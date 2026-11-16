@@ -146,7 +146,7 @@ func drawRunningTree(w io.Writer, running []daemon.RunningTarget, now time.Time)
 		project, target := parseRunning(e.Args)
 		if project == "" && target == "" {
 			project = "(?)"
-			target = Truncate(strings.Join(e.Args, " "), runningLineWidth)
+			target = truncate(strings.Join(e.Args, " "), runningLineWidth)
 		}
 		ws := workspaceLabel(e.Workspace)
 		var dur time.Duration
@@ -207,14 +207,14 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 		for j, lf := range leaves {
 			vLast := j == len(leaves)-1
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
-			line := Truncate(lf.target, runningLineWidth)
+			line := truncate(lf.target, runningLineWidth)
 			if d := sessions.FormatDur(lf.duration); d != "" {
 				line += " " + termkit.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
 			if lf.step != "" {
 				actPrefix, _ := branchPrefix(actIndent, true)
-				fmt.Fprintf(w, "%s%s\n", actPrefix, termkit.Colorize(Truncate(lf.step, runningLineWidth), sgrPoolIdle))
+				fmt.Fprintf(w, "%s%s\n", actPrefix, termkit.Colorize(truncate(lf.step, runningLineWidth), sgrPoolIdle))
 			}
 		}
 	}
@@ -275,7 +275,7 @@ func parseRunning(args []string) (project, target string) {
 	}
 }
 
-// Truncate shortens s to fit n bytes for the running-tree lines.
+// truncate shortens s to fit n bytes for the running-tree lines.
 //
 // It delegates to tty.Clip rather than slicing: a raw s[:n-1] splits a
 // multi-byte rune, so a project or target name with a non-ASCII
@@ -285,6 +285,6 @@ func parseRunning(args []string) (project, target string) {
 // grid, the spinner and the tree rules are GLYPHS, chosen for shape, and there
 // is no ASCII substitute that draws them. That is a different question from
 // prose typography, which the repo does keep to ASCII.
-func Truncate(s string, n int) string {
+func truncate(s string, n int) string {
 	return layout.ClipBytes(s, n)
 }

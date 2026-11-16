@@ -13,15 +13,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ReadOutputRecords checks every JSON Lines record in r, then hands each to each; it
-// writes nothing, and any bad line is an error naming it before each sees a record.
+// readOutputRecords checks every JSON Lines record in r within limits, then hands each to
+// each; it writes nothing, and any bad line is an error naming it before each sees a record.
 // Fields come back as sent, so a caller printing them uses [NeutralizeTerminal]; the
 // exceptions are failed_need_target, which comes back neutralized, and failed_need_ref, which
 // comes back empty unless it is a ref magus mints.
-func ReadOutputRecords(r io.Reader, each func(types.StoredOutput) error) error {
-	return readOutputRecords(r, defaultImportLimits, each)
-}
-
 func readOutputRecords(r io.Reader, limits importLimits, each func(types.StoredOutput) error) error {
 	var recs []types.StoredOutput
 	err := readRecordLines(r, limits, func(line int, raw []byte) error {
@@ -88,7 +84,7 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 // stdout, provenance on stderr. Every printed string is neutralized, and no reproduce
 // command is printed, since a forged record chooses its own project and target.
 func PrintOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
-	return ReadOutputRecords(in, func(rec types.StoredOutput) error {
+	return readOutputRecords(in, defaultImportLimits, func(rec types.StoredOutput) error {
 		writeRecordProvenance(stderr, rec)
 		out, n := NeutralizeTerminal(rec.Bytes(), true)
 		if _, err := stdout.Write(out); err != nil {

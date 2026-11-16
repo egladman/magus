@@ -48,22 +48,22 @@ func machineGraphBuildDir() (string, error) {
 	return filepath.Join(state, "magus", "graph-build"), nil
 }
 
-// AcquireMachineGraphBuild is [AcquireGraphBuild] on the machine's build lock.
-func AcquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
+// acquireMachineGraphBuild is [acquireGraphBuild] on the machine's build lock.
+func acquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
 	dir, err := machineGraphBuildDir()
 	if err != nil {
 		return nil, nil, err
 	}
-	return AcquireGraphBuild(ctx, dir, me, w, every)
+	return acquireGraphBuild(ctx, dir, me, w, every)
 }
 
-// TryMachineGraphBuild is [TryGraphBuild] on the machine's build lock.
+// TryMachineGraphBuild is [tryGraphBuild] on the machine's build lock.
 func TryMachineGraphBuild(me GraphBuildHolder, w io.Writer) (*GraphBuildLock, *GraphBuildHolder, error) {
 	dir, err := machineGraphBuildDir()
 	if err != nil {
 		return nil, nil, err
 	}
-	return TryGraphBuild(dir, me, w)
+	return tryGraphBuild(dir, me, w)
 }
 
 // RunningMachineGraphBuild is [RunningGraphBuild] on the machine's build lock.
@@ -109,7 +109,7 @@ type GraphBuildLock struct {
 	holderPath string
 }
 
-// AcquireGraphBuild takes the build lock of the knowledge store in dir for me, waiting as
+// acquireGraphBuild takes the build lock of the knowledge store in dir for me, waiting as
 // long as another build holds it. Every graph build takes it, manual or server, so two
 // builds never write one store and one set of SCIP shards at once.
 //
@@ -123,8 +123,8 @@ type GraphBuildLock struct {
 // process, and lets a test stand in for two processes.
 //
 // It returns ctx's error when ctx ends first; the other build carries on.
-func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w io.Writer, every time.Duration) (_ *GraphBuildLock, waitedOn *GraphBuildHolder, err error) {
-	lock, h, err := TryGraphBuild(dir, me, w)
+func acquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w io.Writer, every time.Duration) (_ *GraphBuildLock, waitedOn *GraphBuildHolder, err error) {
+	lock, h, err := tryGraphBuild(dir, me, w)
 	if err != nil || h == nil {
 		return lock, nil, err
 	}
@@ -140,9 +140,9 @@ func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w i
 	return lock, h, err
 }
 
-// TryGraphBuild is AcquireGraphBuild without the wait: when another holds
+// tryGraphBuild is acquireGraphBuild without the wait: when another holds
 // the lock it returns that holder and no lock.
-func TryGraphBuild(dir string, me GraphBuildHolder, w io.Writer) (_ *GraphBuildLock, holder *GraphBuildHolder, err error) {
+func tryGraphBuild(dir string, me GraphBuildHolder, w io.Writer) (_ *GraphBuildLock, holder *GraphBuildHolder, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("maintenance: graph build lock: %w", err)
 	}
@@ -241,11 +241,11 @@ func AcquireGraphBuilds(ctx context.Context, wsRoot, dir string, notices io.Writ
 	if proc.IsJob(ctx) {
 		me.By = "the server's sync-graph job in " + wsRoot
 	}
-	machine, behind, err := AcquireMachineGraphBuild(ctx, me, notices, GraphBuildPoll)
+	machine, behind, err := acquireMachineGraphBuild(ctx, me, notices, GraphBuildPoll)
 	if err != nil {
 		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	store, waitedOn, err := AcquireGraphBuild(ctx, dir, me, notices, GraphBuildPoll)
+	store, waitedOn, err := acquireGraphBuild(ctx, dir, me, notices, GraphBuildPoll)
 	if err != nil {
 		return nil, nil, errors.Join(err, machine.Release())
 	}

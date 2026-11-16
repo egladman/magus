@@ -8,10 +8,10 @@ import (
 	"github.com/egladman/magus/internal/proc"
 )
 
-// ServerChildArgs turns a `server start` argv into the detached child's: the `start` verb
+// serverChildArgs turns a `server start` argv into the detached child's: the `start` verb
 // becomes --foreground, and every flag the person passed (a --server-address, say) rides
 // along so the child binds where the parent waits.
-func ServerChildArgs(argv []string) []string {
+func serverChildArgs(argv []string) []string {
 	out := make([]string, 0, len(argv)+1)
 	replaced := false
 	prev := ""
@@ -28,7 +28,7 @@ func ServerChildArgs(argv []string) []string {
 	return out
 }
 
-// ServingSuffix names the workspaces a running server has loaded, or "" when it has none yet.
+// servingSuffix names the workspaces a running server has loaded, or "" when it has none yet.
 //
 // One socket per user serves every workspace, so "already running" answered the question the
 // caller asked and not the one they meant. Starting the server from a second worktree returns 0
@@ -39,7 +39,7 @@ func ServerChildArgs(argv []string) []string {
 // The workspace this call was made from is not marked, deliberately: a server loads a workspace
 // lazily on first use, so "not listed" means "not loaded yet" far more often than it means
 // "wrong server", and flagging it would raise an alarm about the ordinary case.
-func ServingSuffix(st *proc.StatusReply) string {
+func servingSuffix(st *proc.StatusReply) string {
 	if st == nil || len(st.Workspaces) == 0 {
 		return ""
 	}

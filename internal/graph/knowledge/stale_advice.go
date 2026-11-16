@@ -59,7 +59,7 @@ func ReportIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) error {
 	if ans.Reason == types.ReasonIndexStale {
 		return exit.Reported(exit.Failure)
 	}
-	notice := StaleIndexNotice(ans)
+	notice := staleIndexNotice(ans)
 	if notice == "" {
 		return nil
 	}
@@ -67,10 +67,10 @@ func ReportIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) error {
 	return exit.Reported(exit.Failure)
 }
 
-// StaleIndexNotice renders the line, or "" when no index under ans is stale. Split from the
+// staleIndexNotice renders the line, or "" when no index under ans is stale. Split from the
 // probe so the two halves are testable apart: what is stale is the cache's answer, and what
 // to say about it is not.
-func StaleIndexNotice(ans types.KnowledgeAnswer) string {
+func staleIndexNotice(ans types.KnowledgeAnswer) string {
 	projects := len(ans.StaleIndexes)
 	if projects == 0 {
 		return ""
@@ -137,7 +137,7 @@ func RenderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 	return b.String()
 }
 
-// UnverifiedNotice renders what a caller of `refs --occurrences` must do when the index
+// unverifiedNotice renders what a caller of `refs --occurrences` must do when the index
 // disagrees with the tree, and it is shared by all three output arms because all three
 // used to say something different: the text arm named a target, the name arm named the
 // same target on stderr, and the structured arm said nothing at all and exited 0. A
@@ -146,8 +146,8 @@ func RenderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 //
 // The target it used to name was `scip`, which is the indexer's op and not a command
 // anybody runs. `magus graph build` is what clears this, which is why the sibling
-// StaleIndexNotice already names it.
-func UnverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
+// staleIndexNotice already names it.
+func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
 	return fmt.Sprintf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
 		out.OccurrenceCount-out.VerifiedCount, out.StaleFiles) +
 		fmt.Sprintf("  refresh and ask again: %s; sites may also be MISSING from a stale index.\n", hint.GraphBuild)

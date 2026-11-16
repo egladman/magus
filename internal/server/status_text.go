@@ -268,7 +268,7 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 				}
 				fmt.Fprintf(tw, "    %s\tpid %d\tup %s\tslots %d\t%s\t%s\t%s\n", work.Kind, work.PID,
 					cmp.Or(sessions.FormatDur(now.Sub(work.Since).Round(time.Second)), "0s"), max(work.Slots, 1), deadline,
-					Truncate(work.Command, 60), work.Dir)
+					truncate(work.Command, 60), work.Dir)
 			}
 		}
 	}
@@ -276,7 +276,7 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 		fmt.Fprintln(tw, "\nstopped by the broker")
 		for _, e := range r.Ended {
 			fmt.Fprintf(tw, "  %s\t%s\t%s ago\t%s\t%s\n", e.Owner(), e.Kind,
-				cmp.Or(sessions.FormatDur(now.Sub(e.At).Round(time.Second)), "0s"), Truncate(e.Command, 60), e.Reason)
+				cmp.Or(sessions.FormatDur(now.Sub(e.At).Round(time.Second)), "0s"), truncate(e.Command, 60), e.Reason)
 		}
 	}
 	_ = tw.Flush()

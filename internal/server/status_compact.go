@@ -169,5 +169,5 @@ func formatCompactRunningTarget(c daemon.RunningTarget, showWS bool, now time.Ti
 	if d := sessions.FormatDur(runningDuration(c, now)); d != "" {
 		label += fmt.Sprintf("(%s)", d)
 	}
-	return Truncate(label, compactRunningBudget)
+	return truncate(label, compactRunningBudget)
 }

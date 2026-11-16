@@ -19,10 +19,10 @@ import (
 // TestServerChildArgsDropsStart pins the detached server's argv: its role, with no
 // `start` in ps, and every flag the person passed so it binds where the parent waits.
 func TestServerChildArgsDropsStart(t *testing.T) {
-	assert.Equal(t, []string{"server", "--foreground"}, ServerChildArgs([]string{"server", "start"}))
+	assert.Equal(t, []string{"server", "--foreground"}, serverChildArgs([]string{"server", "start"}))
 	assert.Equal(t,
 		[]string{"--server-address", "unix:///tmp/m.sock", "server", "--foreground", "-v"},
-		ServerChildArgs([]string{"--server-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
+		serverChildArgs([]string{"--server-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
 }
 
 func TestIsServerRun(t *testing.T) {
@@ -35,12 +35,12 @@ func TestIsServerRun(t *testing.T) {
 }
 
 func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
-	assert.True(t, IsServerStartHelp([]string{"start", "-h"}))
-	assert.True(t, IsServerStartHelp([]string{"start", "--foreground", "--help"}))
-	assert.True(t, IsServerStartHelp([]string{"start", "help"}))
-	assert.False(t, IsServerStartHelp([]string{"start"}))
-	assert.False(t, IsServerStartHelp([]string{"start", "--foreground"}))
-	assert.False(t, IsServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
+	assert.True(t, isServerStartHelp([]string{"start", "-h"}))
+	assert.True(t, isServerStartHelp([]string{"start", "--foreground", "--help"}))
+	assert.True(t, isServerStartHelp([]string{"start", "help"}))
+	assert.False(t, isServerStartHelp([]string{"start"}))
+	assert.False(t, isServerStartHelp([]string{"start", "--foreground"}))
+	assert.False(t, isServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
 }
 
 func TestWantsForeground(t *testing.T) {
@@ -61,11 +61,11 @@ func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
 	}}
 
 	// Sorted, so two runs of the same server do not print the list two ways.
-	assert.Equal(t, ", serving /repo, /repo/worktrees/b", ServingSuffix(st))
+	assert.Equal(t, ", serving /repo, /repo/worktrees/b", servingSuffix(st))
 
 	// A server that has loaded nothing yet says nothing rather than "serving " with an empty
 	// list, which would read as a server that is serving something unnameable.
-	assert.Empty(t, ServingSuffix(&proc.StatusReply{}))
+	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
 }
 
 func hookSections(t *testing.T, dir string) map[string]string {

@@ -94,16 +94,6 @@ func (s *indexesBehindSuite) TestAStaleIndexIsBehind() {
 	}.IndexBehind())
 }
 
-func (s *indexesBehindSuite) TestTheStaleNoticeSaysWhatTheReadDidAboutIt() {
-	got := knowledge.StaleIndexNotice(types.KnowledgeAnswer{
-		StaleIndexes:      []string{"libs/a"},
-		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go"}},
-		IndexCause:        &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again"},
-	})
-	s.Contains(got, "a refresh started in the background\n  ask again\n")
-	s.NotContains(got, "refresh and ask again")
-}
-
 func (s *indexesBehindSuite) TestAnAnswerKeepsTheCauseTheReadGaveIt() {
 	mine := &types.KnowledgeIndexCause{Why: "a refresh started", Fix: "ask again"}
 	got := withIndexCause(s.T().Context(), s.T().TempDir(), types.KnowledgeAnswer{StaleIndexes: []string{"libs/a"}, IndexCause: mine})

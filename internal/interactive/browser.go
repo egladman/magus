@@ -18,15 +18,15 @@ import (
 // FileProtocolHandler, else `xdg-open`, which itself already respects BROWSER and the
 // desktop's default-web-browser setting on Linux).
 func OpenBrowser(raw string) error {
-	target, err := SafeBrowserURL(raw)
+	target, err := safeBrowserURL(raw)
 	if err != nil {
 		return err
 	}
-	if err := OpenViaBrowserEnv(target); err == nil {
+	if err := openViaBrowserEnv(target); err == nil {
 		return nil
 	}
 	var cmd *exec.Cmd
-	// The opener binary is fixed; the only variable is the URL, and SafeBrowserURL
+	// The opener binary is fixed; the only variable is the URL, and safeBrowserURL
 	// above has already required an http(s) scheme and a host and re-serialized it.
 	switch runtime.GOOS {
 	case "darwin":
@@ -39,7 +39,7 @@ func OpenBrowser(raw string) error {
 	return cmd.Start()
 }
 
-// SafeBrowserURL parses raw and returns it only if it is an http(s) URL, re-serialized
+// safeBrowserURL parses raw and returns it only if it is an http(s) URL, re-serialized
 // from the parsed form.
 //
 // The base of every URL magus opens is overridable (`--url` for the explorer,
@@ -52,7 +52,7 @@ func OpenBrowser(raw string) error {
 // Re-serializing rather than returning raw is the part that makes this a sanitizer and
 // not just a check: what gets executed is what was parsed and validated, so no unparsed
 // tail can ride along.
-func SafeBrowserURL(raw string) (string, error) {
+func safeBrowserURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return "", fmt.Errorf("not a URL: %w", err)
@@ -66,20 +66,20 @@ func SafeBrowserURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
-// ErrNoBrowserEnvEntry means no $BROWSER entry launched (or BROWSER was unset), so the
+// errNoBrowserEnvEntry means no $BROWSER entry launched (or BROWSER was unset), so the
 // caller falls back to the platform opener. The specific entries tried are not worth
 // carrying: openBrowser only branches on nil-vs-non-nil, so a richer error would be
 // built and immediately discarded.
-var ErrNoBrowserEnvEntry = errors.New("no BROWSER entry launched")
+var errNoBrowserEnvEntry = errors.New("no BROWSER entry launched")
 
-// OpenViaBrowserEnv tries the $BROWSER convention: a colon-separated list of commands,
+// openViaBrowserEnv tries the $BROWSER convention: a colon-separated list of commands,
 // each either containing "%s" (replaced by the URL) or taking the URL as a trailing
-// argument. The first entry that launches wins. Returns ErrNoBrowserEnvEntry if BROWSER
+// argument. The first entry that launches wins. Returns errNoBrowserEnvEntry if BROWSER
 // is unset or no entry starts, so the caller falls back to the platform opener.
-func OpenViaBrowserEnv(url string) error {
+func openViaBrowserEnv(url string) error {
 	env := strings.TrimSpace(os.Getenv("BROWSER"))
 	if env == "" {
-		return ErrNoBrowserEnvEntry
+		return errNoBrowserEnvEntry
 	}
 	for _, entry := range strings.Split(env, ":") {
 		entry = strings.TrimSpace(entry)
@@ -100,5 +100,5 @@ func OpenViaBrowserEnv(url string) error {
 			return nil
 		}
 	}
-	return ErrNoBrowserEnvEntry
+	return errNoBrowserEnvEntry
 }

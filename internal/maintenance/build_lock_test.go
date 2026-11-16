@@ -26,7 +26,7 @@ func TestAcquireGraphBuildSerializesTwoBuilds(t *testing.T) {
 	manual := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}
 
 	var quiet bytes.Buffer
-	first, waited, err := AcquireGraphBuild(t.Context(), dir, server, &quiet, time.Millisecond)
+	first, waited, err := acquireGraphBuild(t.Context(), dir, server, &quiet, time.Millisecond)
 	require.NoError(t, err)
 	assert.Nil(t, waited)
 	assert.Empty(t, quiet.String(), "a free lock says nothing")
@@ -42,7 +42,7 @@ func TestAcquireGraphBuildSerializesTwoBuilds(t *testing.T) {
 	var notices syncBuffer
 	second := make(chan result, 1)
 	go func() {
-		l, w, err := AcquireGraphBuild(t.Context(), dir, manual, &notices, time.Millisecond)
+		l, w, err := acquireGraphBuild(t.Context(), dir, manual, &notices, time.Millisecond)
 		second <- result{l, w, err}
 	}()
 	select {
@@ -86,7 +86,7 @@ func TestAcquireGraphBuildReclaimsAStaleLock(t *testing.T) {
 	assert.False(t, ok, "a dead holder is not a running build")
 
 	var notices bytes.Buffer
-	lock, waited, err := AcquireGraphBuild(t.Context(), dir, GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}, &notices, time.Millisecond)
+	lock, waited, err := acquireGraphBuild(t.Context(), dir, GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}, &notices, time.Millisecond)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = lock.Release() })
 	assert.Nil(t, waited, "nothing held the lock, so nothing was waited on")
@@ -99,13 +99,13 @@ func TestAcquireGraphBuildReclaimsAStaleLock(t *testing.T) {
 
 func TestAcquireGraphBuildStopsWaitingWhenCancelled(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "knowledge")
-	held, _, err := AcquireGraphBuild(t.Context(), dir, GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}, &bytes.Buffer{}, time.Millisecond)
+	held, _, err := acquireGraphBuild(t.Context(), dir, GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}, &bytes.Buffer{}, time.Millisecond)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = held.Release() })
 
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
-	_, _, err = AcquireGraphBuild(ctx, dir, GraphBuildHolder{PID: os.Getpid(), By: "the server's sync-graph job"}, &bytes.Buffer{}, time.Millisecond)
+	_, _, err = acquireGraphBuild(ctx, dir, GraphBuildHolder{PID: os.Getpid(), By: "the server's sync-graph job"}, &bytes.Buffer{}, time.Millisecond)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "stopped waiting for `magus graph build`")
 }
@@ -113,13 +113,13 @@ func TestAcquireGraphBuildStopsWaitingWhenCancelled(t *testing.T) {
 func TestTryGraphBuildNamesTheHolderAndTakesNothing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "knowledge")
 	first := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first"}
-	held, busy, err := TryGraphBuild(dir, first, &bytes.Buffer{})
+	held, busy, err := tryGraphBuild(dir, first, &bytes.Buffer{})
 	require.NoError(t, err)
 	require.NotNil(t, held)
 	assert.Nil(t, busy)
 
 	var notices bytes.Buffer
-	lock, busy, err := TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
+	lock, busy, err := tryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
 	require.NoError(t, err)
 	assert.Nil(t, lock)
 	require.NotNil(t, busy)
@@ -130,7 +130,7 @@ func TestTryGraphBuildNamesTheHolderAndTakesNothing(t *testing.T) {
 	assert.Equal(t, "the first", running.By, "a refused try leaves the holder's record")
 
 	require.NoError(t, held.Release())
-	lock, busy, err = TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
+	lock, busy, err = tryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
 	require.NoError(t, err)
 	assert.Nil(t, busy)
 	require.NoError(t, lock.Release())
@@ -160,11 +160,11 @@ func TestMachineGraphBuildIsOnePlaceForEveryCheckout(t *testing.T) {
 func TestGraphBuildHolderRecordsItsStore(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "machine")
 	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first", Store: "/ws/knowledge"}
-	lock, _, err := TryGraphBuild(dir, me, &bytes.Buffer{})
+	lock, _, err := tryGraphBuild(dir, me, &bytes.Buffer{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = lock.Release() })
 
-	_, busy, err := TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &bytes.Buffer{})
+	_, busy, err := tryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &bytes.Buffer{})
 
 	require.NoError(t, err)
 	require.NotNil(t, busy)
@@ -199,7 +199,7 @@ func (b *syncBuffer) String() string {
 
 func TestAcquireGraphBuildsWaitsOnAnotherCheckoutsMachineLock(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	lock, _, err := AcquireMachineGraphBuild(t.Context(),
+	lock, _, err := acquireMachineGraphBuild(t.Context(),
 		GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of /other"}, io.Discard, time.Millisecond)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = lock.Release() })
@@ -221,7 +221,7 @@ func acquireBehindBuild(t *testing.T, aheadStore, store string) *GraphBuildHolde
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ahead := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: aheadStore}
-	lock, _, err := AcquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
+	lock, _, err := acquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
 	require.NoError(t, err)
 
 	type result struct {

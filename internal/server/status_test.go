@@ -1007,8 +1007,8 @@ func TestGridEnabledNeedsATerminalAndColor(t *testing.T) {
 }
 
 func TestTruncateBoundsALabel(t *testing.T) {
-	assert.Equal(t, "abc", Truncate("abc", 10))
-	assert.LessOrEqual(t, len(Truncate(strings.Repeat("x", 100), 10)), 10)
+	assert.Equal(t, "abc", truncate("abc", 10))
+	assert.LessOrEqual(t, len(truncate(strings.Repeat("x", 100), 10)), 10)
 }
 
 // An unvouched index says why under its row, or the reader meets a verdict with no way to

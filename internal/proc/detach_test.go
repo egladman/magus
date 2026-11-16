@@ -25,7 +25,7 @@ func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
 	t.Setenv("MAGUS_KEEP_ME", "yes")
 
 	got := map[string]string{}
-	for _, kv := range DetachedChildEnv() {
+	for _, kv := range detachedChildEnv() {
 		if name, value, ok := strings.Cut(kv, "="); ok {
 			got[name] = value
 		}
@@ -88,7 +88,7 @@ func TestDetachedChildEnvDropsTheInheritedSocket(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "/tmp/magus-parent.sock")
 	t.Setenv("MAGUS_KEEP_ME", "1")
 
-	env := DetachedChildEnv()
+	env := detachedChildEnv()
 
 	for _, kv := range env {
 		assert.False(t, strings.HasPrefix(kv, "MAGUS_PROC_SOCKET="), "child inherited %q", kv)

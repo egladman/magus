@@ -23,8 +23,8 @@ func holdMachineRefresh(t *testing.T) string {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	lock, _, err := maintenance.AcquireMachineGraphBuild(t.Context(),
-		maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of /other"}, io.Discard, time.Millisecond)
+	lock, err := maintenance.TakeRefreshLock(t.Context(), maintenance.MachineRefreshLock(),
+		maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of /other"}, "magus refs", false, io.Discard, time.Millisecond)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = lock.Release() })
 	return root

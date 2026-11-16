@@ -32,14 +32,14 @@ func IsPoolSocketName(name string) bool {
 	return poolSocketRe.MatchString(name)
 }
 
-// StalePools lists live pool sockets under SockDir whose Status Version differs from
+// stalePools lists live pool sockets under SockDir whose Status Version differs from
 // selfVersion. An empty selfVersion disables the check. This process's own pool is
 // skipped. Sockets that do not speak status are ignored (a bare listener is not a pool).
-func StalePools(ctx context.Context, selfVersion string) ([]StalePool, error) {
+func stalePools(ctx context.Context, selfVersion string) ([]StalePool, error) {
 	return StalePoolsIn(ctx, SockDir(), selfVersion)
 }
 
-// StalePoolsIn is StalePools over an explicit socket directory, for doctor checks that
+// StalePoolsIn is stalePools over an explicit socket directory, for doctor checks that
 // already know the directory they are auditing.
 func StalePoolsIn(ctx context.Context, dir, selfVersion string) ([]StalePool, error) {
 	if selfVersion == "" || dir == "" {
@@ -137,7 +137,7 @@ func WaitSocketGone(ctx context.Context, addr string, timeout time.Duration) err
 // differs from selfVersion. Same Shutdown + WaitSocketGone path as a server stop; the
 // parents are leftover magus mcp / run processes, not the persistent server.
 func StopStalePools(ctx context.Context, selfVersion string) error {
-	stale, err := StalePools(ctx, selfVersion)
+	stale, err := stalePools(ctx, selfVersion)
 	if err != nil {
 		return fmt.Errorf("server stop --pools: %w", err)
 	}

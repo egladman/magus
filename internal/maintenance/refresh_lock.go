@@ -18,17 +18,17 @@ type RefreshLock struct {
 
 // MachineRefreshLock is the lock one machine runs one graph build under.
 func MachineRefreshLock() RefreshLock {
-	return RefreshLock{acquire: AcquireMachineGraphBuild, try: TryMachineGraphBuild}
+	return RefreshLock{acquire: acquireMachineGraphBuild, try: TryMachineGraphBuild}
 }
 
 // StoreRefreshLock is the lock the knowledge store at dir builds under.
 func StoreRefreshLock(dir string) RefreshLock {
 	return RefreshLock{
 		acquire: func(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
-			return AcquireGraphBuild(ctx, dir, me, w, every)
+			return acquireGraphBuild(ctx, dir, me, w, every)
 		},
 		try: func(me GraphBuildHolder, w io.Writer) (*GraphBuildLock, *GraphBuildHolder, error) {
-			return TryGraphBuild(dir, me, w)
+			return tryGraphBuild(dir, me, w)
 		},
 	}
 }

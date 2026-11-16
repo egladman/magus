@@ -30,7 +30,7 @@ func StartBackground(ctx context.Context, cfg config.Config, subArgs []string, l
 	// Idempotent start: a server already accepting on the socket means there is nothing to do.
 	if proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
-			slog.InfoContext(ctx, fmt.Sprintf("server already running (pid %d) on %s%s", st.ParentPID, addr, ServingSuffix(st)),
+			slog.InfoContext(ctx, fmt.Sprintf("server already running (pid %d) on %s%s", st.ParentPID, addr, servingSuffix(st)),
 				attr.Notice(""), attr.Component("magus"))
 		} else {
 			slog.InfoContext(ctx, "server already running on "+addr, attr.Notice(""), attr.Component("magus"))
@@ -38,12 +38,12 @@ func StartBackground(ctx context.Context, cfg config.Config, subArgs []string, l
 		return 0, true
 	}
 
-	pid, err := proc.SpawnDetached(ServerChildArgs(argv), logPath)
+	pid, err := proc.SpawnDetached(serverChildArgs(argv), logPath)
 	if err != nil {
 		slog.With(attr.Component("server start")).ErrorContext(ctx, "could not background the server", attr.Error(err))
 		return 1, true
 	}
-	if err := WaitServerReady(ctx, addr, serverReadyTimeout); err != nil {
+	if err := waitServerReady(ctx, addr, serverReadyTimeout); err != nil {
 		slog.ErrorContext(ctx, fmt.Sprintf("server (pid %d) did not become ready within %s; see %s", pid, serverReadyTimeout, logPath),
 			attr.Notice(""), attr.Component("magus"))
 		return 1, true

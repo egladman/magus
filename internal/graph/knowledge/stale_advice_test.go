@@ -16,17 +16,17 @@ func TestStaleIndexNotice(t *testing.T) {
 	answer := func(stale ...types.KnowledgeStaleIndex) types.KnowledgeAnswer {
 		return Answer("Foo", true, Coverage{Seeded: true, Probed: true, Stale: stale})
 	}
-	got := StaleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "libs/api"}, types.KnowledgeStaleIndex{Project: "."}))
+	got := staleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "libs/api"}, types.KnowledgeStaleIndex{Project: "."}))
 	assert.Contains(t, got, "stale index")
 	assert.Contains(t, got, "libs/api", "the reader has to know WHICH answers are short")
 	assert.Contains(t, got, "magus graph build", "and the command that fixes it")
 	assert.Contains(t, got, "projects changed", "two projects read as plural")
 
-	assert.Contains(t, StaleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "a project changed")
-	assert.Empty(t, StaleIndexNotice(answer()),
+	assert.Contains(t, staleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "a project changed")
+	assert.Empty(t, staleIndexNotice(answer()),
 		"a current index draws silence; a banner on every lookup is one nobody reads")
 
-	both := StaleIndexNotice(answer(
+	both := staleIndexNotice(answer(
 		types.KnowledgeStaleIndex{Project: ".", Language: "buzz", Op: "scip-buzz"},
 		types.KnowledgeStaleIndex{Project: ".", Language: "go", Op: "scip"}))
 	assert.Contains(t, both, "a project changed", "two indexes of one project are one project")
@@ -39,7 +39,7 @@ func TestStaleIndexNoticeNamesTheChangedFiles(t *testing.T) {
 	answer := func(stale ...types.KnowledgeStaleIndex) types.KnowledgeAnswer {
 		return Answer("Foo", true, Coverage{Seeded: true, Probed: true, Stale: stale})
 	}
-	got := StaleIndexNotice(answer(
+	got := staleIndexNotice(answer(
 		types.KnowledgeStaleIndex{Project: ".", Language: "go", Op: "scip",
 			Changed: []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "magusfile.buzz"}, ChangedCount: 9},
 		types.KnowledgeStaleIndex{Project: ".", Language: "buzz", Op: "scip-buzz",
@@ -47,7 +47,7 @@ func TestStaleIndexNoticeNamesTheChangedFiles(t *testing.T) {
 	assert.Contains(t, got, "  changed since: a.go, b.go, c.go, d.go, e.go and 4 more; deletions are not listed\n",
 		"five named, the shared magusfile counted once, and the two files past the list's cap counted")
 
-	assert.NotContains(t, StaleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "changed since:",
+	assert.NotContains(t, staleIndexNotice(answer(types.KnowledgeStaleIndex{Project: "."})), "changed since:",
 		"a recorded verdict names no files, and the line does not pretend it does")
 }
 
@@ -59,7 +59,7 @@ func TestStaleIndexAdviceNamesTheChangedFiles(t *testing.T) {
 
 // An answer from a server that predates per-index detail still names its projects.
 func TestStaleIndexNoticeFromProjectsAlone(t *testing.T) {
-	got := StaleIndexNotice(types.KnowledgeAnswer{Verdict: types.VerdictFound, StaleIndexes: []string{"libs/api"}})
+	got := staleIndexNotice(types.KnowledgeAnswer{Verdict: types.VerdictFound, StaleIndexes: []string{"libs/api"}})
 	assert.Contains(t, got, "missing sites in libs/api.")
 }
 
@@ -116,4 +116,14 @@ func TestStalenessBannerAgreesWithTheVerdict(t *testing.T) {
 	outOfScope := render(Answer("kind=author nobody", false, cov))
 	assert.Contains(t, outOfScope, "absent (magus searched everything")
 	assert.NotContains(t, outOfScope, "stale index")
+}
+
+func TestTheStaleNoticeSaysWhatTheReadDidAboutIt(t *testing.T) {
+	got := staleIndexNotice(types.KnowledgeAnswer{
+		StaleIndexes:      []string{"libs/a"},
+		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go"}},
+		IndexCause:        &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again"},
+	})
+	assert.Contains(t, got, "a refresh started in the background\n  ask again\n")
+	assert.NotContains(t, got, "refresh and ask again")
 }

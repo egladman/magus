@@ -160,7 +160,7 @@ func EmitOccurrences(ctx context.Context, env RefsEnv, opts output.Options, refs
 		// point at the symbol. The notice rides stderr, where it cannot corrupt the
 		// record, and the exit status matches the two arms below.
 		if out.VerifiedCount < out.OccurrenceCount {
-			slog.ErrorContext(ctx, strings.TrimSuffix(UnverifiedNotice(out), "\n"), attr.Notice(""))
+			slog.ErrorContext(ctx, strings.TrimSuffix(unverifiedNotice(out), "\n"), attr.Notice(""))
 			return exit.Reported(exit.Failure)
 		}
 		return nil
@@ -248,7 +248,7 @@ func EmitOccurrences(ctx context.Context, env RefsEnv, opts output.Options, refs
 		// The count alone does not say what to do about it, and the wrong response (edit
 		// the good ones, skip the rest) produces a half-renamed tree that still compiles
 		// in some languages.
-		fmt.Fprint(env.Stdout, UnverifiedNotice(out))
+		fmt.Fprint(env.Stdout, unverifiedNotice(out))
 		PrintVerdict(env.Stdout, out.Answer, "")
 		return exit.Reported(exit.Failure)
 	}
@@ -282,7 +282,7 @@ func EmitDefinitions(ctx context.Context, env RefsEnv, opts output.Options, out 
 	// teaches callers to ignore it.
 	settle := func(nw io.Writer) error {
 		if verified > 0 && verified == len(out.Definitions) {
-			fmt.Fprint(nw, StaleIndexNotice(out.Answer))
+			fmt.Fprint(nw, staleIndexNotice(out.Answer))
 			return nil
 		}
 		if err := ReportIndexStaleness(nw, out.Answer); err != nil {

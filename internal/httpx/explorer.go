@@ -16,14 +16,14 @@ func CheckHostedPageOrigin(base string, allowed []string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(allowed, origin) || IsLoopbackOrigin(origin) {
+	if slices.Contains(allowed, origin) || isLoopbackOrigin(origin) {
 		return nil
 	}
 	return fmt.Errorf("the page at %s is not in mcp.allowed_origins", origin)
 }
 
-// IsLoopbackOrigin reports whether origin names localhost or a loopback address.
-func IsLoopbackOrigin(origin string) bool {
+// isLoopbackOrigin reports whether origin names localhost or a loopback address.
+func isLoopbackOrigin(origin string) bool {
 	u, err := url.Parse(origin)
 	if err != nil {
 		return false

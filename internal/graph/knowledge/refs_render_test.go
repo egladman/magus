@@ -130,7 +130,7 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 	var stdout, notices bytes.Buffer
 	env := testEnv(&stdout, &notices)
 	require.NoError(t, EmitDefinitions(context.Background(), env, output.Options{Format: output.Text}, out))
-	assert.Contains(t, notices.String()+stdout.String(), StaleIndexNotice(answer))
+	assert.Contains(t, notices.String()+stdout.String(), staleIndexNotice(answer))
 
 	out.Definitions[0].Status = types.DefinitionUnverified
 	err := EmitDefinitions(context.Background(), env, output.Options{Format: output.Text}, out)

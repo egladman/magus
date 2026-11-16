@@ -19,10 +19,10 @@ type GraphLinkOpts struct {
 	To string
 }
 
-// GraphLink formats http://<host>/console/graph/#<directives>. An empty Host is
+// graphLink formats http://<host>/console/graph/#<directives>. An empty Host is
 // an error: there is no origin to link to. Link owns the escaping and
 // puts the code last.
-func GraphLink(opts GraphLinkOpts) (string, error) {
+func graphLink(opts GraphLinkOpts) (string, error) {
 	if opts.Host == "" {
 		return "", errors.New("graph link: no server host, omit the link")
 	}
@@ -61,12 +61,12 @@ func AuthHint(link string) string {
 }
 
 // BuildGraphLink fills Host/Code on the caller's directives and formats the URL,
-// returning "" only when GraphLink has no host to link to. It is split out with the
+// returning "" only when graphLink has no host to link to. It is split out with the
 // inputs injected so tests can assert the URL without a server.
 func BuildGraphLink(host, code string, directives GraphLinkOpts) string {
 	directives.Host = host
 	directives.Code = code
-	link, err := GraphLink(directives)
+	link, err := graphLink(directives)
 	if err != nil {
 		return ""
 	}

@@ -31,7 +31,7 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 
 func readRecords(in string) ([]types.StoredOutput, error) {
 	var got []types.StoredOutput
-	err := ReadOutputRecords(strings.NewReader(in), func(r types.StoredOutput) error {
+	err := readOutputRecords(strings.NewReader(in), defaultImportLimits, func(r types.StoredOutput) error {
 		got = append(got, r)
 		return nil
 	})
@@ -64,7 +64,7 @@ func TestOutputImportRefusesNewerSchema(t *testing.T) {
 // Nothing reaches each when any line is bad, so a caller never prints half an input.
 func TestOutputImportMalformedLineNamesTheLine(t *testing.T) {
 	calls := 0
-	err := ReadOutputRecords(strings.NewReader(outputRecordLine(t, nil)+"{not json\n"), func(types.StoredOutput) error {
+	err := readOutputRecords(strings.NewReader(outputRecordLine(t, nil)+"{not json\n"), defaultImportLimits, func(types.StoredOutput) error {
 		calls++
 		return nil
 	})

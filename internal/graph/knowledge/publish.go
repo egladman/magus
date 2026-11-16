@@ -41,17 +41,17 @@ const (
 	// before reading any layer, so a tag someone else's tooling wrote to fails loudly
 	// instead of yielding bytes that merely parse as JSON.
 	GraphArtifactType = "application/vnd.magus.knowledge-graph.v1+json"
-	// GraphStoreMediaType is the knowledge store's routing manifest: shard name to
+	// graphStoreMediaType is the knowledge store's routing manifest: shard name to
 	// content fingerprint. A reader takes this first, because it is what turns a shard
 	// name into the layer title that carries it.
-	GraphStoreMediaType = "application/vnd.magus.knowledge-store.v1+json"
-	// GraphShardMediaType is one shard file. Deliberately uncompressed: the point of
+	graphStoreMediaType = "application/vnd.magus.knowledge-store.v1+json"
+	// graphShardMediaType is one shard file. Deliberately uncompressed: the point of
 	// publishing is that anyone can read it, and a plain JSON layer is one unauthenticated
 	// GET away from usable without knowing how magus framed it.
-	GraphShardMediaType = "application/vnd.magus.knowledge-shard.v1+json"
-	// GraphStoreLayer titles the routing manifest's layer. Every other layer is titled
+	graphShardMediaType = "application/vnd.magus.knowledge-shard.v1+json"
+	// graphStoreLayer titles the routing manifest's layer. Every other layer is titled
 	// with a shard's content fingerprint, so this name cannot collide with one.
-	GraphStoreLayer = "manifest.json"
+	graphStoreLayer = "manifest.json"
 	// GraphFloatingTag is what a plain pull reads and every push moves.
 	GraphFloatingTag = "latest"
 )
@@ -165,9 +165,9 @@ func StoreLayers(cacheDir string) ([]oci.Blob, error) {
 		return nil, fmt.Errorf("graph push: %w", err)
 	}
 	layers := make([]oci.Blob, 0, len(export.Shards)+1)
-	layers = append(layers, oci.Blob{Title: GraphStoreLayer, MediaType: GraphStoreMediaType, Data: export.Manifest})
+	layers = append(layers, oci.Blob{Title: graphStoreLayer, MediaType: graphStoreMediaType, Data: export.Manifest})
 	for _, sh := range export.Shards {
-		layers = append(layers, oci.Blob{Title: sh.Key, MediaType: GraphShardMediaType, Data: sh.Bytes})
+		layers = append(layers, oci.Blob{Title: sh.Key, MediaType: graphShardMediaType, Data: sh.Bytes})
 	}
 	return layers, nil
 }
@@ -255,7 +255,7 @@ func PullMergedGraph(ctx context.Context, client *oci.Client, src oci.Reference,
 	if err != nil {
 		return nil, err
 	}
-	raw, err := art.Layer(ctx, GraphStoreLayer)
+	raw, err := art.Layer(ctx, graphStoreLayer)
 	if err != nil {
 		return nil, err
 	}

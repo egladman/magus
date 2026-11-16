@@ -12,19 +12,19 @@ const (
 )
 
 func TestGraphLinkQueryOnly(t *testing.T) {
-	got, err := GraphLink(GraphLinkOpts{Host: loopHost, Code: tok, Query: "kind:target"})
+	got, err := graphLink(GraphLinkOpts{Host: loopHost, Code: tok, Query: "kind:target"})
 	require.NoError(t, err)
 	require.Equal(t, "http://127.0.0.1:7391/console/graph/#q=kind%3Atarget&code=mgx_abc123DEF456", got)
 }
 
 func TestGraphLinkViewAndNode(t *testing.T) {
-	got, err := GraphLink(GraphLinkOpts{Host: loopHost, Code: tok, View: "blast", Node: "target:build"})
+	got, err := graphLink(GraphLinkOpts{Host: loopHost, Code: tok, View: "blast", Node: "target:build"})
 	require.NoError(t, err)
 	require.Equal(t, "http://127.0.0.1:7391/console/graph/#view=blast&node=target%3Abuild&code=mgx_abc123DEF456", got)
 }
 
 func TestGraphLinkEveryDirectiveEncodesAndLeadsTheCode(t *testing.T) {
-	got, err := GraphLink(GraphLinkOpts{
+	got, err := graphLink(GraphLinkOpts{
 		Host: loopHost, Code: tok, Query: "a b", View: "trace", Node: "target:a", To: "target:b",
 	})
 	require.NoError(t, err)
@@ -32,19 +32,19 @@ func TestGraphLinkEveryDirectiveEncodesAndLeadsTheCode(t *testing.T) {
 }
 
 func TestGraphLinkOnlyTheCode(t *testing.T) {
-	got, err := GraphLink(GraphLinkOpts{Host: loopHost, Code: tok})
+	got, err := graphLink(GraphLinkOpts{Host: loopHost, Code: tok})
 	require.NoError(t, err)
 	require.Equal(t, "http://127.0.0.1:7391/console/graph/#code=mgx_abc123DEF456", got)
 }
 
 func TestGraphLinkEmptyHostIsAnError(t *testing.T) {
-	got, err := GraphLink(GraphLinkOpts{Code: tok, Query: "kind:target"})
+	got, err := graphLink(GraphLinkOpts{Code: tok, Query: "kind:target"})
 	require.Error(t, err)
 	require.Equal(t, "", got)
 }
 
 func TestGraphLinkNothingSetIsTheBareConsole(t *testing.T) {
-	got, err := GraphLink(GraphLinkOpts{Host: loopHost})
+	got, err := graphLink(GraphLinkOpts{Host: loopHost})
 	require.NoError(t, err)
 	require.Equal(t, "http://127.0.0.1:7391/console/graph/", got)
 }
