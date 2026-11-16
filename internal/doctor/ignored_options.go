@@ -19,7 +19,7 @@ import (
 // paths magus reports as unreviewed, and an ignored `timeout` leaves the target
 // unbounded.
 //
-// ci.InheritOff already declines to skip CI when anything was dropped, which covers the
+// ci.inheritOff already declines to skip CI when anything was dropped, which covers the
 // one decision that could skip a gate. This covers the rest, by saying so where a person
 // looks. A warning at load is seen by whoever ran that command; a doctor check is the
 // thing CI and a new contributor both run.

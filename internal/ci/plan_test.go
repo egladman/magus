@@ -245,13 +245,13 @@ func absent(project, target string) journal.Event {
 var errGate = errors.New("1 target failed")
 
 func (s *GateOutcomeSuite) TestARunWithNoErrorPasses() {
-	outcome, unrun := GateOutcome(nil, nil)
+	outcome, unrun := gateOutcome(nil, nil)
 	s.Equal(sessions.OutcomePass, outcome)
 	s.Nil(unrun)
 }
 
 func (s *GateOutcomeSuite) TestEveryFailureAnAbsentCapabilityNamesEachTarget() {
-	outcome, unrun := GateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), absent("images/web", "image-build")})
+	outcome, unrun := gateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), absent("images/web", "image-build")})
 	s.Equal(sessions.OutcomeUnrun, outcome)
 	s.Equal([]string{
 		"images/magus:image-build: MGS3004 docker is installed but not ready",
@@ -260,13 +260,13 @@ func (s *GateOutcomeSuite) TestEveryFailureAnAbsentCapabilityNamesEachTarget() {
 }
 
 func (s *GateOutcomeSuite) TestOneFailureOfTheCodeMakesTheGateFail() {
-	outcome, unrun := GateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), {Project: ".", Target: "go-test", Text: "FAIL"}})
+	outcome, unrun := gateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), {Project: ".", Target: "go-test", Text: "FAIL"}})
 	s.Equal(sessions.OutcomeFail, outcome)
 	s.Nil(unrun)
 }
 
 func (s *GateOutcomeSuite) TestNoFailedTargetFails() {
-	outcome, unrun := GateOutcome(errGate, nil)
+	outcome, unrun := gateOutcome(errGate, nil)
 	s.Equal(sessions.OutcomeFail, outcome, "a run that failed before any target ran failed")
 	s.Nil(unrun)
 }
@@ -279,7 +279,7 @@ func (s *GateOutcomeSuite) TestFailedResultsKeepTheCodeTheOutcomeReads() {
 	failure.Kind, failure.Status = journal.KindResult, journal.StatusFail
 	journal.Emit(journal.WithLogger(s.T().Context(), journal.NewLogger(c)), failure)
 
-	outcome, unrun := GateOutcome(errGate, c.List())
+	outcome, unrun := gateOutcome(errGate, c.List())
 	s.Equal(sessions.OutcomeUnrun, outcome)
 	s.Equal([]string{".:ci: MGS3004 docker is installed but not ready"}, unrun)
 }

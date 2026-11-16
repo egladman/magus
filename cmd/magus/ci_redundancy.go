@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/broker"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,7 +41,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 }
 
 func gateEnv() internalci.GateEnv {
-	return internalci.GateEnv{DryRun: globalCfg.DryRun, Version: version, PoolProbe: gatePoolSaturated, Repairs: magus.UncommittedRepairs}
+	return internalci.GateEnv{DryRun: globalCfg.DryRun, Nested: spawn.CurrentLevel() > 0, Version: version, PoolProbe: gatePoolSaturated, Repairs: magus.UncommittedRepairs}
 }
 
 func isGateInvocation(target string, partial bool) bool {

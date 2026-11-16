@@ -331,12 +331,12 @@ func (c *FailedResults) List() []journal.Event {
 	return slices.Clone(c.events)
 }
 
-// GateOutcome is the verdict a finished gate records: sessions.OutcomePass when runErr
+// gateOutcome is the verdict a finished gate records: sessions.OutcomePass when runErr
 // is nil, sessions.OutcomeUnrun when every failed target failed for a capability this
 // host lacks, and sessions.OutcomeFail otherwise. unrun names each target of an unrun
 // gate as "project:target: cause" and is nil for any other outcome. A run that failed
 // with no failed target failed: nothing showed a capability was missing.
-func GateOutcome(runErr error, failed []journal.Event) (outcome string, unrun []string) {
+func gateOutcome(runErr error, failed []journal.Event) (outcome string, unrun []string) {
 	if runErr == nil {
 		return sessions.OutcomePass, nil
 	}

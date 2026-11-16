@@ -223,7 +223,7 @@ type Project struct {
 	// inheritance back on, and dropping `gate_low_risk = []` restores the shipped prose
 	// globs the author deleted. A binary too old to read the key is exactly the one that
 	// cannot know which kind it dropped, so the decision has to be made without knowing:
-	// see ci.InheritOff.
+	// see ci.inheritOff.
 	IgnoredOptions []string
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
