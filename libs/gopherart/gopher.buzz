@@ -1,0 +1,704 @@
+// gopher.buzz draws the Go gopher from numbers. A Gopher is the build
+// (proportions, palette, what it wears and holds) and a Pose is where its
+// joints sit at one moment. draw renders one pose; a list of poses renders
+// one SVG whose joints move between them with SMIL, so posing a gopher and
+// animating it are the same call.
+//
+// Every joint is a nested group that rotates or moves about a pivot, so a
+// prop held in a hand follows the arm without trigonometry, and the SVG
+// renderer does the curve math.
+import "std";
+import "fs";
+
+import "result";
+
+export object P {
+    x: double,
+    y: double,
+}
+
+export fun p(x: double, y: double) > P {
+    return P{ x = x, y = y };
+}
+
+// Pose is one keyframe. Angles are degrees. An arm angle is how far the arm
+// swings out from hanging at the side: 90 points it straight out, 180 up.
+// A leg angle swings the foot toward the viewer's right when positive. look
+// moves the pupils (-1 to 1 each way), turn swings the face toward the
+// viewer's right, blink closes the lids from 0 to 1, and open (0 to 1) drives
+// a held prop's own motion: scissors spread, a cube rises off the palm.
+export object Pose {
+    leftArm: double = 18.0,
+    rightArm: double = 18.0,
+    leftLeg: double = 0.0,
+    rightLeg: double = 0.0,
+    lean: double = 0.0,
+    bob: double = 0.0,
+    lookX: double = 0.0,
+    lookY: double = 0.0,
+    turn: double = 0.0,
+    blink: double = 0.0,
+    open: double = 0.0,
+}
+
+export object Palette {
+    body: str = "#79c7d9",
+    muzzle: str = "#f3dcc2",
+    nose: str = "#3d2b26",
+    eye: str = "#ffffff",
+    pupil: str = "#1d1d24",
+    tooth: str = "#ffffff",
+    ear: str = "#5aa9bd",
+    foot: str = "#f3dcc2",
+    // limb colors the arms and hands, so an arm crossing the body still reads
+    // on a drawing with no outline.
+    limb: str = "#79c7d9",
+    outline: str = "#1f2333",
+    outlineWidth: double = 0.0,
+}
+
+export enum Lids {
+    open,
+    // determined lowers each lid toward the nose.
+    determined,
+    // worried raises each lid toward the nose.
+    worried,
+    sleepy,
+}
+
+export enum Mouth {
+    teeth,
+    grin,
+    open,
+    tongue,
+}
+
+// Layer orders what a gopher wears. back draws behind everything, robe over
+// the body and under the face, beard over the face, hat over the head and
+// front over the arms.
+export enum Layer {
+    back,
+    robe,
+    beard,
+    hat,
+    front,
+}
+
+// Rig is where the parts of one gopher's body sit, in its own space: the
+// ground under its feet is y = 0 and its top is y = -height. Accessories and
+// props read it to fit the body they are drawn on.
+export object Rig {
+    w: double,
+    h: double,
+    top: double,
+    bottom: double,
+    eyeY: double,
+    eyeDX: double,
+    eyeR: double,
+    muzzleY: double,
+    shoulderX: double,
+    shoulderY: double,
+    hipX: double,
+    hipY: double,
+    armLen: double,
+    armW: double,
+}
+
+// Frames carries the poses a drawing runs through and how long one loop
+// takes. One pose draws a still.
+export object Frames {
+    poses: [Pose],
+    seconds: double = 1.0,
+    pal: Palette,
+    rig: Rig,
+    id: str,
+}
+
+export object Accessory {
+    layer: Layer,
+    draw: fun (f: Frames) > str,
+}
+
+// Prop is held in a hand. It is drawn in the hand's frame, the hand at the
+// origin, with +y pointing down the forearm when upright is false. When
+// upright is true the hand's swing is undone, so a staff stays vertical
+// whatever the arm does, and angle tilts it from there.
+export object Prop {
+    draw: fun (f: Frames) > str,
+    upright: bool = false,
+    angle: double = 0.0,
+    behind: bool = false,
+}
+
+export object Gopher {
+    width: double = 220.0,
+    height: double = 300.0,
+    eyeSize: double = 1.0,
+    // reach scales the arms' length; the gopher's own are stubby.
+    reach: double = 1.0,
+    lids: Lids = Lids.open,
+    mouth: Mouth = Mouth.teeth,
+    pal: Palette = Palette{},
+    // sleeve, when set, dresses each arm in a flared sleeve of that color.
+    sleeve: str? = null,
+    // openHand draws the left hand as an upturned palm instead of a fist.
+    openHand: bool = false,
+    // palmTurn turns the open hand from palm up, fingers out: -90 stands the
+    // fingers up, the way a hand says stop.
+    palmTurn: double = 0.0,
+    wear: [Accessory] = [],
+    leftHand: Prop? = null,
+    rightHand: Prop? = null,
+    // band is worn around each upper arm, drawn in the arm's frame with the
+    // middle of the arm at the origin and +y toward the hand.
+    band: Prop? = null,
+}
+
+export fun rigOf(g: Gopher) > Rig {
+    final w = g.width;
+    final h = g.height;
+    final bottom = -h * 0.05;
+    final top = -h;
+    return Rig{
+        w = w,
+        h = h,
+        top = top,
+        bottom = bottom,
+        eyeY = top + h * 0.25,
+        eyeDX = w * 0.215,
+        eyeR = w * 0.2 * g.eyeSize,
+        muzzleY = top + h * 0.43,
+        shoulderX = w * 0.4,
+        shoulderY = top + h * 0.56,
+        hipX = w * 0.26,
+        hipY = bottom - h * 0.06,
+        armLen = w * 0.34 * g.reach,
+        armW = w * 0.13,
+    };
+}
+
+// num prints x to two places, without a trailing zero and never in
+// exponent form.
+export fun num(x: double) > str {
+    final scaled = if (x < 0.0) x * 100.0 - 0.5 else x * 100.0 + 0.5;
+    final i = std\toInt(scaled);
+    final neg = i < 0;
+    final a = if (neg) -i else i;
+    final whole = a / 100;
+    final frac = a % 100;
+    final sign = if (neg and a != 0) "-" else "";
+    if (frac == 0) {
+        return "{sign}{whole}";
+    }
+    if (frac % 10 == 0) {
+        return "{sign}{whole}.{frac / 10}";
+    }
+    if (frac < 10) {
+        return "{sign}{whole}.0{frac}";
+    }
+    return "{sign}{whole}.{frac}";
+}
+
+// paint is a fill with the palette's outline, when it has one.
+export fun paint(fill: str, pal: Palette) > str {
+    if (pal.outlineWidth <= 0.0) {
+        return `fill="{fill}"`;
+    }
+    return `fill="{fill}" stroke="{pal.outline}" stroke-width="{num(pal.outlineWidth)}" stroke-linejoin="round" stroke-linecap="round"`;
+}
+
+// line is a stroke in the palette's outline color.
+export fun line(color: str, width: double) > str {
+    return `fill="none" stroke="{color}" stroke-width="{num(width)}" stroke-linecap="round" stroke-linejoin="round"`;
+}
+
+export fun ellipse(cx: double, cy: double, rx: double, ry: double, attrs: str) > str {
+    return `<ellipse cx="{num(cx)}" cy="{num(cy)}" rx="{num(rx)}" ry="{num(ry)}" {attrs}/>`;
+}
+
+export fun circle(cx: double, cy: double, r: double, attrs: str) > str {
+    return `<circle cx="{num(cx)}" cy="{num(cy)}" r="{num(r)}" {attrs}/>`;
+}
+
+export fun path(d: str, attrs: str) > str {
+    return `<path d="{d}" {attrs}/>`;
+}
+
+// smooth is path data through every point, as a Catmull-Rom spline drawn
+// with cubic Béziers. A closed spline joins the last point to the first.
+export fun smooth(points: [P], closed: bool) > str {
+    final n = points.len();
+    if (n < 3) {
+        return polygon(points, closed: closed);
+    }
+    final parts = mut ["M {num(points[0].x)} {num(points[0].y)}"];
+    final segs = if (closed) n else n - 1;
+    for (var i = 0; i < segs; i = i + 1) {
+        final p0 = points[splineIndex(i - 1, n: n, closed: closed)];
+        final p1 = points[i];
+        final p2 = points[splineIndex(i + 1, n: n, closed: closed)];
+        final p3 = points[splineIndex(i + 2, n: n, closed: closed)];
+        final c1x = p1.x + (p2.x - p0.x) / 6.0;
+        final c1y = p1.y + (p2.y - p0.y) / 6.0;
+        final c2x = p2.x - (p3.x - p1.x) / 6.0;
+        final c2y = p2.y - (p3.y - p1.y) / 6.0;
+        parts.append("C {num(c1x)} {num(c1y)} {num(c2x)} {num(c2y)} {num(p2.x)} {num(p2.y)}");
+    }
+    if (closed) {
+        parts.append("Z");
+    }
+    return parts.join(" ");
+}
+
+fun splineIndex(i: int, n: int, closed: bool) > int {
+    if (closed) {
+        return (i % n + n) % n;
+    }
+    if (i < 0) {
+        return 0;
+    }
+    if (i >= n) {
+        return n - 1;
+    }
+    return i;
+}
+
+export fun polygon(points: [P], closed: bool) > str {
+    final parts = mut [<str>];
+    foreach (i, q in points) {
+        final cmd = if (i == 0) "M" else "L";
+        parts.append("{cmd} {num(q.x)} {num(q.y)}");
+    }
+    if (closed) {
+        parts.append("Z");
+    }
+    return parts.join(" ");
+}
+
+// mirror reflects points across x = 0 and appends them in reverse, so half
+// of a symmetric outline, top to bottom on the right, closes into the whole.
+export fun mirror(half: [P]) > [P] {
+    final all = mut [<P>];
+    foreach (q in half) {
+        all.append(q);
+    }
+    for (var i = half.len() - 1; i >= 0; i = i - 1) {
+        if (half[i].x != 0.0) {
+            all.append(p(-half[i].x, y: half[i].y));
+        }
+    }
+    return all;
+}
+
+// scaled multiplies unit points by w across and h down, about an origin.
+export fun scaled(unit: [P], ox: double, oy: double, w: double, h: double) > [P] {
+    return unit.map(fun (i: int, q: P) > P => p(ox + q.x * w, y: oy + q.y * h));
+}
+
+// track reads one value from every pose.
+export fun track(f: Frames, pick: fun (q: Pose) > double) > [double] {
+    return f.poses.map(fun (i: int, q: Pose) > double => pick(q));
+}
+
+fun moving(values: [double]) > bool {
+    foreach (v in values) {
+        if (v != values[0]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun keyTimes(n: int) > str {
+    final parts = mut [<str>];
+    for (var i = 0; i < n; i = i + 1) {
+        parts.append(num(std\toDouble(i) / std\toDouble(n - 1)));
+    }
+    return parts.join(";");
+}
+
+fun splines(n: int) > str {
+    final parts = mut [<str>];
+    for (var i = 0; i < n - 1; i = i + 1) {
+        parts.append("0.45 0 0.55 1");
+    }
+    return parts.join(";");
+}
+
+// animation is the SMIL child that runs a transform through one value per
+// pose, easing in and out of each, and loops. A drawing that loops ends on
+// the pose it began with.
+fun animation(kind: str, values: [str], f: Frames) > str {
+    final n = values.len();
+    return `<animateTransform attributeName="transform" type="{kind}" values="{values.join(";")}" keyTimes="{keyTimes(n)}" calcMode="spline" keySplines="{splines(n)}" dur="{num(f.seconds)}s" repeatCount="indefinite"/>`;
+}
+
+// rotate opens a group turned about (cx, cy) by one angle per pose. Close
+// it with "</g>".
+export fun rotate(f: Frames, angles: [double], cx: double, cy: double) > str {
+    final head = `<g transform="rotate({num(angles[0])} {num(cx)} {num(cy)})">`;
+    if (!moving(angles)) {
+        return head;
+    }
+    final values = angles.map(fun (i: int, a: double) > str => "{num(a)} {num(cx)} {num(cy)}");
+    return head + animation("rotate", values: values, f: f);
+}
+
+// move opens a group shifted by one (dx, dy) per pose. Close it with "</g>".
+export fun move(f: Frames, dx: [double], dy: [double]) > str {
+    final head = `<g transform="translate({num(dx[0])} {num(dy[0])})">`;
+    if (!moving(dx) and !moving(dy)) {
+        return head;
+    }
+    final values = dx.map(fun (i: int, x: double) > str => "{num(x)} {num(dy[i])}");
+    return head + animation("translate", values: values, f: f);
+}
+
+// draw renders a gopher through its poses as a group, its feet on the
+// origin. id keeps the clip paths of two gophers in one document apart.
+export fun draw(g: Gopher, poses: [Pose], seconds: double, id: str) > result\Result::<str> {
+    if (poses.len() == 0) {
+        return result\fail::<str>("gopher {id}: draw needs at least one pose");
+    }
+    if (poses.len() > 1 and seconds <= 0.0) {
+        return result\fail::<str>("gopher {id}: an animation needs a positive length, got {num(seconds)}s");
+    }
+    final f = Frames{ poses = poses, seconds = seconds, pal = g.pal, rig = rigOf(g), id = id };
+    final r = f.rig;
+    final parts = mut [<str>];
+    parts.append(move(f, dx: track(f, pick: fun (q: Pose) > double => 0.0), dy: track(f, pick: fun (q: Pose) > double => -q.bob)));
+    parts.append(rotate(f, angles: track(f, pick: fun (q: Pose) > double => q.lean), cx: 0.0, cy: 0.0));
+    parts.append(layer(g, f: f, which: Layer.back));
+    parts.append(prop(g, f: f, left: true, behind: true));
+    parts.append(prop(g, f: f, left: false, behind: true));
+    parts.append(leg(g, f: f, left: true));
+    parts.append(leg(g, f: f, left: false));
+    parts.append(ears(g, f: f));
+    parts.append(path(smooth(bodyOutline(r), closed: true), attrs: paint(g.pal.body, pal: g.pal)));
+    parts.append(layer(g, f: f, which: Layer.robe));
+    parts.append(face(g, f: f));
+    final beard = layer(g, f: f, which: Layer.beard);
+    if (beard != "") {
+        parts.append(beard);
+        parts.append(move(f, dx: faceShift(f), dy: zeros(f)));
+        parts.append(teeth(r, pal: g.pal));
+        parts.append("</g>");
+    }
+    parts.append(layer(g, f: f, which: Layer.hat));
+    parts.append(arm(g, f: f, left: true));
+    parts.append(arm(g, f: f, left: false));
+    parts.append(layer(g, f: f, which: Layer.front));
+    parts.append("</g></g>");
+    return result\ok::<str>(parts.join("\n"));
+}
+
+fun layer(g: Gopher, f: Frames, which: Layer) > str {
+    final parts = mut [<str>];
+    foreach (a in g.wear) {
+        if (a.layer == which) {
+            parts.append(a.draw(f));
+        }
+    }
+    return parts.join("\n");
+}
+
+// bodyOutline is the gopher's bean: a dome of a head that runs straight into
+// a body a little wider at the hips, flattened where it sits.
+export fun bodyOutline(r: Rig) > [P] {
+    final half = [
+        p(0.0, y: 0.0),
+        p(0.24, y: 0.02),
+        p(0.4, y: 0.08),
+        p(0.48, y: 0.21),
+        p(0.505, y: 0.4),
+        p(0.52, y: 0.66),
+        p(0.48, y: 0.88),
+        p(0.32, y: 0.985),
+        p(0.0, y: 1.0),
+    ];
+    return scaled(mirror(half), ox: 0.0, oy: r.top, w: r.w, h: r.bottom - r.top);
+}
+
+// faceShift is how far a turn slides the face across the head.
+fun faceShift(f: Frames) > [double] {
+    final w = f.rig.w;
+    return track(f, pick: fun (q: Pose) > double => q.turn * w * 0.11);
+}
+
+fun zeros(f: Frames) > [double] {
+    return track(f, pick: fun (q: Pose) > double => 0.0);
+}
+
+fun ears(g: Gopher, f: Frames) > str {
+    final r = f.rig;
+    final parts = mut [<str>];
+    foreach (s in [-1.0, 1.0]) {
+        final cx = s * r.w * 0.36;
+        final cy = r.top + r.h * 0.045;
+        parts.append(ellipse(cx, cy: cy, rx: r.w * 0.085, ry: r.w * 0.075, attrs: paint(g.pal.body, pal: g.pal)));
+        parts.append(ellipse(cx, cy: cy, rx: r.w * 0.045, ry: r.w * 0.038, attrs: `fill="{g.pal.ear}"`));
+    }
+    return parts.join("\n");
+}
+
+fun face(g: Gopher, f: Frames) > str {
+    final r = f.rig;
+    final pal = g.pal;
+    final parts = mut [<str>];
+    parts.append(move(f, dx: faceShift(f), dy: zeros(f)));
+    foreach (s in [-1.0, 1.0]) {
+        parts.append(eye(g, f: f, side: s));
+    }
+    final my = r.muzzleY;
+    final mw = r.w * 0.15;
+    final mh = r.w * 0.1;
+    parts.append(mouth(g, f: f));
+    parts.append(path(smooth([
+        p(0.0, y: my - mh),
+        p(mw * 0.8, y: my - mh * 0.85),
+        p(mw, y: my - mh * 0.1),
+        p(mw * 0.6, y: my + mh * 0.8),
+        p(0.0, y: my + mh * 0.95),
+        p(-mw * 0.6, y: my + mh * 0.8),
+        p(-mw, y: my - mh * 0.1),
+        p(-mw * 0.8, y: my - mh * 0.85),
+    ], closed: true), attrs: paint(pal.muzzle, pal: pal)));
+    parts.append(ellipse(0.0, cy: my - mh * 0.55, rx: r.w * 0.07, ry: r.w * 0.045, attrs: `fill="{pal.nose}"`));
+    parts.append("</g>");
+    return parts.join("\n");
+}
+
+fun mouth(g: Gopher, f: Frames) > str {
+    final r = f.rig;
+    final pal = g.pal;
+    final my = r.muzzleY + r.w * 0.085;
+    final pair = teeth(r, pal: pal).split("\n");
+    if (g.mouth == Mouth.teeth) {
+        return pair.join("\n");
+    }
+    final ow = r.w * 0.13;
+    final oh = if (g.mouth == Mouth.grin) r.w * 0.09 else r.w * 0.15;
+    final hole = path("M {num(-ow)} {num(my - r.w * 0.02)} Q 0 {num(my + oh * 2.0)} {num(ow)} {num(my - r.w * 0.02)} Z", attrs: paint("#5b2430", pal: pal));
+    final parts = mut [hole];
+    if (g.mouth == Mouth.tongue) {
+        parts.append(ellipse(r.w * 0.05, cy: my + oh * 0.75, rx: r.w * 0.055, ry: r.w * 0.04, attrs: `fill="#ef7f8f"`));
+    }
+    parts.append(pair[0]);
+    parts.append(pair[1]);
+    return parts.join("\n");
+}
+
+// teeth are the two buck teeth alone, for a layer such as a beard that
+// covers the mouth to draw them back on top.
+export fun teeth(r: Rig, pal: Palette) > str {
+    final my = r.muzzleY + r.w * 0.085;
+    final tw = r.w * 0.045;
+    final th = r.w * 0.075;
+    return [
+        path("M {num(-tw)} {num(my)} L {num(-tw)} {num(my + th * 0.8)} Q {num(-tw)} {num(my + th)} {num(-tw * 0.8)} {num(my + th)} L {num(-tw * 0.1)} {num(my + th)} L {num(-tw * 0.05)} {num(my)} Z", attrs: paint(pal.tooth, pal: pal)),
+        path("M {num(tw)} {num(my)} L {num(tw)} {num(my + th * 0.8)} Q {num(tw)} {num(my + th)} {num(tw * 0.8)} {num(my + th)} L {num(tw * 0.1)} {num(my + th)} L {num(tw * 0.05)} {num(my)} Z", attrs: paint(pal.tooth, pal: pal)),
+    ].join("\n");
+}
+
+fun eye(g: Gopher, f: Frames, side: double) > str {
+    final r = f.rig;
+    final pal = g.pal;
+    final cx = side * r.eyeDX;
+    final cy = r.eyeY;
+    final er = r.eyeR;
+    final pr = er * 0.36;
+    final reach = er - pr - er * 0.12;
+    final eyeName = if (side < 0.0) "l" else "r";
+    final clip = "{f.id}-eye{eyeName}";
+    final parts = mut [<str>];
+    parts.append(`<clipPath id="{clip}"><circle cx="{num(cx)}" cy="{num(cy)}" r="{num(er)}"/></clipPath>`);
+    parts.append(circle(cx, cy: cy, r: er, attrs: `fill="{pal.eye}"`));
+    parts.append(move(f, dx: track(f, pick: fun (q: Pose) > double => q.lookX * reach), dy: track(f, pick: fun (q: Pose) > double => q.lookY * reach)));
+    parts.append(circle(cx + er * 0.08 * side, cy: cy + er * 0.05, r: pr, attrs: `fill="{pal.pupil}"`));
+    parts.append(circle(cx + er * 0.08 * side + pr * 0.35, cy: cy + er * 0.05 - pr * 0.35, r: pr * 0.3, attrs: `fill="{pal.eye}"`));
+    parts.append("</g>");
+    parts.append(`<g clip-path="url(#{clip})">`);
+    parts.append(lid(g, f: f, side: side, cx: cx, cy: cy, er: er));
+    parts.append("</g>");
+    if (pal.outlineWidth > 0.0) {
+        parts.append(circle(cx, cy: cy, r: er, attrs: line(pal.outline, width: pal.outlineWidth)));
+    }
+    return parts.join("\n");
+}
+
+// lid is the body-colored lid over one eye: its resting slant comes from the
+// build, and a blink slides it down over the rest.
+fun lid(g: Gopher, f: Frames, side: double, cx: double, cy: double, er: double) > str {
+    var slant = 0.0;
+    var rest = -2.2;
+    if (g.lids == Lids.determined) {
+        slant = 22.0;
+        rest = -1.55;
+    } else if (g.lids == Lids.worried) {
+        slant = -16.0;
+        rest = -1.7;
+    } else if (g.lids == Lids.sleepy) {
+        rest = -1.0;
+    }
+    final parts = mut [<str>];
+    parts.append(move(f, dx: zeros(f), dy: track(f, pick: fun (q: Pose) > double => q.blink * (-1.0 - rest) * er * 1.05)));
+    parts.append(rotate(f, angles: zeros(f).map(fun (i: int, z: double) > double => slant * side), cx: cx, cy: cy));
+    final bottom = cy + rest * er + er * 1.0;
+    parts.append(`<rect x="{num(cx - er * 1.6)}" y="{num(bottom - er * 2.4)}" width="{num(er * 3.2)}" height="{num(er * 2.4)}" fill="{g.pal.body}"/>`);
+    if (g.lids != Lids.open) {
+        parts.append(path("M {num(cx - er * 1.6)} {num(bottom)} L {num(cx + er * 1.6)} {num(bottom)}", attrs: line(g.pal.outline, width: sketchWidth(g.pal, base: er * 0.1))));
+    }
+    parts.append("</g></g>");
+    return parts.join("\n");
+}
+
+fun sketchWidth(pal: Palette, base: double) > double {
+    return if (pal.outlineWidth > 0.0) pal.outlineWidth else base;
+}
+
+fun leg(g: Gopher, f: Frames, left: bool) > str {
+    final r = f.rig;
+    final s = if (left) -1.0 else 1.0;
+    final hx = s * r.hipX;
+    final hy = r.hipY;
+    final angles = track(f, pick: fun (q: Pose) > double => if (left) -q.leftLeg else -q.rightLeg);
+    final parts = mut [<str>];
+    parts.append(rotate(f, angles: angles, cx: hx, cy: hy));
+    final fx = hx + s * r.w * 0.04;
+    parts.append(path("M {num(hx - r.w * 0.07)} {num(hy)} L {num(hx + r.w * 0.07)} {num(hy)} L {num(fx + r.w * 0.07)} {num(-r.w * 0.03)} L {num(fx - r.w * 0.07)} {num(-r.w * 0.03)} Z", attrs: paint(g.pal.body, pal: g.pal)));
+    parts.append(ellipse(fx, cy: -r.w * 0.035, rx: r.w * 0.12, ry: r.w * 0.055, attrs: paint(g.pal.foot, pal: g.pal)));
+    parts.append("</g>");
+    return parts.join("\n");
+}
+
+// armSwing is the rotation that swings an arm out by angle: the left arm
+// turns clockwise, the right counterclockwise.
+fun armSwing(q: Pose, left: bool) > double {
+    return if (left) q.leftArm else -q.rightArm;
+}
+
+fun arm(g: Gopher, f: Frames, left: bool) > str {
+    final r = f.rig;
+    final pal = g.pal;
+    final s = if (left) -1.0 else 1.0;
+    final sx = s * r.shoulderX;
+    final sy = r.shoulderY;
+    final parts = mut [<str>];
+    parts.append(rotate(f, angles: track(f, pick: fun (q: Pose) > double => armSwing(q, left: left)), cx: sx, cy: sy));
+    final len = r.armLen;
+    final aw = r.armW;
+    if (g.sleeve -> cloth) {
+        parts.append(path(smooth([
+            p(sx - aw * 0.55, y: sy - aw * 0.3),
+            p(sx + aw * 0.55, y: sy - aw * 0.3),
+            p(sx + aw * 1.0, y: sy + len * 0.55),
+            p(sx + aw * 1.35, y: sy + len * 0.95),
+            p(sx, y: sy + len * 0.88),
+            p(sx - aw * 1.35, y: sy + len * 0.95),
+            p(sx - aw * 1.0, y: sy + len * 0.55),
+        ], closed: true), attrs: paint(cloth, pal: pal)));
+    } else {
+        parts.append(`<rect x="{num(sx - aw / 2.0)}" y="{num(sy - aw / 2.0)}" width="{num(aw)}" height="{num(len + aw / 2.0)}" rx="{num(aw / 2.0)}" {paint(pal.limb, pal: pal)}/>`);
+    }
+    if (g.band -> band) {
+        parts.append(`<g transform="translate({num(sx)} {num(sy + len * 0.4)})">`);
+        parts.append(band.draw(f));
+        parts.append("</g>");
+    }
+    parts.append(prop(g, f: f, left: left, behind: false));
+    final hy = sy + len;
+    if (left and g.openHand) {
+        // The palm turns up whatever the arm does, so it is drawn with the
+        // arm's swing undone.
+        parts.append(rotate(f, angles: track(f, pick: fun (q: Pose) > double => -armSwing(q, left: left) + g.palmTurn), cx: sx, cy: hy));
+        parts.append(path(smooth([
+            p(sx + aw * 0.5, y: hy - aw * 0.45),
+            p(sx - aw * 0.4, y: hy - aw * 0.15),
+            p(sx - aw * 1.3, y: hy - aw * 0.05),
+            p(sx - aw * 1.55, y: hy + aw * 0.2),
+            p(sx - aw * 0.9, y: hy + aw * 0.45),
+            p(sx + aw * 0.5, y: hy + aw * 0.5),
+        ], closed: true), attrs: paint(pal.limb, pal: pal)));
+        parts.append(path(smooth([
+            p(sx - aw * 0.55, y: hy - aw * 0.2),
+            p(sx - aw * 0.75, y: hy - aw * 0.85),
+            p(sx - aw * 0.5, y: hy - aw * 0.95),
+            p(sx - aw * 0.25, y: hy - aw * 0.3),
+        ], closed: true), attrs: paint(pal.limb, pal: pal)));
+        parts.append("</g>");
+    } else {
+        parts.append(circle(sx, cy: hy, r: aw * 0.62, attrs: paint(pal.limb, pal: pal)));
+    }
+    parts.append("</g>");
+    return parts.join("\n");
+}
+
+// prop draws what a hand holds, at the hand. A prop drawn behind sits in
+// the hand's frame but under the body, the way a staff passes behind a
+// sleeve.
+fun prop(g: Gopher, f: Frames, left: bool, behind: bool) > str {
+    final held = if (left) g.leftHand else g.rightHand;
+    if (held -> pr) {
+        if (pr.behind != behind) {
+            return "";
+        }
+        final r = f.rig;
+        final s = if (left) -1.0 else 1.0;
+        final hx = s * r.shoulderX;
+        final hy = r.shoulderY + r.armLen;
+        final parts = mut [<str>];
+        if (behind) {
+            parts.append(rotate(f, angles: track(f, pick: fun (q: Pose) > double => armSwing(q, left: left)), cx: hx, cy: r.shoulderY));
+        }
+        parts.append(move(f, dx: track(f, pick: fun (q: Pose) > double => hx), dy: track(f, pick: fun (q: Pose) > double => hy)));
+        final undo = track(f, pick: fun (q: Pose) > double => (if (pr.upright) -armSwing(q, left: left) else 0.0) + pr.angle);
+        parts.append(rotate(f, angles: undo, cx: 0.0, cy: 0.0));
+        parts.append(pr.draw(f));
+        parts.append("</g></g>");
+        if (behind) {
+            parts.append("</g>");
+        }
+        return parts.join("\n");
+    }
+    return "";
+}
+
+// document wraps drawn groups in an SVG with a transparent background.
+export fun document(width: double, height: double, body: str) > str {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="{num(width)}" height="{num(height)}" viewBox="0 0 {num(width)} {num(height)}">` + "\n" + body + "\n</svg>\n";
+}
+
+// place sets a drawn gopher's feet at (x, y), scaled.
+export fun place(drawn: str, x: double, y: double, scale: double) > str {
+    return `<g transform="translate({num(x)} {num(y)}) scale({num(scale)})">` + "\n" + drawn + "\n</g>";
+}
+
+// save writes an SVG, creating its directory.
+export fun save(target: str, svg: str) > result\Result::<str> {
+    try {
+        fs\mkdirAll(fs\dirname(target));
+        fs\writeFile(target, content: svg);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "write {target}");
+    }
+    return result\ok::<str>(target);
+}
+
+test "num rounds to two places" {
+    std\assert(num(3.14159) == "3.14", message: "pi");
+    std\assert(num(-0.004) == "0", message: "negative zero");
+    std\assert(num(12.0) == "12", message: "whole");
+    std\assert(num(-1.05) == "-1.05", message: "negative");
+    std\assert(num(0.5) == "0.5", message: "tenths");
+}
+
+test "mirror closes a half outline" {
+    final all = mirror([p(0.0, y: 0.0), p(1.0, y: 1.0), p(0.0, y: 2.0)]);
+    std\assert(all.len() == 4, message: "the axis points are not doubled");
+    std\assert(all[3].x == -1.0, message: "reflected");
+}
+
+test "draw refuses no poses" {
+    final res = draw(Gopher{}, poses: [], seconds: 1.0, id: "t");
+    std\assert(res.error != null, message: "no poses is an error");
+}

@@ -1,0 +1,280 @@
+// safety.buzz is the safetyscissors mark's kit: round-tipped scissors and
+// the protective gear a gopher wears to run with them, and the three
+// gophers the mark is offered as.
+import "gopher";
+import "wardrobe";
+import "wizard";
+
+export final RED = "#e2472f";
+export final CREAM = "#f4eee2";
+export final YELLOW = "#ffc627";
+export final ORANGE = "#ff8a1e";
+export final INK = "#1f2333";
+export final STEEL = "#c7d0d6";
+export final STEEL_SHADE = "#97a3ab";
+export final BALL = "#d6ec3c";
+
+export final BRIGHT = gopher\Palette{
+    body = "#62c6de",
+    limb = "#62c6de",
+    ear = "#3d9fba",
+    muzzle = "#f6e1c7",
+    nose = "#3d2b26",
+    foot = "#f6e1c7",
+    outline = INK,
+    outlineWidth = 5.0,
+};
+
+// scissors are kids' safety scissors: short blades with round, blunt ends
+// and chunky loops. size scales them from a hand-held pair, 1, up to a staff;
+// ball sticks a tennis ball on the tips for good measure. The pose's open
+// spreads the blades.
+export fun scissors(handle: str, size: double, ball: bool, angle: double) > gopher\Prop {
+    return gopher\Prop{
+        upright = true,
+        angle = angle,
+        draw = fun (f: gopher\Frames) > str {
+            final u = f.rig.w * size;
+            final pal = f.pal;
+            final py = -u * 0.12;
+            final bl = u * 0.42;
+            final bw = u * 0.085;
+            final parts = mut [<str>];
+            foreach (s in [-1.0, 1.0]) {
+                parts.append(gopher\rotate(f, angles: gopher\track(f, pick: fun (q: gopher\Pose) > double => s * (5.0 + q.open * 20.0)), cx: 0.0, cy: py));
+                final lx = -s * u * 0.085;
+                final ly = py + u * 0.15;
+                parts.append(gopher\path("M 0 {gopher\num(py)} L {gopher\num(lx)} {gopher\num(ly - u * 0.06)}", attrs: gopher\line(pal.outline, width: u * 0.075 + pal.outlineWidth * 2.0)));
+                parts.append(gopher\path("M 0 {gopher\num(py)} L {gopher\num(lx)} {gopher\num(ly - u * 0.06)}", attrs: gopher\line(handle, width: u * 0.075)));
+                parts.append(gopher\ellipse(lx, cy: ly, rx: u * 0.075, ry: u * 0.065, attrs: gopher\line(pal.outline, width: u * 0.05 + pal.outlineWidth * 2.0)));
+                parts.append(gopher\ellipse(lx, cy: ly, rx: u * 0.075, ry: u * 0.065, attrs: gopher\line(handle, width: u * 0.05)));
+                final blade = [
+                    gopher\p(-bw * 0.45, y: py + bw * 0.4),
+                    gopher\p(-bw * 0.55, y: py - bl * 0.5),
+                    gopher\p(-bw * 0.42, y: py - bl * 0.9),
+                    gopher\p(0.0, y: py - bl),
+                    gopher\p(bw * 0.42, y: py - bl * 0.9),
+                    gopher\p(bw * 0.4, y: py - bl * 0.5),
+                    gopher\p(bw * 0.35, y: py + bw * 0.4),
+                ];
+                parts.append(gopher\path(gopher\smooth(blade, closed: true), attrs: gopher\paint(STEEL, pal: pal)));
+                parts.append(gopher\path("M {gopher\num(s * bw * 0.1)} {gopher\num(py - bl * 0.12)} L {gopher\num(s * bw * 0.1)} {gopher\num(py - bl * 0.8)}", attrs: gopher\line(STEEL_SHADE, width: bw * 0.22)));
+                parts.append("</g>");
+            }
+            parts.append(gopher\circle(0.0, cy: py, r: u * 0.028, attrs: gopher\paint(STEEL_SHADE, pal: pal)));
+            if (ball) {
+                final by = py - bl - u * 0.04;
+                final br = u * 0.085;
+                parts.append(gopher\circle(0.0, cy: by, r: br, attrs: gopher\paint(BALL, pal: pal)));
+                parts.append(gopher\path("M {gopher\num(-br * 0.95)} {gopher\num(by - br * 0.3)} Q 0 {gopher\num(by + br * 0.5)} {gopher\num(br * 0.95)} {gopher\num(by - br * 0.3)}", attrs: gopher\line(CREAM, width: br * 0.16)));
+            }
+            return parts.join("\n");
+        },
+    };
+}
+
+// helmet is a bicycle helmet: a vented dome and a strap under the chin.
+// The strap is its own piece, drawn under the face so the eyes cover it.
+export fun helmet(shell: str, vent: str) > [gopher\Accessory] {
+    final strap = gopher\Accessory{
+        layer = gopher\Layer.robe,
+        draw = fun (f: gopher\Frames) > str {
+            final r = f.rig;
+            final w = r.w;
+            final rim = r.top + r.h * 0.12;
+            final chin = r.muzzleY + w * 0.27;
+            final parts = mut [<str>];
+            foreach (s in [-1.0, 1.0]) {
+                parts.append(gopher\path("M {gopher\num(s * w * 0.44)} {gopher\num(rim)} L 0 {gopher\num(chin)}", attrs: gopher\line(f.pal.outline, width: w * 0.025)));
+            }
+            parts.append(`<rect x="{gopher\num(-w * 0.04)}" y="{gopher\num(chin - w * 0.03)}" width="{gopher\num(w * 0.08)}" height="{gopher\num(w * 0.05)}" rx="{gopher\num(w * 0.01)}" {gopher\paint(YELLOW, pal: f.pal)}/>`);
+            return parts.join("\n");
+        },
+    };
+    final dome = gopher\Accessory{
+        layer = gopher\Layer.hat,
+        draw = fun (f: gopher\Frames) > str {
+            final r = f.rig;
+            final w = r.w;
+            final h = r.h;
+            final rim = r.top + h * 0.12;
+            final parts = mut [gopher\path(gopher\smooth([
+                gopher\p(-w * 0.58, y: rim + h * 0.02),
+                gopher\p(-w * 0.52, y: r.top - h * 0.02),
+                gopher\p(-w * 0.25, y: r.top - h * 0.1),
+                gopher\p(w * 0.05, y: r.top - h * 0.12),
+                gopher\p(w * 0.32, y: r.top - h * 0.09),
+                gopher\p(w * 0.54, y: r.top - h * 0.01),
+                gopher\p(w * 0.58, y: rim + h * 0.02),
+                gopher\p(0.0, y: rim - h * 0.01),
+            ], closed: true), attrs: gopher\paint(shell, pal: f.pal))];
+            foreach (x in [-0.28, 0.0, 0.28]) {
+                final cx = w * x;
+                parts.append(gopher\path(gopher\smooth([
+                    gopher\p(cx - w * 0.05, y: rim - h * 0.035),
+                    gopher\p(cx - w * 0.035, y: r.top - h * 0.055),
+                    gopher\p(cx + w * 0.035, y: r.top - h * 0.055),
+                    gopher\p(cx + w * 0.05, y: rim - h * 0.035),
+                ], closed: true), attrs: `fill="{vent}"`));
+            }
+            return parts.join("\n");
+        },
+    };
+    return [strap, dome];
+}
+
+// hardHat is a builder's hat with a ridge and a short brim.
+export fun hardHat(shell: str, ridge: str) > gopher\Accessory {
+    return gopher\Accessory{
+        layer = gopher\Layer.hat,
+        draw = fun (f: gopher\Frames) > str {
+            final r = f.rig;
+            final w = r.w;
+            final h = r.h;
+            final rim = r.top + h * 0.1;
+            final parts = mut [gopher\path(gopher\smooth([
+                gopher\p(-w * 0.48, y: rim),
+                gopher\p(-w * 0.44, y: r.top - h * 0.02),
+                gopher\p(0.0, y: r.top - h * 0.12),
+                gopher\p(w * 0.44, y: r.top - h * 0.02),
+                gopher\p(w * 0.48, y: rim),
+            ], closed: true), attrs: gopher\paint(shell, pal: f.pal))];
+            parts.append(`<rect x="{gopher\num(-w * 0.62)}" y="{gopher\num(rim - h * 0.015)}" width="{gopher\num(w * 1.24)}" height="{gopher\num(h * 0.045)}" rx="{gopher\num(h * 0.022)}" {gopher\paint(shell, pal: f.pal)}/>`);
+            parts.append(gopher\path(gopher\smooth([
+                gopher\p(-w * 0.08, y: rim - h * 0.02),
+                gopher\p(-w * 0.07, y: r.top - h * 0.07),
+                gopher\p(0.0, y: r.top - h * 0.115),
+                gopher\p(w * 0.07, y: r.top - h * 0.07),
+                gopher\p(w * 0.08, y: rim - h * 0.02),
+            ], closed: true), attrs: gopher\paint(ridge, pal: f.pal)));
+            return parts.join("\n");
+        },
+    };
+}
+
+// vest is a hi-vis vest, open at a V down the front, with two reflective
+// stripes.
+export fun vest(cloth: str, stripe: str) > gopher\Accessory {
+    return gopher\Accessory{
+        layer = gopher\Layer.robe,
+        draw = fun (f: gopher\Frames) > str {
+            final r = f.rig;
+            final w = r.w;
+            final h = r.h;
+            final sy = r.shoulderY;
+            final parts = mut [<str>];
+            foreach (s in [-1.0, 1.0]) {
+                final panel = [
+                    gopher\p(s * w * 0.14, y: sy - h * 0.06),
+                    gopher\p(s * w * 0.42, y: sy - h * 0.05),
+                    gopher\p(s * w * 0.515, y: sy + h * 0.1),
+                    gopher\p(s * w * 0.52, y: sy + h * 0.33),
+                    gopher\p(s * w * 0.04, y: sy + h * 0.36),
+                    gopher\p(s * w * 0.03, y: sy + h * 0.1),
+                ];
+                parts.append(gopher\path(gopher\polygon(panel, closed: true), attrs: gopher\paint(cloth, pal: f.pal)));
+                foreach (y in [0.14, 0.26]) {
+                    parts.append(gopher\path(gopher\polygon([
+                        gopher\p(s * w * 0.035, y: sy + h * y),
+                        gopher\p(s * w * 0.52, y: sy + h * y),
+                        gopher\p(s * w * 0.52, y: sy + h * (y + 0.045)),
+                        gopher\p(s * w * 0.04, y: sy + h * (y + 0.045)),
+                    ], closed: true), attrs: gopher\paint(stripe, pal: f.pal)));
+                }
+            }
+            return parts.join("\n");
+        },
+    };
+}
+
+// floaties are inflatable water wings, one on each upper arm.
+export fun floaties(vinyl: str, shine: str) > gopher\Prop {
+    return gopher\Prop{
+        draw = fun (f: gopher\Frames) > str {
+            final a = f.rig.armW;
+            final parts = mut [`<rect x="{gopher\num(-a * 1.25)}" y="{gopher\num(-a * 0.75)}" width="{gopher\num(a * 2.5)}" height="{gopher\num(a * 1.5)}" rx="{gopher\num(a * 0.75)}" {gopher\paint(vinyl, pal: f.pal)}/>`];
+            parts.append(gopher\path("M {gopher\num(-a * 1.2)} 0 L {gopher\num(a * 1.2)} 0", attrs: gopher\line(f.pal.outline, width: f.pal.outlineWidth * 0.6)));
+            parts.append(gopher\ellipse(-a * 0.6, cy: -a * 0.38, rx: a * 0.35, ry: a * 0.14, attrs: `fill="{shine}"`));
+            parts.append(`<rect x="{gopher\num(a * 0.55)}" y="{gopher\num(-a * 1.0)}" width="{gopher\num(a * 0.3)}" height="{gopher\num(a * 0.35)}" rx="{gopher\num(a * 0.1)}" {gopher\paint(vinyl, pal: f.pal)}/>`);
+            return parts.join("\n");
+        },
+    };
+}
+
+// speedLines trail behind a running gopher, on its left.
+export fun speedLines(color: str) > gopher\Accessory {
+    return gopher\Accessory{
+        layer = gopher\Layer.back,
+        draw = fun (f: gopher\Frames) > str {
+            final r = f.rig;
+            final w = r.w;
+            final h = r.h;
+            final parts = mut [<str>];
+            final rows = [[0.3, 0.55], [0.48, 0.85], [0.66, 0.6], [0.84, 0.4]];
+            foreach (row in rows) {
+                final y = r.top + h * row[0];
+                final x0 = -w * 0.62;
+                parts.append(gopher\path("M {gopher\num(x0)} {gopher\num(y)} L {gopher\num(x0 - w * row[1])} {gopher\num(y)}", attrs: gopher\line(color, width: w * 0.04)));
+            }
+            return parts.join("\n");
+        },
+    };
+}
+
+// runner is the gopher running with safety scissors held high, in a helmet
+// and water wings.
+export fun runner() > gopher\Gopher {
+    return gopher\Gopher{
+        pal = BRIGHT,
+        lids = gopher\Lids.determined,
+        mouth = gopher\Mouth.open,
+        wear = [speedLines(INK), helmet(RED, vent: "#a8301d")[0], helmet(RED, vent: "#a8301d")[1]],
+        band = floaties(YELLOW, shine: "#fff3c4"),
+        rightHand = scissors(RED, size: 1.3, ball: false, angle: 28.0),
+    };
+}
+
+// RUN is one stride and the next, looped.
+export final RUN = [
+    gopher\Pose{ leftArm = 55.0, rightArm = 150.0, leftLeg = -32.0, rightLeg = 28.0, lean = 9.0, bob = 4.0, turn = 0.45, lookX = 0.55, lookY = -0.45, open = 0.0 },
+    gopher\Pose{ leftArm = 35.0, rightArm = 158.0, leftLeg = 5.0, rightLeg = -5.0, lean = 9.0, bob = 16.0, turn = 0.45, lookX = 0.55, lookY = -0.45, open = 1.0 },
+    gopher\Pose{ leftArm = 55.0, rightArm = 150.0, leftLeg = 28.0, rightLeg = -32.0, lean = 9.0, bob = 4.0, turn = 0.45, lookX = 0.55, lookY = -0.45, open = 0.0 },
+    gopher\Pose{ leftArm = 35.0, rightArm = 158.0, leftLeg = -5.0, rightLeg = 5.0, lean = 9.0, bob = 16.0, turn = 0.45, lookX = 0.55, lookY = -0.45, open = 1.0 },
+    gopher\Pose{ leftArm = 55.0, rightArm = 150.0, leftLeg = -32.0, rightLeg = 28.0, lean = 9.0, bob = 4.0, turn = 0.45, lookX = 0.55, lookY = -0.45, open = 0.0 },
+];
+
+// sorcerer is magus's wizard with his staff swapped for a staff-sized pair
+// of safety scissors, a tennis ball on the tips.
+export fun sorcerer() > gopher\Gopher {
+    final g = wizard\figure();
+    return gopher\Gopher{
+        width = g.width,
+        height = g.height,
+        eyeSize = g.eyeSize,
+        lids = gopher\Lids.worried,
+        pal = g.pal,
+        sleeve = g.sleeve,
+        openHand = g.openHand,
+        wear = g.wear,
+        leftHand = g.leftHand,
+        rightHand = scissors(RED, size: 2.0, ball: true, angle: 0.0),
+    };
+}
+
+export final SORCERER = gopher\Pose{ leftArm = 72.0, rightArm = 56.0, lookX = 0.5, lookY = -0.6, open = 0.15 };
+
+// monitor carries the scissors the way the poster says, tips down, in a
+// hard hat and hi-vis, and holds up a palm to anyone running.
+export fun monitor() > gopher\Gopher {
+    return gopher\Gopher{
+        pal = BRIGHT,
+        lids = gopher\Lids.sleepy,
+        mouth = gopher\Mouth.grin,
+        openHand = true,
+        palmTurn = 70.0,
+        wear = [vest(ORANGE, stripe: CREAM), hardHat(YELLOW, ridge: "#e5a90f")],
+        rightHand = scissors(RED, size: 0.7, ball: false, angle: 180.0),
+    };
+}
+
+export final MONITOR = gopher\Pose{ leftArm = 95.0, rightArm = 34.0, lookX = -0.6, lookY = 0.0, turn = -0.2 };
