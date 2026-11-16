@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/types"
@@ -18,9 +17,13 @@ import (
 // manpage.CommonSubcommands minus "ls" (no-op for the shorthand UX).
 var targetChoices = []string{"build", "test", "lint", "format", "clean", "generate", "ci"}
 
-// GraphLoader loads the knowledge graph the project picker searches. The caller
-// owns how: this package cannot reach the workspace.
-type GraphLoader func(ctx context.Context) (*knowledge.Graph, error)
+// GraphSearch resolves typed text to knowledge graph matches, at most limit of them.
+type GraphSearch func(input string, limit int) []types.KnowledgeMatch
+
+// GraphLoader loads the knowledge graph search the project picker runs. The caller
+// owns how: this package cannot reach the workspace, and knowledge imports it for
+// hints, so the graph arrives as its search alone.
+type GraphLoader func(ctx context.Context) (GraphSearch, error)
 
 // graphLookup returns a live search over the knowledge graph, resolving typed
 // text to the PROJECT that owns whatever it names, or nil when no graph is
@@ -47,7 +50,7 @@ func graphLookup(ctx context.Context, load GraphLoader, byPath map[string]*types
 	// keystroke after it lands, the graph does. Nothing waits.
 	var (
 		mu    sync.Mutex
-		g     *knowledge.Graph
+		g     GraphSearch
 		ready bool
 	)
 	go func() {
@@ -72,14 +75,14 @@ func graphLookup(ctx context.Context, load GraphLoader, byPath map[string]*types
 }
 
 // resolveProjects turns one query into the projects that own its matches.
-func resolveProjects(g *knowledge.Graph, filter string, byPath map[string]*types.Project) []string {
+func resolveProjects(g GraphSearch, filter string, byPath map[string]*types.Project) []string {
 	return func(filter string) []string {
 		if strings.TrimSpace(filter) == "" {
 			return nil // no query yet: the caller's own ordering stands
 		}
 		seen := map[string]bool{}
 		var out []string
-		for _, m := range g.Resolve(filter, graphMatchLimit) {
+		for _, m := range g(filter, graphMatchLimit) {
 			p, ok := projectForNode(m, byPath)
 			if !ok || seen[p] {
 				continue

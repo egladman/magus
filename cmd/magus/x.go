@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
@@ -75,8 +74,12 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		return fmt.Errorf("magus x: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project), run `%s` to bootstrap one", hint.Init.String())
 	}
 
-	chosen, err := interactive.PickProject(ctx, func(ctx context.Context) (*knowledge.Graph, error) {
-		return loadKnowledgeGraph(ctx, root, false, false, false)
+	chosen, err := interactive.PickProject(ctx, func(ctx context.Context) (interactive.GraphSearch, error) {
+		g, err := loadKnowledgeGraph(ctx, root, false, false, false)
+		if err != nil {
+			return nil, err
+		}
+		return g.Resolve, nil
 	}, all, filters)
 	if err != nil {
 		if errors.Is(err, pick.ErrAborted) {
