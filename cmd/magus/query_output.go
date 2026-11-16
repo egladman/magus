@@ -43,7 +43,7 @@ func queryOutputStdin(ctx context.Context, qf *flaggen.QueryFlags, pos []string)
 	if outOpts.Format != outputText {
 		return exit.Usagef("magus query output --stdin takes no -o: it prints each untrusted record neutralized, and the records on stdin are already the structured form")
 	}
-	return printOutputRecords(os.Stdin, os.Stdout, noticeLines{ctx: ctx, level: slog.LevelInfo})
+	return cache.PrintOutputRecords(os.Stdin, os.Stdout, noticeLines{ctx: ctx, level: slog.LevelInfo})
 }
 
 // queryOutputCommand is `magus query output <ref>`; pos follows `query`.
@@ -309,9 +309,6 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out out
 	return nil
 }
 
-// outputIdentityRecord is the -o json/yaml projection of `query output <ref> --identity`: the
-// stored descriptor, the producing invocation's lineage when its run log survives, and
-// the cache key's component-class digests when the run persisted its key inputs.
 // invocationRecord is the machine-readable projection of one run: its header plus the events
 // an audit cares about. The events are already redacted (journal.Emit scrubs Text on the way
 // in), and a secret event carries only the reference and the provider by construction.
@@ -428,12 +425,6 @@ func printInvocationText(w io.Writer, header magus.Invocation, secrets, events [
 	}
 }
 
-type outputIdentityRecord struct {
-	magus.OutputDescriptor
-	Invocation   *magus.Invocation   `json:"invocation,omitempty"`
-	ClassDigests []cache.ClassDigest `json:"class_digests,omitempty"`
-}
-
 // showOutputIdentity renders a stored run's IDENTITY rather than its output: what ran,
 // how it ended, which invocation produced it, and the digests of its cache key's
 // component classes: the machine-comparable half of the works-on-my-machine story
@@ -462,82 +453,19 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out out
 	}
 	switch out.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(out, outputIdentityRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
+		return emitFormatted(out, cache.OutputIdentityRecord[magus.Invocation]{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
 	case outputName:
 		return emitNames(os.Stdout, []string{desc.Ref})
 	}
-	printOutputIdentityText(ctx, m, desc, inv, digests)
+	var invArgs []string
+	if inv != nil {
+		invArgs = inv.Command.Arguments
+	}
+	cache.PrintOutputIdentityText(os.Stdout, desc, invArgs, digests, func() string {
+		_, cur, _ := m.CurrentRevision(ctx)
+		return cur
+	})
 	return nil
-}
-
-func printOutputIdentityText(ctx context.Context, m *magus.Magus, desc magus.OutputDescriptor, inv *magus.Invocation, digests []cache.ClassDigest) {
-	fmt.Printf("ref:     %s\n", desc.Ref)
-	fmt.Printf("project: %s\n", desc.Project)
-	if desc.Target != "" {
-		fmt.Printf("target:  %s\n", desc.Target)
-	}
-	status := "pass"
-	if desc.Failed {
-		status = "fail"
-	}
-	fmt.Printf("status:  %s (%s) at %s\n", status,
-		(time.Duration(desc.DurationMs) * time.Millisecond).Round(time.Millisecond),
-		time.UnixMilli(desc.TimestampMs).Format("2006-01-02 15:04:05"))
-	if desc.ErrMsg != "" {
-		fmt.Printf("error:   %s\n", desc.ErrMsg)
-	}
-	if desc.FailedNeedRef != "" {
-		fmt.Printf("failed:  ctx.needs %s, read it with %s\n", desc.FailedNeedTarget, hint.QueryOutput.With(desc.FailedNeedRef))
-	}
-	if desc.Attempt != "" {
-		fmt.Printf("attempt: %s\n", desc.Attempt)
-	}
-	if desc.Inv != "" {
-		fmt.Printf("inv:     %s", desc.Inv)
-		if inv != nil && len(inv.Command.Arguments) > 0 {
-			fmt.Printf("  (magus %s)", strings.Join(inv.Command.Arguments, " "))
-		}
-		fmt.Println()
-	}
-	if desc.Key != "" {
-		fmt.Printf("key:     %s (keyVersion %d)\n", desc.Key, desc.KeyVersion)
-	}
-	if desc.MagusVersion != "" {
-		fmt.Printf("magus:   %s\n", desc.MagusVersion)
-	}
-	if desc.Revision != "" {
-		fmt.Printf("rev:     %s", magus.ShortRevision(desc.Revision))
-		if desc.Dirty {
-			fmt.Printf(" (dirty: uncommitted changes at capture time; the revision alone may not reproduce it)")
-		}
-		fmt.Println()
-		// The cache key pins a tree STATE, never a commit; this is the one place
-		// that names one, by comparing the descriptor's revision against HEAD now.
-		// PROVENANCE only, never instruction: on a cache HIT, recordOutput never runs,
-		// so the descriptor still carries the revision of whichever run FIRST minted
-		// this key, which can differ from HEAD even though the current tree
-		// reproduces the output perfectly (that reproduction is exactly why it was a
-		// hit). Telling the user to check out the recorded commit would therefore be
-		// wrong on the most common path that reaches this line: a ref that resolved
-		// already has its bytes, and the KEY, not the commit, is what decided that.
-		// Only print when the two actually differ: same revision is the common case
-		// and needs no callout.
-		if _, cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
-			fmt.Printf("recorded at %s, you are on %s.\n", magus.ShortRevision(desc.Revision), magus.ShortRevision(cur))
-		}
-	}
-	if len(digests) == 0 {
-		fmt.Println("\nkey components: unavailable (run predates key-input persistence; re-run the target to record them)")
-		return
-	}
-	fmt.Println("\nkey components:")
-	for _, d := range digests {
-		noun := "lines"
-		if d.Count == 1 {
-			noun = "line"
-		}
-		fmt.Printf("  %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
-	}
 }
 
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,

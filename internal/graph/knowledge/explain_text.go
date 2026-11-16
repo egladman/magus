@@ -1,4 +1,4 @@
-package main
+package knowledge
 
 import (
 	"fmt"
@@ -6,9 +6,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// resolutionNote is the line explain prints above a card it did not reach by node ID, ""
+// ResolutionNote is the line explain prints above a card it did not reach by node ID, ""
 // for an ID match.
-func resolutionNote(asked string, out types.KnowledgeExplainOutput) string {
+func ResolutionNote(asked string, out types.KnowledgeExplainOutput) string {
 	switch out.Resolution {
 	case types.ResolvedPath:
 		return fmt.Sprintf("%q resolved by path to %s\n", asked, out.Node.ID)

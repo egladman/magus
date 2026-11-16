@@ -52,7 +52,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 	})
 	run := rankeval.Run{Judgment: j, Dropped: dropped}
 
-	read := graphRead{Input: j.Query}
+	read := knowledge.GraphRead{Input: j.Query}
 	sources := map[string]string{}
 	var hits []string
 	var answer types.KnowledgeAnswer
