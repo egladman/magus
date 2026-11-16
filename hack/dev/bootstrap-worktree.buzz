@@ -31,7 +31,7 @@ final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this s
     + "placed only when it is provably the binary this worktree would build: go-build stamps it with a digest of its Go\n"
     + "build inputs (each file the go spell's mgs_getScopes names for ./cmd/magus: what it compiles or embeds, and its\n"
     + "modules' go.mod, go.sum or go.work), and that digest must be this worktree's. Docs, console, tests, a package nothing links and a separate module such as\n"
-    + "libs/embed/train do not count, so a base commit later than the binary's usually qualifies, and so does a binary built\n"
+    + "libs/train do not count, so a base commit later than the binary's usually qualifies, and so does a binary built\n"
     + "from uncommitted changes. Otherwise the script refuses and names what to build in the root.\n"
     + "--build-from <checkout> is --from after building: it runs `<checkout>/magus --root <checkout> run go-build .` first, then\n"
     + "judges that binary the same way. A session holding a job lease is refused, since a worker never compiles magus.\n"
