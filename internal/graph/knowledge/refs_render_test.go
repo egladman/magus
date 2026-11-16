@@ -40,22 +40,6 @@ func testEnv(stdout, notices io.Writer) RefsEnv {
 			}
 			return nil
 		},
-		Verdict: func(w io.Writer, ans types.KnowledgeAnswer) { fmt.Fprintf(w, "verdict: %s\n", ans.Verdict) },
-		Staleness: func(w io.Writer, ans types.KnowledgeAnswer) error {
-			if ans.Reason == types.ReasonIndexStale {
-				return exit.Reported(exit.Failure)
-			}
-			return nil
-		},
-		StaleNotice: func(ans types.KnowledgeAnswer) string {
-			if len(ans.StaleIndexes) == 0 {
-				return ""
-			}
-			return fmt.Sprintf("stale index: %s\n", ans.DescribeStale())
-		},
-		Unverified: func(out types.KnowledgeOccurrencesOutput) string {
-			return fmt.Sprintf("%d site(s) did not verify\n", out.OccurrenceCount-out.VerifiedCount)
-		},
 		IndexCause: func(ans types.KnowledgeAnswer) types.KnowledgeAnswer { return ans },
 	}
 }
@@ -146,7 +130,7 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 	var stdout, notices bytes.Buffer
 	env := testEnv(&stdout, &notices)
 	require.NoError(t, EmitDefinitions(context.Background(), env, output.Options{Format: output.Text}, out))
-	assert.Contains(t, notices.String()+stdout.String(), env.StaleNotice(answer))
+	assert.Contains(t, notices.String()+stdout.String(), StaleIndexNotice(answer))
 
 	out.Definitions[0].Status = types.DefinitionUnverified
 	err := EmitDefinitions(context.Background(), env, output.Options{Format: output.Text}, out)
@@ -176,7 +160,7 @@ referenced in 2 file(s), 3 occurrence(s):
 	out.Refs, out.FileCount, out.RefCount = nil, 0, 0
 	b.Reset()
 	require.NoError(t, WriteRefsText(&b, env, out))
-	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\nno references found\nverdict: found\n", b.String())
+	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\nno references found\n", b.String())
 
 	out.Answer.Verdict = types.VerdictUnknown
 	b.Reset()

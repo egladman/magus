@@ -1,4 +1,4 @@
-package main
+package knowledge
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 )
@@ -20,7 +19,7 @@ func gap(project string) types.KnowledgeSymbolGap {
 
 func renderVerdict(ans types.KnowledgeAnswer, hint string) string {
 	var b bytes.Buffer
-	printVerdict(&b, ans, hint)
+	PrintVerdict(&b, ans, hint)
 	return b.String()
 }
 
@@ -65,7 +64,7 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 		types.ClassifyAnswer(false, "", nil),
 		types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil),
 		types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")}),
-		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api", Language: "go"}}}),
+		Answer("Foo", false, Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api", Language: "go"}}}),
 	} {
 		got := renderVerdict(ans, "magus refs Foo")
 		for _, r := range got {
@@ -78,9 +77,9 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 // The exit code IS the feature at the process boundary. Both cases used to be 2, so a
 // script could not tell "this does not exist" from "I could not look".
 func TestExitForVerdictSplitsUnknownFromAbsent(t *testing.T) {
-	assert.Equal(t, exit.Reported(exit.Failure), exitForVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil).Verdict),
+	assert.Equal(t, exit.Reported(exit.Failure), ExitForVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil).Verdict),
 		"unknown is exit 1: invoked correctly, the work could not be done")
-	assert.Equal(t, exit.Reported(exit.Usage), exitForVerdict(types.ClassifyAnswer(false, "", nil).Verdict),
+	assert.Equal(t, exit.Reported(exit.Usage), ExitForVerdict(types.ClassifyAnswer(false, "", nil).Verdict),
 		"absent is exit 2: the request cannot be carried out as stated")
 }
 
@@ -89,20 +88,20 @@ func TestExitForVerdictSplitsUnknownFromAbsent(t *testing.T) {
 // is the habit the graph exists to replace.
 func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
 	assert.Equal(t, exit.Reported(exit.Failure),
-		exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, types.ReasonIndexStale, nil)}),
+		ExitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, types.ReasonIndexStale, nil)}),
 		"unknown is exit 1: magus could not search what the question was about")
-	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),
+	require.NoError(t, ExitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),
 		"absent is exit 0: an empty result set is a legitimate answer to a search")
-	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 3, Answer: types.ClassifyAnswer(true, "", nil)}))
+	require.NoError(t, ExitForQuery(types.KnowledgeQueryOutput{MatchCount: 3, Answer: types.ClassifyAnswer(true, "", nil)}))
 }
 
 // The condition that keeps the rule usable. A bare free-text query never loads the symbol
 // layer, so its answer is `unknown` even when it matched twelve nodes, and failing there
 // would make an ordinary lookup exit non-zero.
 func TestExitForQueryIgnoresUnknownWhenSomethingMatched(t *testing.T) {
-	ans := knowledge.Answer("lint", true, knowledge.Coverage{Probed: true})
+	ans := Answer("lint", true, Coverage{Probed: true})
 	require.Equal(t, types.VerdictUnknown, ans.Verdict)
-	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 12, Answer: ans}))
+	require.NoError(t, ExitForQuery(types.KnowledgeQueryOutput{MatchCount: 12, Answer: ans}))
 }
 
 // A gap whose index exists but will not decode reads differently from one never built,
@@ -141,7 +140,7 @@ func TestPrintVerdictCoverageUnknownDoesNotAssertAbsence(t *testing.T) {
 // while the stale-index line showed up only under answers that FOUND something: the one
 // case where it did not change what to do.
 func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
-	got := renderVerdict(knowledge.Answer("adoptionRun", false, knowledge.Coverage{
+	got := renderVerdict(Answer("adoptionRun", false, Coverage{
 		Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}, {Project: ".", Language: "buzz"}},
 	}), "")
 	assert.Contains(t, got, "verdict: unknown, not absent")
@@ -151,17 +150,17 @@ func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
 }
 
 // The CLI and the MCP tools must reach the same verdict about one graph. Both
-// build a knowledge.Coverage of what they observed and hand it to knowledge.Answer; neither
+// build a Coverage of what they observed and hand it to Answer; neither
 // derives a reason. The mirror of this assertion lives in internal/handler/mcp.
 func TestVerdictDerivationIsSharedWithMCP(t *testing.T) {
 	const q = "kind=target nothingmatchesthis"
 	// The gate that used to be CLI-only: a kind outside the lazy layer rules it out, so the
 	// absence is verified whether or not symbols were loaded.
-	assert.Equal(t, types.VerdictAbsent, knowledge.Answer(q, false, knowledge.Coverage{}).Verdict)
+	assert.Equal(t, types.VerdictAbsent, Answer(q, false, Coverage{}).Verdict)
 	// And the case the CLI used to get wrong on its own: kind=file names a kind those shards
 	// hold, so an unseeded lookup may not assert anything.
 	assert.Equal(t, types.VerdictUnknown,
-		knowledge.Answer("kind=file nothingmatchesthis", false, knowledge.Coverage{Probed: true}).Verdict)
+		Answer("kind=file nothingmatchesthis", false, Coverage{Probed: true}).Verdict)
 }
 
 // A found result still carries a coverage caveat when one applies, and prints nothing
@@ -199,7 +198,7 @@ func (s *VerdictRemedySuite) TestAnUnbuiltIndexBesideOneNothingMakesGetsTheBuild
 
 func (s *VerdictRemedySuite) TestAReadThatRefreshedPrintsItsCauseAndNoRebuild() {
 	cause := &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again once it lands"}
-	stale := knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}}})
+	stale := Answer("Foo", false, Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}}})
 	stale.IndexCause = cause
 	missing := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")})
 	missing.IndexCause = cause

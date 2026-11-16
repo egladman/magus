@@ -327,7 +327,7 @@ func TestDefinitionLookupSeedsTheSymbolLayer(t *testing.T) {
 	probed := func(_ string, seeded bool) knowledge.Coverage {
 		return knowledge.Coverage{Seeded: seeded, Probed: true}
 	}
-	res := searchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), graphRead{Input: lookup[0].Query, Nearest: true}, nil, probed)
+	res := searchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), knowledge.GraphRead{Input: lookup[0].Query, Nearest: true}, nil, probed)
 	require.Equal(t, types.VerdictFound, res.Out.Answer.Verdict)
 	require.Equal(t, "symbol:readIndex", res.Out.Matches[0].ID)
 }

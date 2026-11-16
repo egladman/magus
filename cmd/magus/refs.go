@@ -95,7 +95,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 
 	// --rename edits files and --definition/--source read them, so those stay local; the
 	// plain lookup and --occurrences are what a server answers.
-	read := graphRead{Input: pos[0], Occurrences: rf.Occurrences}
+	read := knowledge.GraphRead{Input: pos[0], Occurrences: rf.Occurrences}
 	if rf.Refresh && rf.Rename == "" && refreshIndexesNow(ctx, root, "magus refs") {
 		return nil
 	}
@@ -164,7 +164,7 @@ func emitRefsList(ctx context.Context, env knowledge.RefsEnv, opts output.Option
 		}
 		// stderr, because the record on stdout must stay parseable; the exit status is
 		// what a script reads, and it is the only channel a structured caller has.
-		return reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
+		return knowledge.ReportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
 	case outputName:
 		names := make([]string, 0, len(out.Refs))
 		for _, r := range out.Refs {
@@ -173,7 +173,7 @@ func emitRefsList(ctx context.Context, env knowledge.RefsEnv, opts output.Option
 		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
-		return reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
+		return knowledge.ReportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
 	}
 
 	return knowledge.WriteRefsText(os.Stdout, env, out)
@@ -213,8 +213,8 @@ func refsMissCommand(ctx context.Context, root string, opts output.Options, name
 	if err := knowledge.ReportRefsMiss(missLines, refsEnv(ctx, root), opts, miss); err != nil {
 		return err
 	}
-	emitNearest(ctx, res.Nearest)
-	return exitForVerdict(ans.Verdict)
+	knowledge.EmitNearest(ctx, res.Nearest)
+	return knowledge.ExitForVerdict(ans.Verdict)
 }
 
 // workspaceClassifier is the loaded workspace's file classifier, or nil when it did not
@@ -226,26 +226,10 @@ func workspaceClassifier(ctx context.Context, root string) textindex.ClassifyFun
 	return nil
 }
 
-// refsAdvice is the part of the refs renderers' environment that needs no request: the
-// structured writers and the verdict and stale-index advice. It is a value rather than a
-// call because the renderers it serves decide -o name themselves.
-var refsAdvice = knowledge.RefsEnv{
-	Stdout:      os.Stdout,
-	Format:      emitFormatted,
-	Names:       emitNames,
-	Verdict:     refsVerdict,
-	Staleness:   reportIndexStaleness,
-	StaleNotice: staleIndexNotice,
-	Unverified:  unverifiedNotice,
-}
-
-// refsVerdict prints the verdict block with no search hint to offer.
-func refsVerdict(w io.Writer, ans types.KnowledgeAnswer) { printVerdict(w, ans, "") }
-
 // refsEnv is what the refs renderers borrow from this command: stdout and --tee, the
-// verdict and stale-index advice, and the workspace's classifier.
+// index-cause diagnosis, and the workspace's classifier.
 func refsEnv(ctx context.Context, root string) knowledge.RefsEnv {
-	env := refsAdvice
+	env := knowledge.RefsEnv{Stdout: os.Stdout, Format: emitFormatted, Names: emitNames}
 	env.Root = resolveRootOrEmpty(root)
 	env.Notices = noticeLines{ctx: ctx, level: slog.LevelError}
 	env.Classify = func() textindex.ClassifyFunc { return workspaceClassifier(ctx, root) }
@@ -270,7 +254,7 @@ func occurrenceRead(r *magus.SymbolOccurrenceRead) *knowledge.OccurrenceRead {
 // design for exactly this reason.
 //
 // Its exit code is grep's: 0 matched, 1 no match, 2 error. Deliberately NOT
-// exitForVerdict (see verdict.go): that contract states what magus VERIFIED about a
+// knowledge.ExitForVerdict (see verdict_text.go): that contract states what magus VERIFIED about a
 // SYMBOL (absent=2, unknown=1), and a raw text search asks no such question, so
 // reusing it would make "exit 1" mean opposite things depending on a flag on the same
 // command. refs' own -o name format already carves out its own exit meaning per mode
@@ -532,7 +516,7 @@ func (r *refsResult) noteRefresh(cause *types.KnowledgeIndexCause) {
 
 // lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg,
 // judging the answer by coverage.
-func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read graphRead, coverage coverageFunc) refsResult {
+func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read knowledge.GraphRead, coverage coverageFunc) refsResult {
 	symbol, ambiguous := knowledge.PickSymbol(g, read.Input)
 	if len(ambiguous) > 0 {
 		return refsResult{Ambiguous: ambiguous}

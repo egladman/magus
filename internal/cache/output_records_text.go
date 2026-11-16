@@ -1,4 +1,4 @@
-package main
+package cache
 
 import (
 	"fmt"
@@ -7,19 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
-// printOutputRecords prints each record on in the way a local ref prints: the output on
+// PrintOutputRecords prints each record on in the way a local ref prints: the output on
 // stdout, provenance on stderr. Every printed string is neutralized, and no reproduce
 // command is printed, since a forged record chooses its own project and target.
-func printOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
-	return cache.ReadOutputRecords(in, func(rec types.StoredOutput) error {
+func PrintOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
+	return ReadOutputRecords(in, func(rec types.StoredOutput) error {
 		writeRecordProvenance(stderr, rec)
-		out, n := cache.NeutralizeTerminal(rec.Bytes(), true)
+		out, n := NeutralizeTerminal(rec.Bytes(), true)
 		if _, err := stdout.Write(out); err != nil {
 			return err
 		}
@@ -29,6 +27,9 @@ func printOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
 		return nil
 	})
 }
+
+// shortRevisionLen is how much of a revision id a provenance line shows.
+const shortRevisionLen = 12
 
 func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 	d := rec.OutputDescriptor
@@ -45,14 +46,14 @@ func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 		(time.Duration(d.DurationMs) * time.Millisecond).Round(time.Millisecond),
 		time.UnixMilli(d.TimestampMs).UTC().Format("2006-01-02 15:04:05 UTC"))
 	if d.ErrMsg != "" {
-		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(d.ErrMsg, "\n")), false)
+		msg, _ := NeutralizeTerminal([]byte(strings.TrimRight(d.ErrMsg, "\n")), false)
 		fmt.Fprintf(w, "  error:    %s\n", strings.ReplaceAll(string(msg), "\n", "\n            "))
 	}
 	// A record is another machine's, so the member's ref is only named when it has the shape
 	// of one, and the target is neutralized like the error. The command reads the member's
 	// output wherever the record came from, not here.
-	if cache.IsMintedRef(d.FailedNeedRef) {
-		target, _ := cache.NeutralizeTerminal([]byte(d.FailedNeedTarget), false)
+	if IsMintedRef(d.FailedNeedRef) {
+		target, _ := NeutralizeTerminal([]byte(d.FailedNeedTarget), false)
 		fmt.Fprintf(w, "  failed:   ctx.needs %s; where the record was made, read it with %s\n", target, hint.QueryOutput.With(d.FailedNeedRef))
 	}
 	if d.Attempt != "" {
@@ -69,7 +70,7 @@ func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 		if d.Dirty {
 			dirty = " (dirty)"
 		}
-		fmt.Fprintf(w, "  revision: %s%s\n", magus.ShortRevision(d.Revision), dirty)
+		fmt.Fprintf(w, "  revision: %s%s\n", shortRevision(d.Revision), dirty)
 	}
 	if d.MagusVersion != "" {
 		fmt.Fprintf(w, "  magus:    %s\n", d.MagusVersion)

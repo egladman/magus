@@ -49,7 +49,7 @@ func ReportRefsMiss(stderr io.Writer, env RefsEnv, opts output.Options, m RefsMi
 		}
 	}
 	fmt.Fprintf(stderr, "magus refs: no node matches %q\n", m.Name)
-	env.Verdict(stderr, m.Answer)
+	PrintVerdict(stderr, m.Answer, "")
 	if m.Answer.Text == nil && len(m.Notes) > 0 {
 		fmt.Fprintf(stderr, "  no text match in %d file(s) searched (%s)\n", m.Searched, strings.Join(m.Notes, "; "))
 	}

@@ -28,13 +28,9 @@ type RefsEnv struct {
 	// Format and Names write the structured and the -o name forms.
 	Format func(opts output.Options, v any) error
 	Names  func(w io.Writer, names []string) error
-	// Verdict, Staleness, StaleNotice, Unverified and IndexCause are the advice an
-	// answer carries when its index is absent, behind or disagrees with the tree.
-	Verdict     func(w io.Writer, ans types.KnowledgeAnswer)
-	Staleness   func(w io.Writer, ans types.KnowledgeAnswer) error
-	StaleNotice func(ans types.KnowledgeAnswer) string
-	Unverified  func(out types.KnowledgeOccurrencesOutput) string
-	IndexCause  func(ans types.KnowledgeAnswer) types.KnowledgeAnswer
+	// IndexCause adds the diagnosis an answer carries when its index is absent or
+	// behind, which needs the checkout and its server to observe.
+	IndexCause func(ans types.KnowledgeAnswer) types.KnowledgeAnswer
 }
 
 // OccurrenceRead is what a symbol's occurrence read found: the verified sites,
@@ -62,8 +58,8 @@ func WriteRefsText(w io.Writer, env RefsEnv, out types.KnowledgeRefsOutput) erro
 	}
 	if len(out.Refs) == 0 {
 		fmt.Fprintln(w, "no references found")
-		env.Verdict(w, out.Answer)
-		if err := env.Staleness(w, out.Answer); err != nil {
+		PrintVerdict(w, out.Answer, "")
+		if err := ReportIndexStaleness(w, out.Answer); err != nil {
 			return err
 		}
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
@@ -81,7 +77,7 @@ func WriteRefsText(w io.Writer, env RefsEnv, out types.KnowledgeRefsOutput) erro
 	}
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
-	return env.Staleness(w, out.Answer)
+	return ReportIndexStaleness(w, out.Answer)
 }
 
 // EmitOccurrences renders `magus refs <symbol> --occurrences`: every exact source range
@@ -164,7 +160,7 @@ func EmitOccurrences(ctx context.Context, env RefsEnv, opts output.Options, refs
 		// point at the symbol. The notice rides stderr, where it cannot corrupt the
 		// record, and the exit status matches the two arms below.
 		if out.VerifiedCount < out.OccurrenceCount {
-			slog.ErrorContext(ctx, strings.TrimSuffix(env.Unverified(out), "\n"), attr.Notice(""))
+			slog.ErrorContext(ctx, strings.TrimSuffix(UnverifiedNotice(out), "\n"), attr.Notice(""))
 			return exit.Reported(exit.Failure)
 		}
 		return nil
@@ -211,7 +207,7 @@ func EmitOccurrences(ctx context.Context, env RefsEnv, opts output.Options, refs
 	}
 	if out.OccurrenceCount == 0 {
 		fmt.Fprintln(env.Stdout, "no occurrences found")
-		env.Verdict(env.Stdout, out.Answer)
+		PrintVerdict(env.Stdout, out.Answer, "")
 		if out.Answer.Verdict == types.VerdictUnknown {
 			return exit.Reported(exit.Failure)
 		}
@@ -252,11 +248,11 @@ func EmitOccurrences(ctx context.Context, env RefsEnv, opts output.Options, refs
 		// The count alone does not say what to do about it, and the wrong response (edit
 		// the good ones, skip the rest) produces a half-renamed tree that still compiles
 		// in some languages.
-		fmt.Fprint(env.Stdout, env.Unverified(out))
-		env.Verdict(env.Stdout, out.Answer)
+		fmt.Fprint(env.Stdout, UnverifiedNotice(out))
+		PrintVerdict(env.Stdout, out.Answer, "")
 		return exit.Reported(exit.Failure)
 	}
-	env.Verdict(env.Stdout, out.Answer)
+	PrintVerdict(env.Stdout, out.Answer, "")
 	return nil
 }
 
@@ -286,10 +282,10 @@ func EmitDefinitions(ctx context.Context, env RefsEnv, opts output.Options, out 
 	// teaches callers to ignore it.
 	settle := func(nw io.Writer) error {
 		if verified > 0 && verified == len(out.Definitions) {
-			fmt.Fprint(nw, env.StaleNotice(out.Answer))
+			fmt.Fprint(nw, StaleIndexNotice(out.Answer))
 			return nil
 		}
-		if err := env.Staleness(nw, out.Answer); err != nil {
+		if err := ReportIndexStaleness(nw, out.Answer); err != nil {
 			return err
 		}
 		return staleErr()
@@ -327,7 +323,7 @@ func EmitDefinitions(ctx context.Context, env RefsEnv, opts output.Options, out 
 	fmt.Fprintln(env.Stdout)
 	if len(out.Definitions) == 0 {
 		fmt.Fprintln(env.Stdout, "no definition in this workspace")
-		env.Verdict(env.Stdout, out.Answer)
+		PrintVerdict(env.Stdout, out.Answer, "")
 		if out.Answer.Verdict == types.VerdictUnknown {
 			return exit.Reported(exit.Failure)
 		}
