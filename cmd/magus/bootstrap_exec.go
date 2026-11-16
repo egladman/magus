@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 )
@@ -60,7 +61,7 @@ func maybeBootstrapExec(argv []string) {
 // only a binary a live job row pins takes over, as for the hook's hand-off.
 // An installed binary defers anywhere.
 func bootstrapExecRefusal(target, self string) string {
-	session := binaryCheckout(self)
+	session := guard.BinaryCheckout(self)
 	if session == "" {
 		return ""
 	}

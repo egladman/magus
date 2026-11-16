@@ -238,7 +238,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 			return floor.Tokens, floor.USD, why == ""
 		}
 		// Lazy: the harness spells load only when a row names a model.
-		loc.ModelRows = harnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+		loc.ModelRows = guard.HarnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 			return inspectWorkspace(ctx, root)
 		})
 	}
@@ -2273,7 +2273,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 // workspaceLoadFailure is err's text, naming root's own ./magus when running, a binary
 // too old for root, is not that one.
 func workspaceLoadFailure(err error, root, running string) string {
-	return job.LoadFailureText(err, checkoutBinary(root, running))
+	return job.LoadFailureText(err, guard.CheckoutBinary(root, running))
 }
 
 // diskProbe is the cache package's disk probes, which internal/job cannot import.

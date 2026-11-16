@@ -348,7 +348,7 @@ func sessionShow(root string, args []string) error {
 // the report. The workspace is opened apart from the process's shared handle, which a
 // session read never needs.
 func sessionModelTable(root string) model.Table {
-	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+	rows := guard.HarnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 		return magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	})
 	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())

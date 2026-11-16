@@ -130,7 +130,7 @@ func runCLI() int {
 	if err := config.MisconfiguredEnv(os.Environ()); err != nil {
 		switch sub, subArgs := peekSub(args); sub {
 		case "shell":
-			return mapExitCode(shellCommand(withEnvRefusal(context.Background(), err), subArgs))
+			return mapExitCode(shellCommand(guard.WithEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
 			// No display yet: the logger is built after this check.
@@ -765,7 +765,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// A hook reads a guard that exits as no verdict and refuses the
 		// call, the rebuild included. The guard judges the failure instead.
 		if peekedSub == "shell" {
-			return rootCtx, startupResult{cleanup: cleanup}, mapExitCode(shellCommand(withStaleConfig(rootCtx, err), peekedSubArgs))
+			return rootCtx, startupResult{cleanup: cleanup}, mapExitCode(shellCommand(guard.WithStaleConfig(rootCtx, err), peekedSubArgs))
 		}
 		// Printed rather than logged: the unknown-key error names a file, a line and a
 		// suggestion per line, and slog's text handler escapes every quote and newline
