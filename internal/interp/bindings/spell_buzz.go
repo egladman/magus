@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,31 +34,68 @@ func CheckSpellFile(ctx context.Context, path string) error {
 func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, string, error) {
 	// Every import statement reaches the resolver, even of a module already loaded, so
 	// a library imported by ten files would otherwise be read ten times to learn the
-	// same answer.
+	// same answer. The answers last as long as the load or run that attached the probes.
 	probes := interp.ImportProbesFromContext(ctx)
 	if probes.NotSpell(path) {
 		return spells.Descriptor{}, "", spell.ErrNotASpell
 	}
-	data, err := os.ReadFile(path)
+	src, stamp, err := readSpellSource(path)
 	if err != nil {
 		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, err)
 	}
-	src := string(data)
 	// A spell exports mgs_getName, and only the file's own source can export a name, so
 	// without the text it is a plain module. Executing one to find that out doubled the
 	// cost of every bare-path library import, since the file search runs it again.
 	if !strings.Contains(src, spell.NameFunc) {
-		probes.MarkNotSpell(path)
+		probes.MarkNotSpell(path, stamp.Size(), stamp.ModTime())
 		return spells.Descriptor{}, "", spell.ErrNotASpell
+	}
+	// The importing directory is a search root for the spell's own imports.
+	var importer string
+	if source := interp.SourceFromContext(ctx); source != nil {
+		importer = source.Dir
+	}
+	if spec, notSpell, known := probes.SpellAt(path, importer, src); known {
+		if notSpell {
+			return spells.Descriptor{}, "", spell.ErrNotASpell
+		}
+		return spec, src, nil
 	}
 	resolved, err := resolveWithModules(ctx, src, filepath.Dir(path))
 	if err == nil {
 		var spec spells.Descriptor
 		if spec, err = resolved.Descriptor(); err == nil {
+			// The VM polls cancellation only every few hundred jumps, so a short
+			// compile under a cut-short step succeeds; its answer is not trusted.
+			if ctx.Err() == nil {
+				probes.RecordSpellAt(path, importer, src, spec)
+			}
 			return spec, src, nil
 		}
 	}
+	if errors.Is(err, spell.ErrNotASpell) && ctx.Err() == nil {
+		probes.RecordNotSpellAt(path, importer, src)
+	}
 	return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))
+}
+
+// readSpellSource reads the spell file and returns the stat taken from the open file
+// before the read, the stamp a not-a-spell mark is checked against.
+func readSpellSource(path string) (string, fs.FileInfo, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return "", nil, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return "", nil, err
+	}
+	return string(data), info, nil
 }
 
 // loadBuzzSpell reads, extracts (with host modules registered), and idempotently

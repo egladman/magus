@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -204,6 +206,32 @@ func TestRootFirstLevels(t *testing.T) {
 	})
 }
 
+// BenchmarkResolveImportedSpell imports one spell four times, as the loads of one run
+// do, with and without the run's probes; only with them is it compiled once.
+func BenchmarkResolveImportedSpell(b *testing.B) {
+	w := testkit.NewWorkspace(b)
+	root := w.Root()
+	w.Write("spells/benchspell.buzz", `export fun mgs_getName() > str { return "benchspell"; }`)
+	base := interp.WithSource(types.WithWorkspace(b.Context(), rootOnlyWS{root: root}), &interp.Source{Dir: root})
+	for _, probes := range []bool{false, true} {
+		b.Run(fmt.Sprintf("probes=%v", probes), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				ctx, seal := base, func() {}
+				if probes {
+					ctx, seal = interp.WithImportProbes(base)
+				}
+				for range 4 {
+					if _, ok := resolveLocalSpellImport(ctx, nil, "spells/benchspell"); !ok {
+						b.Fatal("spells/benchspell did not resolve")
+					}
+				}
+				seal()
+			}
+		})
+	}
+}
+
 // BenchmarkResolveLocalSpellImport replays one load's worth of non-spell imports from
 // a nested project, shaped like this repo's docs magusfile: every import statement
 // reaches the resolver, so each module is resolved once per importing file.
@@ -296,21 +324,16 @@ func escapeeSpell(t *testing.T) (w *testkit.Workspace, root, outside string) {
 // The root level used to find a spell above the workspace for a `../` import that
 // the project's own level resolves inside it; from a worktree that loaded the main
 // checkout's spell.
-func TestSpellImportAboveTheRootIsNeitherProbedNorLoaded(t *testing.T) {
-	w, root, outside := escapeeSpell(t)
+func TestSpellImportAboveTheRootIsNotLoaded(t *testing.T) {
+	w, root, _ := escapeeSpell(t)
 	w.Write("ws/app/magusfile.buzz", "import \"magus\";\n")
 	base := interp.WithSource(declaredContext(t, root, config.SpellsConfig{}), &interp.Source{Dir: filepath.Join(root, "app")})
 	ctx, seal := interp.WithImportProbes(base)
 	defer seal()
-	probes := interp.ImportProbesFromContext(ctx)
 
 	_, ok := resolveLocalSpellImport(ctx, remotespell.ImportsFromContext(ctx), "../spells/escapee")
 
 	assert.False(t, ok)
-	_, probed := probes.SpellAt(outside)
-	assert.False(t, probed, "a candidate outside the root was probed")
-	_, inside := probes.SpellAt(filepath.Join(root, "spells", "escapee", "spell.buzz"))
-	assert.True(t, inside, "the project level's candidate inside the root was not probed")
 	_, loaded := project.DefaultSpellRegistry().Lookup("escapee")
 	assert.False(t, loaded)
 }
@@ -331,9 +354,9 @@ func TestSpellImportEscapingEveryLevelIsRefused(t *testing.T) {
 	assert.False(t, loaded)
 }
 
-// The memo is keyed on the absolute candidate, so the same relative import from two
-// projects resolves two spells, and a repeat of one answers without the filesystem.
-func TestSpellImportMemoIsKeyedOnTheAbsoluteCandidate(t *testing.T) {
+// The key is the absolute candidate, so the same relative import from two projects
+// resolves two spells.
+func TestSameRelativeImportFromTwoProjectsResolvesTwoSpells(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	w.Write("a/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memoa"; }`)
@@ -352,6 +375,173 @@ func TestSpellImportMemoIsKeyedOnTheAbsoluteCandidate(t *testing.T) {
 
 	assert.Equal(t, "memoa", name("a"))
 	assert.Equal(t, "memob", name("b"))
-	require.NoError(t, os.RemoveAll(filepath.Join(root, "a", "spells")))
-	assert.Equal(t, "memoa", name("a"), "a repeat of an absolute candidate went back to the filesystem")
+}
+
+// A spell deleted after its directory was listed stops resolving instead of
+// answering from the descriptor compiled earlier.
+func TestSpellDeletedMidRunStopsResolving(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/vanishing/spell.buzz", `export fun mgs_getName() > str { return "vanishingspell"; }`)
+	base, seal := interp.WithImportProbes(declaredContext(t, root, config.SpellsConfig{}))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+	_, ok := resolveLocalSpellImport(base, im, "spells/vanishing")
+	require.True(t, ok)
+
+	require.NoError(t, os.RemoveAll(filepath.Join(root, "spells")))
+
+	_, ok = resolveLocalSpellImport(base, im, "spells/vanishing")
+	assert.False(t, ok, "a spell deleted mid-run still resolved")
+}
+
+// A step cut short mid-compile is a failure of that step, not proof that no spell
+// lives at the path: the next load must compile it.
+func TestCancelledCompileIsNotRememberedAsNoSpell(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	// The loop gives the VM enough backward jumps to notice the cancellation.
+	w.Write("spells/cancelled.buzz", "var i: int = 0;\nwhile (i < 1000) { i = i + 1; }\nexport fun mgs_getName() > str { return \"cancelledspell\"; }\n")
+	base, seal := interp.WithImportProbes(declaredContext(t, root, config.SpellsConfig{}))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+	cancelled, cancel := context.WithCancel(base)
+	cancel()
+
+	_, ok := resolveLocalSpellImport(cancelled, im, "spells/cancelled")
+	require.False(t, ok, "the cancelled compile cannot have produced a spell")
+	v, ok := resolveLocalSpellImport(base, im, "spells/cancelled")
+
+	require.True(t, ok, "the failed compile was remembered as no spell")
+	n, _ := v.MapGet("name")
+	assert.Equal(t, "cancelledspell", n.AsString())
+}
+
+// A spell rewritten during a run is compiled again, not answered from the first
+// descriptor.
+func TestSpellEditedMidRunCompilesAgain(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	path := w.Write("spells/edited.buzz", `export fun mgs_getName() > str { return "editedv1"; }`)
+	base, seal := interp.WithImportProbes(declaredContext(t, root, config.SpellsConfig{}))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+	name := func() string {
+		t.Helper()
+		v, ok := resolveLocalSpellImport(base, im, "spells/edited")
+		require.True(t, ok)
+		n, _ := v.MapGet("name")
+		return n.AsString()
+	}
+
+	require.Equal(t, "editedv1", name())
+	require.NoError(t, os.WriteFile(path, []byte(`export fun mgs_getName() > str { return "editedv2"; }`), 0o644))
+
+	assert.Equal(t, "editedv2", name())
+}
+
+// The importing directory is a search root for the spell's own imports, so one
+// spell file imported from two directories can answer two ways.
+func TestTwoImportingDirectoriesEachCompile(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/viadir.buzz", "import \"dirhelper\";\nexport fun mgs_getName() > str { return dirhelper\\label(); }\n")
+	w.Write("a/dirhelper.buzz", `export fun label() > str { return "viadira"; }`)
+	w.Write("b/dirhelper.buzz", `export fun label() > str { return "viadirb"; }`)
+	base, seal := interp.WithImportProbes(declaredContext(t, root, config.SpellsConfig{}))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+	name := func(project string) string {
+		t.Helper()
+		ctx := interp.WithSource(base, &interp.Source{Dir: filepath.Join(root, project)})
+		v, ok := resolveLocalSpellImport(ctx, im, "../spells/viadir")
+		require.True(t, ok, project)
+		n, _ := v.MapGet("name")
+		return n.AsString()
+	}
+
+	assert.Equal(t, "viadira", name("a"))
+	assert.Equal(t, "viadirb", name("b"))
+}
+
+// resolveEvents counts the spell compiles that reach spell.Resolve, by the name the
+// compile answered; every other method is observability.Nop's.
+type resolveEvents struct {
+	observability.Nop
+	mu    sync.Mutex
+	total int
+}
+
+func (r *resolveEvents) Enabled() bool { return true }
+
+func (r *resolveEvents) RecordBuzzSpellResolve(context.Context, observability.BuzzSpellResolve) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.total++
+}
+
+func (r *resolveEvents) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.total
+}
+
+// A file read while a step rewrites it can be a truncated prefix with no spell in it.
+// The mark that read made must not outlive the full write.
+func TestPlainModuleMarkedFromATruncatedReadIsCompiledOnceRewritten(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	path := w.Write("spells/growing.buzz", "// still being written\n")
+	base, seal := interp.WithImportProbes(declaredContext(t, root, config.SpellsConfig{}))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+	_, ok := resolveLocalSpellImport(base, im, "spells/growing")
+	require.False(t, ok, "a prefix with no spell in it resolved")
+
+	require.NoError(t, os.WriteFile(path, []byte(`export fun mgs_getName() > str { return "growingspell"; }`), 0o644))
+
+	v, ok := resolveLocalSpellImport(base, im, "spells/growing")
+	require.True(t, ok, "the mark outlived the full write")
+	n, _ := v.MapGet("name")
+	assert.Equal(t, "growingspell", n.AsString())
+}
+
+// The VM polls cancellation only every few hundred jumps, so a short spell compiles
+// to success under an ended context; that answer is not recorded.
+func TestCompileUnderAnEndedContextIsNotRecorded(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/shortspell.buzz", `export fun mgs_getName() > str { return "shortspell"; }`)
+	events := &resolveEvents{}
+	base, seal := interp.WithImportProbes(observability.WithProvider(declaredContext(t, root, config.SpellsConfig{}), events))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+	ended, cancel := context.WithCancel(base)
+	cancel()
+
+	_, ok := resolveLocalSpellImport(ended, im, "spells/shortspell")
+	require.True(t, ok, "a short compile succeeds under an ended context")
+	_, ok = resolveLocalSpellImport(base, im, "spells/shortspell")
+
+	require.True(t, ok)
+	assert.Equal(t, 2, events.count(), "the compile under the ended context was recorded")
+}
+
+// A module whose text holds mgs_getName without exporting it is found to be no spell
+// by running it; the next import must not run it again.
+func TestModuleNamingTheSpellFuncWithoutExportingItIsRunOnce(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/mention.buzz", "// mgs_getName is the export that makes a spell\nexport fun helper() > void {}\n")
+	events := &resolveEvents{}
+	base, seal := interp.WithImportProbes(observability.WithProvider(declaredContext(t, root, config.SpellsConfig{}), events))
+	defer seal()
+	im := remotespell.ImportsFromContext(base)
+
+	for range 3 {
+		_, ok := resolveLocalSpellImport(base, im, "spells/mention")
+		require.False(t, ok, "a module that exports no spell resolved as one")
+	}
+
+	assert.Equal(t, 1, events.count())
 }
