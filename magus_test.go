@@ -1607,3 +1607,74 @@ func (s *magusSuite) TestSymbolIndexerOptInRefusesAnInProcessIndexer() {
 	s.Require().Error(err)
 	s.Contains(err.Error(), `lists "go"`)
 }
+
+// TestInspect_TargetPolicyNamingUnknownTarget exercises the A4 fix end to end,
+// through a real magusfile evaluated by the linked Buzz interpreter (magus_test.go
+// blank-imports buzzengine, unlike the bare library's own checks; see
+// TestListTargets_CustomTargets). A per-target policy naming a target the project declares nowhere
+// (neither a custom export fun nor a spell op) must fail Inspect with an
+// actionable error instead of silently producing a phantom target.
+func TestInspect_TargetPolicyNamingUnknownTarget(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+
+export fun build(ctx: magus\Context, args: [str]) > void {}
+
+magus\project({
+    "targets": {
+        "bogus-target": {"skip_cache": "test policy"}
+    }
+})
+`)
+
+	_, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `per-target policy names unknown target "bogus-target"`)
+	assert.ErrorContains(t, err, "declared targets: build")
+}
+
+// TestInspect_TargetPolicyNamingKnownTargetOK is the control: a policy naming a
+// target the magusfile actually declares must load cleanly.
+func TestInspect_TargetPolicyNamingKnownTargetOK(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+
+export fun build(ctx: magus\Context, args: [str]) > void {}
+
+magus\project({
+    "targets": {
+        "build": {"skip_cache": "test policy"}
+    }
+})
+`)
+
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	p := ws.Get(".")
+	require.NotNil(t, p)
+	assert.True(t, p.TargetPolicies["build"].SkipCache)
+}
+
+// TestInspect_ReportsEveryFailingMagusfile pins that one load names every broken
+// magusfile, and that the policy check stays quiet about a registry the failed
+// magusfiles never populated.
+func TestInspect_ReportsEveryFailingMagusfile(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
+	write("magusfile.buzz", `import "magus";
+
+magus\project({
+    "targets": {
+        "bogus-target": {"skip_cache": "test policy"}
+    }
+})
+`)
+	write("a/magusfile.buzz", "magus.project({});\n")
+	write("b/magusfile.buzz", "magus.project({});\n")
+
+	_, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "magus: a: ")
+	assert.ErrorContains(t, err, "magus: b: ")
+	assert.NotContains(t, err.Error(), "per-target policy")
+}

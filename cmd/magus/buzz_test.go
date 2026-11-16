@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"text/template"
 	"time"
@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
@@ -32,32 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
-
-// TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean drives the actual `magus buzz`
-// code path (buzzCommand, the same function main.go dispatches to) end-to-end: a script
-// with an unused import must print the BZZ3001 warning to stderr and still exit
-// clean (nil error, which main.go turns into exit 0): the whole point of a warning
-// is that it never fails the run.
-func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "unused.buzz")
-	require.NoError(t, os.WriteFile(path, []byte("import \"fs\";\nvar x = 1;\n"), 0o644))
-
-	useTextLogger(t)
-
-	var runErr error
-	stderr := captureStderr(t, func() {
-		stdout := captureStdout(t, func() {
-			runErr = buzzCommand(context.Background(), "", []string{path})
-		})
-		assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
-	})
-
-	require.NoError(t, runErr, "a warning must never fail the run")
-	assert.Contains(t, stderr, "BZZ3001")
-	assert.Contains(t, stderr, "fs")
-	assert.Contains(t, stderr, "warning:")
-}
 
 // TestBuzzCmd_SilentSuppressesUnusedImportWarning verifies -s/--silent, the flag
 // this command's own progress/error output already respects, also gates the new
@@ -124,48 +98,6 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	assert.Equal(t, trail.KindSandboxDenial, events[0].Kind)
 }
 
-// TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox: a workspace that fails to load
-// has no policy to apply, and the script used to run anyway, under none. Breaking the
-// magusfile was a way out of the sandbox.
-func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
-	saved := globalCfg
-	t.Cleanup(func() { globalCfg = saved })
-	opens := countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) {
-		return nil, errors.New("magusfile.buzz:1: broken on purpose")
-	})
-
-	globalCfg.Sandbox.Mode = types.SandboxModeBestEffort
-	_, err := buzzScriptContext(t.Context(), t.TempDir())
-	require.ErrorIs(t, err, types.WorkspaceLoadFailed)
-	assert.ErrorContains(t, err, "broken on purpose")
-	assert.Equal(t, 1, *opens)
-
-	// Adopted, so the open is attempted with the sandbox off too.
-	globalCfg.Sandbox.Mode = types.SandboxModeOff
-	_, err = buzzScriptContext(withMagus(t.Context(), nil), t.TempDir())
-	require.NoError(t, err, "with the sandbox off a failed load still only warns")
-	assert.Equal(t, 2, *opens)
-}
-
-// A script run carries one evaluation memo, which std's graph members read.
-// So two magus\graph().refs calls in one script build the symbol graph once.
-func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
-	ctx, err := buzzRunContext(t.Context(), t.TempDir())
-	require.NoError(t, err)
-	memo := types.EvalMemoFromContext(ctx)
-	require.NotNil(t, memo, "graph reads in a script would each rebuild the graph")
-
-	builds := 0
-	for range 2 {
-		_, err := memo.Do("graph+symbols", func() (any, error) {
-			builds++
-			return nil, nil
-		})
-		require.NoError(t, err)
-	}
-	assert.Equal(t, 1, builds)
-}
-
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.
@@ -206,20 +138,6 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	w.Write("magus.yaml", "sandbox:\n  mode: off\n")
 	return w.Root(), w.Write("script.buzz", script)
-}
-
-func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
-	root, script := buzzLazyWorkspace(t, buzzVanillaScript)
-	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-		return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
-	})
-
-	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
-
-	require.NoError(t, runErr)
-	assert.Equal(t, "hi\n", stdout)
-	assert.Equal(t, 0, *opens, "a script that reads no workspace member must not pay for opening one")
 }
 
 func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
@@ -379,61 +297,6 @@ func TestGuardGlueImportsNoWorkspaceReader(t *testing.T) {
 	}
 }
 
-// TestBuzzCmd_OutsideAWorkspace pins both halves outside any workspace: a script that
-// never reads one is not warned about it, and a workspace member still raises MGS1022
-// with the reason it could not attach.
-func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
-	// buzzCommand's flag parse rebuilds the default logger on whatever os.Stderr is then,
-	// which is the only reason captureStderr sees the warning. The text handler writes
-	// synchronously; the pretty one owns a terminal region.
-	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
-	prevQuiet, prevSilent := global.quiet, global.silent
-	globalCfg.Log.Format, globalCfg.Log.Level = "text", "info"
-	global.quiet, global.silent = false, false
-	t.Cleanup(func() {
-		slog.SetDefault(prevLog)
-		globalCfg.Log.Format, globalCfg.Log.Level = prevFormat, prevLevel
-		global.quiet, global.silent = prevQuiet, prevSilent
-	})
-	noWorkspace := errors.New("no magus workspace found")
-	opens := countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) { return nil, noWorkspace })
-	dir := t.TempDir()
-	vanilla := filepath.Join(dir, "vanilla.buzz")
-	require.NoError(t, os.WriteFile(vanilla, []byte(buzzVanillaScript), 0o644))
-	member := filepath.Join(dir, "member.buzz")
-	require.NoError(t, os.WriteFile(member, []byte(buzzMemberScript), 0o644))
-
-	var runErr error
-	stderr := captureStderr(t, func() {
-		captureStdout(t, func() { runErr = buzzCommand(t.Context(), dir, []string{vanilla}) })
-	})
-	require.NoError(t, runErr)
-	assert.Equal(t, 0, *opens)
-	assert.NotContains(t, stderr, "workspace not attached", "a script that never asked for a workspace is not warned about one")
-
-	stderr = captureStderr(t, func() { runErr = buzzCommand(t.Context(), dir, []string{member}) })
-	require.Error(t, runErr)
-	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
-	assert.Contains(t, stderr, "workspace not attached")
-	assert.Contains(t, stderr, noWorkspace.Error())
-}
-
-func TestBuzzCmd_ScriptImportsResolveBesideTheFile(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(
-		"export fun answer() > str { return \"ok\"; }\n"), 0o644))
-	script := filepath.Join(dir, "main.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(answer()); }\n"), 0o644))
-
-	var runErr error
-	stdout := captureStdout(t, func() {
-		runErr = buzzCommand(context.Background(), "", []string{script})
-	})
-	require.NoError(t, runErr)
-	assert.Contains(t, stdout, "ok")
-}
-
 // A hook runs in whatever directory the session is in, so its command names the root
 // with -C and the script by a root-relative path.
 func TestBuzzCmd_WorkDirResolvesRootRelativeScripts(t *testing.T) {
@@ -496,44 +359,6 @@ func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
 	assert.True(t, buzzScriptStage([]string{"-C", "/x", "hooks/main.buzz"}), "a script is")
 }
 
-// --root names the checkout a script's vcs calls read. The process cwd here is the
-// magus checkout this test runs in, a different repository on a different ref.
-func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
-	r := testkit.NewRepository(t, nil)
-	r.Git("switch", "-q", "-c", "split-target")
-	repo := r.Root()
-	script := filepath.Join(t.TempDir(), "ref.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n"), 0o644))
-
-	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), repo, []string{"-s", script}) })
-
-	require.NoError(t, runErr)
-	assert.Equal(t, "split-target\n", stdout)
-}
-
-// Strict mode refuses a raising call at the top level, and the refusal names the form
-// that runs one, which an -e snippet takes as well as a file does.
-func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
-	// -s sets the process-global silent flag, which later tests in the package read.
-	saved := global
-	t.Cleanup(func() { global = saved })
-	var runErr error
-	captureStdout(t, func() {
-		runErr = buzzCommand(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})
-	})
-	require.ErrorContains(t, runErr, string(buzz.UnhandledRaise))
-	assert.ErrorContains(t, runErr, "fun main(args: [str]) > void !> any")
-
-	stdout := captureStdout(t, func() {
-		runErr = buzzCommand(t.Context(), "", []string{"-s", "-e",
-			`import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print("root {vcs\root() != ""}"); }`})
-	})
-	require.NoError(t, runErr)
-	assert.Equal(t, "root true\n", stdout)
-}
-
 // buzzTrace runs buzzCommand under an enabled startup trace wired the way main does it,
 // with the trace's profile on ctx.
 func buzzTrace(t *testing.T, args []string) (stdout, trace string) {
@@ -556,170 +381,6 @@ func TestBuzzCmd_TraceRecordsEachCompilePhaseOnce(t *testing.T) {
 	assert.Contains(t, trace, "buzz profile:")
 	assert.Regexp(t, `(?m)^ +\S+ +parse$`, trace, "the profile carries the compile phases")
 	assert.NotContains(t, trace, "buzz.parse", "a second copy on the startup trace doubles every phase")
-}
-
-func TestBuzzCmd_TraceProfilesAClosedScriptWithoutTheNamespace(t *testing.T) {
-	_, trace := buzzTrace(t, []string{"-s", "-e", `import "std"; fun main() > void { std\print("ok"); }`})
-	assert.Contains(t, trace, "buzz.register_modules")
-	assert.Contains(t, trace, "buzz.register_decls")
-	assert.Contains(t, trace, "buzz.exec")
-	assert.Contains(t, trace, "buzz.main")
-	assert.NotContains(t, trace, "buzz.register_namespace")
-}
-
-func TestBuzzCmd_TraceProfilesTheNamespaceWhenTheScriptImportsMagus(t *testing.T) {
-	stdout, trace := buzzTrace(t, []string{"-s", "-e",
-		`import "std"; import "magus"; fun main() > void { std\print(magus\canonicalName("HTTPServer")); }`})
-	assert.Contains(t, trace, "buzz.register_namespace")
-	assert.Contains(t, stdout, "http-server")
-}
-
-func TestBuzzCmd_NestedMagusImportResolvesWithoutAnEntryImport(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(
-		"import \"magus\";\nexport fun name() > str { return magus\\canonicalName(\"HTTPServer\"); }\n"), 0o644))
-	script := filepath.Join(dir, "main.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(name()); }\n"), 0o644))
-
-	stdout, trace := buzzTrace(t, []string{"-s", script})
-	assert.Contains(t, stdout, "http-server")
-	assert.Contains(t, trace, "buzz.register_namespace")
-}
-
-// An aliased import checks against the types declared when it starts, so a file that
-// reaches magus only through one needs the mirrors declared up front.
-func TestBuzzCmd_AliasedImportReachingMagusSeesTheMirrors(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`import "magus";
-export fun language() > str {
-    final opts: magus\DirsOptions = magus\DirsOptions{ language = "go" };
-    return opts.language;
-}
-`), 0o644))
-	script := filepath.Join(dir, "main.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"lib\" as lib;\nfun main() > void { std\\print(lib\\language()); }\n"), 0o644))
-
-	stdout, trace := buzzTrace(t, []string{"-s", script})
-	assert.Contains(t, stdout, "go")
-	assert.Contains(t, trace, "buzz.register_namespace")
-}
-
-// The entry's `import "magus"` puts the magus types in the session, and a module it
-// imports still names them only through an import of its own. A failure there is
-// reported in the module's file.
-func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
-	for _, tc := range []struct {
-		name, lib string
-		wantErr   bool
-	}{
-		{name: "lib does not import magus", lib: "export fun f(o: magus\\DirsOptions?) > void {}\n", wantErr: true},
-		{name: "lib imports magus", lib: "import \"magus\";\nexport fun f(o: magus\\DirsOptions?) > void {}\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			lib := filepath.Join(dir, "lib.buzz")
-			require.NoError(t, os.WriteFile(lib, []byte(tc.lib), 0o644))
-			script := filepath.Join(dir, "main.buzz")
-			require.NoError(t, os.WriteFile(script, []byte("import \"magus\";\nimport \"lib\";\nfun g(o: magus\\DirsOptions?) > void { f(o); }\n"), 0o644))
-
-			diags, err := buzzCheckFile(t.Context(), script, false)
-			require.NoError(t, err)
-			if !tc.wantErr {
-				assert.Empty(t, diags)
-				return
-			}
-			require.Len(t, diags, 1)
-			got := diags[0]
-			assert.Contains(t, got.Msg, "no import binds magus")
-			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
-		})
-	}
-}
-
-func TestBuzzCheck_WarningFails(t *testing.T) {
-	dir := t.TempDir()
-	clean := filepath.Join(dir, "clean.buzz")
-	require.NoError(t, os.WriteFile(clean, []byte("fun main() > void {}\n"), 0o644))
-	warned := filepath.Join(dir, "warned.buzz")
-	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = p + s; } }\n"), 0o644))
-
-	diags, err := buzzCheckFile(t.Context(), warned, false)
-	require.NoError(t, err)
-	require.NotEmpty(t, diags)
-	for _, d := range diags {
-		require.Equal(t, buzz.SeverityWarning, d.Severity, d.String())
-	}
-
-	require.NoError(t, buzzCheck(t.Context(), []string{clean}, false))
-	require.Error(t, buzzCheck(t.Context(), []string{warned}, false))
-}
-
-func TestBuzzReachesMagus(t *testing.T) {
-	w := testkit.NewWorkspace(t)
-	dir, write := w.Root(), w.Write
-	write("plain.buzz", `import "std";`)
-	write("direct.buzz", `import "magus";`)
-	write("lib/deep.buzz", `import "magus/spell";`)
-	write("lib/mid.buzz", `import "deep" as deep;`)
-	write("cycle.buzz", `import "cycle";`)
-	write("commented.buzz", "// import \"magus\";\nimport \"std\";")
-
-	sess := buzz.NewSession(t.Context())
-	t.Cleanup(func() { _ = sess.Close() })
-	sess.SetIncludeDirs([]string{dir})
-	bindings.RegisterModules(t.Context(), sess)
-
-	for code, want := range map[string]bool{
-		`import "std"; import "fs";`:                  false,
-		`import "plain" as p;`:                        false,
-		`import "missing";`:                           false,
-		`import "cycle";`:                             false,
-		`import "magus" as m;`:                        true,
-		`import print from "buzz:magus";`:             true,
-		`import "std"; import "direct";`:              true,
-		`import "lib/mid" as mid;`:                    true,
-		`import "spells/hello";`:                      true,
-		"import \"std\";\nimport \"magus/figure\";\n": true,
-		"// import \"magus\";\nimport \"std\";":       false,
-		"import \"std\"; // import \"magus\";":        false,
-		"final s = \"import \\\"magus\\\";\";":        false,
-		`import "commented";`:                         false,
-	} {
-		assert.Equal(t, want, buzzReachesMagus(sess, code), code)
-	}
-}
-
-// TestBuzzCmd_ScriptArgvReachesMain pins the three shapes a caller has for handing a
-// script its own argv, which is what lets one file serve several callers without an
-// environment variable a shell has to set. The `--` form is the one that matters:
-// commandParse reorders flags ahead of positionals, so a bare `script.buzz --raw` is
-// magus's flag to parse and fails, and the separator is what hands it to the script.
-func TestBuzzCmd_ScriptArgvReachesMain(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "argv.buzz")
-	require.NoError(t, os.WriteFile(path, []byte(
-		"import \"std\";\nexport fun main(args: [str]) > void { std\\print(\"argv={args}\"); }\n"), 0o644))
-
-	for name, tc := range map[string]struct {
-		args []string
-		want string
-	}{
-		"after a separator":   {[]string{path, "--", "--raw", "-x"}, "argv=[--raw, -x]"},
-		"bare words":          {[]string{path, "one", "two"}, "argv=[one, two]"},
-		"none":                {[]string{path}, "argv=[]"},
-		"separator with none": {[]string{path, "--"}, "argv=[]"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			var runErr error
-			stdout := captureStdout(t, func() {
-				runErr = buzzCommand(context.Background(), "", tc.args)
-			})
-			require.NoError(t, runErr)
-			assert.Contains(t, stdout, tc.want)
-		})
-	}
 }
 
 // glueHostSchemaDir holds the host schemas the glue's replies are graded against;
@@ -1286,16 +947,16 @@ func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	store := cache.NewOutputStore(dir)
 	lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
 	require.NoError(t, err)
-	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", lease, []string{"--x"}))
+	ref := cache.PortableRef(interp.ScriptRunKey("probe.buzz", "code", lease, []string{"--x"}))
 	out, d, err := store.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", string(out))
 	assert.Equal(t, "buzz probe.buzz", d.Target)
 	assert.False(t, d.Failed)
 
-	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", lease, nil), buzzRunKey("probe.buzz", "code", lease, []string{"--x"}),
+	assert.NotEqual(t, interp.ScriptRunKey("probe.buzz", "code", lease, nil), interp.ScriptRunKey("probe.buzz", "code", lease, []string{"--x"}),
 		"different arguments are a different probe")
-	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", "job-a", nil), buzzRunKey("probe.buzz", "code", "job-b", nil),
+	assert.NotEqual(t, interp.ScriptRunKey("probe.buzz", "code", "job-a", nil), interp.ScriptRunKey("probe.buzz", "code", "job-b", nil),
 		"another job's run is another ref")
 }
 
@@ -1316,7 +977,7 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	s.Require().NoError(err)
 	lease, _, err := guard.CheckoutLease(s.T().Context(), s.root, jobPlace)
 	s.Require().NoError(err)
-	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(buzzRunKey("p.buzz", "code", lease, args)))
+	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(interp.ScriptRunKey("p.buzz", "code", lease, args)))
 	s.Require().NoError(err)
 	d.Ref, d.TimestampMs, d.DurationMs, d.PersistedNs, d.Attempt, d.Key, d.KeyVersion, d.Inv = "", 0, 0, 0, "", "", 0, ""
 	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
@@ -1398,7 +1059,7 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 
 			lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
 			require.NoError(t, err)
-			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, lease, []string{"-t"})))
+			out, d, err := store.ByRef(cache.PortableRef(interp.ScriptRunKey(script, code, lease, []string{"-t"})))
 			require.NoError(t, err)
 			assert.Equal(t, cache.OutputDescriptor{Target: "buzz -t " + script, Failed: tc.failed}, cache.OutputDescriptor{Target: d.Target, Failed: d.Failed})
 			for _, line := range tc.lines {
@@ -1437,35 +1098,6 @@ func (s *BuzzTestManyScriptsSuite) run(args ...string) (string, error) {
 	return out, err
 }
 
-func (s *BuzzTestManyScriptsSuite) TestEveryScriptRunsItsTests() {
-	out, err := s.run("-t", s.script("a.buzz", "true"), s.script("a_test.buzz", "true"))
-	s.Require().NoError(err)
-	s.Contains(out, `ok    test "a.buzz"`)
-	s.Contains(out, `ok    test "a_test.buzz"`)
-}
-
-func (s *BuzzTestManyScriptsSuite) TestAFailingSecondScriptFailsTheRun() {
-	out, err := s.run("-t", s.script("a.buzz", "true"), s.script("a_test.buzz", "false"))
-	s.Require().Error(err)
-	s.Contains(out, `FAIL  test "a_test.buzz"`)
-}
-
-func (s *BuzzTestManyScriptsSuite) TestAFailingFirstScriptStillRunsTheNext() {
-	out, err := s.run("-t", s.script("a.buzz", "false"), s.script("a_test.buzz", "true"))
-	s.Require().Error(err)
-	s.Contains(out, `ok    test "a_test.buzz"`)
-}
-
-func (s *BuzzTestManyScriptsSuite) TestOneCoverprofileCoversEveryScript() {
-	profile := filepath.Join(s.dir, "lcov.info")
-	_, err := s.run("-t", "--coverprofile", profile, s.script("a.buzz", "true"), s.script("b.buzz", "true"))
-	s.Require().NoError(err)
-	data, err := os.ReadFile(profile)
-	s.Require().NoError(err)
-	s.Contains(string(data), "a.buzz")
-	s.Contains(string(data), "b.buzz")
-}
-
 func (s *BuzzTestManyScriptsSuite) TestForwardedArgsNeedASingleScript() {
 	_, err := s.run("-t", s.script("a.buzz", "true"), s.script("b.buzz", "true"), "--", "x")
 	s.Require().Error(err)
@@ -1499,4 +1131,444 @@ func (s *BuzzTestManyScriptsSuite) TestPipedStdinStillRunsAsTheScript() {
 	})
 	s.Require().NoError(err)
 	s.Contains(out, `ok    test "piped"`)
+}
+
+// scriptRunnerOver is the CLI's own runner, wired as buzzCommand wires it, over an opener
+// that finds no workspace.
+func scriptRunnerOver(o *scriptOpens) *interp.ScriptRunner {
+	r := newBuzzRunner(context.Background())
+	r.Open = o.open
+	r.Adopted = func(context.Context) bool { return false }
+	r.Sandbox, r.Quiet = false, false
+	return r
+}
+
+// scriptOpens is an opener that finds no workspace and counts how often it was asked.
+type scriptOpens struct {
+	mu  sync.Mutex
+	n   int
+	err error
+}
+
+func (o *scriptOpens) open(context.Context, string) (*interp.ScriptWorkspace, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.n++
+	return nil, o.err
+}
+
+func (o *scriptOpens) count() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.n
+}
+
+// scriptPhases records the startup phases a runner times.
+type scriptPhases struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (p *scriptPhases) time(name string) func() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.seen = append(p.seen, name)
+	return func() {}
+}
+
+func (p *scriptPhases) names() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.seen...)
+}
+
+func writeBuzz(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+	return path
+}
+
+func runBuzzFile(t *testing.T, r *interp.ScriptRunner, root string, o interp.ScriptOptions, rest ...string) (string, error) {
+	t.Helper()
+	var err error
+	out := testkit.CaptureStdout(t, func() { err = r.Run(t.Context(), root, o, "", rest, nil, false) })
+	return out, err
+}
+
+func runBuzzInline(t *testing.T, code string) (string, error) {
+	t.Helper()
+	var err error
+	out := testkit.CaptureStdout(t, func() {
+		err = scriptRunnerOver(&scriptOpens{}).Run(t.Context(), "", interp.ScriptOptions{Inline: true}, code, nil, nil, false)
+	})
+	return out, err
+}
+
+func TestBuzzRunner_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
+	path := writeBuzz(t, t.TempDir(), "unused.buzz", "import \"fs\";\nvar x = 1;\n")
+
+	var stdout string
+	var runErr error
+	stderr := captureStderr(t, func() { stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path) })
+
+	require.NoError(t, runErr, "a warning must never fail the run")
+	assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
+	assert.Contains(t, stderr, "BZZ3001")
+	assert.Contains(t, stderr, "warning:")
+
+	quiet := scriptRunnerOver(&scriptOpens{})
+	quiet.Quiet = true
+	stderr = captureStderr(t, func() { _, runErr = runBuzzFile(t, quiet, "", interp.ScriptOptions{}, path) })
+	require.NoError(t, runErr)
+	assert.NotContains(t, stderr, "BZZ3001", "a quiet run stays quiet")
+}
+
+// A script's child sees the script's own process in MAGUS_INVOCATION_ANCESTORS, so a
+// magus it spawns can tell its parent's claim from a stranger's instead of refusing
+// MGS3009 as blind to its ancestry.
+func TestBuzzRunner_ChildSeesTheScriptProcessAsAnAncestor(t *testing.T) {
+	path := writeBuzz(t, t.TempDir(), "ancestry.buzz", `import "std";
+import "proc";
+
+fun main(args: [str]) > void !> any {
+    final ancestors = proc\exec("sh", args: ["-c", "echo $MAGUS_INVOCATION_ANCESTORS"], opts: proc\ExecOptions{ quiet = true }).stdout.trim();
+    final parent = proc\exec("sh", args: ["-c", "echo $PPID"], opts: proc\ExecOptions{ quiet = true }).stdout.trim();
+    std\print("ancestors={ancestors} parent={parent}");
+    std\assert(ancestors != "", message: "no MAGUS_INVOCATION_ANCESTORS in the child");
+    std\assert(ancestors.indexOf("{parent}:") != null, message: "ancestry {ancestors} lacks the script process {parent}");
+}
+`)
+	_, err := runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path)
+	require.NoError(t, err)
+}
+
+func TestBuzzRunner_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
+	o := &scriptOpens{}
+	path := writeBuzz(t, t.TempDir(), "vanilla.buzz", buzzVanillaScript)
+
+	stdout, err := runBuzzFile(t, scriptRunnerOver(o), t.TempDir(), interp.ScriptOptions{}, path)
+
+	require.NoError(t, err)
+	assert.Equal(t, "hi\n", stdout)
+	assert.Equal(t, 0, o.count(), "a script that reads no workspace member must not pay for opening one")
+}
+
+// Outside any workspace a script that never reads one is not warned about it, and a
+// workspace member still raises MGS1022 with the reason it could not attach.
+func TestBuzzRunner_OutsideAWorkspace(t *testing.T) {
+	noWorkspace := errors.New("no magus workspace found")
+	o := &scriptOpens{err: noWorkspace}
+	dir := t.TempDir()
+	vanilla := writeBuzz(t, dir, "vanilla.buzz", buzzVanillaScript)
+	member := writeBuzz(t, dir, "member.buzz", buzzMemberScript)
+
+	var runErr error
+	stderr := captureStderr(t, func() { _, runErr = runBuzzFile(t, scriptRunnerOver(o), dir, interp.ScriptOptions{}, vanilla) })
+	require.NoError(t, runErr)
+	assert.Equal(t, 0, o.count())
+	assert.NotContains(t, stderr, "workspace not attached", "a script that never asked for a workspace is not warned about one")
+
+	stderr = captureStderr(t, func() { _, runErr = runBuzzFile(t, scriptRunnerOver(o), dir, interp.ScriptOptions{}, member) })
+	require.Error(t, runErr)
+	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
+	assert.Contains(t, stderr, "workspace not attached")
+	assert.Contains(t, stderr, noWorkspace.Error())
+	assert.Equal(t, 1, o.count())
+}
+
+func TestBuzzRunner_ImportsResolveBesideTheFile(t *testing.T) {
+	dir := t.TempDir()
+	writeBuzz(t, dir, "lib.buzz", "export fun answer() > str { return \"ok\"; }\n")
+	script := writeBuzz(t, dir, "main.buzz", "import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(answer()); }\n")
+
+	stdout, err := runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, script)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "ok")
+}
+
+// --root names the checkout a script's vcs calls read. The process cwd here is the
+// magus checkout this test runs in, a different repository on a different ref.
+func TestBuzzRunner_RootSelectsTheVCS(t *testing.T) {
+	r := testkit.NewRepository(t, nil)
+	r.Git("switch", "-q", "-c", "split-target")
+	script := writeBuzz(t, t.TempDir(), "ref.buzz",
+		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n")
+
+	stdout, err := runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), r.Root(), interp.ScriptOptions{}, script)
+
+	require.NoError(t, err)
+	assert.Equal(t, "split-target\n", stdout)
+}
+
+// Strict mode refuses a raising call at the top level, and the refusal names the form
+// that runs one, which an -e snippet takes as well as a file does.
+func TestBuzzRunner_TopLevelRaiseNamesTheMainForm(t *testing.T) {
+	_, err := runBuzzInline(t, `import "vcs"; final r = vcs\root();`)
+	require.ErrorContains(t, err, string(buzz.UnhandledRaise))
+	assert.ErrorContains(t, err, "fun main(args: [str]) > void !> any")
+
+	stdout, err := runBuzzInline(t,
+		`import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print("root {vcs\root() != ""}"); }`)
+	require.NoError(t, err)
+	assert.Equal(t, "root true\n", stdout)
+}
+
+// -e is the one-off exception: statements and imports run with no `fun main`,
+// while files and stdin stay strict.
+func TestBuzzRunner_InlineTakesTheEmbeddedRulesAndFilesStayStrict(t *testing.T) {
+	stdout, err := runBuzzInline(t, `import "std"; std\print("hi");`)
+	require.NoError(t, err)
+	assert.Equal(t, "hi\n", stdout)
+
+	stdout, err = runBuzzInline(t, `import "std"; import "fs"; std\print(fs\basename("a/b.txt"));`)
+	require.NoError(t, err)
+	assert.Equal(t, "b.txt\n", stdout, "imports run beside the statements")
+
+	stdout, err = runBuzzInline(t, `import "std"; fun main(args: [str]) > void { std\print("from main"); }`)
+	require.NoError(t, err)
+	assert.Equal(t, "from main\n", stdout, "a body that declares main still has it called")
+
+	_, err = runBuzzInline(t, `import "std"; std\print(nope);`)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "line 1:25: undefined: nope", "an error position points at the user's own line")
+
+	bare := writeBuzz(t, t.TempDir(), "bare.buzz", "import \"std\";\nif (true) { std\\print(\"bare\"); }\n")
+	_, err = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, bare)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not allowed at the top level")
+}
+
+func scriptRunnerTraced(p *scriptPhases) *interp.ScriptRunner {
+	r := scriptRunnerOver(&scriptOpens{})
+	r.Phase = p.time
+	return r
+}
+
+func scriptTracedRun(t *testing.T, r *interp.ScriptRunner, rest ...string) (stdout, profile string) {
+	t.Helper()
+	p := buzz.NewProfile()
+	ctx := buzz.WithProfile(t.Context(), p)
+	var err error
+	stdout = testkit.CaptureStdout(t, func() { err = r.Run(ctx, "", interp.ScriptOptions{}, "", rest, nil, false) })
+	require.NoError(t, err)
+	return stdout, p.Report()
+}
+
+func TestBuzzRunner_TraceProfilesAClosedScriptWithoutTheNamespace(t *testing.T) {
+	ph := &scriptPhases{}
+	script := writeBuzz(t, t.TempDir(), "closed.buzz", "import \"std\"; fun main() > void { std\\print(\"ok\"); }\n")
+
+	_, profile := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Equal(t, []string{"buzz.register_modules", "buzz.register_decls", "buzz.exec", "buzz.main"}, ph.names())
+	assert.Regexp(t, `(?m)^ +\S+ +parse$`, profile, "the profile carries the compile phases")
+}
+
+func TestBuzzRunner_TraceProfilesTheNamespaceWhenTheScriptImportsMagus(t *testing.T) {
+	ph := &scriptPhases{}
+	script := writeBuzz(t, t.TempDir(), "magus.buzz",
+		"import \"std\"; import \"magus\"; fun main() > void { std\\print(magus\\canonicalName(\"HTTPServer\")); }\n")
+
+	stdout, _ := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Contains(t, ph.names(), "buzz.register_namespace")
+	assert.Contains(t, stdout, "http-server")
+}
+
+func TestBuzzRunner_NestedMagusImportResolvesWithoutAnEntryImport(t *testing.T) {
+	ph := &scriptPhases{}
+	dir := t.TempDir()
+	writeBuzz(t, dir, "lib.buzz", "import \"magus\";\nexport fun name() > str { return magus\\canonicalName(\"HTTPServer\"); }\n")
+	script := writeBuzz(t, dir, "main.buzz", "import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(name()); }\n")
+
+	stdout, _ := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Contains(t, stdout, "http-server")
+	assert.Contains(t, ph.names(), "buzz.register_namespace")
+}
+
+// An aliased import checks against the types declared when it starts, so a file that
+// reaches magus only through one needs the mirrors declared up front.
+func TestBuzzRunner_AliasedImportReachingMagusSeesTheMirrors(t *testing.T) {
+	ph := &scriptPhases{}
+	dir := t.TempDir()
+	writeBuzz(t, dir, "lib.buzz", `import "magus";
+export fun language() > str {
+    final opts: magus\DirsOptions = magus\DirsOptions{ language = "go" };
+    return opts.language;
+}
+`)
+	script := writeBuzz(t, dir, "main.buzz", "import \"std\";\nimport \"lib\" as lib;\nfun main() > void { std\\print(lib\\language()); }\n")
+
+	stdout, _ := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Contains(t, stdout, "go")
+	assert.Contains(t, ph.names(), "buzz.register_namespace")
+}
+
+// The entry's `import "magus"` puts the magus types in the session, and a module it
+// imports still names them only through an import of its own. A failure there is
+// reported in the module's file.
+func TestBuzzRunner_CheckFileMagusTypesNeedTheModulesOwnImport(t *testing.T) {
+	for _, tc := range []struct {
+		name, lib string
+		wantErr   bool
+	}{
+		{name: "lib does not import magus", lib: "export fun f(o: magus\\DirsOptions?) > void {}\n", wantErr: true},
+		{name: "lib imports magus", lib: "import \"magus\";\nexport fun f(o: magus\\DirsOptions?) > void {}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			lib := writeBuzz(t, dir, "lib.buzz", tc.lib)
+			script := writeBuzz(t, dir, "main.buzz", "import \"magus\";\nimport \"lib\";\nfun g(o: magus\\DirsOptions?) > void { f(o); }\n")
+
+			diags, err := scriptRunnerOver(&scriptOpens{}).CheckFile(t.Context(), script, false)
+			require.NoError(t, err)
+			if !tc.wantErr {
+				assert.Empty(t, diags)
+				return
+			}
+			require.Len(t, diags, 1)
+			got := diags[0]
+			assert.Contains(t, got.Msg, "no import binds magus")
+			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
+		})
+	}
+}
+
+func TestBuzzRunner_CheckFailsOnAWarning(t *testing.T) {
+	dir := t.TempDir()
+	clean := writeBuzz(t, dir, "clean.buzz", "fun main() > void {}\n")
+	warned := writeBuzz(t, dir, "warned.buzz", "fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = p + s; } }\n")
+	r := scriptRunnerOver(&scriptOpens{})
+
+	diags, err := r.CheckFile(t.Context(), warned, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, diags)
+	for _, d := range diags {
+		require.Equal(t, buzz.SeverityWarning, d.Severity, d.String())
+	}
+
+	require.NoError(t, r.Check(t.Context(), []string{clean}, false))
+	require.Error(t, r.Check(t.Context(), []string{warned}, false))
+}
+
+// The three shapes a caller has for handing a script its own argv, which is what lets
+// one file serve several callers without an environment variable a shell has to set.
+func TestBuzzRunner_ArgvReachesMain(t *testing.T) {
+	path := writeBuzz(t, t.TempDir(), "argv.buzz",
+		"import \"std\";\nexport fun main(args: [str]) > void { std\\print(\"argv={args}\"); }\n")
+
+	for name, tc := range map[string]struct {
+		rest, forwarded []string
+		sep             bool
+		want            string
+	}{
+		"after a separator":   {[]string{path}, []string{"--raw", "-x"}, true, "argv=[--raw, -x]"},
+		"bare words":          {[]string{path, "one", "two"}, nil, false, "argv=[one, two]"},
+		"none":                {[]string{path}, nil, false, "argv=[]"},
+		"separator with none": {[]string{path}, nil, true, "argv=[]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var err error
+			stdout := testkit.CaptureStdout(t, func() {
+				err = scriptRunnerOver(&scriptOpens{}).Run(t.Context(), "", interp.ScriptOptions{}, "", tc.rest, tc.forwarded, tc.sep)
+			})
+			require.NoError(t, err)
+			assert.Contains(t, stdout, tc.want)
+		})
+	}
+}
+
+// BuzzRunnerTestSuite pins that every path after -t is a script to test, so a spell's test
+// scope runs a file and its _test.buzz sibling, and that a test run is always recorded.
+type BuzzRunnerTestSuite struct {
+	suite.Suite
+	dir     string
+	records []interp.ScriptRecord
+}
+
+func TestBuzzRunnerTestSuite(t *testing.T) { suite.Run(t, new(BuzzRunnerTestSuite)) }
+
+func (s *BuzzRunnerTestSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+	s.records = nil
+}
+
+func (s *BuzzRunnerTestSuite) script(name, assertion string) string {
+	return writeBuzz(s.T(), s.dir, name, "import \"std\";\n\ntest \""+name+"\" {\n    std\\assert("+assertion+", message: \""+name+"\");\n}\n")
+}
+
+func (s *BuzzRunnerTestSuite) test(profile string, paths ...string) (string, error) {
+	r := scriptRunnerOver(&scriptOpens{})
+	r.Record = func(_ context.Context, _ string, rec interp.ScriptRecord) error {
+		s.records = append(s.records, rec)
+		return nil
+	}
+	var err error
+	out := testkit.CaptureStdout(s.T(), func() { err = r.Test(s.T().Context(), s.dir, interp.ScriptOptions{}, profile, "", paths, nil) })
+	return out, err
+}
+
+func (s *BuzzRunnerTestSuite) TestEveryScriptRunsItsTests() {
+	out, err := s.test("", s.script("a.buzz", "true"), s.script("a_test.buzz", "true"))
+	s.Require().NoError(err)
+	s.Contains(out, `ok    test "a.buzz"`)
+	s.Contains(out, `ok    test "a_test.buzz"`)
+}
+
+func (s *BuzzRunnerTestSuite) TestAFailingSecondScriptFailsTheRun() {
+	out, err := s.test("", s.script("a.buzz", "true"), s.script("a_test.buzz", "false"))
+	s.Require().Error(err)
+	s.Contains(out, `FAIL  test "a_test.buzz"`)
+}
+
+func (s *BuzzRunnerTestSuite) TestAFailingFirstScriptStillRunsTheNext() {
+	out, err := s.test("", s.script("a.buzz", "false"), s.script("a_test.buzz", "true"))
+	s.Require().Error(err)
+	s.Contains(out, `ok    test "a_test.buzz"`)
+}
+
+func (s *BuzzRunnerTestSuite) TestOneCoverprofileCoversEveryScript() {
+	profile := filepath.Join(s.dir, "lcov.info")
+	_, err := s.test(profile, s.script("a.buzz", "true"), s.script("b.buzz", "true"))
+	s.Require().NoError(err)
+	data, err := os.ReadFile(profile)
+	s.Require().NoError(err)
+	s.Contains(string(data), "a.buzz")
+	s.Contains(string(data), "b.buzz")
+}
+
+func (s *BuzzRunnerTestSuite) TestForwardedArgsNeedASingleScript() {
+	r := scriptRunnerOver(&scriptOpens{})
+	err := r.Test(s.T().Context(), s.dir, interp.ScriptOptions{}, "", "", []string{s.script("a.buzz", "true"), s.script("b.buzz", "true")}, []string{"x"})
+	s.Require().Error(err)
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *BuzzRunnerTestSuite) TestATestRunIsRecordedWithItsTestLines() {
+	a := s.script("a.buzz", "true")
+	b := s.script("b.buzz", "false")
+	_, err := s.test("", a, b)
+	s.Require().Error(err)
+
+	s.Require().Len(s.records, 2)
+	s.True(s.records[0].Test)
+	s.NoError(s.records[0].Err)
+	s.Contains(string(s.records[0].Out), `ok    test "a.buzz"`)
+	s.Contains(string(s.records[0].Out), "1 passed, 0 failed, 0 skipped")
+	s.Error(s.records[1].Err)
+	s.Contains(string(s.records[1].Out), `FAIL  test "b.buzz"`)
+	s.Contains(string(s.records[1].Out), "0 passed, 1 failed, 0 skipped")
+}
+
+func (s *BuzzRunnerTestSuite) TestARecordedRunWithNoRecorderFails() {
+	path := writeBuzz(s.T(), s.dir, "p.buzz", buzzVanillaScript)
+	r := scriptRunnerOver(&scriptOpens{})
+	r.Record = nil
+	var err error
+	testkit.CaptureStdout(s.T(), func() { err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false) })
+	s.Require().Error(err)
+	s.Contains(err.Error(), "--record")
 }
