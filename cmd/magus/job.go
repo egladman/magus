@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -34,7 +33,6 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
@@ -272,149 +270,6 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		}
 	}
 	return job.NewStore(loc), nil
-}
-
-// newCheckGrader grades a declared check against the guard's rules for the workspace at the
-// root it is handed. Each root's rules load on the first check graded there, so a fork
-// that declares none pays nothing, and are reused until a file they were read from
-// changes: a grader lives as long as the Store, or the daemon, it was made for, and
-// grading against rules an edit has since replaced would admit or refuse the wrong check.
-// runCLI installs one with job.SetCheckGrader for every door that opens a Store naming
-// none, such as magus\workspace().putJob. `magus job fork` grades with a [forkGrader]
-// instead, which judges alike and keeps what it opened for the rest of the fork.
-func newCheckGrader() job.CheckGrader {
-	return (&rulesByRoot{loaded: map[string]gradingRules{}}).grade
-}
-
-// rulesByRoot holds each workspace's rules while their files stay unchanged.
-type rulesByRoot struct {
-	mu     sync.Mutex
-	loaded map[string]gradingRules
-	// opens is handed to every judgment as guard.Dependencies.Opens: nil for the
-	// installed grader, which outlives any one tree, and one fork's memo for a fork's.
-	opens *guard.WorkspaceMemo
-}
-
-func (r *rulesByRoot) grade(ctx context.Context, root string, row types.Job) job.CheckVerdict {
-	return gradeCheck(ctx, r.current(ctx, root).judging(r.opens), root, row)
-}
-
-func (r *rulesByRoot) current(ctx context.Context, root string) gradingRules {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if g, ok := r.loaded[root]; ok && g.unchanged() {
-		return g
-	}
-	// The rules outlive this grade, so its cancellation must not decide them.
-	g := loadGradingRules(context.WithoutCancel(ctx), root)
-	r.loaded[root] = g
-	return g
-}
-
-// gradingRules is a workspace's guard dependencies and the files its rules were read from.
-type gradingRules struct {
-	deps guard.Dependencies
-	// sources are the files the load read, with the id of the bytes it saw. Empty when no
-	// rules loaded: nothing says which file to watch, so the next grade loads again.
-	sources []interp.SourceFile
-}
-
-// judging is g's dependencies for one judgment, which keeps the workspaces it opens in
-// opens when that is not nil.
-func (g gradingRules) judging(opens *guard.WorkspaceMemo) guard.Dependencies {
-	deps := g.deps
-	deps.Opens = opens
-	return deps
-}
-
-func loadGradingRules(ctx context.Context, root string) gradingRules {
-	deps, rules := loadGuardDependencies(ctx, root)
-	if rules != nil {
-		return gradingRules{deps: deps, sources: rules.Policy().Sources}
-	}
-	if deps.Policy == nil {
-		return gradingRules{deps: deps}
-	}
-	// A policy snapshot hit only when its key covered the bytes on disk.
-	// So those bytes are the ones the rules came from.
-	return gradingRules{deps: deps, sources: sourcesOnDisk(deps.Policy().Files)}
-}
-
-// unchanged reports whether every file the rules were read from still holds the bytes the
-// load saw. A file that cannot be read counts as changed, so the next load decides.
-func (g gradingRules) unchanged() bool {
-	if len(g.sources) == 0 {
-		return false
-	}
-	for _, s := range g.sources {
-		data, err := os.ReadFile(s.Path)
-		if err != nil || interp.ContentID(data) != s.ContentID {
-			return false
-		}
-	}
-	return true
-}
-
-// gradeCheck judges row's check as the guard would judge its holder typing it where it is
-// taken ([job.WorkingCheckout]), the row standing in for a lease not stored yet.
-//
-// Only a deny of the check itself refuses. A deny that holds just as well for the
-// compiling check describes the binary or the workspace (a stale hook binary) and not the
-// command, so it is not graded and the verdict's NotGraded says why: a refusal has to
-// come from a verdict on the check. Rules that would not load defer the grade instead
-// (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
-// A deny from a judgment that ran out of time defers too.
-func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row types.Job) job.CheckVerdict {
-	if deps.LoadFailure != nil {
-		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
-		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", row.Check, why),
-			attr.Unchecked())
-		return job.CheckVerdict{Deferred: why}
-	}
-	dir := job.WorkingCheckout(root, row)
-	if row.Worktree.Standing() && row.CheckoutRoot == "" {
-		// Until the fork makes the checkout, root, the repository it is made from, stands in.
-		if _, err := os.Stat(dir); err != nil {
-			worktree := *row.Worktree
-			worktree.Root, dir = root, root
-			row.Worktree = &worktree
-		}
-		row.CheckoutRoot = dir
-	}
-	judge := func(pending types.Job) (types.GuardJudgment, bool) {
-		return guard.JudgeLapsed(ctx, deps, guard.Request{
-			Input:      ownBinaryPrefix + workerCheckLine(*pending.Check),
-			DryRun:     true,
-			Lease:      pending.ID,
-			PendingRow: &pending,
-			Dir:        dir,
-		})
-	}
-	deferLapse := func(v types.GuardJudgment) job.CheckVerdict {
-		first, _, _ := strings.Cut(strings.TrimSpace(v.Reason), "\n")
-		why := fmt.Sprintf("the guard ran out of time grading it: %s", first)
-		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", row.Check, why), attr.Unchecked())
-		return job.CheckVerdict{Deferred: why}
-	}
-	declared, lapsed := judge(row)
-	if declared.Decision != string(types.GuardDeny) {
-		return job.CheckVerdict{}
-	}
-	if lapsed {
-		return deferLapse(declared)
-	}
-	baseline := row
-	compiling := job.CompilingCheck()
-	baseline.Check = &compiling
-	baselineVerdict, lapsed := judge(baseline)
-	if baselineVerdict.Decision == string(types.GuardDeny) && lapsed {
-		return deferLapse(baselineVerdict)
-	}
-	if baselineVerdict.Decision == string(types.GuardDeny) {
-		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
-		return job.CheckVerdict{NotGraded: fmt.Sprintf("the guard denies this worker `%s` as well, so the deny describes the binary or the workspace and not the check: %s", compiling, first)}
-	}
-	return job.CheckVerdict{Denied: true, Rule: declared.Rule, Reason: declared.Reason}
 }
 
 // reportForkFacts prints what a top-level fork leaves waiting. It never stops
@@ -910,10 +765,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so the job holds only the files its branches changed, and no declared output", jobWS.Unavailable), attr.Notice("note"))
 		}
 	}
-	if row, err = forkCheckout(ctx, store, root, row); err != nil {
+	if row, err = job.ForkCheckout(ctx, store, root, row); err != nil {
 		return err
 	}
-	// Claimed after forkCheckout and released before the worktree is provisioned: a build
+	// Claimed after job.ForkCheckout and released before the worktree is provisioned: a build
 	// there claims its own seat, and a step behind its own process's claim may never seat.
 	seated, err := admitForkValidation(ctx, processBrokerClient(), root)
 	if err != nil {
@@ -967,7 +822,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if row.Checkout != "" {
 		exe, _ := os.Executable()
 		cache.KickDiskTick(exe, root, globalCfg.Disk.SampleEvery)
-		if err := refuseForkOnFullDisk(ctx, exe, root, row.Checkout, int64(globalCfg.Disk.CriticalFreeMB)<<20); err != nil {
+		if err := job.RefuseForkOnFullDisk(ctx, diskProbe, exe, root, row.Checkout, int64(globalCfg.Disk.CriticalFreeMB)<<20); err != nil {
 			return err
 		}
 		mirrored := job.MirroredBinary(exe, root)
@@ -984,7 +839,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		// checkout already holds may be anyone's build.
 		placed := made && worktree.Binary != ""
 		if mirrored != "" && (followed || stale || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
-			reused, err := provisionCheckout(ctx, store, jobWS, mirrored, root, row, worktree)
+			reused, err := job.ProvisionCheckout(ctx, store, jobWS, diskProbe, mirrored, root, row, worktree)
 			if err != nil {
 				return job.FailedProvision(ctx, store, worktree, made, err)
 			}
@@ -1131,73 +986,6 @@ func jobFork(ctx context.Context, root string, args []string) error {
 // forkSpecFlags are the job fork flags that declare the spec, which a --stdin record carries
 // instead and a fork by id alone takes from the stored job.
 var forkSpecFlags = []string{"instructions", "new-worker", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "delivery", "read-only"}
-
-// parentCheckout binds a child row forked from outside its parent's checkout to that
-// checkout, when the parent's fork made or adopted it, and refuses one whose parent was only
-// taken there, naming it. inherited is false when the row has no parent, or the parent works
-// here or nowhere yet.
-func parentCheckout(ctx context.Context, store *job.Store, here string, row types.Declaration) (types.Declaration, bool, error) {
-	if row.Parent == "" {
-		return row, false, nil
-	}
-	there, bound, err := store.ParentCheckout(here, row.Parent)
-	switch {
-	case err != nil || there == "":
-		return row, false, err
-	case !bound:
-		return row, false, exit.Usagef("magus job fork: %s's parent %s is held in %s, not here in %s, so its holder could not reach the parent's tree: fork %s from %s, or pass --checkout <dir>",
-			row.ID, row.Parent, there, here, row.ID, there)
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("%s's parent %s is bound to %s, so %s is taken there too", row.ID, row.Parent, there, row.ID), attr.Notice("note"))
-	row.Checkout = there
-	return row, true, nil
-}
-
-// forkCheckout settles the checkout row is taken in when it names none. A fork run inside a
-// checkout a job's fork made adopts that checkout, so the new row's holder is bound there and
-// not refused as a sibling. An integration row forked from any other linked checkout is
-// refused: its holder merges in a checkout of its own, and the forker's tree is not one.
-func forkCheckout(ctx context.Context, store *job.Store, root string, row types.Declaration) (types.Declaration, error) {
-	if row.Checkout != "" || root == "" {
-		return row, nil
-	}
-	here, err := filepath.Abs(root)
-	if err != nil {
-		return row, err
-	}
-	if child, inherited, err := parentCheckout(ctx, store, here, row); inherited || err != nil {
-		return child, err
-	}
-	owned, err := store.OwnedCheckout(here)
-	if err != nil {
-		return row, err
-	}
-	if owned != "" {
-		// A checkpoint off this head is work in another checkout. Adopting
-		// this one would grade it at the wrong commit.
-		head, at, err := job.CheckpointAtHead(ctx, owned, row.Checkpoint)
-		switch {
-		case err != nil:
-			return row, exit.Usagef("magus job fork: whether %s's checkpoint %s is the head of %s cannot be read (%s): pass --checkout <dir>, the checkout the work is in", row.ID, row.Checkpoint, owned, err)
-		case !at:
-			return row, exit.Usagef("magus job fork: %s names the checkpoint %s, and %s, the checkout a job's fork made that this fork would adopt, stands at %.12s: pass --checkout <dir>, the checkout the work is in", row.ID, row.Checkpoint, owned, head)
-		}
-		slog.InfoContext(ctx, fmt.Sprintf("the fork runs inside %s, a checkout a job's fork made, so %s is taken there too", owned, row.ID), attr.Notice("note"))
-		row.Checkout = owned
-		return row, nil
-	}
-	if len(row.Integrates) == 0 {
-		return row, nil
-	}
-	linked, err := store.LinkedCheckout(ctx, here)
-	if err != nil {
-		return row, exit.Usagef("magus job fork: whether %s is a linked checkout cannot be read (%s), so the checkout %s merges in is unknown: pass --checkout <dir>", here, err, row.ID)
-	}
-	if linked {
-		return row, exit.Usagef("magus job fork: %s is an integration job forked from %s, the forker's own linked checkout, where its holder would be bound: pass --checkout <dir>, a new directory the fork makes or the linked checkout the integrator runs in", row.ID, here)
-	}
-	return row, nil
-}
 
 // jobEnter records an entry into job id's path rel, the --stdin record's other shape.
 func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
@@ -1604,69 +1392,6 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 	return removed
 }
 
-// endWorktrees removes the checkouts the forks of jobs which ended made, restoring what magus
-// wrote in them first, and prints what became of each one: removed, or kept and why. What magus wrote includes the tool rows a
-// wired harness's install puts in a checkout, which describe file leaves unclaimed.
-func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
-	return endCheckouts(ctx, out, store, ended, false)
-}
-
-// endNamedWorktrees is [endWorktrees] for the jobs in ended alone, as `job exit` ends them.
-func endNamedWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
-	return endCheckouts(ctx, out, store, ended, true)
-}
-
-func endCheckouts(ctx context.Context, out io.Writer, store *job.Store, ended []string, onlyNamed bool) error {
-	if globalCfg.DryRun {
-		return nil
-	}
-	written := func(ctx context.Context, checkout string, paths []string) ([]string, error) {
-		ws, err := magus.Inspect(ctx, checkout, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
-		if err != nil {
-			return nil, job.UnloadableMagusfile(err)
-		}
-		files, err := ws.ClassifyFiles(ctx, paths)
-		if err != nil {
-			return nil, err
-		}
-		wired, err := workspace.WiredHarnesses(ws)
-		if err != nil {
-			return nil, err
-		}
-		hostCtx := agent.ContextWithWiredHarnesses(ctx, wired)
-		var toolRows []types.HarnessTools
-		for _, id := range wired {
-			d, _, err := agent.LoadHarness(hostCtx, ws.Root(), id)
-			if err != nil {
-				return nil, fmt.Errorf("loading wired harness %s for the tool rows it installs: %w", id, err)
-			}
-			if d.Tools != nil {
-				toolRows = append(toolRows, *d.Tools)
-			}
-		}
-		var out []string
-		for _, f := range files {
-			installed := slices.ContainsFunc(toolRows, func(t types.HarnessTools) bool { return t.Holds(f.Path) })
-			if installed || f.Role == diff.RoleOutput || f.Role == diff.RoleMaintained {
-				out = append(out, f.Path)
-			}
-		}
-		return out, nil
-	}
-	end := store.EndCheckouts
-	if onlyNamed {
-		end = store.EndNamedCheckouts
-	}
-	changed, err := end(ctx, written, ended...)
-	for _, row := range changed {
-		job.PrintWorktree(out, row, false)
-	}
-	if err != nil {
-		return fmt.Errorf("magus job: recording what became of a job's checkout: %w", err)
-	}
-	return nil
-}
-
 // recordCheckout is the checkout a --stdin record runs in, made absolute.
 // The --checkout flag fills in when the record names none.
 func recordCheckout(fromRecord, fromFlag string) (string, error) {
@@ -1681,100 +1406,6 @@ func recordCheckout(fromRecord, fromFlag string) (string, error) {
 		return "", exit.Usagef("magus job fork: --checkout %s and the record's checkout %s name two checkouts: give one", fromFlag, fromRecord)
 	}
 	return abs, nil
-}
-
-// provisionCheckout readies a checkout the fork made or moved: it reuses a
-// ./magus built at the checkout's base, else the script builds one. It then
-// installs only the projects row touches. reused says no build ran.
-func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, exe, forker string, row types.Declaration, wt types.JobWorktree) (reused bool, err error) {
-	placed, err := store.PlaceBuiltBinary(ctx, exe, wt.Base, wt.Root)
-	if err != nil {
-		return false, err
-	}
-	if placed != "" {
-		slog.InfoContext(ctx, fmt.Sprintf("reused %s, already built at %.12s", placed, wt.Base), attr.Notice("note"))
-	}
-	if ws.Unavailable != "" {
-		slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so every project's dependencies are installed", ws.Unavailable), attr.Notice("note"))
-		return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root)
-	}
-	var declared types.Job
-	row.Apply(&declared)
-	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
-}
-
-// bootstrapCheckout builds ./magus in dir, a checkout the fork made or
-// adopted, from dir's own sources. exe runs the forker's copy of its
-// checkout.bootstrap hook from forker. Progress goes to stderr, since the
-// fork's stdout is its record.
-func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...string) error {
-	hook, err := job.CheckoutHook(forker)
-	if err != nil {
-		return fmt.Errorf("magus job fork: %w", err)
-	}
-	if hook == "" {
-		return fmt.Errorf("magus job fork: %s holds a hook to build its own ./magus, and %s has %s", dir, forker, job.NoCheckoutHook)
-	}
-	args := append([]string{"buzz", hook, "--", "--checkout", dir}, flags...)
-	cmd := exec.CommandContext(ctx, exe, args...) //nolint:gosec // exe is the running magus binary or its own placed copy
-	var output bytes.Buffer
-	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
-	if err := cmd.Run(); err != nil {
-		if full := cache.DiskFullCause(output.String(), forker, cache.DiskFullFloorBytes); full != "" {
-			return fmt.Errorf("magus job fork: building ./magus in %s failed: %s: %w", dir, full, err)
-		}
-		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed: `%s` from %s says why: %w",
-			dir, job.CheckoutBootstrap(hook, dir), forker, err)
-	}
-	return nil
-}
-
-// progressWriter takes a script's progress lines. -q raises the log level
-// past info, so it gets none.
-func progressWriter(ctx context.Context) io.Writer {
-	if !slog.Default().Enabled(ctx, slog.LevelInfo) {
-		return io.Discard
-	}
-	return os.Stderr
-}
-
-// reclaimOnForkTimeout bounds the reclaim a fork waits for below the floor.
-const reclaimOnForkTimeout = 5 * time.Minute
-
-// refuseForkOnFullDisk reclaims in the foreground when a fork making a new
-// checkout finds the disk below floorBytes, says so, and refuses if it stays
-// below. An adopted checkout already exists and writes nothing new.
-func refuseForkOnFullDisk(ctx context.Context, exe, root, checkout string, floorBytes int64) error {
-	if _, err := os.Stat(checkout); err == nil {
-		return nil
-	}
-	free, below, err := cache.DiskBelow(root, floorBytes)
-	if err != nil {
-		return fmt.Errorf("magus job fork: cannot read the disk holding %s, so a new checkout cannot be checked against disk.critical_free_mb: %w", root, err)
-	}
-	if !below {
-		return nil
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("%d MiB free is below disk.critical_free_mb; reclaiming first, for at most %s", free>>20, reclaimOnForkTimeout), attr.Notice("note"))
-	if err := reclaimNow(ctx, exe, root); err != nil {
-		slog.InfoContext(ctx, "the reclaim stopped", attr.Error(err), attr.Notice("note"))
-	}
-	free, below, err = cache.DiskBelow(root, floorBytes)
-	if err != nil {
-		return fmt.Errorf("magus job fork: cannot read the disk holding %s after a reclaim: %w", root, err)
-	}
-	if !below {
-		return nil
-	}
-	return types.DiagnosticErrorf(types.DiskFull, "%d MiB free is still below disk.critical_free_mb after a reclaim, and a new checkout would fill it. `%s` lists what it left for you", free>>20, types.ReclaimDiskCommand)
-}
-
-func reclaimNow(ctx context.Context, exe, root string) error {
-	ctx, cancel := context.WithTimeout(ctx, reclaimOnForkTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, "buzz", "-C", root, "-e", cache.ReclaimNowSnippet)
-	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-	return cmd.Run()
 }
 
 // jobWait collects a returned job's result and verifies it against the job's own terms.
@@ -2509,33 +2140,6 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// sourcesOnDisk names each file by the id of the bytes it holds now.
-// It is nil when a file cannot be read, so the next grade loads again.
-func sourcesOnDisk(paths []string) []interp.SourceFile {
-	out := make([]interp.SourceFile, len(paths))
-	for i, p := range paths {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return nil
-		}
-		out[i] = interp.SourceFile{Path: p, ContentID: interp.ContentID(data)}
-	}
-	return out
-}
-
-// ownBinaryPrefix is how a holder types a check: with the ./magus of its own checkout,
-// not whichever binary the PATH holds.
-const ownBinaryPrefix = "./"
-
-// workerCheckLine renders c with --budget-wait 0, which a worker's run needs.
-// A script check has no such flag and is rendered as stored.
-func workerCheckLine(c types.LeaseCheck) string {
-	if c.Script != "" {
-		return c.String()
-	}
-	return guard.WorkerCheckCommand(c)
-}
-
 // outputsIn resolves a ref against the output store of the checkout at root. That
 // checkout's own magus.yaml places its cache dir, and loadMagus cannot open a second root.
 func outputsIn(root string) job.AttemptResolver {
@@ -2650,6 +2254,79 @@ func withoutEnded(list types.JobList) (types.JobList, int) { return job.WithoutE
 
 func jobHolderCell(row types.Job) string { return job.HolderCell(row) }
 
-func failedProvision(ctx context.Context, store *job.Store, wt types.JobWorktree, made bool, err error) error {
-	return job.FailedProvision(ctx, store, wt, made, err)
+// jobWorkspace is the workspace at root as a job record's validation reads it, loaded once.
+func jobWorkspace(ctx context.Context, root string) job.Workspace {
+	var loaded job.LoadedWorkspace
+	m, err := loadMagus(ctx, root)
+	if err == nil {
+		loaded = m
+	}
+	return job.WorkspaceOf(ctx, root, loaded, err, func(err error) string {
+		running, pathErr := runningBinaryPath()
+		if pathErr != nil {
+			return err.Error()
+		}
+		return workspaceLoadFailure(err, root, running)
+	})
+}
+
+// workspaceLoadFailure is err's text, naming root's own ./magus when running, a binary
+// too old for root, is not that one.
+func workspaceLoadFailure(err error, root, running string) string {
+	return job.LoadFailureText(err, checkoutBinary(root, running))
+}
+
+// diskProbe is the cache package's disk probes, which internal/job cannot import.
+var diskProbe = job.Disk{
+	Below: cache.DiskBelow,
+	FullCause: func(output, dir string) string {
+		return cache.DiskFullCause(output, dir, cache.DiskFullFloorBytes)
+	},
+	ReclaimSnippet: cache.ReclaimNowSnippet,
+}
+
+// writtenInCheckout reports which of paths the workspace at checkout wrote itself: its
+// generated outputs, its maintained files and the tool rows a wired harness installs.
+func writtenInCheckout(ctx context.Context, checkout string, paths []string) ([]string, error) {
+	ws, err := magus.Inspect(ctx, checkout, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+	if err != nil {
+		return nil, job.UnloadableMagusfile(err)
+	}
+	files, err := ws.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return nil, err
+	}
+	wired, err := workspace.WiredHarnesses(ws)
+	if err != nil {
+		return nil, err
+	}
+	hostCtx := agent.ContextWithWiredHarnesses(ctx, wired)
+	var toolRows []types.HarnessTools
+	for _, id := range wired {
+		d, _, err := agent.LoadHarness(hostCtx, ws.Root(), id)
+		if err != nil {
+			return nil, fmt.Errorf("loading wired harness %s for the tool rows it installs: %w", id, err)
+		}
+		if d.Tools != nil {
+			toolRows = append(toolRows, *d.Tools)
+		}
+	}
+	var out []string
+	for _, f := range files {
+		installed := slices.ContainsFunc(toolRows, func(t types.HarnessTools) bool { return t.Holds(f.Path) })
+		if installed || f.Role == diff.RoleOutput || f.Role == diff.RoleMaintained {
+			out = append(out, f.Path)
+		}
+	}
+	return out, nil
+}
+
+// endWorktrees is [job.EndCheckouts] for every ended job.
+func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
+	return job.EndCheckouts(ctx, out, store, writtenInCheckout, globalCfg.DryRun, false, ended...)
+}
+
+// endNamedWorktrees is [endWorktrees] for the jobs in ended alone, as `job exit` ends them.
+func endNamedWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
+	return job.EndCheckouts(ctx, out, store, writtenInCheckout, globalCfg.DryRun, true, ended...)
 }

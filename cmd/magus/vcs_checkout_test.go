@@ -124,7 +124,7 @@ func (s *FailedProvisionSuite) SetupTest() {
 func (s *FailedProvisionSuite) failed(wt types.JobWorktree, made bool) error {
 	exe, err := os.Executable()
 	s.Require().NoError(err)
-	return failedProvision(s.T().Context(), s.store, wt, made, bootstrapCheckout(s.T().Context(), exe, s.repo.Root(), wt.Root))
+	return job.FailedProvision(s.T().Context(), s.store, wt, made, job.BootstrapCheckout(s.T().Context(), diskProbe, exe, s.repo.Root(), wt.Root))
 }
 
 func (s *FailedProvisionSuite) TestAnAdoptedCheckoutStaysAndTheErrorSaysSo() {

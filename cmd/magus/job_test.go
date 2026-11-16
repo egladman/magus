@@ -996,7 +996,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	installCheckGrader(t, newCheckGrader())
+	installCheckGrader(t, gradingWith(nil))
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
 	}
@@ -1055,7 +1055,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
 		t.Chdir(elsewhere)
 		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
-			Input:      ownBinaryPrefix + workerCheckLine(*row.Check),
+			Input:      "./" + guard.WorkerCheckCommand(*row.Check),
 			DryRun:     true,
 			Lease:      row.ID,
 			PendingRow: &row,
@@ -1067,7 +1067,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	for name, cwd := range map[string]string{"the root": root, "elsewhere": elsewhere} {
 		t.Run(name, func(t *testing.T) {
 			t.Chdir(cwd)
-			verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+			verdict := gradingWith(nil)(t.Context(), root, row)
 			assert.Empty(t, verdict.NotGraded)
 			assert.False(t, verdict.Denied, "the check is judged from the workspace, wherever the process runs: %s", verdict.Reason)
 		})
@@ -1099,7 +1099,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-	grade := newCheckGrader()
+	grade := gradingWith(nil)
 
 	before := grade(t.Context(), root, row)
 	require.Empty(t, before.NotGraded)
@@ -1111,17 +1111,6 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	assert.Empty(t, after.NotGraded)
 	assert.True(t, after.Denied, "the edited rule denies the check")
 	assert.Contains(t, after.Reason, "builds are refused here")
-}
-
-// A workspace whose rules did not load defers the grade, and says so rather than refuse on a
-// verdict nobody reached.
-func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
-	testkit.Isolate(t)
-	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-
-	verdict := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, t.TempDir(), row)
-
-	assert.Equal(t, job.CheckVerdict{Deferred: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"}, verdict)
 }
 
 // One judge: the check a fork grades is the check `describe job` briefs and the guard lets
@@ -1144,19 +1133,19 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	deps := guardDependencies(t.Context(), root)
 
 	t.Run("its own checkout", func(t *testing.T) {
-		verdict := gradeCheck(t.Context(), deps, root, held)
+		verdict := gradingWith(nil)(t.Context(), root, held)
 		assert.Empty(t, verdict.NotGraded)
 		assert.False(t, verdict.Denied, "the holder gates in the checkout it holds: %s", verdict.Reason)
 		require.NoError(t, jobRefusesTheGate(t.Context(), root, held), "describe briefs what the fork accepted")
 
 		taken := held
 		taken.State, taken.CheckoutRoot = types.StateRunning, own
-		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + workerCheckLine(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
+		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
 		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
 	t.Run("the forker's checkout", func(t *testing.T) {
-		verdict := gradeCheck(t.Context(), deps, root, shared)
+		verdict := gradingWith(nil)(t.Context(), root, shared)
 		assert.True(t, verdict.Denied, "a job's check is never the gate in a shared checkout")
 		require.Error(t, jobRefusesTheGate(t.Context(), root, shared))
 	})
@@ -1189,14 +1178,14 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Chdir(root)
 	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
-	verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+	verdict := gradingWith(nil)(t.Context(), root, row)
 
 	assert.False(t, verdict.Denied)
 	assert.Contains(t, verdict.NotGraded, "denies this worker `magus run go::go-vet .` as well")
 	assert.Contains(t, verdict.NotGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
-	installCheckGrader(t, newCheckGrader())
+	installCheckGrader(t, gradingWith(nil))
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
 	require.ErrorIs(t, err, types.JobUngraded)
 	assert.NotErrorIs(t, err, types.JobCheckUnrunnable)
@@ -1208,7 +1197,19 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.Empty(t, rows, "a fork nobody graded writes nothing")
 }
 
-// installCheckGrader installs g as runCLI installs newCheckGrader, and puts back what was
+// gradingWith is the grader runCLI installs, loading the rules the CLI loads with mutate
+// applied to them.
+func gradingWith(mutate func(*guard.Dependencies)) job.CheckGrader {
+	return guard.NewCheckGrader(func(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
+		deps, rules := loadGuardDependencies(ctx, root)
+		if mutate != nil {
+			mutate(&deps)
+		}
+		return deps, rules
+	})
+}
+
+// installCheckGrader installs g as runCLI installs guard.NewCheckGrader, and puts back what was
 // installed. The grader is process-wide, so a test that uses it does not run in parallel.
 func installCheckGrader(t *testing.T, g job.CheckGrader) {
 	t.Helper()
@@ -1259,68 +1260,17 @@ func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
 	defer cancel()
 	release := make(chan struct{})
 	defer close(release)
-	deps := guardDependencies(ctx, root)
-	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
-		<-release
-		return nil, errors.New("released")
-	}
+	hang := gradingWith(func(deps *guard.Dependencies) {
+		deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
+			<-release
+			return nil, errors.New("released")
+		}
+	})
 
-	verdict := gradeCheck(ctx, deps, root, row)
+	verdict := hang(ctx, root, row)
 
 	s.False(verdict.Denied, verdict.Reason)
 	s.Contains(verdict.Deferred, "the guard ran out of time grading it")
-}
-
-func (s *GradeCheckLapseSuite) TestARealDenyStillRefuses() {
-	testkit.Isolate(s.T())
-	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-	denies := func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
-		if strings.Contains(req.Command, "go-build") {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: "no builds"}, nil
-		}
-		return types.GuardVerdict{}, nil
-	}
-
-	verdict := gradeCheck(s.T().Context(), guard.Dependencies{CommandRule: denies}, s.T().TempDir(), row)
-
-	s.True(verdict.Denied)
-	s.Empty(verdict.Deferred)
-}
-
-type ForkDiskFloorSuite struct {
-	suite.Suite
-	root string
-}
-
-func TestForkDiskFloorSuite(t *testing.T) {
-	suite.Run(t, new(ForkDiskFloorSuite))
-}
-
-func (s *ForkDiskFloorSuite) SetupTest() {
-	s.root = s.T().TempDir()
-}
-
-const everyDiskIsLow = int64(1) << 62
-
-func (s *ForkDiskFloorSuite) TestANewCheckoutOnALowDiskIsRefusedNamingTheCode() {
-	err := refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), everyDiskIsLow)
-	s.ErrorIs(err, types.DiskFull)
-	s.ErrorContains(err, types.ReclaimDiskCommand)
-}
-
-func (s *ForkDiskFloorSuite) TestAnAdoptedCheckoutIsExempt() {
-	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, s.root, everyDiskIsLow))
-}
-
-func (s *ForkDiskFloorSuite) TestAnUnreadableDiskIsRefusedSayingSo() {
-	absent := filepath.Join(s.root, "absent")
-	err := refuseForkOnFullDisk(s.T().Context(), "false", absent, filepath.Join(s.root, "new"), 1)
-	s.ErrorContains(err, "cannot read the disk holding "+absent)
-	s.NotErrorIs(err, types.DiskFull)
-}
-
-func (s *ForkDiskFloorSuite) TestADiskAboveTheFloorPasses() {
-	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), 1))
 }
 
 type jobApplyAddWritePathSuite struct {
@@ -1716,4 +1666,58 @@ func pinCheckoutBinary(t *testing.T, session, bin string) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: session})
 	_, err = store.RecordWorktree(t.Context(), "pinned", types.JobWorktree{Root: filepath.Dir(bin), Binary: bin, BinaryDigest: digest})
 	require.NoError(t, err)
+}
+
+// UnloadedWorkspaceSuite pins what a binary too old for the tree says.
+type UnloadedWorkspaceSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestUnloadedWorkspaceSuite(t *testing.T) {
+	suite.Run(t, new(UnloadedWorkspaceSuite))
+}
+
+func (s *UnloadedWorkspaceSuite) SetupTest() {
+	root, err := filepath.EvalSymlinks(s.T().TempDir())
+	s.Require().NoError(err)
+	s.root = root
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte("{}\n"), 0o644))
+}
+
+func (s *UnloadedWorkspaceSuite) placeBinary() string {
+	own := filepath.Join(s.root, "magus")
+	s.Require().NoError(os.WriteFile(own, []byte("#!/bin/sh\n"), 0o755))
+	return own
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadNamesTheCheckoutsOwnBinary() {
+	own := s.placeBinary()
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Contains(got, types.WorkspaceNeedsNewerMagus.Error())
+	s.Contains(got, fmt.Sprintf("rerun the command with `%s`", own))
+	s.NotContains(got, "job apply")
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadByThatVeryBinaryNamesNone() {
+	own := s.placeBinary()
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, own)
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadWithANonExecutableFileNamesNone() {
+	own := s.placeBinary()
+	s.Require().NoError(os.Chmod(own, 0o644))
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadWithNoBinaryNamesNone() {
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
+}
+
+func (s *UnloadedWorkspaceSuite) TestAnotherFailureNamesNoBinary() {
+	s.placeBinary()
+	s.Equal("a typo", workspaceLoadFailure(errors.New("a typo"), s.root, "/elsewhere/magus"))
 }
