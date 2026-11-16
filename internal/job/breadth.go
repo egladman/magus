@@ -20,7 +20,7 @@ import (
 type Workspace struct {
 	Projects []*types.Project
 	// Ignored returns the paths of its argument the VCS ignores.
-	Ignored func([]string) []string
+	Ignored func([]string) ([]string, error)
 	// Unavailable says why the workspace could not be loaded, empty when it was. A check
 	// that needs it reports itself unchecked rather than passing.
 	Unavailable string
@@ -60,7 +60,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 		}
 		files := writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{wp}, Deny: row.Paths.Deny}})
 		if ws.Ignored != nil {
-			ignored := ws.Ignored(files)
+			ignored, _ := ws.Ignored(files)
 			files = slices.DeleteFunc(files, func(f string) bool { return slices.Contains(ignored, f) })
 		}
 		var projects []string

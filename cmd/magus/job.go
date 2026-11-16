@@ -2452,7 +2452,8 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 	}
 	var declared types.Job
 	row.Apply(&declared)
-	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
+	install := job.InstallProjects(forker, wt.Root, declared, ws.Projects)
+	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", install)
 }
 
 // checkoutReadsRow refuses a checkout of magus whose tree builds a binary

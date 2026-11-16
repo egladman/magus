@@ -49,6 +49,7 @@ exec magus affected ci --base=base
 stderr 'ci gate sized scoped against [0-9a-f]{8};'
 stderr 'a/a.go: scoped \(code: Go package example.com/w/a: its tests and every package importing it\)'
 stderr 'narrowed: go::go-test in . test runs 1 package\(s\): example.com/w/a'
+stderr 'gate: .*magus run .*docs'
 ! stderr 'b ran'
 ! stderr 'whole-suite floor ran'
 

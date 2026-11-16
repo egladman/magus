@@ -3,6 +3,7 @@ package job
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -611,4 +612,83 @@ func (s *FootprintMayExtendSuite) TestWritingOnlyTestsCannotExtend() {
 
 func (s *FootprintMayExtendSuite) TestAReadOnlyRowCannotExtend() {
 	s.False(FootprintMayExtend(s.root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"run/run.go"}}}))
+}
+
+// LintGoalTrackedFilesSuite pins that a derived lint goal skips the files the VCS ignores and
+// keeps every other one, tracked or not.
+type LintGoalTrackedFilesSuite struct {
+	suite.Suite
+}
+
+func TestLintGoalTrackedFilesSuite(t *testing.T) { suite.Run(t, new(LintGoalTrackedFilesSuite)) }
+
+func (s *LintGoalTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([]string, string) {
+	st := NewStore(tempLocation(s.T(), repo.Root())).InWorkspace(ws)
+	var notes bytes.Buffer
+	st.notices = &notes
+	merged, err := resolveMerge(s.T().Context(), st, nil, "w", func(u *types.Job) {
+		u.Paths.Write, u.Check = []string{"skills/**"}, forkCheck()
+	}, nil)
+	s.Require().NoError(err)
+	var row types.Job
+	merged(&row)
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	s.Require().GreaterOrEqual(i, 0, "goals: %v", row.Goals)
+	return row.Goals[i].Check.Args, notes.String()
+}
+
+func (s *LintGoalTrackedFilesSuite) workspace(root string) Workspace {
+	top := &types.Project{
+		Path:             ".",
+		MagusfileTargets: []string{"ci", "lint", "test"},
+		TargetInputs:     map[string][]types.InputRef{"lint": {{Glob: "**/*.md"}}},
+		TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}},
+	}
+	return Workspace{Projects: []*types.Project{top}, Ignored: VCSIgnored(s.T().Context(), root)}
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAnIgnoredFileIsLeftOutAndEveryOtherKept() {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":       "skills/installed/\n",
+		"skills/kept/a.md": "# a\n",
+	})
+	write := func(rel string) {
+		p := filepath.Join(repo.Root(), filepath.FromSlash(rel))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+		s.Require().NoError(os.WriteFile(p, []byte("# x\n"), 0o644))
+	}
+	write("skills/installed/b.md")
+	write("skills/installed/forced.md")
+	repo.Git("add", "-f", "skills/installed/forced.md")
+	repo.Git("commit", "-q", "-m", "force-add an ignored path")
+	write("skills/new/c.md")
+
+	args, note := s.resolve(repo, s.workspace(repo.Root()))
+
+	s.Equal([]string{"skills/installed/forced.md", "skills/kept/a.md", "skills/new/c.md"}, args,
+		"the tracked, the force-added and the not yet tracked file stay; the ignored one goes")
+	s.Contains(note, "left 1 ignored file(s) out of the lint goal")
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAnUnaskableVCSKeepsEveryFileAndSaysSo() {
+	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
+	ws := s.workspace(repo.Root())
+	ws.Ignored = nil
+
+	args, note := s.resolve(repo, ws)
+
+	s.Equal([]string{"skills/kept/a.md"}, args)
+	s.Contains(note, "keeps every one")
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNamesTheError() {
+	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
+	ws := s.workspace(repo.Root())
+	ws.Ignored = func([]string) ([]string, error) { return nil, errors.New("git check-ignore: exit status 128") }
+
+	args, note := s.resolve(repo, ws)
+
+	s.Equal([]string{"skills/kept/a.md"}, args)
+	s.Contains(note, "keeps every written file")
+	s.Contains(note, "git check-ignore: exit status 128")
 }
