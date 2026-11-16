@@ -1,4 +1,4 @@
-package main
+package textindex
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -46,23 +46,13 @@ func TestTextPresenceMarksGeneratedFilesByDefault(t *testing.T) {
 		"src/a.go": "const Ref = \"NEEDLE_VALUE\"\n",
 		"gen/b.go": "const Ref = \"NEEDLE_VALUE\"\n",
 	})
-	w.Magusfile(`import "magus";
-magus\project({"outputs": ["gen/*"]});
-export fun build(ctx: magus\Context, args: [str]) > void {}
-`)
 
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
-	require.NoError(t, err, "magus.Open")
-	t.Cleanup(func() { _ = m.Close() })
 
 	var classifiedPaths []string
-	classify := func(ctx context.Context, paths []string) ([]types.FileEntry, error) {
-		classifiedPaths = append(classifiedPaths, paths...)
-		return m.ClassifyFiles(ctx, paths)
-	}
+	classify := outputUnder(root, "gen", &classifiedPaths)
 	hits, files, searched, skipped, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", false, classify)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{filepath.Join(root, "src/a.go"), filepath.Join(root, "gen/b.go")}, classifiedPaths,
@@ -70,7 +60,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	assert.True(t, classified, "a loaded workspace must classify")
 	assert.Equal(t, 2, hits)
 	assert.Equal(t, 2, files, "both files matched; the generated one is marked, not hidden")
-	assert.Equal(t, 3, searched, "src/a.go, gen/b.go, and the magusfile itself; the generated file was searched, not skipped")
+	assert.Equal(t, 2, searched, "src/a.go and gen/b.go; the generated file was searched, not skipped")
 	assert.Zero(t, skipped)
 	assert.Equal(t, 1, generated, "one of the two matched files is declared output")
 }
@@ -84,24 +74,17 @@ func TestTextPresenceExcludesGeneratedFilesWhenNoGenerated(t *testing.T) {
 		"src/a.go": "const Ref = \"NEEDLE_VALUE\"\n",
 		"gen/b.go": "const Ref = \"NEEDLE_VALUE\"\n",
 	})
-	w.Magusfile(`import "magus";
-magus\project({"outputs": ["gen/*"]});
-export fun build(ctx: magus\Context, args: [str]) > void {}
-`)
 
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
-	require.NoError(t, err, "magus.Open")
-	t.Cleanup(func() { _ = m.Close() })
 
-	hits, files, searched, skipped, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", true, m.ClassifyFiles)
+	hits, files, searched, skipped, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", true, outputUnder(root, "gen", nil))
 	require.NoError(t, err)
 	assert.True(t, classified)
 	assert.Equal(t, 1, hits, "only the hand-written file was searched")
 	assert.Equal(t, 1, files)
-	assert.Equal(t, 2, searched, "src/a.go and the magusfile; the generated file never reached the scanner")
+	assert.Equal(t, 1, searched, "src/a.go; the generated file never reached the scanner")
 	assert.Zero(t, skipped, "excluded-as-generated is not the same reason as skipped")
 	assert.Equal(t, 1, generated, "one file was excluded because it is declared output")
 }
@@ -256,26 +239,26 @@ func TestSearchableFilesHonorsScopes(t *testing.T) {
 	}, rels(paths), "an overlapping scope reads each file once")
 }
 
-// TestResolveSearchScopesRefusesOutsideTheWorkspace pins the containment check. A scope
+// TestResolveScopesRefusesOutsideTheWorkspace pins the containment check. A scope
 // that silently resolved to nothing would print "no matches" for a search that never
 // looked where the reader asked, which is worse than the error.
-func TestResolveSearchScopesRefusesOutsideTheWorkspace(t *testing.T) {
+func TestResolveScopesRefusesOutsideTheWorkspace(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("internal/guard/shell.go", "package guard")
 
-	scopes, err := resolveSearchScopes(w.Root(), nil)
+	scopes, err := ResolveScopes(w.Root(), nil)
 	require.NoError(t, err)
 	assert.Nil(t, scopes, "no operands means the whole workspace, not an empty search")
 
-	scopes, err = resolveSearchScopes(w.Root(), []string{w.Path("internal/guard")})
+	scopes, err = ResolveScopes(w.Root(), []string{w.Path("internal/guard")})
 	require.NoError(t, err)
 	assert.Equal(t, []string{w.Path("internal/guard")}, scopes)
 
-	_, err = resolveSearchScopes(w.Root(), []string{filepath.Join(w.Root(), "..")})
+	_, err = ResolveScopes(w.Root(), []string{filepath.Join(w.Root(), "..")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "outside the workspace")
 
-	_, err = resolveSearchScopes(w.Root(), []string{w.Path("nope")})
+	_, err = ResolveScopes(w.Root(), []string{w.Path("nope")})
 	require.Error(t, err, "a scope that does not exist is an error, not an empty search")
 }
 
@@ -344,7 +327,7 @@ func TestTextPresenceNotes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := textPresenceNotes(tc.skipped, tc.generated, tc.matched, tc.classified, tc.noGenerated)
+			got := PresenceNotes(tc.skipped, tc.generated, tc.matched, tc.classified, tc.noGenerated)
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -363,24 +346,35 @@ func BenchmarkTextPresenceSparseMatches(b *testing.B) {
 		}
 		w.Write(name, body)
 	}
-	w.Magusfile(`import "magus";
-magus\project({"outputs": ["gen/**"]});
-export fun build(ctx: magus\Context, args: [str]) > void {}
-`)
 	root := w.Root()
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer m.Close()
+	classify := outputUnder(root, "gen", nil)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		hits, files, searched, _, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", false, m.ClassifyFiles)
-		if err != nil || hits != 1 || files != 1 || searched != 3001 || generated != 0 || !classified {
+		hits, files, searched, _, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", false, classify)
+		if err != nil || hits != 1 || files != 1 || searched != 3000 || generated != 0 || !classified {
 			b.Fatalf("unexpected result: hits=%d files=%d searched=%d generated=%d classified=%t err=%v", hits, files, searched, generated, classified, err)
 		}
+	}
+}
+
+// outputUnder classifies every path below dir as declared output and the rest as source:
+// the shape a loaded workspace answers with, without loading one.
+func outputUnder(root, dir string, record *[]string) ClassifyFunc {
+	return func(_ context.Context, paths []string) ([]types.FileEntry, error) {
+		if record != nil {
+			*record = append(*record, paths...)
+		}
+		entries := make([]types.FileEntry, len(paths))
+		for i, p := range paths {
+			role := "source"
+			if rel, err := filepath.Rel(filepath.Join(root, dir), p); err == nil && !strings.HasPrefix(rel, "..") {
+				role = "output"
+			}
+			entries[i] = types.FileEntry{Path: p, Role: role}
+		}
+		return entries, nil
 	}
 }
