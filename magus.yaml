@@ -165,6 +165,10 @@ knowledge:
             # detached-run argv reads the generated --detach flag name, and the
             # lifecycle reads the process-wide signal policy beside its own.
             internal/proc: 16
+            # the broker host, registry, probes and MCP bridge moved out of cmd/magus
+            # beside the status rendering already here: the server package wires every
+            # service it hosts, so it imports 68 workspace packages.
+            internal/server: 68
             # job evidence moved out of cmd/magus: *magus.Magus runs through every
             # signature, the shared boundary names the config.Filename constant, and the
             # callers claim reads occurrences through workspacegraph. It holds the symbol

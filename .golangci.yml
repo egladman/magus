@@ -413,9 +413,9 @@ linters:
             - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
             - {file: cmd/magus/queue.go, reason: relays the stderr of the hooks and gates a queue verb runs}
             - {file: cmd/magus/buzz.go, reason: "relays a script's own output under --check"}
-            - {file: cmd/magus/stepper.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
-            - {file: cmd/magus/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
-            - {file: cmd/magus/failures.go, reason: the end-of-run failure prompt and its OSC 52 copy}
+            - {file: internal/interp/step_gate.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
+            - {file: internal/cache/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
+            - {file: internal/interactive/failures/prompt.go, reason: the end-of-run failure prompt and its OSC 52 copy}
             - {file: internal/cache/cache.go, reason: "relays a target's captured log and the frame around it"}
             - {file: internal/settle/quiet.go, reason: relays the captured output of a silenced run}
             - {file: internal/sandbox/launch.go, reason: reports from inside the confined child before any display exists}
@@ -637,16 +637,13 @@ linters:
             - ktrysmt/go-bitbucket
             - shurcooL/githubv4
           allow:
-            # Loopback to magus's OWN server, not a provider: the diff bridge and the
-            # MCP readiness probe.
+            # Loopback to magus's OWN server, not a provider: the diff and graph bridges.
             - file: cmd/magus/diff.go
               reason: talks to magus's own local diff-bridge server over loopback
             - file: cmd/magus/graph.go
               reason: probes magus's own local graph bridge over loopback, and reaches the OCI registry the graph publishes to and pulls from
             - file: cmd/magus/notes.go
               reason: talks to magus's own local diff-bridge server over loopback
-            - file: cmd/magus/probe.go
-              reason: probes magus's own local MCP server's /readyz over loopback
             # magus's own remote services, reached from cmd/magus's CLI wiring.
             - file: cmd/magus/spell.go
               reason: the OCI registry a spell pulls from
