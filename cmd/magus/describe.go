@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -1753,17 +1753,11 @@ func emitSchema(raw string) error {
 		fmt.Print(raw)
 		return nil
 	}
-	var doc map[string]any
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		return fmt.Errorf("parse embedded schema: %w", err)
+	doc, names, err := describe.ParseSchema(raw)
+	if err != nil {
+		return err
 	}
 	if opts.Format == outputName {
-		props, _ := doc["properties"].(map[string]any)
-		names := make([]string, 0, len(props))
-		for k := range props {
-			names = append(names, k)
-		}
-		slices.Sort(names)
 		return emitNames(os.Stdout, names)
 	}
 	return emitFormatted(opts, doc)
