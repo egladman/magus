@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func writeToolFiles(t *testing.T, root string, files []types.AgentFile) {
@@ -104,17 +104,17 @@ func (s *StaleToolRowsSuite) TestRefusesVersionOneRows() {
 
 func testModelFacts(t testing.TB) *ModelFacts {
 	t.Helper()
-	tiers, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
+	tiers, err := tier.NewSet(tier.Declaration{
 		Enum: "Tier", Site: "magusfile.buzz:7", Cases: []string{"economy", "standard"}, Default: 1,
-		Bounds: []typesagent.ModelTierBounds{{MaxLive: 4}, {MaxContext: 150_000}},
-		Skills: []typesagent.SkillVariant{typesagent.SkillVariantShort, typesagent.SkillVariantFull},
+		Bounds: []tier.Bounds{{MaxLive: 4}, {MaxContext: 150_000}},
+		Skills: []tier.SkillVariant{tier.SkillVariantShort, tier.SkillVariantFull},
 		Hosts:  map[string][]string{"host": {"small", "large"}},
 	})
 	require.NoError(t, err)
-	return &ModelFacts{Tiers: tiers, Rows: []types.ModelPricing{
+	return &ModelFacts{Tiers: tiers, Rows: []tier.Pricing{
 		{ID: "small-1", Tier: "economy", Alias: "small", Window: 200_000, Input: 1, Output: 5},
 		{ID: "large-1", Tier: "standard", Alias: "large", Window: 1_000_000, Input: 3, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, Output: 15,
-			LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
+			LongContext: &tier.PriceStep{Above: 200_000, Multiplier: 2}},
 	}}
 }
 

@@ -14,8 +14,8 @@ import (
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // newJobOutcome is row's terminal record, kept in the history file after the row expires.
@@ -62,7 +62,7 @@ func newJobOutcome(row types.Job, tries types.JobAttempts, ended int64) types.Jo
 // PassLower is the Wilson lower bound of the pass rate, the same bound volatility scores
 // flakiness with. ForksPerID is jobs per distinct job id: above 1, a person re-forked an id
 // after it failed. The other per-job figures are means, except MedianTokens.
-func ModelTierRecords(outcomes []types.JobOutcome, set *agent.ModelTierSet) []types.ModelTierRecord {
+func ModelTierRecords(outcomes []types.JobOutcome, set *tier.Set) []types.ModelTierRecord {
 	type key struct {
 		tier string
 		kind types.JobKind
@@ -305,13 +305,13 @@ func attemptStart(row types.Job, tries types.JobAttempts) int64 {
 
 // assignModelTierWithHistory is [Store.assignModelTier] with the recorded outcomes in the
 // matrix's request. They are read only when a matrix runs, since nothing else reads them.
-func (s *Store) assignModelTierWithHistory(ctx context.Context, row types.Job, plan []types.Job) (agent.JobModelTier, error) {
+func (s *Store) assignModelTierWithHistory(ctx context.Context, row types.Job, plan []types.Job) (tier.Assignment, error) {
 	if s.modelTierMatrix == nil {
 		return s.assignModelTier(ctx, row, plan)
 	}
 	matrix := s.modelTierMatrix
 	withHistory := &Store{storeConfig: storeConfig{modelTiers: s.modelTiers, owners: s.owners}}
-	withHistory.modelTierMatrix = func(ctx context.Context, req types.ModelTierRequest) (*agent.JobModelTier, error) {
+	withHistory.modelTierMatrix = func(ctx context.Context, req types.ModelTierRequest) (*tier.Assignment, error) {
 		records, err := s.tierHistory(ctx)
 		if err != nil {
 			return nil, err

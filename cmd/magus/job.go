@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 
@@ -234,9 +235,9 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	if root != "" {
 		// Read once, and only when a job ends with a priceable trail, since it loads the
 		// workspace's harness spells.
-		table := sync.OnceValue(func() model.Table { return sessionModelTable(root) })
+		table := sync.OnceValue(func() tier.Table { return sessionModelTable(root) })
 		loc.PriceContext = func(calls []types.AgentFacts) (int64, float64, bool) {
-			floor, why := table().PriceContext(calls)
+			floor, why := model.PriceContext(table(), calls)
 			return floor.Tokens, floor.USD, why == ""
 		}
 		// Lazy: the harness spells load only when a row names a model.

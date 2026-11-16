@@ -45,6 +45,15 @@ packages:
     config: {module: magus/agent}
     types:
       Request: {config: {name: StepRequest}}
+  github.com/egladman/magus/libs/safetyscissors/tier:
+    # Buzz keeps the names the types had in types/agent, and PriceStep stays in magus.
+    config: {module: magus/agent}
+    types:
+      Assignment: {config: {name: JobModelTier}}
+      Bounds: {config: {name: ModelTierBounds}}
+      PriceStep: {config: {module: ""}}
+      SkillVariant: {config: {zeroCase: ""}}
+      Source: {config: {name: ModelTierSource, zeroCase: ""}}
   github.com/egladman/magus/libs/safetyscissors/verdict:
     # Buzz keeps the names the types had in types.
     config: {module: ""}
@@ -71,8 +80,6 @@ packages:
       Tree: {config: {required: [source, path, modePolicy, symlinks]}}
   github.com/egladman/magus/types/agent:
     types:
-      ModelTierSource: {config: {zeroCase: ""}}
-      SkillVariant: {config: {zeroCase: ""}}
       Spec: {config: {required: [worker]}}
       Worker: {config: {required: [type]}}
       WorkerType: {config: {zeroCase: ""}}

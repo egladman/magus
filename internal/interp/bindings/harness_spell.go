@@ -14,10 +14,10 @@ import (
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM; the loader registers from the layer that can
@@ -210,7 +210,7 @@ func shippedAgents(model string) (vm.Value, error) {
 // declares tiers and has no row for the cheapest one is an error naming the row to add.
 func cheapestTierModel(ctx context.Context, id string, tierModels map[string]string) (string, error) {
 	ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
+		ModelTiers(ctx context.Context) *tier.Set
 	})
 	if !ok {
 		return "", nil
@@ -278,14 +278,14 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 	return hosts, nil
 }
 
-// rowTierModel is the model tiers names for tier, also under the old name
-// a row may still spell it with. compat: see types/agent renamedModelTiers.
-func rowTierModel(tiers map[string]string, tier string) (string, bool) {
-	if model, ok := tiers[tier]; ok {
+// rowTierModel is the model tiers names for tierName, also under the old name
+// a row may still spell it with. compat: see libs/safetyscissors/tier renamedModelTiers.
+func rowTierModel(tiers map[string]string, tierName string) (string, bool) {
+	if model, ok := tiers[tierName]; ok {
 		return model, true
 	}
 	for _, name := range slices.Sorted(maps.Keys(tiers)) {
-		if renamed, ok := typesagent.RenamedModelTier(name); ok && renamed == tier {
+		if renamed, ok := tier.Renamed(name); ok && renamed == tierName {
 			return tiers[name], true
 		}
 	}
@@ -296,27 +296,27 @@ func rowTierModel(tiers map[string]string, tier string) (string, bool) {
 // A tier of several rows takes the id the declaration maps for it.
 // With no declaration in force, such a tier is left out.
 func declaredTierModels(ctx context.Context, id string, tierRows map[string][]string) (map[string]string, error) {
-	var set *typesagent.ModelTierSet
+	var set *tier.Set
 	if ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
+		ModelTiers(ctx context.Context) *tier.Set
 	}); ok {
 		set = ws.ModelTiers(ctx)
 	}
 	if set == nil {
 		var out map[string]string
-		for tier, ids := range tierRows {
+		for tierName, ids := range tierRows {
 			if len(ids) != 1 {
 				continue
 			}
 			if out == nil {
 				out = map[string]string{}
 			}
-			out[tier] = ids[0]
+			out[tierName] = ids[0]
 		}
 		return out, nil
 	}
-	return pickTierModels(tierRows, func(tier string) (string, bool) {
-		t, err := set.Parse(tier)
+	return pickTierModels(tierRows, func(tierName string) (string, bool) {
+		t, err := set.Parse(tierName)
 		if err != nil {
 			return "", false
 		}
@@ -328,20 +328,20 @@ func declaredTierModels(ctx context.Context, id string, tierRows map[string][]st
 // pickTierModels is each tier's default model from its rows' ids.
 // A tier of several rows runs the id mapped returns for it.
 // When mapped names none of them it is an error, never a pick by order.
-func pickTierModels(tierRows map[string][]string, mapped func(tier string) (string, bool)) (map[string]string, error) {
+func pickTierModels(tierRows map[string][]string, mapped func(tierName string) (string, bool)) (map[string]string, error) {
 	out := map[string]string{}
-	for _, tier := range slices.Sorted(maps.Keys(tierRows)) {
-		ids := tierRows[tier]
+	for _, tierName := range slices.Sorted(maps.Keys(tierRows)) {
+		ids := tierRows[tierName]
 		if len(ids) == 1 {
-			out[tier] = ids[0]
+			out[tierName] = ids[0]
 			continue
 		}
-		if id, ok := mapped(tier); ok && slices.Contains(ids, id) {
-			out[tier] = id
+		if id, ok := mapped(tierName); ok && slices.Contains(ids, id) {
+			out[tierName] = id
 			continue
 		}
 		return nil, fmt.Errorf("rows %s all declare tier %s and the declaration maps none of them for it, so map tier %s to one of those ids in the declaration's hosts",
-			strings.Join(ids, ", "), tier, tier)
+			strings.Join(ids, ", "), tierName, tierName)
 	}
 	return out, nil
 }
@@ -349,8 +349,8 @@ func pickTierModels(tierRows map[string][]string, mapped func(tier string) (stri
 // validateModelRows reads model rows into prices and each tier's row ids.
 // A half-set price step, or an alias without a tier or on two rows, names
 // no one model, so each is an error. Several rows may share a tier.
-func validateModelRows(rows []types.HarnessModel) ([]types.ModelPricing, map[string][]string, error) {
-	out := make([]types.ModelPricing, len(rows))
+func validateModelRows(rows []types.HarnessModel) ([]tier.Pricing, map[string][]string, error) {
+	out := make([]tier.Pricing, len(rows))
 	aliases := map[string]string{}
 	var tiers map[string][]string
 	for i, r := range rows {
@@ -375,10 +375,10 @@ func validateModelRows(rows []types.HarnessModel) ([]types.ModelPricing, map[str
 		if (r.Step.Above > 0) != (r.Step.Multiplier > 0) {
 			return nil, nil, fmt.Errorf("row %d (%s) sets one of the price step's above and multiplier without the other", i+1, r.ID)
 		}
-		out[i] = types.ModelPricing{
-			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Input: types.USDPerMTok(r.Price.Input),
-			CacheWrite5m: types.USDPerMTok(r.Price.CacheWrite5m), CacheWrite1h: types.USDPerMTok(r.Price.CacheWrite1h),
-			CacheRead: types.USDPerMTok(r.Price.CacheRead), Output: types.USDPerMTok(r.Price.Output),
+		out[i] = tier.Pricing{
+			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Input: tier.USDPerMTok(r.Price.Input),
+			CacheWrite5m: tier.USDPerMTok(r.Price.CacheWrite5m), CacheWrite1h: tier.USDPerMTok(r.Price.CacheWrite1h),
+			CacheRead: tier.USDPerMTok(r.Price.CacheRead), Output: tier.USDPerMTok(r.Price.Output),
 		}
 		if r.Step.Above > 0 {
 			step := r.Step

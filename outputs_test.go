@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -35,7 +36,7 @@ func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus,
 		reg.RegisterProject(projPath, WithOutputs(outputs...))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m, root
@@ -81,7 +82,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -110,7 +111,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 `
 	w.Magusfile(mf)
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	generated := filepath.Join(root, "gen", "fs.go")
@@ -191,7 +192,7 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 
 			reg := NewWorkspaceRegistry()
 			reg.RegisterProject(".", WithSpell(spellName), WithOutputs("gen/**"))
-			m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+			m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 			require.NoError(t, err, "Open")
 			t.Cleanup(func() { _ = m.Close() })
 
@@ -291,7 +292,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 `)
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	// m.Root() is symlink-resolved by project.Discover; build the path on it so it
@@ -412,7 +413,7 @@ export fun other(ctx: magus\Context, args: [str]) > void {
 	}
 	repo.Write("gen/scratch.go", "")
 
-	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -459,7 +460,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	_, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.Error(t, err, "a target reading from and writing into one project must not load")
 	assert.ErrorIs(t, err, types.CrossOutputCycle)
 	assert.Contains(t, err.Error(), "out.html", "the error names the output that closes the cycle")
@@ -502,7 +503,7 @@ func TestTwoWritersClaimingOnePathAreRejected(t *testing.T) {
 		"p2/magusfile.buzz":   crossWriter("site", "shared.txt"),
 	})
 
-	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	_, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.Error(t, err, "two projects declaring one output path must not load")
 	assert.Contains(t, err.Error(), "shared.txt")
 	assert.Contains(t, err.Error(), "p1")
@@ -523,7 +524,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		"p1/magusfile.buzz": crossWriter("site", "shared.txt"),
 	})
 
-	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	_, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.Error(t, err, "a writer must not claim a path the owner already declares")
 	assert.Contains(t, err.Error(), "shared.txt")
 	assert.Contains(t, err.Error(), "site")
@@ -540,7 +541,7 @@ func TestDistinctPathsIntoOneTreeAreAllowed(t *testing.T) {
 		"p2/magusfile.buzz":   crossWriter("site", "from-p2.txt"),
 	})
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -562,7 +563,7 @@ func TestCrossOutputGlobEscapingOwnerIsRejected(t *testing.T) {
 		"p1/magusfile.buzz":   crossWriter("site", "../../etc/x"),
 	})
 
-	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	_, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, types.CrossOutputGlobEscapes, "the error carries a researchable code")
 	assert.Contains(t, err.Error(), "must not contain ..")
@@ -618,7 +619,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Open(context.Background(), writeWorkspace(t, tc.files), WithSpawnRule(TierCeiling))
+			_, err := Open(context.Background(), writeWorkspace(t, tc.files), WithSpawnRule(tier.Ceiling))
 			require.Error(t, err)
 			assert.ErrorIs(t, err, tc.code)
 			assert.Contains(t, types.CodeURL(tc.code), "/reference/codes/",
@@ -643,7 +644,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -681,7 +682,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -718,7 +719,7 @@ func TestFootprintDeclaredBothWaysIsRejected(t *testing.T) {
 				"go.mod":         "module x\n",
 				"magusfile.buzz": fmt.Sprintf("import \"magus\";\nexport fun tidy(ctx: magus\\Context, args: [str]) > void {\n    %s\n}\n", tc.body),
 			})
-			_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+			_, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 			require.Error(t, err)
 			assert.ErrorIs(t, err, types.FootprintDeclaredBothWays)
 			assert.ErrorContains(t, err, tc.want)
@@ -736,7 +737,7 @@ export fun tidy(ctx: magus\Context, args: [str]) > void {
 }
 `,
 		})
-		m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+		m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = m.Close() })
 	})
@@ -760,7 +761,7 @@ export fun fine(ctx: magus\Context, args: [str]) > void {
 }
 `,
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "a missing edited source is not a load error")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")

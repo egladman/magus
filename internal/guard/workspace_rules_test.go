@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ import (
 // and the root package imports this one. An external test package may import both.
 func init() {
 	guard.WorkspaceInspect = func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
-		return magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		return magus.Inspect(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	}
 	guard.WorkspaceCacheDir = func(root string) (string, error) { return magus.ResolveCacheDir(root) }
 }

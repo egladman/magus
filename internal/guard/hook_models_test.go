@@ -8,31 +8,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // tieredWorkspace is a loaded workspace that declares set as its model tiers.
 type tieredWorkspace struct {
 	types.WorkspaceRepository
-	set *typesagent.ModelTierSet
+	set *tier.Set
 }
 
-func (w tieredWorkspace) ModelTiers(context.Context) *typesagent.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *tier.Set { return w.set }
 
 // The guard's model tiers open the workspace on the first ask and never again, so a spawn
 // that never asks, one bound to no tiered row, pays nothing for the load.
 func TestWorkspaceModelTiersOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
-	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "principal"},
-		Bounds: []typesagent.ModelTierBounds{{}, {}}, Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
+		Bounds: []tier.Bounds{{}, {}}, Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	cases := []struct {
 		name string
 		ws   types.WorkspaceRepository
 		err  error
-		want *typesagent.ModelTierSet
+		want *tier.Set
 	}{
 		{"a tiered workspace", tieredWorkspace{set: set}, nil, set},
 		{"a workspace with no tier reader", struct{ types.WorkspaceRepository }{}, nil, nil},

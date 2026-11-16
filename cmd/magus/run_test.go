@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -92,7 +93,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -146,7 +147,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -327,7 +328,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	ctx := context.Background()
-	w, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	w, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
 

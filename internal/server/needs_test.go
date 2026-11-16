@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/types"
@@ -292,7 +293,7 @@ func bootConsoleServer(t *testing.T) (base string, patterns []string, needs map[
 	root := fixtureWorkspace(t)
 	builtConsole(t)
 
-	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	logs = &syncBuffer{}
 	d, addr := testServer(t, func(opts mcp.Options) *Server {

@@ -22,7 +22,6 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 
-	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
@@ -30,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -112,7 +112,7 @@ type account struct {
 	billing types.AgentBilling
 	// overrides are the rows agents.models declares. The harness rows are not kept here:
 	// they belong to the request judged, and location.modelTable layers these over them.
-	overrides []types.ModelPricing
+	overrides []tier.Pricing
 	// cacheTTL is agents.prompt_cache_ttl, zero when unset; loadErr is why magus.yaml did
 	// not load, which a reader of cacheTTL must say rather than read zero as unset.
 	cacheTTL time.Duration
@@ -151,12 +151,12 @@ func accountAt(root string) account {
 // modelTable is every model row in effect for the request judged at at: the rows its
 // harnesses publish, then the workspace's agents.models over them. The harness rows can
 // take a workspace load, so a call that needs only billing reads accountAt instead.
-func (at location) modelTable() model.Table {
-	var harness []types.ModelPricing
+func (at location) modelTable() tier.Table {
+	var harness []tier.Pricing
 	if at.models != nil {
 		harness = at.models()
 	}
-	return model.InEffect(harness, accountAt(at.workspace).overrides)
+	return tier.InEffect(harness, accountAt(at.workspace).overrides)
 }
 
 // costState is what magus keeps about a session's main thread for the cost rules. It is

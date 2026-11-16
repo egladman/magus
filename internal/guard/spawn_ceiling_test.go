@@ -9,9 +9,9 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // ceilingFixture is a workspace whose tiers map claude-code to haiku, sonnet and opus, a
@@ -21,7 +21,7 @@ func ceilingFixture(t *testing.T, model string, reported bool) (context.Context,
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set)
 	deps := levelDeps(t, types.GuardProfileStandard)
-	deps.ModelTiers = func() *agent.ModelTierSet { return set }
+	deps.ModelTiers = func() *tier.Set { return set }
 	at := hookLocation(ctx, deps)
 	if reported {
 		hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
@@ -68,8 +68,8 @@ func (s *SpawnAboveParentTierSuite) denied() verdict.Judgment {
 }
 
 // pricedRows price sonnet and opus by alias at the tiers the declaration maps.
-func pricedRows() []types.ModelPricing {
-	return []types.ModelPricing{
+func pricedRows() []tier.Pricing {
+	return []tier.Pricing{
 		{ID: "claude-sonnet-5-5", Alias: "sonnet", Tier: "standard", Input: 3, Output: 15},
 		{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5, Output: 25},
 	}
@@ -93,8 +93,8 @@ func (s *SpawnAboveParentTierSuite) TestAProvenHigherTierIsAdvisedWithItsCost() 
 
 func (s *SpawnAboveParentTierSuite) TestAPriceNoRowGivesIsUnknown() {
 	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
-	deps.ModelRows = func() []types.ModelPricing {
-		return []types.ModelPricing{{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5}}
+	deps.ModelRows = func() []tier.Pricing {
+		return []tier.Pricing{{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5}}
 	}
 
 	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
@@ -193,7 +193,7 @@ func (s *SpawnAboveParentTierSuite) TestNoSessionModelIsNotJudged() {
 
 func (s *SpawnAboveParentTierSuite) TestNoDeclarationIsNotJudged() {
 	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
-	deps.ModelTiers = func() *agent.ModelTierSet { return nil }
+	deps.ModelTiers = func() *tier.Set { return nil }
 
 	s.NotEqual(string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, s.T(), deps, "", "opus").Rule)
 }
@@ -228,8 +228,8 @@ func (s *SpawnAboveParentTierSuite) TestTwoUnknownModelsAreAdvisedTogether() {
 // A session's full model id resolves by the harness row naming its tier.
 func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsTierResolvesASessionsID() {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
-	deps.ModelRows = func() []types.ModelPricing {
-		return []types.ModelPricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	deps.ModelRows = func() []tier.Pricing {
+		return []tier.Pricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
 	}
 
 	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
@@ -240,8 +240,8 @@ func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsTierResolvesASessionsID() 
 
 func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
-	deps.ModelRows = func() []types.ModelPricing {
-		return []types.ModelPricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	deps.ModelRows = func() []tier.Pricing {
+		return []tier.Pricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
 	}
 
 	v := judgeSpawnBy(ctx, s.T(), deps, "", "claude-sonnet-5-5-20261001")
@@ -251,8 +251,8 @@ func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
 }
 
 // aliasedRows carry aliases no declaration maps; fable's names no tier.
-func aliasedRows() []types.ModelPricing {
-	return []types.ModelPricing{
+func aliasedRows() []tier.Pricing {
+	return []tier.Pricing{
 		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
 		{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
 		{ID: "claude-fable-5-1", Alias: "fable"},
@@ -301,8 +301,8 @@ func (s *SpawnAboveParentTierSuite) TestAnUnmappedHostIsNamed() {
 }
 
 // secondRows put two rows at the principal tier.
-func secondRows() []types.ModelPricing {
-	return []types.ModelPricing{
+func secondRows() []tier.Pricing {
+	return []tier.Pricing{
 		{ID: "claude-sonnet-5-5", Tier: "standard"},
 		{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
 		{ID: "claude-next-1", Tier: "principal", Alias: "next"},
@@ -331,8 +331,8 @@ func (s *SpawnAboveParentTierSuite) TestASecondRowAtOneTierResolvesByAlias() {
 
 func (s *SpawnAboveParentTierSuite) TestASessionOnASecondRowAtOneTierPassesItsPeer() {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-next-1", true)
-	deps.ModelRows = func() []types.ModelPricing {
-		return []types.ModelPricing{
+	deps.ModelRows = func() []tier.Pricing {
+		return []tier.Pricing{
 			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
 			{ID: "claude-next-1", Tier: "principal", Alias: "next"},
 		}

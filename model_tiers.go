@@ -8,14 +8,14 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // ModelTiers returns what the root magusfile declared with magus\modelTiers.
 // Else it returns the shipped declaration, and nil when it turned them off.
 // It is nil too when the shipped one does not build, logged as an error.
-func (m *Magus) ModelTiers(ctx context.Context) *typesagent.ModelTierSet {
+func (m *Magus) ModelTiers(ctx context.Context) *tier.Set {
 	set, err := m.modelTiers.Tiers()
 	if err != nil {
 		slog.With(attr.Component("magus")).ErrorContext(ctx, "the default model tier declaration does not load", attr.Error(err))
@@ -35,8 +35,8 @@ func (m *Magus) ModelTierMatrix() types.ModelTierMatrix {
 
 // Models is the lazy reader of the model rows this workspace's wired harnesses
 // publish. The first call loads each harness spell.
-func (m *Magus) Models(ctx context.Context) func() []types.ModelPricing {
-	return sync.OnceValue(func() []types.ModelPricing {
+func (m *Magus) Models(ctx context.Context) func() []tier.Pricing {
+	return sync.OnceValue(func() []tier.Pricing {
 		wired, err := workspace.WiredHarnesses(m)
 		if err != nil {
 			return nil

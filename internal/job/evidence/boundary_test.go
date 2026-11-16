@@ -10,6 +10,7 @@ import (
 	"context"
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -25,7 +26,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 `)
-	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	"io"
@@ -53,6 +52,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
@@ -214,7 +214,7 @@ type Magus struct {
 	// steps is WithStepRows' and WithStepRule's, checked at Open.
 	steps guard.StepTable
 	// modelTiers is what the root magusfile's magus\modelTiers declared.
-	modelTiers agent.ModelTierState
+	modelTiers tier.State
 	// stepRules is what the root magusfile's magus\guard.step registered.
 	// Load checks the step specs against its kinds.
 	stepRules steps.Group
@@ -299,7 +299,7 @@ func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
 
 // CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
 // spawn rule.
-func (w internals) CheckSpawn(parent, child agent.ModelTier) error {
+func (w internals) CheckSpawn(parent, child tier.Tier) error {
 	return w.spawnRule(parent, child)
 }
 
@@ -615,7 +615,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, err
 	}
 	if vo.spawnRule == nil {
-		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
+		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(tier.Ceiling), the reference rule, or a rule of your own")
 	}
 	if vo.CacheBackendGiven && vo.CacheBackend == nil {
 		return nil, errors.New("magus: WithCacheBackend was given a nil backend, so pass a backend, or leave the option out to use the one the magusfile wires")

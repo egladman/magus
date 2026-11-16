@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -424,8 +425,8 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	}
 	row.Requires = []string{"claims"}
 	row.Breaks = []string{"--old-flag", "api.Open"}
-	row.ModelTier = &agent.JobModelTier{
-		Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
+	row.ModelTier = &tier.Assignment{
+		Name: "economy", Rank: 0, Skills: tier.SkillVariantFull, Source: tier.SourceMatrix,
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 	row.ReworkRounds, row.Widenings = 2, 1

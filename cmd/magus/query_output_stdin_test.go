@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -49,7 +50,7 @@ func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magu
 	root := w.Root()
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -199,7 +200,7 @@ magus\project({"targets": {
 }})
 `
 	w.Magusfile(mf)
-	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()

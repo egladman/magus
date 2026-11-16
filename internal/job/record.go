@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -416,8 +417,8 @@ var (
 	wireEntryPoint  = newWireEnum(types.EntryPointCLI, types.EntryPointHook, types.EntryPointMCP, types.EntryPointRPC, types.EntryPointServer)
 	wireCredential  = newWireEnum(types.KindOperator, types.KindStored, types.KindShare, types.KindExchange, types.KindStdio, types.KindSocketPeer)
 	wireWorkerType  = newWireEnum(agent.WorkerTypeResumed, agent.WorkerTypeNew)
-	wireTierSource  = newWireEnum(agent.ModelTierSourceJob, agent.ModelTierSourceMatrix, agent.ModelTierSourceUserMatrix, agent.ModelTierSourceDefault)
-	wireSkills      = newWireEnum(agent.SkillVariantShort, agent.SkillVariantFull)
+	wireTierSource  = newWireEnum(tier.SourceJob, tier.SourceMatrix, tier.SourceUserMatrix, tier.SourceDefault)
+	wireSkills      = newWireEnum(tier.SkillVariantShort, tier.SkillVariantFull)
 )
 
 // The records below mirror domain types under camelCase keys. A domain
@@ -494,7 +495,7 @@ type modelTierRecord struct {
 	Shared []string `json:"shared,omitempty"`
 }
 
-func recordModelTier(t *agent.JobModelTier) *modelTierRecord {
+func recordModelTier(t *tier.Assignment) *modelTierRecord {
 	if t == nil {
 		return nil
 	}
@@ -502,11 +503,11 @@ func recordModelTier(t *agent.JobModelTier) *modelTierRecord {
 		Reason: t.Reason, Site: t.Site, Model: t.Model, Shared: t.Shared}
 }
 
-func (r *modelTierRecord) tier(bad *wireReads) *agent.JobModelTier {
+func (r *modelTierRecord) tier(bad *wireReads) *tier.Assignment {
 	if r == nil {
 		return nil
 	}
-	return &agent.JobModelTier{Name: r.Name, Rank: r.Rank, Skills: wireSkills.read(r.Skills, bad), Source: wireTierSource.read(r.Source, bad),
+	return &tier.Assignment{Name: r.Name, Rank: r.Rank, Skills: wireSkills.read(r.Skills, bad), Source: wireTierSource.read(r.Source, bad),
 		Reason: r.Reason, Site: r.Site, Model: r.Model, Shared: r.Shared}
 }
 

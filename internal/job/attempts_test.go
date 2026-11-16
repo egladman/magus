@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -90,7 +90,7 @@ func (s *AttemptsSuite) TestVerifyGatesWordsAnOutsidePathAsClassifyAttemptReadsI
 func foldedRow() types.Job {
 	prev := types.Job{ID: "a", State: types.StateFail, Generation: 2, Checkpoint: "abc", ReportedBase: "abd"}
 	prev.Updated, prev.ReworkRounds, prev.Widenings = 40, 2, 1
-	prev.ModelTier = &agent.JobModelTier{Name: "routine"}
+	prev.ModelTier = &tier.Assignment{Name: "routine"}
 	prev.Attempt = &types.JobAttempt{Ref: "out1", Failed: true}
 	prev.GateAttempts = []types.JobGateAttempt{
 		{GateID: "lint", Attempt: types.JobAttempt{Ref: "out2"}},

@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -57,7 +58,7 @@ func fixtureMagus(t *testing.T) *magus.Magus {
 	pkg := filepath.Join(root, "pkg")
 	require.NoError(t, os.MkdirAll(pkg, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"name":"pkg"}`), 0o644))
-	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	return m
 }

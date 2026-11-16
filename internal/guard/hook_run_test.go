@@ -31,7 +31,6 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // reportedExit is what errors.As finds in an exit.Reported failure.

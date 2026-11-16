@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
@@ -23,7 +24,7 @@ func ComposeModelTierMatrix(workspace, user types.ModelTierMatrix) types.ModelTi
 	if user == nil {
 		return workspace
 	}
-	return func(ctx context.Context, req types.ModelTierRequest) (*typesagent.JobModelTier, error) {
+	return func(ctx context.Context, req types.ModelTierRequest) (*tier.Assignment, error) {
 		if workspace != nil {
 			choice, err := workspace(ctx, req)
 			if err != nil || choice != nil {

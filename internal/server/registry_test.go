@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types/daemon"
 
 	"github.com/egladman/magus"
@@ -665,7 +666,7 @@ func testOpen(root string, lim *budget.Limiter, _ *broker.Client, _ observabilit
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)
 	}
-	return magus.Open(context.Background(), root, workspace.WithLoadedConfig(cfg), workspace.WithLimiter(lim), magus.WithSpawnRule(magus.TierCeiling))
+	return magus.Open(context.Background(), root, workspace.WithLoadedConfig(cfg), workspace.WithLimiter(lim), magus.WithSpawnRule(tier.Ceiling))
 }
 
 // newTestRegistryAt is newRegistry opening workspaces as a library caller would, with the

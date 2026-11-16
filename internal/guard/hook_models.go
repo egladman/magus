@@ -6,8 +6,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // onceInspected is the lazy reader of what read takes from the workspace inspect opens. The
@@ -29,8 +29,8 @@ func onceInspected[T any](ctx context.Context, inspect func(context.Context) (ty
 // spell. A workspace that does not load or carries no wiring, wires no harness or wires none
 // that publishes rows yields no rows, which the guard reads as no facts about a model
 // rather than an error.
-func HarnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []types.ModelPricing {
-	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []types.ModelPricing {
+func HarnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []tier.Pricing {
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []tier.Pricing {
 		wired, err := workspace.WiredHarnesses(ws)
 		if err != nil {
 			return nil
@@ -41,7 +41,7 @@ func HarnessModelRows(ctx context.Context, root string, inspect func(context.Con
 
 // modelRows is HarnessModelRows for the workspace found from rootOverride, opened as
 // the guard's other rules open it, so one load serves them all. nil outside a workspace.
-func (e HookEnv) modelRows(ctx context.Context, rootOverride string) func() []types.ModelPricing {
+func (e HookEnv) modelRows(ctx context.Context, rootOverride string) func() []tier.Pricing {
 	root, err := workspace.FindRoot(rootOverride)
 	if err != nil {
 		return nil
@@ -55,7 +55,7 @@ func (e HookEnv) modelRows(ctx context.Context, rootOverride string) func() []ty
 // It opens the workspace whole, as modelRows does.
 // The guard's rule load keeps only magus\guard registrations.
 // So it holds no magus\modelTiers call and no harness aliases.
-func (e HookEnv) modelTiers(ctx context.Context, rootOverride string) func() *typesagent.ModelTierSet {
+func (e HookEnv) modelTiers(ctx context.Context, rootOverride string) func() *tier.Set {
 	if _, err := workspace.FindRoot(rootOverride); err != nil {
 		return nil
 	}
@@ -66,10 +66,10 @@ func (e HookEnv) modelTiers(ctx context.Context, rootOverride string) func() *ty
 
 // workspaceModelTiers is the lazy reader of the model tiers the workspace inspect opens
 // declares. A workspace that does not load or declares no tiers yields nil.
-func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *typesagent.ModelTierSet {
-	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *typesagent.ModelTierSet {
+func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *tier.Set {
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *tier.Set {
 		tiered, ok := ws.(interface {
-			ModelTiers(ctx context.Context) *typesagent.ModelTierSet
+			ModelTiers(ctx context.Context) *tier.Set
 		})
 		if !ok {
 			return nil

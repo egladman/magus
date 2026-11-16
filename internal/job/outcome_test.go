@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ import (
 
 // outcomeStore is a Store whose workspace names its own history file, so a test reads back
 // exactly what the store recorded.
-func outcomeStore(t *testing.T, set *agent.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error), dryRun bool) (*Store, string) {
+func outcomeStore(t *testing.T, set *tier.Set, matrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error), dryRun bool) (*Store, string) {
 	t.Helper()
 	root := execRepository(t).Root()
 	history := filepath.Join(t.TempDir(), "history.json")
@@ -56,16 +57,16 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	row.Attempt = &types.JobAttempt{}
 	row.GateAttempts = []types.JobGateAttempt{{}, {}}
 	row.ReworkRounds, row.Widenings = 2, 1
-	row.ModelTier = &agent.JobModelTier{
-		Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
+	row.ModelTier = &tier.Assignment{
+		Name: "routine", Rank: 0, Skills: tier.SkillVariantFull, Source: tier.SourceMatrix,
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 
 	got := newJobOutcome(row, nil, 160_000)
 
 	assert.Equal(t, types.JobOutcome{
-		Job: "a", ModelTier: "routine", Kind: types.JobKindCheck, Skills: agent.SkillVariantFull,
-		Model: "haiku", Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20",
+		Job: "a", ModelTier: "routine", Kind: types.JobKindCheck, Skills: tier.SkillVariantFull,
+		Model: "haiku", Source: tier.SourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20",
 		WriteFiles: 2, State: types.StateFail, ChecksRun: 3, DurationMs: 60_000, Ended: 160_000,
 		ReworkRounds: 2, Widenings: 1, Attempt: 1,
 	}, got)
@@ -103,8 +104,8 @@ func TestNewJobOutcomeOfARowWithNoTierNamesNone(t *testing.T) {
 	assert.Zero(t, got.DurationMs, "a row with no creation time has no duration")
 }
 
-func outcome(job, tier string, kind types.JobKind, state types.JobState) types.JobOutcome {
-	return types.JobOutcome{Job: job, ModelTier: tier, Kind: kind, State: state}
+func outcome(job, name string, kind types.JobKind, state types.JobState) types.JobOutcome {
+	return types.JobOutcome{Job: job, ModelTier: name, Kind: kind, State: state}
 }
 
 func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
@@ -360,7 +361,7 @@ func staleTieredRow(s *Store, now int64) types.Job {
 	s.landed = func(context.Context, types.Job) string { return "" }
 	return types.Job{
 		ID: "idle", State: types.StateDeclared, Updated: now - int64((3 * time.Hour).Seconds()),
-		ModelTier: &agent.JobModelTier{Name: "routine", Source: agent.ModelTierSourceMatrix, Site: "magusfile.buzz:40"},
+		ModelTier: &tier.Assignment{Name: "routine", Source: tier.SourceMatrix, Site: "magusfile.buzz:40"},
 	}
 }
 

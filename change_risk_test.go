@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -426,7 +427,7 @@ func (s *ChangeRiskWorkspaceSuite) SetupTest() {
 	})
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
-	m, err := Open(s.T().Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m
@@ -599,7 +600,7 @@ var freshenTree = map[string]string{
 func (s *ProfileFreshenSuite) SetupTest() {
 	w := testkit.NewWorkspace(s.T())
 	w.WriteTree(freshenTree)
-	m, err := Open(s.T().Context(), w.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m
@@ -984,7 +985,7 @@ func (s *ChangeRiskRunSuite) SetupTest() {
 func (s *ChangeRiskRunSuite) open() {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"), WithSpell("magusfile"))
-	m, err := Open(s.T().Context(), s.repo.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), s.repo.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	spellpkg "github.com/egladman/magus/spells"
@@ -57,7 +58,7 @@ func TestGlobalKnowledgeGraphSuite(t *testing.T) { suite.Run(t, new(GlobalKnowle
 
 func (s *GlobalKnowledgeGraphSuite) SetupTest() {
 	s.rootA, s.rootB = mkGlobalWS(s.T(), "build"), mkGlobalWS(s.T(), "deploy")
-	ws, err := Inspect(context.Background(), s.rootA, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), s.rootA, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.wsA = ws
 }
@@ -559,7 +560,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
 
-	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 
@@ -1127,7 +1128,7 @@ func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.C
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
 	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
-	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "idx/index.scip"}}}}
 	return root, ws, cfg
@@ -1203,7 +1204,7 @@ func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
-	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	build := func() string {
 		t.Helper()
@@ -1456,7 +1457,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
-	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
 	log := slog.New(slog.DiscardHandler)

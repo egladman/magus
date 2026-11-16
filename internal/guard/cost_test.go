@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -260,25 +260,25 @@ func fileSize(t *testing.T, path string) int64 {
 
 // fixtureModelRows stand in for the rows a harness spell publishes; no table is built into
 // the guard.
-var fixtureModelRows = []types.ModelPricing{
+var fixtureModelRows = []tier.Pricing{
 	{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 	{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
 	{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10},
 	{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50,
-		LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
+		LongContext: &tier.PriceStep{Above: 100_000, Multiplier: 5}},
 	{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5},
 }
 
-func fixtureModelTable() model.Table { return model.InEffect(fixtureModelRows, nil) }
+func fixtureModelTable() tier.Table { return tier.InEffect(fixtureModelRows, nil) }
 
-func fixtureModelSource() []types.ModelPricing { return fixtureModelRows }
+func fixtureModelSource() []tier.Pricing { return fixtureModelRows }
 
 // The harness rows cost a workspace load, so billing leaves them unread; agents.models
 // then overrides them field by field.
 func TestModelTableReadsHarnessRowsOnlyForTheTableAndUnderAgentsModels(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	loads := 0
-	at := hookLocation(ctx, Dependencies{ModelRows: func() []types.ModelPricing {
+	at := hookLocation(ctx, Dependencies{ModelRows: func() []tier.Pricing {
 		loads++
 		return fixtureModelRows
 	}})
@@ -290,7 +290,7 @@ func TestModelTableReadsHarnessRowsOnlyForTheTableAndUnderAgentsModels(t *testin
 	opus, ok := at.modelTable().Lookup("claude-opus-5-5")
 	require.True(t, ok)
 	assert.Equal(t, 1, loads)
-	assert.Equal(t, types.ModelPricing{ID: "claude-opus-5-5", Window: 1_000_000, Input: 3, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
+	assert.Equal(t, tier.Pricing{ID: "claude-opus-5-5", Window: 1_000_000, Input: 3, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
 		opus, "agents.models wins, and a field it leaves 0 keeps the harness row")
 	_, ok = at.modelTable().Lookup("claude-haiku-5-5")
 	assert.True(t, ok, "rows agents.models does not mention stay")

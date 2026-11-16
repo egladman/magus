@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -111,14 +112,14 @@ func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
 	if err := json.Unmarshal(raw, &status); err != nil {
 		return nil, fmt.Errorf("reading status: %w", err)
 	}
-	var tier map[string]json.RawMessage
+	var record map[string]json.RawMessage
 	if body, ok := status["modelTier"]; ok {
-		if err := json.Unmarshal(body, &tier); err != nil {
+		if err := json.Unmarshal(body, &record); err != nil {
 			return nil, fmt.Errorf("reading status.modelTier: %w", err)
 		}
 	}
 	var source string
-	if body, ok := tier["source"]; ok {
+	if body, ok := record["source"]; ok {
 		if err := json.Unmarshal(body, &source); err != nil {
 			return nil, fmt.Errorf("reading status.modelTier.source: %w", err)
 		}
@@ -129,8 +130,8 @@ func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
 		return e, nil
 	}
 	var err error
-	if tier["source"], err = json.Marshal(wireTierSource.wire[agent.ModelTierSourceJob]); err == nil {
-		if status["modelTier"], err = json.Marshal(tier); err == nil {
+	if record["source"], err = json.Marshal(wireTierSource.wire[tier.SourceJob]); err == nil {
+		if status["modelTier"], err = json.Marshal(record); err == nil {
 			e["status"], err = json.Marshal(status)
 		}
 	}

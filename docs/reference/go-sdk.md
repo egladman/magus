@@ -53,16 +53,17 @@ ctx := context.Background()
 
 // Inspect: read-only, no cache. Use this for introspection - listing,
 // describing, classifying files - and nothing else.
-ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
+ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(tier.Ceiling))
 
 // Open: builds an on-disk cache and returns the concrete *magus.Magus,
 // which adds Run. Use this when you intend to execute targets.
-m, err := magus.Open(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
+m, err := magus.Open(ctx, "/path/to/workspace", magus.WithSpawnRule(tier.Ceiling))
 ```
 
 Both require a spawn rule: the rule every job spawn is held to. A workspace has no
 default one, so leaving `WithSpawnRule` out fails the constructor, naming
-`magus.TierCeiling`, the reference rule the CLI passes.
+`tier.Ceiling` from `github.com/egladman/magus/libs/safetyscissors/tier`, the reference
+rule the CLI passes.
 
 `Inspect` returns `types.WorkspaceRepository`, an interface: a signal that
 an introspection-only caller should keep coding against the interface rather
@@ -89,7 +90,7 @@ import (
 
 func main() {
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
+    ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         log.Fatal(err)
     }
@@ -330,7 +331,7 @@ func TestProjectsOfAMonorepo(t *testing.T) {
         "api/magusfile.buzz": "",
     })
 
-    m, err := magus.Inspect(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Inspect(t.Context(), ws.Root(), magus.WithSpawnRule(tier.Ceiling))
     require.NoError(t, err)
 
     assert.Len(t, m.All(), 2)

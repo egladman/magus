@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -44,7 +45,7 @@ func TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout(t *testing.T) {
 	}
 	root := writeWorkspace(t, files)
 	other := writeWorkspace(t, files)
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -74,7 +75,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 		"docs/guide.md": "# guide\n",
 		"notes/v1.md":   "# v1\n",
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -119,7 +120,7 @@ func (s *sizedRepairSuite) open() (*Magus, *testkit.Repo) {
 		"gen.txt":        "generated\n",
 		"magusfile.buzz": ciRepairMagusfile,
 	})
-	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err, "Open")
 	s.T().Cleanup(func() { _ = m.Close() })
 	return m, repo

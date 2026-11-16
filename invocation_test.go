@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -25,7 +26,7 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
@@ -118,7 +119,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -137,7 +138,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 func covInspect(t *testing.T) *Magus {
 	t.Helper()
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	return ws.(*Magus)
 }

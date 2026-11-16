@@ -43,7 +43,7 @@ interface, and a caller who later needs `Run` should switch to `Open` and get
 the concrete type, not type-assert their way there.{{else}}A caller who later needs
 `Run` switches to `Open`, never type-asserts.{{end}}
 
-Both require `magus.WithSpawnRule(magus.TierCeiling)` (it has no default), and
+Both require `magus.WithSpawnRule(tier.Ceiling)` (it has no default), and
 a workspace with a magusfile needs `import _ "github.com/egladman/magus/buzzengine"`.
 `magus.FindRoot(dir)` walks up from `dir` to the workspace root, the same walk the CLI
 does; an empty `dir` is an error, not the working directory.

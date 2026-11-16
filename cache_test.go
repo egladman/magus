@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -23,12 +24,12 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	inspected := m.(*Magus)
 
-	tier, mode, dir := inspected.CacheDescription()
-	assert.Empty(t, fmt.Sprintf(`%s%s%s`, tier, mode, dir), "an Inspect workspace has no cache to describe")
+	cacheTier, mode, dir := inspected.CacheDescription()
+	assert.Empty(t, fmt.Sprintf(`%s%s%s`, cacheTier, mode, dir), "an Inspect workspace has no cache to describe")
 	_, _, err = inspected.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, inspected.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
@@ -109,7 +110,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 	run := func(root string) CacheStats {
 		t.Helper()
-		m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
+		m, err := Open(t.Context(), root, WithSpawnRule(tier.Ceiling))
 		require.NoError(t, err, "Open %s", root)
 		t.Cleanup(func() { _ = m.Close() })
 		assert.NotEqual(t, storeA, m.CacheDir(), "journals and output records stay in the checkout")
@@ -223,7 +224,7 @@ func TestTailLogWithNoEntries(t *testing.T) {
 
 func TestListAndGetArtifactWithoutACache(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
@@ -258,7 +259,7 @@ func TestMetricsAreOffUnlessAskedFor(t *testing.T) {
 func TestMetricsCollectionYieldsAReadableSnapshot(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
 
-	m, err := Open(context.Background(), root, WithMetricsCollection(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithMetricsCollection(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

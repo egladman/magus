@@ -23,8 +23,8 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // withDefaultCharms combines the workspace default charms (magus.yaml
@@ -342,7 +342,7 @@ func (s *stringList) Set(v string) error {
 func cliOptions() []magus.Option {
 	return []magus.Option{
 		magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
-		magus.WithSpawnRule(magus.TierCeiling),
+		magus.WithSpawnRule(tier.Ceiling),
 	}
 }
 
@@ -354,7 +354,7 @@ type magusInternals interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error)
 	Telemetry() observability.Provider
-	CheckSpawn(parent, child agent.ModelTier) error
+	CheckSpawn(parent, child tier.Tier) error
 	SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 }
 

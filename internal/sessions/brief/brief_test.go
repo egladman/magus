@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -216,7 +217,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	ctx := agent.ContextWithProbeTimeout(context.Background(), time.Hour)
 
 	wireBriefHost(t, w)
-	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	w.Write("host/hooks.json",
 		`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)

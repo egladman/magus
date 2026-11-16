@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -47,7 +48,7 @@ func TestClientStandInProcess(t *testing.T) {
 		if err != nil {
 			return ctx, err
 		}
-		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling)); err != nil {
+		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling)); err != nil {
 			return ctx, err
 		}
 		return types.WithJobLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil

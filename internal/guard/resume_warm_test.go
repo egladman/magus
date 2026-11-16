@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -140,14 +141,14 @@ func TestFindWarmWorker(t *testing.T) {
 	ttl := 5 * time.Minute
 	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: now.Add(-2 * time.Minute).Unix()}
 	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
-	haiku := []types.ModelPricing{{ID: "claude-haiku-9", Alias: "haiku", LongContext: &types.PriceStep{Above: 100_000, Multiplier: 2}}}
+	haiku := []tier.Pricing{{ID: "claude-haiku-9", Alias: "haiku", LongContext: &tier.PriceStep{Above: 100_000, Multiplier: 2}}}
 	tokens := func(n int64) *int64 { return &n }
 
 	tests := []struct {
 		name   string
 		rec    spawnedAgent
 		now    time.Time
-		models []types.ModelPricing
+		models []tier.Pricing
 		want   bool
 	}{
 		{"within the TTL", spawnedAgent{ID: warmAgent, Description: warmEndedTitle}, now, nil, true},

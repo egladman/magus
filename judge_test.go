@@ -13,6 +13,7 @@ import (
 	hostagent "github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -51,7 +52,7 @@ func openRefusing(t *testing.T) (*Magus, *atomic.Int32) {
 	w.Magusfile(refuseEverything)
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(t.Context(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m, runs
@@ -92,7 +93,7 @@ func (s *authorityJudgeSuite) SetupTest() {
 }
 
 func (s *authorityJudgeSuite) judge(ctx context.Context) verdict.Judgment {
-	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	j, err := m.JudgeCommand(ctx, "s1", m.Root(), "ls")
@@ -102,7 +103,7 @@ func (s *authorityJudgeSuite) judge(ctx context.Context) verdict.Judgment {
 
 func (s *authorityJudgeSuite) TestRulesThatDoNotLoadAreJudgedByTheApprovedOnes() {
 	broken := []byte("import \"magus\";\n\nmagus\\guard.command(\n")
-	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), broken, 0o644))
@@ -168,7 +169,7 @@ func TestRunLinesAreTheCLIsCommandLines(t *testing.T) {
 
 func openRefusingExample() (*exampleTB, *Magus) {
 	tb, ws := newExample(map[string]string{"magusfile.buzz": refuseEverything})
-	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		tb.close()
 		panic(err)
@@ -237,7 +238,7 @@ func (s *jobReaderSuite) SetupTest() {
 
 func (s *jobReaderSuite) judge(authority string) verdict.Judgment {
 	task := types.Job{ID: "task", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Authority: authority}
-	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
@@ -262,7 +263,7 @@ func (s *jobReaderSuite) TestATaskWithAnAuthorityIsNotRefusedForIt() {
 func (s *jobReaderSuite) TestATaskIsJudgedByItsJobsCheckout() {
 	other := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refuseEverything})
 	task := types.Job{ID: "task", State: types.StateRunning, Authority: other.Head(), CheckoutRoot: other.Root()}
-	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 
@@ -273,7 +274,7 @@ func (s *jobReaderSuite) TestATaskIsJudgedByItsJobsCheckout() {
 }
 
 func (s *jobReaderSuite) TestANilReaderFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithJobReader(nil), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithJobReader(nil), WithSpawnRule(tier.Ceiling))
 	s.ErrorContains(err, "WithJobReader was given a nil reader")
 }
 
@@ -294,7 +295,7 @@ func (s *judgeStepSuite) SetupTest() {
 }
 
 func (s *judgeStepSuite) open(opts ...Option) *Magus {
-	m, err := Open(s.T().Context(), s.root, append(opts, WithSpawnRule(TierCeiling))...)
+	m, err := Open(s.T().Context(), s.root, append(opts, WithSpawnRule(tier.Ceiling))...)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	return m
@@ -429,13 +430,13 @@ func (s *judgeStepSuite) TestAnEmptyDirIsAnErrorWhenTheSpecReadsACommand() {
 }
 
 func (s *judgeStepSuite) TestASpecNothingJudgesFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "magus.WithStepRule")
 }
 
 func (s *judgeStepSuite) TestARepeatedSpecFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(shellSpec, shellSpec), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(shellSpec, shellSpec), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, `repeats kind "shell"`)
 }
@@ -444,7 +445,7 @@ func (s *judgeStepSuite) TestAPointerThatDoesNotParseFailsTheOpen() {
 	row := shellSpec
 	row.Command = "command"
 
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "not a JSON Pointer")
 }
@@ -453,7 +454,7 @@ func (s *judgeStepSuite) TestASchemaThatDoesNotParseFailsTheOpen() {
 	row := shellSpec
 	row.InputSchema = []byte(`{"type":`)
 
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "input_schema")
 }
@@ -462,7 +463,7 @@ func (s *judgeStepSuite) TestAKindNamedForASeamFailsTheOpen() {
 	row := shellSpec
 	row.Kind = "command"
 
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "reserved")
 }
@@ -479,7 +480,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("No spawns here: {req.description}.");
 });
 `)
-	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(delegateSpec), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(delegateSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	st := step.Step{APIVersion: step.APIVersion, Kind: "delegate", Name: "researcher", Session: "s1", Dir: w.Root(),
@@ -514,7 +515,7 @@ func (s *buzzStepRuleSuite) SetupTest() { testkit.Isolate(s.T()) }
 func (s *buzzStepRuleSuite) open(src string, opts ...Option) (*Magus, error) {
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile(src)
-	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling))...)
+	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))...)
 	if m != nil {
 		s.T().Cleanup(func() { _ = m.Close() })
 	}
@@ -577,7 +578,7 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => 
 
 func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
 	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refundRule})
-	m, err := Open(s.T().Context(), repo.Root(), WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), repo.Root(), WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.allow());\n"
@@ -630,7 +631,7 @@ func (s *stepRemedySuite) TestADenyServesItsRemedyCommand() {
 	testkit.Isolate(s.T())
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile(`import "magus";` + "\n")
-	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(shellSpec), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(shellSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	st := step.Step{APIVersion: step.APIVersion, Kind: "shell", Name: "bash", Session: "s1", Dir: w.Root(),

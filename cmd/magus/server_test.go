@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -217,7 +218,7 @@ func checkReviewWorkspace(t *testing.T, provider string, opts ...magus.Option) (
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	root := w.Root()
-	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(magus.TierCeiling))...)
+	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(tier.Ceiling))...)
 	require.NoError(t, err, "fixture workspace must open")
 
 	prev := bindings.ReviewProvider()
@@ -441,7 +442,7 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 	require.NoError(t, err)
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

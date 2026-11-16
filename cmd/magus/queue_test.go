@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -995,7 +996,7 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		lines []string
 	}
 	keyAll := func() []keyed {
-		w, err := magus.Open(t.Context(), root, magus.WithEnv(os.Environ()), magus.WithSpawnRule(magus.TierCeiling))
+		w, err := magus.Open(t.Context(), root, magus.WithEnv(os.Environ()), magus.WithSpawnRule(tier.Ceiling))
 		require.NoError(t, err)
 		defer func() { _ = w.Close() }()
 		var out []keyed

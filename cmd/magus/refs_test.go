@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -358,7 +359,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "magus.Open")
 	t.Cleanup(func() { _ = m.Close() })
 

@@ -1,7 +1,7 @@
 ---
 title: "ADR 0050: the harness is a module named safetyscissors"
 order: 50
-description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1, 2 and 4, the budget, the verdict and step types and the JSON Lines helpers, are built."
+description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, the budget, the verdict and step types, the tier set and the JSON Lines helpers, are built."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
@@ -270,7 +270,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | 1    | `budget`: `internal/cache/limiter.go` and its slot watch, the machine budget, the claim types and the memory curve and sizing types they carry  | ~2,000 lines                  | no; breaks the Go API lock                                                                                                             | done    |
 | 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go`                                            | ~700 lines                    | yes: breaks the Go API lock                                                                                                            | done    |
-| 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                   | ~650 lines                    | no                                                                                                                                     | planned |
+| 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                   | ~650 lines                    | no                                                                                                                                     | done    |
 | 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done    |
 | 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | planned |
 | 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | planned |
@@ -300,6 +300,17 @@ magus's breadcrumb; the guard converts between the two where a deny is shaped. I
 `ValidateGuardRuleName` is `verdict.ValidateRuleName`, with its own copy of the kebab-case
 suggestion. The Buzz names stay through `.buzzgen.yaml` (`GuardVerdict`, `GuardDecision`,
 `magus\agent\StepRequest`).
+
+Step 3 moved the tier set with the job's record of it and the price table. A job type
+embeds the assignment and the module may not import `types/agent`, so `JobModelTier`,
+`SkillVariant` and `ModelTierSource` moved too, as `tier.Assignment`, `SkillVariant` and
+`Source`. `types.ModelPricing`, `PriceStep` and `USDPerMTok` are `tier.Pricing`,
+`PriceStep` and `USDPerMTok`; `Table` and `InEffect` hold only rows the caller passes.
+Pricing a session's calls stays in magus as `model.PriceContext`, since it reads magus's
+call facts and billing. `TierCeiling` is `tier.Ceiling`, which refuses with
+`*tier.AboveParentError` or `*tier.IncomparableError`; the job store gives those MGS3055
+and MGS3056, since the module cannot name magus's codes. Each name lost its `ModelTier`
+prefix, with no alias. The Buzz names stay through `.buzzgen.yaml`.
 
 ### Principles checked
 

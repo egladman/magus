@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,9 +107,9 @@ func TestAttemptWorkIsUnknownWithoutAnObservedCall(t *testing.T) {
 func TestPriceAttemptIsTheContextFloorOrUnknown(t *testing.T) {
 	t.Parallel()
 
-	table := model.InEffect([]types.ModelPricing{{ID: "m", CacheRead: 1}}, nil)
+	table := tier.InEffect([]tier.Pricing{{ID: "m", CacheRead: 1}}, nil)
 	s := &Store{storeConfig: storeConfig{priceContext: func(calls []types.AgentFacts) (int64, float64, bool) {
-		floor, why := table.PriceContext(calls)
+		floor, why := model.PriceContext(table, calls)
 		return floor.Tokens, floor.USD, why == ""
 	}}}
 	metered := func(tokens int64, id string) types.AgentFacts {

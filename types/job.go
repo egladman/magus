@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types/agent"
 )
 
@@ -757,7 +758,7 @@ type Job struct {
 	// ModelTier is the tier the store assigned for the requested model, and
 	// why. Store-computed like Releases. Nil means the workspace declared no
 	// model tiers when the job was written.
-	ModelTier *agent.JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
+	ModelTier *tier.Assignment `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
 	// BriefFormat is the format a brief to this job's worker takes, ahead of
 	// the workspace's agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
@@ -2672,8 +2673,8 @@ func (u Job) Clone() Job {
 	c.Deferred = slices.Clone(u.Deferred)
 	c.Agent = u.Agent.Clone()
 	if u.ModelTier != nil {
-		tier := *u.ModelTier
-		c.ModelTier = &tier
+		assigned := *u.ModelTier
+		c.ModelTier = &assigned
 	}
 	if u.Attempt != nil {
 		attempt := *u.Attempt

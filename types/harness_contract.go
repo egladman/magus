@@ -4,7 +4,7 @@ import (
 	"path"
 	"slices"
 
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 // The harness contract's records: what a harness spell's mgs_ functions return
@@ -15,7 +15,7 @@ import (
 // installation choice, not a claim about a host or model: magus cannot reliably observe
 // either one.
 //
-// It is a superset of [SkillVariant] rather than the same type, because a form may name
+// It is a superset of [tier.SkillVariant] rather than the same type, because a form may name
 // two bodies: SkillFormBoth writes each skill short and its twin full.
 type SkillForm string
 
@@ -31,11 +31,11 @@ const (
 
 // Variant returns the body this form's primary entries carry. SkillFormBoth's twins are
 // full regardless.
-func (f SkillForm) Variant() agent.SkillVariant {
+func (f SkillForm) Variant() tier.SkillVariant {
 	if f == SkillFormFull {
-		return agent.SkillVariantFull
+		return tier.SkillVariantFull
 	}
-	return agent.SkillVariantShort
+	return tier.SkillVariantShort
 }
 
 // ToolCapability is what a host tool can do to a workspace, in magus's own words. The shape
@@ -139,12 +139,12 @@ type Price struct {
 // none), the short alias the host takes for it in a spawn ("" for none), its context window
 // in tokens, its price, and its long-context step, whose zero Above means none.
 type HarnessModel struct {
-	ID     string    `json:"id"`
-	Tier   string    `json:"tier,omitzero"`
-	Alias  string    `json:"alias,omitzero"`
-	Window int64     `json:"window,omitzero"`
-	Price  Price     `json:"price"`
-	Step   PriceStep `json:"step,omitzero"`
+	ID     string         `json:"id"`
+	Tier   string         `json:"tier,omitzero"`
+	Alias  string         `json:"alias,omitzero"`
+	Window int64          `json:"window,omitzero"`
+	Price  Price          `json:"price"`
+	Step   tier.PriceStep `json:"step,omitzero"`
 }
 
 // HarnessTool is one row of a host's tool table: a tool by the host's own name, and what

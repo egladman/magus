@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +31,7 @@ func openSandboxed(t *testing.T, mode types.SandboxMode) *Magus {
   mode: %s
 `, string(mode)),
 	})
-	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -137,7 +138,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `, s.granted),
 		"magus.yaml": "sandbox:\n  mode: best-effort\n",
 	})
-	m, err := Open(s.T().Context(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m

@@ -205,7 +205,6 @@
 {"name":"TargetHandler","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetLabel","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetOption","reason":"option type taken by Open, Run, Plan or a declaration"}
-{"name":"TierCeiling","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"WithBaseRef","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBroker","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBrokerPolicy","reason":"functional option that configures a Run, a Target or a Project declaration"}

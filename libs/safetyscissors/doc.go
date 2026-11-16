@@ -8,6 +8,8 @@
 //     an arbiter answers them with.
 //   - step: one thing a program is about to do, as data, and the spec that declares
 //     each kind of step.
+//   - tier: the model tier set a caller declares, the assignment a job records, the
+//     reference spawn ceiling, and a price table built from rows the caller supplies.
 //   - verdict: what a rule answers about a call, the stricter-of merge, and the
 //     judgment a caller reads.
 //

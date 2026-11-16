@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -46,7 +47,7 @@ func syncedHumanOnlyWorkspace(tb testing.TB) *testkit.Workspace {
 	w := testkit.NewWorkspace(tb)
 	w.Magusfile(humanOnlyMagusfile)
 	ctx := context.Background()
-	ws, err := Inspect(ctx, w.Root(), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(ctx, w.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(tb, err)
 	_, err = workspacegraph.Build(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
 	require.NoError(tb, err)
@@ -110,7 +111,7 @@ func TestAnOpenRecordsWhatNoSyncDid(t *testing.T) {
 	require.False(t, ok, "no sync and no open has recorded anything")
 
 	opened := NewLazyWorkspace(root, func(ctx context.Context) (*Magus, error) {
-		ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+		ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +181,7 @@ func BenchmarkHumanOnlyRead(b *testing.B) {
 	})
 	b.Run("inspect", func(b *testing.B) {
 		for b.Loop() {
-			ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+			ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 			if err != nil {
 				b.Fatal(err)
 			}

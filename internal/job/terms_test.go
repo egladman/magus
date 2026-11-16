@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/release"
@@ -232,17 +233,17 @@ func TestTermsNamesTheModelTierAndItsSource(t *testing.T) {
 
 	tests := []struct {
 		name string
-		tier agent.JobModelTier
+		tier tier.Assignment
 		want string
 	}{
 		{
 			name: "a matrix answer names its reason and site",
-			tier: agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			tier: tier.Assignment{Name: "routine", Rank: 0, Skills: tier.SkillVariantFull, Source: tier.SourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
 			want: "job: harness/ledger-per-repo\nmodel tier: routine (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
 		},
 		{
 			name: "a default has no site",
-			tier: agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default"},
+			tier: tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceDefault, Reason: "the declared default"},
 			want: "job: harness/ledger-per-repo\nmodel tier: bounded (rank 1), default: \"the declared default\"\nskills: short\n",
 		},
 	}

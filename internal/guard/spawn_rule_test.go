@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -526,7 +527,7 @@ func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
 	judgeSpawn(ctx, t, deps, "haiku")
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
-	assert.Equal(t, &agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
+	assert.Equal(t, &tier.Assignment{Name: "economy", Rank: 0, Skills: tier.SkillVariantFull, Source: tier.SourceMatrix,
 		Reason: "two files", Site: "hack/tiers.buzz:12"}, probe.asked[0].ModelTier)
 	assert.Nil(t, probe.asked[1].ModelTier)
 }

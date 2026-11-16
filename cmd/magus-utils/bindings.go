@@ -847,6 +847,7 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/step", alias: "step", prefix: "Step"},
+	{path: "github.com/egladman/magus/libs/safetyscissors/tier", alias: "tier", prefix: "ModelTier"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/verdict", alias: "verdict", prefix: "Guard"},
 }
 

@@ -1,4 +1,4 @@
-package agent
+package tier
 
 import (
 	"context"
@@ -11,18 +11,18 @@ import (
 	"sync"
 )
 
-var errModelTierDeclaration = errors.New("model tier declaration")
+var errDeclaration = errors.New("model tier declaration")
 
-// ModelTier is one case of the model-tier enum a workspace declares. Only a
-// ModelTierSet hands one out, so a ModelTier always names a declared case; the zero
+// Tier is one case of the model-tier enum a workspace declares. Only a
+// Set hands one out, so a Tier always names a declared case; the zero
 // value means no tier was assigned.
-type ModelTier struct {
-	set  *ModelTierSet
+type Tier struct {
+	set  *Set
 	rank int
 }
 
 // Name is the case's name as the enum declares it, or "" for the zero value.
-func (t ModelTier) Name() string {
+func (t Tier) Name() string {
 	if t.set == nil {
 		return ""
 	}
@@ -30,7 +30,7 @@ func (t ModelTier) Name() string {
 }
 
 // Rank is the case's position in the enum, cheapest first, or -1 for the zero value.
-func (t ModelTier) Rank() int {
+func (t Tier) Rank() int {
 	if t.set == nil {
 		return -1
 	}
@@ -38,11 +38,11 @@ func (t ModelTier) Rank() int {
 }
 
 // IsZero reports whether t is unassigned.
-func (t ModelTier) IsZero() bool { return t.set == nil }
+func (t Tier) IsZero() bool { return t.set == nil }
 
 // Above reports whether t ranks above u. Ranks compare only within one declaration, so
 // it errors when the two come from different sets or either is the zero value.
-func (t ModelTier) Above(u ModelTier) (bool, error) {
+func (t Tier) Above(u Tier) (bool, error) {
 	if t.set == nil || u.set == nil {
 		return false, fmt.Errorf("model tiers %q and %q cannot be compared: one is unassigned", t.Name(), u.Name())
 	}
@@ -53,9 +53,9 @@ func (t ModelTier) Above(u ModelTier) (bool, error) {
 }
 
 // Within is nil when t ranks at or below ceiling, the bound a child's tier keeps to its
-// parent's. It errors naming both tiers when t ranks above ceiling, and as [ModelTier.Above]
+// parent's. It errors naming both tiers when t ranks above ceiling, and as [Tier.Above]
 // does when the two cannot be compared.
-func (t ModelTier) Within(ceiling ModelTier) error {
+func (t Tier) Within(ceiling Tier) error {
 	above, err := t.Above(ceiling)
 	if err != nil {
 		return err
@@ -67,45 +67,45 @@ func (t ModelTier) Within(ceiling ModelTier) error {
 }
 
 // MarshalText writes the case name. There is no UnmarshalText: a name becomes a
-// ModelTier only through [ModelTierSet.Parse], against the declaration it belongs to.
-func (t ModelTier) MarshalText() ([]byte, error) { return []byte(t.Name()), nil }
+// Tier only through [Set.Parse], against the declaration it belongs to.
+func (t Tier) MarshalText() ([]byte, error) { return []byte(t.Name()), nil }
 
-// ModelTierSet is a validated model-tier declaration. It is immutable and safe for
+// Set is a validated model-tier declaration. It is immutable and safe for
 // concurrent use.
-type ModelTierSet struct {
+type Set struct {
 	enum, site string
 	cases      []string
 	byName     map[string]int
 	def        int
-	bounds     []ModelTierBounds
+	bounds     []Bounds
 	skills     []SkillVariant
 	hosts      map[string][]string
 }
 
-// ModelTierState is the model-tier declaration a workspace holds: the root
+// State is the model-tier declaration a workspace holds: the root
 // magusfile's, none when it turned tiers off, or else the shipped default.
 // The zero value holds no declaration and no default. Safe for concurrent use.
-type ModelTierState struct {
+type State struct {
 	mu  sync.Mutex
-	set *ModelTierSet
+	set *Set
 	// declared tells a magusfile's nil (tiers off) apart from no
 	// declaration, which leaves the tiers to build.
 	declared bool
-	build    func() (*ModelTierSet, error)
+	build    func() (*Set, error)
 }
 
 // Declare records a magusfile's declaration, replacing one an earlier
 // evaluation of the same magusfile recorded. nil records that it turned
 // model tiers off, so the default does not apply.
-func (s *ModelTierState) Declare(set *ModelTierSet) {
+func (s *State) Declare(set *Set) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.set, s.declared = set, true
 }
 
 // SetDefault records how to build the declaration a workspace gets when its
-// magusfile declares none. Nothing builds it until [ModelTierState.Tiers].
-func (s *ModelTierState) SetDefault(build func() (*ModelTierSet, error)) {
+// magusfile declares none. Nothing builds it until [State.Tiers].
+func (s *State) SetDefault(build func() (*Set, error)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.build = build
@@ -114,7 +114,7 @@ func (s *ModelTierState) SetDefault(build func() (*ModelTierSet, error)) {
 // Tiers returns the declaration, nil when tiers are off or nothing set a
 // default. A default that builds is kept. One that fails returns its error,
 // and the next call builds again.
-func (s *ModelTierState) Tiers() (*ModelTierSet, error) {
+func (s *State) Tiers() (*Set, error) {
 	s.mu.Lock()
 	if s.declared || s.build == nil {
 		defer s.mu.Unlock()
@@ -137,54 +137,54 @@ func (s *ModelTierState) Tiers() (*ModelTierSet, error) {
 	return s.set, nil
 }
 
-type modelTierStateKey struct{}
+type stateKey struct{}
 
-// WithModelTierState returns ctx carrying s, the state a magusfile's
+// WithState returns ctx carrying s, the state a magusfile's
 // magus\modelTiers declares into.
-func WithModelTierState(ctx context.Context, s *ModelTierState) context.Context {
-	return context.WithValue(ctx, modelTierStateKey{}, s)
+func WithState(ctx context.Context, s *State) context.Context {
+	return context.WithValue(ctx, stateKey{}, s)
 }
 
-// ModelTierStateFromContext returns the state on ctx, or nil.
-func ModelTierStateFromContext(ctx context.Context) *ModelTierState {
-	s, _ := ctx.Value(modelTierStateKey{}).(*ModelTierState)
+// StateFromContext returns the state on ctx, or nil.
+func StateFromContext(ctx context.Context) *State {
+	s, _ := ctx.Value(stateKey{}).(*State)
 	return s
 }
 
-// ModelTierDeclaration is the raw declaration a magusfile's Buzz enum and its mapping
+// Declaration is the raw declaration a magusfile's Buzz enum and its mapping
 // functions produce. Bounds, Skills and each Hosts list carry one entry per case, by rank.
-type ModelTierDeclaration struct {
+type Declaration struct {
 	// Enum is the Buzz enum's name and Site the file:line that declared it.
 	Enum, Site string
 	// Cases are the enum's case names, cheapest first.
 	Cases []string
 	// Default is the rank a job gets when neither its job nor a matrix names one.
 	Default int
-	Bounds  []ModelTierBounds
+	Bounds  []Bounds
 	Skills  []SkillVariant
 	// Hosts maps a harness id to its model alias for each case.
 	Hosts map[string][]string
 }
 
-// ModelTierBounds caps the jobs at one model tier. A zero field is no cap.
-type ModelTierBounds struct {
+// Bounds caps the jobs at one model tier. A zero field is no cap.
+type Bounds struct {
 	// MaxLive is how many jobs at the tier may be live at once.
 	MaxLive int
 	// MaxContext is the context, in tokens, a leased worker at the tier may reach.
 	MaxContext int64
 }
 
-// NewModelTierSet validates decl and builds the set. Every problem is reported at
+// NewSet validates decl and builds the set. Every problem is reported at
 // once: no cases, a duplicate or empty case, a default out of range, a bounds, skills
 // or host list whose length differs from the cases, a negative bound, an invalid skill
 // variant, an empty host id or alias, or one host giving two cases the same alias.
 // Adjacent cases may share one: a host with fewer models repeats an id.
-func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
+func NewSet(decl Declaration) (*Set, error) {
 	problems := slices.Concat(decl.caseProblems(), decl.listProblems(), decl.hostProblems())
 	if len(problems) > 0 {
 		errs := make([]error, len(problems))
 		for i, p := range problems {
-			errs[i] = fmt.Errorf("%w: enum %s at %s: %s", errModelTierDeclaration, decl.Enum, decl.Site, p)
+			errs[i] = fmt.Errorf("%w: enum %s at %s: %s", errDeclaration, decl.Enum, decl.Site, p)
 		}
 		return nil, errors.Join(errs...)
 	}
@@ -196,7 +196,7 @@ func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
 	for k, v := range decl.Hosts {
 		hosts[k] = slices.Clone(v)
 	}
-	return &ModelTierSet{
+	return &Set{
 		enum:   decl.Enum,
 		site:   decl.Site,
 		cases:  slices.Clone(decl.Cases),
@@ -209,7 +209,7 @@ func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
 }
 
 // caseProblems checks the enum's name, its cases and the default rank.
-func (decl ModelTierDeclaration) caseProblems() []string {
+func (decl Declaration) caseProblems() []string {
 	var out []string
 	n := len(decl.Cases)
 	if decl.Enum == "" {
@@ -235,7 +235,7 @@ func (decl ModelTierDeclaration) caseProblems() []string {
 }
 
 // listProblems checks bounds and skills against the cases.
-func (decl ModelTierDeclaration) listProblems() []string {
+func (decl Declaration) listProblems() []string {
 	var out []string
 	n := len(decl.Cases)
 	if len(decl.Bounds) != n {
@@ -258,7 +258,7 @@ func (decl ModelTierDeclaration) listProblems() []string {
 }
 
 // hostProblems checks each host's aliases, sorted so the report is stable.
-func (decl ModelTierDeclaration) hostProblems() []string {
+func (decl Declaration) hostProblems() []string {
 	var out []string
 	n := len(decl.Cases)
 	for _, host := range slices.Sorted(maps.Keys(decl.Hosts)) {
@@ -289,27 +289,27 @@ func (decl ModelTierDeclaration) hostProblems() []string {
 }
 
 // All lists every tier, cheapest first.
-func (s *ModelTierSet) All() []ModelTier {
-	out := make([]ModelTier, len(s.cases))
+func (s *Set) All() []Tier {
+	out := make([]Tier, len(s.cases))
 	for i := range s.cases {
-		out[i] = ModelTier{set: s, rank: i}
+		out[i] = Tier{set: s, rank: i}
 	}
 	return out
 }
 
 // Parse returns the tier named name. An unknown name errors, naming the declared cases.
-// An old name [RenamedModelTier] respells reads as its new one,
+// An old name [Renamed] respells reads as its new one,
 // when the set declares the new name and not the old.
-func (s *ModelTierSet) Parse(name string) (ModelTier, error) {
+func (s *Set) Parse(name string) (Tier, error) {
 	if i, ok := s.byName[name]; ok {
-		return ModelTier{set: s, rank: i}, nil
+		return Tier{set: s, rank: i}, nil
 	}
-	if renamed, ok := RenamedModelTier(name); ok {
+	if renamed, ok := Renamed(name); ok {
 		if i, ok := s.byName[renamed]; ok {
-			return ModelTier{set: s, rank: i}, nil
+			return Tier{set: s, rank: i}, nil
 		}
 	}
-	return ModelTier{}, fmt.Errorf("%q is not a model tier: enum %s at %s declares %s", name, s.enum, s.site, strings.Join(s.cases, ", "))
+	return Tier{}, fmt.Errorf("%q is not a model tier: enum %s at %s declares %s", name, s.enum, s.site, strings.Join(s.cases, ", "))
 }
 
 // renamedModelTiers maps each old shipped tier name to its new one.
@@ -319,10 +319,10 @@ var renamedModelTiers = map[string]string{"economy": "routine", "standard": "bou
 
 var renamedModelTierSaid sync.Map
 
-// RenamedModelTier is the new spelling of an old shipped tier name,
+// Renamed is the new spelling of an old shipped tier name,
 // and false for any other name. The first read of each old name
 // in a process warns once. compat: see renamedModelTiers.
-func RenamedModelTier(name string) (string, bool) {
+func Renamed(name string) (string, bool) {
 	renamed, ok := renamedModelTiers[name]
 	if !ok {
 		return "", false
@@ -335,26 +335,26 @@ func RenamedModelTier(name string) (string, bool) {
 }
 
 // At returns the tier at rank, and false when rank is outside the declaration.
-func (s *ModelTierSet) At(rank int) (ModelTier, bool) {
+func (s *Set) At(rank int) (Tier, bool) {
 	if rank < 0 || rank >= len(s.cases) {
-		return ModelTier{}, false
+		return Tier{}, false
 	}
-	return ModelTier{set: s, rank: rank}, true
+	return Tier{set: s, rank: rank}, true
 }
 
 // Default is the declared default tier.
-func (s *ModelTierSet) Default() ModelTier { return ModelTier{set: s, rank: s.def} }
+func (s *Set) Default() Tier { return Tier{set: s, rank: s.def} }
 
 // Bounds returns t's caps, or no caps for a tier from another set.
-func (s *ModelTierSet) Bounds(t ModelTier) ModelTierBounds {
+func (s *Set) Bounds(t Tier) Bounds {
 	if t.set != s {
-		return ModelTierBounds{}
+		return Bounds{}
 	}
 	return s.bounds[t.rank]
 }
 
 // Skills returns the skill variant t's workers load, or "" for a tier from another set.
-func (s *ModelTierSet) Skills(t ModelTier) SkillVariant {
+func (s *Set) Skills(t Tier) SkillVariant {
 	if t.set != s {
 		return ""
 	}
@@ -363,7 +363,7 @@ func (s *ModelTierSet) Skills(t ModelTier) SkillVariant {
 
 // Alias returns the model host spawns for t. It errors for a tier from another set and
 // for a host the declaration does not map, naming the hosts it does.
-func (s *ModelTierSet) Alias(host string, t ModelTier) (string, error) {
+func (s *Set) Alias(host string, t Tier) (string, error) {
 	if t.set != s {
 		return "", fmt.Errorf("model tier %q is not a case of enum %s", t.Name(), s.enum)
 	}
@@ -376,18 +376,18 @@ func (s *ModelTierSet) Alias(host string, t ModelTier) (string, error) {
 
 // Resolve returns the tier host's alias names, and false when host is unmapped or no
 // case maps to alias. An alias tiers share resolves to the cheapest.
-func (s *ModelTierSet) Resolve(host, alias string) (ModelTier, bool) {
+func (s *Set) Resolve(host, alias string) (Tier, bool) {
 	i := slices.Index(s.hosts[host], alias)
 	if i < 0 {
-		return ModelTier{}, false
+		return Tier{}, false
 	}
-	return ModelTier{set: s, rank: i}, true
+	return Tier{set: s, rank: i}, true
 }
 
 // SharedAliases names each host that maps t and another tier to one
 // alias, with the tiers that share it, sorted by host. It is empty
 // when no host repeats t's alias, or t comes from another set.
-func (s *ModelTierSet) SharedAliases(t ModelTier) []string {
+func (s *Set) SharedAliases(t Tier) []string {
 	if t.set != s {
 		return nil
 	}
@@ -415,78 +415,19 @@ func joinAnd(words []string) string {
 }
 
 // Enum is the name of the Buzz enum that declared the set.
-func (s *ModelTierSet) Enum() string { return s.enum }
+func (s *Set) Enum() string { return s.enum }
 
 // Site is the file:line, or module name, of the declaration.
-func (s *ModelTierSet) Site() string { return s.site }
+func (s *Set) Site() string { return s.site }
 
 // Hosts lists the ids of the harnesses the declaration maps to models, in order.
-func (s *ModelTierSet) Hosts() []string {
+func (s *Set) Hosts() []string {
 	return slices.Sorted(maps.Keys(s.hosts))
 }
 
-func (s *ModelTierSet) hostIDs() string {
+func (s *Set) hostIDs() string {
 	if len(s.hosts) == 0 {
 		return "none"
 	}
 	return strings.Join(s.Hosts(), ", ")
-}
-
-// SkillVariant is which body of a magus skill a reader loads. Both come from one
-// curated source, so they share a content digest and go stale together.
-type SkillVariant string
-
-const (
-	// SkillVariantShort sheds enumeration and keeps judgment: a capable reader can
-	// re-derive the mechanical steps, not which failures are silent or load-bearing.
-	SkillVariantShort SkillVariant = "short"
-	// SkillVariantFull spells out every mechanical step and why each is the right move.
-	SkillVariantFull SkillVariant = "full"
-)
-
-// ModelTierSource says which declaration chose a job's model tier.
-type ModelTierSource string
-
-const (
-	// ModelTierSourceJob is a tier or model the job named.
-	ModelTierSourceJob ModelTierSource = "job"
-	// ModelTierSourceMatrix is the workspace's registered matrix function's answer.
-	ModelTierSourceMatrix ModelTierSource = "matrix"
-	// ModelTierSourceUserMatrix is the person's own matrix module's answer.
-	ModelTierSourceUserMatrix ModelTierSource = "user-matrix"
-	// ModelTierSourceDefault is the declaration's default.
-	ModelTierSourceDefault ModelTierSource = "default"
-)
-
-// JobModelTier is the tier recorded on a job when it was assigned.
-// It holds the case name and rank, the skill variant its worker loads,
-// which declaration chose it and why, and that declaration's file:line.
-// Model is the alias the host spawns.
-type JobModelTier struct {
-	Name   string          `json:"name"             yaml:"name"`
-	Rank   int             `json:"rank"             yaml:"rank"`
-	Skills SkillVariant    `json:"skills"           yaml:"skills"`
-	Source ModelTierSource `json:"source"           yaml:"source"`
-	Reason string          `json:"reason,omitempty" yaml:"reason,omitempty"`
-	Site   string          `json:"site,omitempty"   yaml:"site,omitempty"`
-	Model  string          `json:"model,omitempty"  yaml:"model,omitempty"`
-	// Shared is [ModelTierSet.SharedAliases] for the tier when it was assigned.
-	Shared []string `json:"shared,omitempty" yaml:"shared,omitempty"`
-}
-
-// String renders the assignment as `fork` and `describe job` print it: the name and rank,
-// the source that chose it and, where the source gave them, its reason and site.
-// Each Shared line follows.
-func (t JobModelTier) String() string {
-	line := fmt.Sprintf("%s (rank %d), %s", t.Name, t.Rank, t.Source)
-	if t.Reason != "" {
-		line += fmt.Sprintf(": %q", t.Reason)
-	}
-	if t.Site != "" {
-		line += " at " + t.Site
-	}
-	for _, s := range t.Shared {
-		line += "; " + s
-	}
-	return line
 }

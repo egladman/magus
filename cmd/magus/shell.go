@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
@@ -215,7 +216,7 @@ func hookEnv() guard.HookEnv {
 				return asMagus(ws)
 			})
 		},
-		TierRule: magus.TierCeiling,
+		TierRule: tier.Ceiling,
 		Trace: func(ctx context.Context, phase string) func() {
 			return observability.TraceFromContext(ctx).Phase(phase)
 		},

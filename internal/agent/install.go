@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a
@@ -196,7 +196,7 @@ func (c *Catalog) ContextCost(dir string, written []string) string {
 	// What the always-loaded set would cost if the long form were the one carried. Kept
 	// even though it is no longer a flag to choose between, because it is the number that
 	// justifies the split: without it the reader cannot see what the shorter form buys.
-	if alt, err := c.VariantSize(typesagent.SkillVariantFull); err == nil && alt > installed {
+	if alt, err := c.VariantSize(tier.SkillVariantFull); err == nil && alt > installed {
 		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
 	}
 	if twins > 0 {

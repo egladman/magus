@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 type modelTierSourceJobSuite struct {
@@ -38,7 +38,7 @@ func (s *modelTierSourceJobSuite) TestAStoredRowBecomesTheJobSpelling() {
 	got, err := modelTierSourceJob(s.entry(`{"spec":{},"status":{"modelTier":{"name":"bounded","source":"Row"}}}`))
 
 	s.Require().NoError(err)
-	s.Equal(wireTierSource.wire[agent.ModelTierSourceJob], s.source(got))
+	s.Equal(wireTierSource.wire[tier.SourceJob], s.source(got))
 }
 
 func (s *modelTierSourceJobSuite) TestAnotherSourceIsKept() {

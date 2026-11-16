@@ -30,11 +30,11 @@ import (
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // Dependencies are the workspace facts the rules cannot resolve for themselves: they depend on the
@@ -105,15 +105,15 @@ type Dependencies struct {
 	// only for a judgment that needs a window or a price, never for one that needs only
 	// the billing mode. Nil means no rows: a rule then finds no facts for a model, as for
 	// one the table does not know. It is read per judgment and never kept past one.
-	ModelRows func() []types.ModelPricing
+	ModelRows func() []tier.Pricing
 	// ModelTiers yields the workspace's model-tier declaration, nil when it turned tiers
 	// off or did not load. It opens the workspace whole, so the guard asks only once a job
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
-	ModelTiers func() *typesagent.ModelTierSet
+	ModelTiers func() *tier.Set
 	// TierRule is the workspace's magus.WithSpawnRule, which the spawn
 	// ceiling asks. Nil leaves a ceiling it would judge reported unjudged.
-	TierRule func(parent, child typesagent.ModelTier) error
+	TierRule func(parent, child tier.Tier) error
 	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens
@@ -2473,7 +2473,7 @@ type location struct {
 	// workspace root does, and that difference is the whole of what focus judges.
 	dir string
 	// models is the judged request's Dependencies.ModelRows.
-	models func() []types.ModelPricing
+	models func() []tier.Pricing
 	// policies is what the workspace declares and how it was read, read once per judgment
 	// and only when a rule asks.
 	policies func() declaredIndex

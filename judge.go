@@ -10,9 +10,9 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -118,7 +118,7 @@ func (m *Magus) guardDependenciesAt(ctx context.Context, authority guard.CallAut
 		return guard.Dependencies{}, deps.LoadFailure
 	}
 	deps.Workspace = m.Root()
-	deps.ModelTiers = func() *agent.ModelTierSet { return m.ModelTiers(ctx) }
+	deps.ModelTiers = func() *tier.Set { return m.ModelTiers(ctx) }
 	deps.TierRule = m.spawnRule
 	deps.JobReader = m.jobReader
 	deps.Steps = m.steps

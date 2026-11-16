@@ -16,11 +16,11 @@ import (
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 )
 
@@ -85,7 +85,7 @@ var boundaryRoots = []boundaryRoot{
 	{Type: reflect.TypeFor[types.Declaration]()},
 	{Type: reflect.TypeFor[types.Brief]()},
 	{Type: reflect.TypeFor[types.Result[buzzgen.T]]()},
-	{Type: reflect.TypeFor[agent.ModelTierBounds]()},
+	{Type: reflect.TypeFor[tier.Bounds]()},
 	// An Arg.Enum names these, and its Impl takes a plain string.
 	{Type: reflect.TypeFor[types.SignAlgorithm]()},
 	{Type: reflect.TypeFor[types.LogLevel]()},

@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -68,7 +69,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	w.Write("magus.yaml", fmt.Sprintf("sandbox:\n  mode: %s\n", mode))
 
-	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "fixture workspace must open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -145,7 +146,7 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	var m *magus.Magus
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
 		var err error
-		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		return m, err
 	})
 	t.Cleanup(func() {
@@ -168,7 +169,7 @@ func TestBuzzCmd_WorkspaceHandleReadsTheScriptsWorkspace(t *testing.T) {
 	var m *magus.Magus
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
 		var err error
-		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		return m, err
 	})
 	t.Cleanup(func() {
@@ -250,7 +251,7 @@ func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root, _ := buzzLazyWorkspace(t, buzzVanillaScript)
 			opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-				return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+				return magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 			})
 			script, err := filepath.Abs(filepath.Join("..", "..", "docs", "guides", "integrations", "agents", name))
 			require.NoError(t, err)
@@ -1209,7 +1210,9 @@ func TestBuzzRunner_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 
 	var stdout string
 	var runErr error
-	stderr := captureStderr(t, func() { stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path) })
+	stderr := captureStderr(t, func() {
+		stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path)
+	})
 
 	require.NoError(t, runErr, "a warning must never fail the run")
 	assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
@@ -1592,7 +1595,9 @@ func (s *BuzzRunnerTestSuite) TestARecordedRunWithNoRecorderFails() {
 	r := scriptRunnerOver(&scriptOpens{})
 	r.Record = nil
 	var err error
-	testkit.CaptureStdout(s.T(), func() { err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false) })
+	testkit.CaptureStdout(s.T(), func() {
+		err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false)
+	})
 	s.Require().Error(err)
 	s.Contains(err.Error(), "--record")
 }

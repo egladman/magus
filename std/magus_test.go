@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
@@ -1007,40 +1008,40 @@ func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
 
 type ratedWorkspace struct {
 	ledgerWorkspace
-	tiers *agent.ModelTierSet
-	rows  []types.ModelPricing
+	tiers *tier.Set
+	rows  []tier.Pricing
 }
 
-func (w *ratedWorkspace) ModelTiers(context.Context) *agent.ModelTierSet { return w.tiers }
-func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix         { return nil }
-func (w *ratedWorkspace) CheckSpawn(_, _ agent.ModelTier) error          { return nil }
+func (w *ratedWorkspace) ModelTiers(context.Context) *tier.Set   { return w.tiers }
+func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix { return nil }
+func (w *ratedWorkspace) CheckSpawn(_, _ tier.Tier) error        { return nil }
 func (w *ratedWorkspace) SpawnCeiling(context.Context) (builtin.Setting, error) {
 	return builtin.Setting{Decision: builtin.Advise}, nil
 }
-func (w *ratedWorkspace) Models(context.Context) func() []types.ModelPricing {
-	return func() []types.ModelPricing { return w.rows }
+func (w *ratedWorkspace) Models(context.Context) func() []tier.Pricing {
+	return func() []tier.Pricing { return w.rows }
 }
 
 func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	testkit.Isolate(t)
-	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []agent.ModelTierBounds{{}, {}, {}},
-		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort, agent.SkillVariantShort},
+		Bounds: []tier.Bounds{{}, {}, {}},
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort, tier.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	ws := &ratedWorkspace{
 		ledgerWorkspace: ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()},
 		tiers:           set,
-		rows:            []types.ModelPricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
+		rows:            []tier.Pricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
 	}
 
 	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Agent: &agent.Spec{Instructions: "ship it", Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
-	tier := *got.ModelTier
-	tier.Reason = ""
-	assert.Equal(t, agent.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
+	assigned := *got.ModelTier
+	assigned.Reason = ""
+	assert.Equal(t, tier.Assignment{Name: "principal", Rank: 2, Model: "opus", Skills: assigned.Skills, Source: assigned.Source, Site: assigned.Site}, assigned)
 }
 
 // magus\cmd's nested magus gets the target layer; its caller's exec does not.

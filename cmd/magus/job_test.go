@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	guardverdict "github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -534,7 +535,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 		Display:    agent.HarnessDisplay{Name: "Limit host"},
 		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
 		Config:     types.HarnessConfig{Path: "hooks.json"},
-		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "routine"}},
+		Models:     []tier.Pricing{{ID: "claude-opus-test", Alias: "opus", Tier: "routine"}},
 	})
 	resetWorkspaceMemo(t)
 	root, _ := execFixture(t)

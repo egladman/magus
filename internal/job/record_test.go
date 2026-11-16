@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 type jobRecordReadSuite struct {
@@ -18,7 +18,7 @@ func TestJobRecordRead(t *testing.T) { suite.Run(t, new(jobRecordReadSuite)) }
 
 func (s *jobRecordReadSuite) record(source string) jobRecord {
 	r := recordJob(types.Job{ID: "a", State: types.StateDeclared,
-		ModelTier: &agent.JobModelTier{Name: "bounded", Source: agent.ModelTierSourceJob}}, nil)
+		ModelTier: &tier.Assignment{Name: "bounded", Source: tier.SourceJob}}, nil)
 	r.Status.ModelTier.Source = source
 	return r
 }
@@ -31,10 +31,10 @@ func (s *jobRecordReadSuite) TestAnUnlistedStoredSpellingIsRefused() {
 }
 
 func (s *jobRecordReadSuite) TestAListedSpellingReadsAsItsValue() {
-	got, err := s.record(wireTierSource.spell(agent.ModelTierSourceMatrix)).job()
+	got, err := s.record(wireTierSource.spell(tier.SourceMatrix)).job()
 
 	s.Require().NoError(err)
-	s.Equal(agent.ModelTierSourceMatrix, got.ModelTier.Source)
+	s.Equal(tier.SourceMatrix, got.ModelTier.Source)
 }
 
 func (s *jobRecordReadSuite) TestAFlatRowSourceMigratesToJob() {
@@ -47,7 +47,7 @@ func (s *jobRecordReadSuite) TestAFlatRowSourceMigratesToJob() {
 
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
-	s.Equal(&agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob}, f.Jobs[0].ModelTier)
+	s.Equal(&tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceJob}, f.Jobs[0].ModelTier)
 }
 
 func (s *jobRecordReadSuite) TestAnEmptySpellingReadsEmpty() {

@@ -9,8 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -27,7 +27,7 @@ const (
 // modelTiered is the workspace's model tier declaration, which the workspace the real
 // loader returns carries and a bare WorkspaceReader does not.
 type modelTiered interface {
-	ModelTiers(ctx context.Context) *agent.ModelTierSet
+	ModelTiers(ctx context.Context) *tier.Set
 }
 
 // checkModelTierFit reports each (model tier, job kind) pair whose recorded jobs mostly did
@@ -98,18 +98,18 @@ func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) chec
 }
 
 // modelTierFitDetail is one pair's finding: how it did, what it cost, and the line to edit.
-func modelTierFitDetail(rec types.ModelTierRecord, set *agent.ModelTierSet, outcomes []types.JobOutcome) string {
+func modelTierFitDetail(rec types.ModelTierRecord, set *tier.Set, outcomes []types.JobOutcome) string {
 	lead := fmt.Sprintf("%s on %s jobs: %d of %d passed (pass rate lower bound %.2f), %.1f check(s), %.1f rework round(s) and %.1f widening(s) per job",
 		rec.ModelTier, rec.Kind, rec.Pass, rec.Jobs, rec.PassLower, rec.ChecksPerJob, rec.ReworkPerJob, rec.WideningsPerJob)
 
-	chose := map[agent.ModelTierSource]int{}
+	chose := map[tier.Source]int{}
 	reasons, sites := map[string]int{}, map[string]int{}
 	for _, o := range outcomes {
 		if o.ModelTier != rec.ModelTier || o.Kind != rec.Kind || !o.State.Terminal() {
 			continue
 		}
 		chose[o.Source]++
-		if o.Source == agent.ModelTierSourceMatrix {
+		if o.Source == tier.SourceMatrix {
 			reasons[o.Reason]++
 			if o.Site != "" {
 				sites[o.Site]++
@@ -117,10 +117,10 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *agent.ModelTierSet, outc
 		}
 	}
 	var fixes []string
-	if n := chose[agent.ModelTierSourceDefault]; n > 0 {
+	if n := chose[tier.SourceDefault]; n > 0 {
 		fixes = append(fixes, fmt.Sprintf("%d took the declared default: change the default in the model tier declaration at %s", n, set.Site()))
 	}
-	if n := chose[agent.ModelTierSourceMatrix]; n > 0 {
+	if n := chose[tier.SourceMatrix]; n > 0 {
 		matrix := "the function registered with magus\\modelTier"
 		if site := commonest(sites); site != "" {
 			matrix += " at " + site
@@ -128,7 +128,7 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *agent.ModelTierSet, outc
 		fixes = append(fixes, fmt.Sprintf("%d were routed here by %s (most often %q): route %s jobs to another tier there",
 			n, matrix, commonest(reasons), rec.Kind))
 	}
-	if n := chose[agent.ModelTierSourceJob]; n > 0 {
+	if n := chose[tier.SourceJob]; n > 0 {
 		fixes = append(fixes, fmt.Sprintf("%d named the tier or model themselves: fork them with another --model", n))
 	}
 	if len(fixes) == 0 {

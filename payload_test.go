@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 // A hook the host ran from the primary checkout stored its verdict there, while the worker
@@ -24,7 +25,7 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 	ref, _ := trail.WriteBlob(context.Background(), primaryCache, "grd", []byte("the full verdict"))
 	require.NotEmpty(t, ref)
 
-	opened, err := Inspect(context.Background(), worktree, WithSpawnRule(TierCeiling))
+	opened, err := Inspect(context.Background(), worktree, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	m := opened.(*Magus)
 	got, err := m.PayloadByRef(context.Background(), ref)
@@ -37,7 +38,7 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 	assert.Contains(t, err.Error(), m.CacheDir())
 	assert.Contains(t, err.Error(), primaryCache)
 
-	opened, err = Inspect(context.Background(), primary, WithSpawnRule(TierCeiling))
+	opened, err = Inspect(context.Background(), primary, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	_, err = opened.(*Magus).PayloadByRef(context.Background(), missing)
 	require.ErrorIs(t, err, fs.ErrNotExist)

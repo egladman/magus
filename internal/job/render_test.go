@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
@@ -354,7 +355,7 @@ func TestLsJobsClipsATitleAtAWord(t *testing.T) {
 func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 	t.Parallel()
 
-	tier := &typesagent.JobModelTier{Name: "routine"}
+	tier := &tier.Assignment{Name: "routine"}
 	tests := []struct {
 		name string
 		row  types.Job

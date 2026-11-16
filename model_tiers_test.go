@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -41,14 +42,14 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 		Display:    agent.HarnessDisplay{Name: "Opus host"},
 		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
 		Config:     types.HarnessConfig{Path: "hooks.json"},
-		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "design"}},
+		Models:     []tier.Pricing{{ID: "claude-opus-test", Alias: "opus", Tier: "design"}},
 	})
 	root := writeWorkspace(t, map[string]string{
 		"magus.yaml":                  "",
 		"magusfile.buzz":              "import \"magus\";\nimport \"spells/opus-host\" as host;\nmagus\\harness.provider(host);\n",
 		"spells/opus-host/spell.buzz": opusHostSpell,
 	})
-	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	got, err := std.MagusPutJob(ws.(*Magus).Context(t.Context()), "w1", types.JobPut{Agent: &typesagent.Spec{Instructions: "ship it", Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: new(true)})
@@ -64,8 +65,8 @@ type modelTiersSuite struct {
 func TestModelTiersSuite(t *testing.T) { suite.Run(t, new(modelTiersSuite)) }
 
 func (s *modelTiersSuite) matrix(reason string) types.ModelTierMatrix {
-	return func(context.Context, types.ModelTierRequest) (*typesagent.JobModelTier, error) {
-		return &typesagent.JobModelTier{Name: "high", Rank: 1, Reason: reason}, nil
+	return func(context.Context, types.ModelTierRequest) (*tier.Assignment, error) {
+		return &tier.Assignment{Name: "high", Rank: 1, Reason: reason}, nil
 	}
 }
 
@@ -76,12 +77,12 @@ func (s *modelTiersSuite) TestAZeroMagusHoldsNone() {
 }
 
 func (s *modelTiersSuite) TestTheTiersAreWhatTheMagusfileDeclared() {
-	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum:   "Tier",
 		Site:   "magusfile.buzz:1",
 		Cases:  []string{"low", "high"},
-		Bounds: make([]typesagent.ModelTierBounds, 2),
-		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
+		Bounds: make([]tier.Bounds, 2),
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort},
 	})
 	s.Require().NoError(err)
 	m := &Magus{}
@@ -91,7 +92,7 @@ func (s *modelTiersSuite) TestTheTiersAreWhatTheMagusfileDeclared() {
 
 func (s *modelTiersSuite) TestADefaultThatDoesNotBuildIsNil() {
 	m := &Magus{}
-	m.modelTiers.SetDefault(func() (*typesagent.ModelTierSet, error) { return nil, errors.New("broken") })
+	m.modelTiers.SetDefault(func() (*tier.Set, error) { return nil, errors.New("broken") })
 	s.Nil(m.ModelTiers(s.T().Context()))
 }
 
@@ -103,12 +104,12 @@ func (s *modelTiersSuite) TestTheMatrixIsTheRegistrysLatest() {
 
 	got, err := m.ModelTierMatrix()(s.T().Context(), types.ModelTierRequest{})
 	s.Require().NoError(err)
-	s.Equal(&typesagent.JobModelTier{Name: "high", Rank: 1, Reason: "second"}, got)
+	s.Equal(&tier.Assignment{Name: "high", Rank: 1, Reason: "second"}, got)
 }
 
 func (s *modelTiersSuite) TestTheLoadContextCarriesTheTiers() {
 	m := &Magus{wsReg: workspace.NewWorkspaceRegistry()}
 	ctx := m.installWorkspaceRegistry(s.T().Context())
-	s.Same(&m.modelTiers, typesagent.ModelTierStateFromContext(ctx))
+	s.Same(&m.modelTiers, tier.StateFromContext(ctx))
 	s.Same(m.wsReg, workspace.WorkspaceRegistryFromContext(ctx))
 }

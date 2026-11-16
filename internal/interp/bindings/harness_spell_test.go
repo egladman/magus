@@ -13,11 +13,11 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -277,24 +277,24 @@ func joinedScripts(hooks []types.HookCommand) string {
 // tieredWorkspace is a workspace that also answers the model tiers the render step asks for.
 type tieredWorkspace struct {
 	types.WorkspaceRepository
-	set *typesagent.ModelTierSet
+	set *tier.Set
 }
 
-func (w tieredWorkspace) ModelTiers(context.Context) *typesagent.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *tier.Set { return w.set }
 
-func tiersMapping(t *testing.T, hosts map[string][]string) *typesagent.ModelTierSet {
+func tiersMapping(t *testing.T, hosts map[string][]string) *tier.Set {
 	t.Helper()
-	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"small", "large"}, Default: 1,
-		Bounds: []typesagent.ModelTierBounds{{}, {}},
-		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
+		Bounds: []tier.Bounds{{}, {}},
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort},
 		Hosts:  hosts,
 	})
 	require.NoError(t, err)
 	return set
 }
 
-func tieredContext(t *testing.T, set *typesagent.ModelTierSet) context.Context {
+func tieredContext(t *testing.T, set *tier.Set) context.Context {
 	t.Helper()
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return(nil).Maybe()
@@ -477,13 +477,13 @@ func TestAHarnessWithAnUnknownChannelIsRefused(t *testing.T) {
 
 func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	rows := loadShippedHarness(t, "claude-code").Models
-	assert.Equal(t, []types.ModelPricing{
+	assert.Equal(t, []tier.Pricing{
 		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 		{ID: "claude-opus-5-5", Tier: "design", Alias: "opus", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
 		{ID: "claude-fable-5-2", Tier: "frontier", Alias: "fable", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 		{ID: "claude-sonnet-5-5", Tier: "bounded", Alias: "sonnet", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
 		{ID: "claude-haiku-5-5", Tier: "routine", Alias: "haiku", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
-			LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
+			LongContext: &tier.PriceStep{Above: 100_000, Multiplier: 5}},
 		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.1, Output: 5},
 	}, rows)
 	for _, id := range []string{"codex", "cursor", "opencode"} {
@@ -495,12 +495,12 @@ func TestValidateModelRowsReadsPricesAndTiers(t *testing.T) {
 	got, tiers, err := validateModelRows([]types.HarnessModel{{
 		ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000,
 		Price: types.Price{Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3, CacheRead: 0.1, Output: 7},
-		Step:  types.PriceStep{Above: 100000, Multiplier: 2},
+		Step:  tier.PriceStep{Above: 100000, Multiplier: 2},
 	}})
 
 	require.NoError(t, err)
-	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
-		CacheRead: 0.1, Output: 7, LongContext: &types.PriceStep{Above: 100000, Multiplier: 2}}}, got)
+	assert.Equal(t, []tier.Pricing{{ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
+		CacheRead: 0.1, Output: 7, LongContext: &tier.PriceStep{Above: 100000, Multiplier: 2}}}, got)
 	assert.Equal(t, map[string][]string{"bounded": {"m-1"}}, tiers)
 
 	_, tiers, err = validateModelRows([]types.HarnessModel{{ID: "m-1"}})
@@ -513,9 +513,9 @@ func TestValidateModelRowsRefusesWhatNamesNoOneModel(t *testing.T) {
 		rows []types.HarnessModel
 		want string
 	}{
-		"step without multiplier": {[]types.HarnessModel{{ID: "m-1", Step: types.PriceStep{Above: 100000}}},
+		"step without multiplier": {[]types.HarnessModel{{ID: "m-1", Step: tier.PriceStep{Above: 100000}}},
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
-		"multiplier without step": {[]types.HarnessModel{{ID: "m-1", Step: types.PriceStep{Multiplier: 2}}},
+		"multiplier without step": {[]types.HarnessModel{{ID: "m-1", Step: tier.PriceStep{Multiplier: 2}}},
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
 		"alias without a tier": {[]types.HarnessModel{{ID: "m-1", Alias: "mid"}},
 			"row 1 (m-1) sets alias mid without a tier, so the alias names no tier"},
@@ -550,8 +550,8 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 	for _, row := range d.Models {
 		ids[row.ID] = true
 	}
-	for tier, id := range tiers {
-		assert.True(t, ids[id], "tier %s runs %s, which is a row", tier, id)
+	for tierName, id := range tiers {
+		assert.True(t, ids[id], "tier %s runs %s, which is a row", tierName, id)
 	}
 }
 
@@ -899,7 +899,7 @@ func TestValidateModelRowsKeepsEveryRowOfATier(t *testing.T) {
 
 func TestPickTierModelsTakesTheDeclaredRowOfASeveralRowTier(t *testing.T) {
 	got, err := pickTierModels(map[string][]string{"design": {"m-1", "m-2"}, "routine": {"m-3"}},
-		func(tier string) (string, bool) { return "m-2", tier == "design" })
+		func(tierName string) (string, bool) { return "m-2", tierName == "design" })
 
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"design": "m-2", "routine": "m-3"}, got)

@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
@@ -194,7 +195,7 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	_, _, err = m.PruneCache(context.Background(), time.Now(), true)
 	assert.ErrorIs(t, err, types.ErrNoCache, "PruneCache on Inspect")
@@ -235,7 +236,7 @@ func TestClose_Idempotent(t *testing.T) {
 func TestWithObserverRidesTheRun(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	var builds int
@@ -263,7 +264,7 @@ func TestWithObserverRidesTheRun(t *testing.T) {
 func TestStepFor_RootProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
@@ -290,7 +291,7 @@ func TestStepFor_RootProject(t *testing.T) {
 func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := &types.Project{Path: ".", Sources: types.MustParseGlobs("**/*.go")}
 	assert.Empty(t, m.baseStep(p).IgnoreDirs, "no resolved spells: Step.IgnoreDirs must be empty")
@@ -303,7 +304,7 @@ func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
@@ -320,7 +321,7 @@ func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 func TestStepFor_NestedProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")
-	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    "api",
@@ -400,7 +401,7 @@ func newWorkspace(t *testing.T) types.WorkspaceRepository { //nolint:ireturn // 
 		"extensions/drape/magusfile.buzz":   "", // "extensions/drape"
 		"extensions/lattice/magusfile.buzz": "", // "extensions/lattice"
 	})
-	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
@@ -547,7 +548,7 @@ func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
 	disabled := false
 	cfg.VCS.Enabled = &disabled
 
-	ws, err := Inspect(context.Background(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Inspect")
 
 	got := ws.VCSOptions()
@@ -627,7 +628,7 @@ func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
 	required := true
 	cfg.Cache.Remote.Write.Enabled = &required
 
-	m, err := Open(t.Context(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(tier.Ceiling))
 	if m != nil {
 		_ = m.Close()
 	}
@@ -646,8 +647,8 @@ func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
 	require.NoError(t, err)
-	tier, mode, _ := (&Magus{cache: c}).CacheDescription()
-	assert.True(t, strings.HasPrefix(tier, `local (remote github unavailable: spell "github" is not registered`), tier)
+	cacheTier, mode, _ := (&Magus{cache: c}).CacheDescription()
+	assert.True(t, strings.HasPrefix(cacheTier, `local (remote github unavailable: spell "github" is not registered`), cacheTier)
 	assert.Equal(t, "read+write", mode)
 }
 
@@ -670,11 +671,11 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 		return w.Root()
 	}
 
-	mBuild, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(TierCeiling))
+	mBuild, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	defer func() { _ = mBuild.Close() }()
 
-	mBridge, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(TierCeiling))
+	mBridge, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	defer func() { _ = mBridge.Close() }()
 
@@ -740,7 +741,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -962,7 +963,7 @@ func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
 func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
 	root := floorWorkspace(t, ">= 99.0.0")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"), WithSpawnRule(tier.Ceiling))
 
 	require.Error(t, err, "a binary below the declared floor must not open the workspace")
 	assert.ErrorIs(t, err, types.WorkspaceNeedsNewerMagus)
@@ -973,7 +974,7 @@ func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
 func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 	root := floorWorkspace(t, ">= 0.3.0")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"), WithSpawnRule(tier.Ceiling))
 
 	require.NoError(t, err)
 }
@@ -982,7 +983,7 @@ func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 	root := floorWorkspace(t, "")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"), WithSpawnRule(tier.Ceiling))
 
 	require.NoError(t, err)
 }
@@ -991,7 +992,7 @@ func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 func TestRequiredVersion_NoVersionSuppliedOpens(t *testing.T) {
 	root := floorWorkspace(t, ">= 99.0.0")
 
-	_, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 
 	require.NoError(t, err, "magus.Open/Inspect without WithVersion must not be gated")
 }
@@ -1021,7 +1022,7 @@ func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
 	repo.Write("tracked.txt", "one\nCHANGED\n")
 	repo.Write("fresh.txt", "hello\nworld\n")
 
-	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1041,7 +1042,7 @@ func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
 
 	repo.Write("blob.bin", string([]byte{0x00, 0x01, 0x02, 0x00}))
 
-	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1063,7 +1064,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 	repo.Write("nonewline.txt", "two")
 	repo.Write("brand-new.txt", "fresh\n")
 
-	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1085,7 +1086,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
 	repo := testkit.NewRepository(t, map[string]string{"a.txt": "x\n"})
 
-	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1210,7 +1211,7 @@ func TestLoadConfigReadsOnlyTheEnvironmentItIsGiven(t *testing.T) {
 // workspace keeps what it was given.
 func TestWorkspaceProcessOptionsDefaultToNothing(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	bare := ws.(*Magus)
 	assert.Equal(t, io.Discard, bare.noticeWriter())
@@ -1218,7 +1219,7 @@ func TestWorkspaceProcessOptionsDefaultToNothing(t *testing.T) {
 	assert.Empty(t, bare.env("PATH"), "no WithEnv: no environment variable reads as set")
 
 	var notices bytes.Buffer
-	ws, err = Inspect(t.Context(), root, WithStderr(&notices), WithCommandLine([]string{"magus", "run", "x"}), WithEnv([]string{"A=1", "A=2"}), WithSpawnRule(TierCeiling))
+	ws, err = Inspect(t.Context(), root, WithStderr(&notices), WithCommandLine([]string{"magus", "run", "x"}), WithEnv([]string{"A=1", "A=2"}), WithSpawnRule(tier.Ceiling))
 
 	require.NoError(t, err)
 	given := ws.(*Magus)
@@ -1531,7 +1532,7 @@ func ExampleInspect() {
 	tb, w := newExample(map[string]string{"myapp/magusfile.buzz": ""})
 	defer tb.close()
 
-	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect error:", err)
 		return
@@ -1550,7 +1551,7 @@ func ExampleOpen() {
 	tb, ws := monorepo()
 	defer tb.close()
 
-	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -1571,7 +1572,7 @@ func ExampleMagus_ExpandAffected() {
 	tb, ws := monorepo()
 	defer tb.close()
 
-	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -1628,7 +1629,7 @@ magus\project({
 })
 `)
 
-	_, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), w.Root(), WithSpawnRule(tier.Ceiling))
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `per-target policy names unknown target "bogus-target"`)
 	assert.ErrorContains(t, err, "declared targets: build")
@@ -1649,7 +1650,7 @@ magus\project({
 })
 `)
 
-	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p)
@@ -1673,7 +1674,7 @@ magus\project({
 	write("a/magusfile.buzz", "magus.project({});\n")
 	write("b/magusfile.buzz", "magus.project({});\n")
 
-	_, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "magus: a: ")
 	assert.ErrorContains(t, err, "magus: b: ")

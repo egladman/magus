@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
@@ -392,7 +393,7 @@ func wireOrigin(o types.Origin) *jobv1.JobOrigin {
 
 // wireModelTier maps the tier the store assigned, nil for a row written where the workspace
 // declared none.
-func wireModelTier(t *agent.JobModelTier) *jobv1.JobModelTier {
+func wireModelTier(t *tier.Assignment) *jobv1.JobModelTier {
 	if t == nil {
 		return nil
 	}

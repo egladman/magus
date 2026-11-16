@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -460,7 +461,7 @@ export fun folded(ctx: magus\Context, args: [str]) > void { ctx.needs(inline); }
 export fun check(ctx: magus\Context, args: [str]) > void { ctx.needs(test, vet); }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, check, folded); }
 `)
-	m, err := Open(t.Context(), w.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), w.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 

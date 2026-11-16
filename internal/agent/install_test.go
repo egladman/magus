@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func plantSkillDirs(t *testing.T, dir, dest string) (retired, handAuthored, empt
 	retired = filepath.Join(dir, dest, "magus-retired")
 	require.NoError(t, os.MkdirAll(retired, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(retired, "SKILL.md"),
-		catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), typesagent.SkillVariantShort), 0o644))
+		catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), tier.SkillVariantShort), 0o644))
 
 	handAuthored = filepath.Join(dir, dest, "magus-local-development")
 	require.NoError(t, os.MkdirAll(handAuthored, 0o755))

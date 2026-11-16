@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus"
 	_ "github.com/egladman/magus/buzzengine"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -88,7 +89,7 @@ func Example_openAWorkspace() {
 	defer cleanup()
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -117,7 +118,7 @@ func Example_listProjectsAndTargets() {
 	reg.RegisterProject("api", magus.WithSpell("guide-list"))
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -151,7 +152,7 @@ func Example_runATarget() {
 	reg.RegisterProject("api", magus.WithSpell("guide-run"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -217,7 +218,7 @@ func Example_readAFailedTarget() {
 	reg.RegisterProject("api", magus.WithSpell("guide-check"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -260,7 +261,7 @@ func Example_whatADiffAffects() {
 	reg.RegisterProject("web", magus.WithDependsOn("api"))
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -289,7 +290,7 @@ func ExampleMagus_Context() {
 	defer cleanup()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -339,7 +340,7 @@ func Example_judgeAToolCall() {
 	defer cleanup()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -381,7 +382,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	reg.RegisterProject("api", magus.WithSpell("guide-denied"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -416,7 +417,7 @@ func Example_aProgramThatIsItsOwnHarness() {
 	reg.RegisterProject("api", magus.WithSpell("guide-harness"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return

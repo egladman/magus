@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -51,7 +52,7 @@ func TestMCPUsageNamesOnlyServedTransports(t *testing.T) {
 func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
-	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -110,7 +111,7 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 func TestServeMCPStdioWatchesTheGraphWhileItServes(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
-	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	testkit.CaptureStderr(t, func() {

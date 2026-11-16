@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +51,7 @@ func (s *HistoryMetricsSuite) SetupTest() {
 	reg.RegisterProject(".")
 	reg.RegisterProject("api")
 	reg.RegisterProject("docs", WithDependsOn("api"))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	s.m = ws.(*Magus)
 	t.Cleanup(func() { assert.NoError(t, s.m.Close()) })
@@ -202,7 +203,7 @@ func TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *t
 	reg.RegisterProject(".")
 
 	open := func(cfg config.Config) *Magus {
-		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(tier.Ceiling))
 		require.NoError(t, err)
 		return ws.(*Magus)
 	}
@@ -252,7 +253,7 @@ func TestProjectDisplayName(t *testing.T) {
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 	})
-	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
@@ -276,7 +277,7 @@ func TestDeclaredDeps(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("web", WithDependsOn("lib"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 

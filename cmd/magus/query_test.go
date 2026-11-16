@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -196,7 +197,7 @@ func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -280,7 +281,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -332,7 +333,7 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -381,7 +382,7 @@ func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Inspect")
 	m, ok := ws.(*magus.Magus)
 	require.True(t, ok, "magus.Inspect returns a *magus.Magus under types.WorkspaceRepository")
@@ -439,7 +440,7 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	globalCfg = cfg
 
 	ctx := context.Background()
-	local, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(magus.TierCeiling))
+	local, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { _ = local.Close() })
 

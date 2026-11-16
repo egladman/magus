@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -33,7 +34,7 @@ func TestEnsureDriverNeverFirstInstalls(t *testing.T) {
 		"magusfile.buzz": driverTestMagusfile,
 		"gen/catalog.md": "kept\n",
 	}).Root()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	hooks := filepath.Join(root, ".git", "hooks")
@@ -57,7 +58,7 @@ func TestEnsureDriverRefreshesAnExistingRegistration(t *testing.T) {
 		"magusfile.buzz": driverTestMagusfile,
 		"gen/catalog.md": "kept\n",
 	}).Root()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	installer, ok := vcs.Installer("git")

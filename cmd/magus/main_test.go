@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -965,7 +966,7 @@ func BenchmarkMagusOpenCold(b *testing.B) {
 		root := openBenchWorkspace(b, 10)
 		b.StartTimer()
 
-		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -996,7 +997,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	root := openBenchJSWorkspace(b, 50)
 
 	// Warm the on-disk workspace cache with one full Open.
-	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1005,7 +1006,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1021,7 +1022,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	ctx := context.Background()
 	root := openBenchWorkspace(b, 10)
 
-	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1030,7 +1031,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			b.Fatal(err)
 		}

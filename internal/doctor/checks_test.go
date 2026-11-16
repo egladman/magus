@@ -22,10 +22,10 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -786,7 +786,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
-			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), typesagent.SkillVariantShort)))
+			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), tier.SkillVariantShort)))
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
