@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -219,13 +220,16 @@ func GraphObserverFromContext(ctx context.Context) Observer { //nolint:ireturn /
 	return o
 }
 
-// EvalMemo holds what one evaluation (a target body, or one script) computes once. Every
-// read inside it sees the same snapshot, so a body that writes files and reads the
-// knowledge graph again sees the graph as the body began. A failed computation is not
-// kept, so a canceled context never sticks.
+// EvalMemo holds what one evaluation computes once. An evaluation is one scheduled
+// attempt with every body it needs through ctx.needs, or one script. Every read inside
+// it sees the same snapshot, so a body that writes files and reads the knowledge graph
+// again sees the graph as the evaluation began. A failed computation is not kept, so a
+// canceled context never sticks. End drops everything it holds.
 type EvalMemo struct {
-	mu    sync.Mutex
-	cells map[string]*evalMemoCell
+	mu     sync.Mutex
+	cells  map[string]*evalMemoCell
+	ended  bool
+	warned bool
 }
 
 type evalMemoCell struct {
@@ -236,12 +240,21 @@ type evalMemoCell struct {
 
 // Do returns the value computed for key in this evaluation, computing it on the first
 // call. Concurrent callers of one key wait for the one computation. A nil memo computes
-// every time.
+// every time, as does one that has ended.
 func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
 	if m == nil {
 		return compute()
 	}
 	m.mu.Lock()
+	if m.ended {
+		announce := !m.warned
+		m.warned = true
+		m.mu.Unlock()
+		if announce {
+			slog.WarnContext(context.Background(), "evaluation already ended: computing again instead of reusing its snapshot", "key", key)
+		}
+		return compute()
+	}
 	if m.cells == nil {
 		m.cells = map[string]*evalMemoCell{}
 	}
@@ -263,6 +276,18 @@ func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
 	}
 	c.v, c.done = v, true
 	return v, nil
+}
+
+// End closes the evaluation: the memo drops what it holds and computes every time after,
+// as a nil memo does. The first request after End says so once, naming its key.
+func (m *EvalMemo) End() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.ended = true
+	m.cells = nil
+	m.mu.Unlock()
 }
 
 type evalMemoKey struct{}

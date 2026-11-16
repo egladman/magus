@@ -2780,6 +2780,34 @@ func TestInvokeSpellHandsItsCostToTheStep(t *testing.T) {
 	assert.Equal(t, int64(700), types.CPUMs(step))
 }
 
+// An attempt's evaluation is read by every body it needs, which run under the caller's
+// context, and holds nothing once the attempt returns.
+func TestAttemptEvaluationEndsWithTheAttempt(t *testing.T) {
+	var seen *types.EvalMemo
+	builds := 0
+	build := func() (any, error) { builds++; return builds, nil }
+	s := spells.NewSpell("zzz-evaluation-end", spells.WithTargets("work"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			seen = types.EvalMemoFromContext(ctx)
+			// A ctx.needs child runs under the caller's context.
+			child := func(ctx context.Context) (any, error) { return types.EvalMemoFromContext(ctx).Do("graph", build) }
+			for range 2 {
+				if _, err := child(ctx); err != nil {
+					return nil, err
+				}
+			}
+			return nil, nil
+		}))
+
+	require.NoError(t, invokeSpell(t.Context(), &types.Project{Path: ".", Dir: t.TempDir()}, "work", s))
+
+	require.NotNil(t, seen)
+	assert.Equal(t, 1, builds, "the caller and its child share one build")
+	_, err := seen.Do("graph", build)
+	require.NoError(t, err)
+	assert.Equal(t, 2, builds, "after the attempt the evaluation holds no graph")
+}
+
 type countingObserver struct {
 	builds atomic.Int32
 }

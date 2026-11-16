@@ -50,14 +50,17 @@ type memoGraphs struct {
 	memo *types.EvalMemo
 }
 
-// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
+// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds. The evaluation
+// already holds, or will ask for, the all-symbols graph, so a by-reference scope is built
+// as every symbol: one merge instead of one per symbol.
 func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if req.Refresh {
 		return m.g.KnowledgeGraph(ctx, req)
 	}
 	key := "graph"
 	if req.Symbols.Loaded() {
-		key = "graph+symbols:" + req.Symbols.Ref()
+		req.Symbols = types.AllSymbols
+		key = "graph+symbols:"
 	}
 	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 }

@@ -221,25 +221,30 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
 }
 
-// A refs lookup asks for the shards of its own symbol. One evaluation
-// builds that scope once, while a different symbol builds its own.
-func TestRefsMemoizesPerSymbolScope(t *testing.T) {
+// Inside an evaluation refs reads the all-symbols graph, the one a seeded query
+// reads, so two symbols and a query are one build.
+func TestRefsReadsTheEvaluationsSymbolGraph(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
 	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
-	for range 2 {
-		_, err := MagusRefs(eval, graphSymbol, types.KnowledgeRefsOptions{})
+	for _, sym := range []string{graphSymbol, "symbol:example.com/x Bar#"} {
+		_, err := MagusRefs(eval, sym, types.KnowledgeRefsOptions{})
 		require.NoError(t, err)
 	}
-	assert.Equal(t, countingGraphs{
-		builtGraphWorkspace: ws.builtGraphWorkspace,
-		builds:              1,
-		reqs:                []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}},
-	}, *ws)
-
-	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", types.KnowledgeRefsOptions{})
+	_, err := MagusQuery(eval, "kind=symbol "+graphSymbol, types.KnowledgeQueryOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, 2, ws.builds, "a second symbol is a second scope")
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.AllSymbols}}, ws.reqs)
+}
+
+// A context with no evaluation, such as the MCP worker's or the REPL's, keeps the
+// by-reference scope and builds each time.
+func TestRefsWithoutAnEvaluationKeepsTheReferenceScope(t *testing.T) {
+	t.Parallel()
+	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
+	ctx := types.WithWorkspace(t.Context(), ws)
+	_, err := MagusRefs(ctx, graphSymbol, types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
 }
 
 // definedSymbols is a workspace whose graph holds one symbol per id, each labeled name and

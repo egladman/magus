@@ -2492,7 +2492,9 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 //
 // With symbols, it merges the @symbols shards into a clone.
 // So the warm graph other MCP tools read never holds a huge symbol set.
-// A scope that targets one symbol merges only the shards that mention it.
+// A scope that targets one symbol merges only the shards that mention it. A request
+// inside an evaluation (one scheduled attempt with every body it needs) never arrives
+// with that scope: the std graph reads ask for every symbol there.
 func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	g, err := m.evaluationKnowledgeGraph(ctx, req.Refresh)
 	if err != nil || !req.Symbols.Loaded() {

@@ -1,8 +1,10 @@
 package types
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"sync"
 	"testing"
@@ -175,4 +177,53 @@ func TestEvalMemoScopes(t *testing.T) {
 	outer := WithEvalMemo(context.Background())
 	inner := WithEvalMemo(outer)
 	assert.NotSame(t, EvalMemoFromContext(outer), EvalMemoFromContext(inner), "a nested evaluation starts empty")
+}
+
+func TestEndedEvaluationKeepsNothing(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	calls := 0
+	compute := func() (any, error) { calls++; return calls, nil }
+	_, err := m.Do("graph", compute)
+	require.NoError(t, err)
+
+	m.End()
+	m.mu.Lock()
+	held := len(m.cells)
+	m.mu.Unlock()
+	assert.Zero(t, held, "End drops every computed value")
+}
+
+func TestEndedEvaluationComputesEveryTime(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	calls := 0
+	compute := func() (any, error) { calls++; return calls, nil }
+	first, err := m.Do("graph", compute)
+	require.NoError(t, err)
+	assert.Equal(t, 1, first)
+
+	m.End()
+	for want := 2; want <= 3; want++ {
+		v, err := m.Do("graph", compute)
+		require.NoError(t, err)
+		assert.Equal(t, want, v, "an ended evaluation recomputes, as a nil one does")
+	}
+}
+
+// Not parallel: it swaps the default logger to read what is said.
+func TestEndedEvaluationSaysSoOnce(t *testing.T) {
+	var out bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m.End()
+	for range 3 {
+		_, err := m.Do("graph+symbols:", func() (any, error) { return nil, nil })
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 1, bytes.Count(out.Bytes(), []byte("already ended")), "said once: %s", out.String())
+	assert.Contains(t, out.String(), "key=graph+symbols:", "it names the key")
 }

@@ -59,6 +59,26 @@ func TestMergeSymbolShardsByIDTargetsRoutedShards(t *testing.T) {
 	assert.False(t, hasEdgeIn(g2, "file:pkg/b/b.go", "symbol:S1"), "pkg/b's shard was not loaded")
 }
 
+// For an exact symbol ID the all-symbols graph answers refs as a graph merged for
+// that symbol does.
+func TestRefsOnEverySymbolEqualsRefsOnARefScope(t *testing.T) {
+	cacheDir, in := symsFixture(t)
+	build(t, cacheDir, BuildOptions{}, in)
+	store := NewStore(cacheDir, false, 0, nil, nil)
+
+	all := NewGraph()
+	require.NoError(t, store.MergeSymbolShards(context.Background(), all))
+	for _, id := range []string{"symbol:S1", "symbol:S2"} {
+		byRef := NewGraph()
+		require.NoError(t, store.MergeSymbolShardsByID(context.Background(), byRef, []string{id}))
+		want, ok := byRef.Refs(id)
+		require.True(t, ok, id)
+		got, ok := all.Refs(id)
+		require.True(t, ok, id)
+		assert.Equal(t, want, got, id)
+	}
+}
+
 func TestMergeSymbolShardsByIDFallsBackWithoutRouting(t *testing.T) {
 	cacheDir, in := symsFixture(t)
 	build(t, cacheDir, BuildOptions{}, in)
