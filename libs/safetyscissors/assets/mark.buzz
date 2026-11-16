@@ -1,10 +1,10 @@
-// safetyscissors.buzz draws the libs/safetyscissors mark, a pair of kids'
+// mark.buzz draws the libs/safetyscissors mark, a pair of kids'
 // safety scissors, as SVG from geometry and a little trigonometry, the way
 // buzzed draws its pull tab: flat, two colors, on Apple's macOS grid (an
 // 824 body centered on a 1024 canvas, its outline a superellipse of
 // exponent 5), with a shadow drawn as stacked translucent copies.
 //
-//     magus buzz safetyscissors.buzz [dir]
+//     magus buzz assets/mark.buzz [dir]
 //
 // The math helpers and the grid are copied from buzzed's tools/icon/icon.buzz
 // rather than shared: that is another repository, and this file must run
@@ -496,7 +496,7 @@ export fun writeAll(dir: str) > result\Result::<[str]> {
 }
 
 fun main(args: [str]) > void !> any {
-    final dir = if (args.len() > 0) args[0] else "gen";
+    final dir = if (args.len() > 0) args[0] else "assets/gen";
     final res = writeAll(dir);
     if (res.error -> e) {
         throw e.message;

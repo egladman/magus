@@ -17,8 +17,8 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: magus
 - Project: libs/embed
 - Project: libs/figure
-- Project: libs/marks
 - Project: libs/proofread/train
+- Project: libs/safetyscissors
 - Project: libs/ssg
 - Project: libs/train
 - Project: testdata/latex/onepage
@@ -93,9 +93,9 @@ magus graph export -o json  # the whole graph
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                              |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `buzzbench-test`               |
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
-| libs/marks                                                                  |       4 | `magus query project=libs/marks`                      | `generate`, `lint`, `test`                        |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                            |
+| libs/safetyscissors                                                         |       4 | `magus query project=libs/safetyscissors`             | `ci`, `lint`, `test`                              |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                            |
 | libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                            |
 | [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                            |
@@ -206,15 +206,6 @@ magus graph export -o json  # the whole graph
 | `test` | test runs the in-file test blocks upstream-strict.                           |
 | `lint` | lint type-checks the module upstream-strict and fails on any BZZ diagnostic. |
 
-## Project: libs/marks
-
-| Target     | What it does                                                 |
-| ---------- | ------------------------------------------------------------ |
-| `generate` | generate draws every mark into gen/.                         |
-| `ci`       | ci runs lint, then test.                                     |
-| `test`     | test runs the in-file test blocks.                           |
-| `lint`     | lint type-checks the script and fails on any BZZ diagnostic. |
-
 ## Project: libs/proofread/train
 
 | Target     | What it does                                                                                                                |
@@ -226,6 +217,15 @@ magus graph export -o json  # the whole graph
 | `build`    |                                                                                                                             |
 | `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
 | `security` | Fails on a vulnerable symbol this module calls.                                                                             |
+
+## Project: libs/safetyscissors
+
+| Target     | What it does                                                        |
+| ---------- | ------------------------------------------------------------------- |
+| `generate` | generate draws the mark into assets/gen/.                           |
+| `ci`       | ci runs lint, then test.                                            |
+| `test`     | test runs the in-file test blocks.                                  |
+| `lint`     | lint type-checks the mark's script and fails on any BZZ diagnostic. |
 
 ## Project: libs/ssg
 
