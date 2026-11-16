@@ -246,6 +246,15 @@ func TestInstallProjectsSaysNoneForAGoOnlyJob(t *testing.T) {
 	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{Paths: types.JobPaths{Write: []string{"main.go"}}}, projects))
 }
 
+func TestInstallProjectsInDropsAProjectTheCheckoutLacks(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
+	assert.Equal(t, "docs", InstallProjectsIn(root, "docs,libs/embed/train"))
+	assert.Equal(t, "none", InstallProjectsIn(root, "libs/embed/train"))
+	assert.Equal(t, "none", InstallProjectsIn(root, "none"))
+}
+
 func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	t.Parallel()
 	s, _ := validateWorkspace(t)

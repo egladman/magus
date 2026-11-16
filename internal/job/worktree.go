@@ -355,6 +355,27 @@ func InstallProjects(root string, row types.Job, projects []*types.Project) stri
 	return strings.Join(found, ",")
 }
 
+// InstallProjectsIn keeps of install, an [InstallProjects] answer from another tree,
+// the projects whose directory root also holds. The other tree may hold a project
+// root's revision lacks, and installing it there fails the bootstrap. The workspace
+// loads once per process, so root's own declarations cannot be read here; a
+// missing directory is the signal that its revision predates the project.
+func InstallProjectsIn(root, install string) string {
+	if install == noInstall {
+		return install
+	}
+	var kept []string
+	for _, p := range strings.Split(install, ",") {
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err == nil && info.IsDir() {
+			kept = append(kept, p)
+		}
+	}
+	if len(kept) == 0 {
+		return noInstall
+	}
+	return strings.Join(kept, ",")
+}
+
 // InstallTargets is the sorted paths of the projects that declare an install
 // target. A project whose spells are unresolved cannot list its targets, so it
 // is left out.
