@@ -2663,8 +2663,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if schema {
-		fmt.Print(job.ResultSchema)
-		return nil
+		return emitSchema(job.ResultSchema)
 	}
 	if len(pos) != 1 {
 		return exit.Usagef("magus job wait: requires exactly one job")

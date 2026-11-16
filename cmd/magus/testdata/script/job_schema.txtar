@@ -20,3 +20,11 @@ stdout 'changed_paths'
 exec magus job exit --schema -o name
 stdout '^changed_paths$'
 ! stdout '"type"'
+
+exec magus job wait --schema -o template='{{range $k, $v := .properties}}{{$k}} {{end}}'
+stdout 'changed_paths'
+! stdout '"description"'
+
+exec magus job wait --schema -o name
+stdout '^changed_paths$'
+! stdout '"type"'
