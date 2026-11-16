@@ -1,8 +1,9 @@
-package main
+package interactive
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,6 @@ import (
 	"github.com/egladman/magus/types"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -21,7 +21,7 @@ func TestWhereUniqueMatch(t *testing.T) {
 		{Path: "api/auth", Dir: "/tmp/api/auth"},
 		{Path: "web/dashboard", Dir: "/tmp/web/dashboard"},
 	}
-	scored := interactive.ScoreProjects(all, []string{"dash"})
+	scored := ScoreProjects(all, []string{"dash"})
 	require.Len(t, scored, 1, "expected unique match web/dashboard")
 	assert.Equal(t, "web/dashboard", scored[0].P.Path)
 }
@@ -31,7 +31,7 @@ func TestWhereAmbiguous(t *testing.T) {
 		{Path: "api/gateway", Dir: "/tmp/api/gateway"},
 		{Path: "api/auth", Dir: "/tmp/api/auth"},
 	}
-	scored := interactive.ScoreProjects(all, []string{"api"})
+	scored := ScoreProjects(all, []string{"api"})
 	assert.GreaterOrEqual(t, len(scored), 2, "expected ambiguous results")
 }
 
@@ -39,7 +39,7 @@ func TestWhereNoMatch(t *testing.T) {
 	all := []*types.Project{
 		{Path: "api/gateway", Dir: "/tmp/api/gateway"},
 	}
-	scored := interactive.ScoreProjects(all, []string{"zzznope"})
+	scored := ScoreProjects(all, []string{"zzznope"})
 	assert.Empty(t, scored)
 }
 
@@ -86,7 +86,7 @@ func TestResolveProjectArg(t *testing.T) {
 func whereRoot(t *testing.T) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Write("cmd/magus/guard_shell.go", "package main\n")
+	w.Write("cmd/magus/guard_shell.go", "package interactive\n")
 	return w.Root()
 }
 
@@ -109,10 +109,10 @@ func TestWhereFileFiltersAcceptPastedShapes(t *testing.T) {
 		{"backslash", `cmd\magus\guard_shell.go`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := interactive.SearchFiles(t.Context(), root, normalizeFilters([]string{tc.filter}, root), nil)
+			got, err := SearchFiles(t.Context(), root, NormalizeFilters([]string{tc.filter}, root), nil)
 			require.NoError(t, err)
 			require.Lenf(t, got, 1, "%q should find the file", tc.filter)
-			assert.Equal(t, interactive.ScoredFile{Path: "cmd/magus/guard_shell.go", Score: got[0].Score}, got[0])
+			assert.Equal(t, ScoredFile{Path: "cmd/magus/guard_shell.go", Score: got[0].Score}, got[0])
 		})
 	}
 }
@@ -124,7 +124,7 @@ func TestWhereProjectFiltersAcceptPastedShapes(t *testing.T) {
 	all := []*types.Project{{Path: "console", Dir: filepath.Join(root, "console")}}
 
 	for _, in := range []string{"console", "./console", "/console", filepath.Join(root, "console")} {
-		scored := interactive.ScoreProjects(all, normalizeFilters([]string{in}, root))
+		scored := ScoreProjects(all, NormalizeFilters([]string{in}, root))
 		require.Lenf(t, scored, 1, "%q should resolve the project", in)
 		assert.Equal(t, "console", scored[0].P.Path)
 	}
@@ -135,10 +135,24 @@ func TestWhereProjectFiltersAcceptPastedShapes(t *testing.T) {
 func TestWhereRejectsOutOfWorkspacePath(t *testing.T) {
 	root := whereRoot(t)
 	const filter = "/somewhere/else/cmd/magus/guard_shell.go"
-	assert.Equal(t, []string{filter}, normalizeFilters([]string{filter}, root),
+	assert.Equal(t, []string{filter}, NormalizeFilters([]string{filter}, root),
 		"a path from another checkout stays the literal token it was")
 
-	got, err := interactive.SearchFiles(t.Context(), root, normalizeFilters([]string{filter}, root), nil)
+	got, err := SearchFiles(t.Context(), root, NormalizeFilters([]string{filter}, root), nil)
 	require.NoError(t, err)
 	assert.Empty(t, got)
+}
+
+func TestWhereMatchesJoinTheWorkspaceRoot(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "ws")
+
+	files := FileMatches(root, []ScoredFile{{Path: "cmd/x.go"}})
+	assert.Equal(t, []WhereMatch{{Path: filepath.Join(root, "cmd/x.go"), Rel: "cmd/x.go", Kind: "file"}}, files)
+
+	projects := ProjectMatches(root, []ScoredProject{{P: &types.Project{Path: "api"}}})
+	assert.Equal(t, []WhereMatch{{Path: filepath.Join(root, "api"), Rel: "api", Kind: "project"}}, projects)
+
+	var b strings.Builder
+	PrintWherePaths(&b, append(files, projects...))
+	assert.Equal(t, filepath.Join(root, "cmd/x.go")+"\n"+filepath.Join(root, "api")+"\n", b.String())
 }

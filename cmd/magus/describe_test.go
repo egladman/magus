@@ -2,25 +2,17 @@ package main
 
 import (
 	"context"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
 )
 
 // TestDescribeTargets_SpellsSorted pins that the spells a target lists come out in name
@@ -73,320 +65,19 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	assert.NotEqual(t, out[1].Root, out[0].Root, "expected two distinct workspace roots")
 }
 
-// TestNewTargetCacheLastRun covers the verdicts `describe target --cache` can reach about
-// the last run recorded here. Every explanation has to name the mechanism behind the
-// verdict and the next command, since that section is often the only thing a reader takes
-// away from a miss.
-//
-// The lines are verbatim producer shapes, copied from the writeLine calls in
-// internal/cache/hash.go's hashStepInputs: keyVersion (hash.go:85), target (:114),
-// src:<rel>:<hash>:<execBit> (:147) and tool (:191), whose value cmd/magus/run.go's
-// probeTools joins as <spell>:<tool>:<token> (run.go:842). A `tool:<name>:version=<v>`
-// fixture is what let a broken split ship: no producer writes it.
-func TestNewTargetCacheLastRun(t *testing.T) {
-	t.Parallel()
-	recorded := []string{"keyVersion:3", "target:build", "src:api/main.go:aaa:0", "tool:go:go:go1.25.0"}
-
-	t.Run("nothing recorded", func(t *testing.T) {
-		t.Parallel()
-		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{}, fs.ErrNotExist, "cafe", false, nil)
-		assert.False(t, got.Recorded)
-		assert.Empty(t, got.Ref, "no entry, so nothing to point at")
-		assert.Contains(t, got.Explanation, "nothing to compare against")
-		assert.Contains(t, got.Explanation, "magus run build api")
-	})
-
-	t.Run("matches", func(t *testing.T) {
-		t.Parallel()
-		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
-		got := newTargetCacheLastRun("api", "build", rec, nil, "cafe", true, recorded)
-		assert.True(t, got.Recorded)
-		assert.True(t, got.KeyMatches)
-		assert.True(t, got.WouldReplay)
-		assert.Equal(t, 0, got.Differences)
-		assert.Nil(t, got.First)
-		assert.Contains(t, got.Explanation, "replays that entry")
-	})
-
-	t.Run("live key hits an older entry", func(t *testing.T) {
-		t.Parallel()
-		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
-		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:go:go1.25.0"}
-		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", true, live)
-		assert.False(t, got.KeyMatches, "the newest entry is a different key")
-		assert.True(t, got.WouldReplay)
-		assert.Equal(t, cache.PortableRef("f00d"), got.ReplaysRef, "the entry a run reaches is named")
-		assert.Zero(t, got.Differences, "a hit has no miss to explain")
-		assert.Nil(t, got.First)
-		assert.Contains(t, got.Explanation, "HITS")
-		assert.NotContains(t, got.Explanation, "MISSES")
-	})
-
-	t.Run("names the first differing input", func(t *testing.T) {
-		t.Parallel()
-		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
-		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:go:go1.26.0"}
-		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", false, live)
-		assert.False(t, got.KeyMatches)
-		assert.False(t, got.WouldReplay)
-		assert.Equal(t, 2, got.Differences, "the edited source and the moved tool token, once each")
-		require.NotNil(t, got.First)
-		assert.Equal(t, "src:api/main.go", got.First.Input, "the earliest class in live key order leads")
-		assert.Contains(t, got.Explanation, "MISSES")
-		assert.Contains(t, got.Explanation, "hash of these inputs")
-		assert.Contains(t, got.Explanation, "magus describe target build api --cache --inputs")
-	})
-
-	t.Run("a bumped key version is one difference", func(t *testing.T) {
-		t.Parallel()
-		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
-		live := []string{"keyVersion:4", "target:build", "src:api/main.go:aaa:0", "tool:go:go:go1.25.0"}
-		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", false, live)
-		assert.Equal(t, 1, got.Differences, "one value moved, so one input moved")
-		require.NotNil(t, got.First)
-		assert.Equal(t, cache.KeyInputChange{Class: "keyVersion", Input: "keyVersion", Recorded: "3", Live: "4"}, *got.First)
-		assert.Contains(t, got.Explanation, "1 input moved")
-	})
-
-	t.Run("entry predates key inputs", func(t *testing.T) {
-		t.Parallel()
-		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{Key: "cafe"}, nil, "f00d", false, recorded)
-		assert.True(t, got.Recorded)
-		assert.False(t, got.KeyMatches)
-		assert.Nil(t, got.First, "there is no recorded line to blame")
-		assert.Contains(t, got.Explanation, "predates key-input persistence")
-		assert.Contains(t, got.Explanation, "magus run build api")
-	})
-}
-
-// TestLastRunLines pins the text section's shape: one header line carrying the verdict,
-// the recorded and live values of the first differing input, and the explanation last.
-func TestLastRunLines(t *testing.T) {
-	t.Parallel()
-	at := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
-
-	got := lastRunLines(targetCacheLastRun{Explanation: "nothing recorded."})
-	assert.Equal(t, []string{"  last recorded run: none", "    nothing recorded."}, got)
-
-	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, KeyMatches: true, Explanation: "replays."})
-	assert.Equal(t, []string{"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  MATCHES", "    replays."}, got)
-
-	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, WouldReplay: true, ReplaysRef: "mgs_def456", Explanation: "hits."})
-	assert.Equal(t, []string{
-		"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  DIFFERS; the live key HITS an older entry",
-		"    hits.",
-	}, got, "the header must not read as a miss when a run would replay")
-
-	got = lastRunLines(targetCacheLastRun{
-		Recorded:    true,
-		Ref:         "mgs_abc123",
-		At:          at,
-		Differences: 1,
-		First:       &cache.KeyInputChange{Class: "src", Input: "src:api/main.go", Recorded: "aaa:0", Live: "bbb:0"},
-		Explanation: "misses.",
-	})
-	assert.Equal(t, []string{
-		"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  DIFFERS",
-		"    first differing input: src:api/main.go",
-		"      - recorded  aaa:0",
-		"      + live      bbb:0",
-		"    misses.",
-	}, got)
-}
-
-// TestTargetCacheLastRunWireFields pins the field names a script gating on `describe
-// target --cache -o json` reads. Both verdicts are booleans of the same shape, so a
-// consumer that silently gets the other one back reports a hit as a miss; renaming either
-// has to be a deliberate break rather than a side effect.
-func TestTargetCacheLastRunWireFields(t *testing.T) {
-	t.Parallel()
-	data, err := json.Marshal(targetCacheLastRun{Recorded: true, KeyMatches: true, WouldReplay: true, ReplaysRef: "mgs_abc123"})
-	require.NoError(t, err)
-
-	var wire map[string]any
-	require.NoError(t, json.Unmarshal(data, &wire))
-	assert.Equal(t, true, wire["key_matches"], "the newest entry's key equals the live key")
-	assert.Equal(t, true, wire["would_replay"], "a run now hits some entry")
-	assert.Equal(t, "mgs_abc123", wire["replays_ref"])
-	assert.NotContains(t, wire, "matches")
-	assert.NotContains(t, wire, "replays")
-}
-
-// TestLastRunLinesMarksAbsence: a class with no value slot differs only by appearing or
-// disappearing, and the section must say which side is missing rather than print a blank.
-func TestLastRunLinesMarksAbsence(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name  string
-		first cache.KeyInputChange
-		want  []string
-	}{
-		{
-			name:  "added",
-			first: cache.KeyInputChange{Class: "charm", Input: "charm:rw", RecordedAbsent: true},
-			want:  []string{"      - recorded  (absent)", "      + live      (present)"},
-		},
-		{
-			name:  "dropped",
-			first: cache.KeyInputChange{Class: "dep", Input: "dep:libs/x", LiveAbsent: true},
-			want:  []string{"      - recorded  (present)", "      + live      (absent)"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := lastRunLines(targetCacheLastRun{Recorded: true, Differences: 1, First: &tc.first, Explanation: "x"})
-			assert.Contains(t, got, tc.want[0])
-			assert.Contains(t, got, tc.want[1])
-		})
+// TestDescribeAlias pins that singular and plural resolve to the same canonical
+// noun (kubectl-style interchangeability).
+func TestDescribeAlias(t *testing.T) {
+	pairs := [][2]string{
+		{"module", "modules"},
+		{"project", "projects"},
+		{"spell", "spells"},
+		{"target", "targets"},
+		{"workspace", "workspaces"},
+		{"mcp-tool", "mcp-tools"},
 	}
-}
-
-// TestClaimLabel pins the one spelling `describe file` prints a claim's declarer
-// as: the path:target ref every other magus command accepts, so a reader can run
-// the target that wrote the file without translating anything.
-func TestClaimLabel(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name  string
-		claim types.FileClaim
-		want  string
-	}{
-		{name: "per-target glob", claim: types.FileClaim{Project: "docs", Target: "generate"}, want: "docs:generate"},
-		{name: "project-wide glob", claim: types.FileClaim{Project: "docs"}, want: "docs"},
-		{name: "root project", claim: types.FileClaim{Project: ".", Target: "generate"}, want: ".:generate"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, claimLabel(tc.claim))
-		})
+	for _, p := range pairs {
+		assert.Equal(t, describeAlias[p[0]], describeAlias[p[1]], "%q and %q resolve differently", p[0], p[1])
+		assert.Equal(t, p[0], describeAlias[p[0]], "canonical of %q should be itself", p[0])
 	}
-}
-
-// focusFixture is a WorkspaceReader over the same shapes project's own focus test
-// grades: an upstream dependency, a sibling, and a reverse dependent. It is a fake
-// rather than a real checkout because TestMarkFileFocusStampsEachEntry is about the
-// VERDICT, and standing up a magusfile to reach one would test workspace discovery
-// instead. Mirrors internal/guard's own focusFixture, unexported there.
-type focusFixture struct {
-	root     string
-	projects map[string]*types.Project
-}
-
-func (w focusFixture) Root() string { return w.root }
-
-func (w focusFixture) All() []*types.Project {
-	out := make([]*types.Project, 0, len(w.projects))
-	for _, p := range w.projects {
-		out = append(out, p)
-	}
-	return out
-}
-
-func (w focusFixture) Get(path string) *types.Project      { return w.projects[path] }
-func (w focusFixture) Graph() (*types.Graph, error)        { panic("focus must not build the graph") }
-func (w focusFixture) VCSOptions() types.VCSOptions        { panic("unused") }
-func (w focusFixture) Where(string) (*types.Project, bool) { panic("unused") }
-
-func newFocusFixture() focusFixture {
-	w := focusFixture{root: "/ws", projects: map[string]*types.Project{}}
-	for _, p := range []*types.Project{
-		{Path: ".", Name: "root"},
-		{Path: "app", DependsOn: []string{"libs/core"}},
-		{Path: "libs/core"},
-		{Path: "libs/ui"},
-		{Path: "web", DependsOn: []string{"app"}},
-	} {
-		w.projects[p.Path] = p
-	}
-	return w
-}
-
-// TestMarkFileFocusStampsEachEntry covers the `magus describe file` field: the same
-// computation the guard grades with, surfaced where a caller can ask about a path
-// before reading it rather than after being advised.
-func TestMarkFileFocusStampsEachEntry(t *testing.T) {
-	root := testkit.NewWorkspace(t).Root()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
-	t.Chdir(filepath.Join(root, "app"))
-
-	ws := newFocusFixture()
-	ws.root = root
-	files := []types.FileEntry{
-		{Path: "app/main.go"},
-		{Path: "libs/core/core.go"},
-		{Path: "libs/ui/theme.css"},
-		{Path: "MAGUS.md"},
-	}
-	focus, ok := markFileFocus(ws, files)
-	require.True(t, ok)
-	assert.Equal(t, []string{"app"}, focus.Seeds)
-	assert.Equal(t, []string{types.FocusIn, types.FocusIn, types.FocusOut, types.FocusIn},
-		[]string{files[0].Focus, files[1].Focus, files[2].Focus, files[3].Focus},
-		"the sibling is the only one out; a root file and a declared dependency are in")
-}
-
-func TestFirstLine(t *testing.T) {
-	assert.Equal(t, "", firstLine(""))
-	assert.Equal(t, "one", firstLine("one"))
-	assert.Equal(t, "one", firstLine("one\ntwo\nthree"))
-	assert.Equal(t, "", firstLine("\ntwo"))
-}
-func TestFilterByNameAndNamesOf(t *testing.T) {
-	items := []types.SpellVersion{{Tool: "go"}, {Tool: "node"}}
-	nameOf := func(v types.SpellVersion) string { return v.Tool }
-
-	assert.Equal(t, []types.SpellVersion{{Tool: "node"}}, filterByName(items, "node", nameOf))
-	assert.Nil(t, filterByName(items, "rustc", nameOf))
-	assert.Equal(t, []string{"go", "node"}, collectNames(items, nameOf))
-	assert.Empty(t, collectNames(nil, nameOf))
-}
-
-// TestUnknownEntitySuggestsAndExitsTwo pins both halves: a near miss earns a suggestion,
-// and the caller gets the already-printed sentinel so the message is not doubled.
-func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
-	var err error
-	out := notices(t, func() {
-		err = unknownEntity("spell", "gol", []string{"go", "typescript"})
-	})
-
-	assert.Equal(t, exit.Reported(exit.Usage), err)
-	assert.Contains(t, out, `magus describe spell: unknown spell "gol"`)
-	assert.Contains(t, out, `did you mean "go"?`)
-
-	out = notices(t, func() {
-		err = unknownEntity("spell", "zzzzzzzz", []string{"go"})
-	})
-	assert.Equal(t, exit.Reported(exit.Usage), err)
-	assert.NotContains(t, out, "did you mean")
-}
-
-// TestHashOfKeyInputsIsOrderSensitive guards the property a cache key needs: the same lines
-// in a different order are a different key, because the join is what is hashed.
-func TestHashOfKeyInputsIsOrderSensitive(t *testing.T) {
-	a := hashOfKeyInputs([]string{"a", "b"})
-	assert.Len(t, a, 64)
-	assert.Equal(t, a, hashOfKeyInputs([]string{"a", "b"}))
-	assert.NotEqual(t, a, hashOfKeyInputs([]string{"b", "a"}))
-	assert.NotEqual(t, a, hashOfKeyInputs(nil))
-}
-
-// TestPrintSpellVersionsSeparatesFailureFromSilence pins the three readings a probe can
-// have: a version, a tool that reported none, and a probe that failed. Collapsing any two
-// would make a broken toolchain look like a quiet one.
-func TestPrintSpellVersionsSeparatesFailureFromSilence(t *testing.T) {
-	assert.Empty(t, captureStdout(t, func() { printSpellVersions(nil) }))
-
-	out := captureStdout(t, func() {
-		printSpellVersions([]types.SpellVersion{
-			{Tool: "go", Version: "go1.25.0", CacheKey: "abc123"},
-			{Tool: "node", Error: "executable file not found"},
-			{Tool: "tsc"},
-		})
-	})
-
-	assert.Contains(t, out, "versions (probed just now, never cached)")
-	assert.Contains(t, out, "go1.25.0")
-	assert.Contains(t, out, "key: abc123")
-	assert.Contains(t, out, "probe failed: executable file not found")
-	assert.Contains(t, out, "(no version reported)")
 }

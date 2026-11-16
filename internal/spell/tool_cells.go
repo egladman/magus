@@ -1,100 +1,32 @@
-package main
+package spell
 
 import (
-	"context"
-	"flag"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-// describeTools reports every project's tools, their probed versions, their windows, and
-// where each installed release cycle stands against the wired lifecycle provider.
-//
-// The CLI owns this rather than the console: the console never owns a capability, and a
-// toolchain view reachable only from a browser would make it the first that did.
-func describeTools(ctx context.Context, root string, args []string) error {
-	pos, err := commandParse("describe tools", args, func(fs *flag.FlagSet) {
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus describe tool[s] [<project>] [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.ToolDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
-	})
-	if err != nil {
-		return err
-	}
+const toolRowFormat = "  %-24s %-14s %-24s %-12s %-22s %-8s %-11s %s\n"
 
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-
-	ws, err := inspectWorkspace(ctx, root)
-	if err != nil {
-		return err
-	}
-	m, ok := ws.(*magus.Magus)
-	if !ok {
-		return fmt.Errorf("describe tools: workspace %T cannot report its tools", ws)
-	}
-
-	var paths []string
-	if len(pos) > 0 {
-		projects := ws.All()
-		names := collectNames(projects, func(p *types.Project) string { return p.Path })
-		projects = filterByName(projects, pos[0], func(p *types.Project) string { return p.Path })
-		if len(projects) == 0 {
-			// The entity is the PROJECT being filtered, not the tool: naming the noun the
-			// command is called after would send the reader looking for a missing binary.
-			return unknownEntity("project", pos[0], names)
-		}
-		paths = collectNames(projects, func(p *types.Project) string { return p.Path })
-	}
-
-	report, err := m.Tools(ctx, paths...)
-	if err != nil {
-		return err
-	}
-
-	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, report)
-	case outputName:
-		// project/bin, because a bare bin repeats once per project that drives it and
-		// cannot be fed back to `magus describe tools <project>`.
-		names := make([]string, 0, len(report.Tools))
-		for _, t := range report.Tools {
-			names = append(names, fmt.Sprintf("%s/%s", t.Project, t.Bin))
-		}
-		return emitNames(os.Stdout, names)
-	}
-
-	// text / wide
-	fmt.Printf("definition: %s\n\n", report.Definition)
-	fmt.Printf("workspace: %s (%d tools)\n", report.Workspace, report.Count)
-	fmt.Printf("%s\n\n", lifecycleHeader(report.Lifecycle))
-	fmt.Printf("  %-24s %-14s %-24s %-12s %-22s %-8s %-11s %s\n",
-		"PROJECT/TOOL", "INSTALLED", "WINDOW", "DECLARED BY", "VERDICT", "CYCLE", "EOL", "SUPPORT")
-	for _, t := range report.Tools {
-		fmt.Printf("  %-24s %-14s %-24s %-12s %-22s %-8s %-11s %s\n",
-			fmt.Sprintf("%s/%s", t.Project, t.Bin), installedCell(t), windowCell(t), declaredByCell(t), verdictCell(t),
-			orDash(t.Cycle), orDash(t.EOL), supportCell(t, report.Lifecycle.State))
-	}
-	return nil
+// ToolsHeaderRow is the column header line of `describe tools`.
+func ToolsHeaderRow() string {
+	return fmt.Sprintf(toolRowFormat, "PROJECT/TOOL", "INSTALLED", "WINDOW", "DECLARED BY", "VERDICT", "CYCLE", "EOL", "SUPPORT")
 }
 
-// lifecycleHeader names where the lifecycle columns came from, and the network reads that
+// ToolRow is one tool's line of `describe tools`; state is the report's lifecycle state.
+func ToolRow(t types.ToolStatus, state string) string {
+	return fmt.Sprintf(toolRowFormat,
+		fmt.Sprintf("%s/%s", t.Project, t.Bin), installedCell(t), windowCell(t), declaredByCell(t), verdictCell(t),
+		sessions.OrDash(t.Cycle), sessions.OrDash(t.EOL), supportCell(t, state))
+}
+
+// LifecycleHeader names where the lifecycle columns came from, and the network reads that
 // produced them, the way the run header names the remote cache. It is printed on every
 // call because every call asks.
-func lifecycleHeader(s types.LifecycleStatus) string {
+func LifecycleHeader(s types.LifecycleStatus) string {
 	switch s.State {
 	case types.LifecycleUnwired:
 		return "lifecycle: no provider wired (magus\\lifecycle.provider); the lifecycle columns read -"
@@ -135,7 +67,7 @@ func supportCell(t types.ToolStatus, state string) string {
 	if t.Support == string(spells.SupportUnknown) && (state == types.LifecycleOffline || state == types.LifecycleUnreached) {
 		return fmt.Sprintf("%s (%s)", t.Support, state)
 	}
-	return orDash(t.Support)
+	return sessions.OrDash(t.Support)
 }
 
 // installedCell says what was read, and when nothing was, which kind of nothing.

@@ -1,6 +1,7 @@
-package main
+package spell
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,7 +56,7 @@ func TestLifecycleHeaderNamesTheStateAndTheReads(t *testing.T) {
 			"lifecycle: endoflife-date, nothing to ask (no spell names a lifecycle product)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, lifecycleHeader(tc.s))
+			assert.Equal(t, tc.want, LifecycleHeader(tc.s))
 		})
 	}
 }
@@ -74,4 +75,14 @@ func TestSupportCellSaysWhyItIsUnknown(t *testing.T) {
 	assert.Equal(t, "unknown", supportCell(unknown, types.LifecycleLive), "live and unmatched is a plain unknown")
 	assert.Equal(t, "eol", supportCell(types.ToolStatus{Support: "eol"}, types.LifecycleLive))
 	assert.Equal(t, "-", supportCell(types.ToolStatus{}, types.LifecycleUnwired))
+}
+
+func TestToolRowSharesTheHeaderColumns(t *testing.T) {
+	row := ToolRow(types.ToolStatus{
+		Project: "api", Bin: "go", InstalledVersion: "go1.25.0", Verdict: types.ToolVerdictInside, Cycle: "1.25",
+	}, types.LifecycleLive)
+	assert.Equal(t, strings.Index(ToolsHeaderRow(), "VERDICT"), strings.Index(row, "inside"), "a row lines up under the header's columns")
+	assert.Contains(t, row, "api/go")
+	assert.Contains(t, row, "unconstrained", "no window reads as unconstrained, not blank")
+	assert.Contains(t, row, "1.25")
 }

@@ -7,10 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -21,22 +19,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// whereMatch is one resolved location. Rel is carried alongside the absolute Path
-// because a caller that resolved a name usually needs it back in workspace-relative
-// form to hand to another magus command, and re-deriving it means knowing the root.
-type whereMatch struct {
-	Path string `json:"path"  yaml:"path"`
-	Rel  string `json:"rel"   yaml:"rel"`
-	Kind string `json:"kind"  yaml:"kind"` // "project" or "file"
-}
-
-// whereOutput is the structured view of a where resolution.
-type whereOutput struct {
-	Workspace string       `json:"workspace" yaml:"workspace"`
-	Count     int          `json:"count"     yaml:"count"`
-	Matches   []whereMatch `json:"matches"   yaml:"matches"`
-}
-
 // emitWhere renders resolved matches. The TEXT form stays deliberately bare (one
 // absolute path per line and nothing else) because its whole purpose is to be
 // substituted straight into another command: cd "$(magus where api)". Only the
@@ -46,43 +28,21 @@ type whereOutput struct {
 // was accepted and silently produced text. It looked covered because
 // where_formats.txtar asserted stdout '\{|/', an alternation that matches a path just
 // as happily as an opening brace, so the test could not fail either way.
-func emitWhere(wsRoot string, matches []whereMatch) error {
+func emitWhere(wsRoot string, matches []interactive.WhereMatch) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, whereOutput{
+		return emitFormatted(opts, interactive.WhereOutput{
 			Workspace: wsRoot, Count: len(matches), Matches: matches,
 		})
 	case outputName:
-		return emitItemNames(os.Stdout, matches, func(m whereMatch) string { return m.Path })
+		return emitItemNames(os.Stdout, matches, func(m interactive.WhereMatch) string { return m.Path })
 	}
-	printWherePaths(matches)
+	interactive.PrintWherePaths(os.Stdout, matches)
 	return nil
-}
-
-func printWherePaths(matches []whereMatch) {
-	for _, m := range matches {
-		fmt.Println(m.Path)
-	}
-}
-
-// normalizeFilters canonicalises the path-SHAPED filters to the workspace-relative slash
-// form both matchers compare against, so a filter a human tab-completed ("./cmd/x") or
-// copied out of an editor (an absolute path) reaches what a bare "cmd/x" reaches. It is
-// the same normalization `magus query` applies to a path-shaped term.
-//
-// The result is a copy: the filters the user typed are what the no-match error reports.
-func normalizeFilters(filters []string, wsRoot string) []string {
-	out := slices.Clone(filters)
-	for i, f := range out {
-		if norm, ok := file.NormalizeWorkspacePath(f, wsRoot); ok {
-			out[i] = norm
-		}
-	}
-	return out
 }
 
 // whereCommand fuzzy-matches a project and prints its absolute path. On ambiguity, lists candidates and exits 2.
@@ -170,7 +130,7 @@ func whereCommand(ctx context.Context, root string, args []string) error {
 		matchFn = watch.IgnorePatterns(ws.Root(), []types.IgnorePattern{pat})
 	}
 
-	match := normalizeFilters(filters, ws.Root())
+	match := interactive.NormalizeFilters(filters, ws.Root())
 
 	scored := interactive.ScoreProjects(all, match)
 	if len(scored) == 0 {
@@ -183,16 +143,10 @@ func whereCommand(ctx context.Context, root string, args []string) error {
 			return exit.Reported(exit.Usage)
 		}
 		if printAll {
-			matches := make([]whereMatch, 0, len(files))
-			for _, f := range files {
-				matches = append(matches, whereMatch{
-					Path: filepath.Join(ws.Root(), f.Path), Rel: f.Path, Kind: "file",
-				})
-			}
-			return emitWhere(ws.Root(), matches)
+			return emitWhere(ws.Root(), interactive.FileMatches(ws.Root(), files))
 		}
 		if len(files) == 1 || (len(filters) > 0 && files[0].Score > files[1].Score) {
-			return emitWhere(ws.Root(), []whereMatch{{
+			return emitWhere(ws.Root(), []interactive.WhereMatch{{
 				Path: filepath.Join(ws.Root(), files[0].Path), Rel: files[0].Path, Kind: "file",
 			}})
 		}
@@ -205,18 +159,12 @@ func whereCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	if printAll {
-		matches := make([]whereMatch, 0, len(scored))
-		for _, s := range scored {
-			matches = append(matches, whereMatch{
-				Path: filepath.Join(ws.Root(), s.P.Path), Rel: s.P.Path, Kind: "project",
-			})
-		}
-		return emitWhere(ws.Root(), matches)
+		return emitWhere(ws.Root(), interactive.ProjectMatches(ws.Root(), scored))
 	}
 
 	// Unique top score (or exactly one result): print and exit.
 	if len(scored) == 1 || (len(filters) > 0 && scored[0].Score > scored[1].Score) {
-		return emitWhere(ws.Root(), []whereMatch{{
+		return emitWhere(ws.Root(), []interactive.WhereMatch{{
 			Path: filepath.Join(ws.Root(), scored[0].P.Path), Rel: scored[0].P.Path, Kind: "project",
 		}})
 	}

@@ -24,6 +24,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -977,7 +978,7 @@ func (s *outputFormatsSuite) TestCommandPathStopsAtTheDeepestChild() {
 }
 
 func (s *outputFormatsSuite) TestEmitRecordRendersEveryFormat() {
-	record := whereOutput{Workspace: "/w", Count: 1, Matches: []whereMatch{{Path: "a"}}}
+	record := interactive.WhereOutput{Workspace: "/w", Count: 1, Matches: []interactive.WhereMatch{{Path: "a"}}}
 	render := func(format string) string {
 		opts, err := output.Parse(format)
 		s.Require().NoError(err)
