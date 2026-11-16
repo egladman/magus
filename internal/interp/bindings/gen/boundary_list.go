@@ -64,6 +64,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "CoChange", Zero: types.CoChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCoChange(v.(types.CoChange)) }},
 	{Name: "Command", Zero: spells.Command{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommand(v.(spells.Command), enums) }},
 	{Name: "CommandInvocation", Zero: types.CommandInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommandInvocation(v.(types.CommandInvocation)) }},
+	{Name: "CommandPush", Zero: types.CommandPush{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommandPush(v.(types.CommandPush)) }},
 	{Name: "CommandRequest", Zero: types.CommandRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectCommandRequest(v.(types.CommandRequest), enums)
 	}},

@@ -76,6 +76,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 			req.Checkout = deps.CheckoutState(ctx, site.dir)
 		}
 	}
+	req.Push = commandPush(ctx, deps, in, at)
 	bind := func(rule workspace.CommandRule) ruleCall {
 		if rule == nil {
 			return nil

@@ -3579,6 +3579,17 @@ func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
 	return out
 }
 
+func ObjectCommandPush(v types.CommandPush) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("tool", vm.StringValue(v.Tool))
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("source", vm.StringValue(v.Source))
+	out.MapSet("revision", vm.StringValue(v.Revision))
+	out.MapSet("opensPullRequest", vm.BoolValue(v.OpensPullRequest))
+	out.MapSet("unknown", vm.StringValue(v.Unknown))
+	return out
+}
+
 func ObjectContextWindow(v types.ContextWindow, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("tokens", vm.IntValue(int64(v.Tokens)))
@@ -3620,6 +3631,11 @@ func ObjectCommandRequest(v types.CommandRequest, enums ffi.EnumCases) vm.Value 
 		optCheckout = ObjectCheckoutState((*v.Checkout))
 	}
 	out.MapSet("checkout", optCheckout)
+	optPush := vm.Null
+	if v.Push != nil {
+		optPush = ObjectCommandPush((*v.Push))
+	}
+	out.MapSet("push", optPush)
 	out.MapSet("dir", vm.StringValue(v.Dir))
 	out.MapSet("workspace", vm.StringValue(v.Workspace))
 	out.MapSet("unplaced", vm.BoolValue(v.Unplaced))

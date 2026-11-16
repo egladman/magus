@@ -230,6 +230,11 @@ type CommandRequest struct {
 	// for such a line, since reading it costs processes. Nil otherwise, and when the
 	// checkout's version control cannot report it: a rule reads nil as unknown.
 	Checkout *CheckoutState
+	// Push is what the line publishes with a push or `gh pr create`, read before the line
+	// runs. Nil only when no call on the line publishes: a deletion publishes nothing. Every
+	// other case that magus cannot settle carries Unknown, so a rule never reads nil as a
+	// line that is safe to let through.
+	Push *CommandPush
 	// Dir is the directory the line runs in, as the host reported it; empty when it
 	// reported none.
 	Dir string
@@ -243,6 +248,28 @@ type CommandRequest struct {
 	// --checkout` made for jobs the caller may work in. An unreadable job
 	// store leaves it empty, owning none.
 	OwnedCheckouts []string
+}
+
+// CommandPush is what a shell line publishes, as magus reads it before the line runs.
+type CommandPush struct {
+	// Tool is the program that publishes: git, hg, sl, jj or gh.
+	Tool string
+	// Dir is the checkout the push runs in, absolute: the hook's directory, moved by a cd
+	// earlier on the line and by git -C, hg -R, sl -R or jj -R. Empty when Unknown says
+	// the line's directory is known only by running it.
+	Dir string
+	// Source is the one revision the line names as what it publishes, as typed: a git
+	// refspec's source, the -r of hg, sl and jj, the -c or -b of jj, the --head of gh.
+	// Empty when it names none and publishes the checkout's current revision.
+	Source string
+	// Revision is the full id of the commit Source names, or of the checkout's current
+	// revision when Source is empty. Empty when Unknown says why.
+	Revision string
+	// OpensPullRequest is true for `gh pr create`.
+	OpensPullRequest bool
+	// Unknown says why Revision is empty: where the line runs, what it publishes or which
+	// commit that is cannot be read before the line runs. Empty when Revision is set.
+	Unknown string
 }
 
 // GuardBinary is the magus binary answering a guard hook, as magus\guard.binary() reports

@@ -2187,6 +2187,15 @@ export object CheckoutState {
     base: str = "",
 }
 
+export object CommandPush {
+    tool: str = "",
+    dir: str = "",
+    source: str = "",
+    revision: str = "",
+    opensPullRequest: bool = false,
+    unknown: str = "",
+}
+
 export object CommandRequest {
     host: str = "",
     session: str = "",
@@ -2202,6 +2211,7 @@ export object CommandRequest {
     orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     checkout: CheckoutState? = null,
+    push: CommandPush? = null,
     dir: str = "",
     workspace: str = "",
     unplaced: bool = false,
