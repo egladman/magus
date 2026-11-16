@@ -2452,7 +2452,7 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 	}
 	var declared types.Job
 	row.Apply(&declared)
-	install := job.InstallProjectsIn(wt.Root, job.InstallProjects(forker, declared, ws.Projects))
+	install := job.InstallProjects(forker, wt.Root, declared, ws.Projects)
 	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", install)
 }
 
