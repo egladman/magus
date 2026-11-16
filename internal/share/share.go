@@ -35,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -149,7 +150,7 @@ type Manager struct {
 	selectAddr func() (netip.Addr, error)
 	// mint is auth.MintShare; a test swaps in one whose token expires sooner than the
 	// minimum, to exercise the timeout teardown without waiting a minute.
-	mint func(minter job.Access, ttl time.Duration) (types.Secret, auth.ShareToken, error)
+	mint func(minter job.Access, ttl time.Duration) (secrets.Secret, auth.ShareToken, error)
 
 	// grace is shutdownGrace; a test shortens it.
 	grace time.Duration

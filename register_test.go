@@ -19,6 +19,7 @@ import (
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -54,6 +55,21 @@ func (s *sdkOptionSuite) TestWithSpawnRuleRecordsMisuseOnABareLoad() {
 	WithSpawnRule(tier.Ceiling)(l)
 	s.Require().Len(l.Misuse, 1)
 	s.EqualError(l.Misuse[0], "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestWithSecretsRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts))(l)
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithSecrets sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestWithSecretsAccumulates() {
+	o := collectOptions([]Option{
+		WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts)),
+		WithSecrets(secrets.WithShortSecret(func(context.Context, string) {})),
+	})
+	s.Len(o.secretsOpts, 2)
 }
 
 func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {

@@ -94,6 +94,7 @@ require (
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/egladman/magus/libs/safetyscissors v0.1.0
 	github.com/egladman/magus/libs/scipbuzz v0.1.0
+	github.com/egladman/magus/libs/secrets v0.1.0
 	github.com/egladman/magus/libs/termkit v0.1.0
 	github.com/egladman/magus/libs/text v0.1.0
 	github.com/egladman/magus/libs/xdg v0.1.0
@@ -154,6 +155,8 @@ replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz
 replace github.com/egladman/magus/libs/safetyscissors => ./libs/safetyscissors
 
 replace github.com/egladman/magus/libs/scipbuzz => ./libs/scipbuzz
+
+replace github.com/egladman/magus/libs/secrets => ./libs/secrets
 
 replace github.com/egladman/magus/libs/termkit => ./libs/termkit
 

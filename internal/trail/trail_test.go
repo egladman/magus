@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -902,14 +902,14 @@ func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 // Blobs are the sharpest edge: an MCP request/response pair is a whole tool payload,
 // persisted verbatim, and nothing else on that path scrubs it.
 //
-// Delete the secret.Redact call in WriteBlob (or redactEvent in Append) and this fails.
+// Delete the secrets.Redact call in WriteBlob (or redactEvent in Append) and this fails.
 func TestTrailRedactsThroughContext(t *testing.T) {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
-	res := secret.New()
+	res := secrets.NewResolver()
 	t.Setenv("TRAIL_TEST_TOKEN", credential)
-	ctx := secret.ContextWithResolver(t.Context(), res)
+	ctx := secrets.ContextWithResolver(t.Context(), res)
 	// Reading is what marks the value as a secret: provenance, not shape.
 	got, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
@@ -957,9 +957,9 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 // to protect nothing.
 func TestTrailKeepsStructuralFields(t *testing.T) {
 	base := t.TempDir()
-	res := secret.New()
+	res := secrets.NewResolver()
 	t.Setenv("TRAIL_TEST_TOKEN", "sk-live-must-not-be-persisted")
-	ctx := secret.ContextWithResolver(t.Context(), res)
+	ctx := secrets.ContextWithResolver(t.Context(), res)
 	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // TokenServer is a running loopback server on an ephemeral 127.0.0.1 port for one browser
@@ -23,7 +23,7 @@ import (
 // built with a guard missing.
 type TokenServer struct {
 	srv    *Server
-	token  types.Secret
+	token  secrets.Secret
 	cancel context.CancelFunc
 	done   chan struct{} // closed once the background Serve has fully shut down
 }
@@ -43,7 +43,7 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 	if _, err := rand.Read(raw); err != nil {
 		return nil, fmt.Errorf("httpx: mint token: %w", err)
 	}
-	t := &TokenServer{srv: s, token: types.NewSecret(hex.EncodeToString(raw)), done: make(chan struct{})}
+	t := &TokenServer{srv: s, token: secrets.New(hex.EncodeToString(raw)), done: make(chan struct{})}
 	// The per-run token reads its one page's data and nothing more.
 	verify := SingleTokenVerifier(func() (string, error) { return t.token.Reveal(), nil }, job.AccessViewer)
 	need := job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}

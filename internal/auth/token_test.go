@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -97,7 +98,7 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 	// A valid store token copied into the operator file is refused too: its kind is wrong.
 	stored, err := mintSecret(job.KindStored)
 	require.NoError(t, err)
-	_, err = SaveOperator(types.NewSecret(stored))
+	_, err = SaveOperator(secrets.New(stored))
 	require.NoError(t, err)
 	_, err = LoadOperator()
 	assert.ErrorIs(t, err, types.OperatorTokenFormat)
@@ -165,7 +166,7 @@ func (s *TokenSuite) TestSaveNewOperatorRefusesOverwrite() {
 	first, _ := GenerateOperator()
 	_, err := SaveNewOperator(first)
 	require.NoError(t, err)
-	_, err = SaveNewOperator(types.NewSecret("other"))
+	_, err = SaveNewOperator(secrets.New("other"))
 	assert.ErrorIs(t, err, os.ErrExist)
 	got, _ := LoadOperator()
 	assert.Equal(t, first, got, "token clobbered")

@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -152,7 +153,7 @@ type Server struct {
 	svc  *service
 	http *http.Server
 	// token is the secret every request must carry; see [TokenEnv].
-	token types.Secret
+	token secrets.Secret
 	// peerChecked is whether requests pass the peer-uid guard; see Server.
 	peerChecked bool
 	// extra is what Mount installed for the paths outside /proc/, nil for none.
@@ -276,7 +277,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	srv := &Server{
 		ep:          ep,
 		svc:         svc,
-		token:       types.NewSecret(hex.EncodeToString(secret)),
+		token:       secrets.New(hex.EncodeToString(secret)),
 		peerChecked: httpx.PeerCredentialsSupported(),
 		cancel:      cancel,
 		done:        make(chan struct{}),

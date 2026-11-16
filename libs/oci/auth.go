@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // challenge is what a registry's unauthenticated /v2/ asks for, per the distribution
@@ -65,7 +65,7 @@ func (c *Client) authorize(ctx context.Context, ref Reference, scope string) (st
 		}
 		c.mu.Lock()
 		if c.tokens == nil {
-			c.tokens = map[tokenKey]types.Secret{}
+			c.tokens = map[tokenKey]secrets.Secret{}
 		}
 		c.tokens[key] = tok
 		c.mu.Unlock()
@@ -188,10 +188,10 @@ func parseChallenge(h string) (string, map[string]string) {
 
 // fetchToken asks key's realm for a token, with the client's credentials when it has
 // any.
-func (c *Client) fetchToken(ctx context.Context, key tokenKey) (types.Secret, error) {
+func (c *Client) fetchToken(ctx context.Context, key tokenKey) (secrets.Secret, error) {
 	u, err := url.Parse(key.realm)
 	if err != nil {
-		return types.Secret{}, err
+		return secrets.Secret{}, err
 	}
 	q := u.Query()
 	if key.service != "" {
@@ -201,29 +201,29 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (types.Secret, er
 	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return types.Secret{}, err
+		return secrets.Secret{}, err
 	}
 	if !c.Credentials.isZero() {
 		req.SetBasicAuth(c.Credentials.Username, c.Credentials.Password.Reveal())
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return types.Secret{}, err
+		return secrets.Secret{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return types.Secret{}, statusError(resp)
+		return secrets.Secret{}, statusError(resp)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
 	if err != nil {
-		return types.Secret{}, err
+		return secrets.Secret{}, err
 	}
 	var body struct {
 		Token       issuedToken `json:"token"`
 		AccessToken issuedToken `json:"access_token"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
-		return types.Secret{}, err
+		return secrets.Secret{}, err
 	}
 	if !body.Token.IsZero() {
 		return body.Token.Secret, nil
@@ -231,16 +231,16 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (types.Secret, er
 	if !body.AccessToken.IsZero() {
 		return body.AccessToken.Secret, nil
 	}
-	return types.Secret{}, errors.New("the realm returned no token")
+	return secrets.Secret{}, errors.New("the realm returned no token")
 }
 
-// issuedToken decodes a token reply member straight into a [types.Secret], which has no
+// issuedToken decodes a token reply member straight into a [secrets.Secret], which has no
 // decoder of its own so that plaintext cannot become one by accident. This is the one
 // place a registry hands magus a bearer, and it is wrapped before anything can print it.
-type issuedToken struct{ types.Secret }
+type issuedToken struct{ secrets.Secret }
 
 func (t *issuedToken) UnmarshalText(b []byte) error {
-	t.Secret = types.NewSecret(string(b))
+	t.Secret = secrets.New(string(b))
 	return nil
 }
 

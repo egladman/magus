@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,7 +26,7 @@ type exchangeRequest struct {
 // exchangeResponse holds the redeemed token as a Secret until MarshalJSON writes it to the
 // wire, the one place the exchange hands it out.
 type exchangeResponse struct {
-	token   types.Secret
+	token   secrets.Secret
 	expires time.Time
 }
 
@@ -76,14 +77,14 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 	})
 }
 
-func redeem(code string) (types.Secret, auth.Token, error) {
+func redeem(code string) (secrets.Secret, auth.Token, error) {
 	dir, err := auth.StoreDir()
 	if err != nil {
-		return types.Secret{}, auth.Token{}, err
+		return secrets.Secret{}, auth.Token{}, err
 	}
 	store, err := auth.LoadStore(dir)
 	if err != nil {
-		return types.Secret{}, auth.Token{}, err
+		return secrets.Secret{}, auth.Token{}, err
 	}
 	return store.Redeem(code)
 }

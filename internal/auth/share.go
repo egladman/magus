@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,20 +38,20 @@ type ShareToken struct {
 // the link. A share link holds [job.AccessViewer]. It refuses a minter whose grant does not
 // include that (ErrExceedsGrant, coded GrantInsufficient) and a ttl outside [MinShareTTL,
 // MaxShareTTL] (ErrShareLifetime, coded TokenLifetimeOutOfRange).
-func MintShare(minter job.Access, ttl time.Duration) (secret types.Secret, tok ShareToken, err error) {
+func MintShare(minter job.Access, ttl time.Duration) (secret secrets.Secret, tok ShareToken, err error) {
 	if !job.AccessViewer.Within(minter) {
-		return types.Secret{}, ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
+		return secrets.Secret{}, ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
 			"auth: a share link needs %s, the minter holds %s", job.AccessViewer, grantOrNothing(minter))
 	}
 	if ttl < MinShareTTL || ttl > MaxShareTTL {
-		return types.Secret{}, ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
+		return secrets.Secret{}, ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
 			"auth: a share link lives between 1 minute and 24 hours; asked for %s", ttl)
 	}
 	plain, err := mintSecret(job.KindShare)
 	if err != nil {
-		return types.Secret{}, ShareToken{}, err
+		return secrets.Secret{}, ShareToken{}, err
 	}
-	return types.NewSecret(plain), ShareToken{SHA256: digest(plain), Expires: time.Now().Add(ttl).UTC()}, nil
+	return secrets.New(plain), ShareToken{SHA256: digest(plain), Expires: time.Now().Add(ttl).UTC()}, nil
 }
 
 // Expired reports whether now is past the token's expiry.

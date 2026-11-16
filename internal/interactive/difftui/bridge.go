@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types/diff"
 )
 
@@ -35,7 +35,7 @@ import (
 // waited on, and drained in full at close.
 type Bridge struct {
 	addr    string
-	token   types.Secret
+	token   secrets.Secret
 	tokenID string // revoked at close; empty when the bridge minted no record
 	tokens  Tokens
 	session *diff.Review

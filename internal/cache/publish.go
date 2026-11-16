@@ -17,7 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -106,7 +106,7 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 	pr, pw := io.Pipe()
 	errCh := make(chan error, 1)
 	go func() {
-		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, secret.Redact(ctx, meta), bundleOutputName, secret.Redact(ctx, data))
+		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, secrets.Redact(ctx, meta), bundleOutputName, secrets.Redact(ctx, data))
 		_ = pw.CloseWithError(err)
 		errCh <- err
 	}()
@@ -330,7 +330,7 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 		return
 	}
 	if meta, err := json.Marshal(b.Descriptor); err == nil {
-		_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secret.Redact(ctx, meta), 0o644)
+		_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secrets.Redact(ctx, meta), 0o644)
 	}
 	if len(b.KeyInputs) > 0 {
 		// Already masked and redacted by the publisher; PersistKeyInputs is idempotent

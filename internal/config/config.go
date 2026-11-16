@@ -1220,7 +1220,7 @@ func Defaults() Config {
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
-		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
+		// Kept in step with secrets.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
 		Secret: Secret{
 			Interactive: 60 * time.Second, // long enough to find your phone for a biometric

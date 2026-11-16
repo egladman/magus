@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -118,7 +118,7 @@ func MaskKeyInputs(ctx context.Context, lines []string) []string {
 func RedactKeyInputs(ctx context.Context, lines []string) []string {
 	out := make([]string, len(lines))
 	for i, line := range lines {
-		out[i] = secret.RedactString(ctx, line)
+		out[i] = secrets.RedactString(ctx, line)
 	}
 	return out
 }

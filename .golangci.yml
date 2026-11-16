@@ -372,7 +372,6 @@ linters:
             - {file: std/fs.go, reason: staged}
             - {file: std/magus.go, reason: staged}
             - {file: symbol.go, reason: staged}
-            - {file: types/secret.go, reason: staged}
             - {file: watchdog.go, reason: staged}
 
       secretfields:
@@ -384,7 +383,7 @@ linters:
           # A field that only refers to a secret says so in its name (PasswordRef).
           words: [Password, Passwd, Secret, Token, Tokens, Credential, APIKey, Bearer, SigningKey,
                   PrivateKey, HMAC]
-          hint: hold it as types.Secret, which masks every rendering and reveals only by name
+          hint: hold it as secrets.Secret (libs/secrets), which masks every rendering and reveals only by name
 
       # Results go to stdout through the output emitters, help to stderr when asked,
       # and every other stderr line is a slog record, so -q, -s, why folding, -o jsonl

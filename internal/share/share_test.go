@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -489,7 +490,7 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	// A token that dies in 150ms exercises the timeout teardown path; the listener's lifetime is
 	// the token's, not a second clock.
 	m := newTestManager(t, ctx)
-	m.mint = func(minter job.Access, ttl time.Duration) (types.Secret, auth.ShareToken, error) {
+	m.mint = func(minter job.Access, ttl time.Duration) (secrets.Secret, auth.ShareToken, error) {
 		secret, tok, err := auth.MintShare(minter, ttl)
 		tok.Expires = time.Now().Add(150 * time.Millisecond)
 		return secret, tok, err

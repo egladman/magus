@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/log/quiet"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/stretchr/testify/assert"
@@ -804,9 +804,9 @@ func TestRemoteSuffix(t *testing.T) {
 // the output tap nor journal.Emit's redaction covered it. Redacting in printf covers
 // every record kind this handler will ever render rather than just run.exec.
 func TestPrettyHandlerRedactsSecrets(t *testing.T) {
-	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	ctx := secrets.ContextWithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_never_echo_me")
-	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
+	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
 	require.NoError(t, err)
 
 	var sink bytes.Buffer

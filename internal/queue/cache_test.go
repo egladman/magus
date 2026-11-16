@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
-	magustypes "github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // upstreamCall is one request the recording cache service received.
@@ -52,7 +52,7 @@ func recordingCacheService(t *testing.T) (*httptest.Server, func() []upstreamCal
 
 func startProxy(t *testing.T, upstream string, log *HookLog) *CacheReadProxy {
 	t.Helper()
-	p, err := StartCacheReadProxy(upstream+"/", magustypes.NewSecret("real-runtime-token"), log)
+	p, err := StartCacheReadProxy(upstream+"/", secrets.New("real-runtime-token"), log)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 	return p
@@ -131,9 +131,9 @@ func TestCacheReadProxyRefusesEveryWriteAndAnythingUnknown(t *testing.T) {
 }
 
 func TestStartCacheReadProxyNeedsTheRunnersCredentials(t *testing.T) {
-	_, err := StartCacheReadProxy("", magustypes.NewSecret("t"), nil)
+	_, err := StartCacheReadProxy("", secrets.New("t"), nil)
 	require.Error(t, err)
-	_, err = StartCacheReadProxy("https://results.example/", magustypes.Secret{}, nil)
+	_, err = StartCacheReadProxy("https://results.example/", secrets.Secret{}, nil)
 	require.Error(t, err)
 }
 

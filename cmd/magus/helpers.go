@@ -20,10 +20,12 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -338,11 +340,13 @@ func (s *stringList) Set(v string) error {
 
 // cliOptions are what every workspace the CLI opens is given: this process's environment,
 // stderr and command line, which a workspace the library opens reads none of unless
-// given, and the reference spawn rule, since a workspace has no default one.
+// given, the reference spawn rule, since a workspace has no default one, and the opener
+// for a spell-backed secret provider, which needs the Buzz VM the library does not link.
 func cliOptions() []magus.Option {
 	return []magus.Option{
 		magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
 		magus.WithSpawnRule(tier.Ceiling),
+		magus.WithSecrets(secrets.WithOpener(bindings.SecretOpener)),
 	}
 }
 

@@ -17,13 +17,13 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -209,7 +209,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// magusfile asked for 1Password and got whatever $VAR happened to hold. That is
 		// the wrong-credential failure memoKey is provider-keyed to prevent, arriving
 		// through a different door, and it would be invisible.
-		r := secret.ResolverFromContext(runCtx)
+		r := secrets.ResolverFromContext(runCtx)
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: no secret resolver on this run`)
 		}
@@ -229,7 +229,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// default. Reaching for it to find the resolver fails loudly rather than
 		// resolving against nothing.
 		ref := args[0].AsString()
-		r := secret.ResolverFromContext(runCtx)
+		r := secrets.ResolverFromContext(runCtx)
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.read: no secret resolver on this run`)
 		}
@@ -237,9 +237,9 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		// Audited HERE rather than inside secret.Read, for two reasons. The engine
-		// reason: internal/journal imports internal/secret for redaction, so emitting
-		// from there would be an import cycle. The better reason: this binding IS the
+		// Audited HERE rather than inside secrets.Resolver.Read, for two reasons. The
+		// engine reason: libs/secrets knows nothing of magus's journal, and must not.
+		// The better reason: this binding IS the
 		// boundary worth auditing: it is the one place a magusfile reaches for a
 		// credential, which is the act an audit trail exists to record.
 		//
@@ -276,7 +276,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		r := secret.ResolverFromContext(ctx)
+		r := secrets.ResolverFromContext(ctx)
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.endpoint: no secret resolver on this run`)
 		}
@@ -284,7 +284,16 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// also the correct LIFETIME: a target's dispatch context is cancelled when the
 		// run ends, not when this call returns, so the forwarder outlives the magusfile
 		// asking for its URL and dies with the run that asked.
-		url, err := r.OpenEndpoint(ctx, g)
+		//
+		// Scoped to the run's invocation id, so the token authorizes nothing in another
+		// run. Preload (where a magusfile's TOP LEVEL is evaluated, and which `magus ls`,
+		// `describe` and `graph` reach) has none, and an endpoint opened there would bind
+		// a forwarder for the whole process life, so it is refused here by name.
+		run := journal.InvocationIDFromContext(ctx)
+		if run == "" {
+			return vm.Null, fmt.Errorf(`magus\secret.endpoint: secret grant %q: an endpoint belongs to a run, and this call is outside one, open it inside a target body rather than at the magusfile's top level, where it would outlive every run that could use it`, g.Ref)
+		}
+		url, err := r.OpenEndpoint(ctx, run, g)
 		if err != nil {
 			return vm.Null, fmt.Errorf(`magus\secret.endpoint: %w`, err)
 		}
@@ -314,7 +323,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 // and must not be resolved in order to log it: that would undo the laziness the whole
 // interaction policy rests on, and put a credential one formatting mistake from a
 // durable append-only file.
-func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action string) {
+func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) {
 	base := trail.BaseFromContext(ctx)
 	if base == "" {
 		return
@@ -348,7 +357,7 @@ func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action stri
 // `host = 42` as "host is required" pointed at the wrong mistake, and `prefix = 42`
 // was worse than misleading: Normalize never inspects prefix, so it silently became ""
 // and the credential went out with no "Bearer " in front of it.
-func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
+func secretGrantArg(method string, args []vm.Value) (secrets.Grant, error) {
 	// MapView, not IsMap. A magusfile and a spell both declare `object SecretGrant {...}`
 	// and pass an INSTANCE, which is tagObject and NOT tagMap, so an IsMap check rejected
 	// the documented spelling outright. Nothing caught it because every test built the Go
@@ -358,11 +367,11 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 	// Length first: indexing args[0] to build the view before checking it exists
 	// panics on a no-argument call instead of reporting the error below.
 	if len(args) == 0 {
-		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+		return secrets.Grant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	fields, viewOK := args[0].MapView()
 	if !viewOK {
-		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+		return secrets.Grant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	var bad error
 	field := func(name string) string {
@@ -378,18 +387,19 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 		}
 		return v.AsString()
 	}
-	g := types.SecretGrant{
+	g := secrets.Grant{
 		Ref:    field("ref"),
 		Host:   field("host"),
 		Header: field("header"),
 		Prefix: field("prefix"),
 	}
 	if bad != nil {
-		return types.SecretGrant{}, bad
+		return secrets.Grant{}, bad
 	}
 	g, err := g.Normalize()
 	if err != nil {
-		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: %w`, method, err)
+		// Normalize refuses only with a *secrets.GrantError; magus gives every one MGS1027.
+		return secrets.Grant{}, fmt.Errorf(`magus\secret.%s: %w`, method, types.WrapDiagnostic(types.SecretGrantInvalid, err, "%s", err.Error()))
 	}
 	return g, nil
 }

@@ -9,7 +9,7 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
     final remotetest = magus\graph().dir("internal/cache/remotetest");
     final changeset = magus\graph().dir("internal/changeset");
     final httpx = magus\graph().dir("internal/httpx");
-    final secret = magus\graph().dir("internal/secret");
+    final secret = magus\graph().dir("libs/secrets");
     final jobs = magus\graph().dir("internal/job");
     final journal = magus\graph().dir("internal/journal");
     final spawn = magus\graph().dir("internal/proc/spawn");

@@ -20,8 +20,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
 )
 
@@ -76,7 +76,7 @@ func (s *heldDiffSession) unblock() { s.releaseOnce.Do(func() { close(s.release)
 // bridge is a Bridge pointed at the held session, skipping the attach round trip the queue has no
 // part in.
 func (s *heldDiffSession) bridge() *Bridge {
-	b := &Bridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: types.NewSecret("held")}
+	b := &Bridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: secrets.New("held")}
 	b.start()
 	return b
 }

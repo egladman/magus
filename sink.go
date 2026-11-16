@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
@@ -356,7 +356,7 @@ func (t *plainTerminal) Handle(ctx context.Context, r slog.Record) error {
 func (t *plainTerminal) Print(ctx context.Context, text string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	_, err := io.WriteString(t.w, secret.RedactString(ctx, text))
+	_, err := io.WriteString(t.w, secrets.RedactString(ctx, text))
 	return err
 }
 

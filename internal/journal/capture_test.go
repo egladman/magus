@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestFileHandlerAppendsJSONL writes events through the file handler and reads them back as
@@ -220,4 +222,54 @@ func BenchmarkEmitResultFile(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		Emit(ctx, ev)
 	}
+}
+
+// SecretResolverSuite swaps slog's default for a JSON sink, so it must not run in
+// parallel with anything else that logs through the default.
+type SecretResolverSuite struct {
+	suite.Suite
+	sink bytes.Buffer
+	prev *slog.Logger
+}
+
+func TestSecretResolver(t *testing.T) { suite.Run(t, new(SecretResolverSuite)) }
+
+func (s *SecretResolverSuite) SetupTest() {
+	s.sink.Reset()
+	s.prev = slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&s.sink, &slog.HandlerOptions{Level: slog.LevelDebug})))
+}
+
+func (s *SecretResolverSuite) TearDownTest() { slog.SetDefault(s.prev) }
+
+// Declining to redact a short value is correct; declining in SILENCE would leave the
+// caller treating it as protected. MGS2011 is the whole mitigation available.
+func (s *SecretResolverSuite) TestAValueTooShortToMaskLogsMGS2011() {
+	s.T().Setenv("MAGUS_TEST_TINY", "ab")
+	_, err := NewSecretResolver().Read(s.T().Context(), "MAGUS_TEST_TINY")
+	s.Require().NoError(err, "the read succeeds; only the protection is declined")
+
+	out := s.sink.String()
+	s.Contains(out, string(types.SecretTooShortToMask), "the notice names its code")
+	s.Contains(out, "MAGUS_TEST_TINY", "and the reference it applies to")
+	s.Contains(out, "NOT redacted", "and states plainly that the value is unprotected")
+}
+
+// A long enough value must NOT trip the notice, or it becomes noise every run.
+func (s *SecretResolverSuite) TestAMaskableValueLogsNothing() {
+	s.T().Setenv("MAGUS_TEST_LONG_ENOUGH", "long-enough-token")
+	_, err := NewSecretResolver().Read(s.T().Context(), "MAGUS_TEST_LONG_ENOUGH")
+	s.Require().NoError(err)
+	s.NotContains(s.sink.String(), string(types.SecretTooShortToMask))
+}
+
+// The forwarder's records reach whatever default is installed when they are logged,
+// including one installed after the resolver was built.
+func (s *SecretResolverSuite) TestTheDefaultHandlerFollowsALaterDefault() {
+	h := defaultHandler{}
+	var later bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&later, nil)))
+	s.Require().NoError(h.Handle(s.T().Context(), slog.NewRecord(time.Now(), slog.LevelWarn, "secret.endpoint.proxy", 0)))
+	s.Contains(later.String(), "secret.endpoint.proxy")
+	s.Empty(s.sink.String())
 }

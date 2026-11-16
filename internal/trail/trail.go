@@ -32,8 +32,8 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -324,7 +324,7 @@ func redactFailures(ctx context.Context, in []RuleFailure) []RuleFailure {
 	}
 	out := make([]RuleFailure, len(in))
 	for i, f := range in {
-		out[i] = RuleFailure{Side: f.Side, Error: secret.RedactString(ctx, f.Error)}
+		out[i] = RuleFailure{Side: f.Side, Error: secrets.RedactString(ctx, f.Error)}
 	}
 	return out
 }
@@ -346,10 +346,10 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	// A hook observes a shell command line, which is exactly where a credential passed as an
 	// argument shows up. Redacted here rather than in the blob alone, because these fields also
 	// reach Action and Preview on the event line.
-	command.Command = secret.RedactString(ctx, command.Command)
-	command.Path = secret.RedactString(ctx, command.Path)
-	command.Reason = secret.RedactString(ctx, command.Reason)
-	command.Context = secret.RedactString(ctx, command.Context)
+	command.Command = secrets.RedactString(ctx, command.Command)
+	command.Path = secrets.RedactString(ctx, command.Path)
+	command.Reason = secrets.RedactString(ctx, command.Reason)
+	command.Context = secrets.RedactString(ctx, command.Context)
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	request, _ := json.Marshal(agentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
@@ -529,8 +529,8 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// connector token into a sub-agent's instructions is exactly the lease worth auditing
 	// WITHOUT persisting the token. Redacted before the marker scan so a redaction can never
 	// invent or destroy a lease id after the fact.
-	spawn.Context = secret.RedactString(ctx, spawn.Context)
-	spawn.Child = secret.RedactString(ctx, spawn.Child)
+	spawn.Context = secrets.RedactString(ctx, spawn.Context)
+	spawn.Child = secrets.RedactString(ctx, spawn.Child)
 	// Clamped like the magus.spawner claim it sits beside (see MaxSpawnerLen): a model
 	// name is short, and an unbounded claim is a cost every later read of the
 	// repository would pay for one bad payload.
@@ -681,7 +681,7 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 	// Redacted BEFORE the ref is computed, so the content address names what is actually
 	// stored. Blobs are the highest-risk data in this package: an MCP request/response pair
 	// is a whole tool payload, persisted verbatim, and nothing else on the path scrubs it.
-	data = secret.Redact(ctx, data)
+	data = secrets.Redact(ctx, data)
 	size = int64(len(data))
 	if base == "" || len(data) == 0 || !validPrefix(prefix) {
 		return "", size
@@ -1051,14 +1051,14 @@ func ValidRef(ref string) bool {
 // Lease and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing, the same reasoning that leaves slog
-// attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a
+// attribute KEYS alone in libs/secrets. Lease is the one of those derived from free text (a
 // lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
 // which is why every channel that can stamp one runs it through [job.ValidID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
-	e.Action = secret.RedactString(ctx, e.Action)
-	e.Error = secret.RedactString(ctx, e.Error)
-	e.Preview = secret.RedactString(ctx, e.Preview)
+	e.Action = secrets.RedactString(ctx, e.Action)
+	e.Error = secrets.RedactString(ctx, e.Error)
+	e.Preview = secrets.RedactString(ctx, e.Preview)
 	return e
 }
 

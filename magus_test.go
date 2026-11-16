@@ -11,7 +11,11 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/diff"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1679,4 +1683,58 @@ magus\project({
 	assert.ErrorContains(t, err, "magus: a: ")
 	assert.ErrorContains(t, err, "magus: b: ")
 	assert.NotContains(t, err.Error(), "per-target policy")
+}
+
+// revealCeiling is how many Reveal calls the root module's production code makes. Each is
+// a place a credential stops protecting itself. Lower it when a call goes away; raising it
+// is a review question: could the Secret travel further before it is revealed?
+//
+// 28: PolicyStore.Seal in internal/interp/runtime.go keys an HMAC, and crypto/hmac takes
+// its key only as bytes. Calls inside libs/secrets are its own module's and not counted.
+const revealCeiling = 28
+
+// TestRevealCallsStayCapped counts Reveal calls in the root module's non-test files.
+func (s *magusSuite) TestRevealCallsStayCapped() {
+	var sites []string
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != "." && (strings.HasPrefix(name, ".") || name == "testdata" || name == "node_modules" || isModule(path)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) != 0 {
+				return true
+			}
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Reveal" {
+				sites = append(sites, fset.Position(call.Pos()).String())
+			}
+			return true
+		})
+		return nil
+	})
+	s.Require().NoError(err)
+	s.Require().LessOrEqual(len(sites), revealCeiling,
+		"production Reveal calls are over the ceiling; keep the Secret until the line that hands it out:\n%s", strings.Join(sites, "\n"))
+	s.Require().Equal(revealCeiling, len(sites), "production Reveal calls are under the ceiling: lower revealCeiling")
+}
+
+// isModule reports whether dir holds its own go.mod, which makes it another module.
+func isModule(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "go.mod"))
+	return err == nil
 }

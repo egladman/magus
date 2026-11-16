@@ -40,7 +40,6 @@ import (
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/sys/mem"
@@ -2846,10 +2845,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// So a magusfile binding can record a governance event (a credential granted, an
 	// endpoint opened) without the trail path being threaded through the VM.
 	ctx = trail.ContextWithBase(ctx, m.CacheDir())
-	// Scopes a credential endpoint to THIS run. internal/secret cannot read the
-	// invocation id itself (internal/journal imports it for redaction, so that would be
-	// a cycle), so the id is threaded from here, where both are already in scope.
-	ctx = secret.ContextWithInvocationID(ctx, journal.InvocationIDFromContext(ctx))
 	ctx = types.WithWorkspace(ctx, m.internals())
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run

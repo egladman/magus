@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -25,9 +26,10 @@ type Option = workspace.Option
 // beside what only this package reads.
 type options struct {
 	workspace.Load
-	spawnRule SpawnRule
-	stepSpecs []step.Spec
-	stepRules []StepRule
+	spawnRule   SpawnRule
+	stepSpecs   []step.Spec
+	stepRules   []StepRule
+	secretsOpts []secrets.Option
 }
 
 // sdkOption sets what only this package reads. On a bare Load it records
@@ -114,6 +116,14 @@ type SpawnRule func(parent, child tier.Tier) error
 // tier.Ceiling, the reference rule the CLI passes.
 func WithSpawnRule(rule SpawnRule) Option {
 	return sdkOption("WithSpawnRule", func(o *options) { o.spawnRule = rule })
+}
+
+// WithSecrets adds options to the resolver Open builds for the workspace's secrets, after
+// the timeouts magus.yaml sets. A named secret provider resolves only through an opener
+// given here (secrets.WithOpener); without one, a magusfile that selects a provider gets
+// an error on its first read. Repeated calls accumulate.
+func WithSecrets(opts ...secrets.Option) Option {
+	return sdkOption("WithSecrets", func(o *options) { o.secretsOpts = append(o.secretsOpts, opts...) })
 }
 
 // SpawnCeiling is the workspace's approved spawn-above-parent-tier setting,

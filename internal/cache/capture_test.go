@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,9 +112,9 @@ func TestLineTapSplitsLinesAcrossWrites(t *testing.T) {
 //
 // The resolver rides on the emitter ctx, so this needs no global cleanup.
 func TestLineTapRedactsSecrets(t *testing.T) {
-	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	ctx := secrets.ContextWithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_CAPTURE_TOKEN", "ghp_do_not_log_me")
-	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_CAPTURE_TOKEN")
+	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_CAPTURE_TOKEN")
 	require.NoError(t, err)
 
 	var sink strings.Builder

@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/notify"
 	"github.com/egladman/magus/libs/termkit/progress"
@@ -243,7 +243,7 @@ func displayLogHandler(opts *slog.HandlerOptions) slog.Handler {
 	// text on stderr while a caller parses this run as JSONL. They land as run.notice
 	// records on the stderr encoder a -o jsonl sink writes its notices through.
 	if global.output == string(outputJSONL) {
-		return secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), opts.Level.Level()))
+		return secrets.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), opts.Level.Level()))
 	}
 	h := cache.NewLogHandler(os.Stderr, globalCfg.Log.Format, opts)
 	if ph, ok := h.(*cache.PrettyHandler); ok {

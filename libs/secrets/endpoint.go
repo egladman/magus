@@ -1,10 +1,11 @@
-package secret
+package secrets
 
 import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -14,33 +15,28 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/egladman/magus/types"
 )
 
-// The subprocess half of a grant. [Resolver.ApplyGrants] covers requests magus
-// makes itself, where magus owns the HTTP client and can attach a credential with no
-// ceremony. This file covers requests a CHILD makes, where it does not.
+// The subprocess half of a grant: requests a CHILD makes, where the caller does not own
+// the HTTP client.
 //
-// The mechanism is deliberately NOT interception. magus does not terminate anyone
-// else's TLS, does not generate a CA, and does not ask you to install one. Instead
-// magus serves plain HTTP on a loopback socket it owns and the magusfile hands the
-// child that URL through the env var the tool already reads. magus then makes an
-// ordinary, fully-verified TLS connection upstream itself.
+// The mechanism is deliberately NOT interception. Nothing here terminates anyone else's
+// TLS, generates a CA, or asks for one to be installed. The forwarder serves plain HTTP on
+// a loopback socket it owns, the caller hands the child that URL through whatever setting
+// the tool already reads, and the forwarder makes an ordinary, fully verified TLS
+// connection upstream itself.
 //
-// That is a threat-model decision, not a convenience one. A CA in your trust store is
-// a universal interception capability, and the adversary it would supposedly defend
-// against (a process already executing as you) can read the CA, read magus's
-// memory, or hook the TLS library anyway. Installing one to contain a process that is
-// already inside the boundary it protects makes the machine weaker, not safer. See
-// docs/concepts/secrets.md.
+// That is a threat-model decision, not a convenience one. A CA in the trust store is a
+// universal interception capability, and the adversary it would supposedly defend against
+// (a process already executing as the user) can read the CA, read the caller's memory, or
+// hook the TLS library anyway.
 //
-// There is no standing service to install or run. magus already launches the child, so
-// the listener binds inside the run and closes when the run's context ends.
+// There is no standing service: the listener binds inside the caller's scope and closes
+// when the context it was opened with ends.
 //
-// A child that ignores the endpoint and dials the real API directly is not a bypass
-// worth defending against: it arrives with no credential and gets a 401. That
-// fail-closed property is why magus needs no egress enforcement here.
+// A child that ignores the endpoint and dials the real API directly arrives with no
+// credential and gets a 401. That fail-closed property is why no egress enforcement is
+// needed here.
 
 // endpointListenAddr is the only interface a forwarder binds. Loopback, always: the
 // socket carries plaintext HTTP with a credential attached on the way out, so a
@@ -49,7 +45,7 @@ const endpointListenAddr = "127.0.0.1:0"
 
 // endpointShutdownGrace bounds how long a forwarder waits for in-flight requests when
 // its context ends. Short: the run is over, and a child still talking to it is already
-// past whatever magus was orchestrating.
+// past whatever its scope was doing.
 const endpointShutdownGrace = 2 * time.Second
 
 // endpointIdleTimeout closes a kept-alive connection nobody is using. Without it any
@@ -74,16 +70,14 @@ const endpointResponseHeaderTimeout = 60 * time.Second
 //   - ResponseHeaderTimeout, because the default waits forever for the first byte, so a
 //     stalled upstream would pin a goroutine and a connection indefinitely.
 //   - Proxy is nil, so HTTPS_PROXY / ALL_PROXY cannot reroute a credential-bearing
-//     request. This file's opening argument is that magus makes "an ordinary, fully
-//     verified TLS connection upstream itself", and the whole no-CA position rests on
-//     it. Honoring an ambient proxy variable would undercut exactly that: a CONNECT
+//     request. The whole no-CA position rests on the forwarder making an ordinary,
+//     fully verified TLS connection upstream itself. Honoring an ambient proxy variable would undercut exactly that: a CONNECT
 //     tunnel still protects the body, but the destination is disclosed to the proxy, and
 //     if the proxy's CA is in the trust store the guarantee is gone entirely, which is
 //     the interception this design refuses to perform and should not delegate either.
 //
-// The cost is stated rather than hidden: a workspace that genuinely requires an egress
-// proxy cannot reach the upstream through an endpoint, and should use
-// magus\secret.read instead until magus grows an explicit, per-grant proxy setting.
+// The cost: a caller that genuinely requires an egress proxy cannot reach the upstream
+// through an endpoint, and should read the secret instead.
 func endpointTransport() http.RoundTripper {
 	t, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -95,14 +89,12 @@ func endpointTransport() http.RoundTripper {
 	return c
 }
 
-// forwarder is one running loopback endpoint, belonging to exactly one run.
+// forwarder is one running loopback endpoint, belonging to exactly one scope.
 type forwarder struct {
 	baseURL string
-	// done closes when the owning context ends. Still needed even though the key now
-	// carries the run: a caller OUTSIDE a run (a test, a direct SDK call) has an empty
-	// run id, so several unrelated contexts share that one bucket and a cached entry
-	// there can be dead. Checking it also makes the shutdown/rebind race benign, since
-	// forgetEndpoint runs asynchronously after Shutdown returns.
+	// done closes when the owning context ends. Several contexts can share one scope, so
+	// a cached entry can be dead; checking it also makes the shutdown/rebind race benign,
+	// since forgetEndpoint runs asynchronously after Shutdown returns.
 	done <-chan struct{}
 }
 
@@ -117,41 +109,43 @@ func (f *forwarder) alive() bool {
 }
 
 // endpointKey identifies a forwarder: the WHOLE grant, so two grants differing only by
-// header or prefix get their own endpoint rather than silently sharing one (matching
-// the identity [Resolver.AddGrant] enforces), plus the RUN that opened it.
+// header or prefix get their own endpoint rather than silently sharing one, plus the
+// SCOPE that opened it.
 //
-// The run is part of the key so a token cannot outlive the run that was handed it. Two
-// concurrent runs wanting the same grant get two sockets and two tokens, which costs a
-// file descriptor and buys the property that matters: a token leaked from one run (into
-// a log, a child's argv, a crash dump) authorizes nothing in any other run. It also
-// removes the refcount that sharing required, and with it a whole class of
-// lifetime bug (whose context owns the listener when two runs hold it?).
+// The scope is part of the key so a token cannot outlive the scope that was handed it.
+// Two concurrent scopes wanting the same grant get two sockets and two tokens, which costs
+// a file descriptor and buys the property that matters: a token leaked from one (into a
+// log, a child's argv, a crash dump) authorizes nothing in the other. It also needs no
+// refcount, and so has no question of whose context owns a shared listener.
 type endpointKey struct {
-	invocation string
-	ref        string
-	host       string
-	header     string
-	prefix     string
+	scope  string
+	ref    string
+	host   string
+	header string
+	prefix string
 }
 
-func newEndpointKey(invocation string, g types.SecretGrant) endpointKey {
-	return endpointKey{invocation: invocation, ref: g.Ref, host: g.Host, header: g.Header, prefix: g.Prefix}
+func newEndpointKey(scope string, g Grant) endpointKey {
+	return endpointKey{scope: scope, ref: g.Ref, host: g.Host, header: g.Header, prefix: g.Prefix}
 }
 
-// OpenEndpoint returns the loopback base URL a child should be pointed at so its
-// requests to g.Host carry g's credential, starting the forwarder on first use.
+// ErrNoScope is the error [Resolver.OpenEndpoint] gives when it is handed no scope.
+var ErrNoScope = errors.New("secret endpoint: no scope, so nothing would close it or confine its token")
+
+// OpenEndpoint returns the loopback base URL a child should be pointed at so its requests
+// to g.Host carry g's credential, starting the forwarder on first use. The credential is
+// resolved on each request, never here, so opening one prompts for nothing.
 //
-// Named for what it does. It is not an accessor beside ProviderName/Timeouts: it binds
-// a TCP listener, spawns goroutines and mints a token. "Origin" was also wrong twice
-// over: types.ProjectOrigin already claims that word in a magusfile, and an
-// origin is scheme+host+port by definition while this returns a base URL WITH a path.
+// scope names the unit of work the endpoint belongs to, such as a run's id: it confines
+// the endpoint's token to that scope, and an empty one is refused with [ErrNoScope]. The
+// listener closes when ctx ends, so ctx must end with the scope. Within one scope the
+// endpoint is memoized per grant, and liveness-checked, because a cached entry whose
+// context has ended would hand back a dead URL on a RELEASED port that another local
+// process could then bind.
 //
-// Memoized per grant, so a magusfile naming the same endpoint in three targets binds
-// one socket. The memo is liveness-checked: the Resolver outlives a single run (it is
-// per workspace Open), so a cached entry whose context has ended would otherwise hand
-// back a dead URL on a RELEASED port, and under a local-attacker model another
-// process that then binds that port receives the child's whole request stream.
-func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (string, error) {
+// It binds a TCP listener, starts goroutines and mints a token; it is not an accessor.
+// g is normalized first, so a malformed grant is a *[GrantError].
+func (r *Resolver) OpenEndpoint(ctx context.Context, scope string, g Grant) (string, error) {
 	if r == nil {
 		return "", errNoResolver
 	}
@@ -159,26 +153,10 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 	if err != nil {
 		return "", err
 	}
-	// An endpoint must belong to a RUN, and the run id is what proves it does. Two
-	// things depend on that and neither is optional: the listener shuts down when the
-	// run's context ends, and the key scopes the token so a leak from one run
-	// authorizes nothing in another.
-	//
-	// Gated on the run id rather than on ctx.Done() == nil, which was the first attempt
-	// and does not work: cmd/magus/main.go builds the root context from
-	// cache.WatchInterrupts(context.Background()), so preload (where a magusfile's TOP LEVEL
-	// is evaluated, and which `magus ls`, `describe` and `graph` all reach) has a
-	// perfectly good Done channel and sailed straight through. It would have bound a
-	// credential-forwarding listener with a stable token for the whole process life,
-	// reachable by any local process that ever saw the URL.
-	//
-	// This is the same laziness rule grant() follows, enforced structurally: an endpoint
-	// belongs inside a target body.
-	invocation := InvocationIDFromContext(ctx)
-	if invocation == "" {
-		return "", fmt.Errorf("secret grant %q: an endpoint belongs to a run, and this call is outside one, open it inside a target body rather than at the magusfile's top level, where it would outlive every run that could use it", g.Ref)
+	if scope == "" {
+		return "", fmt.Errorf("secret grant %q: %w", g.Ref, ErrNoScope)
 	}
-	key := newEndpointKey(invocation, g)
+	key := newEndpointKey(scope, g)
 
 	r.endpointMu.Lock()
 	defer r.endpointMu.Unlock()
@@ -187,7 +165,7 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 			return f.baseURL, nil
 		}
 		// Dead, and forgetEndpoint has not swept it yet. Rebind rather than hand back a
-		// URL on a port magus is in the middle of releasing.
+		// URL on a port that is being released.
 		delete(r.endpoints, key)
 	}
 	f, err := r.startForwarder(ctx, key, g)
@@ -206,15 +184,14 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 // The base URL carries a RANDOM PATH TOKEN, and a request that does not present it is
 // refused. Without one, every process on the machine can reach the port and spend the
 // credential: the forwarder would be a local oracle handing out authenticated access
-// to anyone who guessed a port number. The token rides in the URL magus gives the
+// to anyone who guessed a port number. The token rides in the URL the caller gives the
 // child, so a tool that takes a base URL needs no extra wiring to send it.
 //
 // runCtx, NOT the per-request context, is what the handler resolves against. The
-// request context comes from net/http and carries no resolver, no sandbox policy and
-// no journal, so reading through it silently ignored magus.yaml's secret timeouts, ran
-// a spell-backed provider outside the sandbox, and sent every slog record in the read
-// path down the unredacted fast path.
-func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g types.SecretGrant) (*forwarder, error) {
+// request context comes from net/http and carries none of the values the caller put on
+// runCtx, so a provider reading through it would lose them, and every log record in the
+// read path would miss the redacting handler's resolver.
+func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g Grant) (*forwarder, error) {
 	tok, err := endpointToken()
 	if err != nil {
 		return nil, err
@@ -233,15 +210,14 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 	// Redaction is literal substring matching, so a child that logs the request path
 	// alone ("GET /<tok>/v1/models", the ordinary access-log shape) would print the
 	// token in the clear if only the composite URL were registered.
-	r.Register(types.NewSecret(tok))
+	r.Register(New(tok))
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite:      r.rewrite(g, tok),
 		ErrorHandler: endpointErrorHandler(g),
 		// Without this, ReverseProxy logs transport errors through the process-global
-		// log package straight to stderr, outside NewRedactingHandler and outside the
-		// capture tap, the two things that keep a credential out of magus's output.
-		ErrorLog: slogErrorLog(runCtx, "secret.endpoint.proxy"),
+		// log package straight to stderr, past any redacting handler.
+		ErrorLog: r.errorLog(runCtx, "secret.endpoint.proxy"),
 	}
 	proxy.Transport = endpointTransport()
 	if r.endpointTransport != nil {
@@ -261,14 +237,14 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 		// long it may take to finish answering.
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       endpointIdleTimeout,
-		ErrorLog:          slogErrorLog(runCtx, "secret.endpoint.server"),
+		ErrorLog:          r.errorLog(runCtx, "secret.endpoint.server"),
 	}
 	base := fmt.Sprintf("http://127.0.0.1:%d/%s", addr.Port, tok)
 	// The base URL is registered for redaction like a credential, because for the
 	// forwarder that is exactly what it is: presenting the token authorizes an
-	// authenticated request, so a URL reaching a log, a cached output or a knowledge
-	// shard hands any local process the ability to spend the credential.
-	r.Register(types.NewSecret(base))
+	// authenticated request, so a URL reaching anything recorded hands any local process
+	// the ability to spend the credential.
+	r.Register(New(base))
 
 	go func() { _ = srv.Serve(ln) }()
 
@@ -278,9 +254,9 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
 		// Reclaim everything this forwarder added. Eagerly, here, rather than lazily on
-		// the next lookup: a server serving a workspace for days would otherwise
-		// accumulate a dead map entry plus sixteen redaction strings per run, and Redact
-		// scans that set on every captured write.
+		// the next lookup: a long-lived resolver would otherwise accumulate a dead map
+		// entry plus sixteen redaction strings per scope, and Redact scans that set on
+		// every call.
 		//
 		// AFTER Shutdown returns, so in-flight responses are still masked while they
 		// drain. Once the listener is down the token authorizes nothing, so continuing
@@ -288,7 +264,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 		r.forgetEndpoint(key, tok, base)
 	}()
 
-	slog.DebugContext(runCtx, "secret.endpoint.opened",
+	r.log.DebugContext(runCtx, "secret.endpoint.opened",
 		slog.String("ref", g.Ref), slog.String("host", g.Host), slog.Int("port", addr.Port))
 	return &forwarder{baseURL: base, done: runCtx.Done()}, nil
 }
@@ -299,15 +275,14 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 // ReverseProxy strips hop-by-hop headers from its outbound clone BEFORE Rewrite runs,
 // honoring whatever the caller named in Connection, so a local process holding the
 // token could send "Connection: Authorization" and have the proxy remove the
-// credential magus had just set, sending an unauthenticated request upstream. Setting
-// it in Rewrite puts it past that point. Measured: this exact test failed before the
-// move.
+// credential just set, sending an unauthenticated request upstream. Setting it in
+// Rewrite puts it past that point.
 type grantValueKey struct{}
 
 // rewrite builds the ReverseProxy rewrite: retarget the request at the granted
 // host over TLS, strip the token segment, attach the credential, and drop the headers
 // a caller could use to interfere with any of that.
-func (r *Resolver) rewrite(g types.SecretGrant, tok string) func(*httputil.ProxyRequest) {
+func (r *Resolver) rewrite(g Grant, tok string) func(*httputil.ProxyRequest) {
 	return func(pr *httputil.ProxyRequest) {
 		pr.Out.URL.Scheme = "https"
 		pr.Out.URL.Host = g.Host
@@ -317,9 +292,8 @@ func (r *Resolver) rewrite(g types.SecretGrant, tok string) func(*httputil.Proxy
 		pr.Out.Host = g.Host
 
 		// Trim on the ESCAPED path and set both forms. Trimming the decoded Path alone
-		// turned an encoded separator into a real one: "/<tok>/v1/a%2Fb" reached the
-		// upstream as "/v1/a/b", so the proxy silently addressed a different resource
-		// than the child asked for.
+		// would turn an encoded separator into a real one: "/<tok>/v1/a%2Fb" would reach
+		// the upstream as "/v1/a/b", a different resource than the child asked for.
 		escaped := strings.TrimPrefix(pr.In.URL.EscapedPath(), "/"+tok)
 		if escaped == "" {
 			escaped = "/"
@@ -336,7 +310,7 @@ func (r *Resolver) rewrite(g types.SecretGrant, tok string) func(*httputil.Proxy
 
 		// Dropped rather than forwarded: an endpoint is a credential forwarder, and
 		// honoring a caller's connection-control headers only gives a local process
-		// levers over how magus's own upstream request is framed. Losing websocket
+		// levers over how the forwarder's own upstream request is framed. Losing websocket
 		// upgrades through an endpoint is the correct trade.
 		pr.Out.Header.Del("Connection")
 		pr.Out.Header.Del("Upgrade")
@@ -358,23 +332,16 @@ func (r *Resolver) rewrite(g types.SecretGrant, tok string) func(*httputil.Proxy
 // forwards. Resolution happens HERE rather than when the endpoint was opened, so
 // declaring one still prompts for nothing until a child actually sends a request.
 //
-// A header the CHILD already set is OVERWRITTEN, which is the opposite of what
-// ApplyGrants does to a magusfile, and the asymmetry is the point rather than an
-// oversight. The two have different callers:
+// A header the CHILD already set is OVERWRITTEN. The caller here is a third-party SDK:
+// nearly every API library sets its auth header unconditionally from a key it insists on
+// being given, with no supported way to suppress it. Erroring would make the endpoint
+// unusable with the exact clients it exists for, and refusing to overwrite would send the
+// child's dummy key upstream instead of the real one.
 //
-//   - ApplyGrants' caller is the magusfile author. They control the request, so a
-//     collision means they wrote two things that disagree, and erroring tells them.
-//   - This caller is a third-party SDK. openai-python, the Anthropic client and
-//     nearly every API library set their auth header unconditionally from a key
-//     they insist on being given, with no supported way to suppress it. Erroring here
-//     made the endpoint unusable with the exact clients it exists for, and refusing to
-//     overwrite would send the child's dummy key upstream instead of the real one.
-//
-// So the documented pattern is: give the SDK any non-empty placeholder so it stops
-// refusing to start, point it at this endpoint, and magus replaces the header. The
-// child's value is garbage BY CONSTRUCTION, which is what makes overwriting it correct
-// rather than presumptuous.
-func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, tok string, proxy http.Handler) http.Handler {
+// So the pattern is: give the SDK any non-empty placeholder so it stops refusing to start,
+// point it at this endpoint, and the forwarder replaces the header. The child's value is
+// garbage BY CONSTRUCTION, which is what makes overwriting it correct.
+func (r *Resolver) endpointHandler(runCtx context.Context, g Grant, tok string, proxy http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if !loopbackHost(req.Host) {
 			// The listener is loopback-only, so a non-loopback Host means the request
@@ -393,13 +360,12 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 		// runCtx, not req.Context(): see startForwarder.
 		v, err := r.Read(runCtx, g.Ref)
 		if err != nil {
-			// The DETAIL goes to slog, which is redacted; the socket gets a fixed
-			// string. A provider error can embed a spell subprocess's stderr, and on
-			// this path the value was never recorded, so nothing downstream would mask
-			// a credential it happened to quote.
-			slog.ErrorContext(runCtx, "secret.endpoint.resolve_failed",
+			// The DETAIL goes to the logger; the socket gets a fixed string. A provider
+			// error can embed a subprocess's stderr, and on this path the value was never
+			// recorded, so nothing downstream would mask a credential it happened to quote.
+			r.log.ErrorContext(runCtx, "secret.endpoint.resolve_failed",
 				slog.String("ref", g.Ref), slog.String("host", g.Host), slog.Any("err", err))
-			http.Error(w, "magus secret endpoint: could not resolve the granted credential; see the magus log", http.StatusBadGateway)
+			http.Error(w, "secret endpoint: could not resolve the granted credential; see the log", http.StatusBadGateway)
 			return
 		}
 		// Reveal where the credential crosses into the outbound header; see rewrite.
@@ -409,13 +375,11 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 
 // endpointErrorHandler renders an upstream transport failure.
 //
-// The response body is written straight to the socket and is NOT passed through the
-// redaction rail: that covers captured subprocess output, journal text, cache logs
-// and slog records, none of which this is. So it deliberately carries only the host
+// The response body is written straight to the socket and is NOT redacted. So it deliberately carries only the host
 // and the error, and must never be extended to echo a header or a request.
-func endpointErrorHandler(g types.SecretGrant) func(http.ResponseWriter, *http.Request, error) {
+func endpointErrorHandler(g Grant) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(w, fmt.Sprintf("magus secret endpoint: upstream %s: %s", g.Host, err.Error()), http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("secret endpoint: upstream %s: %s", g.Host, err.Error()), http.StatusBadGateway)
 	}
 }
 
@@ -451,25 +415,26 @@ func loopbackHost(host string) bool {
 func endpointToken() (string, error) {
 	b := make([]byte, endpointTokenLen)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("secret: generate endpoint token: %w", err)
+		return "", fmt.Errorf("secret endpoint: generate token: %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }
 
-// slogErrorLog adapts net/http's *log.Logger error sink onto slog, so a proxy or
-// server error travels the same path every other magus log line does (including the
-// redacting handler) instead of being written raw to stderr.
-func slogErrorLog(ctx context.Context, msg string) *log.Logger {
-	return log.New(slogWriter{ctx: ctx, msg: msg}, "", 0)
+// errorLog adapts net/http's *log.Logger error sink onto the resolver's logger, so a
+// proxy or server error reaches the same handler (and its redaction) instead of being
+// written raw to stderr.
+func (r *Resolver) errorLog(ctx context.Context, msg string) *log.Logger {
+	return log.New(logWriter{ctx: ctx, log: r.log, msg: msg}, "", 0)
 }
 
-type slogWriter struct {
-	ctx context.Context //nolint:containedctx // class b: io.Writer has no ctx parameter; no benchmark or optimization: comment (6b3c7db4d)
+type logWriter struct {
+	ctx context.Context //nolint:containedctx // io.Writer has no ctx parameter
+	log *slog.Logger
 	msg string
 }
 
-func (w slogWriter) Write(p []byte) (int, error) {
-	slog.WarnContext(w.ctx, w.msg, slog.String("detail", strings.TrimRight(string(p), "\n")))
+func (w logWriter) Write(p []byte) (int, error) {
+	w.log.WarnContext(w.ctx, w.msg, slog.String("detail", strings.TrimRight(string(p), "\n")))
 	return len(p), nil
 }
 
@@ -488,6 +453,6 @@ func (r *Resolver) forgetEndpoint(key endpointKey, tok, base string) {
 	}
 	r.endpointMu.Unlock()
 
-	r.unregisterRedactable(types.NewSecret(tok))
-	r.unregisterRedactable(types.NewSecret(base))
+	r.unregisterRedactable(New(tok))
+	r.unregisterRedactable(New(base))
 }

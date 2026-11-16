@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -503,7 +503,7 @@ func TestImagePasswordNeverAppearsInAnErrorOrALog(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	creds := Credentials{Username: "bot", Password: types.NewSecret(imageTestPassword)}
+	creds := Credentials{Username: "bot", Password: secrets.New(imageTestPassword)}
 	basicHeader := base64.StdEncoding.EncodeToString([]byte("bot:" + imageTestPassword))
 	payload := []byte("private")
 	desc := blobDescriptor(payload)

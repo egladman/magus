@@ -17,12 +17,13 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
@@ -565,8 +566,8 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 }
 
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
-	r := secret.New()
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
+	r := secrets.NewResolver()
+	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), r), nil)
 
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StringValue("onepassword"))
@@ -575,8 +576,8 @@ func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 }
 
 func TestSecretProviderRejectsNonHandles(t *testing.T) {
-	r := secret.New()
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
+	r := secrets.NewResolver()
+	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), r), nil)
 
 	err := callSecret(t, secretObj, "provider")
 	require.Error(t, err)
@@ -591,9 +592,9 @@ func TestSecretProviderRejectsNonHandles(t *testing.T) {
 }
 
 func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
-	r := secret.New()
+	r := secrets.NewResolver()
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
+	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), r), nil)
 
 	require.NoError(t, callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_TOKEN")))
 
@@ -603,14 +604,14 @@ func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 }
 
 func TestSecretReadRejectsEmptyReference(t *testing.T) {
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
 	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StringValue("")), "non-empty reference string")
 }
 
 func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	err := callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
@@ -649,7 +650,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
-	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	ctx := secrets.ContextWithResolver(context.Background(), secrets.NewResolver())
 	ctx = journal.WithLogger(ctx, slog.New(rec))
 	ctx = journal.WithStep(ctx, "demo", "publish")
 
@@ -695,6 +696,38 @@ func TestSecretGrantArgRejectsNoArguments(t *testing.T) {
 			})
 		})
 	}
+}
+
+// SecretGrantSuite pins MGS1027 onto a refused grant: a grant decides where a credential
+// may go, so a malformed one gets a code a magusfile can branch on, not a bare string.
+type SecretGrantSuite struct{ suite.Suite }
+
+func TestSecretGrantSuite(t *testing.T) { suite.Run(t, new(SecretGrantSuite)) }
+
+func (s *SecretGrantSuite) TestARefusedGrantCarriesMGS1027() {
+	grant := vm.NewMap()
+	grant.MapSet("ref", vm.StringValue("TOKEN"))
+	grant.MapSet("host", vm.StringValue("*.example.com"))
+	grant.MapSet("header", vm.StringValue("Authorization"))
+
+	_, err := secretGrantArg("endpoint", []vm.Value{grant})
+	var d *types.DiagnosticError
+	s.Require().ErrorAs(err, &d)
+	s.Equal(types.SecretGrantInvalid, d.Code)
+	s.Contains(err.Error(), "wildcard", "the module's reason survives the mapping")
+	var ge *secrets.GrantError
+	s.Require().ErrorAs(err, &ge, "the module's typed error stays in the chain")
+}
+
+func (s *SecretGrantSuite) TestAnEndpointOutsideARunIsRefusedByName() {
+	grant := vm.NewMap()
+	grant.MapSet("ref", vm.StringValue("TOKEN"))
+	grant.MapSet("host", vm.StringValue("api.example.com"))
+	grant.MapSet("header", vm.StringValue("Authorization"))
+	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), secrets.NewResolver()), nil)
+
+	err := callVoidDirect(s.T(), requireDirect(s.T(), secretObj, "endpoint"), grant)
+	s.Require().ErrorContains(err, "belongs to a run")
 }
 
 // magus\review.provider is the fourth provider namespace, wired exactly as the other three:

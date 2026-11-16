@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // lineEmitter taps a step's subprocess output as it is written. Each tapped writer
@@ -101,7 +101,7 @@ func (t *lineTap) Write(p []byte) (int, error) {
 	// The write is reported as len(p) rather than the redacted length: the caller is
 	// os/exec copying a pipe, and a short write makes it stop. Redaction changes how
 	// many bytes we emit, never how many we accepted.
-	scrubbed := secret.Redact(t.c.ctx, p)
+	scrubbed := secrets.Redact(t.c.ctx, p)
 	if _, err := t.dest.Write(scrubbed); err != nil {
 		return 0, err
 	}

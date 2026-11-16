@@ -18,6 +18,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	trailtypes "github.com/egladman/magus/types/trail"
@@ -1183,7 +1184,7 @@ func pureMagus() vm.Value {
 //
 // The field READ is duplicated (a dozen lines, and the packages cannot share a helper
 // without internal/dry depending on the bindings layer it exists to stand in for); the
-// RULES are not: both call types.SecretGrant.Normalize, which is where every
+// RULES are not: both call secrets.Grant.Normalize, which is where every
 // judgment about a malformed grant lives. Duplicating the extraction is safe because
 // it has no rules in it; duplicating the validation would not be. The message must
 // stay in step with the real one, including its example: the dry run is the pass most
@@ -1215,7 +1216,7 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 		}
 		return v.AsString()
 	}
-	g := types.SecretGrant{
+	g := secrets.Grant{
 		Ref:    field("ref"),
 		Host:   field("host"),
 		Header: field("header"),
@@ -1225,7 +1226,8 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 		return bad
 	}
 	if _, err := g.Normalize(); err != nil {
-		return fmt.Errorf(`magus\secret.%s: %w`, method, err)
+		// Normalize refuses only with a *secrets.GrantError; magus gives every one MGS1027.
+		return fmt.Errorf(`magus\secret.%s: %w`, method, types.WrapDiagnostic(types.SecretGrantInvalid, err, "%s", err.Error()))
 	}
 	return nil
 }

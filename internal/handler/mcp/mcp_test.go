@@ -19,10 +19,10 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -480,10 +480,10 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
-	res := secret.New()
+	res := secrets.NewResolver()
 	t.Setenv("MCP_TEST_TOKEN", credential)
 	// Provenance is what marks a value as a credential, so resolve it once.
-	got, err := res.Read(secret.ContextWithResolver(t.Context(), res), "MCP_TEST_TOKEN")
+	got, err := res.Read(secrets.ContextWithResolver(t.Context(), res), "MCP_TEST_TOKEN")
 	require.NoError(t, err)
 	require.Equal(t, credential, got.Reveal())
 
@@ -516,10 +516,10 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 func noSecrets(ctx context.Context) context.Context { return ctx }
 
 // wrapWithResolver builds a handler whose trail writes redact against res.
-func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn handlerFn) server.ToolHandlerFunc {
+func wrapWithResolver(t *testing.T, trailDir string, res *secrets.Resolver, fn handlerFn) server.ToolHandlerFunc {
 	t.Helper()
 	return wrap(quietLogger(), func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} },
-		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
+		trailDir, func(ctx context.Context) context.Context { return secrets.ContextWithResolver(ctx, res) },
 		nil, fn)
 }
 

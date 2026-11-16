@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -1144,7 +1145,7 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 const graphRegistryTimeout = knowledge.RegistryTimeout
 
 // readToken takes the registry token from STDIN; spell.go's verbs read theirs the same way.
-func readToken(ctx context.Context) (types.Secret, error) { return knowledge.ReadToken(ctx) }
+func readToken(ctx context.Context) (secrets.Secret, error) { return knowledge.ReadToken(ctx) }
 
 func graphPush(ctx context.Context, root string, args []string) error {
 	var pf *flaggen.GraphPushFlags

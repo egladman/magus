@@ -36,13 +36,13 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -1523,8 +1523,8 @@ func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 // interpolated credential would print it verbatim as the final thing a user sees. This
 // is the one seam where a run error stops being magus's and becomes the caller's text.
 func TestRedactError(t *testing.T) {
-	m := &Magus{resolver: secret.New()}
-	ctx := secret.ContextWithResolver(t.Context(), m.resolver)
+	m := &Magus{resolver: secrets.NewResolver()}
+	ctx := secrets.ContextWithResolver(t.Context(), m.resolver)
 	t.Setenv("MAGUS_TEST_RUNERR_TOKEN", "ghp_thrown_from_a_magusfile")
 	_, err := m.resolver.Read(ctx, "MAGUS_TEST_RUNERR_TOKEN")
 	require.NoError(t, err)

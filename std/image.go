@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -476,7 +477,7 @@ func imageClient(auth *imagetypes.RegistryAuth) *oci.Client {
 	if auth == nil {
 		return &oci.Client{}
 	}
-	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: types.NewSecret(auth.Password.Value)}}
+	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: secrets.New(auth.Password.Value)}}
 }
 
 func imageSpec(ctx context.Context, in imagetypes.Spec) (image.Spec, error) {

@@ -1,10 +1,11 @@
-package types
+package secrets
 
 import (
 	"bytes"
 	"encoding"
 	"encoding/gob"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,28 +16,22 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
-
-	"github.com/egladman/magus/internal/json"
 )
 
 const probePlaintext = "ghp_probe_token_value"
 
-// typesSuite is the package's one testify suite: add a type's tests here as methods
-// named Test<Type>..., not a suite of their own.
-type typesSuite struct {
+type SecretSuite struct {
 	suite.Suite
 	secret Secret
 }
 
-func (s *typesSuite) SetupTest() {
-	s.secret = NewSecret(probePlaintext)
+func (s *SecretSuite) SetupTest() {
+	s.secret = New(probePlaintext)
 }
 
-func TestTypesSuite(t *testing.T) {
-	suite.Run(t, new(typesSuite))
-}
+func TestSecret(t *testing.T) { suite.Run(t, new(SecretSuite)) }
 
-func (s *typesSuite) noPlaintext(got string) {
+func (s *SecretSuite) noPlaintext(got string) {
 	s.T().Helper()
 	plainHex := hex.EncodeToString([]byte(probePlaintext))
 	s.NotContains(got, probePlaintext)
@@ -47,55 +42,55 @@ func (s *typesSuite) noPlaintext(got string) {
 // secretRedacts asserts verb renders a Secret and a *Secret exactly as it renders the mask.
 // fmt routes %v %+v %s %q %x %X through String and %#v through GoString; every other verb
 // skips both and prints the struct, whose only field is a pointer, so an address.
-func (s *typesSuite) secretRedacts(verb string) {
+func (s *SecretSuite) secretRedacts(verb string) {
 	s.T().Helper()
-	want := fmt.Sprintf(verb, secretMask)
+	want := fmt.Sprintf(verb, mask)
 	s.Equal(want, fmt.Sprintf(verb, s.secret), "Secret under %s", verb)
 	s.Equal(want, fmt.Sprintf(verb, &s.secret), "*Secret under %s", verb)
 }
 
-func (s *typesSuite) TestSecretPercentVRedacts() {
+func (s *SecretSuite) TestPercentVRedacts() {
 	s.secretRedacts("%v")
 	s.secretRedacts("%-10v")
 }
 
-func (s *typesSuite) TestSecretPercentPlusVRedacts() {
+func (s *SecretSuite) TestPercentPlusVRedacts() {
 	s.secretRedacts("%+v")
 }
 
-func (s *typesSuite) TestSecretPercentSRedacts() {
+func (s *SecretSuite) TestPercentSRedacts() {
 	s.secretRedacts("%s")
 	s.secretRedacts("%10s")
 	s.secretRedacts("%.2s")
 }
 
-func (s *typesSuite) TestSecretPercentQRedacts() {
+func (s *SecretSuite) TestPercentQRedacts() {
 	s.secretRedacts("%q")
 	s.secretRedacts("%#q")
 }
 
-func (s *typesSuite) TestSecretPercentXRedactsAsHexOfTheMask() {
+func (s *SecretSuite) TestPercentXRedactsAsHexOfTheMask() {
 	s.secretRedacts("%x")
 	s.secretRedacts("%X")
 	s.secretRedacts("%#x")
 	s.secretRedacts("% x")
 }
 
-func (s *typesSuite) TestSecretGoSyntaxRedacts() {
-	s.Equal(secretMask, fmt.Sprintf("%#v", s.secret))
-	s.Equal(secretMask, fmt.Sprintf("%#v", &s.secret))
+func (s *SecretSuite) TestGoSyntaxRedacts() {
+	s.Equal(mask, fmt.Sprintf("%#v", s.secret))
+	s.Equal(mask, fmt.Sprintf("%#v", &s.secret))
 }
 
-func (s *typesSuite) TestSecretTypeVerbNamesTheType() {
-	s.Equal("types.Secret", fmt.Sprintf("%T", s.secret))
-	s.Equal("*types.Secret", fmt.Sprintf("%T", &s.secret))
+func (s *SecretSuite) TestTypeVerbNamesTheType() {
+	s.Equal("secrets.Secret", fmt.Sprintf("%T", s.secret))
+	s.Equal("*secrets.Secret", fmt.Sprintf("%T", &s.secret))
 }
 
 // render takes the verb as a variable: vet rejects a constant format whose verb does not
 // fit the argument, and these tests exercise exactly that.
 func render(verb string, arg any) string { return fmt.Sprintf(verb, arg) }
 
-func (s *typesSuite) TestSecretIntegerVerbsPrintNoPlaintext() {
+func (s *SecretSuite) TestIntegerVerbsPrintNoPlaintext() {
 	s.noPlaintext(fmt.Sprintf("%d", s.secret))
 	s.noPlaintext(fmt.Sprintf("%08d", s.secret))
 	s.noPlaintext(fmt.Sprintf("%b", s.secret))
@@ -105,43 +100,43 @@ func (s *typesSuite) TestSecretIntegerVerbsPrintNoPlaintext() {
 	s.noPlaintext(fmt.Sprintf("%d", &s.secret))
 }
 
-func (s *typesSuite) TestSecretBadVerbsPrintNoPlaintext() {
+func (s *SecretSuite) TestBadVerbsPrintNoPlaintext() {
 	s.noPlaintext(render("%e", s.secret))
 	s.noPlaintext(render("%t", s.secret))
 	s.noPlaintext(render("%p", s.secret))
 	s.noPlaintext(fmt.Sprintf("%p", &s.secret))
 }
 
-func (s *typesSuite) TestSecretExportedFieldRedacts() {
+func (s *SecretSuite) TestExportedFieldRedacts() {
 	v := struct{ Token Secret }{s.secret}
 	s.Equal("{***}", fmt.Sprintf("%v", v))
 	s.Equal("{Token:***}", fmt.Sprintf("%+v", v))
-	s.Equal("struct { Token types.Secret }{Token:***}", fmt.Sprintf("%#v", v))
+	s.Equal("struct { Token secrets.Secret }{Token:***}", fmt.Sprintf("%#v", v))
 	s.Equal(`{"***"}`, fmt.Sprintf("%q", v))
 	s.noPlaintext(fmt.Sprintf("%d", v))
 }
 
-func (s *typesSuite) TestSecretExportedPointerFieldRedacts() {
+func (s *SecretSuite) TestExportedPointerFieldRedacts() {
 	v := struct{ Token *Secret }{&s.secret}
 	s.Equal("{***}", fmt.Sprintf("%v", v))
-	s.Equal("struct { Token *types.Secret }{Token:***}", fmt.Sprintf("%#v", v))
+	s.Equal("struct { Token *secrets.Secret }{Token:***}", fmt.Sprintf("%#v", v))
 }
 
-func (s *typesSuite) TestSecretSliceRedacts() {
+func (s *SecretSuite) TestSliceRedacts() {
 	s.Equal("[***]", fmt.Sprintf("%v", []Secret{s.secret}))
-	s.Equal("[]types.Secret{***}", fmt.Sprintf("%#v", []Secret{s.secret}))
+	s.Equal("[]secrets.Secret{***}", fmt.Sprintf("%#v", []Secret{s.secret}))
 	s.Equal("[***]", fmt.Sprintf("%v", []*Secret{&s.secret}))
 }
 
-func (s *typesSuite) TestSecretMapRedacts() {
+func (s *SecretSuite) TestMapRedacts() {
 	m := map[string]Secret{"token": s.secret}
 	s.Equal("map[token:***]", fmt.Sprintf("%v", m))
-	s.Equal(`map[string]types.Secret{"token":***}`, fmt.Sprintf("%#v", m))
+	s.Equal(`map[string]secrets.Secret{"token":***}`, fmt.Sprintf("%#v", m))
 }
 
 // TestSecretUnexportedFieldPrintsNoPlaintext pins why Secret holds a pointer: fmt calls no
 // method through an unexported field, so it prints the field's pointer as an address.
-func (s *typesSuite) TestSecretUnexportedFieldPrintsNoPlaintext() {
+func (s *SecretSuite) TestUnexportedFieldPrintsNoPlaintext() {
 	v := struct {
 		Name  string
 		token Secret
@@ -156,34 +151,34 @@ func (s *typesSuite) TestSecretUnexportedFieldPrintsNoPlaintext() {
 // leakySecret holds its plaintext by value: the shape Secret must not take.
 type leakySecret struct{ s string }
 
-func (leakySecret) String() string   { return secretMask }
-func (leakySecret) GoString() string { return secretMask }
+func (leakySecret) String() string   { return mask }
+func (leakySecret) GoString() string { return mask }
 
-func (s *typesSuite) TestSecretValueBackedFieldWouldLeak() {
+func (s *SecretSuite) TestValueBackedFieldWouldLeak() {
 	v := struct{ token leakySecret }{leakySecret{probePlaintext}}
 	s.Contains(fmt.Sprintf("%v", v), probePlaintext)
 	s.Contains(fmt.Sprintf("%#v", v), probePlaintext)
 }
 
-func (s *typesSuite) TestSecretErrorsRedact() {
+func (s *SecretSuite) TestErrorsRedact() {
 	s.Equal("login with *** failed", fmt.Errorf("login with %v failed", s.secret).Error())
 	s.Equal("push: token *** rejected", fmt.Errorf("push: %w", fmt.Errorf("token %s rejected", s.secret)).Error())
 	s.Equal("first\ntoken ***", errors.Join(errors.New("first"), fmt.Errorf("token %v", s.secret)).Error())
 }
 
-func (s *typesSuite) TestSecretRecoveredPanicRedacts() {
+func (s *SecretSuite) TestRecoveredPanicRedacts() {
 	got := func() (got string) {
 		defer func() { got = fmt.Sprint(recover()) }()
 		panic(s.secret)
 	}()
-	s.Equal(secretMask, got)
+	s.Equal(mask, got)
 }
 
 type secretDoc struct {
 	Token Secret `json:"token" yaml:"token" toml:"token"`
 }
 
-func (s *typesSuite) TestSecretJSONRedacts() {
+func (s *SecretSuite) TestJSONRedacts() {
 	b, err := json.Marshal(secretDoc{Token: s.secret})
 	s.Require().NoError(err)
 	s.JSONEq(`{"token":"***"}`, string(b))
@@ -195,19 +190,19 @@ func (s *typesSuite) TestSecretJSONRedacts() {
 	s.JSONEq(`{"token":"***"}`, string(b))
 }
 
-func (s *typesSuite) TestSecretYAMLRedacts() {
+func (s *SecretSuite) TestYAMLRedacts() {
 	b, err := yaml.Marshal(secretDoc{Token: s.secret})
 	s.Require().NoError(err)
 	s.Equal("token: '***'\n", string(b))
 }
 
-func (s *typesSuite) TestSecretTOMLRedacts() {
+func (s *SecretSuite) TestTOMLRedacts() {
 	b, err := toml.Marshal(secretDoc{Token: s.secret})
 	s.Require().NoError(err)
 	s.Equal("token = '***'\n", string(b))
 }
 
-func (s *typesSuite) secretLogged(handler func(*bytes.Buffer) slog.Handler) string {
+func (s *SecretSuite) secretLogged(handler func(*bytes.Buffer) slog.Handler) string {
 	var buf bytes.Buffer
 	slog.New(handler(&buf)).InfoContext(s.T().Context(), "using credential",
 		slog.Any("token", s.secret), slog.Any("pointer", &s.secret),
@@ -215,13 +210,13 @@ func (s *typesSuite) secretLogged(handler func(*bytes.Buffer) slog.Handler) stri
 	return buf.String()
 }
 
-func (s *typesSuite) TestSecretSlogJSONRedacts() {
+func (s *SecretSuite) TestSlogJSONRedacts() {
 	got := s.secretLogged(func(b *bytes.Buffer) slog.Handler { return slog.NewJSONHandler(b, nil) })
 	s.noPlaintext(got)
 	s.Contains(got, `"token":"***","pointer":"***","holder":{"Token":"***"}`)
 }
 
-func (s *typesSuite) TestSecretSlogTextRedacts() {
+func (s *SecretSuite) TestSlogTextRedacts() {
 	got := s.secretLogged(func(b *bytes.Buffer) slog.Handler { return slog.NewTextHandler(b, nil) })
 	s.noPlaintext(got)
 	s.Contains(got, `token=*** pointer=*** holder={Token:***}`)
@@ -229,7 +224,7 @@ func (s *typesSuite) TestSecretSlogTextRedacts() {
 
 // TestSecretDecodingIsRefused pins the absent decoders: plaintext in a config file or a
 // response body must not become a Secret by accident.
-func (s *typesSuite) TestSecretDecodingIsRefused() {
+func (s *SecretSuite) TestDecodingIsRefused() {
 	ptr := reflect.PointerTo(reflect.TypeFor[Secret]())
 	s.False(ptr.Implements(reflect.TypeFor[encoding.TextUnmarshaler]()), "Secret must not implement UnmarshalText")
 	s.False(ptr.Implements(reflect.TypeFor[interface{ UnmarshalJSON([]byte) error }]()), "Secret must not implement UnmarshalJSON")
@@ -241,18 +236,18 @@ func (s *typesSuite) TestSecretDecodingIsRefused() {
 	s.True(d.Token.IsZero())
 }
 
-func (s *typesSuite) TestSecretGobIsRefused() {
+func (s *SecretSuite) TestGobIsRefused() {
 	s.Error(gob.NewEncoder(&bytes.Buffer{}).Encode(secretDoc{Token: s.secret}), "gob must refuse a type with no exported field")
 }
 
-func (s *typesSuite) TestSecretRevealReturnsThePlaintext() {
+func (s *SecretSuite) TestRevealReturnsThePlaintext() {
 	s.Equal(probePlaintext, s.secret.Reveal())
 	s.Empty(Secret{}.Reveal())
 }
 
-func (s *typesSuite) TestSecretZeroAndLenRevealNothing() {
+func (s *SecretSuite) TestZeroAndLenRevealNothing() {
 	s.True(Secret{}.IsZero())
-	s.False(NewSecret("x").IsZero())
-	s.Equal(5, NewSecret("abcde").Len())
-	s.Equal(NewSecret("a-very-long-credential").String(), NewSecret("short").String())
+	s.False(New("x").IsZero())
+	s.Equal(5, New("abcde").Len())
+	s.Equal(New("a-very-long-credential").String(), New("short").String())
 }

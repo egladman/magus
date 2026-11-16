@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // cacheService is the GitHub Actions cache service's Twirp path under ACTIONS_RESULTS_URL.
@@ -37,10 +37,10 @@ const (
 // Token, a random stand-in valid only here.
 type CacheReadProxy struct {
 	URL   string // ends in "/", as ACTIONS_RESULTS_URL does
-	Token types.Secret
+	Token secrets.Secret
 
 	upstream string
-	token    types.Secret
+	token    secrets.Secret
 	client   *http.Client
 	log      *HookLog
 	srv      *http.Server
@@ -49,7 +49,7 @@ type CacheReadProxy struct {
 // StartCacheReadProxy listens on an ephemeral loopback port and serves until Close.
 // upstream and token are the runner's ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN.
 // Each refused request is a line on log; a nil log discards.
-func StartCacheReadProxy(upstream string, token types.Secret, log *HookLog) (*CacheReadProxy, error) {
+func StartCacheReadProxy(upstream string, token secrets.Secret, log *HookLog) (*CacheReadProxy, error) {
 	if upstream == "" || token.IsZero() {
 		return nil, errors.New("the cache read proxy needs the cache service URL and its token")
 	}
@@ -63,7 +63,7 @@ func StartCacheReadProxy(upstream string, token types.Secret, log *HookLog) (*Ca
 	}
 	p := &CacheReadProxy{
 		URL:      fmt.Sprintf("http://%s/", ln.Addr().String()),
-		Token:    types.NewSecret(hex.EncodeToString(stand)),
+		Token:    secrets.New(hex.EncodeToString(stand)),
 		upstream: strings.TrimSuffix(upstream, "/"),
 		token:    token,
 		// A lookup is one POST; following a redirect would carry it somewhere unnamed.

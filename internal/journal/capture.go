@@ -3,13 +3,15 @@ package journal
 import (
 	"bufio"
 	"context"
-	"github.com/egladman/magus/internal/secret"
+	"fmt"
 	"io"
 	"log/slog"
 	"slices"
 	"sync"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/types"
 )
 
 // eventAttr is the slog attribute key that carries the whole [Event] value through a
@@ -90,7 +92,7 @@ func Emit(ctx context.Context, e Event) {
 	// that carries free-form content (a command line, an output line, a warning). The
 	// structured fields beside it (Status, Ref, Stream) are magus's own enumerations,
 	// and a credential reaching one would be a different bug than this guards against.
-	e.Text = secret.RedactString(ctx, e.Text)
+	e.Text = secrets.RedactString(ctx, e.Text)
 	loggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
 }
 
@@ -253,4 +255,52 @@ func (h *FileHandler) Flush() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	_ = h.w.Flush()
+}
+
+// NewSecretResolver builds a secrets.Resolver the way every magus scope needs one: a value
+// too short to mask is reported as MGS2011, and the endpoint forwarder logs through
+// slog's default logger, which magus wraps in [secrets.NewRedactingHandler]. opts apply
+// after those, so a caller's own options win.
+//
+// It lives here, the lowest package every caller imports, so no caller builds a bare
+// resolver that would keep the MGS2011 notice to itself.
+func NewSecretResolver(opts ...secrets.Option) *secrets.Resolver {
+	base := []secrets.Option{
+		secrets.WithShortSecret(warnUnmasked),
+		secrets.WithLogger(slog.New(defaultHandler{})),
+	}
+	return secrets.NewResolver(append(base, opts...)...)
+}
+
+// warnUnmasked says out loud that a resolved value will not be masked: the caller has no
+// other way to learn that the credential it was handed is unprotected in magus's output.
+func warnUnmasked(ctx context.Context, ref string) {
+	slog.WarnContext(ctx, "secret.short",
+		slog.String("code", string(types.SecretTooShortToMask)),
+		slog.String("ref", ref),
+		slog.Int("min_length", secrets.MinMaskLen),
+		slog.String("msg", fmt.Sprintf(
+			"secret %q is shorter than %d characters, so its value is NOT redacted from magus output; see %s",
+			ref, secrets.MinMaskLen, types.CodeURL(types.SecretTooShortToMask))))
+}
+
+// defaultHandler sends each record to whatever slog.Default is when the record is
+// logged, not when the resolver was built: a server builds a resolver per workspace
+// before and after the CLI installs its handler.
+type defaultHandler struct{}
+
+func (defaultHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return slog.Default().Handler().Enabled(ctx, l)
+}
+
+func (defaultHandler) Handle(ctx context.Context, r slog.Record) error {
+	return slog.Default().Handler().Handle(ctx, r)
+}
+
+func (defaultHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return slog.Default().Handler().WithAttrs(as)
+}
+
+func (defaultHandler) WithGroup(name string) slog.Handler {
+	return slog.Default().Handler().WithGroup(name)
 }

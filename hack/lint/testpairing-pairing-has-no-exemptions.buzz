@@ -32,7 +32,7 @@ export fun reads() > [str] {
             "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
             "libs/gopherbuzz/**/*_test.go", "libs/proofread/**/*_test.go",
             "libs/testpairing/**/*_test.go", "libs/text/**/*_test.go", "libs/xdg/**/*_test.go", "libs/clikit/**/*_test.go",
-            "libs/safetyscissors/**/*_test.go"];
+            "libs/safetyscissors/**/*_test.go", "libs/secrets/**/*_test.go"];
 }
 
 export fun check(files: [Path]) > [Finding] !> any {

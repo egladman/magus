@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
@@ -41,7 +42,6 @@ import (
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/risk"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/symbols"
@@ -52,6 +52,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
@@ -176,7 +177,7 @@ type Magus struct {
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
-	resolver *secret.Resolver
+	resolver *secrets.Resolver
 
 	// spellImports is resolved once in load, before any magusfile, and read by every
 	// import resolver after; see SpellImports.
@@ -638,7 +639,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.stderr = vo.Stderr
 	}
 	if isJSONLLog(cfg.Log) {
-		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
+		m.records = secrets.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
 	if vo.Limiter != nil {
 		m.limOnce.Do(func() { m.lim = vo.Limiter })
@@ -653,10 +654,10 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
 	workspace.BindRegistry(m, m.wsReg)
-	m.resolver = secret.New(secret.WithTimeouts(secret.Timeouts{
+	m.resolver = journal.NewSecretResolver(append([]secrets.Option{secrets.WithTimeouts(secrets.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
 		Unattended:  m.cfg.Secret.Unattended,
-	}))
+	})}, vo.secretsOpts...)...)
 	return m, nil
 }
 
@@ -2531,5 +2532,5 @@ func (m *Magus) ContextWithSecrets(ctx context.Context) context.Context {
 	if m == nil || m.resolver == nil {
 		return ctx
 	}
-	return secret.ContextWithResolver(ctx, m.resolver)
+	return secrets.ContextWithResolver(ctx, m.resolver)
 }

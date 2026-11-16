@@ -1,7 +1,7 @@
 ---
 title: "ADR 0050: the harness is a module named safetyscissors"
 order: 50
-description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4 and 6, the budget, the verdict and step types, the tier set, the JSON Lines helpers and the session store, are built, and so are step 8's job types."
+description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, 6 and 7, the budget, the verdict and step types, the tier set, the JSON Lines helpers, the session store and the secrets module, are built, and so are step 8's job types."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
@@ -122,7 +122,10 @@ each with one job:
 | `sandbox` | read, write and exec policy, narrowed to a lease                                                                 |
 | `budget`  | the slot limiter, machine claims and their memory curves, and a spend limit priced from rows the caller supplies |
 | `tier`    | the model tier set and price table built from rows the caller supplies                                           |
-| `redact`  | resolving secrets and redacting them from what is recorded                                                       |
+
+Secrets are not a package here. Resolving them, redacting them from what is recorded and
+forwarding one to a child process live in their own module, `libs/secrets`, which magus
+and the module's trail both import; decided by Eli on 2026-11-16.
 
 The root package holds only the package doc. Call sites read `verdict.Deny` or
 `job.Covers`, never a themed name.
@@ -219,8 +222,8 @@ Only seams that already have a second implementation become interfaces:
 - `job.Reader`: the module's store, and an embedder's own rows (`types/job_reader.go:8`).
 - `job.Observer`: magus's VCS-and-output reader, and a caller's own check result
   (`internal/job/verify.go:36`).
-- `redact.Provider`: the environment, and the broker opener
-  (`internal/secret/secret.go:46`, `:104`).
+- `secrets.Provider` in `libs/secrets`: the environment, and magus's spell-backed
+  provider (`internal/interp/bindings/secret_provider.go`).
 
 Repository identity becomes a directory string, not an interface. Each seam gets one
 option. The module's tests carry their own fakes: it never imports `libs/testkit` or the
@@ -274,7 +277,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done                     |
 | 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | planned                  |
 | 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | done                     |
-| 7    | `redact` from `internal/secret`                                                                                                                 | ~1,300 lines                  | no                                                                                                                                     | planned                  |
+| 7    | secrets into their own module, `libs/secrets`, from `internal/secret` and `types/secret.go`                                                     | ~1,300 lines                  | no                                                                                                                                     | done                     |
 | 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | types done; mirrors owed |
 | 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options                                                    | ~8,000-10,000 of 23,431 lines | no: `jobs.jsonl` stays where `vcs.StateDir` puts it, and magus passes that directory (decided 2026-11-16 by the build, Eli to confirm) | planned                  |
 | 10   | the guard engine: the step table and settings, with magus's 137 built-ins registered as rules                                                   | the largest                   | yes: `Judge`'s structure changes                                                                                                       | planned                  |
@@ -322,6 +325,18 @@ process state, so `NewID` stays in magus and the module only checks one with
 `ValidFileID`. Nothing in the module assumes a host session: an editor pane names its
 own invocation. The clock is `WithClock`, the records are written through
 `internal/jsonl`, and no alias remains.
+
+Step 7 moved secrets into `libs/secrets`, a module of its own rather than a
+safetyscissors package, so magus and the module's trail share one. It holds `Secret`,
+which was `types.Secret`, `Grant`, which was `types.SecretGrant`, the `Resolver` and its
+`Provider`, `Redact`, `RedactString`, `NewRedactingHandler` and the endpoint forwarder,
+and `internal/secret` is gone. The module keeps no global and writes nowhere: the
+spell-backed provider is `secrets.WithOpener(bindings.SecretOpener)`, which cmd/magus
+passes through `magus.WithSecrets`; the forwarder logs through `WithLogger`; and a value
+too short to mask is reported through `WithShortSecret`, where
+`journal.NewSecretResolver` logs MGS2011. A refused grant is a `*secrets.GrantError`, which
+magus gives MGS1027. `OpenEndpoint` takes its scope as an argument, and magus passes the
+run's invocation id, so the context key that carried it is gone. No alias remains.
 
 Step 8 moved the job record types into `job` and left every rule that names an MGS code
 in magus. A record's own validation returns `job.Fault` values with a kind and no code,

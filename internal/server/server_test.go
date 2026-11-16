@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	statusv1alpha1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
@@ -391,7 +392,7 @@ func TestServeConsoleDefaultTrustsNoHostedOrigin(t *testing.T) {
 
 // mintConsoleToken mints a console token, the one a browser route takes. The
 // daemon under test must already have minted the operator token.
-func mintConsoleToken(t *testing.T) types.Secret {
+func mintConsoleToken(t *testing.T) secrets.Secret {
 	t.Helper()
 	dir, err := auth.StoreDir()
 	require.NoError(t, err)

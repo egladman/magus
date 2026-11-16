@@ -33,6 +33,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -598,7 +599,7 @@ func sealedBytecodeStoreUnder(name, projectDir string) (buzz.BytecodeStore, erro
 	if err := sweepChunks(dir, now); err != nil {
 		return nil, fmt.Errorf("sweep %s: %w", dir, err)
 	}
-	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: types.NewSecret(string(secret)), scope: dir}, nil
+	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secrets.New(string(secret)), scope: dir}, nil
 }
 
 // sweepChunks removes, at most once per staleStampAge, the files in dir not
@@ -834,7 +835,7 @@ type PolicyStore struct {
 	// Path may name a directory not made yet; Prepare makes it.
 	Path   string
 	Stamp  string
-	secret types.Secret
+	secret secrets.Secret
 }
 
 // GuardPolicyStore is the PolicyStore for the workspace at root. It creates
@@ -863,7 +864,7 @@ func GuardPolicyStore(root string) (PolicyStore, error) {
 	}
 	sum := sha256.Sum256([]byte(abs))
 	path := filepath.Join(base, "magus", "guard-policy", stamp, hex.EncodeToString(sum[:])+".jsonl")
-	return PolicyStore{Path: path, Stamp: stamp, secret: types.NewSecret(string(secret))}, nil
+	return PolicyStore{Path: path, Stamp: stamp, secret: secrets.New(string(secret))}, nil
 }
 
 // Prepare makes the store's directory and prunes other builds' stale ones.
@@ -899,7 +900,7 @@ func (s PolicyStore) Verify(body []byte, seal string) bool {
 // or compiler fails exactly as a forged one does.
 type sealedBytecodeStore struct {
 	inner  buzz.BytecodeStore
-	secret types.Secret
+	secret secrets.Secret
 	scope  string
 }
 
