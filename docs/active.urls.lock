@@ -1090,6 +1090,7 @@ reference/rules/person-advisory/
 reference/rules/person-only/
 reference/rules/policy-unloaded/
 reference/rules/precedent-search/
+reference/rules/process-lookup/
 reference/rules/process-poll/
 reference/rules/process-signal/
 reference/rules/push-gate/
@@ -1615,6 +1616,7 @@ tags/status/
 tags/stdin/
 tags/stdio/
 tags/stdlib/
+tags/step/
 tags/store/
 tags/stores/
 tags/strengthen-only/
