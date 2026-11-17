@@ -1512,7 +1512,7 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	ctx = context.WithValue(ctx, importErrorsKey{}, importErrs)
 	// Run mode re-executes the top level too, so it needs a record of its own even though
 	// only parse mode returns one to a caller that applies it.
-	ctx, choices := WithChoiceRecord(ctx)
+	ctx, choices := withChoiceRecord(ctx)
 	// The buzz path uses the standalone interpreter's concrete API (Exec, Targets,
 	// CallVal) directly; the engine.Session adapter is only for generic registry
 	// consumers, so there's no need to round-trip through engine.Lookup. Confine
@@ -1787,7 +1787,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	if autoload {
 		// An autoloaded magusfile is an evaluation, so its magus\cache.remote and
 		// magus\secret.provider calls must succeed. The REPL applies neither choice.
-		ctx, _ = WithChoiceRecord(ctx)
+		ctx, _ = withChoiceRecord(ctx)
 	}
 	if buzzHostBindingsFn != nil {
 		// nil exports: the REPL has no export-discovery pass, so ctx.needs

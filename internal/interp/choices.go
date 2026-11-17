@@ -49,23 +49,23 @@ func (e *outsideMagusfileError) Error() string {
 	return fmt.Sprintf("%s is a magusfile declaration, and this call runs outside a magusfile evaluation, so move it to a magusfile's top level", e.Declaration)
 }
 
-// ChoiceRecord collects one evaluation's [Choices]. Only [RecordSecretProvider] and
+// choiceRecord collects one evaluation's [Choices]. Only [RecordSecretProvider] and
 // [RecordRemoteBackend] fill it. Safe for concurrent use.
-type ChoiceRecord struct {
+type choiceRecord struct {
 	mu      sync.Mutex
 	choices Choices
 }
 
 type choiceRecordKey struct{}
 
-// WithChoiceRecord installs a fresh record on ctx for one evaluation and returns it.
-func WithChoiceRecord(ctx context.Context) (context.Context, *ChoiceRecord) {
-	rec := &ChoiceRecord{}
+// withChoiceRecord installs a fresh record on ctx for one evaluation and returns it.
+func withChoiceRecord(ctx context.Context) (context.Context, *choiceRecord) {
+	rec := &choiceRecord{}
 	return context.WithValue(ctx, choiceRecordKey{}, rec), rec
 }
 
 // Choices returns what the evaluation has chosen so far.
-func (r *ChoiceRecord) Choices() Choices {
+func (r *choiceRecord) Choices() Choices {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.choices
@@ -85,7 +85,7 @@ func RecordRemoteBackend(ctx context.Context, spell string) error {
 }
 
 func record(ctx context.Context, decl, spell string, field func(*Choices) *string) error {
-	rec, _ := ctx.Value(choiceRecordKey{}).(*ChoiceRecord)
+	rec, _ := ctx.Value(choiceRecordKey{}).(*choiceRecord)
 	if rec == nil {
 		return &outsideMagusfileError{Declaration: decl}
 	}

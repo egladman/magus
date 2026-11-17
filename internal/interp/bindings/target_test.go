@@ -387,15 +387,9 @@ func TestNeedsMarksADependencyFailureParkedOrInline(t *testing.T) {
 
 func TestBuildCache(t *testing.T) {
 	t.Run("valid spell handle records the remote backend", func(t *testing.T) {
-		// buildCache captures the ctx at construction; remote() records into that
-		// evaluation's choices regardless of the call-time ctx.
-		ctx, rec := interp.WithChoiceRecord(context.Background())
-		cache := buildCache(ctx, nil)
-
-		handle := vm.NewMap()
-		handle.MapSet("name", vm.StringValue("aws-s3"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
-		assert.Equal(t, "aws-s3", rec.Choices().RemoteBackend)
+		parsed, err := parseChoices(t, context.Background(), `magus\cache.remote({"name": "aws-s3"});`)
+		require.NoError(t, err)
+		assert.Equal(t, "aws-s3", parsed.Choices.RemoteBackend)
 	})
 
 	t.Run("no evaluation record in context is refused", func(t *testing.T) {
@@ -567,36 +561,56 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 	p := testkit.NewSecretProvider(map[string]string{"op://vault/token": "op-token-value"})
 	r := secrets.NewResolver(secrets.WithOpener(p.Opener()))
-	ctx, rec := interp.WithChoiceRecord(secrets.WithResolver(context.Background(), r))
-	secretObj := buildSecret(ctx, nil)
 
-	handle := vm.NewMap()
-	handle.MapSet("name", vm.StringValue("onepassword"))
-	require.NoError(t, callSecret(t, secretObj, "provider", handle))
-	assert.Equal(t, "onepassword", rec.Choices().SecretProvider, "the selection is returned for the workspace's later runs")
+	// The same evaluation's read goes through the selected provider.
+	parsed, err := parseChoices(t, secrets.WithResolver(context.Background(), r),
+		`import "std";
+magus\secret.provider({"name": "onepassword"});
+try {
+    _ = magus\secret.read("op://vault/token");
+} catch (e: any) {
+    std\print("read failed: {e}");
+}`)
+
+	require.NoError(t, err)
+	assert.Equal(t, "onepassword", parsed.Choices.SecretProvider, "the selection is returned for the workspace's later runs")
 	assert.Empty(t, r.ProviderName(), "the run's resolver is derived from, never changed")
-
-	// The same evaluation's reads go through the selected provider.
-	require.NoError(t, callSecret(t, secretObj, "read", vm.StringValue("op://vault/token")))
 	assert.Equal(t, 1, p.Fetches("op://vault/token"))
 	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=op-token-value"))))
 }
 
-func TestSecretProviderRejectsNonHandles(t *testing.T) {
-	r := secrets.NewResolver()
-	ctx, rec := interp.WithChoiceRecord(secrets.WithResolver(context.Background(), r))
-	secretObj := buildSecret(ctx, nil)
+// parseChoices evaluates a magusfile whose top level is body through [interp.Parse], the
+// path a workspace load takes, and returns what it chose.
+func parseChoices(t *testing.T, ctx context.Context, body string) (interp.Parsed, error) {
+	t.Helper()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, "import \"magus\";\n"+body+"\n")
+	srcs, err := interp.FindAll(dir)
+	require.NoError(t, err)
+	return interp.Parse(ctx, srcs[0])
+}
 
-	err := callSecret(t, secretObj, "provider")
+func TestSecretProviderRejectsNonHandles(t *testing.T) {
+	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
+
+	// Typed as any, so the value reaches the binding rather than the type checker.
+	_, err := parseChoices(t, ctx, `final handle: any = "onepassword";
+magus\secret.provider(handle);`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "expected an imported spell handle")
 
 	// A map with no name is a map, not a spell handle: catching it here beats a lookup
 	// failure later with nothing to point at.
-	err = callSecret(t, secretObj, "provider", vm.NewMap())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a spell handle")
-	assert.Empty(t, rec.Choices().SecretProvider, "a rejected handle must not be recorded")
+	parsed, err := parseChoices(t, ctx, `import "std";
+try {
+    magus\secret.provider({});
+} catch (e: any) {
+    std\print("refused: {e}");
+}`)
+	require.NoError(t, err)
+	assert.Empty(t, parsed.Choices.SecretProvider, "a rejected handle must not be recorded")
+	_, err = parseChoices(t, ctx, `magus\secret.provider({});`)
+	require.ErrorContains(t, err, "not a spell handle")
 }
 
 func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {

@@ -70,7 +70,7 @@ func (s *ChoicesSuite) TestParseRefusesASecondBackend() {
 }
 
 func (s *ChoicesSuite) TestRecordConflictIsTyped() {
-	ctx, rec := WithChoiceRecord(s.T().Context())
+	ctx, rec := withChoiceRecord(s.T().Context())
 	s.Require().NoError(RecordSecretProvider(ctx, "onepassword"))
 	err := RecordSecretProvider(ctx, "system-keychain")
 	var conflict *ChoiceConflictError
