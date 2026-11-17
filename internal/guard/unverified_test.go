@@ -12,9 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/mock"
@@ -35,9 +33,13 @@ func TestUnverifiedReaderSuite(t *testing.T) { suite.Run(t, new(UnverifiedReader
 
 func (s *UnverifiedReaderSuite) SetupTest() {
 	testkit.Isolate(s.T())
+	s.opens.Store(0)
 	s.repo = s.newCheckout()
 	s.base = s.repo.Head()
-	project := &types.Project{Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}}, MagusfileTargets: []string{"test"}}
+	project := &types.Project{
+		Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}}, MagusfileTargets: []string{"test"},
+		TargetInputs: map[string][]types.InputRef{"test": {{Glob: "**/*.go"}}},
+	}
 	ws := typestest.NewMockWorkspaceRepository(s.T())
 	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
 	ws.EXPECT().Get(".").Return(project).Maybe()
@@ -105,10 +107,23 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
 	s.Require().NoError(err)
-	// Whichever of the read's share and the workspace open runs out first words the lapse.
-	s.Regexp(`^(weighing the changed files against recorded runs|opening the workspace to weigh the changed files) (did not finish within|had no time left)`, got.Unknown)
+	// Whichever of the read's share and its own workspace open runs out first words the lapse.
+	s.Regexp(`^(weighing the changed files against the recorded runs|opening the workspace to read which targets declare the changed files) (did not finish within|had no time left)`, got.Unknown)
 	s.Empty(got.Changed)
 	s.True(judgmentPhases(ctx).lapsed(phaseUnverified))
+}
+
+func (s *UnverifiedReaderSuite) TestAnEarlierRulesLapsedOpenIsNamedAsThatAndNotAsThisRead() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	ctx := withPhaseLog(s.T().Context(), trail.Phase{})
+	judgmentPhases(ctx).record(timedPhase(phaseInspect, 2*time.Second, 2*time.Second, true))
+
+	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
+	s.Require().NoError(err)
+	s.Equal("an earlier rule of this judgment opened the workspace, and that open did not finish within 2s, "+
+		"so no target's inputs could be read for this push", got.Unknown)
+	s.Equal(int32(0), s.opens.Load(), "the judgment opens the workspace once")
+	s.False(judgmentPhases(ctx).lapsed(phaseUnverified), "the lapse is the earlier open's")
 }
 
 func (s *UnverifiedReaderSuite) TestNoInspectorRaises() {
@@ -117,22 +132,21 @@ func (s *UnverifiedReaderSuite) TestNoInspectorRaises() {
 	s.Require().ErrorContains(err, "this caller cannot open the workspace")
 }
 
-func (s *UnverifiedReaderSuite) TestADirNoWorkspaceHoldsIsUnknown() {
+func (s *UnverifiedReaderSuite) TestADirNoCheckoutHoldsIsUnknown() {
 	got, err := guardUnverified(s.deps)(s.T().Context(), s.T().TempDir(), s.base)
 	s.Require().NoError(err)
-	s.Contains(got.Unknown, "no workspace with an output store holds")
+	s.Contains(got.Unknown, "is unread: fatal: not a git repository")
 }
 
-func (s *UnverifiedReaderSuite) TestTheCommandRuleCanCallTheReader() {
-	pinned := false
-	s.deps.CommandRule = func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
-		_, pinned = unverified.PinnedReader(ctx)
-		return types.GuardVerdict{}, nil
-	}
-	at := location{dir: s.repo.Root(), workspace: s.repo.Root()}
-	gradeWorkspaceCommand(s.T().Context(), s.deps, types.GuardJudgment{Decision: decisionPass},
-		commandRuleInput{command: "ls", dialect: DialectBash}, hookAttribution{}, at)
-	s.True(pinned)
+func (s *UnverifiedReaderSuite) TestAnotherRepositoryNamesEachChangedFileAsReadByNoTarget() {
+	other := testkit.NewRepository(s.T(), map[string]string{"README.md": "other\n"})
+	s.deps.VCS = types.VCSOptions{BaseRef: other.Head()}
+	head := other.Commit("change", map[string]string{"README.md": "changed\n"})
+
+	got, err := guardUnverified(s.deps)(s.T().Context(), other.Root(), head)
+	s.Require().NoError(err)
+	s.Empty(got.Unknown)
+	s.Equal([]types.UnverifiedFile{{Path: "README.md"}}, got.Unverified, "no target of this workspace's declares it")
 }
 
 // UnverifiedBudgetSuite pins unverifiedBudget against a frozen clock.
