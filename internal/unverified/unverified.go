@@ -1,10 +1,14 @@
 // Package unverified reads which files a commit changed that no clean passing run in a
 // checkout read.
 //
-// A run counts for a file when it passed, its tree was clean, its target's declared inputs
-// claim the file (or its declared outputs do and it wrote it), and its revision holds the
-// file as the commit does. A cache hit records a new attempt over the current revision with
-// Cached set, and counts as evidence for the target's declared inputs. Evidence is per
+// A run counts for a file when it passed, read the file (or wrote it), and the file held,
+// when it ran, what the commit holds, whatever else in the tree was uncommitted. It read
+// the file when its target's declared inputs claim it, held to the paths its command names
+// when it names any; a target that declares no inputs read only the paths its command
+// names. A clean run's revision says what the file held; for a run over uncommitted edits
+// the tree must hold the commit's copy, unwritten since the run started. A cache hit
+// records a new attempt over the current tree with Cached set, and counts as a run of the
+// target's declared inputs. Evidence is per
 // checkout, the store under <root>/.magus/outputs: a second worktree sees no runs until the
 // targets run there, which are cache hits. A clean attempt can be evicted by five later
 // attempts of the same key.
@@ -13,12 +17,15 @@ package unverified
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
@@ -39,7 +46,7 @@ type readInput struct {
 	// Projects opens the workspace, whose targets' declared inputs and outputs say what a
 	// run read. Runs lists the descriptors of the checkout's output store. Both are
 	// called once, in the order the report's unknown names them.
-	Projects func(context.Context) (types.WorkspaceRepository, error)
+	Projects func(context.Context) (Projects, error)
 	Runs     func() ([]cache.OutputDescriptor, error)
 }
 
@@ -93,12 +100,28 @@ func weigh(ctx context.Context, in readInput) types.UnverifiedReport {
 // store recorded there.
 type Checkout struct {
 	// Dir is any directory of the checkout, Workspace the workspace root and CacheDir the
-	// store's directory.
+	// store's directory. CacheDir is empty for a checkout no workspace holds, which has
+	// recorded no run.
 	Dir, Workspace, CacheDir string
 	VCS                      types.VCSOptions
 	// Projects opens the workspace, as readInput.Projects.
-	Projects func(context.Context) (types.WorkspaceRepository, error)
+	Projects func(context.Context) (Projects, error)
 }
+
+// Projects is what a read asks of a workspace: every project, and one by its path.
+type Projects interface {
+	All() []*types.Project
+	Get(path string) *types.Project
+}
+
+// NoProjects are the projects of a checkout no magus workspace holds. A read over them
+// declares no target, so every changed file is one no target reads.
+var NoProjects Projects = noProjects{}
+
+type noProjects struct{}
+
+func (noProjects) All() []*types.Project     { return nil }
+func (noProjects) Get(string) *types.Project { return nil }
 
 // Open resolves c's version control and its top level, then reads revision there.
 func Open(ctx context.Context, c Checkout, revision string) types.UnverifiedReport {
@@ -113,10 +136,20 @@ func Open(ctx context.Context, c Checkout, revision string) types.UnverifiedRepo
 	if err != nil {
 		return unknown(fmt.Sprintf("the checkout root of `%s` is unread: %v", c.Dir, err))
 	}
+	// A worktree nested under the workspace's directory is a checkout of its own, with an
+	// output store of its own.
+	if rel, err := filepath.Rel(realPath(root), realPath(c.Workspace)); err != nil || !filepath.IsLocal(rel) {
+		return unknown(fmt.Sprintf("`%s` is in the checkout `%s`, which does not hold the workspace `%s` whose runs this reads; read it from that checkout", c.Dir, root, c.Workspace))
+	}
 	return weigh(ctx, readInput{
 		Driver: res.VCS, Root: root, Workspace: c.Workspace, Base: res.Base, Revision: revision,
 		Projects: c.Projects,
-		Runs:     func() ([]cache.OutputDescriptor, error) { return cache.NewOutputStore(c.CacheDir).ListDescriptors() },
+		Runs: func() ([]cache.OutputDescriptor, error) {
+			if c.CacheDir == "" {
+				return []cache.OutputDescriptor{}, nil
+			}
+			return cache.NewOutputStore(c.CacheDir).ListDescriptors()
+		},
 	})
 }
 
@@ -150,12 +183,14 @@ type evidence struct {
 	// root is the checkout's top level and workspace the workspace inside it, both with
 	// symlinks resolved.
 	root, workspace string
-	ws              types.WorkspaceRepository
+	ws              Projects
 	runs            []cache.OutputDescriptor
 	commit          string
 	// differing is, per clean run's revision the repository holds, the files it holds
-	// unlike commit.
+	// unlike commit. committed is commit's copy of each file a run with uncommitted edits
+	// read, absent for a file commit lacks.
 	differing map[string]map[string]bool
+	committed map[string]committedFile
 	// footprints is each run's, by its index in runs, and declared each magusfile
 	// target's. Both name glob sets by index in globSets.
 	footprints []runFootprint
@@ -165,32 +200,49 @@ type evidence struct {
 	claimed map[string][]bool
 }
 
-func newEvidence(driver types.VCSDriver, root, workspace string, ws types.WorkspaceRepository, runs []cache.OutputDescriptor, commit string) *evidence {
+// committedFile is one file as commit holds it.
+type committedFile struct {
+	body    string
+	present bool
+}
+
+func newEvidence(driver types.VCSDriver, root, workspace string, ws Projects, runs []cache.OutputDescriptor, commit string) *evidence {
 	ev := &evidence{
 		driver: driver, root: root, workspace: workspace, ws: ws, runs: runs, commit: commit,
-		claimed: map[string][]bool{},
+		committed: map[string]committedFile{}, claimed: map[string][]bool{},
 	}
 	ev.index()
 	return ev
 }
 
 // targetFootprint names the glob sets one target declares as its inputs and its outputs.
+// declaresInputs is false for a target whose body names no input: its run reads only the
+// paths its command names.
 type targetFootprint struct {
 	inputs, outputs int
+	declaresInputs  bool
 }
 
 // runFootprint is one run's target footprint and the paths its args name. known is false
-// when the run names no target of a project the workspace holds.
+// when the run names no target of a project the workspace holds. scoped is set when the
+// args name a path, existing or not: such a run read only named.
 type runFootprint struct {
 	targetFootprint
-	known bool
-	named []string
+	known  bool
+	scoped bool
+	named  []string
 }
 
 // declaredTarget is a magusfile target wouldCover may name.
 type declaredTarget struct {
 	project, target string
 	targetFootprint
+}
+
+// scope is the paths a run's args name and whether they name any.
+type scope struct {
+	named  []string
+	scoped bool
 }
 
 // index roots each target's globs and reads each run's named paths once. Done per changed
@@ -202,15 +254,17 @@ func (ev *evidence) index() {
 		key := [2]string{p.Path, target}
 		fp, ok := targets[key]
 		if !ok {
+			inputs := rootedInputs(p, target)
 			fp = targetFootprint{
-				inputs:  ev.globSet(setIDs, rootedInputs(p, target)),
-				outputs: ev.globSet(setIDs, rootedOutputs(p, target)),
+				inputs:         ev.globSet(setIDs, inputs),
+				outputs:        ev.globSet(setIDs, rootedOutputs(p, target)),
+				declaresInputs: len(inputs) > 0,
 			}
 			targets[key] = fp
 		}
 		return fp
 	}
-	named := map[[2]string][]string{}
+	scopes := map[[2]string]scope{}
 	ev.footprints = make([]runFootprint, len(ev.runs))
 	for i, d := range ev.runs {
 		p := ev.ws.Get(d.Project)
@@ -218,12 +272,15 @@ func (ev *evidence) index() {
 			continue
 		}
 		key := [2]string{d.Project, strings.Join(d.ExtraArgs, "\x00")}
-		paths, ok := named[key]
+		sc, ok := scopes[key]
 		if !ok {
-			paths = ev.namedPaths(d)
-			named[key] = paths
+			sc = ev.namedPaths(d)
+			scopes[key] = sc
 		}
-		ev.footprints[i] = runFootprint{targetFootprint: footprint(p, types.Normalize(bareTarget(d.Target))), known: true, named: paths}
+		ev.footprints[i] = runFootprint{
+			targetFootprint: footprint(p, types.Normalize(bareTarget(d.Target))),
+			known:           true, scoped: sc.scoped, named: sc.named,
+		}
 	}
 	for _, p := range ev.ws.All() {
 		for _, target := range p.MagusfileTargets {
@@ -267,13 +324,14 @@ func (ev *evidence) claiming(rel string) []bool {
 	return got
 }
 
-// clean reports a run that can count: it passed and its tree was clean at a known revision.
+// clean reports a run whose tree held no uncommitted edit at a known revision: its revision
+// alone says what each file held when it ran.
 func clean(d cache.OutputDescriptor) bool {
-	return !d.Failed && d.Revision != "" && !d.Dirty
+	return d.Revision != "" && !d.Dirty
 }
 
-// covered reports a clean passing run that read file as commit holds it. A run whose
-// target outputs hold file and wrote it covers it too. file is repository-relative.
+// covered reports a passing run that read file as commit holds it. A run whose target
+// outputs hold file and wrote it covers it too. file is repository-relative.
 func (ev *evidence) covered(file string) bool {
 	rel, inside := ev.workspacePath(file)
 	if !inside {
@@ -288,19 +346,53 @@ func (ev *evidence) covered(file string) bool {
 	return false
 }
 
-// counts reports whether run i read file, as commit holds it.
+// counts reports whether run i passed and read or wrote file as commit holds it.
 func (ev *evidence) counts(i int, claims []bool, rel, file string) bool {
 	d := ev.runs[i]
-	if !clean(d) || !ev.reads(i, claims, rel, true) && !ev.writes(i, claims) {
+	if d.Failed {
 		return false
 	}
-	// readRevisions answered every revision the repository holds.
-	differing, held := ev.differing[d.Revision]
-	return held && !differing[file]
+	read, wrote := ev.reads(i, claims, rel), ev.writes(i, claims)
+	if !read && !wrote {
+		return false
+	}
+	if clean(d) {
+		// readRevisions answered every revision the repository holds.
+		differing, held := ev.differing[d.Revision]
+		return held && !differing[file]
+	}
+	return ev.unchangedSince(d, file, wrote && !read)
+}
+
+// unchangedSince reports whether the tree holds file as commit does and has not written it
+// since run d started, or, for a run that only wrote it, since d finished: then the file
+// was, when d read it, what commit holds. A deletion dates only its directory.
+func (ev *evidence) unchangedSince(d cache.OutputDescriptor, file string, wrote bool) bool {
+	want, asked := ev.committed[file]
+	if !asked {
+		return false
+	}
+	started := time.UnixMilli(d.TimestampMs - d.DurationMs)
+	if wrote {
+		started = time.UnixMilli(d.TimestampMs)
+	}
+	full := filepath.Join(ev.root, filepath.FromSlash(file))
+	info, err := os.Lstat(full)
+	if errors.Is(err, fs.ErrNotExist) {
+		dir, err := os.Lstat(filepath.Dir(full))
+		return !want.present && err == nil && !dir.ModTime().After(started)
+	}
+	if err != nil || !want.present || info.ModTime().After(started) {
+		return false
+	}
+	body, err := os.ReadFile(full)
+	return err == nil && string(body) == want.body
 }
 
 // wouldCover names at most three runs that would cover file: targets this store ran over
-// it, else magusfile targets whose inputs hold it.
+// it, else magusfile targets whose declared inputs or outputs hold it. A target that
+// declares no inputs is never named: which files it reads depends on the paths a command
+// passes it, so none of its runs says file is its.
 func (ev *evidence) wouldCover(file string) []string {
 	rel, inside := ev.workspacePath(file)
 	if !inside {
@@ -317,17 +409,15 @@ func (ev *evidence) wouldCover(file string) []string {
 		if len(out) == maxCommands {
 			return out
 		}
-		if ev.writes(i, claims) {
-			add(hint.Run.With(bareTarget(d.Target), d.Project))
-			continue
-		}
-		if !ev.reads(i, claims, rel, false) {
-			continue
-		}
+		r := ev.footprints[i]
 		target := bareTarget(d.Target)
-		if len(ev.footprints[i].named) > 0 {
+		switch {
+		case ev.writes(i, claims):
+			add(hint.Run.With(target, d.Project))
+		case !r.known || !r.declaresInputs || !claims[r.inputs]:
+		case r.scoped:
 			add(hint.Run.With(target, d.Project, "--", projectRelative(d.Project, rel)))
-		} else {
+		default:
 			add(hint.Run.With(target, d.Project))
 		}
 	}
@@ -348,7 +438,7 @@ func (ev *evidence) claimingRuns(changed []string, unverified []types.Unverified
 			continue
 		}
 		for _, f := range unverified {
-			if rel, inside := ev.workspacePath(f.Path); inside && ev.claimsFile(i, ev.claiming(rel)) {
+			if rel, inside := ev.workspacePath(f.Path); inside && ev.claimsFile(i, ev.claiming(rel), rel) {
 				relevant = append(relevant, i)
 				break
 			}
@@ -370,7 +460,7 @@ func (ev *evidence) claimingRuns(changed []string, unverified []types.Unverified
 				continue
 			}
 			claims := ev.claiming(rel)
-			if !ev.claimsFile(i, claims) {
+			if !ev.claimsFile(i, claims, rel) {
 				continue
 			}
 			run.Claims = append(run.Claims, file)
@@ -383,11 +473,12 @@ func (ev *evidence) claimingRuns(changed []string, unverified []types.Unverified
 	return out
 }
 
-// claimsFile reports whether run i's target declares the file among its inputs or outputs.
-// claims is claiming of that file.
-func (ev *evidence) claimsFile(i int, claims []bool) bool {
+// claimsFile reports whether run i's target declares rel among its inputs or outputs, or,
+// for a target that declares no inputs, whether the run's command named it. claims is
+// claiming(rel).
+func (ev *evidence) claimsFile(i int, claims []bool, rel string) bool {
 	r := ev.footprints[i]
-	return r.known && (claims[r.inputs] || claims[r.outputs])
+	return r.known && (claims[r.inputs] || claims[r.outputs] || !r.declaresInputs && r.names(rel))
 }
 
 // workspacePath is file, repository-relative, relative to the workspace.
@@ -402,39 +493,65 @@ func (ev *evidence) workspacePath(file string) (string, bool) {
 	return strings.CutPrefix(file, prefix+"/")
 }
 
-// reads reports whether run i's target declares rel among its inputs. claims is
-// claiming(rel). scoped also holds a file-scoped run to the paths it named.
-func (ev *evidence) reads(i int, claims []bool, rel string, scoped bool) bool {
+// reads reports whether run i read rel: its target declares rel among its inputs and the
+// run named no path or one holding rel, or its target declares no inputs and the run named
+// a path holding rel. claims is claiming(rel).
+func (ev *evidence) reads(i int, claims []bool, rel string) bool {
 	r := ev.footprints[i]
-	if !r.known || !claims[r.inputs] {
+	switch {
+	case !r.known:
 		return false
+	case !r.declaresInputs:
+		return r.names(rel)
 	}
-	if !scoped || len(r.named) == 0 {
-		return true
-	}
-	return slices.ContainsFunc(r.named, func(n string) bool { return n == rel || strings.HasPrefix(rel, n+"/") })
+	return claims[r.inputs] && (!r.scoped || r.names(rel))
+}
+
+// names reports whether the run's args name rel or a directory holding it.
+func (r runFootprint) names(rel string) bool {
+	return slices.ContainsFunc(r.named, func(n string) bool { return n == "." || n == rel || strings.HasPrefix(rel, n+"/") })
 }
 
 // namedPaths are the workspace paths run d's forwarded args name, read against its
-// project and then the workspace. None means the run is not file-scoped: `-run Push` names
-// no path.
-func (ev *evidence) namedPaths(d cache.OutputDescriptor) []string {
-	var out []string
+// project and then the workspace, spelled exactly as the tree spells them: on a disk that
+// ignores case, `-run Docs` names no `docs/`. An arg shaped as a path (holding a slash or
+// starting with a dot) scopes the run even when it names nothing that exists, so a typo
+// does not widen the run to every file. `-run Push` names no path and scopes nothing.
+func (ev *evidence) namedPaths(d cache.OutputDescriptor) scope {
+	var sc scope
 	for _, arg := range d.ExtraArgs {
 		if arg == "" || strings.HasPrefix(arg, "-") {
 			continue
 		}
+		if strings.Contains(arg, "/") || strings.HasPrefix(arg, ".") {
+			sc.scoped = true
+		}
 		for _, c := range []string{path.Join(d.Project, arg), path.Clean(arg)} {
-			if !filepath.IsLocal(filepath.FromSlash(c)) {
-				continue
-			}
-			if _, err := os.Lstat(filepath.Join(ev.workspace, filepath.FromSlash(c))); err == nil {
-				out = append(out, c)
+			if filepath.IsLocal(filepath.FromSlash(c)) && spelledAsIs(ev.workspace, c) {
+				sc.named = append(sc.named, c)
+				sc.scoped = true
 				break
 			}
 		}
 	}
-	return out
+	return sc
+}
+
+// spelledAsIs reports whether rel, slash-separated, names an entry under root with every
+// element spelled as the directory lists it.
+func spelledAsIs(root, rel string) bool {
+	if rel == "." {
+		return true
+	}
+	dir := root
+	for _, name := range strings.Split(rel, "/") {
+		entries, err := os.ReadDir(dir)
+		if err != nil || !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == name }) {
+			return false
+		}
+		dir = filepath.Join(dir, name)
+	}
+	return true
 }
 
 // writes reports whether run i's target declares, among its outputs, the file claims is
@@ -445,24 +562,34 @@ func (ev *evidence) writes(i int, claims []bool) bool {
 }
 
 // readRevisions answers what counts compares: which files each clean run's revision holds
-// unlike commit. A process per file and revision spent a 1104-file push's deadline.
+// unlike commit, and commit's copy of each file a run with uncommitted edits read. A
+// process per file and revision spent a 1104-file push's deadline.
 func (ev *evidence) readRevisions(ctx context.Context, files []string) error {
 	compared := map[string][]string{}
 	asked := map[[2]string]bool{}
+	var edited []string
 	for _, file := range files {
 		rel, inside := ev.workspacePath(file)
 		if !inside {
 			continue
 		}
 		claims := ev.claiming(rel)
+		read := false
 		for i, d := range ev.runs {
-			if !clean(d) || !ev.reads(i, claims, rel, true) && !ev.writes(i, claims) {
+			if d.Failed || !ev.reads(i, claims, rel) && !ev.writes(i, claims) {
+				continue
+			}
+			if !clean(d) {
+				read = true
 				continue
 			}
 			if key := [2]string{d.Revision, file}; !asked[key] {
 				asked[key] = true
 				compared[d.Revision] = append(compared[d.Revision], file)
 			}
+		}
+		if read {
+			edited = append(edited, file)
 		}
 	}
 	differing, err := vcs.DifferingPathsByRevision(ctx, ev.driver, ev.root, ev.commit, compared)
@@ -476,22 +603,58 @@ func (ev *evidence) readRevisions(ctx context.Context, files []string) error {
 			ev.differing[rev][p] = true
 		}
 	}
-	return nil
+	return ev.readCommitFiles(ctx, edited)
 }
 
-// rootedInputs is target's source footprint in p, rooted at the workspace. It copies
-// internal/guard's, which the built-in push rule still reads.
-func rootedInputs(p *types.Project, target string) []types.Glob {
-	if refs := p.TargetInputs[target]; len(refs) > 0 {
-		out := make([]types.Glob, len(refs))
-		for i, r := range refs {
-			out[i] = r.Rooted(p.Path)
-		}
-		return out
+// readCommitFiles reads commit's copy of each of files, through one batch where the driver
+// opens one.
+func (ev *evidence) readCommitFiles(ctx context.Context, files []string) error {
+	if len(files) == 0 {
+		return nil
 	}
-	out := make([]types.Glob, len(p.Sources))
-	for i, g := range p.Sources {
-		out[i] = g.Root(p.Path)
+	opener, ok := ev.driver.(vcs.ObjectBatchOpener)
+	if !ok {
+		for _, file := range files {
+			body, err := ev.driver.ReadFileAt(ctx, ev.root, ev.commit, file)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			// ReadFileAt errs on a path the revision lacks.
+			ev.committed[file] = committedFile{body: body, present: err == nil}
+		}
+		return nil
+	}
+	batch, err := opener.OpenObjectBatch(ctx, ev.root, ev.commit)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		// A batch request is one line.
+		if strings.ContainsAny(file, "\n\r") {
+			continue
+		}
+		body, err := batch.Read(file)
+		switch {
+		case errors.Is(err, vcs.ErrObjectMissing):
+			ev.committed[file] = committedFile{}
+		case err != nil:
+			return errors.Join(fmt.Errorf("read %s at %s: %w", file, ev.commit, err), batch.Close())
+		default:
+			ev.committed[file] = committedFile{body: body, present: true}
+		}
+	}
+	return batch.Close()
+}
+
+// rootedInputs is the inputs target's body declares in p, rooted at the workspace, none
+// for a target that declares none. internal/guard's copy falls back to the project's
+// sources, which every target's cache key holds; read as what a run read, that fallback
+// let a clean build verify every file of the project.
+func rootedInputs(p *types.Project, target string) []types.Glob {
+	refs := p.TargetInputs[target]
+	out := make([]types.Glob, len(refs))
+	for i, r := range refs {
+		out[i] = r.Rooted(p.Path)
 	}
 	return out
 }

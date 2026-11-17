@@ -41,9 +41,13 @@ func (s *ReadSuite) SetupTest() {
 	s.base = s.repo.Head()
 	s.cacheDir = filepath.Join(s.repo.Root(), ".magus")
 	project := &types.Project{
-		Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}},
+		Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}, {Pattern: "LICENSE"}},
 		MagusfileTargets: []string{"test", "generate", "lint", "build", "vet"},
-		TargetOutputs:    map[string][]types.OutputRef{"generate": {{Glob: "gen/*.jsonl"}}},
+		// build declares no inputs: its runs read only the paths their commands name.
+		TargetInputs: map[string][]types.InputRef{
+			"test": {{Glob: "**/*.go"}}, "lint": {{Glob: "**/*.go"}}, "vet": {{Glob: "**/*.go"}},
+		},
+		TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/*.jsonl"}}},
 	}
 	ws := typestest.NewMockWorkspaceRepository(s.T())
 	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
@@ -64,12 +68,17 @@ func (s *ReadSuite) record(target, revision string, edit func(*cache.OutputDescr
 	s.Require().NoError(err)
 }
 
+// write puts body at rel in the working tree, uncommitted.
+func (s *ReadSuite) write(rel, body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.repo.Root(), filepath.FromSlash(rel)), []byte(body), 0o644))
+}
+
 func (s *ReadSuite) input(base, revision string) readInput {
 	res, err := vcs.Resolve(s.T().Context(), s.repo.Root(), "", types.VCSOptions{})
 	s.Require().NoError(err)
 	return readInput{
 		Driver: res.VCS, Root: s.repo.Root(), Workspace: s.repo.Root(), Base: base, Revision: revision,
-		Projects: func(context.Context) (types.WorkspaceRepository, error) { return s.ws, nil },
+		Projects: func(context.Context) (Projects, error) { return s.ws, nil },
 		Runs:     func() ([]cache.OutputDescriptor, error) { return cache.NewOutputStore(s.cacheDir).ListDescriptors() },
 	}
 }
@@ -115,7 +124,7 @@ func (s *ReadSuite) TestACleanRunAtAnOlderRevisionLeavesAFileChangedSinceUnverif
 	got := s.read(head)
 	// The target that ran over the file comes first, then the magusfile targets that claim it.
 	s.Equal([]types.UnverifiedFile{{Path: "b.go", Commands: []string{
-		hint.Run.With("test", "."), hint.Run.With("generate", "."), hint.Run.With("lint", "."),
+		hint.Run.With("test", "."), hint.Run.With("lint", "."), hint.Run.With("vet", "."),
 	}}}, got.Unverified)
 	s.Require().Len(got.Runs, 1)
 	s.Equal([]types.RunEvidence{{
@@ -124,8 +133,19 @@ func (s *ReadSuite) TestACleanRunAtAnOlderRevisionLeavesAFileChangedSinceUnverif
 	}}, got.Runs)
 }
 
-func (s *ReadSuite) TestADirtyRunReadsNothingAndIsListedDirty() {
+func (s *ReadSuite) TestARunOverOtherUncommittedEditsReadsAFileTheTreeHoldsAsCommitted() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.write("notes.txt", "uncommitted\n")
+	s.record("test", head, func(d *cache.OutputDescriptor) { d.Dirty = true })
+
+	got := s.read(head)
+	s.Empty(got.Unknown)
+	s.Empty(got.Unverified, "a.go held what the commit holds while the run read it")
+}
+
+func (s *ReadSuite) TestARunOverAnEditTheCommitDoesNotHoldDoesNotReadTheFile() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.write("a.go", "package a\n\nvar A = 2\n")
 	s.record("test", head, func(d *cache.OutputDescriptor) { d.Dirty = true })
 
 	got := s.read(head)
@@ -133,6 +153,17 @@ func (s *ReadSuite) TestADirtyRunReadsNothingAndIsListedDirty() {
 	s.Require().Len(got.Runs, 1)
 	s.True(got.Runs[0].Dirty)
 	s.Empty(got.Runs[0].Reads)
+}
+
+func (s *ReadSuite) TestARunOverUncommittedEditsDoesNotReadAFileWrittenSinceItStarted() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("test", head, func(d *cache.OutputDescriptor) {
+		d.Dirty = true
+		d.TimestampMs = time.Now().Add(-time.Hour).UnixMilli()
+	})
+
+	got := s.read(head)
+	s.Equal([]string{"a.go"}, paths(got.Unverified), "the commit wrote a.go after the run started")
 }
 
 func (s *ReadSuite) TestAFailedRunReadsNothingAndIsListedFailed() {
@@ -146,14 +177,48 @@ func (s *ReadSuite) TestAFailedRunReadsNothingAndIsListedFailed() {
 	s.Empty(got.Runs[0].Reads)
 }
 
-func (s *ReadSuite) TestARunWithNoRevisionReadsNothing() {
+func (s *ReadSuite) TestARunWithNoRevisionReadsAFileTheTreeHoldsAsCommitted() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	s.record("test", "", nil)
 
 	got := s.read(head)
+	s.Empty(got.Unverified)
+}
+
+func (s *ReadSuite) TestARunOfATargetThatDeclaresNoInputsReadsNothingItsCommandDoesNotName() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("build", head, nil)
+
+	got := s.read(head)
+	s.Equal([]types.UnverifiedFile{{Path: "a.go", Commands: []string{
+		hint.Run.With("test", "."), hint.Run.With("lint", "."), hint.Run.With("vet", "."),
+	}}}, got.Unverified, "build is never named: no declaration says a.go is its")
+	s.Empty(got.Runs, "build claims no file")
+}
+
+func (s *ReadSuite) TestARunOfATargetThatDeclaresNoInputsReadsThePathsItsCommandNames() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n", "b.go": "package a\n\nvar B = 1\n"})
+	s.record("build", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"-o", "./a.go"} })
+
+	got := s.read(head)
+	s.Equal([]string{"b.go"}, paths(got.Unverified))
+}
+
+func (s *ReadSuite) TestAPathThatNamesNothingScopesTheRunToNothing() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("test", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"./gone"} })
+
+	got := s.read(head)
 	s.Equal([]string{"a.go"}, paths(got.Unverified))
-	s.Require().Len(got.Runs, 1)
-	s.Empty(got.Runs[0].Revision)
+	s.Equal([]string{hint.Run.With("test", ".", "--", "a.go")}, got.Unverified[0].Commands[:1])
+}
+
+func (s *ReadSuite) TestAnArgSpelledInAnotherCaseNamesNoPath() {
+	head := s.repo.Commit("change", map[string]string{"pkg/a.go": "package pkg\n"})
+	s.record("test", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"-run", "PKG"} })
+
+	got := s.read(head)
+	s.Empty(got.Unverified, "PKG is a test name, not pkg/, so the run read every Go file")
 }
 
 func (s *ReadSuite) TestACachedRunCountsAndIsListedCached() {
@@ -203,14 +268,25 @@ func (s *ReadSuite) TestAFileNoTargetClaimsHasNoCommand() {
 	s.Equal([]types.UnverifiedFile{{Path: "LICENSE"}}, got.Unverified)
 }
 
+func (s *ReadSuite) TestAReadOverNoProjectsNamesEveryFileWithNoCommand() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("test", head, nil)
+	in := s.input(s.base, head)
+	in.Projects = func(context.Context) (Projects, error) { return NoProjects, nil }
+
+	got := weigh(s.T().Context(), in)
+	s.Empty(got.Unknown)
+	s.Equal([]types.UnverifiedFile{{Path: "a.go"}}, got.Unverified, "a run of a target no project declares reads nothing")
+}
+
 func (s *ReadSuite) TestCommandsNameRunsBeforeMagusfileTargetsAndStopAtThree() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
-	s.record("lint", head, func(d *cache.OutputDescriptor) { d.Dirty = true })
-	s.record("build", head, func(d *cache.OutputDescriptor) { d.Failed = true })
+	s.record("lint", head, func(d *cache.OutputDescriptor) { d.Failed = true })
+	s.record("vet", head, func(d *cache.OutputDescriptor) { d.Failed = true })
 
 	got := s.read(head)
 	s.Require().Len(got.Unverified, 1)
-	s.Equal([]string{hint.Run.With("build", "."), hint.Run.With("lint", "."), hint.Run.With("test", ".")}, got.Unverified[0].Commands)
+	s.Equal([]string{hint.Run.With("vet", "."), hint.Run.With("lint", "."), hint.Run.With("test", ".")}, got.Unverified[0].Commands)
 }
 
 func (s *ReadSuite) TestChangedFilesAreSinceTheMergeBase() {
@@ -225,7 +301,7 @@ func (s *ReadSuite) TestChangedFilesAreSinceTheMergeBase() {
 	s.Equal(types.UnverifiedReport{
 		Revision: head, Base: "trunk", Changed: []string{"a.go"},
 		Unverified: []types.UnverifiedFile{{Path: "a.go", Commands: []string{
-			hint.Run.With("test", "."), hint.Run.With("generate", "."), hint.Run.With("lint", "."),
+			hint.Run.With("test", "."), hint.Run.With("lint", "."), hint.Run.With("vet", "."),
 		}}},
 	}, got)
 }
@@ -264,7 +340,7 @@ func (s *ReadSuite) TestAnUnreadableOutputStoreIsUnknown() {
 func (s *ReadSuite) TestAWorkspaceThatDidNotOpenIsUnknown() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	in := s.input(s.base, head)
-	in.Projects = func(context.Context) (types.WorkspaceRepository, error) { return nil, errors.New("no magusfile") }
+	in.Projects = func(context.Context) (Projects, error) { return nil, errors.New("no magusfile") }
 
 	got := weigh(s.T().Context(), in)
 	s.Equal("the workspace did not open, so no target's inputs are known: no magusfile", got.Unknown)
@@ -272,7 +348,7 @@ func (s *ReadSuite) TestAWorkspaceThatDidNotOpenIsUnknown() {
 
 func (s *ReadSuite) TestNoChangedFilesReadsNeitherTheWorkspaceNorTheStore() {
 	in := s.input(s.base, s.base)
-	in.Projects = func(context.Context) (types.WorkspaceRepository, error) { return nil, errors.New("opened") }
+	in.Projects = func(context.Context) (Projects, error) { return nil, errors.New("opened") }
 	in.Runs = func() ([]cache.OutputDescriptor, error) { return nil, errors.New("read") }
 
 	got := weigh(s.T().Context(), in)

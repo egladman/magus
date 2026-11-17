@@ -15,7 +15,8 @@ import (
 
 // MagusWorkspaceUnverified backs magus\workspace(dir).unverified(revision). A guard rule
 // has no workspace on its context, so it takes the reader the guard pinned for the checkout
-// it judges; elsewhere it reads the workspace on ctx and refuses a dir outside it.
+// it judges; elsewhere it reads the workspace on ctx and refuses a dir outside it. A relative
+// dir is read from the process's working directory.
 func MagusWorkspaceUnverified(ctx context.Context, w types.MagusWorkspace, revision string) (types.UnverifiedReport, error) {
 	if revision == "" {
 		return types.UnverifiedReport{}, fmt.Errorf("magus\\workspace(`%s`).unverified: revision is empty, pass the commit to read, such as req.push.revision", w.Dir)
@@ -33,12 +34,16 @@ func MagusWorkspaceUnverified(ctx context.Context, w types.MagusWorkspace, revis
 	}
 	root := ws.Root()
 	dir := cmp.Or(w.Dir, root)
+	// A relative dir is the script's, as every other path it names is.
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
 	if !within(root, dir) {
 		return types.UnverifiedReport{}, fmt.Errorf("magus\\workspace(`%s`).unverified: `%s` is outside this workspace (`%s`), whose runs are the only ones it reads", dir, dir, root)
 	}
 	return unverified.Open(ctx, unverified.Checkout{
 		Dir: dir, Workspace: root, CacheDir: cacheDir, VCS: ws.VCSOptions(),
-		Projects: func(context.Context) (types.WorkspaceRepository, error) { return ws, nil },
+		Projects: func(context.Context) (unverified.Projects, error) { return ws, nil },
 	}, revision), nil
 }
 

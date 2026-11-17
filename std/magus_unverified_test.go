@@ -4,9 +4,11 @@ package std
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/unverified"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -16,11 +18,12 @@ import (
 type unverifiedWorkspace struct {
 	types.WorkspaceRepository
 	root, cacheDir string
+	vcs            types.VCSOptions
 }
 
-func (w unverifiedWorkspace) Root() string               { return w.root }
-func (w unverifiedWorkspace) CacheDir() string           { return w.cacheDir }
-func (unverifiedWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (w unverifiedWorkspace) Root() string                 { return w.root }
+func (w unverifiedWorkspace) CacheDir() string             { return w.cacheDir }
+func (w unverifiedWorkspace) VCSOptions() types.VCSOptions { return w.vcs }
 
 type unverifiedMemberSuite struct{ suite.Suite }
 
@@ -62,4 +65,33 @@ func (s *unverifiedMemberSuite) TestAWorkspaceWithoutACacheDirectoryRaises() {
 	ctx := types.WithWorkspace(s.T().Context(), checkoutWorkspace{})
 	_, err := MagusWorkspaceUnverified(ctx, types.MagusWorkspace{Dir: "."}, "abc")
 	s.Require().ErrorContains(err, "no cache directory")
+}
+
+// repositoryWorkspace is a workspace over a fresh repository whose base ref is its head, so a read
+// of the head has no changed file to weigh.
+func (s *unverifiedMemberSuite) repositoryWorkspace() (*testkit.Repo, context.Context) {
+	testkit.Isolate(s.T())
+	repo := testkit.NewRepository(s.T(), map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	ws := unverifiedWorkspace{root: repo.Root(), cacheDir: filepath.Join(repo.Root(), ".magus"), vcs: types.VCSOptions{BaseRef: repo.Head()}}
+	return repo, types.WithWorkspace(s.T().Context(), ws)
+}
+
+func (s *unverifiedMemberSuite) TestARelativeDirIsReadFromTheWorkingDirectory() {
+	repo, ctx := s.repositoryWorkspace()
+	s.T().Chdir(repo.Root())
+
+	got, err := MagusWorkspaceUnverified(ctx, types.MagusWorkspace{Dir: "."}, repo.Head())
+	s.Require().NoError(err)
+	s.Equal(types.UnverifiedReport{Revision: repo.Head(), Base: repo.Head()}, got)
+}
+
+func (s *unverifiedMemberSuite) TestAWorktreeNestedUnderTheWorkspaceIsNotReadAsIt() {
+	repo, ctx := s.repositoryWorkspace()
+	nested := filepath.Join(repo.Root(), "nested")
+	repo.Git("worktree", "add", "-q", "-b", "nested", nested)
+
+	got, err := MagusWorkspaceUnverified(ctx, types.MagusWorkspace{Dir: nested}, repo.Head())
+	s.Require().NoError(err)
+	s.Contains(got.Unknown, "which does not hold the workspace")
+	s.Empty(got.Changed)
 }
