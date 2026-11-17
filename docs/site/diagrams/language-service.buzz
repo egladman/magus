@@ -25,7 +25,6 @@ export fun languageServiceFigure() > figure\Figure !> any {
         .box(playground, label: "Playground", sub: "WebAssembly build")
         .box(engine, label: "Playground engine", sub: "runs a script")
         .edgesFromGraph()
-        .hideEdges([cli, playground], dst: [token], why: "they read tokens through the service")
         .flowIn(editor, dst: cli, label: "protocol")
         .legend(figure\Look.focal, label: "the one service")
         .legend(figure\Look.external, label: "outside magus")
