@@ -6,29 +6,21 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/diff"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
 	"strings"
-	"time"
 
-	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/interactive/difftui"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/text/plural"
 )
 
 // There is deliberately no `put` subcommand, and adding one would defeat the feature.
@@ -84,98 +76,6 @@ func notesUsage() {
 	fmt.Fprintln(os.Stderr, "happened and quotes it, and the note it writes says so in its own frontmatter.")
 }
 
-// notesDir resolves the declared store, turning the disabled case into a message that says
-// how to enable it rather than an empty listing that looks like an empty store.
-// notesStore is one resolved location plus the scope that says what putting a note there
-// means. Both stores hold the same shape of note; the difference is entirely in who ends
-// up able to read it, which is why the scope travels with every listing.
-type notesStore struct {
-	dir   string
-	scope store.Scope
-}
-
-// notesStores resolves every declared location, in the order a reader should see them.
-//
-// Neither being declared is an error with instructions rather than an empty listing: an
-// empty list would say "you have no notes" when the truth is "this workspace has nowhere
-// to put one", and those call for completely different next actions.
-func notesStores(root, only string) ([]notesStore, error) {
-	declared := globalCfg.Knowledge.Notes
-	found, err := review.NoteStores(root, review.NoteDirs{Shared: declared.Shared, Private: declared.Private})
-	if err != nil {
-		return nil, fmt.Errorf("magus notes: %w", err)
-	}
-	var out []notesStore
-	for _, s := range found {
-		if only == "" || only == string(s.Scope) {
-			out = append(out, notesStore{dir: s.Dir, scope: s.Scope})
-		}
-	}
-	if len(out) == 0 {
-		if only != "" {
-			return nil, fmt.Errorf("magus notes: this workspace declares no %s notes store, set knowledge.notes.%s in magus.yaml", only, only)
-		}
-		return nil, errors.New("magus notes: this workspace declares no notes store, set knowledge.notes.shared " +
-			"(a directory IN the repo: your team gets these, and git records who wrote each one) or knowledge.notes.private " +
-			"(a directory anywhere: only this machine has them, and nothing attributes them)")
-	}
-	return out, nil
-}
-
-// findNote locates one note across the declared stores. A name present in both is an
-// error rather than a silent preference: the two mean different things to a reader, so
-// guessing which was meant is the one thing that must not happen.
-func findNote(stores []notesStore, name string) (store.Note, notesStore, error) {
-	var found []notesStore
-	var note store.Note
-	for _, st := range stores {
-		n, err := store.Get(st.dir, name)
-		switch {
-		case err == nil:
-			note, found = n, append(found, st)
-		case errors.Is(err, os.ErrNotExist):
-			// Genuinely absent here; keep looking in the other store.
-		default:
-			// The note EXISTS and could not be read. Reporting that as "no such note"
-			// sends the reader hunting for a missing file, and lets `notes edit` scaffold
-			// a second copy in the other store on top of the broken one.
-			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q (%s store): %w", name, st.scope, unreadableNoteError{err})
-		}
-	}
-	switch len(found) {
-	case 0:
-		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: no note named %q", name)
-	case 1:
-		return note, found[0], nil
-	default:
-		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q: %w", name, errAmbiguousNote)
-	}
-}
-
-// errAmbiguousNote marks a name present in both stores, so a caller can tell it apart from
-// "not found" instead of treating both as "nothing here". It carries the fix as well as
-// the diagnosis, because it is the text every wrapping caller prints and a reader told
-// the name is ambiguous still needs the flag that resolves it.
-var errAmbiguousNote = errors.New("exists in both stores, say which with --shared or --private")
-
-// errUnreadableNote marks a note whose file is THERE and unreadable, so a caller can
-// tell it apart from "not found" the way errAmbiguousNote separates out "in both". It
-// exists for `notes edit`: without a sentinel to match, an unreadable note fell past
-// every case of that switch and was handled as if the name were free, scaffolding a
-// second copy in the other store on top of the broken one.
-var errUnreadableNote = errors.New("exists but could not be read")
-
-// unreadableNoteError reports why a note could not be read and still matches
-// errUnreadableNote, so the reason follows the sentinel without a second %w in the
-// wrapping format.
-type unreadableNoteError struct{ cause error }
-
-func (e unreadableNoteError) Error() string {
-	return fmt.Sprintf("%s: %s", errUnreadableNote.Error(), e.cause.Error())
-}
-
-func (e unreadableNoteError) Unwrap() []error { return []error{errUnreadableNote, e.cause} }
-
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
 	return fs.Bool("shared", false, "Only notes committed to this repository (your team has these)"),
@@ -187,88 +87,6 @@ func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
 func negateScopeFlags(fs *flag.FlagSet, shared, private *bool) {
 	command.NegatedBoolVar(fs, shared, "shared")
 	command.NegatedBoolVar(fs, private, "private")
-}
-
-func notesScope(shared, private bool) (string, error) {
-	switch {
-	case shared && private:
-		return "", errors.New("magus notes: --shared and --private are opposites, pass neither to see both")
-	case shared:
-		return knowledge.ScopeShared, nil
-	case private:
-		return knowledge.ScopePrivate, nil
-	default:
-		return "", nil
-	}
-}
-
-// scopedNote is a note plus where it lives, so a listing can never present a private
-// note as if the team had it.
-type scopedNote struct {
-	store.Note
-	Scope string `json:"scope" yaml:"scope"`
-	// Path is where the note lives, and it is here so a structured listing is enough to
-	// ACT on: without it a consumer knows a note exists and cannot open it, which is the
-	// difference between a report and an export. Same rendering as the notes service
-	// (internal/handler/notes.Service.notePath), so the CLI and the RPC name one file the
-	// same way rather than each having its own idea of where a note is.
-	Path string `json:"path" yaml:"path"`
-	// Modified shadows the embedded store.Note.Modified so an export can OMIT it instead of
-	// emitting a zero timestamp. It is the file's mtime, which git rewrites on checkout, so
-	// a committed export that carries it reports drift on every fresh clone with the
-	// timestamp as the entire diff. A pointer is what makes "absent" expressible.
-	Modified *time.Time `json:"modified,omitempty" yaml:"-"`
-}
-
-// noteModified picks the mtime to serialize. Under --reproducible it is dropped rather than
-// zeroed: a zero time is a value a reader can misread as "never touched", where an absent
-// field says the export chose not to answer.
-func noteModified(n store.Note, reproducible bool) *time.Time {
-	if reproducible {
-		return nil
-	}
-	m := n.Modified
-	return &m
-}
-
-// notePath renders where a note lives: workspace-relative for a shared note, absolute for a
-// private one. The split follows the scope: a private store sits outside the workspace, so a
-// relative path would be a lie about a file the reader still has to find.
-//
-// The path is the one the note was READ from (store.Note.Path), never one rebuilt from its
-// name: a declared id is deliberately independent of the filename, so rebuilding names a
-// file that stops existing the moment someone renames the note.
-func notePath(root string, st notesStore, n store.Note) string {
-	if st.scope != store.ScopeShared {
-		return n.Path
-	}
-	return relativeToRoot(root, n.Path)
-}
-
-// relativeToRoot renders a path inside the workspace as workspace-relative, and leaves one
-// outside it alone: a private store sits anywhere on disk, and a ../../.. walk out of the
-// checkout names the file no more usefully than the absolute path does.
-func relativeToRoot(root, path string) string {
-	rel, err := filepath.Rel(root, path)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return path
-	}
-	return filepath.ToSlash(rel)
-}
-
-// notesStoreOutput names one declared store in a structured listing. Only DECLARED stores
-// reach a listing at all (notesStores skips the rest), so a consumer reading this knows the
-// location exists; an empty Notes list against a non-empty Stores list is the "declared and
-// empty" case, which is a different fact from "this workspace has nowhere to put a note".
-type notesStoreOutput struct {
-	Scope string `json:"scope" yaml:"scope"`
-	Path  string `json:"path" yaml:"path"`
-}
-
-type notesListOutput struct {
-	Stores []notesStoreOutput `json:"stores"`
-	Notes  []scopedNote       `json:"notes" jsonl:"primary"`
-	Issues []store.Issue      `json:"issues"`
 }
 
 func notesList(ctx context.Context, root string, args []string) error {
@@ -292,47 +110,17 @@ func notesList(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	scope, err := notesScope(*onlyShared, *onlyPrivate)
+	scope, err := store.ScopeFromFlags(*onlyShared, *onlyPrivate)
 	if err != nil {
 		return err
 	}
-	stores, err := notesStores(root, scope)
+	stores, err := review.ResolveNoteStores(root, noteDirs(), scope)
 	if err != nil {
 		return err
 	}
-	var found []scopedNote
-	var issues []store.Issue
-	listed := make([]notesStoreOutput, 0, len(stores))
-	for _, st := range stores {
-		dir := st.dir
-		if *reproducible {
-			dir = relativeToRoot(root, dir)
-		}
-		listed = append(listed, notesStoreOutput{Scope: string(st.scope), Path: dir})
-		ns, is, err := store.Inspect(st.dir)
-		if err != nil {
-			return err
-		}
-		for _, n := range ns {
-			if !n.HasTags(tags) {
-				continue
-			}
-			found = append(found, scopedNote{
-				Note:     n,
-				Scope:    string(st.scope),
-				Path:     notePath(root, st, n),
-				Modified: noteModified(n, *reproducible),
-			})
-		}
-		if *reproducible {
-			// An issue names the file it is about by absolute path, which identifies the
-			// machine that ran this as much as the note. Relative to the workspace it
-			// still points at the same file for whoever reads the export.
-			for i := range is {
-				is[i].Path = relativeToRoot(root, is[i].Path)
-			}
-		}
-		issues = append(issues, is...)
+	found, issues, listed, err := review.ListNotes(root, stores, tags, *reproducible)
+	if err != nil {
+		return err
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -346,28 +134,28 @@ func notesList(ctx context.Context, root string, args []string) error {
 		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
-		return notesIssuesError(issues, false)
+		return store.IssuesError(issues, false)
 	}
 	if opts.Format != outputText {
-		if err := emitFormatted(opts, notesListOutput{Stores: listed, Notes: found, Issues: issues}); err != nil {
+		if err := emitFormatted(opts, store.ListOutput{Stores: listed, Notes: found, Issues: issues}); err != nil {
 			return err
 		}
 		// Never strict: `ls` is a listing, and a listing that exits non-zero because the
 		// store has a repair pending is one nothing can pipe. The gate lives in `verify`.
-		return notesIssuesError(issues, false)
+		return store.IssuesError(issues, false)
 	}
 	if len(found) == 0 {
 		fmt.Printf("No notes yet. Write the first one with `%s`.\n", hint.NotesEdit.With("<name>"))
 	} else {
-		finder := &notesFinder{root: root}
+		finder := &review.NotesFinder{Root: root, Load: notesResolver}
 		for _, n := range found {
-			fmt.Printf("%-8s %s  %s  (%s)\n", n.Scope, n.Name, n.Title, notesAnchorSummary(n.Note))
-			for _, line := range finder.block(ctx, n.Scope, n.Note) {
+			fmt.Printf("%-8s %s  %s  (%s)\n", n.Scope, n.Name, n.Title, store.AnchorSummary(n.Note))
+			for _, line := range finder.Block(ctx, n.Scope, n.Note) {
 				fmt.Println("  " + line)
 			}
 		}
 	}
-	return printNotesIssues(issues, false)
+	return store.PrintIssues(issues, false)
 }
 
 func notesGet(ctx context.Context, root string, args []string) error {
@@ -387,15 +175,15 @@ func notesGet(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return fmt.Errorf("magus notes get: requires exactly one note name")
 	}
-	scope, err := notesScope(*getShared, *getPrivate)
+	scope, err := store.ScopeFromFlags(*getShared, *getPrivate)
 	if err != nil {
 		return err
 	}
-	stores, err := notesStores(root, scope)
+	stores, err := review.ResolveNoteStores(root, noteDirs(), scope)
 	if err != nil {
 		return err
 	}
-	n, st, err := findNote(stores, pos[0])
+	n, st, err := review.FindNote(stores, pos[0])
 	if err != nil {
 		return err
 	}
@@ -407,16 +195,16 @@ func notesGet(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{n.Name})
 	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, scopedNote{
+		return emitFormatted(opts, store.ScopedNote{
 			Note:     n,
-			Scope:    string(st.scope),
-			Path:     notePath(root, st, n),
-			Modified: noteModified(n, false),
+			Scope:    string(st.Scope),
+			Path:     store.Locate(root, st.Scope, n),
+			Modified: store.NoteModified(n, false),
 		})
 	}
-	printNote(n, st.scope)
-	finder := &notesFinder{root: root}
-	for _, line := range finder.block(ctx, string(st.scope), n) {
+	store.PrintNote(n, st.Scope)
+	finder := &review.NotesFinder{Root: root, Load: notesResolver}
+	for _, line := range finder.Block(ctx, string(st.Scope), n) {
 		fmt.Println(line)
 	}
 	return nil
@@ -447,11 +235,11 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return fmt.Errorf("magus notes edit: requires exactly one note name")
 	}
-	scope, err := notesScope(*editShared, *editPrivate)
+	scope, err := store.ScopeFromFlags(*editShared, *editPrivate)
 	if err != nil {
 		return err
 	}
-	stores, err := notesStores(root, scope)
+	stores, err := review.ResolveNoteStores(root, noteDirs(), scope)
 	if err != nil {
 		return err
 	}
@@ -465,19 +253,19 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// answers differ, so editing one opened a blank scaffold at the id's path and left the
 	// real note untouched beside it.
 	var existing string
-	switch found, st, err := findNote(stores, pos[0]); {
+	switch found, st, err := review.FindNote(stores, pos[0]); {
 	case err == nil:
 		target, existing = st, found.Path
-	case errors.Is(err, errAmbiguousNote):
+	case errors.Is(err, review.ErrAmbiguousNote):
 		// Never guess which store was meant: the two mean different things to a reader,
 		// and silently editing the shared one is the mistake this error exists to prevent.
 		return err
-	case errors.Is(err, errUnreadableNote):
+	case errors.Is(err, review.ErrUnreadableNote):
 		// The name is TAKEN, just not readable. Falling through would treat it as free
 		// and scaffold a second copy beside the broken one, so refuse and say what to fix.
 		return fmt.Errorf("fix the file's permissions or contents, then edit it again: %w", err)
 	}
-	dir := target.dir
+	dir := target.Dir
 	path := existing
 	if path == "" {
 		path, err = store.Path(dir, pos[0])
@@ -490,10 +278,10 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// still a PERSON writing: an agent reaching for this is denied by the command guard,
 	// which is where the write boundary is enforced for shell commands (the file-write rule
 	// only sees file writes, and a pipe is not one).
-	if !stdinIsTerminal() {
+	if !termkit.StdinIsTerminal() {
 		return notesWriteFromStdin(ctx, root, dir, target, pos[0], path, anchors)
 	}
-	editor := strings.TrimSpace(firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
+	editor := strings.TrimSpace(store.FirstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
 	if editor == "" {
 		return fmt.Errorf("magus notes edit: neither $VISUAL nor $EDITOR is set, set one to your editor, pipe the body in, or open %s directly", path)
 	}
@@ -531,7 +319,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus notes edit %q: %w", pos[0], err)
 	}
-	fmt.Printf("Saved %s [%s] (%s).\n", path, target.scope, notesAnchorSummary(n))
+	fmt.Printf("Saved %s [%s] (%s).\n", path, target.Scope, store.AnchorSummary(n))
 
 	// Re-attestation, and the reason it lives HERE rather than inside verify: the person
 	// just had this note and its anchors in front of them, so recording the anchored
@@ -550,7 +338,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 		// is a real error, with the saved path named so nobody goes looking for lost work.
 		return fmt.Errorf("magus notes edit: saved %s, but its anchors could not be fingerprinted because the knowledge graph would not load, run `%s` again once it does: %w", path, hint.NotesEdit.With(pos[0]), err)
 	}
-	changed, err := store.RecordDigests(ctx, dir, pos[0], notesRevision(ctx, root), res.ForScope(string(target.scope)))
+	changed, err := store.RecordDigests(ctx, dir, pos[0], store.Revision(ctx, root), res.ForScope(string(target.Scope)))
 	if err != nil {
 		return fmt.Errorf("magus notes edit %q: recording anchors: %w", pos[0], err)
 	}
@@ -583,17 +371,17 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	scope, err := notesScope(*vShared, *vPrivate)
+	scope, err := store.ScopeFromFlags(*vShared, *vPrivate)
 	if err != nil {
 		return err
 	}
-	stores, err := notesStores(root, scope)
+	stores, err := review.ResolveNoteStores(root, noteDirs(), scope)
 	if err != nil {
 		return err
 	}
 	var report store.Verification
 	for _, st := range stores {
-		r, err := store.Verify(st.dir)
+		r, err := store.Verify(st.Dir)
 		if err != nil {
 			return err
 		}
@@ -611,7 +399,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes verify: %d note(s) are structurally valid, but their anchors were NOT checked because the knowledge graph would not load: %w", report.Notes, resErr)
 	}
 	for _, st := range stores {
-		anchorIssues, err := store.AnchorIssues(ctx, st.dir, res.ForScope(string(st.scope)))
+		anchorIssues, err := store.AnchorIssues(ctx, st.Dir, res.ForScope(string(st.Scope)))
 		if err != nil {
 			return err
 		}
@@ -625,46 +413,25 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	// the reader would act on next: the note each issue is about (its file, for an issue
 	// about the store rather than a note). A clean store prints nothing.
 	if opts.Format == outputName {
-		if err := emitNames(os.Stdout, notesIssueSubjects(report.Issues)); err != nil {
+		if err := emitNames(os.Stdout, store.IssueSubjects(report.Issues)); err != nil {
 			return err
 		}
-		return notesIssuesError(report.Issues, strict)
+		return store.IssuesError(report.Issues, strict)
 	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, report); err != nil {
 			return err
 		}
-		return notesIssuesError(report.Issues, strict)
+		return store.IssuesError(report.Issues, strict)
 	}
 	if len(report.Issues) == 0 {
 		fmt.Printf("[pass] notes: %d verified\n", report.Notes)
 		return nil
 	}
-	if err := printNotesIssues(report.Issues, strict); err != nil {
+	if err := store.PrintIssues(report.Issues, strict); err != nil {
 		return err
 	}
 	return nil
-}
-
-// notesRevision is the commit the re-attestation is recorded AT, so a later drift report can
-// say what to diff rather than only that something changed.
-//
-// It reports HEAD even when the tree is dirty, deliberately. A note is normally written
-// alongside the very work it describes, so demanding a clean tree would leave the provenance
-// empty in the common case. HEAD-at-review is still the right base: it is the parent of
-// the commit that will carry both the note and the change, so diffing from it shows the
-// author exactly the work they were looking at. Empty when there is no resolvable VCS, which
-// omits the provenance rather than blocking the write.
-func notesRevision(ctx context.Context, root string) string {
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return ""
-	}
-	meta, err := res.VCS.Metadata(ctx, root)
-	if err != nil {
-		return ""
-	}
-	return magus.ShortRevision(meta.ID)
 }
 
 // notesResolver loads the graph once and returns a resolver over it. The caller binds a
@@ -686,7 +453,7 @@ func notesResolver(ctx context.Context, root string) (knowledge.NoteResolver, er
 // frontmatter and inventing one would put words in the author's mouth. An EXISTING note
 // keeps its title and anchors and has only its body replaced, so re-piping is a rewrite of
 // the prose rather than a silent reshaping of what the note is about.
-func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStore, name, path string, anchors []string) error {
+func notesWriteFromStdin(ctx context.Context, root, dir string, target review.NoteStore, name, path string, anchors []string) error {
 	body, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("magus notes edit: reading stdin: %w", err)
@@ -724,107 +491,18 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 	if err := store.Save(dir, n); err != nil {
 		return fmt.Errorf("magus notes edit: %w", err)
 	}
-	fmt.Printf("Wrote %s [%s] (%s).\n", path, target.scope, notesAnchorSummary(n))
+	fmt.Printf("Wrote %s [%s] (%s).\n", path, target.Scope, store.AnchorSummary(n))
 
 	res, err := notesResolver(ctx, root)
 	if err != nil {
 		return fmt.Errorf("magus notes edit: wrote %s, but its anchors could not be fingerprinted because the knowledge graph would not load: %w", path, err)
 	}
-	changed, err := store.RecordDigests(ctx, dir, name, notesRevision(ctx, root), res.ForScope(string(target.scope)))
+	changed, err := store.RecordDigests(ctx, dir, name, store.Revision(ctx, root), res.ForScope(string(target.Scope)))
 	if err != nil {
 		return fmt.Errorf("magus notes edit: wrote %s, but recording its anchors failed: %w", path, err)
 	}
 	if changed != 0 {
 		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, plural.Word(changed, "", "s"))
-	}
-	return nil
-}
-
-// firstNonEmpty returns a when it holds anything but whitespace, else b.
-func firstNonEmpty(a, b string) string {
-	if strings.TrimSpace(a) != "" {
-		return a
-	}
-	return b
-}
-
-func notesAnchorSummary(n store.Note) string {
-	parts := make([]string, 0, len(n.Anchors))
-	for _, a := range n.Anchors {
-		parts = append(parts, fmt.Sprintf("%s:%s", string(a.Kind), a.Target))
-	}
-	return strings.Join(parts, ", ")
-}
-
-func printNote(n store.Note, scope store.Scope) {
-	fmt.Printf("%s  [%s]\n%s\n", n.Name, scope, n.Title)
-	if len(n.Tags) != 0 {
-		fmt.Printf("tags: %s\n", strings.Join(n.Tags, ", "))
-	}
-	fmt.Println("anchors:")
-	for _, a := range n.Anchors {
-		line := fmt.Sprintf("  %s: %s", a.Kind, a.Target)
-		if a.Commit != "" {
-			line += fmt.Sprintf("  (reviewed at %s)", a.Commit)
-		}
-		fmt.Println(line)
-	}
-	if n.Body != "" {
-		fmt.Printf("\n%s\n", n.Body)
-	}
-	fmt.Printf("\nmodified: %s\n", n.Modified.UTC().Format(time.RFC3339))
-}
-
-func printNotesIssues(issues []store.Issue, strict bool) error {
-	for _, issue := range issues {
-		glyph := "[warn]"
-		if issue.Severity == "error" || (strict && issue.Code == store.CodeDanglingAnchor) {
-			glyph = "[fail]"
-		}
-		fmt.Printf("%s %s: %s\n  %s\n", glyph, issue.Path, issue.Message, issue.Hint)
-	}
-	return notesIssuesError(issues, strict)
-}
-
-// notesIssuesError decides the exit status. An invalid note always fails: the store could not
-// be READ as declared, so anything acting on the result is acting on a partial store.
-//
-// Under --strict a dangling anchor fails too, and nothing else ever does. The line is drawn
-// there because of what each finding costs to act on: a dangling anchor names something that
-// was renamed or deleted in a diff someone is already looking at, and the fix is bounded. A
-// drift finding asks a person to re-read prose against code and decide, and a gate that
-// blocks a merge pending a judgment call is one people route around permanently. The only
-// actively-maintained tool in this space is a CI check that fails a pull request when covered
-// files move: the gate is the mechanism that works, and keeping it narrow is what keeps it.
-// notesIssueSubjects names what each issue is about, for `-o name`.
-func notesIssueSubjects(issues []store.Issue) []string {
-	out := make([]string, 0, len(issues))
-	for _, i := range issues {
-		if i.Note != "" {
-			out = append(out, i.Note)
-			continue
-		}
-		out = append(out, i.Path)
-	}
-	return out
-}
-
-func notesIssuesError(issues []store.Issue, strict bool) error {
-	var failures, dangling int
-	for _, issue := range issues {
-		if issue.Severity == "error" {
-			failures++
-		}
-		if strict && issue.Code == store.CodeDanglingAnchor {
-			dangling++
-		}
-	}
-	if failures == 0 && dangling != 0 {
-		return fmt.Errorf("magus notes verify: %d dangling anchor%s, re-anchor the note or remove the anchor",
-			dangling, plural.Word(dangling, "", "s"))
-	}
-	if failures != 0 {
-		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, plural.Word(failures, "", "s"))
 	}
 	return nil
 }
@@ -865,7 +543,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if gap {
-		return notesCaptureGap(ctx, root, store.Gap{Title: title, Anchors: anchors, Refs: pos, Tags: tags}, name, *shared, *private)
+		return captureEnv(root).Gap(ctx, store.Gap{Title: title, Anchors: anchors, Refs: pos, Tags: tags}, name, *shared, *private)
 	}
 	if len(anchors) > 0 {
 		return exit.Usagef("magus notes capture: --anchor needs --gap, a review thread is anchored by the files it discussed")
@@ -878,42 +556,45 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
-	sess, fromServer, err := captureSession(ctx, m)
+	sess, fromServer, err := review.CaptureSession(ctx, reviewServerGet, func(ctx context.Context) string {
+		patch, _ := m.WorkingDiff(ctx, nil)
+		return patch
+	}, m.CacheDir())
 	if err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
-	comments, partial := reviewComments(ctx, m)
+	comments, partial := review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
 	if len(sess.Comments) == 0 && len(comments) == 0 {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
 
-	target, err := captureStore(root, *shared, *private)
+	target, err := captureEnv(root).Store(*shared, *private)
 	if err != nil {
 		return err
 	}
 
-	capture := captureFromSession(sess, comments, title, tags)
+	capture := review.CaptureFromSession(sess, comments, title, tags)
 	noteName := name
 	if noteName == "" {
-		noteName = captureName(sess)
+		noteName = review.CaptureName(sess)
 	}
 	n, err := capture.Note(noteName)
 	if err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
-	if _, err := store.Get(target.dir, noteName); err == nil {
-		return fmt.Errorf("magus notes capture: %q already exists in the %s store, pass --name to keep both because overwriting it would destroy a transcript nothing can recreate", noteName, target.scope)
+	if _, err := store.Get(target.Dir, noteName); err == nil {
+		return fmt.Errorf("magus notes capture: %q already exists in the %s store, pass --name to keep both because overwriting it would destroy a transcript nothing can recreate", noteName, target.Scope)
 	}
-	if err := store.Save(target.dir, n); err != nil {
+	if err := store.Save(target.Dir, n); err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
 	// Read back rather than reporting the value just written. notePath needs Note.Path, which
 	// is observed on read and empty on a note that was built; printing the built one names
 	// the store directory instead of the file. The round trip also proves the transcript
 	// parses as a note, which is worth one stat for something nothing can recreate.
-	saved, err := store.Get(target.dir, noteName)
+	saved, err := store.Get(target.Dir, noteName)
 	if err != nil {
 		return fmt.Errorf("magus notes capture: wrote %q, but it does not read back as a note: %w", noteName, err)
 	}
@@ -922,8 +603,8 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	said := len(sess.Comments) + len(comments)
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
 		said, plural.Word(said, "", "s"),
-		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
-	if line := newRemarkLine(comments); line != "" {
+		store.Locate(root, target.Scope, saved), target.Scope, store.AnchorSummary(saved))
+	if line := review.NewRemarkLine(comments); line != "" {
 		fmt.Println(line)
 	}
 	// Said out loud, because a transcript is exactly the artifact nobody re-checks. A capture
@@ -948,7 +629,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus notes capture: captured the thread, but its anchors could not be fingerprinted because the knowledge graph would not load: %w", err)
 	}
-	changed, err := store.RecordDigests(ctx, target.dir, noteName, notesRevision(ctx, root), res.ForScope(string(target.scope)))
+	changed, err := store.RecordDigests(ctx, target.Dir, noteName, store.Revision(ctx, root), res.ForScope(string(target.Scope)))
 	if err != nil {
 		return fmt.Errorf("magus notes capture: captured the thread, but recording its anchors failed: %w", err)
 	}
@@ -956,351 +637,6 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, plural.Word(changed, "", "s"))
 	}
 	return nil
-}
-
-// captureStore picks the store a capture is written to: private by default, because
-// committing a capture puts quoted, half-finished words in front of review under your
-// name. --shared is how the team gets it.
-func captureStore(root string, shared, private bool) (notesStore, error) {
-	scope, err := notesScope(shared, private)
-	if err != nil {
-		return notesStore{}, err
-	}
-	defaulted := scope == ""
-	if defaulted {
-		scope = knowledge.ScopePrivate
-	}
-	stores, err := notesStores(root, scope)
-	if err != nil {
-		// Never a quiet fall back to shared: that turns a safety default into a surprise
-		// commit. A shared-only workspace is common, so the error names --shared.
-		if defaulted {
-			return notesStore{}, fmt.Errorf("pass --shared to put this capture in the repository, where review sees it: %w", err)
-		}
-		return notesStore{}, err
-	}
-	return stores[0], nil
-}
-
-// notesCaptureGap records a harness gap. Every anchor is resolved against the graph before
-// anything is written, so a gap that could not be found again is refused rather than stored.
-func notesCaptureGap(ctx context.Context, root string, g store.Gap, name string, shared, private bool) error {
-	target, err := captureStore(root, shared, private)
-	if err != nil {
-		return err
-	}
-	res, err := notesResolver(ctx, root)
-	if err != nil {
-		return fmt.Errorf("magus notes capture --gap: its anchors cannot be resolved because the knowledge graph would not load: %w", err)
-	}
-	scoped := res.ForScope(string(target.scope))
-	rev := notesRevision(ctx, root)
-	g.AsOf, g.Captured = rev, time.Now()
-	n, err := g.Note(ctx, name, scoped)
-	if err != nil {
-		return fmt.Errorf("magus notes capture --gap: %w", err)
-	}
-	if _, err := store.Get(target.dir, n.Name); err == nil {
-		return fmt.Errorf("magus notes capture --gap: %q already exists in the %s store, pass --name to keep both", n.Name, target.scope)
-	}
-	if err := store.Save(target.dir, n); err != nil {
-		return fmt.Errorf("magus notes capture --gap: %w", err)
-	}
-	if _, err := store.RecordDigests(ctx, target.dir, n.Name, rev, scoped); err != nil {
-		return fmt.Errorf("magus notes capture --gap: captured %q, but recording its anchors failed: %w", n.Name, err)
-	}
-	saved, err := store.Get(target.dir, n.Name)
-	if err != nil {
-		return fmt.Errorf("magus notes capture --gap: wrote %q, but it does not read back as a note: %w", n.Name, err)
-	}
-	fmt.Printf("Captured gap %s into %s [%s] (%s).\n", saved.Name, notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
-	for _, line := range store.FindBlock(ctx, scoped, saved) {
-		fmt.Println(line)
-	}
-	return nil
-}
-
-// captureFromSession maps a review session onto the store's source-agnostic capture shape.
-// The mapping lives here rather than in internal/notes so the store never has to know what a
-// diff is, and so a second source can be added without it learning.
-//
-// comments are the remarks already on the host's review, and they are captured ALONGSIDE the
-// session's own. A transcript holding only your half of a conversation is not a transcript of
-// the conversation: the question a reader has months later is what was decided, and the answer
-// is nearly always in what somebody else said back.
-func captureFromSession(sess *diff.Review, comments []diff.ReviewComment, title string, tags []string) store.Capture {
-	// Grouped by file, because that is how a reviewer looks for a thread later ("what did we
-	// say about key.go"). Comment order within a file is left alone: it is the order the
-	// conversation happened in, and sorting it would break the replies.
-	byPath := map[string][]store.CaptureEntry{}
-	paths := []string{}
-	add := func(path string, e store.CaptureEntry) {
-		if _, seen := byPath[path]; !seen {
-			paths = append(paths, path)
-		}
-		byPath[path] = append(byPath[path], e)
-	}
-	// The host's comments first, per file. What a colleague said usually came before the
-	// remark it provoked, and a transcript that opened with the reply reads backwards.
-	for _, t := range comments {
-		add(t.Path, store.CaptureEntry{
-			Subject: t.Path,
-			Locator: store.LineLocator(t.Line),
-			// The author the host reported, verbatim. Nothing here verifies it, and nothing
-			// should: a capture records who a conversation says spoke, and a store that
-			// second-guessed that would be making the authorship claim it exists to avoid.
-			Author: t.Author,
-			Body:   t.Body,
-		})
-	}
-	for _, c := range sess.Comments {
-		add(c.Path, store.CaptureEntry{
-			Subject:  c.Path,
-			Locator:  store.HunkLocator(c.Hunk),
-			Author:   commentAuthor(c),
-			Body:     c.Body,
-			Resolved: c.Resolved,
-		})
-	}
-	sort.Strings(paths)
-
-	entries := []store.CaptureEntry{}
-	for _, p := range paths {
-		entries = append(entries, byPath[p]...)
-	}
-	return store.Capture{
-		Title: firstNonEmpty(title, "Review thread on "+firstNonEmpty(sess.Base, "the working tree")),
-		Tags:  tags,
-		Source: store.Source{
-			Kind:     store.SourceReviewThread,
-			Ref:      sess.ID,
-			AsOf:     sess.AsOf,
-			Captured: time.Now(),
-		},
-		Entries: entries,
-	}
-}
-
-// commentAuthor renders who said something. An agent is named as one: a transcript that let a
-// tool's output read as a colleague's opinion would be the capture telling the reader the one
-// thing it must not.
-func commentAuthor(c diff.Comment) string {
-	if c.Author != diff.AuthorAgent {
-		// "reviewer", not a name. The session records which route and credential wrote this,
-		// never which person, so a name would be invented; and "You" would be a lie to
-		// everyone except the one reader who captured it, which is exactly the wrong reader to
-		// optimize a committed note for.
-		return "reviewer"
-	}
-	if c.AgentName == "" {
-		return "agent"
-	}
-	return c.AgentName + " (agent)"
-}
-
-// captureName derives a note name from the patch the thread was written against, so two
-// captures from different reviews cannot collide and a repeat of the SAME review is caught by
-// the exists check rather than silently overwriting.
-func captureName(sess *diff.Review) string {
-	digest := sess.AsOf
-	if len(digest) > 12 {
-		digest = digest[:12]
-	}
-	if digest == "" {
-		return "review-thread"
-	}
-	return "review-" + digest
-}
-
-// captureSession is the local half of the conversation to transcribe, and whether it came from
-// a running server.
-//
-// The server is preferred because it holds strictly more: an agent's remarks, and remarks
-// already published to the review, neither of which the store keeps. But the store keeps the
-// unsent human ones, which is what a person writing alone in `magus diff` produces, so the
-// absence of a server is a smaller transcript rather than no transcript. The caller says which
-// one it got; see notesCapture's output.
-func captureSession(ctx context.Context, m *magus.Magus) (*diff.Review, bool, error) {
-	if sess := serverDiffReview(ctx); sess != nil {
-		return sess, true, nil
-	}
-	patch, _ := m.WorkingDiff(ctx, nil)
-	sess, err := storedDiffReview(m.CacheDir(), patch)
-	return sess, false, err
-}
-
-// storedDiffReview rebuilds what a capture needs from the files the store persists.
-//
-// AsOf is the patch digest attachDiffReview would have stamped with no server in the picture,
-// so the note this capture names is the one either path would have named for this tree. No
-// patch leaves it EMPTY rather than digesting the empty string, which would name every such
-// capture the same note and make the second one collide with the first.
-func storedDiffReview(cacheDir, patch string) (*diff.Review, error) {
-	drafts, err := changeset.NewStore(cacheDir).LoadDrafts()
-	if err != nil {
-		return nil, err
-	}
-	sess := &diff.Review{Comments: drafts}
-	if patch != "" {
-		sess.AsOf = changeset.PatchDigest(patch)
-	}
-	return sess, nil
-}
-
-// serverDiffReview reads the running server's review session, or nil when there is no server,
-// no token, or nothing attached. Every failure is nil rather than an error: the caller has one
-// message to print for all of them, and it is about the session rather than the transport.
-//
-// /api/v1/diff/session, NOT /api/v1/diff. The latter is the annotated changeset: it loads the
-// symbol shards and walks a reverse closure, and it wants the paths under review. This one
-// hands back the attached session as it stands, which is all a transcript needs, and answers
-// 409 when nothing is attached.
-func serverDiffReview(ctx context.Context) *diff.Review {
-	addr := mcpAddrString()
-	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
-	if !ok {
-		return nil
-	}
-	defer revokeReviewToken(ctx, tokenID)
-	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/session", addr), nil)
-	if err != nil {
-		return nil
-	}
-	setBearer(req, token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil
-	}
-	var sess diff.Review
-	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
-		return nil
-	}
-	return &sess
-}
-
-// reviewComments reads what colleagues said on the review this branch has open, and the reason
-// the read was incomplete when there is one.
-//
-// The server answers when one is running, because its session also knows which threads the
-// reader has already had on screen. Without one the forge is asked directly: a colleague's
-// remark is a fact about the review, not about whether a background process happens to be up,
-// and the same patch on the same branch must not show a different conversation either way.
-func reviewComments(ctx context.Context, m *magus.Magus) ([]diff.ReviewComment, string) {
-	if comments, reason, served := serverReviewComments(ctx); served {
-		return comments, reason
-	}
-	return localReviewComments(ctx, m.ReviewOrigin(ctx), m.CacheDir())
-}
-
-// serverReviewComments reads the comments from a running server. served says whether the server
-// answered at all, which is what separates "no server, ask the forge yourself" from "the server
-// looked and there is no review open".
-//
-// The reason is separate from the emptiness, and only non-empty when magus READ the review and
-// could not understand part of it. That is the one case a caller must not pass over quietly: a
-// transcript silently missing a colleague's remark is worse than no transcript.
-func serverReviewComments(ctx context.Context) (comments []diff.ReviewComment, reason string, served bool) {
-	addr := mcpAddrString()
-	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
-	if !ok {
-		return nil, "", false
-	}
-	defer revokeReviewToken(ctx, tokenID)
-	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/review", addr), nil)
-	if err != nil {
-		return nil, "", false
-	}
-	setBearer(req, token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, "", false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, "", false
-	}
-	var body struct {
-		ID       string               `json:"id"`
-		Comments []diff.ReviewComment `json:"threads"`
-		Reason   string               `json:"reason"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, "", false
-	}
-	if body.ID == "" {
-		// No review open. The reason names which ordinary situation that is, and none of them
-		// is worth a line during a capture: there is simply no second half.
-		return nil, "", true
-	}
-	return body.Comments, body.Reason, true
-}
-
-// localReviewComments asks the forge itself, the way the check-review job and the server's own
-// review handler do. Placement is left to the caller: the server resolves comments against the
-// working tree, and a caller showing some other patch has to place them against that one.
-//
-// The origin and the cache dir are passed rather than a workspace, so a test can answer them
-// without a repository, the narrowing the server's own review source uses.
-func localReviewComments(ctx context.Context, from diff.ReviewOrigin, cacheDir string) ([]diff.ReviewComment, string) {
-	at := bindings.FindReview(ctx, from.Branch, from.Remote)
-	if !at.Open() {
-		return nil, ""
-	}
-	comments, err := bindings.ReviewComments(ctx, at)
-	// The watermark is PERSISTED, so the new-comment mark survives without the server that
-	// normally applies it. Reading it here never moves it, for the reason the handler gives.
-	// An unreadable watermark marks nothing new rather than everything, and its error rides
-	// with the forge's.
-	seen, seenErr := changeset.NewStore(cacheDir).LoadSeenComments()
-	err = errors.Join(err, seenErr)
-	watermark := diff.Review{SeenComments: seen}
-	fresh := make(map[string]struct{})
-	for _, id := range watermark.UnseenComments(comments) {
-		if seenErr == nil {
-			fresh[id] = struct{}{}
-		}
-	}
-	for i := range comments {
-		if _, ok := fresh[comments[i].ID]; ok {
-			comments[i].New = true
-		}
-	}
-	if err != nil {
-		// The reason rides beside whatever came back: none on a malformed answer, which decodes
-		// strictly, and every comment when only the watermark failed.
-		return comments, err.Error()
-	}
-	return comments, ""
-}
-
-// newRemarkLine says how much of the captured conversation this reader had never had in front
-// of them, or "" when none of it is new to them.
-//
-// Printed rather than written into the note, which is the whole reason it is a line and not a
-// field. New belongs to the READER's history with the review, not the
-// conversation (see diff.ReviewComment.New). A colleague reading the transcript
-// next year would see it describe somebody else's morning. Said to the person
-// taking the capture, it is the one moment it is worth knowing.
-func newRemarkLine(comments []diff.ReviewComment) string {
-	fresh := 0
-	for _, t := range comments {
-		if t.New {
-			fresh++
-		}
-	}
-	if fresh == 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `%s` marks them new.",
-		fresh, plural.Word(fresh, "", "s"), hint.Diff.String())
 }
 
 // tagList collects a repeatable --tag flag.
@@ -1317,30 +653,41 @@ func (t *tagList) Set(v string) error {
 	return nil
 }
 
-// notesFinder loads the graph at most once, and only for a note with find lines, so
-// listing plain notes costs no graph load.
-type notesFinder struct {
-	root   string
-	loaded bool
-	res    *knowledge.NoteResolver
-	err    error
+// noteDirs is the notes locations the loaded config declares.
+func noteDirs() review.NoteDirs {
+	declared := globalCfg.Knowledge.Notes
+	return review.NoteDirs{Shared: declared.Shared, Private: declared.Private}
 }
 
-func (f *notesFinder) block(ctx context.Context, scope string, n store.Note) []string {
-	if len(n.Find) == 0 {
-		return nil
-	}
-	if !f.loaded {
-		f.loaded = true
-		res, err := notesResolver(ctx, f.root)
-		if err != nil {
-			f.err = err
-		} else {
-			f.res = &res
-		}
-	}
-	if f.res == nil {
-		return append(store.FindBlock(ctx, nil, n), "  because: "+f.err.Error())
-	}
-	return store.FindBlock(ctx, f.res.ForScope(scope), n)
+func captureEnv(root string) review.CaptureEnv {
+	return review.CaptureEnv{Root: root, Dirs: noteDirs(), Load: notesResolver}
 }
+
+// reviewServerGet reads path from the running server with a short-lived token, which it
+// revokes before returning.
+func reviewServerGet(ctx context.Context, path string) ([]byte, bool) {
+	addr := mcpAddrString()
+	token, tokenID, ok := difftui.MintToken(ctx, cliTokens{}, addr, difftui.CallTokenTTL)
+	if !ok {
+		return nil, false
+	}
+	defer difftui.RevokeToken(ctx, cliTokens{}, tokenID)
+	ctx, cancel := context.WithTimeout(ctx, difftui.AttachTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s%s", addr, path), nil)
+	if err != nil {
+		return nil, false
+	}
+	difftui.SetBearer(req, token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	raw, err := io.ReadAll(resp.Body)
+	return raw, err == nil
+}
+

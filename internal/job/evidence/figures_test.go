@@ -1,0 +1,40 @@
+package evidence
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/types"
+)
+
+func TestPlanSVGsDrawWithoutARefusalAndRepeatByteForByte(t *testing.T) {
+	rows := []types.Job{{ID: "lead", Created: 1, State: types.StateRunning}}
+	for _, id := range []string{"a", "b"} {
+		rows = append(rows, types.Job{ID: id, Created: 2, State: types.StateExited, Parent: "lead"})
+	}
+	p := job.NewPlan(rows)
+	holder := func(types.Job) string { return "" }
+	first, second := t.TempDir(), t.TempDir()
+
+	paths, err := WritePlanSVGs(t.Context(), p, p.Figures(), first, holder)
+	require.NoError(t, err)
+	again, err := WritePlanSVGs(t.Context(), p, p.Figures(), second, holder)
+	require.NoError(t, err)
+
+	require.Len(t, again, len(paths))
+	assert.Equal(t, filepath.Join(first, "plan.svg"), paths[0])
+	for i := range paths {
+		a, err := os.ReadFile(paths[i])
+		require.NoError(t, err)
+		b, err := os.ReadFile(again[i])
+		require.NoError(t, err)
+		assert.True(t, strings.HasPrefix(string(a), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), paths[i])
+		assert.Equal(t, string(a), string(b), paths[i])
+	}
+}

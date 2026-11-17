@@ -8,35 +8,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
-
-// listProject is the structured view of a project emitted under -o
-// json|yaml. Empty slices/strings are omitted to keep the payload tight.
-type listProject struct {
-	Path string `json:"path"                yaml:"path"`
-	// Name is the DECLARED project name (magus.project's "name"), empty when the
-	// project declares none. Without it the human label fell back to the checkout
-	// directory, so `magus ls` printed a worktree's directory name where MAGUS.md,
-	// generated from the same workspace, printed the declared one.
-	Name  string `json:"name,omitempty"      yaml:"name,omitempty"`
-	Dir   string `json:"dir"             yaml:"dir"`
-	Spell string `json:"spell,omitempty" yaml:"spell,omitempty"`
-	// Targets are the project's runnable target names, from the same graph
-	// `magus ls targets` reads. Carried here so the default listing can answer
-	// "what can I run" without a second command.
-	Targets   []string `json:"targets,omitempty"    yaml:"targets,omitempty"`
-	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
-	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
-	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-}
-
-type listOutput struct {
-	Workspace string        `json:"workspace" yaml:"workspace"`
-	Count     int           `json:"count"     yaml:"count"`
-	Projects  []listProject `json:"projects"  yaml:"projects"`
-}
 
 // lsNouns is the noun ls actually routes on, in both spellings: the dispatcher's
 // own accept-list, the way graphSubs is graphCommand's, so a drift test can read the
@@ -117,13 +92,13 @@ func lsProjects(ctx context.Context, root string) error {
 		}
 	}
 
-	out := listOutput{
+	out := describe.LsOutput{
 		Workspace: ws.Root(),
 		Count:     len(projects),
-		Projects:  make([]listProject, 0, len(projects)),
+		Projects:  make([]describe.LsProject, 0, len(projects)),
 	}
 	for _, p := range projects {
-		out.Projects = append(out.Projects, listProject{
+		out.Projects = append(out.Projects, describe.LsProject{
 			Path:      p.Path,
 			Name:      p.Name,
 			Dir:       p.Dir,
@@ -186,23 +161,6 @@ func lsProjects(ctx context.Context, root string) error {
 	return nil
 }
 
-// lsTargetsProject is one project's runnable targets. Nodes are reused verbatim
-// from the target graph rather than remapped into a parallel struct, so `magus ls
-// targets -o json` and `magus describe graph -o json` describe a target the same
-// way instead of drifting into two shapes for one thing.
-type lsTargetsProject struct {
-	Path    string                  `json:"path"            yaml:"path"`
-	Name    string                  `json:"name,omitempty"  yaml:"name,omitempty"`
-	Count   int                     `json:"count"           yaml:"count"`
-	Targets []types.TargetGraphNode `json:"targets"         yaml:"targets"`
-}
-
-type lsTargetsOutput struct {
-	Workspace string             `json:"workspace" yaml:"workspace"`
-	Count     int                `json:"count"     yaml:"count"`
-	Projects  []lsTargetsProject `json:"projects"  yaml:"projects"`
-}
-
 // lsTargets answers "what can I run here". Nothing else did: `describe targets` is
 // a workspace-wide union of every magusfile target AND every spell op, unscopeable
 // (it reads a project path as a target name and rejects it), and `describe project`
@@ -238,14 +196,14 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 		byPath[p.Path] = p
 	}
 
-	out := lsTargetsOutput{Workspace: ws.Root()}
+	out := describe.LsTargetsOutput{Workspace: ws.Root()}
 	for _, sel := range selection {
 		p, ok := byPath[sel.Path]
 		if !ok {
 			// Selected but contributes no target graph (no magusfile targets).
 			continue
 		}
-		out.Projects = append(out.Projects, lsTargetsProject{
+		out.Projects = append(out.Projects, describe.LsTargetsProject{
 			Path: p.Path, Name: p.Name, Count: len(p.Nodes), Targets: p.Nodes,
 		})
 	}
@@ -282,7 +240,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 		for _, t := range p.Targets {
 			// A target with nothing to say prints as a bare name rather than a name
 			// padded out to a column of trailing spaces.
-			if s := targetSummary(t); s != "" {
+			if s := describe.TargetSummary(t); s != "" {
 				fmt.Printf("  %-*s  %s\n", width, t.Name, s)
 			} else {
 				fmt.Printf("  %s\n", t.Name)
@@ -296,25 +254,4 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 	fmt.Printf("run one:              %s\n", hint.Run.With("<target>", "<project>"))
 	fmt.Printf("what it dispatches:   %s\n", hint.DescribeTargets.With("<target>"))
 	return nil
-}
-
-// targetSummary is the one-line right-hand column: the target's doc when it has
-// one, else the spell ops its body drives. Most targets in practice carry no doc
-// comment, and for those "which toolchain does this actually invoke" is the next
-// most useful thing a reader can be told; falling back to it beats a blank column.
-func targetSummary(t types.TargetGraphNode) string {
-	if t.Doc != "" {
-		return t.Doc
-	}
-	var parts []string
-	for _, s := range t.Spells {
-		parts = append(parts, fmt.Sprintf("%s: %s", s.Spell, strings.Join(s.Ops, ", ")))
-	}
-	if len(parts) > 0 {
-		return fmt.Sprintf("[%s]", strings.Join(parts, "; "))
-	}
-	if len(t.Dependencies) > 0 {
-		return fmt.Sprintf("[needs: %s]", strings.Join(t.Dependencies, ", "))
-	}
-	return ""
 }

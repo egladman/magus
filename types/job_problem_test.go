@@ -6,8 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/internal/json"
 )
 
 func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
@@ -79,30 +77,11 @@ func TestPermitNeverPermitsAnUnpermissibleCode(t *testing.T) {
 }
 
 func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
-	edit := &JobEdit{AddWritePath: "docs/x.md"}
-	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Fix: "add it", Edit: edit}}.Error()
+	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Fix: "add it"}}.Error()
 
-	var carried *JobProblemError
-	require.ErrorAs(t, err, &carried)
-	assert.Same(t, edit, carried.Problem.Edit)
 	var diag *DiagnosticError
 	require.ErrorAs(t, err, &diag)
 	assert.Equal(t, "x: add it", diag.Msg)
-}
-
-func TestJobEditApplyChangesTheRecordOnce(t *testing.T) {
-	goal := Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}
-	deviation := Deviation{Code: OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: "the integrator regenerates it"}
-	edits := []JobEdit{{AddWritePath: "docs/x.md"}, {AddGoal: &goal}, {AddDeviation: &deviation}}
-	var d Declaration
-
-	for _, e := range edits {
-		assert.True(t, e.Apply(&d), "%s changes the record", e)
-		assert.False(t, e.Apply(&d), "%s a second time changes nothing", e)
-	}
-	assert.Equal(t, Declaration{Paths: JobPaths{Write: []string{"docs/x.md"}}, Goals: []Goal{goal}, Deviations: []Deviation{deviation}}, d)
-	assert.False(t, JobEdit{AddGoal: &Goal{ID: "lint"}}.Apply(&d), "a goal id the record uses is left alone")
-	assert.False(t, JobEdit{}.Apply(&d))
 }
 
 func TestDoubleStarPermitsEveryRegeneratedOutputSubject(t *testing.T) {
@@ -117,18 +96,4 @@ func TestDoubleStarPermitsEveryRegeneratedOutputSubject(t *testing.T) {
 	} {
 		assert.Truef(t, w.Permits(JobProblem{Code: OutputOutsideWritePaths, Subject: subject}), "%q", subject)
 	}
-}
-
-func TestJobEditRoundTripsThroughJSON(t *testing.T) {
-	p := JobProblem{Code: GateNotRun, Message: "m", Fix: "f", Edit: &JobEdit{AddGoal: &Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}}}
-
-	raw, err := json.Marshal(p)
-	require.NoError(t, err)
-	var back JobProblem
-	require.NoError(t, json.Unmarshal(raw, &back))
-	assert.Equal(t, p.Edit, back.Edit)
-
-	raw, err = json.Marshal(JobProblem{Code: GateNotRun})
-	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "edit", "a problem with no edit carries no member")
 }

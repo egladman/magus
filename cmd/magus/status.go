@@ -1,43 +1,27 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/daemon"
 	"io"
 	"os"
-	"path/filepath"
-	"runtime"
-	"slices"
-	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 )
-
-// statusWatchMin keeps status cheap enough to leave running beside real work.
-// A tighter loop adds no useful signal: locks, services, and pool snapshots do
-// not need sub-second animation, and a slow workspace probe otherwise overlaps
-// its next poll before the last one has finished.
-const statusWatchMin = 15 * time.Second
 
 // bindStatus registers status's flags from the command registry and installs its
 // usage banner. The hand-written options struct this replaced described itself as
@@ -58,7 +42,7 @@ func bindStatus(f **flaggen.ServerStatusFlags) func(*flag.FlagSet) {
 
 // queryCapacity is the broker's build budget as status reads it.
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
-	st, err := queryBroker(ctx)
+	st, err := server.QueryBroker(ctx)
 	return st.Capacity, err
 }
 
@@ -72,11 +56,11 @@ func status(ctx context.Context, args []string) error {
 	// Ignores --watch, --compact, and -o formatting flags. The value is
 	// comma-combinable (e.g. --probe=liveness,mcp), failing if any listed probe does.
 	if f.Probe != "" {
-		kinds, err := parseProbeKinds(f.Probe)
+		kinds, err := server.ParseProbeKinds(f.Probe)
 		if err != nil {
 			return err
 		}
-		return runProbes(ctx, f.Socket, globalCfg.MCP, kinds, f.Workspace)
+		return server.RunProbes(ctx, resolveServerAddr(f.Socket), globalCfg.MCP, kinds, f.Workspace)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -96,19 +80,19 @@ func status(ctx context.Context, args []string) error {
 		}
 		if snapshot.Broker != nil && opts.Format == outputText && !f.Compact {
 			if work, err := queryWork(ctx); err == nil {
-				printWorkByOwner(os.Stdout, work, time.Now())
+				server.PrintWorkByOwner(os.Stdout, work, time.Now())
 			}
 		}
 		return nil
 	}
-	f.Watch = clampStatusWatch(f.Watch)
+	f.Watch = server.ClampStatusWatch(f.Watch)
 
 	// One probe for both decisions. They are the same question (may this loop move the
 	// cursor), and asking it twice with different answers is how a repaint gets set up on a
 	// terminal that cannot repaint: InlineView measures with CanRender, so a weaker gate here
 	// only ever produced a view that fell back to appending, one full frame per tick.
 	canRender := termkit.CanRender(os.Stdout, termkit.SystemProbe)
-	useGrid := gridEnabled(opts, canRender) && !f.Compact
+	useGrid := server.GridEnabled(opts, canRender) && !f.Compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// while retaining the last snapshot until the next real poll. Every other
@@ -151,14 +135,6 @@ func status(ctx context.Context, args []string) error {
 	}
 }
 
-// statusReport is the snapshot with the leases whose session has gone silent. They sit
-// beside the snapshot, not in it, while the report is a shadow measurement.
-type statusReport struct {
-	daemon.Snapshot   `yaml:",inline"`
-	SilentLeases      []guard.SilentLease `json:"silent_leases,omitempty" yaml:"silent_leases,omitempty"`
-	SilentLeasesError string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
-}
-
 // loadSilentLeases reads the workspace's silent leased rows. Outside a workspace it returns
 // the NoWorkspaceRoot error, which the caller reads as no rows.
 func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
@@ -178,27 +154,18 @@ func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
 	return guard.SilentLeases(root, loc.CacheDir, rows, now, guard.SilentLeaseAfter)
 }
 
-// statusNames is the identifier of each run the server is executing.
-func statusNames(r daemon.Snapshot) []string {
-	names := make([]string, len(r.Runs))
-	for i, run := range r.Runs {
-		names[i] = run.Inv
-	}
-	return names
-}
-
 // printStatusWithSilent renders the snapshot, then the silent leases: appended to the text
 // form, a field of the structured ones.
 func printStatusWithSilent(w io.Writer, snapshot daemon.Snapshot, silent []guard.SilentLease, silentErr error, opts output.Options, compact bool) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		report := statusReport{Snapshot: snapshot, SilentLeases: silent}
+		report := server.StatusReport{Snapshot: snapshot, SilentLeases: silent}
 		if silentErr != nil {
 			report.SilentLeasesError = silentErr.Error()
 		}
 		return emitFormatted(opts, report)
 	case outputName:
-		return emitNames(w, statusNames(snapshot))
+		return emitNames(w, server.StatusNames(snapshot))
 	}
 	if err := writeStatus(w, snapshot, opts, 0, compact); err != nil {
 		return err
@@ -206,40 +173,8 @@ func printStatusWithSilent(w io.Writer, snapshot daemon.Snapshot, silent []guard
 	if compact {
 		return nil
 	}
-	printSilentLeases(w, silent, silentErr)
+	server.PrintSilentLeases(w, silent, silentErr)
 	return nil
-}
-
-// printSilentLeases lists leased rows whose session is silent, each with how long and
-// where it was last seen. It prints nothing when there are none and no error.
-func printSilentLeases(w io.Writer, silent []guard.SilentLease, err error) {
-	if err != nil {
-		fmt.Fprintf(w, "\nsilent leases: not read: %v\n", err)
-		return
-	}
-	if len(silent) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "\nsilent leases (no judged call for over %s, no background command running; nothing was ended):\n", guard.SilentLeaseAfter)
-	for _, s := range silent {
-		line := fmt.Sprintf("  %s  session %s  silent %s", s.Lease, s.Session, formatDur(time.Duration(s.SilentSeconds)*time.Second))
-		if s.BackgroundNote != "" {
-			line = fmt.Sprintf("%s  (%s)", line, s.BackgroundNote)
-		}
-		fmt.Fprintln(w, line)
-	}
-}
-
-// clampStatusWatch floors the poll interval at statusWatchMin. Zero passes
-// through untouched: it is the caller's "not watching" sentinel, answered with a
-// single snapshot before this runs. A NEGATIVE interval clamps too, because
-// time.NewTicker panics at or below zero. `--watch -1s` once took the whole
-// process down.
-func clampStatusWatch(interval time.Duration) time.Duration {
-	if interval != 0 && interval < statusWatchMin {
-		return statusWatchMin
-	}
-	return interval
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
@@ -257,23 +192,20 @@ func writeStatus(w io.Writer, r daemon.Snapshot, opts output.Options, animFrame 
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
 	case outputName:
-		return emitNames(w, statusNames(r))
+		return emitNames(w, server.StatusNames(r))
 	default:
 		if compact {
-			printStatusCompact(w, r, time.Now())
+			server.PrintStatusCompact(w, r, time.Now())
 			return nil
 		}
-		printStatusText(w, r, gridEnabled(opts, termkit.CanRender(os.Stdout, termkit.SystemProbe)), animFrame)
+		server.PrintStatusText(w, r, server.StatusView{
+			ClientVersion: version,
+			Verbose:       global.verbose >= 1,
+			Grid:          server.GridEnabled(opts, termkit.CanRender(os.Stdout, termkit.SystemProbe)),
+			AnimFrame:     animFrame,
+		})
 	}
 	return nil
-}
-
-// gridEnabled returns true when the pool graphic should be rendered. canRender
-// must already account for TERM=dumb (see [tty.CanRender]): the grid draws
-// SGR colors and a braille spinner unconditionally, so a dumb terminal that
-// merely passed a bare TTY check would render them as garbage.
-func gridEnabled(opts output.Options, canRender bool) bool {
-	return opts.Format == outputText && canRender && os.Getenv("NO_COLOR") == ""
 }
 
 // buildStatusBase constructs the static portions of a StatusSnapshot that depend
@@ -282,8 +214,8 @@ func gridEnabled(opts output.Options, canRender bool) bool {
 // daemon.Snapshot without importing cmd/magus.
 func buildStatusBase() daemon.Base {
 	return daemon.Base{
-		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
-		Cache:     buildCacheStatus(globalCfg.Cache),
+		Telemetry: server.BuildTelemetryStatus(globalCfg.Telemetry),
+		Cache:     server.BuildCacheStatus(globalCfg.Cache),
 		Build: daemon.Build{
 			SelfUpdate: selfUpdateCompiled,
 		},
@@ -292,9 +224,9 @@ func buildStatusBase() daemon.Base {
 
 func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemon.Snapshot {
 	snapshot := daemon.Snapshot{
-		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
-		Cache:     buildCacheStatus(globalCfg.Cache),
-		Config:    buildConfigStatus(globalCfg),
+		Telemetry: server.BuildTelemetryStatus(globalCfg.Telemetry),
+		Cache:     server.BuildCacheStatus(globalCfg.Cache),
+		Config:    server.BuildConfigStatus(globalCfg),
 		Build: daemon.Build{
 			SelfUpdate: selfUpdateCompiled,
 		},
@@ -307,10 +239,10 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemo
 		// MCP endpoint health is probed independently of the proc socket below: the
 		// endpoint an agent host connects to can be down while the proc server is up, or
 		// vice versa, so it is set before any early return on a proc-socket error.
-		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
+		MCPEndpoint: server.BuildMCPEndpointStatus(ctx, globalCfg.MCP),
 	}
 	// After the literal, because it reads the MCP probe above rather than making its own.
-	snapshot.Console = buildConsoleStatus(globalCfg.Console, snapshot.MCPEndpoint)
+	snapshot.Console = server.BuildConsoleStatus(globalCfg.Console, snapshot.MCPEndpoint)
 	if symbols {
 		// Symbol-index freshness hashes every symbol-capable project. Keep it opt-in so
 		// status remains a cheap operational snapshot rather than a second workspace scan.
@@ -319,54 +251,16 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemo
 	// The broker is read whatever the policy: this reports the host, and a broker other
 	// runs started is a fact about it even when this workspace never asks one.
 	snapshot.BrokerPolicy = globalCfg.Broker.Resolved()
-	if st, err := queryBroker(ctx); err == nil {
+	if st, err := server.QueryBroker(ctx); err == nil {
 		snapshot.Broker = &st
 	}
-	addrs, err := resolveStatusSockets(ctx, socket)
+	addrs, err := server.ResolveStatusSockets(ctx, socket)
 	if err != nil {
 		snapshot.PoolError = err.Error()
 		return snapshot
 	}
-	applyStatusPools(ctx, &snapshot, addrs, proc.QueryStatus)
+	server.ApplyStatusPools(ctx, &snapshot, addrs, proc.QueryStatus)
 	return snapshot
-}
-
-// statusQuery fetches one proc server's snapshot. A seam, like probe.go's statusFunc, so
-// the multi-server assembly can be exercised without live sockets.
-type statusQuery func(ctx context.Context, addr string) (*proc.StatusReply, error)
-
-// applyStatusPools reads every proc server in addrs and folds them onto the snapshot.
-//
-// The first one that answers (the server when it is up) becomes THE pool: every renderer
-// that shows a single pool (the grid, the compact line) reads it. The rest ride along in
-// Pools, which stays empty for the single-server case so it never just repeats Pool. A
-// server that died between discovery and the query is dropped rather than failing the
-// snapshot; PoolError is set only when nothing answered, so more than one server is
-// reported, never refused. The one that says it is the server fills the server section.
-func applyStatusPools(ctx context.Context, snapshot *daemon.Snapshot, addrs []string, query statusQuery) {
-	var pools []daemon.Output
-	var failed []string
-	for _, addr := range addrs {
-		reply, err := query(ctx, addr)
-		if err != nil {
-			failed = append(failed, fmt.Sprintf("query %s: %v", addr, err))
-			continue
-		}
-		out := reply.StatusOutput()
-		out.Socket = addr
-		if snapshot.Server == nil && reply.Server != nil {
-			snapshot.Server = reply.Server
-		}
-		pools = append(pools, *out)
-	}
-	if len(pools) == 0 {
-		snapshot.PoolError = strings.Join(failed, "; ")
-		return
-	}
-	snapshot.Pool = &pools[0]
-	if len(pools) > 1 {
-		snapshot.Pools = pools
-	}
 }
 
 // loadSymbolIndexStatus computes each symbol-capable project's SCIP index
@@ -408,1064 +302,11 @@ func loadPipeWaits(ctx context.Context) []daemon.PipeWait {
 	return m.PipeWaits()
 }
 
-func buildTelemetryStatus(t config.Telemetry) daemon.Telemetry {
-	st := daemon.Telemetry{
-		Enabled:     t.Enabled,
-		Endpoint:    t.Endpoint,
-		Protocol:    t.Protocol,
-		Insecure:    t.Insecure,
-		ServiceName: t.ServiceName,
-		SampleRatio: t.SampleRatio,
-	}
-	switch {
-	case !t.Enabled:
-		st.Note = "telemetry is disabled. Set telemetry.enabled=true in magus.yaml to ship metrics/traces to your OTLP collector. magus does not run a hosted backend; the endpoint is yours."
-	case t.Endpoint == "":
-		st.Note = "telemetry is enabled but telemetry.endpoint is empty. The exporter will fail to start."
-	default:
-		proto := t.Protocol
-		if proto == "" {
-			proto = "grpc"
-		}
-		st.Note = fmt.Sprintf("phoning home to %s (%s); this is YOUR collector, not a magus-operated service.", t.Endpoint, proto)
-	}
-	return st
-}
-
-func buildCacheStatus(c config.Cache) daemon.Cache {
-	return daemon.Cache{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
-}
-
-// buildConfigStatus reports the resolved config a run executes under. Concurrency.Effective
-// is resolved by the run path's own function so status cannot drift from the width a build
-// actually gets.
-func buildConfigStatus(c config.Config) daemon.Config {
-	return daemon.Config{
-		DefaultCharms: c.DefaultCharms,
-		Concurrency: daemon.Concurrency{
-			Configured: c.Concurrency,
-			Profile:    c.ConcurrencyProfile,
-			Effective:  cache.ResolveConcurrency(c.Concurrency, c.ConcurrencyProfile),
-		},
-		Sandbox: c.Sandbox.Mode.Enabled(),
-	}
-}
-
-func printStatusText(w io.Writer, r daemon.Snapshot, useGrid bool, animFrame int) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "telemetry")
-	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
-	if r.Telemetry.Endpoint != "" {
-		fmt.Fprintf(tw, "  endpoint\t%s\n", r.Telemetry.Endpoint)
-	}
-	if r.Telemetry.Protocol != "" {
-		fmt.Fprintf(tw, "  protocol\t%s\n", r.Telemetry.Protocol)
-	}
-	if r.Telemetry.ServiceName != "" {
-		fmt.Fprintf(tw, "  service_name\t%s\n", r.Telemetry.ServiceName)
-	}
-	if r.Telemetry.SampleRatio > 0 {
-		fmt.Fprintf(tw, "  sample_ratio\t%.2f\n", r.Telemetry.SampleRatio)
-	}
-	if r.Telemetry.Insecure {
-		fmt.Fprintln(tw, "  insecure\ttrue (no TLS)")
-	}
-	fmt.Fprintln(tw, "")
-	fmt.Fprintln(tw, "cache")
-	fmt.Fprintf(tw, "  immutable\t%v\n", r.Cache.Immutable)
-	if r.Cache.Dir != "" {
-		fmt.Fprintf(tw, "  dir\t%s\n", r.Cache.Dir)
-	}
-	if r.Cache.SizeMB > 0 {
-		fmt.Fprintf(tw, "  size_mb\t%d\n", r.Cache.SizeMB)
-	}
-	fmt.Fprintln(tw, "")
-	fmt.Fprintln(tw, "concurrency")
-	fmt.Fprintf(tw, "  configured\t%s\n", intOrDef(r.Config.Concurrency.Configured, "(from profile)"))
-	fmt.Fprintf(tw, "  profile\t%s\n", r.Config.Concurrency.Profile)
-	fmt.Fprintf(tw, "  effective\t%d\n", r.Config.Concurrency.Effective)
-	if global.verbose >= 1 {
-		fmt.Fprintln(tw, "")
-		fmt.Fprintln(tw, "build")
-		fmt.Fprintf(tw, "  selfupdate\t%t\n", r.Build.SelfUpdate)
-		fmt.Fprintf(tw, "  engine\tbuzz\n")
-	}
-	_ = tw.Flush()
-
-	if r.Telemetry.Note != "" {
-		fmt.Fprintf(w, "\n%s\n", r.Telemetry.Note)
-	}
-
-	fmt.Fprintln(w, "")
-	now := time.Now()
-	if r.Broker != nil {
-		printBrokerRows(w, *r.Broker, r.BrokerPolicy, now)
-	} else {
-		printBrokerDown(w, r.BrokerPolicy)
-	}
-	if r.Server != nil {
-		printServerRows(w, r.Server, now)
-	} else {
-		fmt.Fprintf(w, "server   -      not running (`%s` serves MCP and the console)\n", hint.ServerStart)
-	}
-
-	if r.Pool != nil {
-		fmt.Fprintln(w, "")
-		if useGrid {
-			drawPoolGrid(w, r.Pool, runtime.NumCPU(), animFrame)
-		} else {
-			printPoolSummary(w, r.Pool, "pool")
-			if skew := serverVersionSkew(r.Pool); skew != "" {
-				fmt.Fprint(w, skew)
-			}
-			if len(r.Pool.RunningTargets) == 0 {
-				if r.Pool.Running > 0 {
-					fmt.Fprintln(w, "local work active; detailed target data unavailable")
-				} else {
-					fmt.Fprintln(w, "nothing running")
-				}
-			} else {
-				fmt.Fprintf(w, "\n%-4s  %-30s  %s\n", "#", "workspace", "args")
-				fmt.Fprintln(w, strings.Repeat("-", 60))
-				for i, e := range r.Pool.RunningTargets {
-					ws := e.Workspace
-					if ws == "" {
-						ws = "-"
-					}
-					fmt.Fprintf(w, "%-4d  %-30s  %s\n", i+1, ws, strings.Join(e.Args, " "))
-				}
-			}
-		}
-		if len(r.Pool.Workspaces) > 0 {
-			fmt.Fprintf(w, "\nworkspaces (%d)\n", len(r.Pool.Workspaces))
-			fmt.Fprintln(w, strings.Repeat("-", 60))
-			for _, ws := range r.Pool.Workspaces {
-				switch ws.State {
-				case daemon.WorkspaceFailed:
-					fmt.Fprintf(w, "  %s  (failed to load)\n", ws.Root)
-					if ws.Error != nil {
-						fmt.Fprintf(w, "    %s\n", strings.ReplaceAll(ws.Error.Message, "\n", "\n    "))
-					}
-				case daemon.WorkspaceLoading:
-					fmt.Fprintf(w, "  %s  (loading)\n", ws.Root)
-				default:
-					idle := time.Since(ws.LastAccess).Round(time.Second)
-					fmt.Fprintf(w, "  %s  (idle %s)\n", ws.Root, idle)
-				}
-			}
-		}
-	}
-
-	printPoolServers(w, r.Pools)
-	printMCPEndpointStatus(w, r.MCPEndpoint)
-	printConsoleStatus(w, r.Console)
-	printSymbolIndexStatus(w, r.SymbolIndexes)
-	printLockStatus(w, r.Locks)
-	printPipeWaitStatus(w, r.PipeWaits)
-}
-
-// printPipeWaitStatus renders the runs holding no lock yet because a magus upstream of
-// them in a pipe still needs their projects.
-func printPipeWaitStatus(w io.Writer, waits []daemon.PipeWait) {
-	if len(waits) == 0 {
-		return
-	}
-	fmt.Fprintln(w, "\nwaiting on a pipe upstream:")
-	for _, pw := range waits {
-		line := fmt.Sprintf("  pid %d", pw.PID)
-		if !pw.WaitTime.IsZero() {
-			line += "  " + formatDur(time.Since(pw.WaitTime))
-		}
-		if pw.Command != "" {
-			line += "  " + pw.Command
-		}
-		fmt.Fprintln(w, line)
-		fmt.Fprintf(w, "    on pid %d  %s\n", pw.UpstreamPID, pw.UpstreamCommand)
-	}
-}
-
-// printBrokerRows renders the broker one fact per row, record type first and pid second,
-// so awk and xargs work on it without a parser: the broker itself, its capacity and the
-// policy in force, every claim holding it, every request it holds until the budget can
-// answer it, every service it hosts, and when it exits.
-// Printed whenever a broker answered, held or idle, because "nothing holds it" is the
-// answer to the question people ask it.
-func printBrokerRows(w io.Writer, st daemon.Broker, policy types.BrokerPolicy, now time.Time) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(tw, "broker\t%d\t%s\n", st.PID, strings.Join(nonEmpty(
-		upText(st.StartTime, now),
-		fmt.Sprintf("proto %s", st.Protocol),
-		st.Version, st.Executable, st.Socket), "  "))
-	c := st.Capacity
-	fmt.Fprintf(tw, "capacity\t-\t%s  broker: %s\n", capacityText(c), policy.Resolved())
-	for _, h := range c.Holders {
-		fmt.Fprintf(tw, "held\t%d\t%s\n", h.PID, strings.Join(nonEmpty(
-			fmt.Sprintf("slots %d", max(h.Slots, 1)),
-			holderMemText(h),
-			fmt.Sprintf("%s %s", holderProject(h.Project), h.Target),
-			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
-		if holdsOverAQuarter(h, c.BudgetMB) {
-			fmt.Fprintf(tw, "sized\t%d\t%s\n", h.PID, h.Sizing.Breakdown(fmt.Sprintf("%s %s", holderProject(h.Project), h.Target), h.Under, h.MemoryMB))
-		}
-	}
-	for _, q := range c.Waiting {
-		why := ""
-		if q.Tree != "" {
-			why = fmt.Sprintf("seat in %s", q.Tree)
-		}
-		fmt.Fprintf(tw, "waiting\t%d\t%s\n", q.PID, strings.Join(nonEmpty(
-			fmt.Sprintf("slots %d", max(q.Slots, 1)), mbText("mem ", q.MemoryMB),
-			fmt.Sprintf("%s %s", holderProject(q.Project), q.Target),
-			why, q.Owner, q.Dir, q.Command, sinceText(q.Since)), "  "))
-	}
-	for _, r := range c.Refused {
-		fmt.Fprintf(tw, "refused\t%d\t%s\n", r.PID, strings.Join(nonEmpty(
-			fmt.Sprintf("%s ago", cmp.Or(formatDur(now.Sub(r.At).Round(time.Second)), "0s")),
-			fmt.Sprintf("slots %d", max(r.Slots, 1)), mbText("mem ", r.MemoryMB),
-			fmt.Sprintf("%s %s", holderProject(r.Project), r.Target),
-			r.Owner, r.Dir, r.Command, refusedHoldersText(r.Holders)), "  "))
-	}
-	for _, s := range st.Services {
-		label := s.Label
-		if label == "" {
-			label = s.ID
-		}
-		fmt.Fprintf(tw, "service\t-\t%s\n", strings.Join(nonEmpty(
-			label, string(s.State),
-			fmt.Sprintf("deps %d", s.Dependents),
-			portsText(s.Ports), sinceText(s.StartedAt)), "  "))
-	}
-	switch {
-	case st.Draining:
-		fmt.Fprintf(tw, "draining\t-\tseats nothing new; exits once what it holds is released\n")
-	case st.IdleExitSeconds > 0:
-		fmt.Fprintf(tw, "idle\t-\texits after %s holding nothing\n", formatDur(time.Duration(st.IdleExitSeconds)*time.Second))
-	}
-	_ = tw.Flush()
-}
-
 // queryWork asks the broker what runs against it and who owns each piece.
 func queryWork(ctx context.Context) (broker.WorkReport, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	return broker.QueryWork(ctx, broker.DefaultAddr())
-}
-
-// printWorkByOwner renders what runs against the broker grouped by owner (a job lease,
-// or unleased for a person or a root session), each with its kind, pid, age, slots and
-// deadline, then the work the broker stopped lately and why. It prints nothing when
-// nothing runs and nothing was stopped.
-func printWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
-	if len(r.Running) == 0 && len(r.Ended) == 0 {
-		return
-	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if len(r.Running) > 0 {
-		fmt.Fprintln(tw, "\nwork by owner")
-		byOwner := map[string][]broker.Work{}
-		var owners []string
-		for _, work := range r.Running {
-			o := work.Owner()
-			if _, seen := byOwner[o]; !seen {
-				owners = append(owners, o)
-			}
-			byOwner[o] = append(byOwner[o], work)
-		}
-		for _, o := range owners {
-			fmt.Fprintf(tw, "  %s\n", o)
-			for _, work := range byOwner[o] {
-				deadline := "no deadline"
-				switch left := work.Deadline.Sub(now).Round(time.Second); {
-				case work.Deadline.IsZero():
-				case left > 0:
-					deadline = "deadline in " + formatDur(left)
-				default:
-					deadline = "past its deadline"
-				}
-				fmt.Fprintf(tw, "    %s\tpid %d\tup %s\tslots %d\t%s\t%s\t%s\n", work.Kind, work.PID,
-					cmp.Or(formatDur(now.Sub(work.Since).Round(time.Second)), "0s"), max(work.Slots, 1), deadline,
-					truncate(work.Command, 60), work.Dir)
-			}
-		}
-	}
-	if len(r.Ended) > 0 {
-		fmt.Fprintln(tw, "\nstopped by the broker")
-		for _, e := range r.Ended {
-			fmt.Fprintf(tw, "  %s\t%s\t%s ago\t%s\t%s\n", e.Owner(), e.Kind,
-				cmp.Or(formatDur(now.Sub(e.At).Round(time.Second)), "0s"), truncate(e.Command, 60), e.Reason)
-		}
-	}
-	_ = tw.Flush()
-}
-
-// printBrokerDown is the broker row when none answers, naming the policy that decides
-// what that means.
-func printBrokerDown(w io.Writer, policy types.BrokerPolicy) {
-	why := "a run starts one"
-	if policy.Resolved() == types.BrokerOff {
-		why = "runs here never ask one"
-	}
-	fmt.Fprintf(w, "broker   -      not running (%s; broker: %s)\n", why, policy.Resolved())
-}
-
-// printServerRows renders the server one fact per row: the server itself, each listener,
-// and the workspaces whose graph and symbols it keeps current.
-func printServerRows(w io.Writer, st *daemon.Server, now time.Time) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(tw, "server\t%d\t%s\n", st.PID, strings.Join(nonEmpty(
-		upText(st.StartTime, now), st.Version, st.Executable, st.Socket), "  "))
-	for _, l := range st.Listeners {
-		if l.Kind == daemon.ListenerSocket {
-			continue
-		}
-		fmt.Fprintf(tw, "listen\t%d\t%s %s\n", st.PID, l.Kind, l.Address)
-	}
-	for _, root := range st.Watch {
-		fmt.Fprintf(tw, "watch\t%d\tgraph+symbols  %s\n", st.PID, root)
-	}
-	_ = tw.Flush()
-}
-
-// capacityText is the capacity row's figures: slots and memory held of the whole.
-func capacityText(c types.MachineSnapshot) string {
-	parts := make([]string, 0, 2)
-	if c.BudgetSlots > 0 {
-		parts = append(parts, fmt.Sprintf("slots %d/%d", c.HeldSlots, c.BudgetSlots))
-	}
-	if c.BudgetMB > 0 {
-		mem := fmt.Sprintf("mem %s/%s", types.FormatMB(c.HeldMB), types.FormatMB(c.BudgetMB))
-		if r := c.Reserve; r.TotalMB > 0 {
-			mem += fmt.Sprintf(" (%s less %s: %s)", types.FormatMB(r.TotalMB), types.FormatMB(r.ReservedMB), r.Rule)
-		}
-		parts = append(parts, mem)
-	}
-	if len(parts) == 0 {
-		return "unmeasured"
-	}
-	return strings.Join(parts, "  ")
-}
-
-func mbText(prefix string, mb int) string {
-	if mb <= 0 {
-		return ""
-	}
-	return prefix + types.FormatMB(mb)
-}
-
-// holderMemText is a holder's memory claim, naming the runs it was measured over when
-// it was sized from them. A bare figure is a declaration: a claimant recorded by a magus
-// that does not report sizing reads the same way, which is what it claimed.
-func holderMemText(h types.MachineClaimant) string {
-	text := mbText("mem ", h.MemoryMB)
-	if text != "" && h.Sizing.Measured() {
-		text += " " + h.Sizing.String()
-	}
-	return text
-}
-
-// holdsOverAQuarter reports a holder big enough that where its figure came
-// from is worth a row.
-func holdsOverAQuarter(h types.MachineClaimant, budgetMB int) bool {
-	return budgetMB > 0 && h.MemoryMB*4 > budgetMB
-}
-
-// refusedHoldersText names the holders that kept a refused claim out, by pid and owner.
-func refusedHoldersText(holders []types.MachineClaimant) string {
-	if len(holders) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(holders))
-	for _, h := range holders {
-		names = append(names, fmt.Sprintf("pid %d %s", h.PID, cmp.Or(h.Owner, "owner unknown")))
-	}
-	return fmt.Sprintf("held by %s", strings.Join(names, ", "))
-}
-
-// holderProject names the workspace root the way a refusal does.
-func holderProject(p string) string {
-	if p == "" || p == "." {
-		return "(root)"
-	}
-	return p
-}
-
-func upText(start, now time.Time) string {
-	if start.IsZero() {
-		return ""
-	}
-	return "up " + formatDur(now.Sub(start))
-}
-
-func sinceText(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return "since " + t.Local().Format("15:04")
-}
-
-func portsText(ports []string) string {
-	if len(ports) == 0 {
-		return ""
-	}
-	return "ports " + strings.Join(ports, ",")
-}
-
-// nonEmpty drops the empty fields a row leaves out.
-func nonEmpty(fields ...string) []string {
-	out := fields[:0]
-	for _, f := range fields {
-		if f != "" {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
-// printPoolServers lists every live proc server when this machine is running more than
-// one, each with the slots it holds. One server is already rendered above as THE pool, so
-// the list would only repeat it and is omitted.
-func printPoolServers(w io.Writer, pools []daemon.Output) {
-	if len(pools) < 2 {
-		return
-	}
-	fmt.Fprintf(w, "\nproc servers (%d)\n", len(pools))
-	fmt.Fprintln(w, strings.Repeat("-", 60))
-	for _, p := range pools {
-		fmt.Fprintf(w, "  pid %-8d  %d/%d in use  %d available  %s\n",
-			p.ParentPID, p.Running, p.Capacity, p.Available, p.Socket)
-	}
-}
-
-// printMCPEndpointStatus renders the runtime health of the MCP endpoint agent hosts
-// connect to. This is the answer to "are my magus tools actually reachable", separate
-// from the pool block above (which reports the proc socket). Omitted only when
-// the snapshot carries no MCP section (e.g. a server's own snapshot).
-func printMCPEndpointStatus(w io.Writer, m *daemon.MCPEndpoint) {
-	if m == nil {
-		return
-	}
-	fmt.Fprintln(w, "\nmcp endpoint")
-	if !m.Enabled {
-		fmt.Fprintf(w, "  state  %s\n", m.State)
-		if m.Note != "" {
-			fmt.Fprintf(w, "  %s\n", m.Note)
-		}
-		return
-	}
-	// Deliberately not a tabwriter: this block is short and reads fine aligned by hand,
-	// and it lets the note wrap as a full-width line rather than a padded cell.
-	fmt.Fprintf(w, "  url    %s\n", m.URL)
-	fmt.Fprintf(w, "  state  %s\n", m.State)
-	if m.Note != "" {
-		fmt.Fprintf(w, "  %s\n", m.Note)
-	}
-}
-
-// serverVersionSkew reports that the server answering this workspace is a different build
-// from the binary asking, or "" when they match or the server did not say.
-//
-// THE PREDICATE HAS NO JUDGMENT IN IT: two version strings are equal or they are not. For
-// a normal install both sides are one binary and this is dormant forever; it fires for
-// somebody who upgraded magus while an old server kept running, and for anyone who
-// rebuilds constantly. That is why uptake is the wrong measure of it and it must not be
-// pruned with the advisories that are measured that way: the cost of missing it is a
-// store quietly rewritten by a binary that does not know half its fields, which is what
-// happened here on 2026-09-11.
-//
-// It names the workspaces the server has loaded because that is the only provenance a
-// client can see, and the one that ate rows here belonged to another worktree entirely
-// while looking exactly like this one's.
-func serverVersionSkew(pool *daemon.Output) string {
-	if pool == nil || pool.Version == "" || version == "" || pool.Version == version {
-		return ""
-	}
-	isPool := proc.PoolSocketPath(pool.Socket) != ""
-	noun := "server"
-	if isPool {
-		noun = "pool parent"
-	}
-	var s strings.Builder
-	fmt.Fprintf(&s, "[%s] version skew: this magus is %s and the %s serving it is %s (pid %d).\n",
-		types.PeerFromAnotherBuild, version, noun, pool.Version, pool.ParentPID)
-	fmt.Fprintf(&s, "  every call through that %s is answered by the older build, which decodes what it knows and writes back the rest without it.\n", noun)
-	if len(pool.Workspaces) > 0 {
-		roots := make([]string, 0, len(pool.Workspaces))
-		for _, ws := range pool.Workspaces {
-			roots = append(roots, ws.Root)
-		}
-		fmt.Fprintf(&s, "  it was started from, and is serving: %s\n", strings.Join(roots, ", "))
-	}
-	if isPool {
-		fmt.Fprintf(&s, "  stop the leftover pool parent to pick up this build: `%s`.\n",
-			hint.ServerStop.With("--pools"))
-	} else {
-		fmt.Fprintf(&s, "  restart it to pick up this build: `%s` then `%s`. It may be serving other workspaces, which stop for them too.\n",
-			hint.ServerStop, hint.ServerStart)
-	}
-	return s.String()
-}
-
-// printPoolSummary renders whose pool this is and what it is running: the identity line
-// and the width line.
-//
-// ONE renderer, which `magus server status` prints beside the server rows. A
-// second spelling of these two lines would drift first in wording, then in
-// which number they read.
-func printPoolSummary(w io.Writer, p *daemon.Output, label string) {
-	fmt.Fprintf(w, "%s pid %d\n", label, p.ParentPID)
-	fmt.Fprintf(w, "width: %d   running: %d   available: %d   queued: %d\n",
-		p.Capacity, p.Running, p.Available, p.Queued)
-}
-
-// printConsoleStatus renders where a person opens the console. It is the answer to "where
-// do I look at this", which until now lived only in the server's log.
-func printConsoleStatus(w io.Writer, c *daemon.Console) {
-	if c == nil {
-		return
-	}
-	fmt.Fprintln(w, "\nconsole")
-	if !c.Enabled {
-		fmt.Fprintf(w, "  state  %s\n", c.State)
-		if c.Note != "" {
-			fmt.Fprintf(w, "  %s\n", c.Note)
-		}
-		return
-	}
-	fmt.Fprintf(w, "  url    %s\n", c.URL)
-	fmt.Fprintf(w, "  state  %s\n", c.State)
-	if c.Note != "" {
-		fmt.Fprintf(w, "  %s\n", c.Note)
-	}
-}
-
-// printSymbolIndexStatus renders the per-project SCIP index freshness section, omitted
-// when no project is symbol-capable.
-func printSymbolIndexStatus(w io.Writer, indexes []types.SymbolIndexStatus) {
-	if len(indexes) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "\nsymbol indexes (%d)\n", len(indexes))
-	fmt.Fprintln(w, strings.Repeat("-", 60))
-	for _, s := range indexes {
-		lang := s.Language
-		if lang == "" {
-			lang = "-"
-		}
-		// Project.Display() shows the name, adding the path only when it differs (the
-		// workspace root: "magus (.)"), so the root never renders as a bare ".".
-		fmt.Fprintf(w, "  %-12s  %-30s  %s\n", s.Freshness, s.Project.Display(), lang)
-		if s.Detail != "" {
-			fmt.Fprintf(w, "    %s\n", s.Detail)
-		}
-	}
-}
-
-// compactRunningMax caps how many running entries the compact line shows
-// before collapsing the tail into "+N more". Three keeps the line readable in
-// a narrow sidebar pane while still surfacing the slowest work.
-const compactRunningMax = 3
-
-// compactRunningBudget bounds a single "project:target(dur)" entry so one
-// pathological label can't blow the line out.
-const compactRunningBudget = 32
-
-// printStatusCompact renders the snapshot as one densely-packed line. The format
-// targets multiplexer sidebars: ANSI-free, no telemetry/cache config (those are
-// static), oldest running targets first so the long-running work stays visible.
-// now is the reference time for per-target durations (parameterised for tests).
-func printStatusCompact(w io.Writer, r daemon.Snapshot, now time.Time) {
-	parts := []string{compactBrokerToken(r.Broker, r.BrokerPolicy), compactServerToken(r.Server)}
-	if r.Pool == nil {
-		fmt.Fprintln(w, strings.Join(parts, " · "))
-		return
-	}
-	p := r.Pool
-	pool := "pool idle"
-	if p.Capacity > 0 || p.Running > 0 {
-		state := "running"
-		if p.Running == 0 && len(p.RunningTargets) == 0 {
-			state = "idle"
-		}
-		pool = fmt.Sprintf("pool %d/%d %s", p.Running, p.Capacity, state)
-	}
-	if p.Queued > 0 {
-		pool += fmt.Sprintf(" +%d queued", p.Queued)
-	}
-	parts = append(parts, pool)
-
-	parts = append(parts, compactRunningParts(p.RunningTargets, now)...)
-
-	if n := len(p.Workspaces); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d workspace%s", n, plural.Word(n, "", "s")))
-	}
-	if tok := compactMCPToken(r.MCPEndpoint); tok != "" {
-		parts = append(parts, tok)
-	}
-	if r.Broker != nil {
-		if tok := compactServiceToken(r.Broker.Services); tok != "" {
-			parts = append(parts, tok)
-		}
-	}
-	fmt.Fprintln(w, strings.Join(parts, " · "))
-}
-
-// compactBrokerToken says what a missing broker means rather than one word for every
-// absence: "broker off" is the policy, "no broker" is a broker a run would start. A
-// running one shows the slots it has seated when it measured the host.
-func compactBrokerToken(b *daemon.Broker, policy types.BrokerPolicy) string {
-	switch {
-	case b == nil && policy.Resolved() == types.BrokerOff:
-		return "broker off"
-	case b == nil:
-		return "no broker"
-	case b.Capacity.BudgetSlots > 0:
-		return fmt.Sprintf("broker %d/%d slots", b.Capacity.HeldSlots, b.Capacity.BudgetSlots)
-	default:
-		return "broker up"
-	}
-}
-
-func compactServerToken(s *daemon.Server) string {
-	if s == nil {
-		return "no server"
-	}
-	return "server up"
-}
-
-func compactServiceToken(services []daemon.Service) string {
-	if len(services) == 0 {
-		return ""
-	}
-	running, dependents := 0, 0
-	for _, s := range services {
-		if s.State == "running" || s.State == "starting" {
-			running++
-		}
-		dependents += s.Dependents
-	}
-	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, plural.Word(dependents, "", "s")))
-}
-
-// compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when
-// there is no MCP section to show. Only a degraded endpoint is worth the width in the
-// compact line: "mcp serving" is the expected steady state and would just be noise.
-func compactMCPToken(m *daemon.MCPEndpoint) string {
-	if m == nil || m.State == "serving" {
-		return ""
-	}
-	return "mcp " + m.State
-}
-
-func compactRunningParts(targets []daemon.RunningTarget, now time.Time) []string {
-	if len(targets) == 0 {
-		return nil
-	}
-
-	wsSet := map[string]struct{}{}
-	for _, c := range targets {
-		wsSet[c.Workspace] = struct{}{}
-	}
-	showWS := len(wsSet) > 1
-
-	// Sort by duration descending (oldest first); zero durations sort last.
-	sorted := make([]daemon.RunningTarget, len(targets))
-	copy(sorted, targets)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		di := runningDuration(sorted[i], now)
-		dj := runningDuration(sorted[j], now)
-		switch {
-		case di > 0 && dj == 0:
-			return true
-		case di == 0 && dj > 0:
-			return false
-		default:
-			return di > dj
-		}
-	})
-
-	out := make([]string, 0, compactRunningMax+1)
-	limit := compactRunningMax
-	if len(sorted) < limit {
-		limit = len(sorted)
-	}
-	for i := 0; i < limit; i++ {
-		out = append(out, formatCompactRunningTarget(sorted[i], showWS, now))
-	}
-	if extra := len(sorted) - limit; extra > 0 {
-		out = append(out, fmt.Sprintf("+%d more", extra))
-	}
-	return out
-}
-
-func runningDuration(c daemon.RunningTarget, now time.Time) time.Duration {
-	if c.StartedAt.IsZero() {
-		return 0
-	}
-	return now.Sub(c.StartedAt)
-}
-
-func formatCompactRunningTarget(c daemon.RunningTarget, showWS bool, now time.Time) string {
-	project, target := parseRunning(c.Args)
-	label := fmt.Sprintf("%s:%s", project, target)
-	if label == ":" {
-		label = "?:?"
-	}
-	if showWS {
-		label = fmt.Sprintf("%s/%s", workspaceLabel(c.Workspace), label)
-	}
-	if d := formatDur(runningDuration(c, now)); d != "" {
-		label += fmt.Sprintf("(%s)", d)
-	}
-	return truncate(label, compactRunningBudget)
-}
-
-// resolveStatusSockets resolves every proc server status reports on. A pinned socket
-// narrows to that one; otherwise every live server is reported, because each is a separate
-// pool and "which one did you mean" is not an answer to "how many slots are free".
-func resolveStatusSockets(ctx context.Context, explicit string) ([]string, error) {
-	if addr := pinnedStatusSocket(explicit); addr != "" {
-		return []string{addr}, nil
-	}
-	return proc.DiscoverSockets(ctx)
-}
-
-// pinnedStatusSocket returns the socket the caller named, by --socket or the environment,
-// or "" when neither pins one.
-func pinnedStatusSocket(explicit string) string {
-	if explicit != "" {
-		return explicit
-	}
-	return os.Getenv(proc.SocketEnv)
-}
-
-type leafEntry struct {
-	target   string        // target name
-	duration time.Duration // zero when StartedAt was unset upstream
-	step     string        // current cache step label, e.g. "archive.uncompress foo.tar.zst [4×]"
-}
-
-const (
-	runningLineWidth = 70 // max chars per leaf line before truncation
-)
-
-type cellKind int
-
-const (
-	cellRunning        cellKind = iota // running slot
-	cellIdle                           // capacity slot, not running
-	cellOutOfPool                      // CPU thread outside configured capacity
-	cellOverSubscribed                 // configured capacity slot beyond NumCPU
-)
-
-func cellState(i, running, capacity, numCPU int) cellKind {
-	isRunning := i < running
-	inPool := i < capacity
-	inMachine := i < numCPU
-
-	switch {
-	case isRunning:
-		return cellRunning
-	case inPool && !inMachine:
-		return cellOverSubscribed
-	case inPool:
-		return cellIdle
-	default:
-		return cellOutOfPool
-	}
-}
-
-// The pool grid's palette, as SGR parameter codes. The escape wrapping
-// itself lives in tty.Colorize; these only choose the colors.
-const (
-	sgrPoolRunning = termkit.SGRBrightGreen // a slot doing work
-	sgrPoolIdle    = termkit.SGRDimGrey     // a free slot
-	sgrPoolQueued  = termkit.SGRYellow      // work waiting for a slot
-)
-
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-
-// drawPoolGrid renders the dot-matrix pool visualization; animFrame drives the pulse (0 = static).
-func drawPoolGrid(w io.Writer, pool *daemon.Output, numCPU int, animFrame int) {
-	total := numCPU
-	if pool.Capacity > total {
-		total = pool.Capacity
-	}
-	if total == 0 {
-		return
-	}
-
-	// Compute grid dimensions: up to 8 cols per row.
-	cols := 8
-	if total < cols {
-		cols = total
-	}
-	rows := (total + cols - 1) / cols
-
-	// Header: mode-aware label + counts. The header is static; the only
-	// animated element is the spinner attached to the "running" subtree.
-	fmt.Fprintln(w, poolHeader(pool, numCPU))
-	fmt.Fprintln(w)
-
-	// Grid rows. No per-cell animation — the header carries no motion
-	// and the spinner lives on the running tree below.
-	for r := 0; r < rows; r++ {
-		var sb strings.Builder
-		sb.WriteString("  ")
-		for c := 0; c < cols; c++ {
-			i := r*cols + c
-			if i >= total {
-				sb.WriteString("  ")
-				continue
-			}
-			kind := cellState(i, pool.Running, pool.Capacity, numCPU)
-			switch kind {
-			case cellRunning:
-				sb.WriteString(termkit.Colorize("●", sgrPoolRunning) + " ")
-			case cellIdle:
-				sb.WriteString("○ ")
-			case cellOutOfPool:
-				sb.WriteString(termkit.Colorize("·", sgrPoolIdle) + " ")
-			case cellOverSubscribed:
-				sb.WriteString(termkit.Colorize("●", sgrPoolQueued) + " ")
-			}
-		}
-		fmt.Fprintln(w, sb.String())
-	}
-
-	if len(pool.RunningTargets) > 0 {
-		spinner := spinnerFrames[animFrame%len(spinnerFrames)]
-		fmt.Fprintf(w, "\n  %s running\n", spinner)
-		drawRunningTree(w, pool.RunningTargets, time.Now())
-	}
-
-	fmt.Fprintf(w, "\n  %s running  ○ idle  %s cpu\n",
-		termkit.Colorize("●", sgrPoolRunning), termkit.Colorize("·", sgrPoolIdle))
-}
-
-func poolHeader(pool *daemon.Output, numCPU int) string {
-	parts := []string{"pool"}
-	parts = append(parts, fmt.Sprintf("pid %d", pool.ParentPID))
-	if pool.Version != "" {
-		parts = append(parts, pool.Version)
-	}
-	parts = append(parts, fmt.Sprintf("%d/%d running", pool.Running, pool.Capacity))
-	parts = append(parts, fmt.Sprintf("%d available", pool.Available))
-	parts = append(parts, fmt.Sprintf("%d cpu", numCPU))
-	out := strings.Join(parts, " · ")
-	if pool.Queued > 0 {
-		out += fmt.Sprintf("  (+%d queued)", pool.Queued)
-	}
-	return out
-}
-
-// drawRunningTree renders running targets grouped by workspace → project → target; collapses workspace when single.
-func drawRunningTree(w io.Writer, running []daemon.RunningTarget, now time.Time) {
-	const indent = "  "
-	// Group: workspace → project → []leafEntry
-	type projMap map[string][]leafEntry
-	wsGroups := map[string]projMap{}
-	for _, e := range running {
-		project, target := parseRunning(e.Args)
-		if project == "" && target == "" {
-			project = "(?)"
-			target = truncate(strings.Join(e.Args, " "), runningLineWidth)
-		}
-		ws := workspaceLabel(e.Workspace)
-		var dur time.Duration
-		if !e.StartedAt.IsZero() {
-			dur = now.Sub(e.StartedAt)
-		}
-		if wsGroups[ws] == nil {
-			wsGroups[ws] = projMap{}
-		}
-		wsGroups[ws][project] = append(wsGroups[ws][project], leafEntry{target: target, duration: dur, step: e.Step})
-	}
-
-	wsKeys := make([]string, 0, len(wsGroups))
-	for k := range wsGroups {
-		wsKeys = append(wsKeys, k)
-	}
-	slices.Sort(wsKeys)
-
-	showWorkspace := len(wsKeys) > 1
-
-	if !showWorkspace {
-		drawProjectTree(w, indent, wsGroups[wsKeys[0]])
-		return
-	}
-
-	for i, ws := range wsKeys {
-		wsLast := i == len(wsKeys)-1
-		wsPrefix, childPrefix := branchPrefix(indent, wsLast)
-		fmt.Fprintf(w, "%s%s\n", wsPrefix, ws)
-		drawProjectTree(w, childPrefix, wsGroups[ws])
-	}
-}
-
-func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry) {
-	projKeys := make([]string, 0, len(projects))
-	for k := range projects {
-		projKeys = append(projKeys, k)
-	}
-	slices.Sort(projKeys)
-
-	for i, p := range projKeys {
-		pLast := i == len(projKeys)-1
-		pPrefix, vIndent := branchPrefix(indent, pLast)
-		label := p
-		if label == "" {
-			label = "(all)"
-		}
-		fmt.Fprintf(w, "%s%s\n", pPrefix, label)
-
-		leaves := projects[p]
-		// Stable order: oldest first, then target name.
-		slices.SortStableFunc(leaves, func(a, b leafEntry) int {
-			if a.duration != b.duration {
-				return cmp.Compare(b.duration, a.duration) // oldest first
-			}
-			return cmp.Compare(a.target, b.target)
-		})
-		for j, lf := range leaves {
-			vLast := j == len(leaves)-1
-			vPrefix, actIndent := branchPrefix(vIndent, vLast)
-			line := truncate(lf.target, runningLineWidth)
-			if d := formatDur(lf.duration); d != "" {
-				line += " " + termkit.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
-			}
-			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
-			if lf.step != "" {
-				actPrefix, _ := branchPrefix(actIndent, true)
-				fmt.Fprintf(w, "%s%s\n", actPrefix, termkit.Colorize(truncate(lf.step, runningLineWidth), sgrPoolIdle))
-			}
-		}
-	}
-}
-
-// formatDur renders a wall-clock running duration. Returns "" for zero
-// or negative durations (unset upstream / clock skew).
-//
-// Deliberately NOT internal/cache.fmtDur, which they otherwise resemble enough
-// to invite a merge. That one measures how long a target TOOK and resolves to
-// nanoseconds, because the difference between 2ms and 200ms is the answer
-// somebody is looking for. This one is a clock a reader watches tick, so
-// sub-second precision would be unreadable noise, and an unset value has to
-// render as nothing rather than as zero.
-func formatDur(d time.Duration) string {
-	if d <= 0 {
-		return ""
-	}
-	switch {
-	case d < 10*time.Second:
-		return fmt.Sprintf("%.1fs", d.Seconds())
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		m := int(d / time.Minute)
-		s := int((d % time.Minute) / time.Second)
-		return fmt.Sprintf("%dm%ds", m, s)
-	default:
-		h := int(d / time.Hour)
-		m := int((d % time.Hour) / time.Minute)
-		return fmt.Sprintf("%dh%dm", h, m)
-	}
-}
-
-func branchPrefix(indent string, last bool) (string, string) {
-	if last {
-		return indent + "└── ", indent + "    "
-	}
-	return indent + "├── ", indent + "│   "
-}
-
-func workspaceLabel(root string) string {
-	if root == "" {
-		return "(unknown)"
-	}
-	return filepath.Base(root)
-}
-
-func parseRunning(args []string) (project, target string) {
-	i := 0
-	for i < len(args) && strings.HasPrefix(args[i], "-") {
-		i++
-	}
-	if i >= len(args) {
-		return "", ""
-	}
-	subcmd := args[i]
-	i++
-
-	switch subcmd {
-	case "run":
-		// magus run <target[:modes]> [project ...]
-		if i < len(args) {
-			target = args[i]
-			if t, err := types.ParseTarget(args[i]); err == nil {
-				target = t.Name
-			}
-			i++
-		}
-		if i < len(args) {
-			project = args[i]
-		}
-		return project, target
-	case "build", "test", "lint", "format", "gen", "watch":
-		// magus <target> [project]
-		target = subcmd
-		if i < len(args) {
-			project = args[i]
-		}
-		return project, target
-	default:
-		target = subcmd
-		if i < len(args) {
-			project = args[i]
-		}
-		return project, target
-	}
-}
-
-// truncate shortens s to fit n bytes for the running-tree lines.
-//
-// It delegates to tty.Clip rather than slicing: a raw s[:n-1] splits a
-// multi-byte rune, so a project or target name with a non-ASCII
-// character rendered as a replacement glyph.
-//
-// The ellipsis is ASCII. The rest of this file is deliberately not: the pool
-// grid, the spinner and the tree rules are GLYPHS, chosen for shape, and there
-// is no ASCII substitute that draws them. That is a different question from
-// prose typography, which the repo does keep to ASCII.
-func truncate(s string, n int) string {
-	return layout.ClipBytes(s, n)
-}
-
-// printLockStatus renders the workspace locks held right now.
-//
-// Held is normal, so this is never styled as a failure. Age is the column that
-// matters: seconds means a peer is mid-run, days means a holder nobody remembers
-// starting, and every other run is being refused by it.
-func printLockStatus(w io.Writer, locks []daemon.Lock) {
-	if len(locks) == 0 {
-		return
-	}
-	fmt.Fprintln(w, "\nlocks held:")
-	for _, l := range locks {
-		line := "  " + l.Project
-		if l.PID != 0 {
-			line += fmt.Sprintf("  pid %d", l.PID)
-		}
-		if !l.AcquireTime.IsZero() {
-			line += "  " + formatDur(time.Since(l.AcquireTime))
-		}
-		if l.Command != "" {
-			line += "  " + l.Command
-		}
-		fmt.Fprintln(w, line)
-		if l.Dir != "" {
-			fmt.Fprintln(w, "    in "+l.Dir)
-		}
-	}
 }
 
 // paintStatusFrame draws one watch frame, redrawing in place when it can.

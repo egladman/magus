@@ -287,3 +287,16 @@ func TestSessionEndedReadsTheHoldersTombstones(t *testing.T) {
 	_, ended = s.SessionEnded("w")
 	assert.False(t, ended, "a session that bound the job again is working it")
 }
+
+func TestApplyClaimRefusesPathBesideCallers(t *testing.T) {
+	rec := types.Declaration{
+		Schema: types.Schema{Version: types.JobAPIVersion},
+		ID:     "fix-parser",
+		Claim:  []types.JobClaimRequest{{Path: "lib/lib.go", Callers: "Parse"}},
+	}
+	open := func() (*Store, error) { return nil, errors.New("a refused record opens no store") }
+
+	_, _, err := ApplyClaim(t.Context(), t.TempDir(), []types.Declaration{rec}, open, false, ClaimEnv{})
+
+	assert.ErrorContains(t, err, "names callers of Parse and also a path or a proof")
+}

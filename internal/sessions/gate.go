@@ -103,7 +103,7 @@ type GateResult struct {
 	// Unrun names each target an OutcomeUnrun gate could not run, and why.
 	Unrun []string `json:"unrun,omitempty"`
 	// Fingerprint condenses the per-step cache keys the gate ran under
-	// (ci.GateFingerprint), so a later run can tell "identical inputs"
+	// (ci.gateFingerprint), so a later run can tell "identical inputs"
 	// apart from "same commit".
 	Fingerprint string `json:"fingerprint,omitempty"`
 	// Projects are the project paths the gate covered. A later gate defers to

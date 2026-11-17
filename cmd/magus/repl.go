@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 
-	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/langservice"
 )
 
 // buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile API
@@ -39,97 +36,31 @@ func buzzRepl(ctx context.Context, noAutoload bool) error {
 		Stderr:     os.Stderr,
 		Banner:     "magus buzz - Buzz REPL (.help for commands)",
 		Candidates: workspaceReplCandidates(ctx, cwd),
-		Targets:    workspaceTargetNames(ctx, cwd),
-		Flags:      cliFlagCandidates,
+		Targets:    interp.ReplTargetNames(ctx, cwd, workspaceNames),
+		Flags:      interp.CLIFlagCandidates,
 
 		ShellIntegration: globalCfg.ShellIntegration == "osc133",
 	})
 }
 
-// workspaceReplCandidates supplies the completion candidates only the CLI can reach: the
-// host module names, and this workspace's targets and projects.
-//
-// It is memoized on first Tab rather than computed at startup, for two reasons. A
-// session that never presses Tab pays nothing, which matters because loading the
-// workspace is the expensive half; and resolving it lazily means a REPL opened
-// outside a workspace still starts, with module names alone, instead of failing on
-// a lookup it did not need.
-func workspaceReplCandidates(ctx context.Context, cwd string) func() []string {
-	var cached []string
-	return func() []string {
-		if cached != nil {
-			return cached
-		}
-		// Host modules come from the binary, not the workspace, so they are always
-		// available, and they are what a workspace REPL is mostly for. Sourced from
-		// the same manifest `magus buzz lsp` completes from, spelled the way Buzz
-		// actually calls it (module\name), not the dotted form the Go descriptor
-		// declares a member under.
-		cached = append(cached, langservice.ModuleCallCandidates()...)
-		if m, err := loadMagus(ctx, cwd); err == nil {
-			// Best-effort completion candidates: this closure has no error path of its
-			// own (it feeds a completer, not a command), so a cancelled ctx here just
-			// means fewer candidates offered, not a failed Tab press.
-			if targets, err := m.ListTargets(ctx); err == nil {
-				for _, t := range targets {
-					cached = append(cached, t.Name)
-				}
-			}
-			for _, p := range m.All() {
-				cached = append(cached, p.Path)
-			}
-		}
-		if cached == nil {
-			// Distinguish "resolved to nothing" from "not yet resolved", or every Tab
-			// re-runs the workspace load that just came back empty.
-			cached = []string{}
-		}
-		return cached
+// workspaceNames lists the open workspace's target names and project paths, for the REPL's
+// completion. A workspace that will not load offers none; targets that fail to list leave
+// the project paths.
+func workspaceNames(ctx context.Context, dir string) (targets, projects []string, err error) {
+	m, err := loadMagus(ctx, dir)
+	if err != nil {
+		return nil, nil, err
 	}
+	if listed, err := m.ListTargets(ctx); err == nil {
+		for _, t := range listed {
+			targets = append(targets, t.Name)
+		}
+	}
+	for _, p := range m.All() {
+		projects = append(projects, p.Path)
+	}
+	return targets, projects, nil
 }
 
-// workspaceTargetNames supplies just this workspace's target names, for
-// completion inside magus\run(["<target>", ...]), where offering every module
-// and project path alongside them would bury the few names valid there.
-func workspaceTargetNames(ctx context.Context, cwd string) func() []string {
-	var cached []string
-	return func() []string {
-		if cached != nil {
-			return cached
-		}
-		if m, err := loadMagus(ctx, cwd); err == nil {
-			if targets, err := m.ListTargets(ctx); err == nil {
-				for _, t := range targets {
-					cached = append(cached, t.Name)
-				}
-			}
-		}
-		if cached == nil {
-			cached = []string{}
-		}
-		return cached
-	}
-}
-
-// cliFlagCandidates returns the CLI's declared flags for verb (e.g. "run"),
-// each spelled with its leading dashes, read from the same registry the
-// generated binders in cmd/magus/gen and the shell completions come from, so
-// this can't drift from what the subcommand actually accepts.
-func cliFlagCandidates(verb string) []string {
-	for _, c := range commands.Root.Spec.Children {
-		if c.Name != verb {
-			continue
-		}
-		out := make([]string, 0, len(c.Flags))
-		for _, f := range c.Flags {
-			prefix := "--"
-			if len(f.Name) == 1 {
-				prefix = "-"
-			}
-			out = append(out, prefix+f.Name)
-		}
-		sort.Strings(out)
-		return out
-	}
-	return nil
-}
+// workspaceReplCandidates is the completion source the step gate and the REPL take.
+var workspaceReplCandidates = interp.ReplCandidates(workspaceNames)

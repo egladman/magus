@@ -379,9 +379,6 @@ type gateOwner struct {
 	// runs is the reason a GateNotRun deviation gives,
 	// empty when no owner is declared.
 	runs string
-	// unread is a magus.yaml that did not load, which
-	// [broadClaimProblems] reports. No edit is guessed then.
-	unread bool
 }
 
 // declaredGateOwner is the owner the workspace declares for
@@ -395,7 +392,8 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 	cfg, err := config.LoadWorkspaceOnly(root)
 	switch {
 	case err != nil:
-		return gateOwner{unread: true}
+		// [broadClaimProblems] reports the config that did not load; no owner is guessed.
+		return gateOwner{}
 	case cfg.CI.RemoteGate != "":
 		return gateOwner{runs: cfg.CI.RemoteGate + " runs it"}
 	case row.Parent == "":
@@ -616,7 +614,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merg
 		})
 	}
 	owner := declaredGateOwner(store.root, rows, merged)
-	ps = append(ps, regeneratedProblems(regenerated, merged.Paths.Deny, owner)...)
+	ps = append(ps, regeneratedProblems(regenerated)...)
 	gates, undecided := unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged))
 	ps = append(ps, unrunGateProblems(gates, owner)...)
 	unchecked = append(unchecked, undecided...)
@@ -714,44 +712,22 @@ func listNames(names []string) string {
 }
 
 // regeneratedProblems is each output as OutputOutsideWritePaths, its Subject the output.
-// One a deny path touches carries no Edit: the record kept it from the job on purpose.
-// With a declared owner, the Edit permits the output for the integrator.
-func regeneratedProblems(outputs []RegeneratedOutput, deny []string, owner gateOwner) types.JobProblems {
+func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(outputs))
 	for _, o := range outputs {
-		p := types.JobProblem{
+		ps = append(ps, types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: o.Output,
 			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
 			Fix: fmt.Sprintf(`add %q to paths.write, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
-		}
-		glob, _, _ := strings.Cut(o.Output, " !")
-		denied := slices.ContainsFunc(deny, func(d string) bool { return types.PathsIntersect(d, glob) })
-		switch {
-		case denied || owner.unread:
-		case owner.runs != "":
-			p.Edit = &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates}}
-		default:
-			p.Edit = regeneratedEdit(o.Output)
-		}
-		ps = append(ps, p)
+		})
 	}
 	return ps
 }
 
-// regeneratedEdit adds output to the write paths, or permits it for the integrator when it
-// carries an exclusion (`gen/*.go !gen/*_test.go`), which no write path can spell.
-func regeneratedEdit(output string) *types.JobEdit {
-	if strings.Contains(output, " !") {
-		return &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: output, Reason: integratorRegenerates}}
-	}
-	return &types.JobEdit{AddWritePath: output}
-}
-
 // unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. A gate no
-// worker may run is the integrator's and raises nothing. The goal a lint gate's Edit adds
-// skips default charms, as [lintGoals] adds it, so --fix lint reports and rewrites nothing.
-// With a declared owner, another gate's Edit is the deviation naming it.
+// worker may run is the integrator's and raises nothing. With a declared owner, the fix is
+// the deviation naming it.
 func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(gates))
 	for _, g := range gates {
@@ -759,10 +735,6 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			continue
 		}
 		subject := fmt.Sprintf("%s %s", g.Target, g.Project)
-		add := g.Goal
-		if g.Target == lintTarget {
-			add.Check.NoDefaultCharms = true
-		}
 		goal, _ := json.Marshal(g.Goal)
 		p := types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
@@ -770,15 +742,8 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			Fix: fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				goal, types.GateNotRun, subject),
 		}
-		switch {
-		case g.Target == lintTarget:
-			p.Edit = &types.JobEdit{AddGoal: &add}
-		case owner.unread:
-		case owner.runs != "":
+		if g.Target != lintTarget && owner.runs != "" {
 			p.Fix = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
-			p.Edit = &types.JobEdit{AddDeviation: &types.Deviation{Code: types.GateNotRun, Subject: subject, Reason: owner.runs}}
-		default:
-			p.Edit = &types.JobEdit{AddGoal: &add}
 		}
 		ps = append(ps, p)
 	}

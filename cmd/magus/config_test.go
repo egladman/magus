@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
-	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,21 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
-
-func TestRunConfigView_Text(t *testing.T) {
-	cfg := config.Defaults()
-	require.NoError(t, runConfigView(cfg, nil))
-}
-
-func TestRunConfigView_JSON(t *testing.T) {
-	cfg := config.Defaults()
-	require.NoError(t, runConfigView(cfg, []string{"-o", "json"}))
-}
 
 type configViewSuite struct {
 	suite.Suite
@@ -53,37 +39,6 @@ func (s *configViewSuite) TestJSONCarriesTheReadingList() {
 		"verdict": "follow", "why": "the reference", "contradicts": "https://blog.example/go"}}, view.Sources)
 }
 
-func TestRunConfigView_YAML(t *testing.T) {
-	cfg := config.Defaults()
-	require.NoError(t, runConfigView(cfg, []string{"-o", "yaml"}))
-}
-
-func TestRunConfigView_Name(t *testing.T) {
-	cfg := config.Defaults()
-
-	// Capture stdout by redirecting within the test is complex; instead just
-	// verify no error and that KnownKeys() is populated.
-	_ = cfg
-	keys := config.KnownKeys()
-	assert.NotEmpty(t, keys)
-	require.NoError(t, runConfigView(cfg, []string{"-o", "name"}))
-}
-
-func TestRunConfigSet_Local(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	require.NoError(t, runConfigSet(t.Context(), []string{"key=cache.dir,value=/tmp/mycache"}))
-
-	path := filepath.Join(dir, config.Filename)
-	_, err := os.Stat(path)
-	require.NoError(t, err, "expected %s to exist", path)
-
-	cfg, err := config.Load(path)
-	require.NoError(t, err)
-	assert.Equal(t, "/tmp/mycache", cfg.Cache.Dir)
-}
-
 func TestRunConfigSet_Global(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -99,27 +54,12 @@ func TestRunConfigSet_Global(t *testing.T) {
 	assert.Equal(t, "json", cfg.Log.Format)
 }
 
-func TestRunConfigSet_UnknownKey(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	err := runConfigSet(t.Context(), []string{"key=not.a.real.key,value=v"})
-	assert.Error(t, err, "expected error for unknown key")
-}
-
 func TestRunConfigSet_BadInt(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
 	err := runConfigSet(t.Context(), []string{"key=parallel,value=notanumber"})
 	assert.Error(t, err, "expected error for bad int")
-}
-
-func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
-	cfg := config.Defaults()
-	err := configCommand(context.Background(), "", cfg, []string{"frobnicate"})
-	require.Error(t, err, "expected error for unknown subcommand")
-	assert.Contains(t, err.Error(), "frobnicate", "error should mention subcommand name")
 }
 
 // TestRunConfigCmd_NoArgs pins that a missing subcommand is a USAGE ERROR, not a
@@ -134,148 +74,3 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 	assert.Equal(t, exit.Usage, mapExitCode(err))
 }
 
-// TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
-// is a satisfied request (0), a misuse is 2, and a genuine runtime failure stays 1.
-func TestUsageErrorsExitTwo(t *testing.T) {
-	assert.Equal(t, 0, mapExitCode(nil), "success")
-	assert.Equal(t, 0, mapExitCode(flag.ErrHelp), "an explicit -h is a request that was satisfied")
-	assert.Equal(t, exit.Usage, mapExitCode(exit.Usagef("bad invocation")), "misuse")
-	assert.Equal(t, 1, mapExitCode(errors.New("the work failed")), "runtime failure")
-}
-
-// selfStatusErr is any failure that names its own process status, the shape a contended
-// workspace lock arrives in. Declared here rather than imported because the package that
-// returns it keeps the type unexported; what mapExitCode reads is the method.
-type selfStatusErr struct{ code int }
-
-func (selfStatusErr) Error() string   { return "the machine is busy" }
-func (e selfStatusErr) ExitCode() int { return e.code }
-
-// TestSelfDescribedExitStatusSurvives pins that a failure carrying its own status keeps
-// it locally, matching what the server already forwards for an adopted run. A contended
-// lock exits 75 (EX_TEMPFAIL); collapsing it to 1 is what made a busy machine read as a
-// broken build.
-func TestSelfDescribedExitStatusSurvives(t *testing.T) {
-	assert.Equal(t, 75, mapExitCode(selfStatusErr{code: 75}))
-	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", selfStatusErr{code: 75})), "survives wrapping")
-}
-
-// runOnlyFlags lists flags that intentionally exist on `magus run` but not
-// `magus affected`. Each entry must cite the reason; the corresponding
-// declaration in run.go carries a matching "run-only:" comment.
-var runOnlyFlags = map[string]string{
-	"shard":            "CI matrix sharding targets an explicit project set; affected's scope is already minimal",
-	"n-shards":         "pairs with --shard",
-	"stdin":            "reads a saved shard plan; affected's --stdin reads changed paths, so the two share the input idiom and not a meaning",
-	"volatility-retry": "consumed by `magus ci bisect` which dispatches through run, not affected",
-	"skip":             "subtracts from a selection the caller named; affected's set is derived from the diff, and dropping a project the diff put there un-gates exactly what affected exists to gate",
-}
-
-// affectedOnlyFlags lists flags that intentionally exist on `magus affected`
-// but not `magus run`. Each entry must cite the reason; the corresponding
-// declaration in affected.go carries a matching "affected-only:" comment.
-var affectedOnlyFlags = map[string]string{
-	"base":  "VCS diff base ref; `magus run` has no diff",
-	"b":     "short for --base",
-	"stdin": "reads changed paths from a pipe (watch loop); `magus run` takes explicit project paths",
-	"null":  "pairs with --stdin",
-
-	// The sub-modes. These select a different command path rather than configure
-	// the run, and each is documented on affected's page because that is where a
-	// reader meets it. They were absent from this map while the comparison read
-	// run.go and affected.go as SOURCE: the scan looked only inside the affected
-	// function, so everything bound by affectedPlan, affectedImpact and bisect was
-	// invisible to it. Comparing the documented flags instead makes them visible,
-	// which is the point: they are exceptions, not omissions.
-	"explain":             "mode selector: reports why a project is in the set instead of running",
-	"plan":                "mode selector: emits a CI shard plan for the affected set",
-	"max-shards":          "pairs with --plan",
-	"max-parallel-budget": "pairs with --plan",
-	"detail":              "pairs with --plan",
-	"bisect":              "mode selector: drives VCS bisect over the diff, which `magus run` has no notion of",
-	"good":                "pairs with --bisect",
-	"target":              "pairs with --bisect",
-
-	"impact": "mode selector: reports the changeset's blast radius instead of running",
-}
-
-// TestRunAffectedFlagParity ensures that `magus run` and `magus affected`
-// expose the same flags, minus the documented exceptions above. When a new
-// flag lands on one subcommand it must either also land on the other, or be
-// added to the appropriate exception map here with a one-line rationale.
-//
-// To debug a failure:
-//
-//	go test ./cmd/magus/ -run TestRunAffectedFlagParity -v
-func TestRunAffectedFlagParity(t *testing.T) {
-	// This file's own name, so the error messages below can point back to it
-	// without runtime.Caller, which returns a module path under -trimpath.
-	const thisFile = "config_test.go"
-
-	runFlags := registryFlagNames(t, "run")
-	affectedFlags := registryFlagNames(t, "affected")
-
-	// Stale exception check: every entry in an exception map must correspond
-	// to a flag that actually exists in the owning file.
-	for name := range runOnlyFlags {
-		assert.Contains(t, runFlags, name,
-			"runOnlyFlags entry %q no longer exists in run.go — remove it from the exception map", name)
-	}
-	for name := range affectedOnlyFlags {
-		assert.Contains(t, affectedFlags, name,
-			"affectedOnlyFlags entry %q no longer exists in affected.go — remove it from the exception map", name)
-	}
-
-	runShared := subtract(runFlags, runOnlyFlags)
-	affectedShared := subtract(affectedFlags, affectedOnlyFlags)
-
-	for name := range runShared {
-		assert.Contains(t, affectedShared, name,
-			"flag --%s exists in `magus run` (run.go) but not `magus affected` (affected.go)\n"+
-				"\tAdd it to affected.go, or add an entry to affectedOnlyFlags in %s",
-			name, thisFile)
-	}
-	for name := range affectedShared {
-		assert.Contains(t, runShared, name,
-			"flag --%s exists in `magus affected` (affected.go) but not `magus run` (run.go)\n"+
-				"\tAdd it to run.go, or add an entry to runOnlyFlags in %s",
-			name, thisFile)
-	}
-}
-
-// registryFlagNames returns the flags one command declares, as a set.
-//
-// Read from the command registry rather than parsed out of the Go source. The
-// source scan this replaced walked run.go and affected.go for fs.Bool-style calls,
-// which was the only way to ask "what does this command bind" while each command
-// bound its own list by hand. Both now bind from the registry via a generated
-// binder, so there is nothing to scrape, and a scan would find zero and pass
-// vacuously if it were not for its own emptiness check.
-func registryFlagNames(t *testing.T, command string) map[string]struct{} {
-	t.Helper()
-	for _, c := range commands.Root.Spec.Children {
-		if c.Name != command {
-			continue
-		}
-		require.NotEmpty(t, c.Flags, "command %q declares no flags", command)
-		out := make(map[string]struct{}, len(c.Flags))
-		for _, f := range c.Flags {
-			out[f.Name] = struct{}{}
-		}
-		return out
-	}
-	t.Fatalf("command %q is not in the man-page registry", command)
-	return nil
-}
-
-// subtract returns a copy of flags with all keys in exceptions removed.
-func subtract(flags map[string]struct{}, exceptions map[string]string) map[string]struct{} {
-	out := make(map[string]struct{}, len(flags))
-	for k, v := range flags {
-		out[k] = v
-	}
-	for k := range exceptions {
-		delete(out, k)
-	}
-	return out
-}

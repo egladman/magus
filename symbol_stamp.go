@@ -46,9 +46,9 @@ func symbolStampPath(indexPath string) string { return indexPath + ".fresh" }
 // read fresh without a probe: op's step key before run keying (no tool versions, so no
 // subprocess) and the identity of the index and of each stamp the step declares. "" when
 // the key cannot be computed, which matches no stamp file.
-func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.Project, op, index string, memo *cache.SourceMemo) string {
+func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.Project, op, index string, once *cache.SourceOnce) string {
 	step := m.buildStep(p, op)
-	key, _, err := c.StepKeyMemo(ctx, &step, memo)
+	key, _, err := c.StepKeyWithSources(ctx, &step, once)
 	if err != nil {
 		return ""
 	}
@@ -100,8 +100,8 @@ const changedListCap = 200
 
 // changedSinceIndex is the workspace-relative sources the step for op keys on in p whose
 // mtime is past index's, sorted. A deleted source leaves nothing to stat, so it is never
-// listed. memo is the sweep's, so the expansion symbolIndexStamp paid is not paid again.
-func (m *Magus) changedSinceIndex(ctx context.Context, p *types.Project, op, index string, memo *cache.SourceMemo) ([]string, error) {
+// listed. once is the sweep's, so the expansion symbolIndexStamp paid is not paid again.
+func (m *Magus) changedSinceIndex(ctx context.Context, p *types.Project, op, index string, once *cache.SourceOnce) ([]string, error) {
 	built, err := os.Stat(index)
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (m *Magus) changedSinceIndex(ctx context.Context, p *types.Project, op, ind
 		return nil, errors.New("no cache is open to expand the indexer's sources")
 	}
 	step := m.buildStep(p, op)
-	_, lines, err := c.StepKeyMemo(ctx, &step, memo)
+	_, lines, err := c.StepKeyWithSources(ctx, &step, once)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (m *Magus) SymbolFreshnessEnv() []string {
 // SymbolIndexStatusByStamp reports the freshness of each symbol index the workspace's
 // projects declare, one entry per (project, indexer op), sorted by project and then
 // binding order, checked now: unlike SymbolIndexStatus it never answers
-// from the server's watcher memo, so a graph read can state freshness as of the moment it
+// from the server's watcher state, so a graph read can state freshness as of the moment it
 // reads. An index whose stamp file matches is fresh with no probe; the rest pay the
 // tool-version and observation probes once for the sweep, as a run does, and each one the
 // probe finds fresh is stamped for the next read. A stale entry carries the sources whose
@@ -184,7 +184,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 	}
 	cacheDir := resolveCacheDir(m.Root(), m.cfg)
 	c := m.freshnessCache(ctx)
-	memo := cache.NewSourceMemo()
+	once := cache.NewSourceOnce()
 	out := make([]types.SymbolIndexStatus, len(capable))
 	type pending struct {
 		at    int
@@ -210,7 +210,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		if c == nil {
 			continue
 		}
-		stamp := m.symbolIndexStamp(ctx, c, idx.project, idx.op, index, memo)
+		stamp := m.symbolIndexStamp(ctx, c, idx.project, idx.op, index, once)
 		if symbolStampMatches(index, stamp) {
 			out[i].Freshness = types.SymbolIndexFresh
 			continue
@@ -246,7 +246,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		if out[i].Freshness != types.SymbolIndexStale {
 			continue
 		}
-		changed, err := m.changedSinceIndex(ctx, idx.project, idx.op, indexes[i], memo)
+		changed, err := m.changedSinceIndex(ctx, idx.project, idx.op, indexes[i], once)
 		if err != nil {
 			out[i].Detail = "cannot list the sources changed since it was built: " + err.Error()
 			continue

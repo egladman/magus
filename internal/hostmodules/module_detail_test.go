@@ -1,0 +1,80 @@
+package hostmodules
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/testkit"
+)
+
+func TestMain(m *testing.M) { testkit.Main(m) }
+
+// TestBuildModulesOutput_List covers the no-name list view: every module is
+// present with a doc, and methods are NOT expanded (that's the detail view).
+func TestBuildModulesOutput_List(t *testing.T) {
+	out := Describe("")
+	require.NotEmpty(t, out)
+	var sawEnv bool
+	for _, m := range out {
+		if m.Name == "env" {
+			sawEnv = true
+		}
+		assert.Empty(t, m.Methods, "list view expanded %q methods; detail-only", m.Name)
+		assert.Empty(t, m.Fields, "list view expanded %q fields; detail-only", m.Name)
+	}
+	assert.True(t, sawEnv, "expected the env module in the list")
+}
+
+// TestBuildModulesOutput_Detail covers the named detail view: methods are
+// expanded with both engine signatures, and the native-Buzz cross-reference is
+// surfaced for overlap entries (env.get/lookup).
+func TestBuildModulesOutput_Detail(t *testing.T) {
+	out := Describe("env")
+	require.Len(t, out, 1)
+	require.Equal(t, "env", out[0].Name)
+	byName := map[string]struct{ buzz, native string }{}
+	for _, m := range out[0].Methods {
+		byName[m.Name] = struct{ buzz, native string }{m.Buzz, m.BuzzStdlib}
+	}
+	lk, ok := byName["lookup"]
+	require.True(t, ok, "env.lookup missing from detail view")
+	assert.True(t, strings.HasPrefix(lk.buzz, `env\lookup(`),
+		"Buzz sig = %q, want env\\lookup(...): namespace access is backslash-qualified", lk.buzz)
+	assert.NotEmpty(t, lk.native, "env.lookup should carry a native Buzz cross-reference")
+}
+
+// TestBuildModulesOutput_Unknown: an unknown name yields an empty result so the
+// command can report it (rather than silently listing all).
+func TestBuildModulesOutput_Unknown(t *testing.T) {
+	out := Describe("definitely-not-a-module")
+	assert.Empty(t, out)
+}
+
+type DescribeModuleObjectsSuite struct {
+	suite.Suite
+}
+
+func TestDescribeModuleObjects(t *testing.T) {
+	suite.Run(t, new(DescribeModuleObjectsSuite))
+}
+
+func (s *DescribeModuleObjectsSuite) TestTheDetailListsObjectMethods() {
+	out := Describe("image")
+	s.Require().Len(out, 1)
+	var b strings.Builder
+	PrintModuleDetail(&b, out[0])
+	s.Contains(b.String(), "\nobject methods (1):\n  Digest.string\n")
+	s.Contains(b.String(), "    Signature: Digest.string() -> string\n")
+}
+
+func (s *DescribeModuleObjectsSuite) TestAModuleWithoutObjectsPrintsNoSection() {
+	out := Describe("env")
+	s.Require().Len(out, 1)
+	var b strings.Builder
+	PrintModuleDetail(&b, out[0])
+	s.NotContains(b.String(), "object methods")
+}

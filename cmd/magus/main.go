@@ -43,7 +43,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -58,8 +57,11 @@ import (
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
@@ -101,10 +103,10 @@ func runCLI() int {
 	}
 	// Before the worker branches: a worker runs magus\workspace().putJob.
 	// That opens its own Store inside std and grades the check through this.
-	job.SetCheckGrader(newCheckGrader())
+	job.SetCheckGrader(guard.NewCheckGrader(loadGuardDependencies))
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
-		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
+		return transform.Serve(context.Background(), os.Stdin, os.Stdout, os.Stderr)
 	}
 	if os.Getenv(mcpclient.WorkerEnv) == "1" {
 		return runClientWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
@@ -129,7 +131,7 @@ func runCLI() int {
 	if err := config.MisconfiguredEnv(os.Environ()); err != nil {
 		switch sub, subArgs := peekSub(args); sub {
 		case "shell":
-			return mapExitCode(shellCommand(withEnvRefusal(context.Background(), err), subArgs))
+			return mapExitCode(shellCommand(guard.WithEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
 			// No display yet: the logger is built after this check.
@@ -145,7 +147,7 @@ func runCLI() int {
 	// returns, and a profile that stops only on the happy path is a profile that is
 	// empty exactly when a run failed slowly. main() calls os.Exit on runCLI's RESULT,
 	// so this defer still runs. No-op unless MAGUS_PPROF is set.
-	defer startProfiling()()
+	defer observability.StartProfiling()()
 
 	var rootCtx context.Context
 	var stopSignals func()
@@ -153,11 +155,11 @@ func runCLI() int {
 	// A broker or a foreground server answers its own signals (see lifecycle); a run's
 	// Ctrl+C policy would cancel it on the first SIGTERM it means to drain on.
 	if ownsItsSignals(args) {
-		captureSignals()
+		proc.CaptureSignals()
 		rootCtx, stopSignals = context.WithCancel(context.Background())
 		interrupted = func() (syscall.Signal, bool) { return 0, false }
 	} else {
-		rootCtx, stopSignals, interrupted = watchInterrupts(context.Background())
+		rootCtx, stopSignals, interrupted = cache.WatchInterrupts(context.Background())
 	}
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
@@ -198,8 +200,8 @@ func runCLI() int {
 	if exitCode >= 0 {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
-		pipeStageFromContext(rootCtx).linger()
-		recordPipeExit(args, code, interrupted)
+		pipe.StageFromContext(rootCtx).Linger()
+		pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 		return code
 	}
 
@@ -230,14 +232,14 @@ func runCLI() int {
 	// Only a stage that succeeded settles: one that failed reports its own failure,
 	// never an upstream's.
 	if code == 0 {
-		if err := settlePipeline(dispatchCtx, args); err != nil {
+		if err := pipe.SettleProcess(dispatchCtx, extractRootFlag(args), globalCfg); err != nil {
 			dispatchErr, code = err, mapExitCode(err)
 		}
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
-	pipeStageFromContext(rootCtx).linger()
-	recordPipeExit(args, code, interrupted)
+	pipe.StageFromContext(rootCtx).Linger()
+	pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 	return code
 }
 
@@ -270,7 +272,7 @@ type startupResult struct {
 	rc      runConfig
 	sub     string
 	subArgs []string
-	trace   *startupTracer
+	trace   *observability.StartupTracer
 	cleanup func()
 }
 
@@ -720,28 +722,11 @@ func peekSub(args []string) (sub string, subArgs []string) {
 	return "", nil
 }
 
-// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
-// in, whose magus cannot start for root, since a host runs a failed hook's call.
-func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
-	if sub == "shell" {
-		return mapExitCode(shellCommand(withStaleConfig(ctx, cause), subArgs)), true
-	}
-	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
-	if sub != "buzz" || stdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
-		return 0, false
-	}
-	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
-	if reason != "" {
-		fmt.Fprintln(os.Stderr, reason)
-	}
-	return answer.ExitCode(), true
-}
-
 // startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
 // exitCode >= 0 means exit without dispatching; -1 means proceed.
 func startup(rootCtx context.Context, args []string) (context.Context, startupResult, int) {
-	trace := newStartupTracer(startupTraceEnabled(args))
-	cleanup := trace.done
+	trace := observability.NewStartupTracer(startupTraceEnabled(args))
+	cleanup := trace.Done
 
 	peekedSub, peekedSubArgs := peekSub(args)
 	profile := resolveProfile(peekedSub, peekedSubArgs)
@@ -769,11 +754,11 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		}, -1
 	}
 
-	stopEarlyRoot := trace.phase("startup.find_root_early")
+	stopEarlyRoot := trace.Phase("startup.find_root_early")
 	earlyRoot, _ := workspace.FindRoot(extractRootFlag(args))
 	stopEarlyRoot()
 
-	stopCfgLoad := trace.phase("startup.config_load")
+	stopCfgLoad := trace.Phase("startup.config_load")
 	cfg, err := config.LoadWithRoot(config.ExtractFlag(args), earlyRoot)
 	stopCfgLoad()
 	if err != nil {
@@ -832,9 +817,8 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	applyDisplay()
 
 	// Retrofit-enable the tracer if the config file set trace level (pre-config phases are missed).
-	if !trace.enabled && cfg.Log.SlogLevel() <= config.LevelTrace {
-		trace.enabled = true
-		trace.start = time.Now()
+	if !trace.Enabled() && cfg.Log.SlogLevel() <= config.LevelTrace {
+		trace.Enable()
 	}
 
 	// parentLive records whether a parent proc server is alive and reachable: true only
@@ -843,7 +827,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	// only while it has a live parent to forward to.
 	parentLive := false
 	if profile.needsForward {
-		stopSock := trace.phase("startup.socket_lookup")
+		stopSock := trace.Phase("startup.socket_lookup")
 		sock := os.Getenv(proc.SocketEnv)
 		// topLevel: no parent exported a socket, so this process is the head of its own
 		// tree rather than a magus a magusfile spawned.
@@ -869,7 +853,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		}
 		stopSock()
 		if sock != "" {
-			stopFwd := trace.phase("startup.forward")
+			stopFwd := trace.Phase("startup.forward")
 			// Flags are unparsed, so this is magus.yaml and the environment.
 			// A --sandbox flag rides in args (see adoptedSandbox).
 			fwdCtx := rootCtx
@@ -895,7 +879,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		}
 	}
 
-	stopFlags := trace.phase("startup.flag_parse")
+	stopFlags := trace.Phase("startup.flag_parse")
 	var (
 		root    string
 		cfgPath string
@@ -969,9 +953,9 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		return rootCtx, startupResult{cleanup: cleanup}, exit.Usage
 	}
 
-	rootCtx = withTrace(rootCtx, trace)
-	if trace.profile != nil {
-		rootCtx = buzz.WithProfile(rootCtx, trace.profile)
+	rootCtx = observability.WithTrace(rootCtx, trace)
+	if trace.Profile() != nil {
+		rootCtx = buzz.WithProfile(rootCtx, trace.Profile())
 	}
 
 	sub, subArgs := rest[0], rest[1:]
@@ -983,13 +967,13 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	// after the flag parse, so --broker off
 	// is honored and -o decides the notice's shape.
 	if profile.spawnsWork && globalCfg.Broker.Resolved() != types.BrokerOff {
-		stopBroker := trace.phase("startup.broker")
+		stopBroker := trace.Phase("startup.broker")
 		pid := ensureBroker(rootCtx)
 		stopBroker()
 		noticeBroker(rootCtx, pid)
 	}
 
-	runsServer := sub == "server" && isServerRun(subArgs)
+	runsServer := sub == "server" && server.IsServerRun(subArgs)
 	if runsServer && cfg.Server.Address == "" {
 		cfg.Server.Address = proc.ServerDefaultAddr()
 	}
@@ -1001,7 +985,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// `server --foreground` and returns once it is accepting. done==true means we are
 		// that parent (or a server was already running, or spawning failed); only a
 		// foreground server falls through to build and run it in this process.
-		if code, done := startServerBackground(rootCtx, cfg, subArgs); done {
+		if code, done := server.StartBackground(rootCtx, cfg, subArgs, server.LogPath(), os.Args[1:]); done {
 			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		startServer(rootCtx, cfg, rc)

@@ -45,19 +45,6 @@ func withDefaultCharms(perRun, defaults []string, noDefault bool) []string {
 	return out
 }
 
-type traceCtxKey struct{}
-
-func withTrace(ctx context.Context, t *startupTracer) context.Context {
-	return context.WithValue(ctx, traceCtxKey{}, t)
-}
-
-func traceFromContext(ctx context.Context) *startupTracer {
-	if t, ok := ctx.Value(traceCtxKey{}).(*startupTracer); ok {
-		return t
-	}
-	return newStartupTracer(false) // no-op
-}
-
 type magusCtxKey struct{}
 
 // withMagus injects a per-workspace Magus for server-adopted handlers.
@@ -142,17 +129,17 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 	if m, ok := magusFromContext(ctx); ok { // server-adopted handlers bypass the singleton
 		return m, nil
 	}
-	t := traceFromContext(ctx)
+	t := observability.TraceFromContext(ctx)
 	magusOnce.Do(func() {
 		magusOpened.override = rootOverride
-		defer t.phase("magus.find_root")()
+		defer t.Phase("magus.find_root")()
 		root, err := workspace.FindRoot(rootOverride)
 		if err != nil {
 			magusErr = err
 			return
 		}
 		magusOpened.root = root
-		stop := t.phase("magus.open")
+		stop := t.Phase("magus.open")
 		defer relaxGC()()
 		opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		if lim := bootstrapLimiterFromContext(ctx); lim != nil {
@@ -239,7 +226,7 @@ func relaxGC() func() {
 }
 
 func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
-	t := traceFromContext(ctx)
+	t := observability.TraceFromContext(ctx)
 	inspectOnce.Do(func() {
 		inspectOpened.override = rootOverride
 		// startup already opened this workspace for most subcommands, and an open
@@ -250,7 +237,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			inspectOpened.root, inspectValue = magusOpened.root, magusValue
 			return
 		}
-		defer t.phase("workspace.find_root")()
+		defer t.Phase("workspace.find_root")()
 		root, err := workspace.FindRoot(rootOverride)
 		if err != nil {
 			inspectErr = err
@@ -261,7 +248,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			inspectValue = magusValue
 			return
 		}
-		stop := t.phase("workspace.inspect")
+		stop := t.Phase("workspace.inspect")
 		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
 			append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)

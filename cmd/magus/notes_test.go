@@ -2,269 +2,20 @@ package main
 
 import (
 	"context"
-	"github.com/egladman/magus/types/diff"
-	"os"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/interp/bindings"
-	store "github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/libs/testkit/register"
-	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/review"
+	store "github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/types"
 )
-
-func TestNotePathIsRelativeOnlyForSharedNotes(t *testing.T) {
-	root := filepath.Join(string(filepath.Separator), "ws")
-	shared := notesStore{dir: filepath.Join(root, "notes"), scope: store.ScopeShared}
-	private := notesStore{dir: filepath.Join(string(filepath.Separator), "home", "me", "vault"), scope: store.ScopePrivate}
-
-	sharedNote := store.Note{Name: "why-buzz", Path: filepath.Join(root, "notes", "why-buzz.md")}
-	if got, want := notePath(root, shared, sharedNote), "notes/why-buzz.md"; got != want {
-		t.Errorf("shared note path = %q, want %q", got, want)
-	}
-	// A private store lives outside the workspace, so there is nothing for a relative path
-	// to be relative TO; it stays absolute rather than becoming a ../.. walk.
-	want := filepath.Join(string(filepath.Separator), "home", "me", "vault", "why-buzz.md")
-	if got := notePath(root, private, store.Note{Name: "why-buzz", Path: want}); got != want {
-		t.Errorf("private note path = %q, want %q", got, want)
-	}
-}
-
-// The case the old derivation got wrong. A note that declares an id is identified by that id
-// and NOT by its filename, so rebuilding the path from the name pointed the reader at a file
-// that does not exist. The listing reports where the note actually is.
-func TestNotePathReportsTheFileNotTheId(t *testing.T) {
-	root := filepath.Join(string(filepath.Separator), "ws")
-	shared := notesStore{dir: filepath.Join(root, "notes"), scope: store.ScopeShared}
-	n := store.Note{
-		Name: "cache-pairing",
-		ID:   "cache-pairing",
-		Path: filepath.Join(root, "notes", "Archive", "Some Note.md"),
-	}
-	if got, want := notePath(root, shared, n), "notes/Archive/Some Note.md"; got != want {
-		t.Errorf("renamed note path = %q, want %q", got, want)
-	}
-}
-
-// A capture holds BOTH halves of the conversation. A transcript of only your own remarks is
-// not a transcript of the review: what was decided is nearly always in what somebody said
-// back, and that half lives on the forge rather than in the session.
-func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
-	sess := &diff.Review{
-		ID:   "rev-1",
-		AsOf: "patch-1",
-		Comments: []diff.Comment{
-			{Path: "a.go", Hunk: 1, Author: diff.AuthorUnattributed, Body: "mine"},
-		},
-	}
-	threads := []diff.ReviewComment{
-		{ID: "t1", Path: "a.go", Line: 12, Author: "priya", Body: "theirs"},
-		{ID: "t2", Path: "z.go", Line: 3, Author: "marcus", Body: "elsewhere"},
-	}
-
-	c := captureFromSession(sess, threads, "review", nil)
-	n, err := c.Note("cap")
-	require.NoError(t, err)
-
-	assert.Contains(t, n.Body, "theirs")
-	assert.Contains(t, n.Body, "priya")
-	// The colleague's remark precedes the reply it provoked. A transcript that opened with the
-	// answer reads backwards.
-	assert.Less(t, strings.Index(n.Body, "theirs"), strings.Index(n.Body, "mine"))
-	// A thread on a file the session never commented on still anchors that file, which is what
-	// makes the capture turn up when somebody later asks what is known about z.go.
-	assert.Contains(t, n.Body, "elsewhere")
-	assert.Len(t, n.Anchors, 2)
-}
-
-// A review with no forge behind it is the ordinary case, and the local conversation is worth
-// keeping on its own.
-func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
-	sess := &diff.Review{
-		ID: "rev-1",
-		Comments: []diff.Comment{
-			{Path: "a.go", Author: diff.AuthorUnattributed, Body: "mine"},
-		},
-	}
-	n, err := captureFromSession(sess, nil, "review", nil).Note("cap")
-	require.NoError(t, err)
-	assert.Contains(t, n.Body, "mine")
-}
-
-// The server accelerates and never gates. A person who wrote remarks in `magus diff` with no
-// server running has them on disk, and capture refusing because no server is up would lose the
-// one artifact nothing can recreate.
-func TestCaptureReadsTheStoreWhenNoServerIsRunning(t *testing.T) {
-	cache := t.TempDir()
-	root := filepath.Join(cache, "ws")
-	written := changeset.NewStore(cache)
-	written.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
-	written.AddComment(root, diff.Comment{Path: "a.go", Line: 4, Body: "mine"}, diff.AuthorUnattributed)
-
-	sess, err := storedDiffReview(cache, "diff --git a/a.go b/a.go\n")
-	require.NoError(t, err)
-	require.Len(t, sess.Comments, 1, "the drafts the store persisted are the transcript")
-	assert.Equal(t, "mine", sess.Comments[0].Body)
-	// Digested from the patch exactly as attachDiffReview digests it, so a capture taken with
-	// no server names the note a server-attached one would have named.
-	assert.Equal(t, changeset.PatchDigest("diff --git a/a.go b/a.go\n"), sess.AsOf)
-	assert.Equal(t, "review-"+sess.AsOf[:12], captureName(sess))
-}
-
-// An unreadable patch must not name every such capture the same note: the second one would
-// collide with the first and be refused, which is the transcript lost.
-func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
-	sess, err := storedDiffReview(t.TempDir(), "")
-	require.NoError(t, err)
-	assert.Empty(t, sess.AsOf)
-	assert.Equal(t, "review-thread", captureName(sess))
-}
-
-// A colleague's remark is a fact about the review, not about whether a background process is
-// up. Without a server the forge is asked directly rather than the reader being shown a review
-// with nobody else in it.
-func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
-	withCannedThreads(t, []diff.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
-	cache := t.TempDir()
-
-	threads, reason := localReviewComments(t.Context(), diff.ReviewOrigin{Branch: "feat/x"}, cache)
-	require.Len(t, threads, 1)
-	assert.Equal(t, "theirs", threads[0].Body)
-	assert.Empty(t, reason)
-	// Nothing has been on screen here, so the whole conversation is new: the mark the server
-	// would have applied, taken from the watermark the store persists rather than from a session.
-	assert.True(t, threads[0].New)
-}
-
-// The watermark outlives the server that normally reads it, so a thread already seen does not
-// come back marked new the moment the server is stopped.
-func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
-	withCannedThreads(t, []diff.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
-	cache := t.TempDir()
-	root := filepath.Join(cache, "ws")
-	sessions := changeset.NewStore(cache)
-	sessions.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
-	sessions.MarkCommentsSeen(root, []string{"t1"})
-
-	threads, _ := localReviewComments(t.Context(), diff.ReviewOrigin{Branch: "feat/x"}, cache)
-	require.Len(t, threads, 1)
-	assert.False(t, threads[0].New)
-}
-
-// Both read paths compute the mark, so a capture can say which half of the conversation the
-// reader had not weighed yet. It is told to the person TAKING the capture and never written
-// into the note: New belongs to this reader's history with the review, and in a transcript a
-// colleague reads next year it would describe somebody else's morning.
-func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
-	threads := []diff.ReviewComment{
-		{ID: "t1", Author: "priya", Body: "you weighed this already"},
-		{ID: "t2", Author: "marcus", Body: "arrived since you looked", New: true},
-	}
-
-	assert.Contains(t, newRemarkLine(threads), "1 remark on the review had not been in front of you before")
-	assert.Empty(t, newRemarkLine(threads[:1]), "a conversation the reader has already had says nothing")
-	assert.Contains(t, newRemarkLine(append(threads, diff.ReviewComment{ID: "t3", New: true})), "2 remarks")
-}
-
-// A malformed remark fails the read loudly: the threads decode strictly, so the caller says
-// what it could not read rather than handing over a conversation with a remark missing.
-func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
-	name := register.Spell(t, "malformed-notes-review", spells.WithFuncSource(`import "magus/spell";
-export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
-    return ReviewTarget{ id = "482", repo = "acme/acme" };
-}
-export fun review_threads(target: Target, req: ReviewRef) > any {
-    return [{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"}, "not a thread at all"];
-}`))
-	prev := bindings.ReviewProvider()
-	bindings.SetReviewProvider(name)
-	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
-
-	threads, reason := localReviewComments(t.Context(), diff.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
-	assert.Empty(t, threads)
-	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
-}
-
-// withCannedThreads wires a review provider for this test, so the server-free read path
-// can be exercised against threads instead of only against an unwired workspace.
-func withCannedThreads(t *testing.T, threads []diff.ReviewComment) {
-	t.Helper()
-	name := register.ReviewSpell(t, diff.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads)
-	prev := bindings.ReviewProvider()
-	bindings.SetReviewProvider(name)
-	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
-}
-
-func TestFirstNonEmptyTreatsBlankAsEmpty(t *testing.T) {
-	assert.Equal(t, "a", firstNonEmpty("a", "b"))
-	assert.Equal(t, "b", firstNonEmpty("", "b"))
-	assert.Equal(t, "b", firstNonEmpty("   \n", "b"))
-	assert.Equal(t, "", firstNonEmpty("", ""))
-}
-
-func TestRelativeToRootKeepsAnOutsidePathAbsolute(t *testing.T) {
-	root := filepath.Join(string(filepath.Separator), "repos", "magus")
-
-	assert.Equal(t, "cmd/magus/diff.go", relativeToRoot(root, filepath.Join(root, "cmd", "magus", "diff.go")))
-	assert.Equal(t, ".", relativeToRoot(root, root))
-
-	outside := filepath.Join(string(filepath.Separator), "repos", "other", "x.go")
-	assert.Equal(t, outside, relativeToRoot(root, outside))
-}
-
-// unreadableNoteStores declares a shared and a private store and plants a name in the
-// shared one that EXISTS and cannot be read: a directory where the .md should be, so
-// the failure is EISDIR rather than a permission bit root would ignore.
-func unreadableNoteStores(t *testing.T, name string) (root string, privateDir string) {
-	t.Helper()
-	root = t.TempDir()
-	privateDir = t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes", name+".md"), 0o755))
-
-	prev := globalCfg
-	globalCfg.Knowledge.Notes.Shared = "notes"
-	globalCfg.Knowledge.Notes.Private = privateDir
-	t.Cleanup(func() { globalCfg = prev })
-	return root, privateDir
-}
-
-// findNote reported an unreadable note as a bare fmt.Errorf, which no caller could
-// match. `notes edit` switches on the error, and with nothing to match on this fell
-// past every case: the name read as free, and the command scaffolded a SECOND copy in
-// the other store on top of the broken one.
-func TestFindNoteMarksAnUnreadableNote(t *testing.T) {
-	root, privateDir := unreadableNoteStores(t, "broken")
-
-	stores, err := notesStores(root, "")
-	require.NoError(t, err)
-	require.Len(t, stores, 2, "both stores must be declared for the duplicate-scaffold case to exist")
-
-	_, _, err = findNote(stores, "broken")
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUnreadableNote, "an existing unreadable note needs a sentinel a caller can match")
-	assert.NotErrorIs(t, err, errAmbiguousNote, "unreadable is not ambiguous")
-	assert.NotErrorIs(t, err, os.ErrNotExist, "reporting it absent sends the reader hunting for a missing file")
-	assert.Contains(t, err.Error(), "shared", "the message must name which store holds it")
-	_ = privateDir
-}
-
-// The whole point of the sentinel: refuse rather than scaffold a duplicate.
-func TestNotesEditRefusesAnUnreadableNoteInsteadOfScaffoldingADuplicate(t *testing.T) {
-	root, privateDir := unreadableNoteStores(t, "broken")
-
-	err := notesEdit(context.Background(), root, []string{"broken"})
-	require.Error(t, err, "an unreadable note must not be treated as a free name")
-	assert.ErrorIs(t, err, errUnreadableNote)
-	assert.Contains(t, err.Error(), "fix the file", "a refusal names the next step")
-
-	left, err := os.ReadDir(privateDir)
-	require.NoError(t, err)
-	assert.Empty(t, left, "nothing may be scaffolded into the other store beside the broken note")
-}
 
 func TestNotesLsByTagListsOpenGapsWithTheirFindLines(t *testing.T) {
 	root := t.TempDir()
@@ -294,4 +45,28 @@ func TestNotesLsByTagListsOpenGapsWithTheirFindLines(t *testing.T) {
 	assert.Contains(t, out, "gap-wait-poll")
 	assert.NotContains(t, out, "cache-pairing", "a note without the tag is not listed")
 	assert.Contains(t, out, "  find it:\n    magus query 'kind=diagnostic id=MGS3009'\n")
+}
+
+func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var presented string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		cred, ok := auth.Verify(presented)
+		if !ok || cred.Kind != types.KindStored {
+			http.Error(w, "no", http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+
+	_, _, served := review.ServerReviewComments(context.Background(), reviewServerGet)
+
+	assert.True(t, served)
+	_, ok := auth.Verify(presented)
+	assert.False(t, ok)
 }

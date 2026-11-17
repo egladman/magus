@@ -1565,22 +1565,22 @@ func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string
 }
 
 // sweepReuse bundles the two sweep-scoped reuses computeTargetKey accepts: an
-// optional cache.SourceMemo (passed to cache.StepKeyMemo) and an optional
+// optional cache.SourceOnce (passed to cache.StepKeyWithSources) and an optional
 // pre-resolved tool-version map keyed by project path. IdentifyRef is the only
 // caller that supplies one, and it always supplies both together, since its sweep
 // keys every candidate target under every charm variant against the SAME
-// workspace tree; see cache.SourceMemo's doc for why that is safe here and
+// workspace tree; see cache.SourceOnce's doc for why that is safe here and
 // nowhere a target actually runs. Bundling them into one type makes "always both
 // or neither" a fact of the signature instead of a doc-comment promise.
 type sweepReuse struct {
-	memo         *cache.SourceMemo
+	sources      *cache.SourceOnce
 	toolVersions map[string][]string
 }
 
 // computeTargetKey is ComputeTargetKey with an optional sweepReuse threaded in.
 // ComputeTargetKey passes nil, so its public behavior is unchanged.
 //
-// The tool-version map matters more than it looks: toolVersionsByProject memoizes
+// The tool-version map matters more than it looks: toolVersionsByProject keeps probes
 // only WITHIN one call, and each probe SPAWNS A SUBPROCESS (`go version`, `pnpm
 // --version`, ...). Resolving per target made the sweep re-probe every spell of
 // every project once per target, which was the sweep's dominant cost: wall clock
@@ -1598,11 +1598,11 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if err != nil {
 		return "", nil, err
 	}
-	var memo *cache.SourceMemo
+	var sources *cache.SourceOnce
 	if reuse != nil {
-		memo = reuse.memo
+		sources = reuse.sources
 	}
-	return m.cache.StepKeyMemo(ctx, &step, memo)
+	return m.cache.StepKeyWithSources(ctx, &step, sources)
 }
 
 // targetStep is the step a run of target on p with charms mints, keyed as the
@@ -1619,7 +1619,7 @@ func (m *Magus) targetStep(ctx context.Context, p *types.Project, target string,
 		}
 	}
 	// Not part of sweepReuse: an observation probe runs only for a project whose
-	// spells declare one, so the sweep's re-probe cost this memoizes for versions does
+	// spells declare one, so the sweep's re-probe cost the version probes avoid does
 	// not arise. Keyed the same as a run so `describe target --cache` mints the same key.
 	observations := m.probeObservations(ctx, []*types.Project{p},
 		map[string]map[string]bool{p.Path: targetDrivenBins(p, target)})
@@ -1976,7 +1976,7 @@ func (m *Magus) toolVersionsEach(ctx context.Context, projects []*types.Project)
 	if err == nil {
 		return lines, nil
 	}
-	// Every reading is memoized now, so asking per project spawns nothing more.
+	// Every reading is kept now, so asking per project spawns nothing more.
 	lines, failed = map[string][]string{}, map[string]error{}
 	for _, p := range projects {
 		one, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil)
@@ -1997,8 +1997,8 @@ func (m *Magus) toolVersionsEach(ctx context.Context, projects []*types.Project)
 // forking a second time per tool: the run path already pays for these probes, so the
 // check rides along free.
 //
-// One-shot: it builds a fresh, unmemoized toolProber for exactly this call, so a caller
-// that will ask about the same (spell, dir, tool) more than once in one logical
+// One-shot: it builds a fresh toolProber for exactly this call and keeps nothing after it.
+// A caller that will ask about the same (spell, dir, tool) more than once in one logical
 // operation should hold its own long-lived prober instead (newToolProber, held across
 // calls the way the run path's `prober` variable is) so repeat asks replay rather than
 // re-spawning the probe.
@@ -2006,13 +2006,13 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 	return m.newToolProber().probeVersions(ctx, projects, nil, extracted)
 }
 
-// toolProber memoizes one invocation's version probes per (spell, dir, tool), so a tool is
+// toolProber keeps one invocation's version probes per (spell, dir, tool), so a tool is
 // probed only once a step keys on it, and once however many steps share it.
 type toolProber struct {
-	m    *Magus
-	mode string
-	mu   sync.Mutex
-	memo map[string]*toolProbe
+	m      *Magus
+	mode   string
+	mu     sync.Mutex
+	probes map[string]*toolProbe
 }
 
 type toolProbe struct {
@@ -2022,7 +2022,7 @@ type toolProbe struct {
 }
 
 func (m *Magus) newToolProber() *toolProber {
-	return &toolProber{m: m, mode: toolVersionMode(m.env("MAGUS_CACHE_TOOL_VERSION")), memo: map[string]*toolProbe{}}
+	return &toolProber{m: m, mode: toolVersionMode(m.env("MAGUS_CACHE_TOOL_VERSION")), probes: map[string]*toolProbe{}}
 }
 
 func (tp *toolProber) dir(p *types.Project) string {
@@ -2033,7 +2033,7 @@ func (tp *toolProber) dir(p *types.Project) string {
 }
 
 // probeVersions returns each project's "spell:tool:token" key lines, probing what is not
-// yet memoized. only narrows the tools to probe and key on; nil means every declared
+// yet probed. only narrows the tools to probe and key on; nil means every declared
 // tool. It is safe for concurrent use; extracted is written only by the calling goroutine.
 //
 // A tool that runs but cannot be probed fails the whole call with MGS3035 and no lines:
@@ -2046,7 +2046,7 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 		t, _ := s.Tool(tool)
 		return t.HasProbe() && (only == nil || only(s.Name(), tool))
 	}
-	memo, err := tp.m.probeReadings(ctx, tp, projects, wanted)
+	readings, err := tp.m.probeReadings(ctx, tp, projects, wanted)
 	if err != nil {
 		return nil, err
 	}
@@ -2063,7 +2063,7 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 				if !wanted(s, tool) {
 					continue
 				}
-				r := memo[fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)]
+				r := readings[fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)]
 				// A project sharing a dir with another still needs its own gate entry.
 				if extracted != nil && r.full != "" {
 					extracted[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)] = r.full
@@ -2115,10 +2115,10 @@ func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*t
 					continue
 				}
 				key := fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)
-				probe := tp.memo[key]
+				probe := tp.probes[key]
 				if probe == nil {
 					probe = &toolProbe{}
-					tp.memo[key] = probe
+					tp.probes[key] = probe
 				}
 				wants[key] = want{spell: s, dir: dir, tool: tool, probe: probe}
 			}
@@ -2256,7 +2256,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 // since the constant at least keeps the miss deterministic.
 func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project, driven map[string]map[string]bool) map[string]map[string]string {
 	out := map[string]map[string]string{}
-	memo := map[string]string{}
+	observed := map[string]string{}
 	for _, p := range projects {
 		drivenHere := driven[p.Path]
 		for _, s := range p.ResolvedSpells {
@@ -2281,7 +2281,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 					continue
 				}
 				tk := fmt.Sprintf("%s\x00%s\x00%s", s.Name(), p.Dir, tool)
-				value, hit := memo[tk]
+				value, hit := observed[tk]
 				if !hit {
 					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
 					if err != nil {
@@ -2297,7 +2297,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 						probed = "UNPROBED"
 					}
 					value = probed
-					memo[tk] = value
+					observed[tk] = value
 				}
 				if out[p.Path] == nil {
 					out[p.Path] = map[string]string{}
@@ -2534,7 +2534,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				out.emit(ctx, report.RunStep{
 					Label: label, Project: p.Path, Target: charmedTarget(st.target, opts.Charms), Status: "dry",
 				})
-				// Fresh memo per target so a shared dependency (e.g. format -> generate)
+				// Fresh TargetRuns per target so a shared dependency (e.g. format -> generate)
 				// records once, matching the real run's pool dedup.
 				stepCtx := buzz.WithTargetRuns(stageCtx, buzz.NewTargetRuns())
 				if err := st.handler(stepCtx, p); err != nil {
@@ -2722,7 +2722,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		var toolVersions []string
 		if keysTools(p, target) {
-			// A project the pass above probed replays its memo; one a composed target
+			// A project the pass above probed replays its probes; one a composed target
 			// reaches only now is probed here, and refused the same way.
 			byProject, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil)
 			if err != nil {
@@ -2740,7 +2740,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return step, err
 	}
 	// stepOrUncached is newStep for the settle pass, which takes no error. Every step it
-	// re-runs was keyed above, so an error here is the memo of one already returned;
+	// re-runs was keyed above, so an error here is one already returned;
 	// should one slip past, the step runs uncached rather than keyed without the tool.
 	stepOrUncached := func(p *types.Project, target string) cache.Step {
 		step, err := newStep(p, target)
@@ -3489,14 +3489,23 @@ func globMatchesAFile(dir string, g types.Glob) bool {
 	return errors.Is(err, found)
 }
 
+// invokeEvaluation runs one attempt under a fresh evaluation and ends it when the
+// attempt returns.
+func invokeEvaluation(ctx context.Context, s *spells.Spell, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+	eval := types.WithEvalOnce(ctx)
+	defer types.EvalOnceFromContext(eval).End()
+	return s.Invoke(eval, req)
+}
+
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
-// Each attempt is one evaluation with its own types.EvalMemo, so the body reads one
-// knowledge graph snapshot however many graph members it calls, and a retry rebuilds it.
+// Each attempt is one evaluation with its own types.EvalOnce, so every body it runs reads
+// one knowledge graph snapshot however many graph members it calls. The evaluation ends
+// with the attempt, and a retry builds a new one.
 func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.Spell) error {
 	req := spells.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
-		resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
+		resp, err := invokeEvaluation(ctx, s, req)
 		if err == nil {
 			types.RecordReturn(ctx, p.Path, name, resp.Data)
 		}
@@ -3516,7 +3525,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// has to fit on one runner is the target, not the invocation.
 	step := ctx
 	ctx = types.WithExecCost(ctx)
-	resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
+	resp, err := invokeEvaluation(ctx, s, req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
 	// the retry below: a first attempt that failed after returning a value would
@@ -3531,7 +3540,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	if err != nil {
 		decision = rt.Decide(p.Path, volatileTarget, affected, eligible, err)
 		if decision.Retry {
-			resp2, err2 := s.Invoke(types.WithEvalMemo(ctx), req)
+			resp2, err2 := invokeEvaluation(ctx, s, req)
 			if err2 == nil {
 				types.RecordReturn(ctx, p.Path, name, resp2.Data)
 			}

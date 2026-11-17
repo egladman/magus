@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"net"
 	"os"
 	"os/exec"
@@ -25,8 +24,10 @@ import (
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -111,10 +112,10 @@ func TestBrokerStatusPrintsItsRows(t *testing.T) {
 	_, err = c.Request(t.Context(), types.MachineClaim{Project: "api", Target: "test", MemoryMB: 1024, Slots: 2, Dir: "/src/a"})
 	require.NoError(t, err)
 
-	st, err := queryBroker(t.Context())
+	st, err := server.QueryBroker(t.Context())
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	printBrokerRows(&buf, st, types.BrokerBestEffort, time.Now())
+	server.PrintBrokerRows(&buf, st, types.BrokerBestEffort, time.Now())
 	got := buf.String()
 	assert.Contains(t, got, "broker  ")
 	assert.Contains(t, got, "capacity  -")
@@ -125,32 +126,6 @@ func TestBrokerStatusPrintsItsRows(t *testing.T) {
 	assert.Contains(t, got, "api test")
 	assert.Contains(t, got, "/src/a")
 	assert.Contains(t, got, "exits after 10m0s holding nothing")
-}
-
-func TestBrokerDownRowNamesThePolicy(t *testing.T) {
-	var buf bytes.Buffer
-	printBrokerDown(&buf, types.BrokerOff)
-	assert.Contains(t, buf.String(), "not running (runs here never ask one; broker: off)")
-
-	buf.Reset()
-	printBrokerDown(&buf, "")
-	assert.Contains(t, buf.String(), "a run starts one; broker: best-effort", "unset reads as the default it behaves as")
-}
-
-func TestServerRowsNameEveryListener(t *testing.T) {
-	var buf bytes.Buffer
-	printServerRows(&buf, &daemon.Server{
-		PID: 47001, Socket: "unix:///run/magus/server.sock", StartTime: time.Now().Add(-time.Hour),
-		Listeners: []daemon.Listener{
-			{Kind: daemon.ListenerSocket, Address: "unix:///run/magus/server.sock"},
-			{Kind: daemon.ListenerHTTP, Address: "127.0.0.1:7391"},
-		},
-		Watch: []string{"/repo"},
-	}, time.Now())
-	got := buf.String()
-	assert.Contains(t, got, "server  47001")
-	assert.Contains(t, got, "listen  47001  http 127.0.0.1:7391")
-	assert.Contains(t, got, "watch   47001  graph+symbols  /repo")
 }
 
 func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
@@ -171,14 +146,15 @@ func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
 // The hint names the code only when that code exists at a fetchable commit.
 func TestCrashHint(t *testing.T) {
 	const sha = "d32c55d6700000000000000000000000000000ab"
-	pushed := crashHint(versionOutput{Version: "v0.5.0", Commit: sha, Repository: sourceRepository})
+	repo := buildinfo.NewVersionOutput(types.MagusBuild{}, "").Repository
+	pushed := crashHint(buildinfo.VersionOutput{Version: "v0.5.0", Commit: sha, Repository: repo})
 	assert.Contains(t, pushed, "not in your workspace")
-	assert.Contains(t, pushed, sourceRepository+"/tree/"+sha)
+	assert.Contains(t, pushed, fmt.Sprintf("%s/tree/%s", repo, sha))
 	assert.Contains(t, pushed, "magus-upstream-source")
 
-	for _, v := range []versionOutput{
-		{Version: "v0.5.0-dirty", Commit: sha, Dirty: true, Repository: sourceRepository},
-		{Version: unknownVersion, Commit: unknownVersion, Repository: sourceRepository},
+	for _, v := range []buildinfo.VersionOutput{
+		{Version: "v0.5.0-dirty", Commit: sha, Dirty: true, Repository: repo},
+		{Version: buildinfo.UnknownVersion, Commit: buildinfo.UnknownVersion, Repository: repo},
 	} {
 		hint := crashHint(v)
 		assert.Contains(t, hint, "not published")
@@ -402,13 +378,6 @@ func (s *BrokerStopSuite) TestStoppingOnlyTheServicesOfAnotherBuildSaysWhatItCan
 	s.Empty(exited, "nothing was signalled")
 }
 
-func (s *BrokerStopSuite) TestAnUnreadablePeerSaysWhatToRun() {
-	err := unknownBrokerError("/run/broker.sock", errors.ErrUnsupported, types.PeerFromAnotherBuild)
-	s.ErrorContains(err, "`lsof -U`")
-	s.ErrorContains(err, "/run/broker.sock")
-	s.ErrorContains(err, "`kill -TERM <pid>`")
-}
-
 func (s *BrokerStopSuite) TestStatusNamesABrokerOfAnotherBuild() {
 	s.otherBuild(1, "refuse")
 	err := brokerStatus(s.T().Context(), nil)
@@ -418,8 +387,4 @@ func (s *BrokerStopSuite) TestStatusNamesABrokerOfAnotherBuild() {
 func (s *BrokerStopSuite) TestNoBrokerIsStillNoBroker() {
 	privateSockDir(s.T())
 	s.Equal(exit.Reported(exit.Failure), brokerStop(s.T().Context(), nil))
-}
-
-func (s *BrokerStopSuite) TestAdmissionsLiveBesideTheBrokerLog() {
-	s.Equal(filepath.Join(filepath.Dir(brokerLogPath()), "admissions.jsonl"), admissionLogPath())
 }

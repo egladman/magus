@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -21,574 +20,28 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/fixture"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/queue"
-	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 
-	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
-// A checkout whose magusfile this magus cannot load keeps one line naming the code, never
-// the spell dump a load failure renders.
-func TestUnloadableMagusfileIsOneLine(t *testing.T) {
-	t.Parallel()
-	coded := fmt.Errorf("loading magusfile: %w", types.DiagnosticErrorf(types.NoCITarget, "no ci target\n  at magusfile.buzz:1\n  spell dump"))
-	assert.EqualError(t, unloadableMagusfile(coded), fmt.Sprintf("this magus cannot load its magusfile (%s)", types.NoCITarget))
-	assert.EqualError(t, unloadableMagusfile(errors.New("parse failed\n  spell dump")), "parse failed")
-}
-
 func leaseRow(id, parent string) types.Job {
 	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
-}
-
-// A job verb, `ls jobs` and `describe job` read the job store first and open the workspace
-// themselves where a section needs it, so startup neither preloads it nor forwards: the
-// preload put a magusfile evaluation in front of every fork and exit. The other nouns of
-// ls and describe still list the workspace.
-func TestJobReadsSkipTheWorkspacePreload(t *testing.T) {
-	t.Parallel()
-
-	configOnly := dispatchProfile{needsConfig: true}
-	preload := dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
-	for _, tc := range []struct {
-		sub  string
-		args []string
-		want dispatchProfile
-	}{
-		{"job", []string{"fork", "a", "--write-paths", "x"}, configOnly},
-		{"job", []string{"exit", "a"}, configOnly},
-		{"job", []string{"wait", "a"}, configOnly},
-		{"job", []string{"run", "sync-graph"}, configOnly},
-		{"ls", []string{"jobs"}, configOnly},
-		{"ls", []string{"-o", "json", "job"}, configOnly},
-		{"ls", []string{"targets", "jobs-dir"}, preload},
-		{"ls", nil, preload},
-		{"describe", []string{"job", "a"}, configOnly},
-		{"describe", []string{"jobs", "a"}, configOnly},
-		{"describe", []string{"project", "."}, preload},
-	} {
-		assert.Equal(t, tc.want, resolveProfile(tc.sub, tc.args), "%s %v", tc.sub, tc.args)
-	}
-}
-
-func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
-	t.Parallel()
-
-	parent := leaseRow("plan", "")
-	parent.Paths.Write = []string{"internal/ledger"}
-	parent.Validation = "magus run test internal/ledger"
-	child := leaseRow("plan/cli", "plan")
-	child.Paths.Write = []string{"internal/ledger/store.go"}
-
-	var out strings.Builder
-	printJobTree(&out, types.NewJobList([]types.Job{parent, child}))
-	got := out.String()
-
-	assert.Contains(t, got, "JOB")
-	assert.Contains(t, got, "\n  plan/cli", "a child is indented under its parent")
-	assert.Contains(t, got, "magus run test internal/ledger")
-	assert.Contains(t, got, "overlaps")
-	assert.Contains(t, got, "plan and plan/cli claim common ground")
-}
-
-func TestPrintJobTreeMarksJobsNobodyIsWaitingOn(t *testing.T) {
-	t.Parallel()
-
-	rows := []types.Job{
-		{ID: "root", State: types.StatePass},
-		{ID: "root/orphan", Parent: "root", State: types.StateRunning, Updated: 100},
-		{ID: "late", State: types.StateRunning, Deadline: 50, Updated: 100},
-	}
-	var out strings.Builder
-	printJobTree(&out, types.NewJobList(rows).Flag(200, time.Minute))
-	text := out.String()
-	assert.Contains(t, text, "overdue")
-	assert.Contains(t, text, "orphan")
-	assert.Contains(t, text, "stale")
-	assert.Contains(t, text, hint.JobExit.With("root/orphan"))
-}
-
-func TestPrintJobTreeCodesTheReadOnlyRows(t *testing.T) {
-	t.Parallel()
-
-	var out strings.Builder
-	list := types.NewJobList([]types.Job{{ID: "newer", State: types.StateDeclared}})
-	list.ReadOnly = []types.JobReadOnly{{Job: "newer", Lacks: []string{"leases-v9"}}}
-	printJobTree(&out, list)
-	got := out.String()
-	assert.Contains(t, got, "["+string(types.StoreRecordsNewer)+"] read-only jobs")
-	assert.Contains(t, got, "  newer: requires leases-v9")
-}
-
-// HOLDER says who took each job: the checkout it was taken in, the server for its own,
-// and nobody for one still waiting to be taken.
-func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {
-	t.Parallel()
-
-	rows := []types.Job{
-		{ID: "taken", State: types.StateRunning, CheckoutRoot: "/src/ana"},
-		{ID: "waiting", State: types.StateDeclared},
-		{ID: "sweep", State: types.StateRunning, RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}},
-	}
-	var out strings.Builder
-	printJobTree(&out, types.NewJobList(rows))
-	holders := map[string]string{}
-	for _, line := range strings.Split(out.String(), "\n")[1:4] {
-		f := strings.Fields(line)
-		holders[f[0]] = f[1]
-	}
-	assert.Equal(t, map[string]string{"taken": "ana", "waiting": "-", "sweep": "server"}, holders)
-}
-
-// TestGeneratedBoundaryNamesWhatAnOutputCarvesOut: a brief fences a lease's generated
-// globs, and the hand files an exclusion carves out of one must read as the exception
-// rather than fenced with the rest.
-func TestGeneratedBoundaryNamesWhatAnOutputCarvesOut(t *testing.T) {
-	t.Parallel()
-	w := testkit.NewWorkspace(t)
-	w.Magusfile(`import "magus";
-export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
-}
-`)
-	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
-
-	got := generatedBoundary(m, []string{"."}, []string{"gen"})
-
-	require.Len(t, got, 1)
-	assert.Equal(t, "gen/*.go", got[0].Path)
-	assert.Contains(t, got[0].Reason, "except gen/runtime.go")
-}
-
-// LeasedBoundarySuite pins which of a sibling lease's paths a job's terms put out of reach.
-type LeasedBoundarySuite struct {
-	suite.Suite
-}
-
-func TestLeasedBoundarySuite(t *testing.T) { suite.Run(t, new(LeasedBoundarySuite)) }
-
-// owners is the paths leasedBoundary lists for row, from a checkout at /repos/landing in a
-// workspace that declares gen/** a generated output.
-func (s *LeasedBoundarySuite) owners(row types.Job, rows []types.Job) []string {
-	projects := func() ([]*types.Project, string) {
-		return []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}, ""
-	}
-	var out []string
-	for _, b := range leasedBoundary(row, rows, "/repos/landing", projects) {
-		out = append(out, b.Path)
-	}
-	return out
-}
-
-func (s *LeasedBoundarySuite) TestSkipsTheRowsAncestors() {
-	rows := []types.Job{
-		{ID: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal"}}},
-		{ID: "root/a", Parent: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job"}}},
-		{ID: "root/a/leaf", Parent: "root/a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go"}}},
-		{ID: "root/b", Parent: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard"}}},
-	}
-	s.Equal([]string{"internal/guard"}, s.owners(rows[2], rows), "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
-}
-
-// An exited holder returned, so a sibling's terms no longer put its paths out of reach.
-func (s *LeasedBoundarySuite) TestSkipsAnExitedRow() {
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job"}}},
-		{ID: "b", State: types.StateExited, Paths: types.JobPaths{Write: []string{"internal/guard"}}},
-		{ID: "c", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/hint"}}},
-	}
-	s.Equal([]string{"internal/hint"}, s.owners(rows[0], rows))
-}
-
-// A soft path is free until its holder writes it, so a sibling's terms leave it in reach.
-func (s *LeasedBoundarySuite) TestSkipsASoftPath() {
-	soft := types.Job{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
-	soft.Paths.Soft = []string{"internal/job/plan_test.go"}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan_test.go"}}}
-	s.Equal([]string{"internal/job/plan.go"}, s.owners(me, []types.Job{me, soft}))
-}
-
-func (s *LeasedBoundarySuite) TestListsAHardenedPath() {
-	held := types.Job{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan_test.go"}}}
-	s.Equal([]string{"internal/job/plan.go", "internal/job/plan_test.go"}, s.owners(me, []types.Job{me, held}))
-}
-
-func (s *LeasedBoundarySuite) TestSkipsAGeneratedOutputAnotherCheckoutHolds() {
-	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/mandate", Paths: types.JobPaths{Write: []string{"gen/decode.go", "run.go"}}}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
-	s.Equal([]string{"run.go"}, s.owners(me, []types.Job{me, other}), "each checkout regenerates its own gen/decode.go")
-}
-
-func (s *LeasedBoundarySuite) TestListsAGeneratedOutputHeldInTheSameCheckout() {
-	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/landing", Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
-	s.Equal([]string{"gen/decode.go"}, s.owners(me, []types.Job{me, other}))
-}
-
-func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
-	t.Parallel()
-
-	var out strings.Builder
-	printJobTree(&out, types.NewJobList(nil))
-	assert.Contains(t, out.String(), fmt.Sprintf("`%s`", hint.JobFork.With("<job>")))
-	assert.Contains(t, out.String(), fmt.Sprintf("`%s` MCP tool", hint.ToolClient.String()))
-}
-
-// TestPrintJobStatusFailedGateNamesHowToReadIt pins step 3 of the plan that added goals:
-// a failed goal named an output ref but not how to read it, leaving the holder to
-// reconstruct `magus query output <ref>` by hand. The line must be rendered through
-// hint.QueryOutput (never a hardcoded string), and must appear only for a goal that
-// actually failed and actually carries a ref.
-func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
-	t.Parallel()
-
-	status := job.Status{
-		Job:        "plan",
-		Violations: []string{`goal "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
-		Gates: []types.VerificationStatus{
-			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
-			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
-		},
-	}
-
-	var out strings.Builder
-	printJobStatus(&out, status)
-	got := out.String()
-
-	assert.Contains(t, got, "goal ci: rejected (outdeadbeef)")
-	assert.Contains(t, got, "magus query output outdeadbeef", "a failed gate must name how to read its ref")
-	assert.NotContains(t, got, "magus query output outfeedface", "a verified gate needs no query-output line")
-}
-
-func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name   string
-		status job.Status
-		want   string
-	}{
-		{
-			name: "known",
-			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true, Footprint: []types.RegionChange{
-				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{3, 9}, Declaration: "func X() {", Driver: "golang"},
-				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{12, 14}, Declaration: "func X() {", Driver: "golang"},
-				{File: types.FileChange{Path: "a.go"}, Side: types.RegionOld, Lines: [2]int{20, 21}, Declaration: "func Y() {", Driver: "golang"},
-				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{1, 2}},
-				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{8, 8}},
-			}},
-			want: "verified plan, recorded pass\n" +
-				"footprint: where its diff since the checkpoint landed\n" +
-				"  a.go#func X() {\n" +
-				"  a.go#func Y() {\n" +
-				"  notes.txt:1-2\n" +
-				"  notes.txt:8-8\n",
-		},
-		{
-			name:   "known and empty",
-			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true},
-			want: "verified plan, recorded pass\n" +
-				"footprint: no line changed since the checkpoint\n",
-		},
-		{
-			name:   "declined",
-			status: job.Status{Job: "plan", Verified: true, FootprintReason: "git does not report changed regions (RegionReporter)"},
-			want: "verified plan, recorded pass\n" +
-				"footprint: not known, git does not report changed regions (RegionReporter)\n",
-		},
-		{
-			name:   "nobody looked",
-			status: job.Status{Job: "plan", Verified: true},
-			want: "verified plan, recorded pass\n" +
-				"footprint: not known, nothing observed the tree\n",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			var out strings.Builder
-			printJobStatus(&out, tc.status)
-			assert.Equal(t, tc.want, out.String())
-		})
-	}
-}
-
-func TestPrintJobTreeRendersTheClaimsVerdict(t *testing.T) {
-	t.Parallel()
-
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}},
-		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#RunCI"}}},
-	}
-	var out strings.Builder
-	printJobTree(&out, types.NewJobList(rows))
-	_, after, ok := strings.Cut(out.String(), "\noverlaps\n")
-	require.True(t, ok, "two claims on one file are listed: %s", out.String())
-	assert.Equal(t, "  a and b claim common ground\n"+
-		"    a: run.go#executeStages\n"+
-		"    b: run.go#RunCI\n"+
-		"    claims: disjoint (different declarations of one file: an integration order, not a wait)\n", after)
-}
-
-func TestPrintJobTreeRendersEachFootprintVerdict(t *testing.T) {
-	t.Parallel()
-
-	pair := func(f *types.JobOverlapFootprint) types.JobOverlap {
-		return types.JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: f}
-	}
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api"}}},
-		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api/x.go"}}},
-	}
-	for _, tc := range []struct {
-		name string
-		f    *types.JobOverlapFootprint
-		want string
-	}{
-		{"disjoint", &types.JobOverlapFootprint{Verdict: types.FootprintDisjoint}, "    footprints: disjoint\n"},
-		{"shared", &types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"a.go#func X", "b.go#func Y"}},
-			"    footprints: shared (a.go#func X, b.go#func Y)\n"},
-		{"unknown", &types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository is bound to b"},
-			"    footprints: unknown (b: no checkout of this repository is bound to b)\n"},
-		{"not computed", nil, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			var out strings.Builder
-			printJobTree(&out, types.JobList{Jobs: rows, Overlaps: []types.JobOverlap{pair(tc.f)}})
-			_, after, ok := strings.Cut(out.String(), "    b: api/x.go\n")
-			require.True(t, ok, "the pair's paths are rendered: %s", out.String())
-			assert.Equal(t, tc.want, after)
-		})
-	}
-}
-
-// Explain resolves a bare name fuzzily, which is right for a person typing
-// `magus explain build` and wrong for evidence: asked for "cmd/magus" it once answered
-// target:.:release-sign, and a blast radius from an unrelated node is worse than silence.
-func TestLeaseGraphEvidenceTakesOnlyAnExactNode(t *testing.T) {
-	t.Parallel()
-
-	g := knowledge.NewGraph()
-	g.AddNode(types.KnowledgeNode{ID: "dir:cmd/magus", Kind: types.KindDir, Label: "cmd/magus"})
-	g.AddNode(types.KnowledgeNode{ID: "file:internal/ledger/brief.go", Kind: types.KindFile, Label: "brief.go"})
-
-	got, ok := pathEvidence(g, "cmd/magus")
-	require.True(t, ok)
-	assert.Equal(t, job.TermsEvidence{Path: "cmd/magus", Node: "dir:cmd/magus"}, got)
-	// "brief.go" resolves to file:internal/ledger/brief.go by name. It is a match and not
-	// evidence: the lease declared a path at the workspace root, and this node is not it.
-	_, ok = pathEvidence(g, "brief.go")
-	assert.False(t, ok, "a fuzzy match is not evidence")
-}
-
-// The gate reached indirectly buys the same seven concurrent pipelines as the gate named
-// outright, and it is the likelier mistake once the obvious spelling is refused.
-func TestChainToGateFollowsComposites(t *testing.T) {
-	t.Parallel()
-
-	deps := map[string][]string{
-		"preflight": {"format", "verify"},
-		"verify":    {"ci"},
-		"ci":        {"test", "lint"},
-		"test":      nil,
-		"format":    nil,
-	}
-
-	assert.Equal(t, []string{"preflight", "verify", "ci"}, chainToGate("preflight", deps))
-	assert.Nil(t, chainToGate("test", deps))
-	// Every bare word of a validation field reaches here, project paths included.
-	assert.Nil(t, chainToGate("internal/ledger", deps))
-}
-
-// `magus describe graph` reports a cycle rather than rejecting it, so one reaches this
-// walk. It has to terminate on its own rather than trust the graph to be acyclic.
-func TestChainToGateTerminatesOnACycle(t *testing.T) {
-	t.Parallel()
-
-	assert.Nil(t, chainToGate("a", map[string][]string{"a": {"b"}, "b": {"a"}}))
-}
-
-// The person's two spellings are one declaration: a row typed as flags and the same row
-// piped in as a record reach the store identically, or the CLI has quietly grown a
-// second vocabulary.
-func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
-	t.Parallel()
-
-	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := flaggen.BindJobFork(flags)
-	require.NoError(t, flags.Parse([]string{
-		"--instructions", "the store is the enforcement point",
-		"--parent", "adjacency",
-		"--checkpoint", "cf5509d09",
-		"--write-paths", "internal/ledger,types/lease.go",
-		"--deny-paths", "MAGUS.md",
-		"--read-paths", "internal/trail",
-		"--depends-on", "adj/guard",
-		"--check", "test internal/ledger",
-		"--model", "design",
-		"--brief-format", "buzz",
-	}))
-	// The version is READ from the constant, not typed as a digit: this case is about the
-	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
-	// it at the version check instead, naming nothing it came here to compare.
-	piped, err := job.DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
-	  "api_version": %q,
-	  "id": "adj/store",`, types.JobAPIVersion) + `
-	  "parent": "adjacency",
-	  "agent": {"model": {"tier": "design"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
-	  "checkpoint": "cf5509d09",
-	  "paths": {"write": ["internal/ledger", "types/lease.go"], "read": ["internal/trail"], "deny": ["MAGUS.md"]},
-	  "depends_on": ["adj/guard"],
-	  "validation": "magus run test internal/ledger",
-	  "brief_format": "buzz"
-	}`))
-	require.NoError(t, err)
-
-	fromFlags, err := flagDeclaration("adj/store", *spec, tierWords("design"))
-	require.NoError(t, err)
-	require.NoError(t, fromFlags.Validate())
-
-	var a, b types.Job
-	fromFlags.Apply(&a)
-	piped.Apply(&b)
-	assert.Equal(t, a, b)
-	assert.Equal(t, types.BriefFormatBuzz, a.BriefFormat)
-}
-
-// A brief format is one of the two, refused at fork rather than read as markdown later.
-func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
-	t.Parallel()
-	d, err := flagDeclaration("adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords())
-	require.NoError(t, err)
-	err = d.Validate()
-	require.Error(t, err)
-	assert.ErrorContains(t, err, `brief_format "json"`)
-}
-
-// tierWords reads a --model word as a store declaring tiers would.
-func tierWords(tiers ...string) func(string) typesagent.Model {
-	return func(word string) typesagent.Model {
-		if slices.Contains(tiers, word) {
-			return typesagent.Model{Tier: word}
-		}
-		return typesagent.Model{ID: word}
-	}
-}
-
-// forkAgentFlagsSuite pins how the agent flags of `job fork` write the
-// agent section: each flag alone, and none at all.
-type forkAgentFlagsSuite struct {
-	suite.Suite
-}
-
-func TestForkAgentFlags(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(forkAgentFlagsSuite))
-}
-
-func (s *forkAgentFlagsSuite) fork(args ...string) types.Declaration {
-	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := flaggen.BindJobFork(flags)
-	s.Require().NoError(flags.Parse(args))
-	d, err := flagDeclaration("adj/store", *spec, tierWords("design"))
-	s.Require().NoError(err)
-	s.Require().NoError(d.Validate())
-	return d
-}
-
-func (s *forkAgentFlagsSuite) TestNoAgentFlagWritesNoSection() {
-	s.Nil(s.fork("--read-only").Agent)
-}
-
-func (s *forkAgentFlagsSuite) TestInstructionsResumeTheWarmWorker() {
-	s.Equal(&typesagent.Spec{
-		Instructions: "ship it",
-		Worker:       typesagent.Worker{Type: typesagent.WorkerTypeResumed},
-	}, s.fork("--read-only", "--instructions", "ship it").Agent)
-}
-
-func (s *forkAgentFlagsSuite) TestModelNamingATierRequestsTheTier() {
-	s.Equal(&typesagent.Spec{
-		Model:  typesagent.Model{Tier: "design"},
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed},
-	}, s.fork("--read-only", "--model", "design").Agent)
-}
-
-func (s *forkAgentFlagsSuite) TestModelNamingNoTierRequestsTheID() {
-	s.Equal(typesagent.Model{ID: "opus"}, s.fork("--read-only", "--model", "opus").Agent.Model)
-}
-
-func (s *forkAgentFlagsSuite) TestNewWorkerStartsANewWorkerForItsReason() {
-	s.Equal(&typesagent.Spec{
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "the warm one read the old limiter"},
-	}, s.fork("--read-only", "--new-worker", "the warm one read the old limiter").Agent)
-}
-
-// forkListFlagsSuite pins how the list flags of `job fork` reach the record.
-type forkListFlagsSuite struct {
-	suite.Suite
-}
-
-func TestForkListFlags(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(forkListFlagsSuite))
-}
-
-func (s *forkListFlagsSuite) declare(args ...string) (types.Declaration, error) {
-	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := flaggen.BindJobFork(flags)
-	s.Require().NoError(flags.Parse(args))
-	return flagDeclaration("adj/store", *spec, tierWords())
-}
-
-func (s *forkListFlagsSuite) TestRepeatsAndCommasReachThePaths() {
-	d, err := s.declare("--write-paths", "a.go,b.go", "--write-paths", "c.go", "--depends-on", "adj/guard")
-	s.Require().NoError(err)
-	s.Equal([]string{"a.go", "b.go", "c.go"}, d.Paths.Write)
-	s.Equal([]string{"adj/guard"}, d.DependsOn)
-}
-
-func (s *forkListFlagsSuite) TestATrailingCommaIsRefused() {
-	_, err := s.declare("--deny-paths", "MAGUS.md,")
-	s.ErrorContains(err, "--deny-paths")
-}
-
-// A path flag takes both spellings, and refuses the empty segment a trailing comma
-// leaves: a boundary that silently shrank is the failure --skip already refuses.
-func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
-	t.Parallel()
-
-	var repeated, combined listFlag
-	require.NoError(t, repeated.Set("internal/ledger"))
-	require.NoError(t, repeated.Set("types/lease.go"))
-	require.NoError(t, combined.Set("internal/ledger, types/lease.go"))
-	assert.Equal(t, repeated, combined)
-
-	var refused listFlag
-	require.Error(t, refused.Set("internal/ledger,"))
-	require.Error(t, refused.Set(""))
 }
 
 // execFixture pins XDG_STATE_HOME to a scratch dir (the job store lives there, not under
@@ -1215,114 +668,12 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	assert.Equal(t, types.StateExited, rows[0].State)
 }
 
-// Prune prints each job it ends with the reason, then the count; under --dry-run it says
-// what would end and leaves the row live.
-func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
-	exited := leaseRow("returned", "")
-	exited.State = types.StateExited
-	busy := leaseRow("busy", "")
-	busy.Registered = time.Now().Unix()
-	root, cacheDir := execFixture(t, exited, busy)
-	prev := globalCfg.DryRun
-	t.Cleanup(func() { globalCfg.DryRun = prev })
-
-	globalCfg.DryRun = true
-	out := captureStdout(t, func() { require.NoError(t, jobPrune(t.Context(), root, nil)) })
-	assert.Regexp(t, "^would end returned: exited .* ago and nobody collected its result with `magus job wait`\n"+
-		"would end 1 job\\(s\\); --dry-run ended nothing\n$", out)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	rows, err := store.List()
-	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, rows[0].State)
-
-	globalCfg.DryRun = false
-	out = captureStdout(t, func() { require.NoError(t, jobPrune(t.Context(), root, nil)) })
-	assert.Regexp(t, "^ended returned: exited .* ago and nobody collected its result with `magus job wait`\nended 1 job\\(s\\)\n$", out)
-	rows, err = store.List()
-	require.NoError(t, err)
-	assert.Equal(t, []types.JobState{types.StateNoReturn, types.StateRunning}, []types.JobState{rows[0].State, rows[1].State})
-}
-
-// Filing a result leaves the row exited and the holder bound, and exit says
-// so as a notice: stdout stays the record the guides compare.
-func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
-	row := leaseRow("held", "")
-	row.Paths.Write, row.Registered = []string{"a/**"}, time.Now().Unix()
-	root, _ := execFixture(t, row)
-	writeStdin(t, `{"api_version":"magus.job-result/v1alpha1","changed_paths":["a/x.go"],"unresolved_risks":[]}`)
-
-	savedLog, savedGlobal := globalCfg.Log, global
-	t.Cleanup(func() { globalCfg.Log, global = savedLog, savedGlobal })
-	globalCfg.Log, global = config.Log{Format: "text"}, globalFlags{}
-
-	var out string
-	stderr := captureStderr(t, func() {
-		out = captureStdout(t, func() { require.NoError(t, jobExit(t.Context(), root, []string{"held", "--stdin"})) })
-	})
-	assert.True(t, strings.HasPrefix(out, "exited held, recorded exited, with its result filed."), out)
-	assert.NotContains(t, out, exitedBindingNote)
-	assert.Contains(t, stderr, exitedBindingNote)
-}
-
-// jobExitShapeSuite pins that a refused result prints the shape to file.
-type jobExitShapeSuite struct {
-	suite.Suite
-}
-
-func TestJobExitShape(t *testing.T) { suite.Run(t, new(jobExitShapeSuite)) }
-
-func (s *jobExitShapeSuite) refusal(stdin string) string {
-	t := s.T()
-	row := leaseRow("held", "")
-	row.Paths.Write, row.Registered = []string{"a/**"}, time.Now().Unix()
-	root, _ := execFixture(t, row)
-	writeStdin(t, stdin)
-	err := jobExit(t.Context(), root, []string{"held", "--stdin"})
-	s.Require().Error(err)
-	return err.Error()
-}
-
-func (s *jobExitShapeSuite) TestAnEmptyResultOnAWritingRowIsRefused() {
-	got := s.refusal(`{"api_version":"magus.job-result/v1alpha1"}`)
-	s.Contains(got, "held writes, and its result names no changed path")
-	s.Contains(got, `"changed_paths"`)
-	s.Contains(got, `"owed": "no seat"`)
-}
-
-func (s *jobExitShapeSuite) TestAnUnknownFieldPrintsTheShape() {
-	got := s.refusal(`{"api_version":"magus.job-result/v1alpha1","summary":"done"}`)
-	s.Contains(got, "File this shape:")
-	s.Contains(got, `"owed": "no seat"`)
-}
-
 // jobApplyStateSuite pins what `job apply` says of a state it moved.
 type jobApplyStateSuite struct {
 	suite.Suite
 }
 
 func TestJobApplyState(t *testing.T) { suite.Run(t, new(jobApplyStateSuite)) }
-
-func (s *jobApplyStateSuite) printed(from, to types.JobState, dryRun bool) string {
-	var out bytes.Buffer
-	printJobApply(&out, []job.Applied{{
-		Prev:    types.Job{ID: "w", State: from, Paths: types.JobPaths{Write: []string{"a.go"}}},
-		Next:    types.Job{ID: "w", State: to, Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}},
-		Changed: []string{"paths.write"},
-	}}, nil, dryRun)
-	return out.String()
-}
-
-func (s *jobApplyStateSuite) TestAKeptStateReadsStill() {
-	s.Contains(s.printed(types.StateRunning, types.StateRunning, false), "updated w, still running:\n  paths.write +b.go\n")
-}
-
-func (s *jobApplyStateSuite) TestAMovedStateNamesBoth() {
-	s.Contains(s.printed(types.StateExited, types.StateDeclared, false), "updated w, exited to declared, so its holder takes it with `magus job exec w`:\n  paths.write +b.go\n")
-}
-
-func (s *jobApplyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
-	s.Contains(s.printed(types.StateExited, types.StateDeclared, true), "would update w, exited to declared, so its holder takes it with `magus job exec w`:\n")
-}
 
 func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 	row := leaseRow("w", "")
@@ -1335,178 +686,6 @@ func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 
 	s.Require().Len(notes["w"], 1)
 	s.Contains(notes["w"][0], "src/a.go stays released, so the pattern naming it does not hold it")
-}
-
-// Apply prints the spec diff, writes nothing under --dry-run, and keeps the job's state
-// either way.
-func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
-	row := leaseRow("w", "")
-	row.State, row.Paths.Write, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
-	root, cacheDir := execFixture(t, row)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	record := filepath.Join(t.TempDir(), "w.json")
-	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"bounded"},"worker":{"type":"resumed"}},"paths":{"write":["b.go","c.go"]},"check":{"target":"test","project":"."}}`,
-		types.JobAPIVersion), 0o644))
-	args := []string{"-f", record}
-
-	globalCfg.DryRun = true
-	t.Cleanup(func() { globalCfg.DryRun = false })
-	out := captureStdout(t, func() { require.NoError(t, jobApply(t.Context(), root, args)) })
-	assert.Equal(t, "would update w, still running:\n"+
-		"  paths.write +c.go -a.go\n"+
-		"dry run: nothing written; rerun without --dry-run to write it\n", out)
-	rows, err := store.List()
-	require.NoError(t, err)
-	assert.Equal(t, []string{"a.go", "b.go"}, rows[0].Paths.Write)
-
-	globalCfg.DryRun = false
-	out = captureStdout(t, func() { require.NoError(t, jobApply(t.Context(), root, args)) })
-	assert.True(t, strings.HasPrefix(out, "updated w, still running:\n  paths.write +c.go -a.go\n"), out)
-	rows, err = store.List()
-	require.NoError(t, err)
-	assert.Equal(t, []any{[]string{"b.go", "c.go"}, types.StateRunning}, []any{rows[0].Paths.Write, rows[0].State})
-
-	require.Error(t, jobApply(t.Context(), root, nil), "an apply naming no records is a usage error")
-}
-
-// describe job reads the graph as built and job wait may build it. On a current index the
-// two grade a row alike; on a stale one describe builds nothing and leaves the symbol goal
-// ungraded, naming the rebuild.
-func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
-	t.Parallel()
-
-	g := deltaGraph(map[string]string{"Present": "code.go:3"})
-	row := types.Job{ID: "wave/sym", Paths: types.JobPaths{Write: []string{"code.go"}}, Goals: []types.Goal{
-		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
-		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Removed"}},
-	}}
-	read := func(rebuild bool, stale []types.KnowledgeStaleIndex) *jobGraph {
-		return &jobGraph{
-			rebuild: rebuild,
-			stale:   func(context.Context) []types.KnowledgeStaleIndex { return stale },
-			build: func(context.Context) (*knowledge.Graph, error) {
-				if !rebuild && len(stale) > 0 {
-					t.Error("describe built the graph over a stale index")
-				}
-				return g, nil
-			},
-		}
-	}
-	grade := func(graph *jobGraph) types.JobStatus {
-		seen, err := jobObserver("", func(string) *jobGraph { return graph })(t.Context(), row)
-		require.NoError(t, err)
-		return job.VerifyGates(row, types.JobResult{Job: row.ID}, types.JobAttempt{}, nil, []types.Job{row}, seen)
-	}
-
-	described, waited := grade(read(false, nil)), grade(read(true, nil))
-	assert.Equal(t, waited, described, "on a current index describe and wait agree")
-	require.Len(t, described.Gates, 2)
-	for _, gate := range described.Gates {
-		assert.True(t, gate.Verified, "%+v", gate)
-	}
-
-	stale := []types.KnowledgeStaleIndex{{Project: "pkg", Language: "go"}}
-	described = grade(read(false, stale))
-	require.Len(t, described.Gates, 2)
-	for _, gate := range described.Gates {
-		assert.False(t, gate.Verified, gate.ID)
-		assert.Contains(t, strings.Join(gate.Violations, " "), hint.GraphBuild.String(), gate.ID)
-	}
-	assert.Equal(t, waited, grade(read(true, stale)), "wait builds whatever the index says")
-}
-
-func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
-	t.Parallel()
-
-	root, checkout := t.TempDir(), t.TempDir()
-	row := types.Job{ID: "wave/sym", CheckoutRoot: checkout, Goals: []types.Goal{
-		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
-	}}
-	var trees []string
-	graphIn := func(tree string) *jobGraph {
-		trees = append(trees, tree)
-		return &jobGraph{
-			rebuild: true,
-			stale:   func(context.Context) []types.KnowledgeStaleIndex { return nil },
-			build: func(context.Context) (*knowledge.Graph, error) {
-				return deltaGraph(map[string]string{"Present": "code.go:3"}), nil
-			},
-		}
-	}
-
-	seen, err := jobObserver(root, graphIn)(t.Context(), row)
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{checkout}, trees, "the worker's checkout holds the symbols its branch defines, not the waiter's")
-	assert.True(t, seen.SymbolsKnown)
-}
-
-// describe reads the graph evidence as it reads the symbol goals: from the graph as built,
-// and from none while a symbol index is stale, which it reports cold.
-func TestLeaseGraphEvidenceBuildsNothingOverAStaleIndex(t *testing.T) {
-	t.Parallel()
-
-	paths := []string{"code.go"}
-	evidence := func(rebuild bool, stale []types.KnowledgeStaleIndex) (cold bool, loads int) {
-		graph := &jobGraph{
-			rebuild: rebuild,
-			stale:   func(context.Context) []types.KnowledgeStaleIndex { return stale },
-			domain: func(context.Context) (*knowledge.Graph, error) {
-				loads++
-				if !rebuild && len(stale) > 0 {
-					t.Error("describe built the graph over a stale index")
-				}
-				return deltaGraph(nil), nil
-			},
-		}
-		_, cold = leaseGraphEvidence(t.Context(), graph, paths)
-		_, again := leaseGraphEvidence(t.Context(), graph, paths)
-		assert.Equal(t, cold, again, "a second ask answers alike")
-		return cold, loads
-	}
-
-	cold, loads := evidence(false, nil)
-	assert.False(t, cold)
-	assert.Equal(t, 1, loads, "one load serves every ask")
-
-	stale := []types.KnowledgeStaleIndex{{Project: "pkg", Language: "go"}}
-	cold, loads = evidence(false, stale)
-	assert.True(t, cold, "a stale index is reported, not read as nothing depending on the paths")
-	assert.Zero(t, loads)
-
-	cold, loads = evidence(true, stale)
-	assert.False(t, cold)
-	assert.Equal(t, 1, loads)
-}
-
-func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
-	t.Parallel()
-
-	load := func(context.Context) *knowledge.Graph {
-		t.Fatal("a row that writes nothing loaded the graph")
-		return nil
-	}
-	assert.Nil(t, deletionCandidates(t.Context(), load, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"a.go"}}}))
-	assert.Nil(t, deletionCandidates(t.Context(), load, types.Job{}))
-}
-
-func TestForkOutputCarriesReferencedOutsideBesideTheRow(t *testing.T) {
-	t.Parallel()
-
-	out := forkOutput{
-		Job:               types.Job{ID: "fork-names-refs-outside"},
-		ReferencedOutside: []job.ReferencedFile{{File: "types/conformance_test.go", Count: 9, Uses: []string{"types/conformance.go"}}},
-	}
-	raw, err := json.Marshal(forkReport{forkOutput: out})
-	require.NoError(t, err)
-
-	var got map[string]any
-	require.NoError(t, json.Unmarshal(raw, &got))
-	assert.Equal(t, "fork-names-refs-outside", got["id"], "the row flattens")
-	assert.Equal(t, []any{map[string]any{"file": "types/conformance_test.go", "count": float64(9), "uses": []any{"types/conformance.go"}}},
-		got["referenced_outside"])
 }
 
 // A workspace with no symbol index cannot say what references the write paths, so a fork
@@ -1538,39 +717,6 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 func bindCheckout(t *testing.T, cacheDir, id string) {
 	t.Helper()
 	require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}).Bind(job.Caller{}, id))
-}
-
-// TestJobExecWritesNoMarker pins the half of the 2026-09-26 fix that lives in the CLI: exec
-// records the base and the checkout, and binds nobody. A CLI process cannot tell a subagent
-// from its parent, so a binding it wrote was the checkout's, and the parent sharing that
-// checkout was graded as the subagent from its next call.
-func TestJobExecWritesNoMarker(t *testing.T) {
-	row := leaseRow("lease-enforcement/wave4/docs", "")
-	row.State = types.StateRunning
-	repo, cacheDir := execRepositoryFixture(t, row)
-	root := repo.Root()
-
-	out := captureStdout(t, func() {
-		require.NoError(t, jobExec(t.Context(), root, []string{row.ID}))
-	})
-	assert.Contains(t, out, "took "+row.ID)
-
-	loc := job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}
-	_, err := os.Stat(loc.MarkerPath())
-	assert.True(t, os.IsNotExist(err), "exec writes no checkout record")
-	lease, from := job.ActingLease(loc, "")
-	assert.Equal(t, []any{"", types.LeaseSource("")}, []any{lease, from}, "the checkout acts under nothing")
-
-	store := job.NewStore(loc)
-	rows, err := store.List()
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	abs, err := filepath.Abs(root)
-	require.NoError(t, err)
-	base, err := store.CheckoutToken(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, []any{base, abs}, []any{rows[0].ReportedBase, rows[0].CheckoutRoot}, "the base read from the tree and the checkout are recorded")
-	assert.True(t, strings.HasPrefix(base, repo.Head()), "the base is the checkout's own revision")
 }
 
 // Exec takes exactly one job: the read form it had printed a binding the CLI no longer
@@ -1618,34 +764,6 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	} {
 		assert.Error(t, jobExec(t.Context(), root, args), name)
 	}
-}
-
-// TestJobForkReadOnlyRowPrintsNoBudgetAdvice: a row that runs no target has no
-// holder to hold back, so a full budget is not its forker's news.
-func TestJobForkReadOnlyRowPrintsNoBudgetAdvice(t *testing.T) {
-	root, _ := execFixture(t)
-	privateSockDir(t)
-	t.Setenv("MAGUS_BROKER", "")
-	ln, err := broker.Listen(t.Context(), broker.DefaultAddr())
-	require.NoError(t, err)
-	done := make(chan error, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() { done <- broker.Serve(ctx, ln, broker.WithCapacity(0, 1)) }()
-	t.Cleanup(func() { cancel(); <-done })
-	holder, err := broker.Dial(t.Context(), broker.DefaultAddr())
-	require.NoError(t, err)
-	defer func() { _ = holder.Close() }()
-	_, err = holder.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
-	require.NoError(t, err)
-
-	reader := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--read-only", "--instructions", "find the callers"}))
-	})
-	assert.NotContains(t, reader, "the build budget is full")
-	writer := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"writer", "--check", "test .", "--write-paths", "magus.yaml"}))
-	})
-	assert.Contains(t, writer, "the build budget is full")
 }
 
 // A fork under `job exec --timeout` bootstraps with the wrapper holding the
@@ -1722,96 +840,6 @@ func TestJobExecRefusesATypedBase(t *testing.T) {
 	assert.Equal(t, []any{types.StateDeclared, ""}, []any{rows[0].State, rows[0].ReportedBase}, "a refused exec takes nothing")
 }
 
-// inflightFixture is the in-flight plan's fixture: two job trees, one checkout on
-// fork-row-rebase, eight open changes on main listed out of plan order, one plan of one
-// partition and one verdict.
-func inflightFixture() (types.JobList, job.InflightInput) {
-	rows := []types.Job{
-		{ID: "fleet", State: types.StateRunning},
-		{ID: "child-job-wait", Parent: "fleet", State: types.StatePass, CheckoutRoot: "/w/child-job-wait"},
-		{ID: "status-wait", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/status-wait"},
-		{ID: "fork-row-rebase", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/fork-row-rebase"},
-		{ID: "inflight-view", Parent: "fleet", State: types.StateRunning, ReadOnly: true, CheckoutRoot: "/w/main"},
-		{ID: "their-fleet", State: types.StateRunning},
-		{ID: "their-work", Parent: "their-fleet", State: types.StateRunning, CheckoutRoot: "/w/theirs"},
-	}
-	change := func(id, branch, title, author string) qtypes.Change {
-		return qtypes.Change{ID: id, Head: strings.Repeat(id, 14)[:40], Branch: branch, Base: "main", Title: title, Author: author, Method: qtypes.MethodSquash}
-	}
-	c438 := change("438", "guard-reads-and-searches", "guard reads and searches", "egladman")
-	c443 := change("443", "fork-row-rebase", "rebase the fork row onto the job store before a worker forks its own child", "egladman")
-	c445 := change("445", "trimpath-tests-more", "trimpath the remaining tests", "egladman")
-	c450 := change("450", "merge-queue-dashboard", "merge queue dashboard", "egladman")
-	c456 := change("456", "fix-444-review", "fix the 444 review", "egladman")
-	c457 := change("457", "theirs", "their change", "priya")
-	c459 := change("459", "status-wait", "status wait pipe", "egladman")
-	in := job.InflightInput{
-		Fetch: &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 1790514000, ElapsedMS: 812},
-		Changes: qtypes.Changes{
-			Base:    "main",
-			Changes: []qtypes.Change{c443, c438, c450, c445, c456, c457, c459},
-			Unqueued: []qtypes.UnqueuedChange{
-				{ID: "458", Head: strings.Repeat("8", 40), Branch: "child-job-wait", Base: "main", Title: "child job wait", Author: "egladman", Mark: qtypes.MarkKickedBack},
-			},
-		},
-		Plan: &qtypes.Plan{
-			Base: "main", BaseCommit: "f223bb1" + strings.Repeat("0", 33), Depth: 1,
-			Partitions: [][]qtypes.Change{{c438, c443, c445, c450, c456, c457}},
-			Verdicts:   []qtypes.Verdict{{Change: c459, Decision: qtypes.DecisionKick, Code: qtypes.CodeKickRed, Reason: "pr hygiene: changelog fragment missing"}},
-		},
-		Branches: map[string]string{
-			"/w/child-job-wait": "child-job-wait", "/w/status-wait": "status-wait", "/w/fork-row-rebase": "fork-row-rebase",
-			"/w/main": "main", "/w/theirs": "theirs",
-		},
-		Me: job.Identity{Lease: "fork-row-rebase", Login: "egladman"},
-	}
-	return types.JobList{Jobs: rows}, in
-}
-
-// The plan's proof: the reader's two kicked-back changes first, the five queued in plan
-// order whatever order the provider listed them in, and everyone else as one count line.
-func TestLsJobsPrintsTheChangesInFlight(t *testing.T) {
-	t.Parallel()
-	list, in := inflightFixture()
-	render := func(all bool) string {
-		var out strings.Builder
-		printInflight(&out, job.Inflight(list, in), all)
-		return out.String()
-	}
-	head := "in flight on main at f223bb100000, as of 2026-09-27 13:00 UTC (github, github.com, 812ms)\n"
-	kicked := "" +
-		"  #459  status wait pipe  KICK_RED: pr hygiene: changelog fragment missing  job status-wait\n" +
-		"  #458  child job wait    kicked back                                       job child-job-wait\n"
-	queued := "" +
-		"  #438  guard reads and searches                            pos 1\n" +
-		"  #443  rebase the fork row onto the job store before a...  pos 2  job fork-row-rebase\n" +
-		"  #445  trimpath the remaining tests                        pos 3\n" +
-		"  #450  merge queue dashboard                               pos 4\n" +
-		"  #456  fix the 444 review                                  pos 5\n"
-	tail := "jobs without a change (1)\n  inflight-view\n"
-	refetch := "refetch: magus queue ls --provider github --base main\n"
-
-	assert.Equal(t, fmt.Sprintf(`%sneeds me (2)
-%squeued, in plan order (5)
-%s%sothers: 1 queued
-%s`, head, kicked, queued, tail, refetch), render(false))
-	assert.Equal(t, fmt.Sprintf(`%sneeds the author (2)
-%squeued, in plan order (6)
-%s  #457  their change                                        pos 6  job their-work
-%s%s`, head, kicked, queued, tail, refetch), render(true))
-	assert.Equal(t, render(false), render(false), "one store and one snapshot render the same bytes")
-}
-
-func TestLsJobsRendersTheRecordTheSameTwice(t *testing.T) {
-	t.Parallel()
-	list, in := inflightFixture()
-	first, err := json.Marshal(job.Inflight(list, in))
-	require.NoError(t, err)
-	second, err := json.Marshal(job.Inflight(list, in))
-	require.NoError(t, err)
-	assert.Equal(t, string(first), string(second))
-}
-
 func TestLsJobsSaysWhenTheQueueWasNeverFetched(t *testing.T) {
 	root, _ := execFixture(t, leaseRow("fleet", ""))
 	withOutput(t, "")
@@ -1819,118 +847,6 @@ func TestLsJobsSaysWhenTheQueueWasNeverFetched(t *testing.T) {
 		require.NoError(t, lsJobs(root, nil))
 	})
 	assert.Contains(t, out, "in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes\n")
-}
-
-// Read end to end from a snapshot: a caller no job or login names sees everyone's.
-func TestLsJobsReadsTheSnapshot(t *testing.T) {
-	root, _ := execFixture(t, leaseRow("fleet", ""))
-	_, in := inflightFixture()
-	require.NoError(t, queue.WriteSnapshot(root, queue.Snapshot{Fetched: *in.Fetch, Changes: in.Changes}))
-
-	withOutput(t, "json")
-	out := captureStdout(t, func() {
-		require.NoError(t, lsJobs(root, nil))
-	})
-	var got types.JobList
-	require.NoError(t, json.Unmarshal([]byte(out), &got))
-	var ids []string
-	for _, c := range got.Changes {
-		ids = append(ids, c.ID)
-	}
-	assert.Equal(t, []string{"443", "438", "450", "445", "456", "457", "459", "458"}, ids)
-}
-
-// Ended rows pile up, so the board lists the live ones and counts the rest; --all is the
-// way to ask for every row.
-func TestLsJobsListsLiveRowsAndLeavesEndedOnesToAll(t *testing.T) {
-	root, _ := execFixture(t,
-		leaseRow("fleet", ""),
-		types.Job{ID: "done", State: types.StatePass},
-		types.Job{ID: "lost", State: types.StateNoReturn},
-		types.Job{ID: "handed-in", State: types.StateExited},
-	)
-	withOutput(t, "name")
-	useTextLogger(t)
-	ls := func(args ...string) (ids, notice string) {
-		notice = captureStderr(t, func() {
-			ids = captureStdout(t, func() { require.NoError(t, lsJobs(root, args)) })
-		})
-		return ids, notice
-	}
-
-	ids, notice := ls()
-	assert.ElementsMatch(t, []string{"fleet", "handed-in"}, strings.Fields(ids), "an exited row still holds its lease, so it is live")
-	assert.Contains(t, notice, "2 ended jobs left out; `magus ls jobs --all` lists them")
-
-	ids, notice = ls("--all")
-	assert.ElementsMatch(t, []string{"fleet", "handed-in", "done", "lost"}, strings.Fields(ids))
-	assert.NotContains(t, notice, "ended", "nothing was left out")
-}
-
-func TestDescribeJobPrintsItsChange(t *testing.T) {
-	t.Parallel()
-	list, in := inflightFixture()
-	joined := job.Inflight(list, in)
-	var out strings.Builder
-	printJobChange(&out, joined.Changes, "fork-row-rebase")
-	printJobChange(&out, joined.Changes, "child-job-wait")
-	printJobChange(&out, joined.Changes, "inflight-view")
-	assert.Equal(t, "\nchange: #443 rebase the fork row onto the job store before a..., the queue's turn, pos 2\n"+
-		"\nchange: #458 child job wait, its author's turn, kicked back\n", out.String())
-}
-
-func TestLsJobsClipsATitleAtAWord(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "short", clipTitle("short", 48))
-	assert.Equal(t, "one two...", clipTitle("one two three", 9))
-	assert.Equal(t, "abcdefgh...", clipTitle("abcdefghijk", 8), "no space to cut at")
-}
-
-// Every job verb's help ends its prose with one command a person types, spelled with the
-// verb itself, so `-h` answers "what does a use of this look like" without a docs page.
-func TestJobHelpCarriesAPersonRunExample(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	ctx := t.Context()
-	verbs := []struct {
-		name string
-		run  func(args []string) error
-	}{
-		{"job fork", func(a []string) error { return jobFork(ctx, "", a) }},
-		{"job apply", func(a []string) error { return jobApply(ctx, "", a) }},
-		{"job exec", func(a []string) error { return jobExec(ctx, "", a) }},
-		{"job exit", func(a []string) error { return jobExit(ctx, "", a) }},
-		{"job wait", func(a []string) error { return jobWait(ctx, "", a) }},
-		{"job watch", func(a []string) error { return jobWatch(ctx, "", a) }},
-		{"job rm", func(a []string) error { return jobDelete(ctx, "", a) }},
-		{"job prune", func(a []string) error { return jobPrune(ctx, "", a) }},
-		{"ls jobs", func(a []string) error { return lsJobs("", a) }},
-		{"describe job", func(a []string) error { return describeJob(ctx, "", a) }},
-	}
-	for _, v := range verbs {
-		var err error
-		help := captureStderr(t, func() { err = v.run([]string{"-h"}) })
-		require.ErrorIs(t, err, flag.ErrHelp, v.name)
-		_, example, found := strings.Cut(help, "\nExample:\n  ")
-		if !found {
-			_, example, found = strings.Cut(help, "\nExamples:\n  ")
-		}
-		require.True(t, found, "`magus %s -h` carries no Example:\n%s", v.name, help)
-		line, _, _ := strings.Cut(example, "\n")
-		assert.True(t, strings.HasPrefix(line, fmt.Sprintf("magus %s ", v.name)), "`magus %s -h` example runs something else: %q", v.name, line)
-	}
-}
-
-func TestJobApplyHelpIsItsRegistryEntry(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-
-	children := jobCommandSpec().Children
-	spec := children[slices.IndexFunc(children, func(c command.Command) bool { return c.Name == "apply" })]
-	var err error
-	help := captureStderr(t, func() { err = jobApply(t.Context(), "", []string{"-h"}) })
-	require.ErrorIs(t, err, flag.ErrHelp)
-	assert.Contains(t, help, fmt.Sprintf("Usage: %s\n\n%s\n", spec.Usage, spec.Long))
-	assert.Contains(t, help, "  -f file\n")
-	assert.Contains(t, help, "  --[no-]fix (default: off)\n")
 }
 
 // guideMarker pins the fenced block on the next line to a section of a job_people script.
@@ -2086,7 +1002,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	installCheckGrader(t, newCheckGrader())
+	installCheckGrader(t, gradingWith(nil))
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
 	}
@@ -2145,7 +1061,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
 		t.Chdir(elsewhere)
 		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
-			Input:      ownBinaryPrefix + workerCheckLine(*row.Check),
+			Input:      "./" + guard.WorkerCheckCommand(*row.Check),
 			DryRun:     true,
 			Lease:      row.ID,
 			PendingRow: &row,
@@ -2157,7 +1073,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	for name, cwd := range map[string]string{"the root": root, "elsewhere": elsewhere} {
 		t.Run(name, func(t *testing.T) {
 			t.Chdir(cwd)
-			verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+			verdict := gradingWith(nil)(t.Context(), root, row)
 			assert.Empty(t, verdict.NotGraded)
 			assert.False(t, verdict.Denied, "the check is judged from the workspace, wherever the process runs: %s", verdict.Reason)
 		})
@@ -2189,7 +1105,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-	grade := newCheckGrader()
+	grade := gradingWith(nil)
 
 	before := grade(t.Context(), root, row)
 	require.Empty(t, before.NotGraded)
@@ -2201,17 +1117,6 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	assert.Empty(t, after.NotGraded)
 	assert.True(t, after.Denied, "the edited rule denies the check")
 	assert.Contains(t, after.Reason, "builds are refused here")
-}
-
-// A workspace whose rules did not load defers the grade, and says so rather than refuse on a
-// verdict nobody reached.
-func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
-	testkit.Isolate(t)
-	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-
-	verdict := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, t.TempDir(), row)
-
-	assert.Equal(t, job.CheckVerdict{Deferred: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"}, verdict)
 }
 
 // One judge: the check a fork grades is the check `describe job` briefs and the guard lets
@@ -2234,19 +1139,19 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	deps := guardDependencies(t.Context(), root)
 
 	t.Run("its own checkout", func(t *testing.T) {
-		verdict := gradeCheck(t.Context(), deps, root, held)
+		verdict := gradingWith(nil)(t.Context(), root, held)
 		assert.Empty(t, verdict.NotGraded)
 		assert.False(t, verdict.Denied, "the holder gates in the checkout it holds: %s", verdict.Reason)
 		require.NoError(t, jobRefusesTheGate(t.Context(), root, held), "describe briefs what the fork accepted")
 
 		taken := held
 		taken.State, taken.CheckoutRoot = types.StateRunning, own
-		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + workerCheckLine(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
+		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
 		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
 	t.Run("the forker's checkout", func(t *testing.T) {
-		verdict := gradeCheck(t.Context(), deps, root, shared)
+		verdict := gradingWith(nil)(t.Context(), root, shared)
 		assert.True(t, verdict.Denied, "a job's check is never the gate in a shared checkout")
 		require.Error(t, jobRefusesTheGate(t.Context(), root, shared))
 	})
@@ -2279,14 +1184,14 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Chdir(root)
 	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
-	verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+	verdict := gradingWith(nil)(t.Context(), root, row)
 
 	assert.False(t, verdict.Denied)
 	assert.Contains(t, verdict.NotGraded, "denies this worker `magus run go::go-vet .` as well")
 	assert.Contains(t, verdict.NotGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
-	installCheckGrader(t, newCheckGrader())
+	installCheckGrader(t, gradingWith(nil))
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
 	require.ErrorIs(t, err, types.JobUngraded)
 	assert.NotErrorIs(t, err, types.JobCheckUnrunnable)
@@ -2298,7 +1203,19 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.Empty(t, rows, "a fork nobody graded writes nothing")
 }
 
-// installCheckGrader installs g as runCLI installs newCheckGrader, and puts back what was
+// gradingWith is the grader runCLI installs, loading the rules the CLI loads with mutate
+// applied to them.
+func gradingWith(mutate func(*guard.Dependencies)) job.CheckGrader {
+	return guard.NewCheckGrader(func(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
+		deps, rules := loadGuardDependencies(ctx, root)
+		if mutate != nil {
+			mutate(&deps)
+		}
+		return deps, rules
+	})
+}
+
+// installCheckGrader installs g as runCLI installs guard.NewCheckGrader, and puts back what was
 // installed. The grader is process-wide, so a test that uses it does not run in parallel.
 func installCheckGrader(t *testing.T, g job.CheckGrader) {
 	t.Helper()
@@ -2328,206 +1245,6 @@ func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	assert.Empty(t, graded)
 }
 
-func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		values []string
-		want   evidenceFlag
-		err    string
-	}{
-		"one pair":       {values: []string{"check=abc123"}, want: evidenceFlag{"check": "abc123"}},
-		"repeated":       {values: []string{"check=a", "docs=b"}, want: evidenceFlag{"check": "a", "docs": "b"}},
-		"no separator":   {values: []string{"check"}, err: `want <goal>=<ref>, got "check"`},
-		"no ref":         {values: []string{"check="}, err: `want <goal>=<ref>, got "check="`},
-		"no goal":        {values: []string{"=abc"}, err: `want <goal>=<ref>, got "=abc"`},
-		"a goal's twice": {values: []string{"check=a", "check=b"}, err: `goal "check" is named twice`},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			got := evidenceFlag{}
-			var err error
-			for _, v := range tc.values {
-				if err = got.Set(v); err != nil {
-					break
-				}
-			}
-			if tc.err != "" {
-				require.EqualError(t, err, tc.err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
-// The MODEL column names the model the row asks for and falls back to the tier the store
-// assigned, so a row that names nothing still shows what it runs at.
-func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
-	t.Parallel()
-
-	tier := &typesagent.JobModelTier{Name: "routine"}
-	tests := []struct {
-		name string
-		row  types.Job
-		want string
-	}{
-		{"the model the row names wins", types.Job{Agent: &typesagent.Spec{Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ModelTier: tier}, "opus"},
-		{"the assigned tier stands in", types.Job{ModelTier: tier}, "routine"},
-		{"neither is a dash", types.Job{}, "-"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, jobModelCell(tt.row))
-		})
-	}
-}
-
-// dryRunFork runs a fork under the global --dry-run in a workspace whose go spell gives the
-// checks they name something to resolve against.
-func dryRunFork(t *testing.T, format string, args ...string) (stdout string, store *job.Store, err error) {
-	t.Helper()
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	if format != "" {
-		args = append([]string{"-o", format}, args...)
-	}
-	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(t)
-	t.Chdir(root)
-	installCheckGrader(t, newCheckGrader())
-	globalCfg.DryRun = true
-	t.Cleanup(func() { globalCfg.DryRun = false })
-	cacheDir, cacheErr := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	require.NoError(t, cacheErr)
-	store = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	stdout = captureStdout(t, func() { err = jobFork(t.Context(), root, args) })
-	return stdout, store, err
-}
-
-func TestJobForkDryRunListsEveryProblemAndWritesNothing(t *testing.T) {
-	out, store, err := dryRunFork(t, "", "w", "--write-paths", "run.go", "--check", "nosuch .")
-
-	require.Error(t, err)
-	assert.Equal(t, exit.Failure, exit.Code(err))
-	assert.True(t, exit.AlreadyReported(err), "the list is printed, not repeated as an error")
-	assert.Contains(t, out, "1 problem:")
-	assert.Contains(t, out, "[MGS3040]")
-	assert.Contains(t, out, "     fix: name one of its targets")
-	assert.Contains(t, out, "would store:")
-	assert.Contains(t, out, "dry run: nothing written")
-	rows, err := store.List()
-	require.NoError(t, err)
-	assert.Empty(t, rows)
-}
-
-func TestJobForkDryRunOfACleanRecordPrintsItAndExitsZero(t *testing.T) {
-	out, store, err := dryRunFork(t, "", "w", "--write-paths", "run.go", "--check", "go::go-vet .")
-
-	require.NoError(t, err)
-	assert.Contains(t, out, "no problems\nwould store:\n")
-	assert.Contains(t, out, `"id": "w"`)
-	rows, err := store.List()
-	require.NoError(t, err)
-	assert.Empty(t, rows)
-}
-
-func TestJobForkDryRunEmitsTheValidationForAStructuredFormat(t *testing.T) {
-	out, _, err := dryRunFork(t, "json", "w", "--write-paths", "run.go", "--check", "nosuch .")
-
-	require.Error(t, err)
-	var v types.JobValidation
-	require.NoError(t, json.Unmarshal([]byte(out), &v), out)
-	assert.Equal(t, "w", v.Job.ID)
-	require.Len(t, v.Problems, 1)
-	assert.Equal(t, types.JobCheckUnrunnable, v.Problems[0].Code)
-}
-
-// The fork says which magus its checkout got, and that an adopted checkout is never removed.
-func TestPrintJobWorktreeSaysWhichMagusTheCheckoutGot(t *testing.T) {
-	made := types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef", Made: true, Binary: "/w/c/magus"}
-	for name, tc := range map[string]struct {
-		wt    types.JobWorktree
-		built bool
-		want  string
-	}{
-		"built from its own sources": {wt: made, built: true, want: "built /w/c/magus from the checkout's own sources"},
-		"a copy":                     {wt: made, want: "placed /w/c/magus, the magus the forking checkout runs"},
-		"a forker on PATH":           {wt: types.JobWorktree{Root: "/w/c", Made: true}, want: "runs magus from PATH"},
-		"adopted":                    {wt: types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}, want: "adopted for job w at 0123456789ab; its holder takes it there with `"},
-	} {
-		var out bytes.Buffer
-		printJobWorktree(&out, types.Job{ID: "w", Worktree: &tc.wt}, tc.built)
-		assert.Contains(t, out.String(), tc.want, name)
-	}
-}
-
-func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0)
-	cases := map[string]int64{
-		"":                     0,
-		"2h":                   now.Add(2 * time.Hour).Unix(),
-		"2027-01-15T09:00:00Z": 1_800_003_600,
-	}
-	for raw, want := range cases {
-		got, err := types.ParsePauseUntil(raw, now)
-		require.NoError(t, err, raw)
-		assert.Equal(t, want, got, raw)
-	}
-	for _, raw := range []string{"-2h", "tomorrow"} {
-		_, err := types.ParsePauseUntil(raw, now)
-		assert.Error(t, err, raw)
-	}
-}
-
-type forkDeliverySuite struct {
-	suite.Suite
-}
-
-func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
-
-func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
-	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := flaggen.BindJobFork(flags)
-	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", types.DeliveryFold}))
-	row, err := flagDeclaration("adj/store", *spec, tierWords())
-	s.Require().NoError(err)
-	s.Require().NoError(row.Validate())
-	s.Equal(types.DeliveryFold, row.Delivery)
-}
-
-func (s *forkDeliverySuite) TestAStackedForkRecordsThisCheckoutsBranch() {
-	r := testkit.NewRepository(s.T(), nil)
-	r.Git("switch", "-q", "-c", "feat/parent")
-	row, err := stackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked})
-	s.Require().NoError(err)
-	s.Equal("feat/parent", row.ParentHead)
-}
-
-func (s *forkDeliverySuite) TestAStackedForkKeepsTheHeadTheRecordNames() {
-	row, err := stackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliveryStacked, ParentHead: "feat/named"})
-	s.Require().NoError(err)
-	s.Equal("feat/named", row.ParentHead)
-}
-
-func (s *forkDeliverySuite) TestAStackedForkOnNoBranchIsRefused() {
-	r := testkit.NewRepository(s.T(), nil)
-	r.Git("switch", "-q", "--detach")
-	_, err := stackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked})
-	s.Require().ErrorContains(err, "is on no branch")
-}
-
-func (s *forkDeliverySuite) TestAnUnstackedForkReadsNoBranch() {
-	row, err := stackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliverySeparate})
-	s.Require().NoError(err)
-	s.Empty(row.ParentHead)
-}
-
 // GradeCheckLapseSuite pins that a guard which ran out of time reached no verdict on
 // the check, so the grade defers where a real deny refuses.
 type GradeCheckLapseSuite struct {
@@ -2549,68 +1266,17 @@ func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
 	defer cancel()
 	release := make(chan struct{})
 	defer close(release)
-	deps := guardDependencies(ctx, root)
-	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
-		<-release
-		return nil, errors.New("released")
-	}
+	hang := gradingWith(func(deps *guard.Dependencies) {
+		deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
+			<-release
+			return nil, errors.New("released")
+		}
+	})
 
-	verdict := gradeCheck(ctx, deps, root, row)
+	verdict := hang(ctx, root, row)
 
 	s.False(verdict.Denied, verdict.Reason)
 	s.Contains(verdict.Deferred, "the guard ran out of time grading it")
-}
-
-func (s *GradeCheckLapseSuite) TestARealDenyStillRefuses() {
-	testkit.Isolate(s.T())
-	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-	denies := func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
-		if strings.Contains(req.Command, "go-build") {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: "no builds"}, nil
-		}
-		return types.GuardVerdict{}, nil
-	}
-
-	verdict := gradeCheck(s.T().Context(), guard.Dependencies{CommandRule: denies}, s.T().TempDir(), row)
-
-	s.True(verdict.Denied)
-	s.Empty(verdict.Deferred)
-}
-
-type ForkDiskFloorSuite struct {
-	suite.Suite
-	root string
-}
-
-func TestForkDiskFloorSuite(t *testing.T) {
-	suite.Run(t, new(ForkDiskFloorSuite))
-}
-
-func (s *ForkDiskFloorSuite) SetupTest() {
-	s.root = s.T().TempDir()
-}
-
-const everyDiskIsLow = int64(1) << 62
-
-func (s *ForkDiskFloorSuite) TestANewCheckoutOnALowDiskIsRefusedNamingTheCode() {
-	err := refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), everyDiskIsLow)
-	s.ErrorIs(err, types.DiskFull)
-	s.ErrorContains(err, types.ReclaimDiskCommand)
-}
-
-func (s *ForkDiskFloorSuite) TestAnAdoptedCheckoutIsExempt() {
-	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, s.root, everyDiskIsLow))
-}
-
-func (s *ForkDiskFloorSuite) TestAnUnreadableDiskIsRefusedSayingSo() {
-	absent := filepath.Join(s.root, "absent")
-	err := refuseForkOnFullDisk(s.T().Context(), "false", absent, filepath.Join(s.root, "new"), 1)
-	s.ErrorContains(err, "cannot read the disk holding "+absent)
-	s.NotErrorIs(err, types.DiskFull)
-}
-
-func (s *ForkDiskFloorSuite) TestADiskAboveTheFloorPasses() {
-	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), 1))
 }
 
 type jobApplyAddWritePathSuite struct {
@@ -2631,85 +1297,12 @@ func (s *jobApplyAddWritePathSuite) SetupTest() {
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 }
 
-func (s *jobApplyAddWritePathSuite) apply(add ...string) []job.Applied {
-	rec, err := widenedDeclaration(s.store, "w", add)
-	s.Require().NoError(err)
-	applied, err := job.Apply(s.T().Context(), s.store, []types.Declaration{rec}, globalCfg.Jobs, nil, func() string { return "" }, false)
-	s.Require().NoError(err)
-	return applied
-}
-
-func (s *jobApplyAddWritePathSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
-	before, err := s.store.List()
-	s.Require().NoError(err)
-	want := before[0]
-	want.Paths.Write, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
-
-	applied := s.apply("b.go", "c.go")
-
-	s.Require().Len(applied, 1)
-	want.Validated, want.WriteProof = applied[0].Next.Validated, applied[0].Next.WriteProof
-	s.Equal(want, applied[0].Next)
-	rows, err := s.store.List()
-	s.Require().NoError(err)
-	s.Equal(want, rows[0])
-}
-
-func (s *jobApplyAddWritePathSuite) TestAPathTheRowHoldsChangesNothing() {
-	applied := s.apply("a.go")
-
-	s.Require().Len(applied, 1)
-	s.Empty(applied[0].Changed)
-}
-
 func (s *jobApplyAddWritePathSuite) TestNamingRecordsAsWellIsAUsageError() {
 	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"w", "--add-write-path", "b.go", "-f", "-"}))
 }
 
 func (s *jobApplyAddWritePathSuite) TestWithoutAnIdIsAUsageError() {
 	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"--add-write-path", "b.go"}))
-}
-
-func (s *jobApplyAddWritePathSuite) TestAnUnknownJobIsAUsageError() {
-	_, err := widenedDeclaration(s.store, "nope", []string{"b.go"})
-
-	s.Require().Error(err)
-	s.Equal(exit.Usage, exit.Code(err))
-}
-
-type ForkJudgedPathSuite struct {
-	suite.Suite
-	store *job.Store
-}
-
-func TestForkJudgedPathSuite(t *testing.T) {
-	suite.Run(t, new(ForkJudgedPathSuite))
-}
-
-func (s *ForkJudgedPathSuite) SetupTest() {
-	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"}).Root()
-	s.store = job.NewStore(job.Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: root})
-}
-
-func (s *ForkJudgedPathSuite) seed(state types.JobState) {
-	_, err := s.store.Update(s.T().Context(), "w", func(u *types.Job) {
-		*u = types.Job{ID: "w", State: state, ReadOnly: true}
-	})
-	s.Require().NoError(err)
-}
-
-func (s *ForkJudgedPathSuite) TestALiveRowIsJudgedAsAnUpdate() {
-	s.seed(types.StateDeclared)
-	s.True(noteForkJudgedAsUpdate(s.T().Context(), s.store, "w"))
-}
-
-func (s *ForkJudgedPathSuite) TestAnEndedRowIsJudgedWhole() {
-	s.seed(types.StateNoReturn)
-	s.False(noteForkJudgedAsUpdate(s.T().Context(), s.store, "w"))
-}
-
-func (s *ForkJudgedPathSuite) TestAnUnknownRowIsJudgedWhole() {
-	s.False(noteForkJudgedAsUpdate(s.T().Context(), s.store, "nobody"))
 }
 
 type jobApplyFailureSuite struct {
@@ -2723,43 +1316,6 @@ func (s *jobApplyFailureSuite) TestARecordFileThatWillNotOpenFailsWithItsChain()
 
 	s.Require().ErrorIs(err, os.ErrNotExist)
 	s.Equal(exit.Failure, exit.Code(err))
-}
-
-type jobHelpSuite struct {
-	suite.Suite
-}
-
-func TestJobHelp(t *testing.T) { suite.Run(t, new(jobHelpSuite)) }
-
-func (s *jobHelpSuite) TestApplyHelpPrintsItsExamplesOnce() {
-	spec, known := commandAt("job apply")
-	s.Require().True(known)
-	s.Require().NotEmpty(spec.Examples)
-
-	var out bytes.Buffer
-	fs := flag.NewFlagSet("job apply", flag.ContinueOnError)
-	fs.SetOutput(&out)
-	printRegisteredHelp(fs)
-
-	s.Contains(out.String(), spec.Usage)
-	for _, ex := range spec.Examples {
-		s.Equal(1, strings.Count(out.String(), ex.Command), ex.Command)
-	}
-}
-
-type lsJobsUnmergedSuite struct {
-	suite.Suite
-}
-
-func TestLsJobsUnmerged(t *testing.T) { suite.Run(t, new(lsJobsUnmergedSuite)) }
-
-func (s *lsJobsUnmergedSuite) TestTheNameFormatSkipsTheRead() {
-	s.Nil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, nil, outputName))
-}
-
-func (s *lsJobsUnmergedSuite) TestEveryOtherFormatCarriesTheReport() {
-	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, nil, outputText))
-	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, nil, outputJSON))
 }
 
 type forkFactsReportSuite struct {
@@ -2936,32 +1492,6 @@ func (s *forkErrorsSuite) TestUsageFormattingPreservesTypedCauses() {
 	s.Equal(exit.Usage, exit.Code(err))
 }
 
-func (s *forkErrorsSuite) TestStackedHeadPreservesResolutionFailures() {
-	repo, _ := execRepositoryFixture(s.T())
-	globalCfg.VCS.Name = "not-a-vcs"
-	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
-
-	got, err := stackedHead(s.T().Context(), repo.Root(), row)
-
-	s.ErrorIs(err, types.ErrVCSUnknown)
-	s.ErrorContains(err, "child is stacked with no pull request base")
-	s.ErrorContains(err, "name parent_head in the record")
-	s.Equal(row, got)
-}
-
-func (s *forkErrorsSuite) TestStackedHeadPreservesMetadataFailures() {
-	s.T().Cleanup(snapshotGlobals())
-	globalCfg.VCS.Name = "git"
-	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
-
-	got, err := stackedHead(s.T().Context(), s.T().TempDir(), row)
-
-	var cause *exec.ExitError
-	s.ErrorAs(err, &cause)
-	s.ErrorContains(err, "child is stacked with no pull request base")
-	s.Equal(row, got)
-}
-
 func (s *forkErrorsSuite) TestForkPreservesTheStackedHeadCancellation() {
 	resetWorkspaceMemo(s.T())
 	repo, _ := execRepositoryFixture(s.T())
@@ -3049,51 +1579,12 @@ func (s *jobApplyReleaseWritePathSuite) SetupTest() {
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 }
 
-func (s *jobApplyReleaseWritePathSuite) release(paths ...string) types.Declaration {
-	held, err := widenedDeclaration(s.store, "w", nil)
-	s.Require().NoError(err)
-	rec, err := narrowedDeclaration(held, "w", paths)
-	s.Require().NoError(err)
-	return rec
-}
-
-func (s *jobApplyReleaseWritePathSuite) TestAReleasedPathLeavesTheRestOfTheSpec() {
-	rec := s.release("b.go")
-
-	s.Equal([]string{"a.go", "c.go#Run"}, rec.Paths.Write)
-	s.Len(rec.Goals, 1)
-	s.NotNil(rec.Check)
-}
-
-func (s *jobApplyReleaseWritePathSuite) TestADeclarationClaimIsReleasedByItsWholeValue() {
-	s.Equal([]string{"a.go", "b.go"}, s.release("c.go#Run").Paths.Write)
-}
-
-func (s *jobApplyReleaseWritePathSuite) TestAPathTheJobLacksIsAUsageError() {
-	held, err := widenedDeclaration(s.store, "w", nil)
-	s.Require().NoError(err)
-
-	_, err = narrowedDeclaration(held, "w", []string{"nope.go"})
-
-	s.Require().Error(err)
-	s.Equal(exit.Usage, exit.Code(err))
-}
-
 func (s *jobApplyReleaseWritePathSuite) TestNamingRecordsAsWellIsAUsageError() {
 	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"w", "--release-write-path", "b.go", "--stdin"}))
 }
 
 func (s *jobApplyReleaseWritePathSuite) TestWithoutAnIdIsAUsageError() {
 	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"--release-write-path", "b.go"}))
-}
-
-func (s *jobApplyReleaseWritePathSuite) TestAClaimWithACommaIsOnePath() {
-	var paths claimListFlag
-
-	s.Require().NoError(paths.Set("a.go#Run,Stop"))
-	s.Require().NoError(paths.Set("b.go,c.go"))
-
-	s.Equal(claimListFlag{"a.go#Run,Stop", "b.go", "c.go"}, paths)
 }
 
 // ForkProvisionContractSuite pins how a fork judges an adopted checkout of
@@ -3157,55 +1648,82 @@ func (s *ForkProvisionContractSuite) TestAnyBinaryReadsATreeCarryingNoContract()
 	s.False(readsTree(s.T().Context(), "", s.root))
 }
 
-type DescribeJobRecordSuite struct {
+func TestPointAtConsoleNamesTheServerStartOnlyWhenAsked(t *testing.T) {
+	testkit.Isolate(t)
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	pointAtConsole(t.Context(), "some-job", false)
+	assert.Empty(t, buf.String(), "nobody asked for the server")
+
+	pointAtConsole(t.Context(), "some-job", true)
+	assert.Contains(t, buf.String(), "the console is not running")
+}
+
+// pinCheckoutBinary records bin, hashed as it stands, as the binary of a live
+// row's checkout in the job store session reads.
+func pinCheckoutBinary(t *testing.T, session, bin string) {
+	t.Helper()
+	digest, err := job.BinaryDigest(bin)
+	require.NoError(t, err)
+	_, cacheDir := seedJobStore(t, session, types.Job{ID: "pinned", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: session})
+	_, err = store.RecordWorktree(t.Context(), "pinned", types.JobWorktree{Root: filepath.Dir(bin), Binary: bin, BinaryDigest: digest})
+	require.NoError(t, err)
+}
+
+// UnloadedWorkspaceSuite pins what a binary too old for the tree says.
+type UnloadedWorkspaceSuite struct {
 	suite.Suite
-	out describeJobOutput
+	root string
 }
 
-func TestDescribeJobRecordSuite(t *testing.T) { suite.Run(t, new(DescribeJobRecordSuite)) }
-
-func (s *DescribeJobRecordSuite) SetupTest() {
-	s.out = describeJobOutput{Terms: job.Terms{Lease: types.Job{
-		ID:    "wave/a",
-		Paths: types.JobPaths{Write: []string{"a.go"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."},
-		State: types.StateDeclared,
-	}}}
+func TestUnloadedWorkspaceSuite(t *testing.T) {
+	suite.Run(t, new(UnloadedWorkspaceSuite))
 }
 
-func (s *DescribeJobRecordSuite) printed() map[string]json.RawMessage {
-	raw, err := json.Marshal(s.out)
+func (s *UnloadedWorkspaceSuite) SetupTest() {
+	root, err := filepath.EvalSymlinks(s.T().TempDir())
 	s.Require().NoError(err)
-	var members map[string]json.RawMessage
-	s.Require().NoError(json.Unmarshal(raw, &members))
-	return members
+	s.root = root
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte("{}\n"), 0o644))
 }
 
-func (s *DescribeJobRecordSuite) TestTheJobNamesTheAPIVersionApplyReads() {
-	var row map[string]json.RawMessage
-	s.Require().NoError(json.Unmarshal(s.printed()["job"], &row))
-	s.JSONEq(fmt.Sprintf("%q", types.JobAPIVersion), string(row["api_version"]))
+func (s *UnloadedWorkspaceSuite) placeBinary() string {
+	own := filepath.Join(s.root, "magus")
+	s.Require().NoError(os.WriteFile(own, []byte("#!/bin/sh\n"), 0o755))
+	return own
 }
 
-func (s *DescribeJobRecordSuite) TestTheTermsAndGoalsStayBesideTheJob() {
-	members := s.printed()
-	s.Contains(members, "goals")
-	s.Contains(members, "stage")
-	s.Contains(members, "job")
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadNamesTheCheckoutsOwnBinary() {
+	own := s.placeBinary()
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Contains(got, types.WorkspaceNeedsNewerMagus.Error())
+	s.Contains(got, fmt.Sprintf("rerun the command with `%s`", own))
+	s.NotContains(got, "job apply")
 }
 
-func (s *DescribeJobRecordSuite) TestTheWholeRecordRoundTripsThroughApply() {
-	raw, err := json.Marshal(s.out)
-	s.Require().NoError(err)
-	rows, err := job.DecodeDeclarations(bytes.NewReader(raw))
-	s.Require().NoError(err)
-	s.Require().Len(rows, 1)
-	s.Equal("wave/a", rows[0].ID)
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadByThatVeryBinaryNamesNone() {
+	own := s.placeBinary()
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, own)
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
 }
 
-func (s *DescribeJobRecordSuite) TestTheJobMemberAloneRoundTripsThroughApply() {
-	rows, err := job.DecodeDeclarations(bytes.NewReader(s.printed()["job"]))
-	s.Require().NoError(err)
-	s.Require().Len(rows, 1)
-	s.Equal([]string{"a.go"}, rows[0].Paths.Write)
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadWithANonExecutableFileNamesNone() {
+	own := s.placeBinary()
+	s.Require().NoError(os.Chmod(own, 0o644))
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadWithNoBinaryNamesNone() {
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
+}
+
+func (s *UnloadedWorkspaceSuite) TestAnotherFailureNamesNoBinary() {
+	s.placeBinary()
+	s.Equal("a typo", workspaceLoadFailure(errors.New("a typo"), s.root, "/elsewhere/magus"))
 }

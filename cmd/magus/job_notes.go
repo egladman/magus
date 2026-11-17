@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -13,72 +12,11 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types"
 )
-
-// rowNotes is what the workspace says about a job's write paths that the row cannot: the
-// outputs regenerated outside them, the ci targets over them that nothing the job is
-// graded on runs, and a check too long to wait on in the foreground.
-type rowNotes struct {
-	RegeneratedOutside []job.RegeneratedOutput
-	UnrunGates         []job.UnrunGate
-	ForegroundOverrun  *job.ForegroundOverrun
-}
-
-// refuseFork refuses the fork with every problem of v listed in full.
-func refuseFork(v types.JobValidation) error {
-	var list strings.Builder
-	job.RenderValidation(&list, v, false)
-	return listedProblems{list: list.String(), err: v.Error()}
-}
-
-// judgedMerge is row's merge as validation reads it. A job that works in its own checkout
-// shares none, which the standing placeholder says before the worktree exists.
-func judgedMerge(row types.Declaration) func(*types.Job) {
-	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
-	if row.Checkout == "" {
-		return merge
-	}
-	return func(u *types.Job) {
-		merge(u)
-		u.Worktree = &types.JobWorktree{Root: row.Checkout}
-	}
-}
-
-// fixFork is [job.FixFork] over the merge a fork validates, noting each edit it made.
-func fixFork(ctx context.Context, store *job.Store, row types.Declaration, read job.SymbolReader) (types.Declaration, error) {
-	fixed, edits, err := job.FixFork(ctx, store, row, judgedMerge, globalCfg.Jobs, read)
-	for _, e := range edits {
-		slog.InfoContext(ctx, e.String(), attr.Notice("fixed"))
-	}
-	return fixed, err
-}
-
-// fixApply is [job.FixApply], noting each edit it made under its record's id.
-func fixApply(ctx context.Context, store *job.Store, records []types.Declaration, read job.SymbolReader, checkpoint func() string) []types.Declaration {
-	fixed, edits := job.FixApply(ctx, store, records, globalCfg.Jobs, read, checkpoint)
-	for _, rec := range fixed {
-		for _, e := range edits[rec.ID] {
-			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", rec.ID, e.String()), attr.Notice("fixed"))
-		}
-	}
-	return fixed
-}
-
-// listedProblems is a refusal whose text is its problems as [job.RenderValidation] lists
-// them, so the one error record carries the whole list. It unwraps to the problems.
-type listedProblems struct {
-	list string
-	err  error
-}
-
-func (e listedProblems) Error() string { return strings.TrimSuffix(e.list, "\n") }
-func (e listedProblems) Unwrap() error { return e.err }
-func (listedProblems) ExitCode() int   { return exit.Failure }
 
 // forkDryRun reports what a fork would do and writes nothing: the validation as
 // [types.JobValidation] for a structured format, or the rendered problems and record. It
@@ -122,21 +60,12 @@ func forkOverrun(ctx context.Context, root string, row types.Job) (*job.Foregrou
 	if err != nil {
 		return nil, err
 	}
-	return checkOverrun(m, row, hostForegroundMax(ctx, m)), nil
+	return job.CheckOverrun(m.Root(), row, hostForegroundMax(ctx, m)), nil
 }
 
 // collectNotes is row's notes over the already loaded workspace m.
-func collectNotes(ctx context.Context, m *magus.Magus, row types.Job) rowNotes {
-	return rowNotesWith(ctx, m, row, hostForegroundMax(ctx, m))
-}
-
-func rowNotesWith(ctx context.Context, m *magus.Magus, row types.Job, foregroundMax func() (time.Duration, bool)) rowNotes {
-	regenerated := job.RegeneratedOutside(m.Root(), row, m.All(), job.VCSIgnored(ctx, m.Root()))
-	return rowNotes{
-		RegeneratedOutside: regenerated,
-		UnrunGates:         job.UnrunGates(m.Root(), row, m.All(), regenerated),
-		ForegroundOverrun:  checkOverrun(m, row, foregroundMax),
-	}
+func collectNotes(ctx context.Context, m *magus.Magus, row types.Job) job.RowNotes {
+	return job.RowNotesWith(ctx, m.Root(), m.All(), row, hostForegroundMax(ctx, m))
 }
 
 // hostForegroundMax is the shortest foreground maximum among the harnesses m wires. The
@@ -158,43 +87,4 @@ func hostForegroundMax(ctx context.Context, m *magus.Magus) func() (time.Duratio
 		}
 		return agent.ShortestForegroundMax(loaded)
 	})
-}
-
-// checkOverrun is row's check when its last real run here took longer than a wired host
-// lets a foreground call wait. The session store is read first, and the harnesses are
-// consulted only for a check that has a recorded run.
-func checkOverrun(m *magus.Magus, row types.Job, foregroundMax func() (time.Duration, bool)) *job.ForegroundOverrun {
-	dir, err := sessions.Dir(m.Root())
-	if err != nil {
-		return nil
-	}
-	lastRun := func(project, target string) (time.Duration, bool) {
-		return sessions.LastRunDuration(dir, project, target)
-	}
-	overrun, ok := job.OverrunsForeground(row, lastRun, foregroundMax)
-	if !ok {
-		return nil
-	}
-	return &overrun
-}
-
-// forkOutput is `job fork`'s structured output: the row as stored, plus its notes. The
-// embedded row flattens, so the wire shape is the job's own with deletion_candidates,
-// referenced_outside, referenced_outside_gap, foreground_overrun and claim_notes added.
-type forkOutput struct {
-	types.Job `yaml:",inline"`
-	// DeletionCandidates are the unreferenced symbols the write paths cover: findings to
-	// finish or delete, never goals.
-	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
-	// ReferencedOutside are the files outside the write paths that use what they define.
-	ReferencedOutside []job.ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
-	// ReferencedOutsideGap says why ReferencedOutside is unknown; empty when a symbol index
-	// answered.
-	ReferencedOutsideGap string `json:"referenced_outside_gap,omitempty" yaml:"referenced_outside_gap,omitempty"`
-	// ForegroundOverrun is the check, when its last real run took longer than a wired host
-	// lets a foreground call wait.
-	ForegroundOverrun *job.ForegroundOverrun `json:"foreground_overrun,omitempty" yaml:"foreground_overrun,omitempty"`
-	// ClaimNotes are job.ForkNotes for the row: a claim naming no declaration yet, and the
-	// claim pair that would split a file a job in this checkout also writes.
-	ClaimNotes []string `json:"claim_notes,omitempty" yaml:"claim_notes,omitempty"`
 }

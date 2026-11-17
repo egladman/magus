@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,31 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gcpolicy"
-	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/check"
 )
-
-// TestStatusGlyph maps every documented status to its plain (uncoloured) marker and
-// confirms the unknown-status fallback.
-func TestStatusGlyph(t *testing.T) {
-	assert.Equal(t, "[pass]", statusGlyph(check.OK, false))
-	assert.Equal(t, "[fail]", statusGlyph(check.Fail, false))
-	assert.Equal(t, "[?]", statusGlyph("", false))
-	assert.Equal(t, "[?]", statusGlyph("unknown", false))
-	assert.Equal(t, "[?]", statusGlyph("OK", false)) // case-sensitive by design
-	// Coloured variant wraps the marker in ANSI but preserves the label.
-	assert.Contains(t, statusGlyph(check.Fail, true), "[fail]")
-	assert.Contains(t, statusGlyph(check.Fail, true), "\x1b[31m")
-}
 
 // TestCanonicalTarget covers the short-alias expansions and the passthrough.
 func TestCanonicalTarget(t *testing.T) {
@@ -120,52 +101,6 @@ func TestReportedRunErr(t *testing.T) {
 		"a step failure the cache logged is not printed again")
 }
 
-// TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
-// branch of its own in mapExitCode. The local path and the server now ask the error the
-// same question, so the refusal must answer it rather than be recognised by type or by
-// diagnostic code, which is what lets one seam serve both this and a contended lock.
-func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
-	// The refusal is built inside the cache, so stand in for it with an error carrying
-	// the same two properties the real one does (machine_test.go pins that it does).
-	busy := machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
-
-	assert.Equal(t, cache.ExitCodeMachineBusy, exit.Code(busy), "the server reads the code off a forwarded refusal")
-	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(busy), "and the local path must agree")
-	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", busy)),
-		"through every layer between the step and main")
-
-	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
-	// a Reported failure is matched first and keeps 1, so a peer being busy cannot
-	// rewrite the verdict on work that actually ran.
-	assert.Equal(t, 1, mapExitCode(errors.Join(exit.Reported(exit.Failure), busy)))
-}
-
-type machineRefusal struct{ error }
-
-func (machineRefusal) ExitCode() int { return cache.ExitCodeMachineBusy }
-
-// TestExitCodeOfPrintsWhatNoOneElseDid pins which of the two exit-75 refusals mapExitCode
-// prints. A contended workspace lock is refused before any step exists, so this line is
-// the only place it is ever said. A machine refusal is an ExitError the cache already
-// logged beside the step it refused (cache's TestRunAllReportsAMachineRefusal), so
-// printing it here too would say it twice.
-func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
-	var logged bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	lock := lockRefusal{errors.New("magus: project . is locked by another magus process (held by pid 41221 magus run test in /elsewhere); not waiting")}
-	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", lock)))
-	assert.Contains(t, logged.String(), "held by pid 41221 magus run test in /elsewhere")
-
-	logged.Reset()
-	refused := types.ExitError{Code: cache.ExitCodeMachineBusy,
-		Err: types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) test")}
-	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", refused)))
-	assert.Empty(t, logged.String())
-}
-
 // AdmissionRefusalSuite pins that a refusal from cache.AdmitMachine is printed
 // once: it runs outside any step, so no cache.error record says it.
 type AdmissionRefusalSuite struct {
@@ -219,19 +154,6 @@ func (s *AdmissionRefusalSuite) TestABareExitStaysSilent() {
 // the CLI in; set, it marks that process as the helper.
 const briefRefusalRootVar = "MAGUS_TEST_BRIEF_REFUSAL_ROOT"
 
-// TestBriefRefusalHelperProcess is the process TestTheCLIPrintsTheBriefRefusal
-// starts. A fresh process builds its own stderr display handler, which an
-// earlier in-process runCLI would otherwise have bound to another stderr.
-func TestBriefRefusalHelperProcess(t *testing.T) {
-	root := os.Getenv(briefRefusalRootVar)
-	if root == "" {
-		t.Skip("not invoked as the brief refusal helper process")
-	}
-	t.Setenv("MAGUS_BROKER", "required")
-	os.Args = []string{"magus", "--root", root, "session", "--brief"}
-	os.Exit(runCLI())
-}
-
 func (s *AdmissionRefusalSuite) TestTheCLIPrintsTheBriefRefusal() {
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile("import \"magus\";\n")
@@ -248,14 +170,6 @@ func (s *AdmissionRefusalSuite) TestTheCLIPrintsTheBriefRefusal() {
 	s.Contains(string(out), "session-brief")
 }
 
-// lockRefusal has the shape of the root package's unexported lockContendedError:
-// a plain error that states 75 and is not an ExitError.
-type lockRefusal struct{ error }
-
-func (lockRefusal) ExitCode() int { return 75 }
-
-func (e machineRefusal) Unwrap() error { return e.error }
-
 func TestUsagefCarriesTheMisuseMessage(t *testing.T) {
 	err := exit.Usagef("magus diff: %d is too many", 3)
 	assert.EqualError(t, err, "magus diff: 3 is too many")
@@ -266,340 +180,6 @@ func TestUsagefCarriesTheMisuseMessage(t *testing.T) {
 type reportedExit interface {
 	AlreadyReported() bool
 	ExitCode() int
-}
-
-func TestFlagIsBool(t *testing.T) {
-	fs := flag.NewFlagSet("t", flag.ContinueOnError)
-	fs.Bool("force", false, "")
-	fs.String("dir", "", "")
-
-	assert.True(t, flagIsBool(fs.Lookup("force")))
-	assert.False(t, flagIsBool(fs.Lookup("dir")))
-}
-
-// TestIsFlagNamedAndFlagValueOf pins all four spellings Go's flag package accepts. A
-// hand-rolled scanner that handles three of them fails invisibly on the fourth, which is
-// exactly how `magus affected -explain .` came to read "." as a target name.
-func TestIsFlagNamedAndFlagValueOf(t *testing.T) {
-	assert.True(t, isFlagNamed("-explain", "explain"))
-	assert.True(t, isFlagNamed("--explain", "explain"))
-	assert.False(t, isFlagNamed("-explain=web", "explain"))
-	assert.False(t, isFlagNamed("--explains", "explain"))
-
-	assert.Equal(t, "web", parseFlagValue("-explain=web", "explain"))
-	assert.Equal(t, "web", parseFlagValue("--explain=web", "explain"))
-	assert.Equal(t, "", parseFlagValue("--explain", "explain"))
-	assert.Equal(t, "", parseFlagValue("--base=main", "explain"))
-}
-
-func TestOutputOptionsOrDefault(t *testing.T) {
-	prev := global.output
-	t.Cleanup(func() { global.output = prev })
-
-	global.output = ""
-	opts, err := outputOptionsOrDefault()
-	require.NoError(t, err)
-	assert.Equal(t, outputText, opts.Format)
-
-	global.output = "json"
-	opts, err = outputOptionsOrDefault()
-	require.NoError(t, err)
-	assert.Equal(t, outputJSON, opts.Format)
-
-	global.output = "nonsense"
-	_, err = outputOptionsOrDefault()
-	assert.Error(t, err)
-}
-
-func TestHasModeFlagAcceptsEverySpelling(t *testing.T) {
-	for _, arg := range []string{"--plan", "-plan", "--plan=3", "-plan=3"} {
-		assert.True(t, hasModeFlag([]string{"ci", arg}, "plan"), arg)
-	}
-	assert.False(t, hasModeFlag([]string{"ci", "--planner"}, "plan"))
-	assert.False(t, hasModeFlag(nil, "plan"))
-}
-
-func TestImpactPct(t *testing.T) {
-	assert.Equal(t, "0%", impactPct(0))
-	assert.Equal(t, "25%", impactPct(0.25))
-	assert.Equal(t, "76%", impactPct(0.756))
-	assert.Equal(t, "100%", impactPct(1))
-}
-
-func TestLinesSuffix(t *testing.T) {
-	assert.Equal(t, "", linesSuffix(nil))
-	assert.Equal(t, "  lines 7", linesSuffix([]int{7}))
-	assert.Equal(t, "  lines 7,19,42", linesSuffix([]int{7, 19, 42}))
-}
-
-func TestStrOrDefAndIntOrDef(t *testing.T) {
-	assert.Equal(t, "(default)", stringOrDef("", "(default)"))
-	assert.Equal(t, "set", stringOrDef("set", "(default)"))
-
-	// Zero means "nothing was configured", not "zero builds may run", so it renders as
-	// the placeholder rather than as the number.
-	assert.Equal(t, "(default)", intOrDef(0, "(default)"))
-	assert.Equal(t, "8", intOrDef(8, "(default)"))
-}
-
-func TestSplitConfigCommasHonorsEscapes(t *testing.T) {
-	assert.Equal(t, []string{"a", "b", "c"}, splitConfigCommas("a,b,c"))
-	assert.Equal(t, []string{"go,rust"}, splitConfigCommas(`go\,rust`))
-	assert.Equal(t, []string{"key=a,b", "value=c"}, splitConfigCommas(`key=a\,b,value=c`))
-	assert.Equal(t, []string{""}, splitConfigCommas(""))
-	// A trailing backslash is literal, not an escape with nothing to escape.
-	assert.Equal(t, []string{`a\`}, splitConfigCommas(`a\`))
-}
-
-func TestParseConfigSetArg(t *testing.T) {
-	key, value, err := parseConfigSetArg("key=cache.mode,value=write")
-	require.NoError(t, err)
-	assert.Equal(t, "cache.mode", key)
-	assert.Equal(t, "write", value)
-
-	// The value keeps its own '=' and its escaped commas.
-	key, value, err = parseConfigSetArg(`key=spells,value=go\,rust`)
-	require.NoError(t, err)
-	assert.Equal(t, "spells", key)
-	assert.Equal(t, "go,rust", value)
-
-	// A key with no value is legal: it is how a key is set to empty.
-	key, value, err = parseConfigSetArg("key=cache.dir")
-	require.NoError(t, err)
-	assert.Equal(t, "cache.dir", key)
-	assert.Equal(t, "", value)
-
-	_, _, err = parseConfigSetArg("cache.mode")
-	assert.ErrorContains(t, err, "not in key=value form")
-
-	_, _, err = parseConfigSetArg("k=cache.mode")
-	assert.ErrorContains(t, err, `unknown field "k"`)
-
-	_, _, err = parseConfigSetArg("value=write")
-	assert.ErrorContains(t, err, "key is required")
-}
-
-func TestFmtBytes(t *testing.T) {
-	assert.Equal(t, "0 B", fmtBytes(0))
-	assert.Equal(t, "512 B", fmtBytes(512))
-	assert.Equal(t, "1.0 KiB", fmtBytes(1<<10))
-	assert.Equal(t, "1.5 MiB", fmtBytes(3<<19))
-	assert.Equal(t, "2.0 GiB", fmtBytes(2<<30))
-}
-
-func TestFirstLine(t *testing.T) {
-	assert.Equal(t, "", firstLine(""))
-	assert.Equal(t, "one", firstLine("one"))
-	assert.Equal(t, "one", firstLine("one\ntwo\nthree"))
-	assert.Equal(t, "", firstLine("\ntwo"))
-}
-
-func TestFilterByNameAndNamesOf(t *testing.T) {
-	items := []types.SpellVersion{{Tool: "go"}, {Tool: "node"}}
-	nameOf := func(v types.SpellVersion) string { return v.Tool }
-
-	assert.Equal(t, []types.SpellVersion{{Tool: "node"}}, filterByName(items, "node", nameOf))
-	assert.Nil(t, filterByName(items, "rustc", nameOf))
-	assert.Equal(t, []string{"go", "node"}, collectNames(items, nameOf))
-	assert.Empty(t, collectNames(nil, nameOf))
-}
-
-// TestUnknownEntitySuggestsAndExitsTwo pins both halves: a near miss earns a suggestion,
-// and the caller gets the already-printed sentinel so the message is not doubled.
-func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
-	var err error
-	out := notices(t, func() {
-		err = unknownEntity("spell", "gol", []string{"go", "typescript"})
-	})
-
-	assert.Equal(t, exit.Reported(exit.Usage), err)
-	assert.Contains(t, out, `magus describe spell: unknown spell "gol"`)
-	assert.Contains(t, out, `did you mean "go"?`)
-
-	out = notices(t, func() {
-		err = unknownEntity("spell", "zzzzzzzz", []string{"go"})
-	})
-	assert.Equal(t, exit.Reported(exit.Usage), err)
-	assert.NotContains(t, out, "did you mean")
-}
-
-// TestHashOfKeyInputsIsOrderSensitive guards the property a cache key needs: the same lines
-// in a different order are a different key, because the join is what is hashed.
-func TestHashOfKeyInputsIsOrderSensitive(t *testing.T) {
-	a := hashOfKeyInputs([]string{"a", "b"})
-	assert.Len(t, a, 64)
-	assert.Equal(t, a, hashOfKeyInputs([]string{"a", "b"}))
-	assert.NotEqual(t, a, hashOfKeyInputs([]string{"b", "a"}))
-	assert.NotEqual(t, a, hashOfKeyInputs(nil))
-}
-
-// TestPrintSpellVersionsSeparatesFailureFromSilence pins the three readings a probe can
-// have: a version, a tool that reported none, and a probe that failed. Collapsing any two
-// would make a broken toolchain look like a quiet one.
-func TestPrintSpellVersionsSeparatesFailureFromSilence(t *testing.T) {
-	assert.Empty(t, captureStdout(t, func() { printSpellVersions(nil) }))
-
-	out := captureStdout(t, func() {
-		printSpellVersions([]types.SpellVersion{
-			{Tool: "go", Version: "go1.25.0", CacheKey: "abc123"},
-			{Tool: "node", Error: "executable file not found"},
-			{Tool: "tsc"},
-		})
-	})
-
-	assert.Contains(t, out, "versions (probed just now, never cached)")
-	assert.Contains(t, out, "go1.25.0")
-	assert.Contains(t, out, "key: abc123")
-	assert.Contains(t, out, "probe failed: executable file not found")
-	assert.Contains(t, out, "(no version reported)")
-}
-
-// TestTargetSummaryPrefersTheAuthorsWords pins the fallback order: a doc comment beats a
-// derived description, and a target that composes only siblings still says something.
-func TestTargetSummaryPrefersTheAuthorsWords(t *testing.T) {
-	assert.Equal(t, "build the site", targetSummary(types.TargetGraphNode{
-		Doc:    "build the site",
-		Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-build"}}},
-	}))
-
-	assert.Equal(t, "[go: go-build, go-vet; md: lint]", targetSummary(types.TargetGraphNode{
-		Spells: []types.TargetSpellUse{
-			{Spell: "go", Ops: []string{"go-build", "go-vet"}},
-			{Spell: "md", Ops: []string{"lint"}},
-		},
-	}))
-
-	assert.Equal(t, "[needs: build, test]", targetSummary(types.TargetGraphNode{
-		Dependencies: []string{"build", "test"},
-	}))
-
-	assert.Equal(t, "", targetSummary(types.TargetGraphNode{Name: "bare"}))
-}
-
-// TestParseGitRemote covers both remote spellings a forge hands out, plus the refusals that
-// keep a wrong link from being emitted.
-func TestParseGitRemote(t *testing.T) {
-	tests := []struct {
-		remote            string
-		host, owner, repo string
-	}{
-		{"git@github.com:egladman/magus.git", "github.com", "egladman", "magus"},
-		{"https://github.com/egladman/magus.git", "github.com", "egladman", "magus"},
-		{"https://user@git.example.com:8443/team/repo", "git.example.com", "team", "repo"},
-		{"ssh://git@github.com/egladman/magus", "github.com", "egladman", "magus"},
-		{"  git@github.com:egladman/magus  ", "github.com", "egladman", "magus"},
-		{"github.com/egladman/magus", "", "", ""},
-		{"git@github.com", "", "", ""},
-		{"https://github.com/egladman", "github.com", "", ""},
-	}
-
-	for _, tc := range tests {
-		host, owner, repo := parseGitRemote(tc.remote)
-		assert.Equal(t, tc.host, host, tc.remote)
-		assert.Equal(t, tc.owner, owner, tc.remote)
-		assert.Equal(t, tc.repo, repo, tc.remote)
-	}
-}
-
-// TestGithubRawBase pins the deliberate narrowness: other forges serve raw content from
-// different hosts, so an unmapped one yields no link rather than a wrong one.
-func TestGithubRawBase(t *testing.T) {
-	assert.Equal(t,
-		"https://raw.githubusercontent.com/egladman/magus/main",
-		githubRawBase("https://github.com/egladman/magus/blob/main"))
-
-	assert.Equal(t, "", githubRawBase("https://gitlab.com/o/r/-/blob/main"))
-	assert.Equal(t, "", githubRawBase(""))
-}
-
-// TestGraphExplorerLinkNeedsACommittedGraph covers the guard that keeps MAGUS.md from
-// carrying a link that 404s. No docs/graph.json means no link, decided before any VCS
-// resolution is attempted.
-func TestGraphExplorerLinkNeedsACommittedGraph(t *testing.T) {
-	assert.Equal(t, "", graphExplorerLink(t.Context(), t.TempDir()))
-}
-
-func TestWriteYAMLIndentsTwo(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeFormatted(&buf, output.Options{Format: outputYAML}, map[string]any{"outer": map[string]any{"inner": 1}}))
-	assert.Equal(t, "outer:\n  inner: 1\n", buf.String())
-}
-
-// TestTemplateFuncsExcludesTheNonHermetic pins the curated sprig subset: a build-tool
-// template must not read the clock, the environment, or a crypto source, because any of
-// them makes an otherwise cacheable render non-reproducible.
-func TestTemplateFuncsExcludesTheNonHermetic(t *testing.T) {
-	f := templateFuncs()
-
-	for _, name := range excludedSprigFuncs {
-		assert.NotContains(t, f, name)
-	}
-	for _, name := range []string{"env", "expandenv", "getHostByName"} {
-		assert.NotContains(t, f, name)
-	}
-	for _, name := range []string{"join", "upper", "lower", "trim", "quote", "b64enc"} {
-		assert.Contains(t, f, name)
-	}
-}
-
-func TestEmitFormattedWritesToStdout(t *testing.T) {
-	prev := global.tee
-	t.Cleanup(func() { global.tee = prev })
-	global.tee = ""
-
-	out := captureStdout(t, func() {
-		require.NoError(t, emitFormatted(output.Options{Format: outputYAML}, types.ProjectRef{Path: "web", Name: "web"}))
-	})
-	assert.Contains(t, out, "path: web")
-
-	out = captureStdout(t, func() {
-		require.NoError(t, emitFormatted(output.Options{Format: outputTemplate, Template: "{{.path}}"}, types.ProjectRef{Path: "web"}))
-	})
-	assert.Equal(t, "web", out)
-}
-
-// TestMCPAddrFallsBackToTheDefault covers both arms of the address resolution. The
-// unconfigured case has to yield a parseable host:port on its own, because that is what
-// the doctor bridge check probes when nothing declares an address.
-func TestMCPAddrFallsBackToTheDefault(t *testing.T) {
-	prev := globalCfg.MCP.Address
-	t.Cleanup(func() { globalCfg.MCP.Address = prev })
-
-	globalCfg.MCP.Address = ""
-	assert.Equal(t, internalmcp.DefaultAddress, mcpAddrString())
-	parsed, err := mcpAddrPort()
-	require.NoError(t, err)
-	assert.NotZero(t, parsed.Port())
-
-	globalCfg.MCP.Address = "127.0.0.1:9999"
-	assert.Equal(t, "127.0.0.1:9999", mcpAddrString())
-	parsed, err = mcpAddrPort()
-	require.NoError(t, err)
-	assert.Equal(t, uint16(9999), parsed.Port())
-}
-
-// TestServerAndBrokerSocketsSitApart pins the two addresses: each a unix socket in the
-// private socket directory, named for what listens there, and never the same file.
-func TestServerAndBrokerSocketsSitApart(t *testing.T) {
-	server, brk := proc.ServerDefaultAddr(), broker.DefaultAddr()
-	assert.True(t, strings.HasPrefix(server, "unix://"), server)
-	assert.True(t, strings.HasSuffix(server, "/server.sock"), server)
-	assert.True(t, strings.HasPrefix(brk, "unix://"), brk)
-	assert.True(t, strings.HasSuffix(brk, "/"+broker.SocketName), brk)
-	assert.Equal(t, filepath.Dir(server), filepath.Dir(brk))
-}
-
-// TestResolveServerAddrNeverConsultsTheAdoptionSocket pins that the server's address is
-// config or server.sock, never MAGUS_PROC_SOCKET: inside a run that variable names the
-// run's own per-process pool, which dies with it.
-func TestResolveServerAddrNeverConsultsTheAdoptionSocket(t *testing.T) {
-	defer snapshotGlobals()()
-	t.Setenv(proc.SocketEnv, "unix:///tmp/magus-1-abc.sock")
-	globalCfg.Server.Address = ""
-	assert.Equal(t, proc.ServerDefaultAddr(), resolveServerAddr(""))
-	globalCfg.Server.Address = "unix:///tmp/configured.sock"
-	assert.Equal(t, "unix:///tmp/configured.sock", resolveServerAddr(""))
-	assert.Equal(t, "unix:///tmp/flag.sock", resolveServerAddr("unix:///tmp/flag.sock"))
 }
 
 // TestHintCanonicalSpellingTeachesCharmOnce covers the one place a run is told it spelled

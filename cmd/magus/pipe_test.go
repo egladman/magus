@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"slices"
 	"testing"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/pipe"
-	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/types"
 )
 
 func TestTakesProjectLocks(t *testing.T) {
@@ -82,46 +79,6 @@ func TestPipeRecordStage(t *testing.T) {
 	// -o decides only what a stage writes; it still reads the records written to it.
 	if !tradesRecords([]string{"run", "lint", "-o", "json"}) {
 		t.Errorf("tradesRecords(run lint -o json) = false")
-	}
-}
-
-// A run naming no projects takes every project its upstream's run.scope records named,
-// once each and in the order they were first named.
-func TestScopeProjects(t *testing.T) {
-	var lines []report.Line
-	for _, raw := range []string{
-		`{"schema":5,"type":"run.scope","label":"2 projects","projects":["libs/x","."]}`,
-		`{"schema":5,"type":"run.target.result","project":"libs/y","target":"build","status":"ok","cache_hit":false}`,
-		`{"schema":5,"type":"run.scope","label":"libs/x","projects":["libs/x","libs/z"]}`,
-	} {
-		line, err := report.ParseLine([]byte(raw))
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines = append(lines, line)
-	}
-	got, err := scopeProjects(lines)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"libs/x", ".", "libs/z"}; !slices.Equal(got, want) {
-		t.Fatalf("scopeProjects = %q, want %q", got, want)
-	}
-	if got := scopePaths([]types.Target{{Path: ""}, {Path: "a"}, {Path: "a"}}); !slices.Equal(got, []string{".", "a"}) {
-		t.Fatalf("scopePaths = %q", got)
-	}
-}
-
-// A stage with no pipe beside it proves nothing and trades no records.
-func TestPipeStageWithoutAPipe(t *testing.T) {
-	var s *pipeStage
-	if s.writesRecords() {
-		t.Fatalf("a nil stage writes records")
-	}
-	s.linger()
-	in, pid := pipeRecordsIn(context.Background())
-	if in != nil || pid != 0 {
-		t.Fatalf("a process that proved nothing reads records")
 	}
 }
 

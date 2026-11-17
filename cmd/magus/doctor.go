@@ -4,37 +4,26 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/libs/termkit"
-	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/check"
 )
 
-func doctorCommand(ctx context.Context, root string, rc runConfig, args []string) error {
-	var probe, fix, list bool
+func doctorCommand(ctx context.Context, root string, args []string) error {
+	var probe, list bool
 	_, err := commandParse("doctor", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&probe, "probe", false,
 			"Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
-		fs.BoolVar(&fix, "fix", false,
-			"Run the remedy each finding names, where one exists (see --dry-run to list them first)")
 		fs.BoolVar(&list, "list", false,
 			"Print every check magus would run - name, subject, and MGS code - without running any of them")
 		command.NegatedBoolVar(fs, &probe, "probe")
-		command.NegatedBoolVar(fs, &fix, "fix")
 		command.NegatedBoolVar(fs, &list, "list")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
@@ -75,7 +64,7 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 
 	// Query the server for the server-related checks. Non-fatal on failure.
 	dopts := []doctor.Option{
-		doctor.WithConfig(globalCfg), doctor.WithServerInfo(buildServerInfo(ctx)), doctor.WithSkillCatalog(agentSkills),
+		doctor.WithConfig(globalCfg), doctor.WithServerInfo(doctor.BuildServerInfo(ctx, serverSource())), doctor.WithSkillCatalog(agentSkills),
 		doctor.WithGraphNodes(func(ctx context.Context) ([]types.KnowledgeNode, error) {
 			// Domain-only: the graph `graph export` renders into the docs site.
 			g, err := loadKnowledgeGraph(ctx, root, false, false, false)
@@ -101,33 +90,12 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 		return m.MachineClaims(ctx, targets, nil, nil), nil
 	}, mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile), cache.MachineCeiling())
 	ctx = doctor.WithAdmissions(ctx, func(context.Context) ([]types.MachineAdmission, error) {
-		return file.Log[types.MachineAdmission]{Path: admissionLogPath()}.Load()
+		return file.Log[types.MachineAdmission]{Path: server.AdmissionLogPath()}.Load()
 	})
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 
 	if err := emitDoctor(opts, out); err != nil {
 		return err
-	}
-	if fix {
-		if err := applyDoctorFixes(ctx, root, rc, out); err != nil {
-			return err
-		}
-		// A dry run applied nothing, so there is nothing new to judge: it lists the
-		// remedies and exits 0 even where the workspace is unhealthy, which is what
-		// doctor_agent_skills.txtar pins against a deliberately imperfect fixture.
-		if globalCfg.DryRun {
-			return nil
-		}
-		// The report above described the workspace BEFORE the remedies ran, so its
-		// summary is no longer what is true. Re-run the checks for the count to gate on,
-		// rather than returning nil, which reported a still-broken workspace as healthy
-		// to anything scripting `doctor --fix`. ws is reused: every remedy writes a file
-		// the checks re-read here, and none changes the shape magus.Inspect models.
-		out = doctor.Run(ctx, root, ws, wsErr, dopts...)
-		if out.Summary.Fail > 0 {
-			return fmt.Errorf("magus doctor: %d check(s) still failing after --fix", out.Summary.Fail)
-		}
-		return nil
 	}
 	if out.Summary.Fail > 0 {
 		return fmt.Errorf("magus doctor: %d check(s) failed", out.Summary.Fail)
@@ -137,37 +105,14 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 
 // emitDoctorChecks renders `magus doctor --list`: what magus would check, without
 // checking it.
-//
-// The name is printed alone on its line so the identifier is what a reader copies, and
-// the subject sits underneath rather than beside it: a name column wide enough for
-// "stale-spell-shadow-acknowledgments" pushes every subject past a terminal's width.
 func emitDoctorChecks(opts output.Options, checks []doctor.CheckInfo) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, checks)
 	case outputName:
-		names := make([]string, 0, len(checks))
-		for _, c := range checks {
-			names = append(names, c.Name)
-		}
-		return emitNames(os.Stdout, names)
+		return emitNames(os.Stdout, doctor.CheckNames(checks))
 	}
-
-	fmt.Printf("%d checks, in the order `magus doctor` reports them:\n\n", len(checks))
-	for _, c := range checks {
-		fmt.Print("  " + c.Name)
-		var notes []string
-		if c.Code != "" {
-			notes = append(notes, c.Code)
-		}
-		if !c.NeedsWorkspace {
-			notes = append(notes, "reported even when the workspace fails to load")
-		}
-		if len(notes) > 0 {
-			fmt.Printf("  (%s)", strings.Join(notes, "; "))
-		}
-		fmt.Printf("\n      %s [%s]\n", c.Doc, c.Evidence)
-	}
+	doctor.RenderChecks(os.Stdout, checks)
 	return nil
 }
 
@@ -176,196 +121,21 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
-		var names []string
-		for _, c := range out.Checks {
-			if c.Status != check.OK {
-				names = append(names, c.Name)
-			}
-		}
-		return emitNames(os.Stdout, names)
+		return emitNames(os.Stdout, doctor.UnhealthyNames(out))
 	}
-
-	// Doctor's report stays on stdout (it is the command's primary output, meant to be
-	// piped/grepped) but shares the cache's colored [pass]/[fail] status glyphs so the
-	// whole tool reads consistently. Color only when stdout is a TTY and NO_COLOR is unset.
-	color := termkit.WantsColor(os.Stdout, termkit.SystemProbe)
-
-	if out.Workspace != "" {
-		fmt.Printf("workspace: %s\n\n", out.Workspace)
-	}
-	for _, c := range out.Checks {
-		fmt.Printf("%s %s", checkGlyph(c, color), c.Name)
-		if c.Message != "" {
-			fmt.Printf(": %s", c.Message)
-		}
-		// Only the evidence that qualifies the verdict is printed. Stamping "measured"
-		// on the forty checks that measured something is noise, and noise is what
-		// people learn to skip; "inferred" is the one that says read this twice.
-		if c.Evidence == check.EvidenceInferred {
-			fmt.Printf(" [%s]", c.Evidence)
-		}
-		fmt.Println()
-		for _, d := range c.Details {
-			fmt.Printf("    %s\n", d)
-		}
-	}
-	fmt.Printf("\nsummary: %d ok, %d fail", out.Summary.OK, out.Summary.Fail)
-	if out.Summary.Advice > 0 {
-		// Named only when there is some. A count of things that did not fail reads as
-		// a scold when it is always there.
-		fmt.Printf(", %d advice", out.Summary.Advice)
-	}
-	if out.Summary.Unknown > 0 {
-		fmt.Printf(", %d unknown", out.Summary.Unknown)
-	}
-	fmt.Println()
+	doctor.RenderReport(os.Stdout, out)
 	return nil
 }
 
-// checkGlyph renders a finding's level, except that a check which did not run gets its
-// own glyph rather than the pass it nominally returned.
-//
-// A skipped check carries check.OK, which is true and misleading.
-// Nothing was looked at. Rendering it as [pass] is how a green report came
-// to mean "either fine or unexamined, and you cannot tell which from here".
-func checkGlyph(c check.Check, color bool) string {
-	if c.Evidence == check.EvidenceUnknown {
-		if color {
-			return "\x1b[36m[unknown]\x1b[0m"
-		}
-		return "[unknown]"
+// serverSource gathers what the server checks need from this process: the version, the
+// resolved server and MCP addresses, and which services the config enables.
+func serverSource() doctor.ServerSource {
+	return doctor.ServerSource{
+		ClientVersion: version,
+		Addr:          resolveServerAddr(""),
+		MCPAddr:       mcpAddrString(),
+		BridgeEnabled: globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled,
+		MCPEnabled:    globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled,
+		ServerEnabled: globalCfg.Server.Enabled,
 	}
-	return statusGlyph(c.Status, color)
-}
-
-// statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,
-// colored (green/red) when color is true. Mirrors the cache handler's glyphs so a
-// failed check and a failed build look identical across the tool.
-func statusGlyph(status check.Status, color bool) string {
-	label, code := "[?]", "0"
-	switch status {
-	case check.OK:
-		label, code = "[pass]", "32" // green
-	case check.Fail:
-		label, code = "[fail]", "31" // red
-	case check.Advice:
-		// Yellow, not red: it did not fail, and coloring it like a failure would
-		// undo the whole point of the level.
-		label, code = "[advice]", "33"
-	}
-	if color {
-		return fmt.Sprintf("\x1b[%sm%s\x1b[0m", code, label)
-	}
-	return label
-}
-
-// serverSocketIn is the file name the server listens on inside sockDir: the configured
-// server.address when it names a socket there, server.sock otherwise. A configured
-// address elsewhere leaves the default, which is the one a second server would take.
-func serverSocketIn(sockDir string) string {
-	if path := strings.TrimPrefix(resolveServerAddr(""), "unix://"); filepath.Dir(path) == sockDir {
-		return filepath.Base(path)
-	}
-	return proc.ServerSocketName()
-}
-
-// buildServerInfo queries the running server (if any) and returns a
-// ServerInfo for the doctor checks. If no server is reachable, returns an
-// empty ServerInfo so checks render a sensible "no server" message.
-func buildServerInfo(ctx context.Context) doctor.ServerInfo {
-	sockDir := proc.SockDir()
-	di := doctor.ServerInfo{
-		SockDir: sockDir, ClientVersion: version,
-		ServerSocket: serverSocketIn(sockDir), BrokerSocket: broker.SocketName,
-	}
-
-	// Populate bridge fields from resolved config. BridgeEnabled is true unless
-	// explicitly set to false (mirrors how MCP.Enabled works).
-	di.MCPAddr = mcpAddrString()
-	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
-	di.MCPEnabled = globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
-
-	// server.enabled=false means this invocation is self-contained, so there is nothing
-	// to ask. Without this check the probe still dials whatever server the host happens
-	// to be running: doctor then reports on a process the caller opted out of, and the
-	// testscript suite (which sets MAGUS_SERVER_ENABLED=false precisely to stay
-	// hermetic) reaches the real socket and fails wherever a server is up.
-	if !globalCfg.Server.Enabled {
-		return di
-	}
-
-	addr := resolveServerAddr("")
-	di.SockAddr = addr
-
-	reply, err := proc.QueryStatus(ctx, addr)
-	if err != nil {
-		return di
-	}
-	di.Reachable = true
-	// Only the server reports itself, and only it starts the MCP HTTP server, so only
-	// it makes a bridge something to expect.
-	di.Persistent = reply.Server != nil
-	di.ParentPID = reply.ParentPID
-	di.ServerVersion = reply.Version
-	di.Capacity = reply.Capacity
-	di.Running = reply.Running
-	di.Queued = reply.Queued
-	for _, w := range reply.Workspaces {
-		if !w.Loaded() {
-			continue
-		}
-		di.Workspaces = append(di.Workspaces, doctor.LoadedWorkspace{
-			Root:       w.Root,
-			LoadedAt:   w.LoadedAt,
-			LastAccess: w.LastAccess,
-		})
-	}
-	return di
-}
-
-// applyDoctorFixes runs the remedy each non-OK finding names.
-//
-// It dispatches EXISTING magus subcommands, never a private repair routine, and that is
-// the safety property rather than an implementation detail: --fix can only do things you
-// could have typed yourself and can inspect afterwards. A finding whose remedy needs
-// judgment (narrow this over-wide glob, or accept that the key is deliberately volatile?)
-// declares no Fix and stays a report, which is why this can be blunt about running what
-// it is given.
-//
-// Nothing here writes config directly either. A config-shaped remedy is spelled `config
-// set ...`, so the one thing in magus that edits config stays the one thing that edits
-// config.
-//
-// Failures are reported and do not stop the rest: the findings are independent, and a
-// remedy that cannot run is a thing to say, not a reason to leave the others unapplied.
-func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.DoctorReport) error {
-	var ran, failed int
-	for _, c := range out.Checks {
-		if c.Status == check.OK || len(c.Fix) == 0 {
-			continue
-		}
-		cmdline := "magus " + strings.Join(c.Fix, " ")
-		if globalCfg.DryRun {
-			fmt.Printf("would fix %s: %s\n", c.Name, cmdline)
-			continue
-		}
-		fmt.Printf("fixing %s: %s\n", c.Name, cmdline)
-		if err := dispatchSub(ctx, root, rc, c.Fix[0], c.Fix[1:]); err != nil {
-			slog.ErrorContext(ctx, c.Name, attr.Notice(""), attr.Component("magus doctor --fix"), attr.Error(err))
-			failed++
-			continue
-		}
-		ran++
-	}
-	switch {
-	case globalCfg.DryRun:
-		return nil
-	case ran == 0 && failed == 0:
-		fmt.Println("nothing to fix: no finding named a remedy magus can run")
-	case failed > 0:
-		return fmt.Errorf("magus doctor --fix: %d of %d remedy/remedies failed", failed, ran+failed)
-	default:
-		fmt.Printf("\napplied %d remedy/remedies; re-run `%s` to confirm\n", ran, hint.Doctor)
-	}
-	return nil
 }

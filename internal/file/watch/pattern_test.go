@@ -153,3 +153,12 @@ func FuzzParsePattern(f *testing.F) {
 		}
 	})
 }
+
+func TestSplitEscapedCommasHonorsEscapes(t *testing.T) {
+	assert.Equal(t, []string{"a", "b", "c"}, SplitEscapedCommas("a,b,c"))
+	assert.Equal(t, []string{"go,rust"}, SplitEscapedCommas(`go\,rust`))
+	assert.Equal(t, []string{"key=a,b", "value=c"}, SplitEscapedCommas(`key=a\,b,value=c`))
+	assert.Equal(t, []string{""}, SplitEscapedCommas(""))
+	// A trailing backslash is literal, not an escape with nothing to escape.
+	assert.Equal(t, []string{`a\`}, SplitEscapedCommas(`a\`))
+}

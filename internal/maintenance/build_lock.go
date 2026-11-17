@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,7 +13,10 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -47,22 +51,22 @@ func machineGraphBuildDir() (string, error) {
 	return filepath.Join(state, "magus", "graph-build"), nil
 }
 
-// AcquireMachineGraphBuild is [AcquireGraphBuild] on the machine's build lock.
-func AcquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
+// acquireMachineGraphBuild is [acquireGraphBuild] on the machine's build lock.
+func acquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
 	dir, err := machineGraphBuildDir()
 	if err != nil {
 		return nil, nil, err
 	}
-	return AcquireGraphBuild(ctx, dir, me, w, every)
+	return acquireGraphBuild(ctx, dir, me, w, every)
 }
 
-// TryMachineGraphBuild is [TryGraphBuild] on the machine's build lock.
+// TryMachineGraphBuild is [tryGraphBuild] on the machine's build lock.
 func TryMachineGraphBuild(me GraphBuildHolder, w io.Writer) (*GraphBuildLock, *GraphBuildHolder, error) {
 	dir, err := machineGraphBuildDir()
 	if err != nil {
 		return nil, nil, err
 	}
-	return TryGraphBuild(dir, me, w)
+	return tryGraphBuild(dir, me, w)
 }
 
 // RunningMachineGraphBuild is [RunningGraphBuild] on the machine's build lock.
@@ -76,12 +80,29 @@ func RunningMachineGraphBuild() (GraphBuildHolder, bool, error) {
 	return holder, running, nil
 }
 
-// ReindexRefusals is the part of a reindex failure that fails `graph build`:
+// ReindexSymbols runs reindex for `graph build` and returns how many symbol indexes
+// it refreshed. A failing or missing indexer is a hint, not an error: the domain graph
+// rebuilds regardless. The error is non-nil only for the [reindexRefusals] part, worded
+// for the rebuild that goes on over the stale index.
+func ReindexSymbols(ctx context.Context, reindex func(context.Context) (int, error)) (int, error) {
+	n, err := reindex(ctx)
+	slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
+	if err == nil {
+		return n, nil
+	}
+	interactive.Hint(ctx, "some projects were not reindexed", attr.Error(err))
+	if refused := reindexRefusals(err); refused != nil {
+		return n, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused)
+	}
+	return n, nil
+}
+
+// reindexRefusals is the part of a reindex failure that fails `graph build`:
 // each project refused for the outer run's lock (MGS3007), a full build budget
 // (MGS3009) or memory pressure (MGS3053). The index it wanted stayed stale,
 // and an exit 0 under magus\cmd's quiet hid that. A missing indexer stays a
 // warning. Nil when nothing was refused.
-func ReindexRefusals(err error) error {
+func reindexRefusals(err error) error {
 	errs := []error{err}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		errs = joined.Unwrap()
@@ -108,7 +129,7 @@ type GraphBuildLock struct {
 	holderPath string
 }
 
-// AcquireGraphBuild takes the build lock of the knowledge store in dir for me, waiting as
+// acquireGraphBuild takes the build lock of the knowledge store in dir for me, waiting as
 // long as another build holds it. Every graph build takes it, manual or server, so two
 // builds never write one store and one set of SCIP shards at once.
 //
@@ -122,8 +143,8 @@ type GraphBuildLock struct {
 // process, and lets a test stand in for two processes.
 //
 // It returns ctx's error when ctx ends first; the other build carries on.
-func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w io.Writer, every time.Duration) (_ *GraphBuildLock, waitedOn *GraphBuildHolder, err error) {
-	lock, h, err := TryGraphBuild(dir, me, w)
+func acquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w io.Writer, every time.Duration) (_ *GraphBuildLock, waitedOn *GraphBuildHolder, err error) {
+	lock, h, err := tryGraphBuild(dir, me, w)
 	if err != nil || h == nil {
 		return lock, nil, err
 	}
@@ -139,9 +160,9 @@ func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w i
 	return lock, h, err
 }
 
-// TryGraphBuild is AcquireGraphBuild without the wait: when another holds
+// tryGraphBuild is acquireGraphBuild without the wait: when another holds
 // the lock it returns that holder and no lock.
-func TryGraphBuild(dir string, me GraphBuildHolder, w io.Writer) (_ *GraphBuildLock, holder *GraphBuildHolder, err error) {
+func tryGraphBuild(dir string, me GraphBuildHolder, w io.Writer) (_ *GraphBuildLock, holder *GraphBuildHolder, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("maintenance: graph build lock: %w", err)
 	}
@@ -223,4 +244,34 @@ func readGraphBuildHolder(path string) (h GraphBuildHolder, ok bool, err error) 
 		return GraphBuildHolder{}, false, fmt.Errorf("maintenance: %s: %w", path, err)
 	}
 	return h, true, nil
+}
+
+const (
+	// GraphBuildPoll is how often a waiting graph build retries.
+	GraphBuildPoll = 250 * time.Millisecond
+	// GraphBuildMemoryMB is a build's own process while it assembles the graph. Measured
+	// 2026-10-31 here: 1.83 and 2.13 GiB resident, 2.28 GiB in that day's memory panic.
+	GraphBuildMemoryMB = 2400
+)
+
+// AcquireGraphBuilds takes the machine's build lock, then the store's at dir, waiting
+// on each and saying so to notices. waitedOn is the build whose work this one can load.
+func AcquireGraphBuilds(ctx context.Context, wsRoot, dir string, notices io.Writer) (release func() error, waitedOn *GraphBuildHolder, err error) {
+	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
+	if proc.IsJob(ctx) {
+		me.By = "the server's sync-graph job in " + wsRoot
+	}
+	machine, behind, err := acquireMachineGraphBuild(ctx, me, notices, GraphBuildPoll)
+	if err != nil {
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
+	}
+	store, waitedOn, err := acquireGraphBuild(ctx, dir, me, notices, GraphBuildPoll)
+	if err != nil {
+		return nil, nil, errors.Join(err, machine.Release())
+	}
+	// The build ahead released this store first, so its lock read free.
+	if waitedOn == nil && behind != nil && behind.Store == dir {
+		waitedOn = behind
+	}
+	return func() error { return errors.Join(store.Release(), machine.Release()) }, waitedOn, nil
 }

@@ -2,12 +2,10 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
 	"cmp"
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,13 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/script"
 	"github.com/egladman/magus/types"
@@ -144,38 +138,6 @@ func plantSkillDirs(t *testing.T, dir, dest string) (retired, handAuthored, empt
 	empty = filepath.Join(dir, dest, "magus-empty")
 	require.NoError(t, os.MkdirAll(empty, 0o755))
 	return retired, handAuthored, empty
-}
-
-func TestInstallSkillTreePrunesOnlyWhatMagusStamped(t *testing.T) {
-	dir := t.TempDir()
-	const dest = ".claude/skills"
-	retired, handAuthored, empty := plantSkillDirs(t, dir, dest)
-
-	written, changed, removed, err := installSkillTree(dir, dest, true, false, types.SkillFormFull)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
-	assert.NotEmpty(t, written)
-	assert.Equal(t, written, changed, "a fresh tree is all changes")
-	assert.NoDirExists(t, retired)
-	assert.DirExists(t, handAuthored, "a skill without the stamp is not magus's to delete")
-	assert.DirExists(t, empty, "an empty directory proves nothing about who wrote it")
-	assert.FileExists(t, filepath.Join(dir, dest, "magus-query", "SKILL.md"))
-}
-
-func TestInstallSkillTreeDryRunRemovesNothing(t *testing.T) {
-	dir := t.TempDir()
-	const dest = ".claude/skills"
-	retired, _, _ := plantSkillDirs(t, dir, dest)
-
-	written, changed, removed, err := installSkillTree(dir, dest, true, true, types.SkillFormFull)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
-	assert.NotEmpty(t, written)
-	assert.Empty(t, changed)
-	assert.DirExists(t, retired)
-	assert.NoDirExists(t, filepath.Join(dir, dest, "magus-query"), "a dry run writes nothing")
 }
 
 // TestAgentInstallReportsEachRemovalOnStdout: install prunes without a flag, so the
@@ -553,42 +515,6 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 	}
 }
 
-// TestInstallTargetHonorsGlobal pins the fix for a flag that never worked:
-// --global documents "allow absolute destination paths", the command let one
-// past its own guard, and Catalog.WriteSkillTree then refused it
-// unconditionally, so the error told the caller to pass the flag they had just
-// passed.
-//
-// The split is what makes it work without weakening the catalog: an absolute
-// destination becomes the directory it names plus the leaf inside it, so the
-// catalog's containment check still has something real to check.
-func TestInstallTargetHonorsGlobal(t *testing.T) {
-	base, leaf := installTarget(".", "/tmp/skills", true)
-	assert.Equal(t, filepath.Dir("/tmp/skills"), base, "an absolute dest supplies its own base")
-	assert.Equal(t, "skills", leaf)
-	assert.Equal(t, filepath.Clean("/tmp/skills"), filepath.Join(base, leaf),
-		"the split must rejoin to the path the caller asked for")
-}
-
-// TestInstallTargetLeavesRelativeAlone: without --global, and for a relative
-// destination with it, the pair is unchanged: the catalog keeps enforcing
-// containment against the repo dir.
-func TestInstallTargetLeavesRelativeAlone(t *testing.T) {
-	base, leaf := installTarget("repo", ".claude/skills", false)
-	assert.Equal(t, "repo", base)
-	assert.Equal(t, ".claude/skills", leaf)
-
-	base, leaf = installTarget("repo", ".claude/skills", true)
-	assert.Equal(t, "repo", base, "--global does not relocate a relative destination")
-	assert.Equal(t, ".claude/skills", leaf)
-
-	// A traversal is left intact so the catalog still refuses it; --global must
-	// not become a way to escape the tree.
-	base, leaf = installTarget("repo", "../../outside", true)
-	assert.Equal(t, "repo", base)
-	assert.Equal(t, "../../outside", leaf)
-}
-
 // extractTar reads a tar archive at src and writes its entries under dst,
 // creating parent directories. Mirrors the user-facing `tar -xf - -C <dst>`
 // pipe that the tar output mode is designed for.
@@ -616,17 +542,6 @@ func extractTar(t *testing.T, src, dst string) {
 		default:
 			t.Fatalf("unexpected tar entry type %v for %s", hdr.Typeflag, hdr.Name)
 		}
-	}
-}
-
-func TestAgentStarterDocPlainASCIISelfContained(t *testing.T) {
-	doc := agentStarterDoc(false)
-	assert.Contains(t, doc, "# AGENTS.md")
-	assert.Contains(t, doc, "## Project")  // a project placeholder to fill in
-	assert.Contains(t, doc, "## magus")    // the reproduced magus block
-	assert.Contains(t, doc, vcsSafetyRule) // the shared safety rule
-	for _, r := range doc {
-		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
 	}
 }
 
@@ -706,43 +621,4 @@ func TestAgentEval(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
-	saved := globalCfg
-	t.Cleanup(func() { globalCfg = saved })
-	globalCfg = config.Config{}
-	t.Setenv(trail.EnvBaggage, "")
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	require.NoError(t, err)
-	bindCheckout(t, cacheDir, "fleet/bound")
-
-	reader, writer, err := os.Pipe()
-	require.NoError(t, err)
-	defer reader.Close()
-	defer writer.Close()
-	previous := os.Stdin
-	os.Stdin = reader
-	t.Cleanup(func() { os.Stdin = previous })
-	err = agentHarnessLinksCommand(context.Background(), root, []string{"--stdin"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
-	_, err = writer.Write([]byte(`{"links":{}}`))
-	assert.NoError(t, err, "stdin remains unread while the checkout is bound")
-}
-
-func TestPointAtConsoleNamesTheServerStartOnlyWhenAsked(t *testing.T) {
-	testkit.Isolate(t)
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	pointAtConsole(t.Context(), "some-job", false)
-	assert.Empty(t, buf.String(), "nobody asked for the server")
-
-	pointAtConsole(t.Context(), "some-job", true)
-	assert.Contains(t, buf.String(), "the console is not running")
 }

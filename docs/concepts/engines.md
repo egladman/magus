@@ -56,8 +56,9 @@ func init() { engine.Register("buzz", engineImpl{}) }
 and is found by name through `engine.Lookup(name)`. The registered backend in a
 stock magus binary is `buzz`.
 
-The backend is pulled into the binary by blank import in
-[`cmd/magus/packs_interp.go`](../../cmd/magus/packs_interp.go):
+A program embedding magus pulls the backend in by blank-importing the
+`buzzengine` package, whose
+[`buzzengine/buzzengine.go`](../../buzzengine/buzzengine.go) imports it:
 
 ```go
 _ ".../internal/interp/engine/buzz"

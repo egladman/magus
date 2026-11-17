@@ -2,31 +2,29 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/spells"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
-	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/server"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
@@ -177,14 +175,14 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 
 	// Before the scope filter, so a scoped index can still link the neighbors it
 	// leaves out of the render.
-	indexes := declareIndexes(ws, out.Projects)
+	indexes := describe.DeclareIndexes(ws, out.Projects)
 
 	// A trailing list of project paths scopes the graph to those projects.
 	if len(pos) > 0 {
-		known := collectNames(out.Projects, func(p types.TargetGraphProject) string { return p.Path })
+		known := describe.CollectNames(out.Projects, func(p types.TargetGraphProject) string { return p.Path })
 		for _, a := range pos {
 			if !slices.Contains(known, a) {
-				return unknownEntity("project", a, known)
+				return describe.UnknownEntity("project", a, known)
 			}
 		}
 		out.Projects = slices.DeleteFunc(out.Projects, func(p types.TargetGraphProject) bool {
@@ -229,76 +227,8 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	for _, p := range out.Projects {
-		if p.Engine != "buzz" {
-			fmt.Printf("project: %s  (engine %s: graph extraction not yet supported)\n\n", p.Label(), p.Engine)
-			continue
-		}
-		fmt.Printf("project: %s  (%d targets)\n", p.Label(), len(p.Nodes))
-		if len(p.Cycle) > 0 {
-			fmt.Printf("  CYCLE: %s\n", strings.Join(p.Cycle, " -> "))
-		}
-		for _, n := range p.Nodes {
-			if len(n.Dependencies) > 0 {
-				fmt.Printf("  %s -> %s\n", n.Name, strings.Join(n.Dependencies, ", "))
-			} else {
-				fmt.Printf("  %s\n", n.Name)
-			}
-		}
-		fmt.Println()
-	}
+	describe.RenderGraph(os.Stdout, out)
 	return nil
-}
-
-// indexFile is the routing index a project may declare as an output.
-const indexFile = "MAGUS.md"
-
-// declareIndexes sets Index on each project whose declared outputs include MAGUS.md
-// and returns the path to index-path map of those that do. Declarations only: an
-// index that has not been generated yet still counts.
-func declareIndexes(ws types.WorkspaceReader, projects []types.TargetGraphProject) map[string]string {
-	indexes := map[string]string{}
-	for i := range projects {
-		p := ws.Get(projects[i].Path)
-		if p == nil || !slices.ContainsFunc(p.AllOutputs(), func(g types.Glob) bool { return g.Pattern == indexFile }) {
-			continue
-		}
-		projects[i].Index = indexFile
-		indexes[projects[i].Path] = indexFile
-	}
-	return indexes
-}
-
-// filterByName returns a single-element slice holding the item whose name equals
-// name, or nil if none match. Used to turn a list view into a one-entity detail.
-func filterByName[T any](items []T, name string, nameOf func(T) string) []T {
-	for _, it := range items {
-		if nameOf(it) == name {
-			return []T{it}
-		}
-	}
-	return nil
-}
-
-// collectNames projects each item to its name, for typo suggestions.
-func collectNames[T any](items []T, nameOf func(T) string) []string {
-	out := make([]string, len(items))
-	for i, it := range items {
-		out[i] = nameOf(it)
-	}
-	return out
-}
-
-// unknownEntity prints a "no such <kind>" message (with a nearest-match hint) and
-// returns the already-printed sentinel.
-func unknownEntity(kind, name string, all []string) error {
-	msg := fmt.Sprintf("unknown %s %q", kind, name)
-	if sug := hint.Nearest(name, all); sug != "" {
-		msg += fmt.Sprintf("; did you mean %q?", sug)
-	}
-	slog.ErrorContext(context.Background(), msg, attr.Notice(""), attr.Component("magus describe "+kind))
-	return exit.Reported(exit.Usage)
 }
 
 func describeSpells(ctx context.Context, root string, args []string) error {
@@ -325,7 +255,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 
 	// Still required, even though ListSpells itself reads only the global spell
 	// registry: it preserves `describe spells`' existing behavior of failing outside
-	// a magus workspace, and probeSpellVersions below shells out relative to root.
+	// a magus workspace, and spell.ProbeSpellVersions below shells out relative to root.
 	if _, err := inspectWorkspace(ctx, root); err != nil {
 		return err
 	}
@@ -335,10 +265,10 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		names := collectNames(inventory, func(s types.Spell) string { return s.Name })
-		inventory = filterByName(inventory, pos[0], func(s types.Spell) string { return s.Name })
+		names := describe.CollectNames(inventory, func(s types.Spell) string { return s.Name })
+		inventory = describe.FilterByName(inventory, pos[0], func(s types.Spell) string { return s.Name })
 		if len(inventory) == 0 {
-			return unknownEntity("spell", pos[0], names)
+			return describe.UnknownEntity("spell", pos[0], names)
 		}
 	}
 
@@ -347,7 +277,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	// for the machine-readable formats is worse than no flag.
 	if sf.Versions {
 		for i := range inventory {
-			inventory[i].Versions = probeSpellVersions(ctx, inventory[i].Name, root)
+			inventory[i].Versions = spell.ProbeSpellVersions(ctx, inventory[i].Name, root)
 		}
 	}
 
@@ -363,151 +293,8 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.SpellDefinition)
-	fmt.Printf("spells (%d):\n", len(inventory))
-	for _, t := range inventory {
-		// A workspace-local spell is marked, because the two are not
-		// interchangeable and the listing used to imply they were: only a built-in
-		// is reachable as `import "magus/spell/<name>"` from anywhere and appears in
-		// the spell reference. A local one came from a path import in THIS
-		// workspace's magusfile.
-		if t.BuiltIn {
-			fmt.Printf("  %s\n", t.Name)
-		} else {
-			fmt.Printf("  %s  [workspace-local, not a built-in]\n", t.Name)
-		}
-		// "adapts", not "language": the record carries two different languages, and
-		// naming them both language is what made this ambiguous. This is the source
-		// language the spell teaches magus to build; the import below is written in
-		// Buzz, whatever that language happens to be.
-		if t.Language != "" {
-			fmt.Printf("    adapts:  %s\n", t.Language)
-		}
-		if s := spellSyntaxSummary(t); s != "" {
-			fmt.Printf("    syntax:  %s\n", s)
-		}
-		// Rendered as the whole statement rather than the bare path, so it is
-		// copy-pasteable into a magusfile. It is the ONLY way to reach the spell's
-		// ops: written literally, so the target graph can see the edge.
-		//
-		// Built-ins only. `magus/spell/<name>` resolves nothing for a workspace-local
-		// spell, so printing it handed the reader a line that cannot work; that
-		// spell is reached by the path import its own magusfile already writes.
-		if t.BuzzImport != "" && t.BuiltIn {
-			fmt.Printf("    import:  import %q;  (buzz)\n", t.BuzzImport)
-		}
-		if len(t.Targets) > 0 {
-			fmt.Printf("    targets: %s\n", strings.Join(t.Targets, ", "))
-		}
-		for _, toolchain := range t.Toolchains {
-			fmt.Printf("    toolchain: %s (%s)\n", toolchain.Command, strings.Join(toolchain.Operations, ", "))
-		}
-		// Print each documented target's comment below the summary line; absent for
-		// undocumented targets and for spells whose docs aren't carried (built-ins).
-		for _, tgt := range t.Targets {
-			if doc := t.TargetDocs[tgt]; doc != "" {
-				fmt.Printf("      %s: %s\n", tgt, firstLine(doc))
-			}
-		}
-		if t.Opaque {
-			fmt.Printf("    opaque: true\n")
-		}
-		printSpellVersions(t.Versions)
-	}
+	describe.RenderSpells(os.Stdout, inventory, spell.PrintSpellVersions)
 	return nil
-}
-
-// spellSyntaxSummary folds the spell's declared language record into one line:
-// which extensions, which comment openers, and what a stub may replace. The
-// full record is in -o json; this line says only whether each part exists.
-func spellSyntaxSummary(t types.Spell) string {
-	var parts []string
-	if len(t.Extensions) > 0 {
-		parts = append(parts, strings.Join(t.Extensions, " "))
-	}
-	if t.Syntax == nil {
-		return strings.Join(parts, "; ")
-	}
-	if c := t.Syntax.Comments; c != nil {
-		openers := slices.Clone(c.LineComments)
-		for _, b := range c.BlockComments {
-			openers = append(openers, fmt.Sprintf("%s %s", b.Open, b.Close))
-		}
-		parts = append(parts, "comments "+strings.Join(openers, ", "))
-	}
-	if st := t.Syntax.Stubs; st != nil {
-		parts = append(parts, fmt.Sprintf("stubs %s (%s)", strings.Join(st.Kinds, ", "), st.BodyStyle))
-	}
-	return strings.Join(parts, "; ")
-}
-
-// printSpellVersions EXECUTES a spell's version probes and reports what they return
-// today, alongside the cache-key fragment each produces.
-//
-// Declared and observed are different questions, and only the second one debugs
-// anything. The existing output answers the first with a bare boolean, which says a
-// probe exists and nothing about what it reports, so a toolchain that has drifted
-// from what the project pins is invisible even though its value is sitting in every
-// cache key. It is also the first thing to check for MGS1009 (a target that never
-// replays), because a probe returning a moving value moves the key with it.
-//
-// Never cached. A probe's whole job is to observe what is installed right now, and a
-// cached probe's failure mode is a wrong cache HIT, which trades away the guarantee
-// the probe exists to provide.
-func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVersion {
-	sp, ok := project.DefaultSpellRegistry().Lookup(name)
-	if !ok || !sp.HasVersionProbe() {
-		return nil
-	}
-	var out []types.SpellVersion
-	// One uniform pass: every declared binary keys as spell:tool:version, with no
-	// privileged primary. A tool with a constant version reports it without spawning.
-	for _, tool := range sp.ToolNames() {
-		t, _ := sp.Tool(tool)
-		if !t.HasProbe() {
-			continue
-		}
-		if t.Probe.Bin == "" {
-			out = append(out, types.SpellVersion{
-				Tool: tool, Version: t.Key.Const,
-				CacheKey: fmt.Sprintf("spell:%s:version=%s", tool, t.Key.Const),
-			})
-			continue
-		}
-		v, err := sp.ProbeVersion(ctx, tool, dir)
-		switch {
-		case err != nil:
-			out = append(out, types.SpellVersion{Tool: tool, Error: err.Error()})
-		case v == "":
-			out = append(out, types.SpellVersion{Tool: tool})
-		default:
-			token, _ := spells.VersionToken(v, t.Key)
-			out = append(out, types.SpellVersion{
-				Tool: tool, Version: v,
-				CacheKey: fmt.Sprintf("spell:%s:version=%s", tool, token),
-			})
-		}
-	}
-	return out
-}
-
-// printSpellVersions renders probe results for the text formats.
-func printSpellVersions(vs []types.SpellVersion) {
-	if len(vs) == 0 {
-		return
-	}
-	fmt.Printf("    versions (probed just now, never cached):\n")
-	for _, v := range vs {
-		switch {
-		case v.Error != "":
-			fmt.Printf("      %-16s probe failed: %s\n", v.Tool, v.Error)
-		case v.Version == "":
-			fmt.Printf("      %-16s (no version reported)\n", v.Tool)
-		default:
-			fmt.Printf("      %-16s %s\n", v.Tool, v.Version)
-			fmt.Printf("      %-16s key: %s\n", "", v.CacheKey)
-		}
-	}
 }
 
 // describeCharms routes `describe charm[s]`: no name lists every charm known in the
@@ -549,10 +336,10 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	detail := len(pos) > 0
 	if detail {
 		name := types.Normalize(pos[0])
-		names := collectNames(charms, func(c types.CharmEntry) string { return c.Name })
-		charms = filterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
+		names := describe.CollectNames(charms, func(c types.CharmEntry) string { return c.Name })
+		charms = describe.FilterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
 		if len(charms) == 0 {
-			return unknownEntity("charm", pos[0], names)
+			return describe.UnknownEntity("charm", pos[0], names)
 		}
 	}
 
@@ -573,55 +360,8 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.CharmDefinition)
-	fmt.Printf("charms (%d):\n", len(charms))
-	for _, c := range charms {
-		tags := make([]string, 0, 2)
-		if c.Builtin {
-			tags = append(tags, "built-in")
-		}
-		if c.Default {
-			tags = append(tags, "workspace default")
-		}
-		line := "  " + c.Name
-		if len(tags) > 0 {
-			line += fmt.Sprintf("  [%s]", strings.Join(tags, ", "))
-		}
-		fmt.Println(line)
-		if c.Doc != "" {
-			fmt.Printf("    %s\n", c.Doc)
-		}
-		// List view stays a summary; the per-target argv edits print only in the
-		// single-charm detail view, where the extra lines are the point.
-		if !detail {
-			if n := len(c.Declarations); n > 0 {
-				fmt.Printf("    declared by %d target(s)\n", n)
-			}
-			continue
-		}
-		if len(c.Declarations) == 0 {
-			fmt.Printf("    no target in this workspace declares it\n")
-			continue
-		}
-		fmt.Printf("    declared by:\n")
-		for _, d := range c.Declarations {
-			fmt.Printf("      %s:%s  (spell %s)\n", d.Project, d.Target, d.Spell)
-			if len(d.After) > 0 && !slices.Equal(d.Before, d.After) {
-				fmt.Printf("        base     %s\n", strings.Join(d.Before, " "))
-				fmt.Printf("        + %-6s %s\n", c.Name, strings.Join(d.After, " "))
-			}
-		}
-	}
+	describe.RenderCharms(os.Stdout, charms, detail)
 	return nil
-}
-
-// firstLine returns the first line of s, for compact one-line rendering of a
-// possibly multi-line doc comment.
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
 }
 
 // describeTargetNoun routes `describe target[s]`: no name lists every target;
@@ -700,59 +440,6 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	return describeTarget(ctx, root, pos, tf.Explain)
 }
 
-// targetCacheReport is the -o json/yaml projection of `describe target --cache`: one
-// entry per resolved (project, target) pair with its live key, predicted ref, and
-// component-class digests; Against carries the stored-vs-live diff when --against
-// named a ref.
-type targetCacheReport struct {
-	Project      string              `json:"project"`
-	Target       string              `json:"target"`
-	Charms       []string            `json:"charms,omitempty"`
-	Key          string              `json:"key"`
-	KeyVersion   int                 `json:"key_version"`
-	Ref          string              `json:"ref"`
-	ClassDigests []cache.ClassDigest `json:"class_digests"`
-	// KeyInputs is the masked line-by-line key, present only with --inputs. The class
-	// digests say a class changed; these say WHICH line, and, read as a list, which
-	// files a declaration actually resolved to. A `src:` line missing for a file the
-	// target declares is the whole bug class this exists to make visible.
-	KeyInputs []string            `json:"key_inputs,omitempty"`
-	Against   *targetCacheAgainst `json:"against,omitempty"`
-	LastRun   *targetCacheLastRun `json:"last_run,omitempty"`
-}
-
-type targetCacheAgainst struct {
-	Ref     string               `json:"ref"`
-	Key     string               `json:"key"` // the stored run's full cache key
-	Matches bool                 `json:"matches"`
-	Diff    []cache.KeyInputDiff `json:"diff,omitempty"`
-}
-
-// targetCacheLastRun is the negative half of the cache lens: the newest entry recorded
-// for this target HERE, whether a run now would replay a stored entry, and the first key
-// input that moved when it would not. --against answers the same question about a peer
-// the caller names; this answers it about the run the caller already made, which is the
-// one they have when they ask why the cache missed.
-type targetCacheLastRun struct {
-	Recorded bool      `json:"recorded"`
-	Ref      string    `json:"ref,omitempty"`
-	Key      string    `json:"key,omitempty"`
-	At       time.Time `json:"at,omitempty"`
-	// KeyMatches is whether the NEWEST entry's key equals the live key. WouldReplay is the
-	// question the reader actually asked (would a run now hit at all), and the two come
-	// apart: an edit and a revert leave the newest entry keyed to the edited tree while an
-	// older entry still sits at the live key and replays. ReplaysRef names the entry a run
-	// would reach, and is set whenever WouldReplay is.
-	KeyMatches  bool                  `json:"key_matches"`
-	WouldReplay bool                  `json:"would_replay"`
-	ReplaysRef  string                `json:"replays_ref,omitempty"`
-	Differences int                   `json:"differences,omitempty"`
-	First       *cache.KeyInputChange `json:"first_difference,omitempty"`
-	// Explanation names the mechanism behind the verdict and the next step, so the JSON
-	// consumer is not left to reassemble the sentence the text renderer prints.
-	Explanation string `json:"explanation"`
-}
-
 // describeTargetCache answers "what cache key would this target mint RIGHT NOW, and
 // why does it differ from that stored run": it keys the target exactly as `magus run`
 // would (default charms merged, tool versions resolved) without executing, and with
@@ -822,7 +509,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		}
 	}
 
-	reports := make([]targetCacheReport, 0, len(evaluated))
+	reports := make([]cache.TargetCacheReport, 0, len(evaluated))
 	mismatched := false
 	for _, e := range evaluated {
 		key, lines, kerr := m.ComputeTargetKey(ctx, e.Project, e.Target, charms)
@@ -832,7 +519,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		// Masked as the store masks at write, so anything skipped here would read as a
 		// difference on every run rather than as drift.
 		lines = cache.MaskKeyInputs(ctx, lines)
-		r := targetCacheReport{
+		r := cache.TargetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,
 			Charms:       charms,
@@ -848,12 +535,12 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			// The VERDICT is key equality, never the line diff: DiffKeyInputs pairs
 			// inputs by identity (multiplicity and order collapse), so an empty diff
 			// cannot prove two keys equal. The lines explain the verdict; they do
-			// not decide it. compat: see hashOfKeyInputs for the keyless fallback.
+			// not decide it. compat: see cache.HashOfKeyInputs for the keyless fallback.
 			matches := key == storedKey
 			if storedKey == "" {
-				matches = hashOfKeyInputs(storedLines) == hashOfKeyInputs(lines)
+				matches = cache.HashOfKeyInputs(storedLines) == cache.HashOfKeyInputs(lines)
 			}
-			r.Against = &targetCacheAgainst{
+			r.Against = &cache.TargetCacheAgainst{
 				Ref: storedRef, Key: storedKey, Matches: matches,
 				Diff: cache.DiffKeyInputs(storedLines, lines),
 			}
@@ -865,7 +552,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			// It never gates the exit code the way --against does: a differing key here
 			// is the NORMAL state after any edit, and failing on it would break every
 			// script that reads `--cache` for a predicted ref.
-			lr := newTargetCacheLastRun(e.Project, e.Target, rec, rerr, key, rec.WouldReplay(key), lines)
+			lr := cache.NewTargetCacheLastRun(e.Project, e.Target, rec, rerr, key, rec.WouldReplay(key), lines)
 			r.LastRun = &lr
 		}
 		reports = append(reports, r)
@@ -896,179 +583,13 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		return nil
 	}
 
-	for _, r := range reports {
-		fmt.Printf("project: %s  target: %s\n", r.Project, r.Target)
-		if len(r.Charms) > 0 {
-			fmt.Printf("  charms: %s\n", strings.Join(r.Charms, ","))
-		}
-		fmt.Printf("  key:    %s (keyVersion %d)\n", r.Key, r.KeyVersion)
-		fmt.Printf("  ref:    %s (what a run of these exact inputs prints)\n", r.Ref)
-		fmt.Println("  components:")
-		for _, d := range r.ClassDigests {
-			noun := "lines"
-			if d.Count == 1 {
-				noun = "line"
-			}
-			fmt.Printf("    %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
-		}
-		if len(r.KeyInputs) > 0 {
-			fmt.Println("  key inputs:")
-			for _, line := range r.KeyInputs {
-				fmt.Printf("    %s\n", line)
-			}
-		}
-		if r.LastRun != nil {
-			for _, line := range lastRunLines(*r.LastRun) {
-				fmt.Println(line)
-			}
-		}
-		if r.Against == nil {
-			fmt.Println()
-			continue
-		}
-		if r.Against.Matches {
-			fmt.Printf("  against %s: keys MATCH: a run here mints the same ref\n\n", r.Against.Ref)
-			continue
-		}
-		fmt.Printf("  against %s: keys DIFFER\n", r.Against.Ref)
-		if len(r.Against.Diff) == 0 {
-			fmt.Println("    (no line-level difference to show: the stored run recorded no key inputs)")
-		}
-		for _, d := range r.Against.Diff {
-			fmt.Printf("    %s:\n", d.Class)
-			for _, l := range d.StoredOnly {
-				fmt.Printf("      - stored  %s\n", l)
-			}
-			for _, l := range d.LiveOnly {
-				fmt.Printf("      + live    %s\n", l)
-			}
-		}
-		fmt.Println()
-	}
+	cache.WriteTargetCacheReports(os.Stdout, reports)
 	// --against is a comparison a script should be able to gate on, so a mismatch
 	// exits non-zero (the report above is the explanation, already printed).
 	if mismatched {
 		return exit.Reported(exit.Failure)
 	}
 	return nil
-}
-
-// newTargetCacheLastRun turns the last recorded entry for project:target into the miss
-// explanation for liveKey. lookupErr wrapping fs.ErrNotExist is the "nothing recorded
-// yet" case, which is an answer rather than a failure. liveLines must already be digested
-// and redacted, like the lines the store persists.
-//
-// liveKeyReplays is [cache.RecordedRun.WouldReplay] for liveKey, and it gates the whole
-// miss explanation: a true there means a run HITS, whatever the newest entry's key says.
-func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookupErr error, liveKey string, liveKeyReplays bool, liveLines []string) targetCacheLastRun {
-	switch {
-	case errors.Is(lookupErr, fs.ErrNotExist):
-		return targetCacheLastRun{Explanation: fmt.Sprintf(
-			"nothing recorded for this target here, so there is nothing to compare against: run `%s` once and this section will name what moved.",
-			hint.Run.With(target, project))}
-	case lookupErr != nil:
-		return targetCacheLastRun{Explanation: fmt.Sprintf(
-			"the last recorded entry could not be read, so there is nothing to compare against: %v", lookupErr)}
-	}
-	lr := targetCacheLastRun{
-		Recorded:   true,
-		Ref:        cache.PortableRef(rec.Key),
-		Key:        rec.Key,
-		At:         rec.CreatedAt,
-		KeyMatches: rec.Key == liveKey,
-	}
-	lr.WouldReplay = liveKeyReplays || lr.KeyMatches
-	if lr.WouldReplay {
-		lr.ReplaysRef = cache.PortableRef(liveKey)
-	}
-	if lr.KeyMatches {
-		lr.Explanation = "the live key hashes to the same value, so a run now replays that entry instead of executing."
-		return lr
-	}
-	if lr.WouldReplay {
-		lr.Explanation = fmt.Sprintf(
-			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `%s` reads the entry that would replay.",
-			lr.ReplaysRef, lr.Ref, hint.QueryOutput.With(lr.ReplaysRef))
-		return lr
-	}
-	if rec.KeyInputs == nil {
-		lr.Explanation = fmt.Sprintf(
-			"a run now MISSES, but that entry predates key-input persistence, so no input can be named: run `%s` once to record them, then ask again.",
-			hint.Run.With(target, project))
-		return lr
-	}
-	changes := cache.FirstKeyInputChange(rec.KeyInputs, liveLines)
-	lr.Differences = len(changes)
-	if len(changes) > 0 {
-		lr.First = &changes[0]
-	}
-	// A differing key with no differing input means the two sides disagree on
-	// multiplicity or order, which the pairing collapses; say so rather than
-	// claiming nothing changed while the ref plainly moved.
-	if lr.Differences == 0 {
-		lr.Explanation = fmt.Sprintf(
-			"a run now MISSES, but no single input differs: the keys disagree on the ORDER or repetition of inputs, which this comparison collapses. Next: `%s` to read the key line by line.",
-			hint.DescribeTarget.With(target, project, "--cache", "--inputs"))
-		return lr
-	}
-	noun := "inputs"
-	if lr.Differences == 1 {
-		noun = "input"
-	}
-	lr.Explanation = fmt.Sprintf(
-		"a run now MISSES: the cache key is a hash of these inputs and %d %s moved since. Next: `%s` to see every line.",
-		lr.Differences, noun, hint.DescribeTarget.With(target, project, "--cache", "--inputs"))
-	return lr
-}
-
-// lastRunLines renders the miss explanation as the text section, indented to match the
-// key/components blocks above it.
-func lastRunLines(lr targetCacheLastRun) []string {
-	if !lr.Recorded {
-		return []string{"  last recorded run: none", "    " + lr.Explanation}
-	}
-	verdict := "DIFFERS"
-	switch {
-	case lr.KeyMatches:
-		verdict = "MATCHES"
-	case lr.WouldReplay:
-		verdict = "DIFFERS; the live key HITS an older entry"
-	}
-	out := []string{fmt.Sprintf("  last recorded run: %s  %s  %s", lr.At.UTC().Format(time.RFC3339), lr.Ref, verdict)}
-	if lr.First != nil {
-		side := func(value string, absent bool) string {
-			if absent {
-				return "(absent)"
-			}
-			if value == "" {
-				return "(present)"
-			}
-			return value
-		}
-		out = append(out,
-			"    first differing input: "+lr.First.Input,
-			"      - recorded  "+side(lr.First.Recorded, lr.First.RecordedAbsent),
-			"      + live      "+side(lr.First.Live, lr.First.LiveAbsent))
-	}
-	return append(out, "    "+lr.Explanation)
-}
-
-// hashOfKeyInputs digests a key-input set for equality comparison. It is the THIRD
-// spelling of "do these two keys agree" in this command (after key equality and the
-// identity pairing behind [cache.FirstKeyInputChange]), and the only order-sensitive one:
-// it hashes the lines in hash order, so a reordering reads as a difference where the
-// pairing collapses it. That is the correct behavior HERE, since it stands in for the key
-// itself, and the wrong behavior for naming what a reader should go fix.
-//
-// compat(until: no store still serves a descriptor written without a key field): a
-// descriptor predating OutputDescriptor.Key carries no key for --against to compare, and
-// falling back to the lines it does have is what keeps such a ref answerable at all rather
-// than reporting every comparison as a mismatch. Observe it is safe to drop by checking
-// that every .json descriptor under the cache's outputs/ tree (including any store a ref
-// was imported from) carries a non-empty "key".
-func hashOfKeyInputs(lines []string) string {
-	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
-	return hex.EncodeToString(sum[:])
 }
 
 func describeTargets(ctx context.Context, root string) error {
@@ -1099,20 +620,7 @@ func describeTargets(ctx context.Context, root string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.TargetDefinition)
-	fmt.Printf("targets (%d):\n", len(targets))
-	for _, t := range targets {
-		switch t.Kind {
-		case "canonical":
-			fmt.Printf("  %s  [canonical - affected/pipeline anchor; composed in the magusfile]\n", t.Name)
-		case "spell":
-			fmt.Printf("  %s  [spell: %s]\n", t.Name, strings.Join(t.Spells, ", "))
-		case "custom":
-			fmt.Printf("  %s  [custom - projects: %s]\n", t.Name, strings.Join(t.Projects, ", "))
-		default:
-			fmt.Printf("  %s\n", t.Name)
-		}
-	}
+	describe.RenderTargets(os.Stdout, targets)
 	return nil
 }
 
@@ -1149,11 +657,11 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		if len(pos) > 0 {
-			names := collectNames(out.Projects, func(p types.EvaluatedProject) string { return p.Path })
-			out.Projects = filterByName(out.Projects, pos[0], func(p types.EvaluatedProject) string { return p.Path })
+			names := describe.CollectNames(out.Projects, func(p types.EvaluatedProject) string { return p.Path })
+			out.Projects = describe.FilterByName(out.Projects, pos[0], func(p types.EvaluatedProject) string { return p.Path })
 			out.Count = len(out.Projects)
 			if out.Count == 0 {
-				return unknownEntity("project", pos[0], names)
+				return describe.UnknownEntity("project", pos[0], names)
 			}
 		}
 
@@ -1169,56 +677,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		}
 
 		// text / wide
-		fmt.Printf("definition: %s\n\n", out.Definition)
-		fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
-		for _, p := range out.Projects {
-			fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
-			fmt.Printf("  dir:     %s\n", p.Dir)
-			if len(p.Sources) > 0 {
-				fmt.Printf("  sources: %v\n", p.Sources)
-			}
-			if len(p.Outputs) > 0 {
-				fmt.Printf("  outputs: %v\n", p.Outputs)
-			}
-			if len(p.DependsOn) > 0 {
-				fmt.Printf("  depends_on: %v\n", p.DependsOn)
-			}
-			for _, s := range p.ResolvedSpells {
-				fmt.Printf("  spell: %s\n", s.Name)
-			}
-			for targetName, pol := range p.TargetPolicies {
-				fmt.Printf("  policy: %s", targetName)
-				if pol.IncludeOS != nil {
-					fmt.Printf("  include_os=%t", *pol.IncludeOS)
-				}
-				if pol.IncludeArch != nil {
-					fmt.Printf("  include_arch=%t", *pol.IncludeArch)
-				}
-				if pol.Drift != types.DriftDefault {
-					fmt.Printf("  drift=%s", pol.Drift)
-				}
-				if pol.RetryOnVolatile {
-					fmt.Printf("  retry_on_volatile")
-				}
-				if pol.Advisory {
-					fmt.Printf("  advisory=%q", pol.AdvisoryReason)
-				}
-				if pol.SkipCache {
-					fmt.Printf("  skip_cache")
-				}
-				if pol.Slots > 0 {
-					fmt.Printf("  slots=%d", pol.Slots)
-				}
-				if pol.MemoryMB > 0 {
-					fmt.Printf("  memory_mb=%d", pol.MemoryMB)
-				}
-				if pol.Timeout != "" {
-					fmt.Printf("  timeout=%s", pol.Timeout)
-				}
-				fmt.Println()
-			}
-			fmt.Println()
-		}
+			describe.RenderEvaluatedProjects(os.Stdout, out)
 		return nil
 	}
 
@@ -1227,11 +686,11 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		names := collectNames(out.Projects, func(p types.ProjectEntry) string { return p.Path })
-		out.Projects = filterByName(out.Projects, pos[0], func(p types.ProjectEntry) string { return p.Path })
+		names := describe.CollectNames(out.Projects, func(p types.ProjectEntry) string { return p.Path })
+		out.Projects = describe.FilterByName(out.Projects, pos[0], func(p types.ProjectEntry) string { return p.Path })
 		out.Count = len(out.Projects)
 		if out.Count == 0 {
-			return unknownEntity("project", pos[0], names)
+			return describe.UnknownEntity("project", pos[0], names)
 		}
 	}
 
@@ -1247,25 +706,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
-	for _, p := range out.Projects {
-		fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
-		fmt.Printf("  dir:  %s\n", p.Dir)
-		if p.Spell != "" {
-			fmt.Printf("  spell: %s\n", p.Spell)
-		}
-		if len(p.Sources) > 0 {
-			fmt.Printf("  sources: %v\n", p.Sources)
-		}
-		if len(p.Outputs) > 0 {
-			fmt.Printf("  outputs: %v\n", p.Outputs)
-		}
-		if len(p.DependsOn) > 0 {
-			fmt.Printf("  depends_on: %v\n", p.DependsOn)
-		}
-		fmt.Println()
-	}
+	describe.RenderProjects(os.Stdout, out)
 	return nil
 }
 
@@ -1314,121 +755,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.EvaluatedTargetDefinition)
-	fmt.Printf("targets (%d):\n\n", len(out))
-	for _, e := range out {
-		fmt.Printf("project: %s  target: %s\n", e.Project, e.Target)
-		fmt.Printf("  dir:     %s\n", e.Dir)
-		if len(e.Sources) > 0 {
-			fmt.Printf("  sources: %v\n", e.Sources)
-		}
-		if len(e.Outputs) > 0 {
-			fmt.Printf("  outputs: %v\n", e.Outputs)
-		}
-		// Always on, no flag: it is one line, it is absent for a target that composes
-		// nothing, and "what does this run, in what order" is the question the command
-		// already exists to answer: a flag would only hide the answer behind knowing
-		// to ask for it (docs/recommendations.md, fold don't add).
-		if len(e.Chain) > 0 {
-			fmt.Printf("  chain:   %s\n", types.Chain(e.Chain))
-		}
-		if len(e.BeforeKey) > 0 {
-			refs := make([]string, len(e.BeforeKey))
-			for i, r := range e.BeforeKey {
-				refs[i] = r.Ref()
-			}
-			fmt.Printf("  before key: %s\n", strings.Join(refs, ", "))
-		}
-		if len(e.DependsOn) > 0 {
-			fmt.Printf("  depends_on: %v\n", e.DependsOn)
-		}
-		if len(e.Charms) > 0 {
-			fmt.Printf("  charms:  %v\n", e.Charms)
-		}
-		for _, s := range e.Spells {
-			fmt.Printf("  spell: %s", s.Name)
-			if len(s.TargetSources) > 0 {
-				fmt.Printf("  target_sources=%v", s.TargetSources)
-			}
-			fmt.Println()
-			if len(s.Command) > 0 {
-				fmt.Printf("    command: %s\n", strings.Join(s.Command, " "))
-			}
-			if s.Service != nil {
-				fmt.Printf("    service:\n")
-				if len(s.Service.Readiness) > 0 {
-					fmt.Printf("      readiness: %s\n", strings.Join(s.Service.Readiness, " "))
-				}
-				if len(s.Service.Stop) > 0 {
-					fmt.Printf("      stop:      %s\n", strings.Join(s.Service.Stop, " "))
-				}
-				if s.Service.Idle != "" {
-					fmt.Printf("      idle:      %s\n", s.Service.Idle)
-				}
-				if s.Service.Distinct != "" {
-					fmt.Printf("      distinct:  %s\n", s.Service.Distinct)
-				} else {
-					fmt.Printf("      shared:    yes (dedups by fingerprint)\n")
-				}
-				if s.Service.Fingerprint != "" {
-					fmt.Printf("      fingerprint: %s\n", s.Service.Fingerprint)
-				}
-			}
-			if explain && len(s.CharmTrace) > 0 {
-				fmt.Printf("    charm trace:\n")
-				for _, step := range s.CharmTrace {
-					label := "base"
-					if step.Charm != "" {
-						label = "+ " + step.Charm
-					}
-					fmt.Printf("      %-10s %s\n", label, strings.Join(step.Command, " "))
-				}
-			}
-			// Shown without --explain: an overridden charm is a mistake, not a detail.
-			if len(s.Conflicts) > 0 {
-				fmt.Printf("    charm conflicts:\n")
-				for _, c := range s.Conflicts {
-					by := c.OverriddenBy
-					if by == "" {
-						by = "another active charm"
-					}
-					fmt.Printf("      %s overridden by %s (no effect here)\n", c.Name, by)
-				}
-			}
-		}
-		if e.Policy != nil {
-			fmt.Printf("  policy:")
-			if e.Policy.IncludeOS != nil {
-				fmt.Printf("  include_os=%t", *e.Policy.IncludeOS)
-			}
-			if e.Policy.IncludeArch != nil {
-				fmt.Printf("  include_arch=%t", *e.Policy.IncludeArch)
-			}
-			if e.Policy.Drift != types.DriftDefault {
-				fmt.Printf("  drift=%s", e.Policy.Drift)
-			}
-			if e.Policy.RetryOnVolatile {
-				fmt.Printf("  retry_on_volatile")
-			}
-			if e.Policy.Advisory {
-				fmt.Printf("  advisory=%q", e.Policy.AdvisoryReason)
-			}
-			if e.Policy.SkipCache {
-				fmt.Printf("  skip_cache")
-			}
-			if e.Policy.Slots > 0 {
-				fmt.Printf("  slots=%d", e.Policy.Slots)
-			}
-			if e.Policy.MemoryMB > 0 {
-				fmt.Printf("  memory_mb=%d", e.Policy.MemoryMB)
-			}
-			if e.Policy.Timeout != "" {
-				fmt.Printf("  timeout=%s", e.Policy.Timeout)
-			}
-			fmt.Println()
-		}
-		fmt.Println()
-	}
+	describe.RenderEvaluatedTargets(os.Stdout, out, explain)
 	return nil
 }
 
@@ -1469,27 +796,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.WorkspaceDefinition)
-	for _, w := range out {
-		fmt.Printf("workspace: %s\n", w.Root)
-		fmt.Printf("  projects: %d\n", w.ProjectCount)
-		if w.VCSBaseRef != "" {
-			fmt.Printf("  vcs base ref: %s\n", w.VCSBaseRef)
-		}
-		if w.CacheDir != "" {
-			fmt.Printf("  cache dir: %s\n", w.CacheDir)
-		}
-		if w.Concurrency > 0 {
-			fmt.Printf("  concurrency: %d\n", w.Concurrency)
-		}
-		for _, l := range w.Workspaces {
-			if l.Dir == "" {
-				fmt.Printf("  workspace %s: %s (this one)\n", l.Name, l.Root)
-				continue
-			}
-			fmt.Printf("  workspace %s: %s -> %s\n", l.Name, l.Dir, l.Root)
-		}
-	}
+	describe.RenderWorkspaces(os.Stdout, out)
 	return nil
 }
 
@@ -1515,7 +822,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
 	for _, wsRoot := range declared {
-		cfg, err := loadWorkspaceConfig(wsRoot)
+		cfg, err := server.LoadWorkspaceConfig(wsRoot)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
@@ -1557,11 +864,11 @@ func describeMCPTools(args []string) error {
 
 	out := mcp.DescribeTools()
 	if len(pos) > 0 {
-		names := collectNames(out.MCPTools, func(t types.MCPTool) string { return t.Name })
-		out.MCPTools = filterByName(out.MCPTools, pos[0], func(t types.MCPTool) string { return t.Name })
+		names := describe.CollectNames(out.MCPTools, func(t types.MCPTool) string { return t.Name })
+		out.MCPTools = describe.FilterByName(out.MCPTools, pos[0], func(t types.MCPTool) string { return t.Name })
 		out.Count = len(out.MCPTools)
 		if out.Count == 0 {
-			return unknownEntity("mcp-tool", pos[0], names)
+			return describe.UnknownEntity("mcp-tool", pos[0], names)
 		}
 	}
 
@@ -1577,21 +884,7 @@ func describeMCPTools(args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("mcp-tools (%d):\n", out.Count)
-	for _, t := range out.MCPTools {
-		fmt.Printf("  %s\n", t.Name)
-		if t.Description != "" {
-			fmt.Printf("    %s\n", t.Description)
-		}
-		for _, p := range t.Params {
-			req := ""
-			if p.Required {
-				req = " (required)"
-			}
-			fmt.Printf("    param %s <%s>%s: %s\n", p.Name, p.Type, req, p.Description)
-		}
-	}
+	describe.RenderMCPTools(os.Stdout, out)
 	return nil
 }
 
@@ -1632,14 +925,14 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	focus, inFocus := markFileFocus(ws, files)
+	focus, inFocus := describe.MarkFileFocus(ws, files)
 	report := types.NewFileReport(files)
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForFiles(files))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, filesWithNext{FileReport: report, Next: next})
+		return emitFormatted(opts, job.FilesWithNext{FileReport: report, Next: next})
 	case outputName:
 		// One bare path per line. This used to print "<path>\t<role>", which is two
 		// columns in the one format that promises a single token, so `xargs` and
@@ -1652,93 +945,152 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n", types.FileDefinition)
-	// Printed once rather than per entry: it is a fact about where the caller stands,
-	// so it is the same for every path in the request, and it is what makes a
-	// `focus: out` line below actionable instead of an accusation.
-	if inFocus {
-		fmt.Printf("focus of %s: %s\n", strings.Join(focus.Seeds, ", "), strings.Join(focus.Projects, ", "))
-	}
-	fmt.Println()
-	for _, f := range files {
-		fmt.Printf("%s\n", f.Path)
-		if f.Project != "" {
-			fmt.Printf("  project: %s\n", f.Project)
-		}
-		fmt.Printf("  role: %s\n", f.Role)
-		// Only when absent. Present is the overwhelmingly common case, and a line on
-		// every entry would bury the one reading that changes what the rest means.
-		if !f.Exists {
-			fmt.Printf("  exists: false\n")
-		}
-		if len(f.OutputOf) > 0 {
-			fmt.Printf("  output_of: %v\n", f.OutputOf)
-		}
-		if len(f.SourceOf) > 0 {
-			fmt.Printf("  source_of: %v\n", f.SourceOf)
-		}
-		if len(f.DependsOn) > 0 {
-			fmt.Printf("  depends_on: %v\n", f.DependsOn)
-		}
-		// Only when OUT, for the reason `exists: false` prints only when false: in
-		// focus is the overwhelmingly common case, and a line on every entry buries
-		// the one reading that changes what to do next. `-o json` carries both.
-		if f.Focus == types.FocusOut {
-			fmt.Printf("  focus: out\n")
-		}
-		for _, c := range f.Claims {
-			fmt.Printf("  declared: %-6s %s  %s\n", c.Role, claimLabel(c), c.Glob)
-		}
-		if f.Hint != "" {
-			fmt.Printf("  hint: %s\n", f.Hint)
-		}
-		fmt.Println()
-	}
-	if len(report.Overlaps) > 0 {
-		fmt.Println("declarations covering more than one of these paths:")
-		printOverlaps(os.Stdout, report.Overlaps)
-	}
+	describe.RenderFiles(os.Stdout, report, files, focus, inFocus)
 	printNext(os.Stdout, nx, next)
 	return nil
 }
 
-// markFileFocus stamps each entry with whether it is inside the focus of the
-// project holding the working directory, and reports the focus it used.
-//
-// Computed at the render edge rather than inside ClassifyFiles, because focus is a
-// fact about WHERE THE CALLER STANDS and classification is a fact about the file.
-// Folding it in would give the same path two different classifications from two
-// directories, and every other caller of ClassifyFiles (staging, the gate, the
-// write guard) asks about the file.
-//
-// Silent on every uncertainty: an unresolvable cwd, or a workspace with no project
-// holding it, leaves Focus empty rather than claiming everything is out.
-func markFileFocus(ws types.WorkspaceReader, files []types.FileEntry) (project.Focus, bool) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return project.Focus{}, false
-	}
-	focus, ok := project.FocusAt(ws, cwd)
-	if !ok {
-		return project.Focus{}, false
-	}
-	for i, f := range files {
-		if focus.Contains(f.Path) {
-			files[i].Focus = types.FocusIn
-		} else {
-			files[i].Focus = types.FocusOut
+// describeModules implements `magus describe modules` (list) and
+// `magus describe module <name>` (detail). Modules are static — the magus
+// standard library — so this needs no workspace.
+func describeModules(ctx context.Context, args []string) error {
+	rest, err := commandParse("describe modules", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus describe module[s] [<name>] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, types.ModuleDefinition)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "With no name, lists every module; with a name, prints its methods")
+			fmt.Fprintln(os.Stderr, "with Buzz signatures.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			printOwnDefaults(fs)
 		}
+	})
+	if err != nil {
+		return err
 	}
-	return focus, true
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	var name string
+	if len(rest) > 0 {
+		name = rest[0]
+	}
+	out := hostmodules.Describe(name)
+	if name != "" && len(out) == 0 {
+		mods := hostmodules.All()
+		names := make([]string, len(mods)) // module names, sorted for a stable suggestion
+		for i, m := range mods {
+			names[i] = m.Name
+		}
+		slices.Sort(names)
+		msg := fmt.Sprintf("unknown module %q", name)
+		if sug := hint.Nearest(name, names); sug != "" {
+			msg += fmt.Sprintf("; did you mean %q?", sug)
+		}
+		slog.ErrorContext(ctx, msg, attr.Notice(""), attr.Component("magus describe module"))
+		return exit.Reported(exit.Usage)
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, types.ModuleReport{Definition: types.ModuleDefinition, Count: len(out), Modules: out})
+	case outputName:
+		names := make([]string, 0, len(out))
+		for _, m := range out {
+			names = append(names, m.Name)
+		}
+		return emitNames(os.Stdout, names)
+	}
+
+	// text / wide
+	if name == "" {
+		describe.RenderModules(os.Stdout, out)
+		return nil
+	}
+
+	hostmodules.PrintModuleDetail(os.Stdout, out[0])
+	return nil
 }
 
-// claimLabel spells a claim's declarer as the path:target ref the rest of the CLI
-// takes, or the bare project for a project-wide glob no single target owns.
-func claimLabel(c types.FileClaim) string {
-	if c.Target == "" {
-		return c.Project
+// describeTools reports every project's tools, their probed versions, their windows, and
+// where each installed release cycle stands against the wired lifecycle provider.
+//
+// The CLI owns this rather than the console: the console never owns a capability, and a
+// toolchain view reachable only from a browser would make it the first that did.
+func describeTools(ctx context.Context, root string, args []string) error {
+	pos, err := commandParse("describe tools", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus describe tool[s] [<project>] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, types.ToolDefinition)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			printOwnDefaults(fs)
+		}
+	})
+	if err != nil {
+		return err
 	}
-	return fmt.Sprintf("%s:%s", c.Project, c.Target)
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	m, ok := ws.(*magus.Magus)
+	if !ok {
+		return fmt.Errorf("describe tools: workspace %T cannot report its tools", ws)
+	}
+
+	var paths []string
+	if len(pos) > 0 {
+		projects := ws.All()
+		names := describe.CollectNames(projects, func(p *types.Project) string { return p.Path })
+		projects = describe.FilterByName(projects, pos[0], func(p *types.Project) string { return p.Path })
+		if len(projects) == 0 {
+			// The entity is the PROJECT being filtered, not the tool: naming the noun the
+			// command is called after would send the reader looking for a missing binary.
+			return describe.UnknownEntity("project", pos[0], names)
+		}
+		paths = describe.CollectNames(projects, func(p *types.Project) string { return p.Path })
+	}
+
+	report, err := m.Tools(ctx, paths...)
+	if err != nil {
+		return err
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, report)
+	case outputName:
+		// project/bin, because a bare bin repeats once per project that drives it and
+		// cannot be fed back to `magus describe tools <project>`.
+		names := make([]string, 0, len(report.Tools))
+		for _, t := range report.Tools {
+			names = append(names, fmt.Sprintf("%s/%s", t.Project, t.Bin))
+		}
+		return emitNames(os.Stdout, names)
+	}
+
+	// text / wide
+	fmt.Printf("definition: %s\n\n", report.Definition)
+	fmt.Printf("workspace: %s (%d tools)\n", report.Workspace, report.Count)
+	fmt.Printf("%s\n\n", spell.LifecycleHeader(report.Lifecycle))
+	fmt.Print(spell.ToolsHeaderRow())
+	for _, t := range report.Tools {
+		fmt.Print(spell.ToolRow(t, report.Lifecycle.State))
+	}
+	return nil
 }
 
 // emitSchema prints a --schema document. Text is the raw document; any other -o
@@ -1761,25 +1113,4 @@ func emitSchema(raw string) error {
 		return emitNames(os.Stdout, names)
 	}
 	return emitFormatted(opts, doc)
-}
-
-// printOverlaps renders each set of paths once, then the declarations covering exactly
-// that set. Declarations that cover the same paths are the common case, and printing the
-// paths per declaration grew the text with paths times declarations.
-func printOverlaps(out io.Writer, overlaps []types.FileClaim) {
-	var order []string
-	groups := map[string][]types.FileClaim{}
-	for _, c := range overlaps {
-		k := strings.Join(c.Paths, ", ")
-		if _, ok := groups[k]; !ok {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], c)
-	}
-	for _, k := range order {
-		fmt.Fprintf(out, "  %s\n", k)
-		for _, c := range groups[k] {
-			fmt.Fprintf(out, "    %-6s %-24s %s\n", c.Role, claimLabel(c), c.Glob)
-		}
-	}
 }

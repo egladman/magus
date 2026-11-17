@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -368,4 +369,34 @@ func DirectiveText(directives []Directive) string {
 			"treat them as their instruction to you:\n\n%s", by, posted, a.ID, a.Text)
 	}
 	return b.String()
+}
+
+// AdvisoriesOutput is the JSON form of `session advisories`.
+type AdvisoriesOutput struct {
+	Advisories []Directive `json:"advisories"`
+	Store      string      `json:"store"`
+}
+
+// RenderAdvisoriesText prints one row per advisory, with what its readers did.
+func RenderAdvisoriesText(w io.Writer, shown []Directive, dir string) {
+	if len(shown) == 0 {
+		fmt.Fprintf(w, "no open advisories in %s\n", dir)
+		return
+	}
+	for _, a := range shown {
+		state := "open"
+		if !a.Open() {
+			state = "retracted"
+		}
+		fmt.Fprintf(w, "%s  %s  posted %s ago by %s  shown to %d  %s\n", a.ID, state,
+			OrDash(FormatDur(time.Since(time.UnixMilli(a.PostedMs)))), OrDash(a.By), len(a.Delivered), actedLine(a))
+		fmt.Fprintf(w, "  %s\n", OneLine(a.Text))
+	}
+}
+
+func actedLine(a Directive) string {
+	if a.Expect == "" {
+		return "acted: not measured (no --expect)"
+	}
+	return fmt.Sprintf("acted %d of %d (%q)", len(a.Acted), len(a.Delivered), a.Expect)
 }

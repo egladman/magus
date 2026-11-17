@@ -2,19 +2,13 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
-	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // affectedBisect implements `magus affected --bisect <project> [flags]`.
@@ -49,93 +43,24 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	if bf.Bisect == "" {
 		return flag.ErrHelp
 	}
-	projectPath := bf.Bisect
 
-	// Load history.
-	historyPath := globalCfg.HistoryPath
 	var h forecast.History
-	if err := h.Load(ctx, historyPath); err != nil {
-		return fmt.Errorf("bisect: load history %q: %w", historyPath, err)
+	if err := h.Load(ctx, globalCfg.HistoryPath); err != nil {
+		return fmt.Errorf("bisect: load history %q: %w", globalCfg.HistoryPath, err)
 	}
-
-	// Verify a regression is actually suspected.
 	cfg := volatility.Config{
 		Enabled:          globalCfg.Volatility.Enabled,
 		BootstrapSamples: globalCfg.Volatility.BootstrapSamples,
 		MinSamples:       globalCfg.Volatility.MinSamples,
 		Threshold:        globalCfg.Volatility.Threshold,
 	}
-	rt := volatility.NewRuntime(&h, "", cfg, nil, false) // reads history only; never retries
-	if !rt.IsRegression(projectPath, bf.Target) {
-		stats := rt.Stats(projectPath, bf.Target)
-		slog.InfoContext(ctx, fmt.Sprintf("need >=%d outcomes, volatility score < %.0f%%, and two consecutive affected failures",
-			cfg.MinSamples, cfg.Threshold*100), attr.Notice(""), attr.Component("bisect"))
-		slog.InfoContext(ctx, fmt.Sprintf("outcomes recorded: %d, volatility score: %.1f%%",
-			len(stats.RecentOutcomes), rt.Score(projectPath, bf.Target)*100), attr.Notice(""), attr.Component("bisect"))
-		return fmt.Errorf("bisect: no confirmed regression detected for %q/%q", projectPath, bf.Target)
-	}
-
-	// Resolve the active VCS from the workspace root.
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	rec, err := volatility.Bisect(ctx, root, &h, cfg, bf.Bisect, bf.Target, bf.Good)
 	if err != nil {
-		return fmt.Errorf("bisect: %w", err)
+		return err
 	}
-
-	wsRoot, err := res.VCS.Root(ctx, root)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return fmt.Errorf("bisect: VCS %q does not support bisect (supported: git, hg, sl)", res.Name)
-	}
-	if err != nil {
-		return fmt.Errorf("bisect: find vcs root: %w", err)
-	}
-
-	// Build the bisect run command. Disable volatility retry so bisect sees raw
-	// failures, and scope to the project under test.
-	self, err := os.Executable()
-	if err != nil {
-		self = "magus"
-	}
-	testCmd := fmt.Sprintf("%s run %s --no-volatility-retry %s", self, bf.Target, projectPath)
-
-	// Determine the good commit.
-	opts := types.BisectOptions{
-		Good:    bf.Good,
-		Bad:     "HEAD",
-		TestCmd: testCmd,
-	}
-	if opts.Good == "" {
-		lastPass := rt.LastPassTime(projectPath, bf.Target)
-		if lastPass.IsZero() {
-			return errors.New("bisect: no passing run found in history, provide --good <sha>")
-		}
-		opts.GoodBefore = lastPass.Add(time.Minute)
-		slog.InfoContext(ctx, "deriving good commit from last recorded pass: "+lastPass.Format(time.RFC3339),
-			attr.Notice(""), attr.Component("bisect"))
-	}
-
-	slog.InfoContext(ctx, fmt.Sprintf("starting %s bisect between HEAD and good commit", res.Name),
-		attr.Notice(""), attr.Component("bisect"))
-
-	culprit, err := res.VCS.Bisect(ctx, wsRoot, opts)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return fmt.Errorf("bisect: VCS %q does not support bisect (supported: git, hg, sl)", res.Name)
-	}
-	if err != nil {
-		return fmt.Errorf("bisect: %w", err)
-	}
-
 	if format.Format != outputText {
-		rec := affectedBisectOutput{Project: projectPath, Target: bf.Target, VCS: res.Name, Culprit: culprit.ID, Info: culprit.Info}
 		return emitRecord(format, rec, []string{rec.Culprit})
 	}
-	fmt.Printf("suspected culprit: %s  %s\n", culprit.ID, culprit.Info)
+	fmt.Printf("suspected culprit: %s  %s\n", rec.Culprit, rec.Info)
 	return nil
-}
-
-type affectedBisectOutput struct {
-	Project string `json:"project"`
-	Target  string `json:"target"`
-	VCS     string `json:"vcs"`
-	Culprit string `json:"culprit"`
-	Info    string `json:"info"`
 }

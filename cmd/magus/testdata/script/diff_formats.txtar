@@ -1,0 +1,93 @@
+# `magus diff` names its changeset by a flag and answers in the format asked for. A revision
+# range (--rev) and a handed-over patch (--patch) each read the same files; -o json is the
+# record a script parses, -o name the shape a shell loop reads, and a refused invocation fails
+# naming why (the usage exit code itself is pinned where the refusals are made).
+
+[!exec:git] skip 'the changeset is read from git'
+env XDG_STATE_HOME=$WORK/.state
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz src/a.txt src/b.txt
+exec git commit -m initial
+exec git checkout -b topic
+cp src/a.new.txt src/a.txt
+exec git add src/a.txt
+exec git commit -m topic
+exec git diff main...topic --no-color
+cp stdout change.patch
+
+# A clean working tree is a state, not an empty table.
+exec magus diff --no-tui
+stdout 'clean: every change is committed'
+
+# A range reads what the topic added since it diverged; -o name lists its paths.
+exec magus diff --no-tui --rev main...topic -o name
+stdout '^src/a\.txt$'
+! stdout 'src/b\.txt'
+
+# -o json is the Diff record: the base the range was compared against and its files.
+exec magus diff --no-tui --rev main...topic -o json
+stdout '"base": "main"'
+stdout '"path": "src/a.txt"'
+! stdout 'src/b\.txt'
+
+# The text report opens with the counts line.
+exec magus diff --no-tui --rev main...topic
+stdout '^1 files to read'
+stdout 'src/a\.txt'
+
+# A patch somebody handed over reads the same file, from a file or on stdin.
+exec magus diff --no-tui --patch change.patch -o name
+stdout '^src/a\.txt$'
+stdin change.patch
+exec magus diff --no-tui --patch - -o name
+stdout '^src/a\.txt$'
+
+# A positional path narrows a range.
+exec magus diff --no-tui --rev main...topic src/a.txt -o name
+stdout '^src/a\.txt$'
+
+# A patch is bytes somebody chose, so it cannot be narrowed after the fact.
+! exec magus diff --no-tui --patch change.patch src/a.txt
+stderr 'cannot be narrowed'
+
+# A refusal of the invocation is never a report: two sources, a two-dot range, a bare dash
+# as a path, --thread with a whole-changeset flag, and a patch with no file headers.
+! exec magus diff --rev main...topic --patch change.patch
+stderr 'only one may be given'
+! exec magus diff --rev main..topic
+stderr 'three dots'
+! exec magus diff -- -
+stderr 'reads a patch on stdin'
+! exec magus diff --no-tui --thread c1 --ack
+stderr '--thread narrows the review to one thread'
+stdin not-a-patch.txt
+! exec magus diff --no-tui --patch -
+stderr 'no file headers magus can read'
+
+-- magus.yaml --
+default_charms: [rw]
+-- .gitignore --
+.magus/
+.gitignore
+*.new.txt
+change.patch
+not-a-patch.txt
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "sources": ["magusfile.buzz", "src/**"],
+});
+-- src/a.txt --
+one
+-- src/b.txt --
+two
+-- src/a.new.txt --
+one
+changed
+-- not-a-patch.txt --
+this is not a unified diff

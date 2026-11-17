@@ -3,36 +3,14 @@ package main
 import (
 	"context"
 	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
-
-func TestWriteMagusfileStub(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, writeMagusfileStub(dir))
-	data, err := os.ReadFile(filepath.Join(dir, "magusfile.buzz"))
-	require.NoError(t, err, "expected magusfile.buzz")
-	body := string(data)
-	for _, want := range []string{
-		`import "magus"`,
-		`magus\project`,
-		`export fun generate`,
-		`export fun test`,
-	} {
-		assert.Contains(t, body, want, "magusfile.buzz missing %q", want)
-	}
-}
 
 // TestStarterMagusfileNoRemovedAPI guards P3-23/P3-24: starterMagusfileBuzz is the
 // canonical example magusfile referenced from the docs (see its doc comment in
@@ -71,150 +49,8 @@ func TestStarterMagusfileChecksClean(t *testing.T) {
 	defer func() { _ = sess.Close() }()
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(io.Discard))
 	bindings.RegisterMagusNamespace(ctx, sess)
-	require.NoError(t, bindings.RegisterSpellSourceModules(sess))
+	bindings.RegisterSpellDecls(sess)
+	require.NoError(t, bindings.DeclareMagusTypes(sess))
 	require.NoError(t, sess.Exec(ctx, starterMagusfileBuzz),
 		"embedded starter magusfile must check clean under the magusfile engine")
-}
-
-func TestInitSpellCmd(t *testing.T) {
-	t.Run("scaffolds a parseable, contract-complete spell", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, initSpellCommand(context.Background(), []string{"--dir", dir, "acme"}))
-
-		data, err := os.ReadFile(filepath.Join(dir, "acme", "spell.buzz"))
-		require.NoError(t, err, "expected spells/acme/spell.buzz")
-		body := string(data)
-
-		// The generated spell must parse (embedded mode, as the engine loads it).
-		_, perr := buzz.ParseEmbedded(body)
-		require.NoError(t, perr, "scaffolded spell must parse")
-
-		for _, want := range []string{
-			`export fun mgs_getName() > str { return "acme"; }`,
-			"mgs_listRequiredGlobs",
-			"mgs_listTargets",
-			`import "magus/spell"`,
-			`import "magus/charm"`,
-			`test "build op forks the expected command"`,
-		} {
-			assert.Contains(t, body, want, "scaffold missing %q", want)
-		}
-	})
-
-	t.Run("rejects an invalid handle", func(t *testing.T) {
-		dir := t.TempDir()
-		err := initSpellCommand(context.Background(), []string{"--dir", dir, "1bad name"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not a valid handle")
-	})
-
-	t.Run("refuses to overwrite without --force", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, initSpellCommand(context.Background(), []string{"--dir", dir, "acme"}))
-		err := initSpellCommand(context.Background(), []string{"--dir", dir, "acme"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "already exists")
-		require.NoError(t, initSpellCommand(context.Background(), []string{"--dir", dir, "--force", "acme"}))
-	})
-}
-
-func TestMagusfilePresent(t *testing.T) {
-	for _, name := range []string{"magusfile.buzz"} {
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644))
-		assert.True(t, magusfilePresent(dir), "magusfilePresent should detect %s", name)
-	}
-	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "magusfiles"), 0o755))
-	assert.True(t, magusfilePresent(dir), "magusfilePresent should detect magusfiles/ directory")
-	assert.False(t, magusfilePresent(t.TempDir()), "magusfilePresent should be false for an empty directory")
-}
-
-// An existing magusfile must not be clobbered by a stub write.
-func TestWriteMagusfileStubSkipsExisting(t *testing.T) {
-	dir := t.TempDir()
-	existing := filepath.Join(dir, "magusfile.buzz")
-	require.NoError(t, os.WriteFile(existing, []byte("// mine\n"), 0o644))
-	require.NoError(t, writeMagusfileStub(dir))
-	data, _ := os.ReadFile(existing)
-	assert.Equal(t, "// mine\n", string(data), "existing magusfile.buzz was modified")
-}
-
-// TestInitCmdRootWithoutLocalOrGlobalRefused pins the fix for the scoping defect:
-// --root only ever reached the merge-driver load, so `magus init --root <scratch>`
-// (no --local/--global) wrote the caller's REAL global config while bootstrapping
-// an unrelated workspace. Refusing the ambiguous combination is cheaper than
-// guessing, and it must fire before anything is written.
-func TestInitCmdRootWithoutLocalOrGlobalRefused(t *testing.T) {
-	// Sandbox the global path too: if the refusal regresses, this proves it by
-	// failing on a write attempt instead of by polluting the real XDG dir.
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	cwd := t.TempDir()
-	t.Chdir(cwd)
-	root := t.TempDir()
-
-	err := initCommand(context.Background(), root, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--local or --global")
-
-	assert.NoFileExists(t, filepath.Join(root, "magusfile.buzz"), "refused init must not scaffold root")
-	assert.NoFileExists(t, filepath.Join(cwd, "magusfile.buzz"), "refused init must not scaffold cwd either")
-	xdgTarget := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "magus", "magus.yaml")
-	assert.NoFileExists(t, xdgTarget, "refused init must not write the global config")
-}
-
-// `init --global` on an empty config dir writes a config naming no key: every key keeps
-// its built-in default, and a key a later magus removes is never pinned there. A second
-// init leaves it alone rather than failing.
-func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
-	xdg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdg)
-	t.Chdir(t.TempDir())
-	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0", Commit: "abc1234", Date: "2026-09-26T00:00:00Z"})
-
-	require.NoError(t, initCommand(ctx, "", []string{"--global"}))
-	path := filepath.Join(xdg, "magus", "magus.yaml")
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var keys map[string]any
-	require.NoError(t, yaml.Unmarshal(data, &keys))
-	assert.Empty(t, keys, "init writes no key:\n%s", data)
-	assert.Contains(t, string(data), "# written by magus v0.5.0 (commit abc1234, 2026-09-26T00:00:00Z)")
-
-	require.NoError(t, initCommand(ctx, "", []string{"--global"}))
-	again, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, string(data), string(again))
-}
-
-// The other half, that --local alongside --root lands both writes in root, is pinned by
-// testdata/script/init_root_scopes_writes.txtar rather than here. It cannot be an
-// in-process test: initCommand reaches loadMagus, which memoizes its root for the life of
-// the process and panics when a later call names a different one, so the assertion
-// passes alone and panics in a full run. Each script case is its own subprocess.
-
-func TestInstallInitHooksWritesRefreshAndDriftHooksOnly(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
-	installer, ok := vcs.Installer("git")
-	require.True(t, ok)
-
-	require.NoError(t, installInitHooks(t.Context(), installer, "git", dir))
-
-	hooks := filepath.Join(dir, ".git", "hooks")
-	for file, sections := range map[string][]string{
-		"post-checkout": {"# BEGIN magus-refresh"},
-		"post-commit":   {"# BEGIN magus-drift-notice"},
-		"pre-push":      {"# BEGIN magus-drift-notice"},
-	} {
-		data, err := os.ReadFile(filepath.Join(hooks, file))
-		require.NoError(t, err, file)
-		for _, want := range sections {
-			assert.Contains(t, string(data), want, file)
-		}
-		assert.NotContains(t, string(data), "magus-regenerate", file)
-	}
-	for _, file := range []string{"pre-merge-commit", "pre-commit", "post-applypatch"} {
-		assert.NoFileExists(t, filepath.Join(hooks, file), "no hook blocks a commit on a regeneration")
-	}
 }

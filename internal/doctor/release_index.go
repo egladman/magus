@@ -30,9 +30,8 @@ const releaseIndexWarnWindow = 45 * 24 * time.Hour
 // outage this whole area exists to have fixed, arriving by a different door.
 //
 // It carries NO Fix: re-signing is a human running a workflow, not a repair
-// `doctor --fix` may perform on someone's behalf. The Fix arms it used to carry named
-// `run release-index`, a target no workspace declares, so the first finding would have
-// failed `doctor --fix` outright.
+// doctor may name as a command. The Fix arms it used to carry named `run release-index`,
+// a target no workspace declares.
 func (r *runner) checkReleaseIndexExpiry() check.Check {
 	const name = "release-index"
 

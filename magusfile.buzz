@@ -2527,6 +2527,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "docs/guides/integrations/agents/magusfile.buzz",
                     "libs/conventions/magusfile.buzz", "libs/proofread/magusfile.buzz",
                     "libs/apiversion/magusfile.buzz",
+                    "libs/safetyscissors/magusfile.buzz", "libs/safetyscissors/README.md", "libs/safetyscissors/assets/*.buzz",
                     "libs/apiversion/**/*.go", "libs/apiversion/**/*.md",
                     "libs/result/result.buzz", "libs/result/*.go",
                    // proofread's staleness check hashes the labeled cases the binary embeds.
