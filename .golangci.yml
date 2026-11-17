@@ -541,6 +541,7 @@ linters:
             - jobserver # GNU make's name for the token protocol internal/proc/spawn implements
             - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
             - worktree  # git's own term
+            - identity  # one word, as internal/cache and internal/file already spell it; not id + entity
 
       nameoutput:
         type: module
@@ -836,6 +837,9 @@ linters:
       # G703/G706: experimental taint analysis (path traversal / log injection)
       #       on trusted local config paths and filenames in a CLI — false positives
       #       (the G304 rationale above applies to the taint variant too).
+      # G702: the taint variant of G204, excluded for its reason: a subprocess path
+      #       here is one magus resolved, such as the checkout's own ./magus the guard
+      #       hands a hook call to (internal/guard/deadline.go).
       # G122: WalkDir TOCTOU on paths under our own cache/workspace dir; not a
       #       threat for a local build cache.
       excludes:
@@ -843,6 +847,7 @@ linters:
         - G304
         - G306
         - G115
+        - G702
         - G703
         - G706
         - G122
@@ -941,11 +946,13 @@ linters:
       # test file.
       - path: ^broker/(activation_unix|activation_unix_test)\.go$
         linters: [testpairing]
-      - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
+      - path: ^cmd/magus/bootstrap_exec_unix\.go$
         linters: [testpairing]
       - path: ^internal/audit/inode_unix\.go$
         linters: [testpairing]
       - path: ^internal/file/identity_unix\.go$
+        linters: [testpairing]
+      - path: ^internal/proc/detach_unix\.go$
         linters: [testpairing]
       - path: ^internal/proc/spawn/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
         linters: [testpairing]

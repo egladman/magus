@@ -95,7 +95,7 @@ func openViaBrowserEnv(url string) error {
 		if len(fields) == 0 {
 			continue
 		}
-		cmd := exec.Command(fields[0], fields[1:]...) //nolint:gosec // G702: user's own configured browser-open command, not remote input
+		cmd := exec.Command(fields[0], fields[1:]...)
 		if err := cmd.Start(); err == nil {
 			return nil
 		}

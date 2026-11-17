@@ -227,7 +227,7 @@ func capture(bin string, args ...string) string {
 	// version that was means spawning it. `MAKE_BIN=gmake` is how a macOS run measures
 	// GNU Make 4.x rather than Apple's 3.81; reporting the bare name would record the
 	// wrong one.
-	out, err := exec.Command(bin, args...).Output() //nolint:gosec // G702: the tool under measurement, named by the operator
+	out, err := exec.Command(bin, args...).Output()
 	if err != nil {
 		return unknown
 	}
