@@ -3489,14 +3489,23 @@ func globMatchesAFile(dir string, g types.Glob) bool {
 	return errors.Is(err, found)
 }
 
+// invokeEvaluation runs one attempt under a fresh evaluation and ends it when the
+// attempt returns.
+func invokeEvaluation(ctx context.Context, s *spells.Spell, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+	eval := types.WithEvalMemo(ctx)
+	defer types.EvalMemoFromContext(eval).End()
+	return s.Invoke(eval, req)
+}
+
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
-// Each attempt is one evaluation with its own types.EvalMemo, so the body reads one
-// knowledge graph snapshot however many graph members it calls, and a retry rebuilds it.
+// Each attempt is one evaluation with its own types.EvalMemo, so every body it runs reads
+// one knowledge graph snapshot however many graph members it calls. The evaluation ends
+// with the attempt, and a retry builds a new one.
 func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.Spell) error {
 	req := spells.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
-		resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
+		resp, err := invokeEvaluation(ctx, s, req)
 		if err == nil {
 			types.RecordReturn(ctx, p.Path, name, resp.Data)
 		}
@@ -3516,7 +3525,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// has to fit on one runner is the target, not the invocation.
 	step := ctx
 	ctx = types.WithExecCost(ctx)
-	resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
+	resp, err := invokeEvaluation(ctx, s, req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
 	// the retry below: a first attempt that failed after returning a value would
@@ -3531,7 +3540,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	if err != nil {
 		decision = rt.Decide(p.Path, volatileTarget, affected, eligible, err)
 		if decision.Retry {
-			resp2, err2 := s.Invoke(types.WithEvalMemo(ctx), req)
+			resp2, err2 := invokeEvaluation(ctx, s, req)
 			if err2 == nil {
 				types.RecordReturn(ctx, p.Path, name, resp2.Data)
 			}

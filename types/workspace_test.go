@@ -1,8 +1,11 @@
 package types
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
+	"log/slog"
 	"slices"
 	"sync"
 	"testing"
@@ -175,4 +178,96 @@ func TestEvalMemoScopes(t *testing.T) {
 	outer := WithEvalMemo(context.Background())
 	inner := WithEvalMemo(outer)
 	assert.NotSame(t, EvalMemoFromContext(outer), EvalMemoFromContext(inner), "a nested evaluation starts empty")
+}
+
+func TestEndedEvaluationKeepsNothing(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	calls := 0
+	compute := func() (any, error) { calls++; return calls, nil }
+	_, err := m.Do("graph", compute)
+	require.NoError(t, err)
+
+	m.End()
+	m.mu.Lock()
+	held := len(m.cells)
+	m.mu.Unlock()
+	assert.Zero(t, held, "End drops every computed value")
+}
+
+func TestEndedEvaluationComputesEveryTime(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	calls := 0
+	compute := func() (any, error) { calls++; return calls, nil }
+	first, err := m.Do("graph", compute)
+	require.NoError(t, err)
+	assert.Equal(t, 1, first)
+
+	m.End()
+	for want := 2; want <= 3; want++ {
+		v, err := m.Do("graph", compute)
+		require.NoError(t, err)
+		assert.Equal(t, want, v, "an ended evaluation recomputes, as a nil one does")
+	}
+}
+
+// Not parallel: it swaps the default logger to read what is said.
+func TestEndedEvaluationSaysSoOnce(t *testing.T) {
+	var out bytes.Buffer
+	prev, prevOut, prevFlags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(prev)
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
+
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m.End()
+	for range 3 {
+		_, err := m.Do("graph+symbols:", func() (any, error) { return nil, nil })
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 1, bytes.Count(out.Bytes(), []byte("already ended")), "said once: %s", out.String())
+	assert.Contains(t, out.String(), "key=graph+symbols:", "it names the key")
+}
+
+func TestEndedEvaluationKeepsNothingFromAComputeInFlight(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	started, release := make(chan struct{}), make(chan struct{})
+	type result struct {
+		v   any
+		err error
+	}
+	done := make(chan result)
+	go func() {
+		v, err := m.Do("graph", func() (any, error) {
+			close(started)
+			<-release
+			return "late", nil
+		})
+		done <- result{v, err}
+	}()
+	<-started
+	m.End()
+	close(release)
+	got := <-done
+	require.NoError(t, got.err)
+	assert.Equal(t, "late", got.v, "a compute already running returns its value")
+
+	again, err := m.Do("graph", func() (any, error) { return "again", nil })
+	require.NoError(t, err)
+	assert.Equal(t, "again", again, "the value it computed was not kept")
+}
+
+func TestEndedReportsWhetherTheEvaluationEnded(t *testing.T) {
+	t.Parallel()
+	var nilMemo *EvalMemo
+	assert.False(t, nilMemo.Ended(), "a nil holder never ended")
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	assert.False(t, m.Ended())
+	m.End()
+	assert.True(t, m.Ended())
 }

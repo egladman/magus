@@ -37,7 +37,7 @@ func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, err
 	if !ok {
 		return nil, fmt.Errorf("magus\\%s: this workspace has no knowledge graph", member)
 	}
-	if memo := types.EvalMemoFromContext(ctx); memo != nil {
+	if memo := types.EvalMemoFromContext(ctx); memo != nil && !memo.Ended() {
 		return memoGraphs{g: g, memo: memo}, nil
 	}
 	return g, nil
@@ -50,14 +50,17 @@ type memoGraphs struct {
 	memo *types.EvalMemo
 }
 
-// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
+// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds. A by-reference
+// scope is built as every symbol: N refs calls share one merge, and a lone one pays a full
+// merge instead of the small one.
 func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if req.Refresh {
 		return m.g.KnowledgeGraph(ctx, req)
 	}
 	key := "graph"
 	if req.Symbols.Loaded() {
-		key = "graph+symbols:" + req.Symbols.Ref()
+		req.Symbols = types.AllSymbols
+		key = "graph+symbols:"
 	}
 	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 }
