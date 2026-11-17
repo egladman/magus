@@ -51,7 +51,7 @@ func Place(ctx context.Context, source string) (Placed, error) {
 func ReadPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error) {
 	var stamp types.BuildStamp
 	var out bytes.Buffer
-	cmd := exec.CommandContext(ctx, source, "version", "-o", "json") //nolint:gosec // exe is the running magus binary or its own placed copy
+	cmd := exec.CommandContext(ctx, source, "version", "-o", "json")
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
 		return stamp, fmt.Errorf("magus self place: %s did not report its version: %w", source, err)

@@ -30,8 +30,8 @@ type SpellImportRecord struct {
 	Spells   []SpellRow `json:"spells"`
 }
 
-// OutcomeOf names what a restore did: an inactive backend, a miss (no key), or a restore.
-func OutcomeOf(inactive bool, key string) SpellOutcome {
+// RestoreOutcome names what a restore did: an inactive backend, a miss (no key), or a restore.
+func RestoreOutcome(inactive bool, key string) SpellOutcome {
 	switch {
 	case inactive:
 		return SpellInactive

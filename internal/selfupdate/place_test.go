@@ -2,6 +2,7 @@ package selfupdate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,7 +42,7 @@ func inode(fi os.FileInfo) uint64 {
 func stampScript(t *testing.T, stamp string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "candidate.sh")
-	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho '"+stamp+"'\n"), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf("#!/bin/sh\necho '%s'\n", stamp)), 0o755))
 	return path
 }
 

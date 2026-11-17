@@ -152,7 +152,7 @@ type configCachePruneOutput struct {
 
 func newSpellCacheRow(s magus.SpellCache) cache.SpellRow {
 	return cache.SpellRow{
-		Spell: s.Spell, Outcome: cache.OutcomeOf(s.Inactive, s.Key), Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
+		Spell: s.Spell, Outcome: cache.RestoreOutcome(s.Inactive, s.Key), Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
 		Transferred: s.Transferred, Skipped: s.Skipped, Refused: s.Refused, Dirs: s.Dirs,
 	}
 }

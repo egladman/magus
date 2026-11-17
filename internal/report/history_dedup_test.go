@@ -47,11 +47,7 @@ func (s *historyDedupSuite) TestReadMissesKeepsOnlyFreshSuccessfulRuns() {
 	got, err := ReadMisses(s.T().Context(), path)
 
 	s.Require().NoError(err)
-	s.Require().Len(got, 1)
-	s.Equal("api", got[0].Project)
-	s.Equal("h1", got[0].Hash)
-	s.Equal(int64(400), got[0].DurationMs)
-	s.Equal(path, got[0].File)
+	s.Equal([]MissEvent{{Project: "api", Target: "test", Hash: "h1", DurationMs: 400, File: path}}, got)
 }
 
 func (s *historyDedupSuite) TestReadMissesOfAMissingFileIsEmpty() {

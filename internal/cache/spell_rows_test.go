@@ -6,11 +6,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOutcomeOf(t *testing.T) {
-	assert.Equal(t, SpellInactive, OutcomeOf(true, ""))
-	assert.Equal(t, SpellInactive, OutcomeOf(true, "go-1"), "an inactive backend wins over a stale key")
-	assert.Equal(t, SpellCold, OutcomeOf(false, ""))
-	assert.Equal(t, SpellRestored, OutcomeOf(false, "go-1"))
+func TestRestoreOutcome(t *testing.T) {
+	assert.Equal(t, SpellInactive, RestoreOutcome(true, ""))
+	assert.Equal(t, SpellInactive, RestoreOutcome(true, "go-1"), "an inactive backend wins over a stale key")
+	assert.Equal(t, SpellCold, RestoreOutcome(false, ""))
+	assert.Equal(t, SpellRestored, RestoreOutcome(false, "go-1"))
 }
 
 func TestSpellImportRecordRestoredOnceAnyRowRestored(t *testing.T) {
