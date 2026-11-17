@@ -61,7 +61,7 @@ export fun decidePush(push: CommandPush?, read: fun (dir: str, revision: str) > 
     final checkable = mut [<UnverifiedFile>];
     final unclaimed = mut [<UnverifiedFile>];
     foreach (f in report.unverified) {
-        if (f.commands.len() == 0) {
+        if (!f.declared) {
             unclaimed.append(f);
         } else {
             checkable.append(f);
@@ -71,9 +71,17 @@ export fun decidePush(push: CommandPush?, read: fun (dir: str, revision: str) > 
         return magus\guard.allow();
     }
     if (checkable.len() == 0) {
-        return magus\guard.advise(unclaimedNote(unclaimed), opts: {"rule": "push-unverified"});
+        return magus\guard.advise(unclaimedNote(unclaimed, report: report, dir: p.dir), opts: {"rule": "push-unverified"});
     }
     return refused(unverifiedDenial(p, report: report, checkable: checkable, unclaimed: unclaimed));
+}
+
+// later says what the answer does now: it advises while advising holds.
+fun later() > str {
+    if (advising) {
+        return "this advises for now and will refuse later";
+    }
+    return "this refuses the push";
 }
 
 // refused is the rule's answer where it would refuse: advice while advising holds.
@@ -108,7 +116,7 @@ fun published(p: CommandPush) > str {
 // lineUnjudged refuses a push whose commit magus cannot name before the line runs; why is
 // what about the line hides it.
 fun lineUnjudged(why: str) > str {
-    return "this push is refused because magus cannot tell, before the line runs, which commit it publishes:\n"
+    return "magus cannot tell, before the line runs, which commit this push publishes; {later()}:\n"
         + "{why}\n"
         + "Run the push as one call of its own, naming one revision in literal words.";
 }
@@ -116,13 +124,14 @@ fun lineUnjudged(why: str) > str {
 // readUnjudged refuses a push whose files the read could not weigh; why is the step that did
 // not finish.
 fun readUnjudged(why: str) > str {
-    return "this push is refused because magus could not finish checking its changed files against the recorded runs:\n"
+    return "magus could not finish checking this push's changed files against the recorded runs; {later()}:\n"
         + "{why}\n"
-        + "Nothing on the line is wrong. Run it again; if it is refused twice for the same reason, report it and stop.";
+        + "Nothing on the line is wrong. Run it again; if the same reason comes back twice, report it and stop.";
 }
 
-// unclaimedNote names the changed files no target declares, which no run can check.
-fun unclaimedNote(unclaimed: [UnverifiedFile]) > str {
+// unclaimedNote names the changed files no target declares, which no run can check, and
+// says when that is because no magus workspace holds the checkout at dir.
+fun unclaimedNote(unclaimed: [UnverifiedFile], report: UnverifiedReport, dir: str) > str {
     final names = mut [<str>];
     foreach (f in unclaimed) {
         if (names.len() == named) {
@@ -134,11 +143,15 @@ fun unclaimedNote(unclaimed: [UnverifiedFile]) > str {
     if (unclaimed.len() > named) {
         rest = " and {files(unclaimed.len() - named)} more";
     }
+    var why = "no target of this workspace declares";
+    if (report.noWorkspace) {
+        why = "no target declares, since no magus workspace holds `{dir}`";
+    }
     if (unclaimed.len() == 1) {
-        return "1 file changed here that no target of this workspace declares, so no run can check it: {names.join(", ")}\n"
+        return "1 file changed here that {why}, so no run can check it: {names.join(", ")}\n"
             + "It does not block this push. Declaring it as a target's input is how it gets checked.";
     }
-    return "{files(unclaimed.len())} changed here that no target of this workspace declares, so no run can check them: {names.join(", ")}{rest}\n"
+    return "{files(unclaimed.len())} changed here that {why}, so no run can check them: {names.join(", ")}{rest}\n"
         + "They do not block this push. Declaring each as a target's input is how it gets checked.";
 }
 
@@ -212,7 +225,7 @@ export fun remedy(unread: [str]) > [str] {
 
 fun unverifiedDenial(p: CommandPush, report: UnverifiedReport, checkable: [UnverifiedFile], unclaimed: [UnverifiedFile]) > str {
     final n = checkable.len();
-    final lines = mut ["{published(p)} changes {files(n)} that no passing run has read as committed; run the command on each line, then push again"];
+    final lines = mut ["{published(p)} changes {files(n)} that no passing run has read as committed; {later()}: run the command on each line before you push"];
     final unread = mut [<str>];
     foreach (f in report.unverified) {
         unread.append(f.path);
@@ -238,7 +251,7 @@ fun unverifiedDenial(p: CommandPush, report: UnverifiedReport, checkable: [Unver
         lines.append("{stale.join(", ")} ran while some of these files differed from the commit, or before they last changed, so those runs do not count for them.");
     }
     if (unclaimed.len() > 0) {
-        lines.append(unclaimedNote(unclaimed));
+        lines.append(unclaimedNote(unclaimed, report: report, dir: p.dir));
     }
     lines.append("A run counts when it passed and, as it ran, the file was the same as in {short(p.revision)}; only runs recorded in this checkout (`{p.dir}`) count. The files are those changed since the merge base with {report.base}.");
     return lines.join("\n");
@@ -269,11 +282,11 @@ test "a push whose changed files a passing run read is allowed" {
 test "a push with an unread file is advised naming it and the commands that read it" {
     final asked = mut [<str>];
     final report = UnverifiedReport{ revision = pushed.revision, base = "origin/main", changed = ["a.go", "b.md"],
-        unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run go-test . -- -run 'A'"] }, UnverifiedFile{ path = "b.md" }] };
+        unverified = [UnverifiedFile{ path = "a.go", declared = true, commands = ["magus run go-test . -- -run 'A'"] }, UnverifiedFile{ path = "b.md" }] };
     final v = decidePush(pushed, read: stub(report, asked: asked));
     std\assert(v.decision == magus\GuardDecision.advise, message: "advised while advising");
-    verdict\assertVerdict(v.reason, label: "an unread file");
-    std\assert(v.reason.split("\n")[0] == "pushing 0123456789ab changes 1 file that no passing run has read as committed; run the command on each line, then push again", message: v.reason);
+    verdict\checked(v, label: "an unread file");
+    std\assert(v.reason.split("\n")[0] == "pushing 0123456789ab changes 1 file that no passing run has read as committed; this advises for now and will refuse later: run the command on each line before you push", message: v.reason);
     std\assert(v.reason.split("\n")[1] == "  `./magus run lint . -- a.go b.md`", message: v.reason);
     std\assert(v.reason.split("\n")[2] == "  `./magus run go::go-test . -s -- -run '<Name>' .`", message: v.reason);
     std\assert(v.reason.indexOf("  unread: a.go") != null, message: v.reason);
@@ -299,9 +312,25 @@ test "two files no target declares are named in the plural" {
     std\assert(v.reason.indexOf("They do not block this push.") != null, message: v.reason);
 }
 
+test "a declared file only a generator reads is unread, not undeclared" {
+    final report = UnverifiedReport{ revision = pushed.revision, base = "origin/main", changed = ["a.go"],
+        unverified = [UnverifiedFile{ path = "a.go", declared = true }] };
+    final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
+    std\assert(v.reason.indexOf("changes 1 file that no passing run") != null, message: v.reason);
+    std\assert(v.reason.indexOf("  `./magus run lint . -- a.go`") != null, message: v.reason);
+}
+
+test "a checkout no magus workspace holds says so" {
+    final report = UnverifiedReport{ revision = pushed.revision, base = "origin/main", changed = ["README.md"], noWorkspace = true,
+        unverified = [UnverifiedFile{ path = "README.md" }] };
+    final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.decision.value);
+    std\assert(v.reason.indexOf("1 file changed here that no target declares, since no magus workspace holds `/w`, so no run can check it: README.md") != null, message: v.reason);
+}
+
 test "a reply names a file no target declares beside the ones to run" {
     final report = UnverifiedReport{ revision = pushed.revision, base = "origin/main",
-        unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run test ."] }, UnverifiedFile{ path = "LICENSE" }] };
+        unverified = [UnverifiedFile{ path = "a.go", declared = true, commands = ["magus run test ."] }, UnverifiedFile{ path = "LICENSE" }] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
     std\assert(v.decision == magus\GuardDecision.advise, message: "advised while advising");
     std\assert(v.reason.indexOf("changes 1 file that no passing run") != null, message: "only the checkable file is counted: " + v.reason);
@@ -311,7 +340,7 @@ test "a reply names a file no target declares beside the ones to run" {
 test "a reply names five files and counts the rest" {
     final many = mut [<UnverifiedFile>];
     foreach (name in ["a", "b", "c", "d", "e", "f", "g"]) {
-        many.append(UnverifiedFile{ path = name, commands = ["magus run test ."] });
+        many.append(UnverifiedFile{ path = name, declared = true, commands = ["magus run test ."] });
     }
     final v = decidePush(pushed, read: stub(UnverifiedReport{ revision = pushed.revision, unverified = many }, asked: mut [<str>]));
     std\assert(v.reason.indexOf("  unread: e\n") != null and v.reason.indexOf("  unread: f") == null, message: v.reason);
@@ -334,8 +363,8 @@ test "the remedy runs each Go package's tests once" {
 
 test "the remedy names neither a generator nor one command per file" {
     final report = UnverifiedReport{ revision = pushed.revision, unverified = [
-        UnverifiedFile{ path = "internal/a.go", commands = ["magus run go-api-generate .", "magus run lint . -- internal/a.go"] },
-        UnverifiedFile{ path = "internal/b.go", commands = ["magus run lint . -- internal/b.go"] },
+        UnverifiedFile{ path = "internal/a.go", declared = true, commands = ["magus run go-api-generate .", "magus run lint . -- internal/a.go"] },
+        UnverifiedFile{ path = "internal/b.go", declared = true, commands = ["magus run lint . -- internal/b.go"] },
     ] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
     std\assert(v.reason.indexOf("go-api-generate") == null, message: v.reason);
@@ -344,7 +373,7 @@ test "the remedy names neither a generator nor one command per file" {
 }
 
 test "a run that claims the file but did not read it as committed is named once" {
-    final report = UnverifiedReport{ revision = pushed.revision, unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run go-test ."] }],
+    final report = UnverifiedReport{ revision = pushed.revision, unverified = [UnverifiedFile{ path = "a.go", declared = true, commands = ["magus run go-test ."] }],
         runs = [RunEvidence{ ref = "out1", project = ".", target = "go-test", dirty = true, claims = ["a.go"] },
                 RunEvidence{ ref = "out2", project = ".", target = "go-test", dirty = true, claims = ["a.go"] }] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
@@ -353,7 +382,7 @@ test "a run that claims the file but did not read it as committed is named once"
 }
 
 test "a run of a target no listed command runs is not named" {
-    final report = UnverifiedReport{ revision = pushed.revision, unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run go-test ."] }],
+    final report = UnverifiedReport{ revision = pushed.revision, unverified = [UnverifiedFile{ path = "a.go", declared = true, commands = ["magus run go-test ."] }],
         runs = [RunEvidence{ ref = "out1", project = ".", target = "vet", dirty = true, claims = ["a.go"] }] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
     std\assert(v.reason.indexOf("`vet .`") == null, message: v.reason);
@@ -362,9 +391,10 @@ test "a run of a target no listed command runs is not named" {
 test "a read that did not finish is advised as unjudged with its reason" {
     final v = decidePush(pushed, read: stub(UnverifiedReport{ unknown = "the output store is unread: permission denied" }, asked: mut [<str>]));
     std\assert(v.decision == magus\GuardDecision.advise, message: "advised while advising");
-    verdict\assertVerdict(v.reason, label: "an unfinished read");
+    verdict\checked(v, label: "an unfinished read");
     std\assert(v.reason.split("\n")[1] == "the output store is unread: permission denied", message: v.reason);
-    std\assert(v.reason.split("\n")[2] == "Nothing on the line is wrong. Run it again; if it is refused twice for the same reason, report it and stop.", message: v.reason);
+    std\assert(v.reason.split("\n")[0] == "magus could not finish checking this push's changed files against the recorded runs; this advises for now and will refuse later:", message: v.reason);
+    std\assert(v.reason.split("\n")[2] == "Nothing on the line is wrong. Run it again; if the same reason comes back twice, report it and stop.", message: v.reason);
 }
 
 test "a read that raised is advised as unjudged" {
@@ -381,12 +411,13 @@ test "a push whose revision is unknown is advised as unjudged without a read" {
     final v = decidePush(moved, read: stub(UnverifiedReport{}, asked: asked));
     std\assert(v.decision == magus\GuardDecision.advise and asked.len() == 0, message: v.reason);
     std\assert(v.reason.indexOf("`git commit` before it pushes") != null, message: v.reason);
+    std\assert(v.reason.split("\n")[0] == "magus cannot tell, before the line runs, which commit this push publishes; this advises for now and will refuse later:", message: v.reason);
     std\assert(v.reason.split("\n")[2] == "Run the push as one call of its own, naming one revision in literal words.", message: v.reason);
 }
 
 test "a pull request call is worded as opening one" {
     final pr = CommandPush{ tool = "gh", dir = "/w", revision = "0123456789abcdef0123", opensPullRequest = true };
-    final report = UnverifiedReport{ revision = pr.revision, unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run test ."] }] };
+    final report = UnverifiedReport{ revision = pr.revision, unverified = [UnverifiedFile{ path = "a.go", declared = true, commands = ["magus run test ."] }] };
     final v = decidePush(pr, read: stub(report, asked: mut [<str>]));
     std\assert(v.reason.split("\n")[0].startsWith("opening a pull request at 0123456789ab changes 1 file"), message: v.reason);
 }
