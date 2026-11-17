@@ -228,11 +228,11 @@ func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 
 func (s *exitEvidenceSuite) TestRefuseOwedReasonAcceptsRemoteCI() {
 	result := passingResult()
-	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: OwedRemoteCI}}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: owedRemoteCI}}
 	s.Require().NoError(refuseOwedReason(result))
 
 	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: "too slow"}}
-	s.ErrorContains(refuseOwedReason(result), OwedRemoteCI)
+	s.ErrorContains(refuseOwedReason(result), owedRemoteCI)
 }
 
 func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {

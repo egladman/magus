@@ -193,7 +193,7 @@ func refuseWrongRun(row job.Job, primary job.CapturedRun, gates []job.GateAttemp
 			return nil
 		}
 		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, RecordedCommand(attempt), CheckCommand(resolveCheck(goals[i].Check, defaults)), leftOut(goals[i].Check, attempt, files, named, selection))
+			id, attempt.Ref, recordedCommand(attempt), CheckCommand(resolveCheck(goals[i].Check, defaults)), leftOut(goals[i].Check, attempt, files, named, selection))
 	}
 	if primary.Found {
 		if err := check(job.PrimaryGoalID, primary); err != nil {
@@ -721,13 +721,13 @@ func refuseOwedReason(result job.Result) error {
 		owed[evidence.GateID] = evidence.Owed
 	}
 	for _, goal := range slices.Sorted(maps.Keys(owed)) {
-		if reason := owed[goal]; reason != "" && reason != OwedNoSeat && reason != OwedRemoteCI {
+		if reason := owed[goal]; reason != "" && reason != OwedNoSeat && reason != owedRemoteCI {
 			return fmt.Errorf("job: goal %q is filed as owed because %q, and the reasons a run is owed are %q and %q:"+
 				" a check the environment kept from running is filed as unrun with that cause, which fails the job,"+
 				" the integrator regenerates an output outside the write paths, so that files nothing,"+
 				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
 				" and a lint finding in a file this job did not change clears by linting the files it changed",
-				goal, reason, OwedNoSeat, OwedRemoteCI)
+				goal, reason, OwedNoSeat, owedRemoteCI)
 		}
 	}
 	return nil

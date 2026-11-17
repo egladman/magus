@@ -114,7 +114,7 @@ func (s *CredentialSuite) TestGrantPresets() {
 	s.Equal("mcp=write", AccessConnector().String())
 	s.Equal("console=write", AccessConsole().String())
 	s.Equal("console=read", AccessViewer().String())
-	s.Equal("mcp=write,console=write", AccessSocketPeer().String())
+	s.Equal("mcp=write,console=write", accessSocketPeer().String())
 	s.Empty(Access{}.String())
 }
 

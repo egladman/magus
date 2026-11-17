@@ -210,7 +210,7 @@ func RunEvents(row job.Job) []FeedEvent {
 }
 
 func runEvent(id string, a job.CapturedRun, note string) FeedEvent {
-	e := FeedEvent{Ts: a.TimestampMs, Kind: FeedRun, Job: id, Action: RecordedCommand(a), Ref: a.Ref, Outcome: trail.OutcomeOK, Note: note}
+	e := FeedEvent{Ts: a.TimestampMs, Kind: FeedRun, Job: id, Action: recordedCommand(a), Ref: a.Ref, Outcome: trail.OutcomeOK, Note: note}
 	if a.Failed {
 		e.Outcome = trail.OutcomeError
 	}

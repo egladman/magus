@@ -18,25 +18,25 @@ type inflightDetailSuite struct {
 func TestInflightDetail(t *testing.T) { suite.Run(t, new(inflightDetailSuite)) }
 
 func (s *inflightDetailSuite) TestOnePartitionNamesOnlyThePosition() {
-	s.Equal("pos 2", InflightDetail(InflightChange{Partition: 1, Position: 2}, 1))
+	s.Equal("pos 2", inflightDetail(InflightChange{Partition: 1, Position: 2}, 1))
 }
 
 func (s *inflightDetailSuite) TestSeveralPartitionsNameThePartition() {
-	s.Equal("partition 1 pos 2", InflightDetail(InflightChange{Partition: 1, Position: 2}, 3))
+	s.Equal("partition 1 pos 2", inflightDetail(InflightChange{Partition: 1, Position: 2}, 3))
 }
 
 func (s *inflightDetailSuite) TestACodeWithAReasonOutranksTheMark() {
 	c := InflightChange{Position: 1, Code: "MGS1", Reason: "why", Mark: "needs_work"}
 
-	s.Equal("pos 1  MGS1: why", InflightDetail(c, 1))
+	s.Equal("pos 1  MGS1: why", inflightDetail(c, 1))
 }
 
 func (s *inflightDetailSuite) TestAMarkReadsAsWords() {
-	s.Equal("needs work", InflightDetail(InflightChange{Mark: "needs_work"}, 0))
+	s.Equal("needs work", inflightDetail(InflightChange{Mark: "needs_work"}, 0))
 }
 
 func (s *inflightDetailSuite) TestNothingToSayIsEmpty() {
-	s.Empty(InflightDetail(InflightChange{}, 0))
+	s.Empty(inflightDetail(InflightChange{}, 0))
 }
 
 func inflightRows() []job.Job {
@@ -85,13 +85,13 @@ func TestInflightJoinsChangesToJobsAndThePlan(t *testing.T) {
 		// Provider order, another base's change left out, each joined by branch and placed by the plan.
 		Changes: []InflightChange{
 			{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Jobs: []string{"other/work"}, Intent: "rebase",
-				Partition: 1, Position: 2, Attention: AttentionQueue},
+				Partition: 1, Position: 2, Attention: attentionQueue},
 			{ID: "2", Title: "queued", Head: "h2", Branch: "queued", Base: "main", Author: "eli", Jobs: []string{"fleet/queued"}, Intent: "squash",
-				Partition: 1, Position: 1, Mine: true, Attention: AttentionQueue},
+				Partition: 1, Position: 1, Mine: true, Attention: attentionQueue},
 			{ID: "4", Head: "h4", Base: "main", Author: "eli", Intent: "squash",
-				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: AttentionReview},
-			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: AttentionAuthor},
-			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: AttentionNone},
+				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: attentionReview},
+			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: attentionAuthor},
+			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: attentionNone},
 		},
 		// A live job of the tree on a branch no change carries.
 		Unproposed: []string{"fleet/nopr"},
@@ -119,15 +119,15 @@ func TestInflightMineIsTheJobTreeThenTheLogin(t *testing.T) {
 
 func TestInflightAttention(t *testing.T) {
 	t.Parallel()
-	for want, ch := range map[InflightAttention]InflightChange{
-		AttentionAuthor: {Intent: "squash", Decision: "kick", Code: "KICK_RED"},
-		AttentionReview: {Intent: "squash", Decision: "wait", Code: "WAIT_NOT_APPROVED"},
-		AttentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
-		AttentionNone:   {Mark: "queued"},
+	for want, ch := range map[inflightAttention]InflightChange{
+		attentionAuthor: {Intent: "squash", Decision: "kick", Code: "KICK_RED"},
+		attentionReview: {Intent: "squash", Decision: "wait", Code: "WAIT_NOT_APPROVED"},
+		attentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
+		attentionNone:   {Mark: "queued"},
 	} {
 		assert.Equal(t, want, changeAttention(ch), "%+v", ch)
 	}
-	assert.Equal(t, AttentionAuthor, changeAttention(InflightChange{Mark: "needs_regeneration"}))
+	assert.Equal(t, attentionAuthor, changeAttention(InflightChange{Mark: "needs_regeneration"}))
 }
 
 // A plan for another base, or for a head that has moved, places nothing.

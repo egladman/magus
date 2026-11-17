@@ -278,20 +278,20 @@ func ParsePauseUntil(raw string, now time.Time) (int64, error) {
 	}
 	if d, err := time.ParseDuration(raw); err == nil {
 		if d <= 0 {
-			return 0, &PauseUntilError{Until: raw, Reason: "is not ahead of now, as a positive duration (2h) or a later instant is"}
+			return 0, &pauseUntilError{Until: raw, Reason: "is not ahead of now, as a positive duration (2h) or a later instant is"}
 		}
 		return now.Add(d).Unix(), nil
 	}
 	if at, err := time.Parse(time.RFC3339, raw); err == nil {
 		return at.Unix(), nil
 	}
-	return 0, &PauseUntilError{Until: raw, Reason: "is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z"}
+	return 0, &pauseUntilError{Until: raw, Reason: "is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z"}
 }
 
-// PauseUntilError is a pause bound [ParsePauseUntil] refuses, and why.
-type PauseUntilError struct {
+// pauseUntilError is a pause bound [ParsePauseUntil] refuses, and why.
+type pauseUntilError struct {
 	Until  string
 	Reason string
 }
 
-func (e *PauseUntilError) Error() string { return fmt.Sprintf("--until %q %s", e.Until, e.Reason) }
+func (e *pauseUntilError) Error() string { return fmt.Sprintf("--until %q %s", e.Until, e.Reason) }

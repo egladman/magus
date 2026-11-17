@@ -321,9 +321,9 @@ func integratorGoals(row job.Job) []job.Goal {
 // waits on neither.
 const OwedNoSeat = "no seat"
 
-// OwedRemoteCI is the reason a check is owed when the workspace declares a
+// owedRemoteCI is the reason a check is owed when the workspace declares a
 // remote CI (ci.remote_gate) that runs it on the pull request.
-const OwedRemoteCI = "remote CI runs it"
+const owedRemoteCI = "remote CI runs it"
 
 // owedGoals are the checks the jobs row merges filed as owed (see [OwedNoSeat]), one
 // goal per check no goal in held or before it covers. A merged job is one whose id names a
@@ -803,7 +803,7 @@ func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun,
 	}
 	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles, seen.TestSelection) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run%s",
-			status.OutputRef, RecordedCommand(attempt), CheckCommand(resolveCheck(gate.Check, seen.DefaultCharms)), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
+			status.OutputRef, recordedCommand(attempt), CheckCommand(resolveCheck(gate.Check, seen.DefaultCharms)), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
 	}
 	if attempt.Failed {
 		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check, seen.namedFiles, seen.TestSelection))

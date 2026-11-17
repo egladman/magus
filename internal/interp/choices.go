@@ -39,13 +39,13 @@ func (e *ChoiceConflictError) Error() string {
 		e.Declaration, e.FirstProject, e.First, e.SecondProject, e.Second)
 }
 
-// OutsideMagusfileError is a workspace-wide declaration called where no magusfile
+// outsideMagusfileError is a workspace-wide declaration called where no magusfile
 // evaluation is collecting choices, such as a `magus buzz` script.
-type OutsideMagusfileError struct {
+type outsideMagusfileError struct {
 	Declaration string
 }
 
-func (e *OutsideMagusfileError) Error() string {
+func (e *outsideMagusfileError) Error() string {
 	return fmt.Sprintf("%s is a magusfile declaration, and this call runs outside a magusfile evaluation, so move it to a magusfile's top level", e.Declaration)
 }
 
@@ -72,7 +72,7 @@ func (r *ChoiceRecord) Choices() Choices {
 }
 
 // RecordSecretProvider records spell as the evaluation's secret provider. It returns an
-// [*OutsideMagusfileError] when ctx carries no record, and a [*ChoiceConflictError] when
+// [*outsideMagusfileError] when ctx carries no record, and a [*ChoiceConflictError] when
 // the evaluation already chose a different spell. Naming the same spell again passes.
 func RecordSecretProvider(ctx context.Context, spell string) error {
 	return record(ctx, declSecretProvider, spell, func(c *Choices) *string { return &c.SecretProvider })
@@ -87,7 +87,7 @@ func RecordRemoteBackend(ctx context.Context, spell string) error {
 func record(ctx context.Context, decl, spell string, field func(*Choices) *string) error {
 	rec, _ := ctx.Value(choiceRecordKey{}).(*ChoiceRecord)
 	if rec == nil {
-		return &OutsideMagusfileError{Declaration: decl}
+		return &outsideMagusfileError{Declaration: decl}
 	}
 	rec.mu.Lock()
 	defer rec.mu.Unlock()

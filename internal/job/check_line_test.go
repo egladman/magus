@@ -37,7 +37,7 @@ func (s *CheckLineSuite) TestAScriptCheckRendersAsARecordedRun() {
 
 func (s *CheckLineSuite) TestASetOfRunsIsNotOneCheck() {
 	_, err := ParseCheckCommand("magus affected ci --no-default-charms")
-	var refused *CheckCommandError
+	var refused *checkCommandError
 	s.Require().ErrorAs(err, &refused, "a set of runs is not one run, so no ref can be bound to it")
 	s.False(refused.Script)
 	s.Contains(err.Error(), "is not one")
@@ -48,7 +48,7 @@ func (s *CheckLineSuite) TestASetOfRunsIsNotOneCheck() {
 
 func (s *CheckLineSuite) TestARecordedCommandQualifiesItsTargetWithTheSpell() {
 	s.Equal("magus run go::go-test cmd/magus -- -run X",
-		RecordedCommand(job.CapturedRun{Spell: "go", Target: "go-test", Project: "cmd/magus", ExtraArgs: []string{"-run", "X"}}))
+		recordedCommand(job.CapturedRun{Spell: "go", Target: "go-test", Project: "cmd/magus", ExtraArgs: []string{"-run", "X"}}))
 }
 
 func (s *CheckLineSuite) TestAStoreWriteRendersValidationFromCheck() {

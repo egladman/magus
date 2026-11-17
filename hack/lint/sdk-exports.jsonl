@@ -263,3 +263,5 @@
 {"name":"ModelRow","reason":"Magus.Models returns it; the alias names internal/agent/model's row so no caller outside the module meets an internal type"}
 {"name":"ModelRow.Multiplier","reason":"the long-context surcharge field ModelRow promotes from budget.Price"}
 {"name":"WithSecrets","reason":"a program embedding magus supplies the secret provider openers and options the workspace's resolver is built with"}
+{"name":"ChoiceConflictError","reason":"Open returns it when two magusfiles name different spells for one workspace-wide choice, and a caller matches it with errors.As"}
+{"name":"ChoiceConflictError.Error","reason":"the error method of the conflict Open returns"}

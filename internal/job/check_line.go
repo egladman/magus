@@ -63,35 +63,35 @@ func ParseCheckCommand(s string) (job.LeaseCheck, error) {
 		c := job.LeaseCheck{Script: words[2]}
 		if rest := words[3:]; len(rest) > 0 {
 			if rest[0] != "--" {
-				return job.LeaseCheck{}, &CheckCommandError{Line: s, Script: true}
+				return job.LeaseCheck{}, &checkCommandError{Line: s, Script: true}
 			}
 			c.Args = rest[1:]
 		}
 		return c, nil
 	}
 	if len(words) == 0 || words[0] != "run" {
-		return job.LeaseCheck{}, &CheckCommandError{Line: s}
+		return job.LeaseCheck{}, &checkCommandError{Line: s}
 	}
 	return job.ParseLeaseCheck(strings.Join(words[1:], " "))
 }
 
-// CheckCommandError is a line [ParseCheckCommand] refuses. Script says it began as a
+// checkCommandError is a line [ParseCheckCommand] refuses. Script says it began as a
 // script check.
-type CheckCommandError struct {
+type checkCommandError struct {
 	Line   string
 	Script bool
 }
 
-func (e *CheckCommandError) Error() string {
+func (e *checkCommandError) Error() string {
 	if e.Script {
 		return fmt.Sprintf("a script check line is `magus buzz --record <script> [-- args]` and %q is not one", e.Line)
 	}
 	return fmt.Sprintf("a check line is `magus run <target> <project> [-- args]` and %q is not one", e.Line)
 }
 
-// RecordedCommand renders the command a captured run recorded, its spell qualifying the
+// recordedCommand renders the command a captured run recorded, its spell qualifying the
 // target.
-func RecordedCommand(a job.CapturedRun) string {
+func recordedCommand(a job.CapturedRun) string {
 	target := a.Target
 	if a.Spell != "" {
 		target = fmt.Sprintf("%s::%s", a.Spell, target)

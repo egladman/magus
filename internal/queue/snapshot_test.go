@@ -128,11 +128,16 @@ func TestSnapshotJoinInflight(t *testing.T) {
 	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
 	got, err = JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, job.InflightList{
+	// The attention type is internal/job's own, so its value is read as the string it carries.
+	require.Len(t, got.Changes, 1)
+	assert.Equal(t, "queue", string(got.Changes[0].Attention))
+	want := job.InflightList{
 		List:    list,
 		Fetched: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
 		Changes: []job.InflightChange{{
-			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: job.AttentionQueue,
+			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true,
 		}},
-	}, got)
+	}
+	want.Changes[0].Attention = got.Changes[0].Attention
+	assert.Equal(t, want, got)
 }

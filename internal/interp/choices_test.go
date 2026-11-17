@@ -80,7 +80,7 @@ func (s *ChoicesSuite) TestRecordConflictIsTyped() {
 }
 
 func (s *ChoicesSuite) TestRecordWithoutAnEvaluationIsRefused() {
-	var outside *OutsideMagusfileError
+	var outside *outsideMagusfileError
 	s.Require().ErrorAs(RecordRemoteBackend(s.T().Context(), "aws-s3"), &outside)
 	s.Equal(declRemoteBackend, outside.Declaration)
 	s.Require().ErrorAs(RecordSecretProvider(s.T().Context(), "onepassword"), &outside)

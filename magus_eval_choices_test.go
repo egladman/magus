@@ -8,7 +8,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/secrets"
@@ -74,7 +73,7 @@ func (s *EvalChoicesSuite) TestIdenticalChoicesAcrossMagusfilesPass() {
 
 func (s *EvalChoicesSuite) TestDifferentChoicesAcrossMagusfilesAreRefused() {
 	_, err := s.open(chooseFakeCache, "import \"magus\";\nmagus\\cache.remote({\"name\": \"other-cache\"});\n")
-	var conflict *interp.ChoiceConflictError
+	var conflict *ChoiceConflictError
 	s.Require().ErrorAs(err, &conflict)
 	s.Equal(`magus\cache.remote`, conflict.Declaration)
 	s.ElementsMatch([]string{"fake-cache", "other-cache"}, []string{conflict.First, conflict.Second})

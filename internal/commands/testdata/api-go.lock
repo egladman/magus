@@ -14,6 +14,13 @@ github.com/egladman/magus.CacheStats.SavedMs field int64
 github.com/egladman/magus.CatalogFingerprint func() string
 github.com/egladman/magus.CharmsForCI func(charms []string) []string
 github.com/egladman/magus.CheckGrader type = github.com/egladman/magus/internal/job.CheckGrader
+github.com/egladman/magus.ChoiceConflictError type = github.com/egladman/magus/internal/interp.ChoiceConflictError
+github.com/egladman/magus.ChoiceConflictError.Declaration field string
+github.com/egladman/magus.ChoiceConflictError.Error method(ptr) func() string
+github.com/egladman/magus.ChoiceConflictError.First field string
+github.com/egladman/magus.ChoiceConflictError.FirstProject field string
+github.com/egladman/magus.ChoiceConflictError.Second field string
+github.com/egladman/magus.ChoiceConflictError.SecondProject field string
 github.com/egladman/magus.CleanedOutputs type struct
 github.com/egladman/magus.CleanedOutputs.Removed field []string
 github.com/egladman/magus.CleanedOutputs.Tracked field []string
@@ -2468,6 +2475,7 @@ github.com/egladman/magus/types.JobRegistration type struct
 github.com/egladman/magus/types.JobRegistration.Advice field string "json:\"advice\""
 github.com/egladman/magus/types.JobRegistration.Job field github.com/egladman/magus/libs/safetyscissors/job.Job "json:\"job\""
 github.com/egladman/magus/types.JobResultSchema var FormatLedger
+github.com/egladman/magus/types.JobStoreRecordForeign const DiagnosticCode = "MGS3058"
 github.com/egladman/magus/types.JobStoreWriterOlder const DiagnosticCode = "MGS3051"
 github.com/egladman/magus/types.JobUngraded const DiagnosticCode = "MGS3039"
 github.com/egladman/magus/types.JobValidation type struct

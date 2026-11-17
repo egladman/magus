@@ -82,31 +82,31 @@ type InflightChange struct {
 	// Mine is whether the caller is on the change: a job of the caller's job tree works
 	// on its branch, or its author is the caller's forge login.
 	Mine bool `json:"mine" yaml:"mine,omitempty"`
-	// Attention is whose turn the change is. See [InflightAttention].
-	Attention InflightAttention `json:"attention" yaml:"attention"`
+	// Attention is whose turn the change is. See [inflightAttention].
+	Attention inflightAttention `json:"attention" yaml:"attention"`
 	// Neighbours are the other in-flight changes this one touches, on the caller's
 	// changes only, strongest evidence first.
-	Neighbours []InflightNeighbour `json:"neighbours,omitempty" yaml:"neighbours,omitempty"`
+	Neighbours []inflightNeighbour `json:"neighbours,omitempty" yaml:"neighbours,omitempty"`
 }
 
-// InflightAttention is whose turn an in-flight change is, derived from its facts and
+// inflightAttention is whose turn an in-flight change is, derived from its facts and
 // never written by hand.
-type InflightAttention string
+type inflightAttention string
 
 const (
-	// AttentionAuthor: the queue kicked it back, so its author acts next.
-	AttentionAuthor InflightAttention = "author"
-	// AttentionReview: it waits for an approval at its head.
-	AttentionReview InflightAttention = "review"
-	// AttentionQueue: it carries merge intent and the queue acts next.
-	AttentionQueue InflightAttention = "queue"
-	// AttentionNone: it carries no merge intent and nothing waits on anyone.
-	AttentionNone InflightAttention = "none"
+	// attentionAuthor: the queue kicked it back, so its author acts next.
+	attentionAuthor inflightAttention = "author"
+	// attentionReview: it waits for an approval at its head.
+	attentionReview inflightAttention = "review"
+	// attentionQueue: it carries merge intent and the queue acts next.
+	attentionQueue inflightAttention = "queue"
+	// attentionNone: it carries no merge intent and nothing waits on anyone.
+	attentionNone inflightAttention = "none"
 )
 
-// InflightNeighbour is another in-flight change a change touches, by the strongest
+// inflightNeighbour is another in-flight change a change touches, by the strongest
 // evidence that holds: merge_conflict, then declaration, file, affected.
-type InflightNeighbour struct {
+type inflightNeighbour struct {
 	// ID is the other change, or a job id when that work has no change yet.
 	ID           string   `json:"id"                     yaml:"id"`
 	Evidence     string   `json:"evidence"               yaml:"evidence"`
@@ -205,23 +205,23 @@ func Inflight(jobs job.List, in InflightInput) InflightList {
 
 // changeAttention is whose turn ch is. A kick-back outranks intent: a change still carrying
 // intent after the queue kicked it is waiting on its author, not on the queue.
-func changeAttention(ch InflightChange) InflightAttention {
+func changeAttention(ch InflightChange) inflightAttention {
 	switch {
 	case ch.Mark == string(qtypes.MarkKickedBack), ch.Mark == string(qtypes.MarkNeedsRegeneration),
 		ch.Decision == qtypes.DecisionKick.String():
-		return AttentionAuthor
+		return attentionAuthor
 	case ch.Code == string(qtypes.CodeWaitNotApproved):
-		return AttentionReview
+		return attentionReview
 	case ch.Intent != "":
-		return AttentionQueue
+		return attentionQueue
 	}
-	return AttentionNone
+	return attentionNone
 }
 
-// InflightDetail is why a change is where it is: its place in the plan, and
+// inflightDetail is why a change is where it is: its place in the plan, and
 // the verdict's code and reason or the mark it shows. It names the partition
 // only when partitions exceeds one, and is "" with nothing to say.
-func InflightDetail(c InflightChange, partitions int) string {
+func inflightDetail(c InflightChange, partitions int) string {
 	var parts []string
 	if c.Position > 0 {
 		place := fmt.Sprintf("pos %d", c.Position)

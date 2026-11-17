@@ -706,12 +706,16 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	return cfg, nil
 }
 
+// ChoiceConflictError is two magusfiles naming different spells for one workspace-wide
+// choice, such as the secret provider or the remote cache backend. Open returns it.
+type ChoiceConflictError = interp.ChoiceConflictError
+
 // preloadMagusfiles parses magusfiles in each project so magus.project() calls
 // populate m.wsReg, and returns each project's custom (export fun) target names,
 // keyed by project path — used afterward by validateTargetPolicies to confirm a
 // project's per-target policy table names only targets that actually exist — and the
 // choices every magusfile made, merged. Two magusfiles naming different spells for one
-// choice are an *interp.ChoiceConflictError.
+// choice are a [*ChoiceConflictError].
 //
 // Every evaluation here reads through the base resolver: a provider one magusfile
 // chooses applies to its own reads and, after preload, to every run, but never to

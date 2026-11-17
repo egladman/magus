@@ -60,12 +60,12 @@ func PrintInflight(out io.Writer, list InflightList, all bool) {
 	}
 	groups := []struct {
 		title     string
-		attention InflightAttention
+		attention inflightAttention
 	}{
-		{needs, AttentionAuthor},
-		{"waiting on review", AttentionReview},
-		{"queued, in plan order", AttentionQueue},
-		{"not queued", AttentionNone},
+		{needs, attentionAuthor},
+		{"waiting on review", attentionReview},
+		{"queued, in plan order", attentionQueue},
+		{"not queued", attentionNone},
 	}
 	for _, g := range groups {
 		var rows []InflightChange
@@ -77,14 +77,14 @@ func PrintInflight(out io.Writer, list InflightList, all bool) {
 		if len(rows) == 0 {
 			continue
 		}
-		if g.attention == AttentionQueue {
+		if g.attention == attentionQueue {
 			slices.SortStableFunc(rows, queueOrder)
 		}
 		fmt.Fprintf(out, "%s (%d)\n", g.title, len(rows))
 		var table strings.Builder
 		w := tabwriter.NewWriter(&table, 0, 0, 2, ' ', 0)
 		for _, c := range rows {
-			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), InflightDetail(c, partitions), inflightJobs(c.Jobs))
+			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), inflightDetail(c, partitions), inflightJobs(c.Jobs))
 		}
 		_ = w.Flush() // writes to a strings.Builder, which never errors
 		// An empty last column leaves the padding before it at the end of the line.
@@ -113,7 +113,7 @@ func PrintInflight(out io.Writer, list InflightList, all bool) {
 
 // printInflightOthers counts the changes that are not the reader's on one line.
 func printInflightOthers(out io.Writer, changes []InflightChange) {
-	counts := map[InflightAttention]int{}
+	counts := map[inflightAttention]int{}
 	for _, c := range changes {
 		if !c.Mine {
 			counts[c.Attention]++
@@ -121,13 +121,13 @@ func printInflightOthers(out io.Writer, changes []InflightChange) {
 	}
 	var parts []string
 	for _, a := range []struct {
-		attention InflightAttention
+		attention inflightAttention
 		word      string
 	}{
-		{AttentionQueue, "queued"},
-		{AttentionAuthor, "kicked back"},
-		{AttentionReview, "waiting on review"},
-		{AttentionNone, "not queued"},
+		{attentionQueue, "queued"},
+		{attentionAuthor, "kicked back"},
+		{attentionReview, "waiting on review"},
+		{attentionNone, "not queued"},
 	} {
 		if n := counts[a.attention]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n, a.word))
@@ -157,18 +157,18 @@ func queueOrder(a, b InflightChange) int {
 // PrintChange names the change job id's checkout carries, whose turn it is, and the
 // changes it touches.
 func PrintChange(out io.Writer, changes []InflightChange, id string) {
-	turns := map[InflightAttention]string{
-		AttentionAuthor: "its author's turn",
-		AttentionReview: "waiting on review",
-		AttentionQueue:  "the queue's turn",
-		AttentionNone:   "not queued",
+	turns := map[inflightAttention]string{
+		attentionAuthor: "its author's turn",
+		attentionReview: "waiting on review",
+		attentionQueue:  "the queue's turn",
+		attentionNone:   "not queued",
 	}
 	for _, c := range changes {
 		if !slices.Contains(c.Jobs, id) {
 			continue
 		}
 		line := fmt.Sprintf("\nchange: #%s %s, %s", c.ID, clipTitle(c.Title, 48), turns[c.Attention])
-		if d := InflightDetail(c, 0); d != "" {
+		if d := inflightDetail(c, 0); d != "" {
 			line += ", " + d
 		}
 		fmt.Fprintln(out, line)

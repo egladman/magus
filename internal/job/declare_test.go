@@ -204,14 +204,14 @@ func (s *pauseUntilSuite) TestAPauseLapsesAtADurationOrAnInstant() {
 
 func (s *pauseUntilSuite) TestABoundNotAheadOfNowIsRefused() {
 	_, err := ParsePauseUntil("-2h", time.Unix(1000, 0))
-	refused, ok := errors.AsType[*PauseUntilError](err)
+	refused, ok := errors.AsType[*pauseUntilError](err)
 	s.Require().True(ok, err)
 	s.Contains(refused.Error(), "is not ahead of now")
 }
 
 func (s *pauseUntilSuite) TestABoundThatIsNeitherIsRefused() {
 	_, err := ParsePauseUntil("tomorrow", time.Unix(1000, 0))
-	refused, ok := errors.AsType[*PauseUntilError](err)
+	refused, ok := errors.AsType[*pauseUntilError](err)
 	s.Require().True(ok, err)
 	s.Equal("tomorrow", refused.Until)
 }
