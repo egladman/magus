@@ -18,32 +18,98 @@ import (
 // commandPush reads what the line publishes, for the workspace command rule's req.Push.
 // Nil only when no call on the line publishes. Every case magus cannot settle before the
 // line runs carries Unknown, so a rule that reads Revision never mistakes it for a line
-// that pushes nothing.
+// that pushes nothing. Several publishing calls that name one commit in one checkout, such
+// as a push and then `gh pr create` for the branch it pushed, are one publication.
 //
 // It copies the location reads of locatePush and pushedRev rather than sharing them: those
 // answer for the built-in push rule, which reads one push and treats a refspec it cannot
 // read as the current revision.
 func commandPush(ctx context.Context, deps Dependencies, in commandRuleInput, at location) *types.CommandPush {
+	if inner, ok := substitutedPublish(in); ok {
+		return &types.CommandPush{
+			Tool: filepath.Base(inner.Name), OpensPullRequest: isPRCreate(inner),
+			Unknown: fmt.Sprintf("`%s` runs inside a command substitution, whose words magus does not place before the line runs", publishSpelling(inner)),
+		}
+	}
 	pushes := publishingCalls(in, cmp.Or(at.dir, at.workspace))
 	if len(pushes) == 0 {
 		return nil
 	}
-	first := pushes[0]
-	push := &types.CommandPush{Tool: filepath.Base(first.call.inv.Name), OpensPullRequest: isPRCreate(first.call.inv)}
-	site, located := placedPush(first.call)
+	read := make([]*types.CommandPush, len(pushes))
+	for i, p := range pushes {
+		read[i] = readPush(ctx, deps, p)
+	}
+	first := read[0]
+	if len(read) == 1 {
+		return first
+	}
+	for _, p := range read[1:] {
+		if first.Unknown != "" || p.Unknown != "" || p.Dir != first.Dir || p.Revision != first.Revision {
+			return &types.CommandPush{Tool: first.Tool, Dir: first.Dir, OpensPullRequest: first.OpensPullRequest, Unknown: manyPushes(pushes)}
+		}
+		first.OpensPullRequest = first.OpensPullRequest || p.OpensPullRequest
+	}
+	return first
+}
+
+// readPush is what one publishing call publishes.
+func readPush(ctx context.Context, deps Dependencies, found foundPush) *types.CommandPush {
+	push := &types.CommandPush{Tool: filepath.Base(found.call.inv.Name), OpensPullRequest: isPRCreate(found.call.inv)}
+	site, located := placedPush(found.call)
 	switch {
-	case len(pushes) > 1:
-		push.Unknown = manyPushes(pushes)
 	case !located || site.dir == "":
-		push.Unknown = fmt.Sprintf("where `%s` runs is known only by running the line, so the revision it publishes cannot be read first", publishSpelling(first.call.inv))
-	case first.moved != "":
+		push.Unknown = fmt.Sprintf("where `%s` runs is known only by running the line, so the revision it publishes cannot be read first", publishSpelling(found.call.inv))
+	case found.moved != "":
 		push.Dir = site.dir
-		push.Unknown = fmt.Sprintf("this line runs `%s` before it pushes, so the revision it publishes exists only once the line runs", first.moved)
+		push.Unknown = fmt.Sprintf("this line runs `%s` before it pushes, so the revision it publishes exists only once the line runs", found.moved)
 	default:
 		push.Dir = site.dir
-		resolvePush(ctx, deps, push, first.call)
+		resolvePush(ctx, deps, push, found.call)
 	}
 	return push
+}
+
+// substitutedPublish is the first publishing call inside a command or process substitution
+// on the line, which the line walk does not reach: `out=$(git push)` runs a push whose
+// words are a substitution's.
+func substitutedPublish(in commandRuleInput) (hint.Invocation, bool) {
+	f, err := parseFile(in.command, in.dialect)
+	if err != nil {
+		return hint.Invocation{}, false
+	}
+	var found hint.Invocation
+	ok := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if ok {
+			return false
+		}
+		var stmts []*syntax.Stmt
+		switch n := n.(type) {
+		case *syntax.CmdSubst:
+			stmts = n.Stmts
+		case *syntax.ProcSubst:
+			stmts = n.Stmts
+		default:
+			return true
+		}
+		for _, st := range stmts {
+			syntax.Walk(st, func(m syntax.Node) bool {
+				call, isCall := m.(*syntax.CallExpr)
+				if ok || !isCall {
+					return !ok
+				}
+				for _, inv := range peelWrappers(literalWords(call.Args), in.dialect) {
+					if publishes(inv) {
+						found, ok = inv, true
+						return false
+					}
+				}
+				return true
+			})
+		}
+		return false
+	})
+	return found, ok
 }
 
 // foundPush is a publishing call on the line, with the first command before it that
@@ -79,7 +145,7 @@ func manyPushes(pushes []foundPush) string {
 	for i, p := range pushes {
 		names[i] = fmt.Sprintf("`%s`", publishSpelling(p.call.inv))
 	}
-	return fmt.Sprintf("this line publishes %d times (%s), so no one revision is what it publishes", len(pushes), strings.Join(names, ", "))
+	return fmt.Sprintf("this line publishes %d times (%s) and they do not name one commit in one checkout, so no one revision is what it publishes", len(pushes), strings.Join(names, ", "))
 }
 
 // resolvePush fills push's Source and Revision from the call, or Unknown with the reason
@@ -119,9 +185,18 @@ func errorMessage(err error) string {
 }
 
 // publishes reports a call that sends a commit out: a push that deletes nothing but also
-// `gh pr create`, which opens review on the pushed head.
+// `gh pr create`, which opens review on the pushed head. A dry run or a request for help
+// sends nothing.
 func publishes(c hint.Invocation) bool {
-	return isPush(c) && !deletesOnly(c)
+	return isPush(c) && !deletesOnly(c) && !sendsNothing(c)
+}
+
+// sendsNothing reports a push or `gh pr create` that only prints: --dry-run (git's -n too)
+// or --help.
+func sendsNothing(c hint.Invocation) bool {
+	return slices.ContainsFunc(pushWords(c), func(a string) bool {
+		return a == "--dry-run" || a == "--help" || a == "-h" || c.Name == "git" && a == "-n"
+	})
 }
 
 // deletesOnly reports a push that removes remote names and publishes no commit.
@@ -139,7 +214,8 @@ func deletesOnly(c hint.Invocation) bool {
 		if len(ops) < 2 {
 			return false
 		}
-		return !slices.ContainsFunc(ops[1:], func(spec string) bool { return !strings.HasPrefix(spec, ":") })
+		// A bare `:` is not a deletion: it pushes every branch that matches one on the remote.
+		return !slices.ContainsFunc(ops[1:], func(spec string) bool { return !strings.HasPrefix(spec, ":") || spec == ":" })
 	case "sl":
 		return slices.Contains(args, "--delete")
 	case "jj":
@@ -206,14 +282,107 @@ func placedPush(c locatedCall) (pushSite, bool) {
 	return site, true
 }
 
-// hasUnreadWord reports a word of the call the shell expands at run time, which the
-// rendered arguments show as empty. A call reached through a script has only rendered
-// words, and pushSource reads those.
+// hasUnreadWord reports a word of the call the shell expands at run time. A call reached
+// through a script (`sh -c`, eval) has only its rendered words, where such a word renders
+// empty. The text gh pr create sends as a title or body never decides what it publishes,
+// so a substitution there, such as a heredoc body, is not one.
 func hasUnreadWord(c locatedCall) bool {
-	return slices.ContainsFunc(c.pushArgs(), func(w *syntax.Word) bool {
-		_, ok := literalArg(w.Parts)
-		return !ok
-	})
+	words := c.pushArgs()
+	read := func(i int) bool {
+		if words == nil {
+			return c.inv.Args[i] != ""
+		}
+		_, ok := literalArg(words[i].Parts)
+		return ok
+	}
+	var text map[int]bool
+	if isPRCreate(c.inv) {
+		_, text = ghOptions(c.inv.Args)
+	}
+	for i := range c.inv.Args {
+		if words != nil && i >= len(words) {
+			break
+		}
+		if !text[i] && !read(i) {
+			return true
+		}
+	}
+	return false
+}
+
+// ghValued are the options of gh pr create that take a value, as the short and long forms
+// gh accepts. Every other option of it is a switch.
+var ghValued = []string{
+	"-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-R", "--repo",
+	"-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer",
+	"-T", "--template", "--recover",
+}
+
+// ghOptions reads gh pr create's args: the values of --head, and the index of every word
+// that is an option's value or carries one, other than --head and --repo, whose values
+// decide what is published. A value never reads as an option: a body of `- Handles the
+// push` is the body.
+func ghOptions(args []string) (heads []string, text map[int]bool) {
+	text = map[int]bool{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return heads, text
+		case strings.HasPrefix(a, "--"):
+			name, value, joined := strings.Cut(a, "=")
+			if !slices.Contains(ghValued, name) {
+				continue
+			}
+			at := i
+			if !joined {
+				i++
+				if i >= len(args) {
+					return heads, text
+				}
+				at, value = i, args[i]
+			}
+			switch name {
+			case "--head":
+				heads = append(heads, value)
+			case "--repo":
+			default:
+				text[at] = true
+			}
+		case len(a) > 1 && a[0] == '-':
+			i = ghShort(args, i, &heads, text)
+		}
+	}
+	return heads, text
+}
+
+// ghShort reads the cluster of short options at args[i] (`-dH topic`), and is the index of
+// the last word it took.
+func ghShort(args []string, i int, heads *[]string, text map[int]bool) int {
+	a := args[i]
+	for j := 1; j < len(a); j++ {
+		flag := "-" + a[j:j+1]
+		if !slices.Contains(ghValued, flag) {
+			continue
+		}
+		at, value := i, a[j+1:]
+		if value == "" {
+			if i+1 >= len(args) {
+				return i
+			}
+			i++
+			at, value = i, args[i]
+		}
+		switch flag {
+		case "-H":
+			*heads = append(*heads, value)
+		case "-R":
+		default:
+			text[at] = true
+		}
+		return i
+	}
+	return i
 }
 
 // pushOptionsWithValues are the git push options whose value is the next word, which
@@ -262,8 +431,11 @@ func gitSource(args []string) (source, unknown string) {
 	case ops[1] == "":
 		return "", "a refspec of this push is not literal, so what it publishes is known only when the line runs"
 	}
-	src, _, _ := strings.Cut(strings.TrimPrefix(ops[1], "+"), ":")
+	spec := strings.TrimPrefix(ops[1], "+")
+	src, _, _ := strings.Cut(spec, ":")
 	switch {
+	case spec == ":":
+		return "", fmt.Sprintf("the refspec `%s` pushes every branch that matches one on the remote, so it publishes more than one revision", ops[1])
 	case src == "HEAD" || src == "@":
 		return "", ""
 	case strings.ContainsAny(src, "*?["):
@@ -310,7 +482,7 @@ func jjSelectors(args []string) []string {
 
 // ghSource is gh pr create's --head, a branch of this repository.
 func ghSource(args []string) (source, unknown string) {
-	heads := flagValues(args, "H", "head")
+	heads, _ := ghOptions(args)
 	switch {
 	case len(heads) == 0:
 		return "", ""
