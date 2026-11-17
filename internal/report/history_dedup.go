@@ -69,7 +69,7 @@ func ReadMissFiles(ctx context.Context, paths []string) ([]MissEvent, error) {
 			return nil, err
 		}
 		for _, m := range matches {
-			ms, err := ReadMisses(ctx, m)
+			ms, err := readMisses(ctx, m)
 			if err != nil {
 				return nil, fmt.Errorf("read %q: %w", m, err)
 			}
@@ -92,8 +92,8 @@ func expandGlob(p string) ([]string, error) {
 	return matches, nil
 }
 
-// ReadMisses parses cache-miss events from one JSONL report file, each tagged with path.
-func ReadMisses(ctx context.Context, path string) ([]MissEvent, error) {
+// readMisses parses cache-miss events from one JSONL report file, each tagged with path.
+func readMisses(ctx context.Context, path string) ([]MissEvent, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

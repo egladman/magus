@@ -37,7 +37,7 @@ func maybeBootstrapExec(argv []string) {
 	if testing.Testing() {
 		return
 	}
-	self, err := selfupdate.RunningBinaryPath()
+	self, err := selfupdate.RunningBinary()
 	// The bootstrap builds ./magus with `go run`, so that build is the fresh
 	// one and the placed ./magus the stale one.
 	if err != nil || ward.GoRunBinary(self) {

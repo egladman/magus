@@ -44,14 +44,14 @@ const (
 func (s *historyDedupSuite) TestReadMissesKeepsOnlyFreshSuccessfulRuns() {
 	path := s.write("a.jsonl", missLine+hitLine+failedLine+otherLine+"not json\n\n")
 
-	got, err := ReadMisses(s.T().Context(), path)
+	got, err := readMisses(s.T().Context(), path)
 
 	s.Require().NoError(err)
 	s.Equal([]MissEvent{{Project: "api", Target: "test", Hash: "h1", DurationMs: 400, File: path}}, got)
 }
 
 func (s *historyDedupSuite) TestReadMissesOfAMissingFileIsEmpty() {
-	got, err := ReadMisses(s.T().Context(), filepath.Join(s.dir, "absent.jsonl"))
+	got, err := readMisses(s.T().Context(), filepath.Join(s.dir, "absent.jsonl"))
 
 	s.Require().NoError(err)
 	s.Empty(got)

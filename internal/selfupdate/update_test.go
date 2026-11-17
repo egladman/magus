@@ -521,25 +521,25 @@ func TestReleaseArchMatchesGOARCHOffARM(t *testing.T) {
 	require.Equal(t, runtime.GOARCH, releaseArch())
 }
 
-// TestSelfUpdate_DiscoveryHost pins the precedence DiscoveryHost must mirror from
+// TestSelfUpdate_DiscoveryHost pins the precedence discoveryHost must mirror from
 // Options.discoveryURL: an explicit Options.DiscoveryURL wins, then
 // MAGUS_UPDATE_URL, then the default site; the confirmation prompt always names
 // the host that will actually be fetched from.
 func TestSelfUpdate_DiscoveryHost(t *testing.T) {
 	t.Run("explicit DiscoveryURL wins", func(t *testing.T) {
-		got := DiscoveryHost(Options{DiscoveryURL: "https://mirror.example.com/index.json"})
+		got := discoveryHost(Options{DiscoveryURL: "https://mirror.example.com/index.json"})
 		assert.Equal(t, "mirror.example.com", got)
 	})
 
 	t.Run("falls back to MAGUS_UPDATE_URL", func(t *testing.T) {
 		t.Setenv("MAGUS_UPDATE_URL", "https://private.example.org/index.json")
-		got := DiscoveryHost(Options{})
+		got := discoveryHost(Options{})
 		assert.Equal(t, "private.example.org", got)
 	})
 
 	t.Run("falls back to the default site", func(t *testing.T) {
 		t.Setenv("MAGUS_UPDATE_URL", "")
-		got := DiscoveryHost(Options{})
+		got := discoveryHost(Options{})
 		want, err := url.Parse(DefaultDiscoveryURL)
 		require.NoError(t, err)
 		assert.Equal(t, want.Host, got)

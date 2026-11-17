@@ -7,18 +7,18 @@ import (
 )
 
 func TestRestoreOutcome(t *testing.T) {
-	assert.Equal(t, SpellInactive, RestoreOutcome(true, ""))
-	assert.Equal(t, SpellInactive, RestoreOutcome(true, "go-1"), "an inactive backend wins over a stale key")
-	assert.Equal(t, SpellCold, RestoreOutcome(false, ""))
-	assert.Equal(t, SpellRestored, RestoreOutcome(false, "go-1"))
+	assert.Equal(t, spellInactive, RestoreOutcome(true, ""))
+	assert.Equal(t, spellInactive, RestoreOutcome(true, "go-1"), "an inactive backend wins over a stale key")
+	assert.Equal(t, spellCold, RestoreOutcome(false, ""))
+	assert.Equal(t, spellRestored, RestoreOutcome(false, "go-1"))
 }
 
 func TestSpellImportRecordRestoredOnceAnyRowRestored(t *testing.T) {
 	rec := SpellImportRecord{Remote: true, Spells: []SpellRow{}}
-	rec.Add(SpellRow{Spell: "go", Outcome: SpellCold})
+	rec.Add(SpellRow{Spell: "go", Outcome: spellCold})
 	assert.False(t, rec.Restored)
-	rec.Add(SpellRow{Spell: "rust", Outcome: SpellRestored})
-	rec.Add(SpellRow{Spell: "node", Outcome: SpellCold})
+	rec.Add(SpellRow{Spell: "rust", Outcome: spellRestored})
+	rec.Add(SpellRow{Spell: "node", Outcome: spellCold})
 	assert.True(t, rec.Restored)
 	assert.Len(t, rec.Spells, 3)
 }

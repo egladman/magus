@@ -179,16 +179,16 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 // rules alone rather than by the policy of whichever checkout they happen to run in.
 var guardRoot = workspace.FindRoot
 
-// hookBinaryPath is selfupdate.RunningBinaryPath, a variable so tests can place the
+// hookBinaryPath is selfupdate.RunningBinary, a variable so tests can place the
 // running binary in a checkout.
-var hookBinaryPath = selfupdate.RunningBinaryPath
+var hookBinaryPath = selfupdate.RunningBinary
 
 // hookEnv binds the hook's guard to this binary: its version, its workspace openers and
 // its output arms, read from the process globals at the call.
 func hookEnv() guard.HookEnv {
 	return guard.HookEnv{
 		Version:        version,
-		BinaryPath:     selfupdate.RunningBinaryPath,
+		BinaryPath:     selfupdate.RunningBinary,
 		HookBinaryPath: hookBinaryPath,
 		Config:         globalCfg,
 		FindRoot:       guardRoot,

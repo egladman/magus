@@ -4,9 +4,9 @@ package cache
 type SpellOutcome string
 
 const (
-	SpellRestored SpellOutcome = "restored"
-	SpellCold     SpellOutcome = "cold"
-	SpellInactive SpellOutcome = "inactive"
+	spellRestored SpellOutcome = "restored"
+	spellCold     SpellOutcome = "cold"
+	spellInactive SpellOutcome = "inactive"
 )
 
 // SpellRow is one spell's line in the record `magus config cache import` prints under -o.
@@ -34,15 +34,15 @@ type SpellImportRecord struct {
 func RestoreOutcome(inactive bool, key string) SpellOutcome {
 	switch {
 	case inactive:
-		return SpellInactive
+		return spellInactive
 	case key == "":
-		return SpellCold
+		return spellCold
 	}
-	return SpellRestored
+	return spellRestored
 }
 
 // Add appends row and marks the record restored once any row restored something.
 func (r *SpellImportRecord) Add(row SpellRow) {
 	r.Spells = append(r.Spells, row)
-	r.Restored = r.Restored || row.Outcome == SpellRestored
+	r.Restored = r.Restored || row.Outcome == spellRestored
 }

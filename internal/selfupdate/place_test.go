@@ -23,7 +23,7 @@ func TestPlaceIntoGivesTheTargetANewInode(t *testing.T) {
 	before, err := os.Stat(target)
 	require.NoError(t, err)
 
-	require.NoError(t, PlaceInto(source, target))
+	require.NoError(t, placeInto(source, target))
 
 	body, err := os.ReadFile(target)
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestPlaceRefusesAReplacementWithoutACleanStamp(t *testing.T) {
 }
 
 func TestReadPlaceStampNamesTheSourceWhenItCannotReportAVersion(t *testing.T) {
-	_, err := ReadPlaceStamp(context.Background(), filepath.Join(t.TempDir(), "absent"))
+	_, err := readPlaceStamp(context.Background(), filepath.Join(t.TempDir(), "absent"))
 	assert.ErrorContains(t, err, "did not report its version")
 }
 
@@ -79,7 +79,7 @@ func TestInstallShorthand(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got.Created)
 
-	target, err := RunningBinaryPath()
+	target, err := RunningBinary()
 	require.NoError(t, err)
 	resolved, err := filepath.EvalSymlinks(filepath.Join(dir, shorthandFileName()))
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
 
 	_, err = InstallShorthand(dir, true)
 	require.NoError(t, err)
-	target, err := RunningBinaryPath()
+	target, err := RunningBinary()
 	require.NoError(t, err)
 	resolved, err := filepath.EvalSymlinks(occupied)
 	require.NoError(t, err)

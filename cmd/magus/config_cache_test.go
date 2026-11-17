@@ -63,12 +63,12 @@ func (s *ConfigCacheImportRecordSuite) TestAMissRestoresNothing() {
 	rec := s.importRecord()
 	s.False(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
-	s.Equal(cache.SpellCold, rec.Spells[0].Outcome)
+	s.Equal(cache.SpellOutcome("cold"), rec.Spells[0].Outcome)
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAnInactiveBackendRestoresNothing() {
 	row := newSpellCacheRow(magus.SpellCache{Spell: "go", Inactive: true})
-	s.Equal(cache.SpellInactive, row.Outcome)
+	s.Equal(cache.SpellOutcome("inactive"), row.Outcome)
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
@@ -96,7 +96,7 @@ func (s *ConfigCacheImportRecordSuite) TestAnUntrustedBundleIsNamed() {
 	rec := s.importRecord()
 	s.False(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
-	s.Equal(cache.SpellCold, rec.Spells[0].Outcome)
+	s.Equal(cache.SpellOutcome("cold"), rec.Spells[0].Outcome)
 	s.NotEmpty(rec.Spells[0].Refused)
 }
 
@@ -109,7 +109,7 @@ func (s *ConfigCacheImportRecordSuite) TestARestoreSaysWhatItRestored() {
 	s.True(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
 	row := rec.Spells[0]
-	s.Equal(cache.SpellRestored, row.Outcome)
+	s.Equal(cache.SpellOutcome("restored"), row.Outcome)
 	s.True(row.Exact)
 	s.NotEmpty(row.Dirs)
 	s.Positive(row.Transferred)
@@ -148,7 +148,7 @@ func (s *cacheShard) sign(t *testing.T) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	t.Setenv(cache.SigningKeyEnv, base64.StdEncoding.EncodeToString(priv.Seed()))
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", base64.StdEncoding.EncodeToString(priv.Seed()))
 	s.trusted = base64.StdEncoding.EncodeToString(pub)
 }
 
@@ -266,7 +266,7 @@ func TestConfigCacheRemoteRefusesAnUntrustedBundle(t *testing.T) {
 // bundle to refuse later, since none is stored.
 func TestConfigCacheRemoteExportNeedsTheSigningKey(t *testing.T) {
 	s := newCacheShard(t)
-	t.Setenv(cache.SigningKeyEnv, "")
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", "")
 	goCaches(t, map[string]string{"GOCACHE:0a/0abc-a": "compiled"})
 
 	out, err := s.run(t, "export", "--remote")

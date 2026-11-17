@@ -30,25 +30,25 @@ type Placed struct {
 // stamp newer than the running build. The target gets a new inode: on macOS an
 // in-place rewrite leaves a stale code signature and the next exec is killed.
 func Place(ctx context.Context, source string) (Placed, error) {
-	repl, err := ReadPlaceStamp(ctx, source)
+	repl, err := readPlaceStamp(ctx, source)
 	if err != nil {
 		return Placed{}, err
 	}
 	if err := types.MagusBuildFromContext(ctx).AcceptsReplacement(repl); err != nil {
 		return Placed{}, fmt.Errorf("magus self place: %w", err)
 	}
-	target, err := RunningBinaryPath()
+	target, err := RunningBinary()
 	if err != nil {
 		return Placed{}, err
 	}
-	if err := PlaceInto(source, target); err != nil {
+	if err := placeInto(source, target); err != nil {
 		return Placed{}, fmt.Errorf("magus self place: %w", err)
 	}
 	return Placed{Commit: repl.Commit, BuildDate: repl.BuildDate, Path: target}, nil
 }
 
-// ReadPlaceStamp asks source for its build stamp.
-func ReadPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error) {
+// readPlaceStamp asks source for its build stamp.
+func readPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error) {
 	var stamp types.BuildStamp
 	var out bytes.Buffer
 	cmd := exec.CommandContext(ctx, source, "version", "-o", "json")
@@ -62,8 +62,8 @@ func ReadPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error
 	return stamp, nil
 }
 
-// PlaceInto writes source's bytes over target as a new file.
-func PlaceInto(source, target string) error {
+// placeInto writes source's bytes over target as a new file.
+func placeInto(source, target string) error {
 	body, err := os.ReadFile(source)
 	if err != nil {
 		return err
@@ -71,12 +71,12 @@ func PlaceInto(source, target string) error {
 	return file.WriteFileAtomic(target, body, 0o755)
 }
 
-// RunningBinaryPath returns the real path of the running binary. os.Executable
+// RunningBinary returns the real path of the running binary. os.Executable
 // reports the as-invoked path on macOS, so running this through an existing mgs
 // link would otherwise point the new link at a link. EvalSymlinks pins it to the
 // real file. It does not borrow ResolveTargetPath, which only the updater's build
 // compiles in.
-func RunningBinaryPath() (string, error) {
+func RunningBinary() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("resolve executable path: %w", err)
@@ -101,7 +101,7 @@ type Shorthand struct {
 // selfupdate resolves symlinks before it swaps, so the real binary is replaced
 // underneath a link that keeps pointing at it. dir empty means beside the binary.
 func InstallShorthand(dir string, force bool) (Shorthand, error) {
-	target, err := RunningBinaryPath()
+	target, err := RunningBinary()
 	if err != nil {
 		return Shorthand{}, fmt.Errorf("magus self install-shorthand: %w", err)
 	}

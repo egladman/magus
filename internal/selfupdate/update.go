@@ -33,11 +33,11 @@ func activeOptions() Options {
 	return opts
 }
 
-// DiscoveryHost returns the hostname a release index fetch will use, mirroring
+// discoveryHost returns the hostname a release index fetch will use, mirroring
 // Options.discoveryURL's precedence (explicit opts.DiscoveryURL, then
 // MAGUS_UPDATE_URL, then the default site) so the confirmation prompt names the
 // actual source instead of assuming GitHub, which only ever hosts the artifacts.
-func DiscoveryHost(opts Options) string {
+func discoveryHost(opts Options) string {
 	raw := opts.DiscoveryURL
 	if raw == "" {
 		raw = os.Getenv("MAGUS_UPDATE_URL")
@@ -98,7 +98,7 @@ const (
 const (
 	OutcomeChecked   = "checked"
 	OutcomeDryRun    = "dry-run"
-	OutcomeInstalled = "installed"
+	outcomeInstalled = "installed"
 )
 
 // Request is one `magus self update`.
@@ -246,7 +246,7 @@ func Update(ctx context.Context, req Request) (Result, error) {
 		return Result{Current: current, Latest: manifest.Version, Path: targetPath, Outcome: OutcomeDryRun}, nil
 	}
 
-	if err := req.Confirm(manifest.Version, DiscoveryHost(opts), targetPath); err != nil {
+	if err := req.Confirm(manifest.Version, discoveryHost(opts), targetPath); err != nil {
 		return Result{}, err
 	}
 
@@ -257,5 +257,5 @@ func Update(ctx context.Context, req Request) (Result, error) {
 	if err := minioselfupdate.Apply(binary, minioselfupdate.Options{TargetPath: targetPath}); err != nil {
 		return Result{}, fmt.Errorf("apply update: %w", err)
 	}
-	return Result{Current: current, Latest: manifest.Version, Path: targetPath, Outcome: OutcomeInstalled}, nil
+	return Result{Current: current, Latest: manifest.Version, Path: targetPath, Outcome: outcomeInstalled}, nil
 }

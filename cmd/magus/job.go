@@ -2256,7 +2256,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 		loaded = m
 	}
 	return job.WorkspaceOf(ctx, root, loaded, err, func(err error) string {
-		running, pathErr := selfupdate.RunningBinaryPath()
+		running, pathErr := selfupdate.RunningBinary()
 		if pathErr != nil {
 			return err.Error()
 		}
