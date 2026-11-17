@@ -88,9 +88,9 @@ func encodeError(err error) error {
 	}
 	switch {
 	case errors.Is(syntactic.Err, jsontext.ErrDuplicateName):
-		return &EncodeError{Err: fmt.Errorf("%w %q", ErrDuplicateKey, syntactic.JSONPointer.LastToken())}
+		return &EncodeError{Err: fmt.Errorf("%w: %q", ErrDuplicateKey, syntactic.JSONPointer.LastToken())}
 	case errors.Is(syntactic.Err, invalidUTF8()):
-		return &EncodeError{Err: fmt.Errorf("%w in a string", ErrInvalidUTF8)}
+		return &EncodeError{Err: fmt.Errorf("writing a string: %w", ErrInvalidUTF8)}
 	}
 	return err
 }
@@ -130,7 +130,7 @@ func decodeError(data []byte, v any, err error) error {
 	if syntax := validate(data); syntax != nil {
 		return syntax
 	}
-	t, _ := targetOf(v)
+	t, _ := pointee(v)
 	s := scanner{data: data}
 	if lengths := s.document(t, reflect.Value{}); lengths != nil {
 		return lengths

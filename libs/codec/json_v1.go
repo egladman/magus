@@ -46,7 +46,7 @@ func marshal(v any) ([]byte, error) {
 		return nil, err
 	}
 	if s.sawReplacement && holdsInvalidUTF8(reflect.ValueOf(v), 0) {
-		return nil, &EncodeError{Err: fmt.Errorf("%w in a string", ErrInvalidUTF8)}
+		return nil, &EncodeError{Err: fmt.Errorf("writing a string: %w", ErrInvalidUTF8)}
 	}
 	return s.out, nil
 }
@@ -62,10 +62,10 @@ func holdsInvalidUTF8(v reflect.Value, depth int) bool {
 		return false
 	}
 	if v.CanInterface() {
-		if _, ok := methodOf[json.Marshaler](v); ok {
+		if _, ok := asMethod[json.Marshaler](v); ok {
 			return false
 		}
-		if m, ok := methodOf[encoding.TextMarshaler](v); ok {
+		if m, ok := asMethod[encoding.TextMarshaler](v); ok {
 			text, err := m.MarshalText()
 			return err == nil && !utf8.Valid(text)
 		}
@@ -105,9 +105,9 @@ func holdsInvalidUTF8(v reflect.Value, depth int) bool {
 	return false
 }
 
-// methodOf is v as an M, through its address when only the pointer has the method and
+// asMethod is v as an M, through its address when only the pointer has the method and
 // encoding/json could take it.
-func methodOf[M any](v reflect.Value) (M, bool) {
+func asMethod[M any](v reflect.Value) (M, bool) {
 	if m, ok := reflect.TypeAssert[M](v); ok {
 		return m, true
 	}
@@ -142,7 +142,7 @@ func encodable(v any) (any, error) {
 }
 
 func unmarshal(data []byte, v any) error {
-	t, rv := targetOf(v)
+	t, rv := pointee(v)
 	if err := refuseDecode(t); err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func unmarshal(data []byte, v any) error {
 // unmarshalLossless is unmarshal with each number bound for an interface kept as a
 // json.Number, as v2 keeps it under the lossless option.
 func unmarshalLossless(data []byte, v any) error {
-	t, rv := targetOf(v)
+	t, rv := pointee(v)
 	if err := refuseDecode(t); err != nil {
 		return err
 	}

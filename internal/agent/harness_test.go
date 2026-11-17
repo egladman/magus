@@ -230,7 +230,7 @@ func TestPlanHarnessRejectsDuplicateKeys(t *testing.T) {
 
 	_, err := PlanHarness(context.Background(), root, "test-host")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `duplicate key "hooks"`)
+	assert.Contains(t, err.Error(), `duplicate key: "hooks"`)
 }
 
 // TestPlanHarnessForAMissingFileCreatesIt pins the first-time case: the plan writes nothing,

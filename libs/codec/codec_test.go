@@ -67,7 +67,7 @@ func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8() {
 	s.Require().ErrorIs(err, ErrInvalidUTF8)
 	var encode *EncodeError
 	s.Require().ErrorAs(err, &encode)
-	s.Equal("codec: cannot encode: invalid UTF-8 in a string", err.Error())
+	s.Equal("codec: cannot encode: writing a string: invalid UTF-8", err.Error())
 }
 
 func (s *ConformanceSuite) TestMarshalIndent() {
@@ -158,13 +158,13 @@ func (s *ConformanceSuite) TestADurationBehindAnInterfaceIsAStringOrARefusal() {
 
 func (s *ConformanceSuite) TestUnmarshalRefusesWhatIsAmbiguous() {
 	var m map[string]int
-	s.Equal(`duplicate key "a" at byte offset 7`, Unmarshal([]byte(`{"a":1,"a":2}`), &m).Error())
+	s.Equal(`duplicate key: "a" at byte offset 7`, Unmarshal([]byte(`{"a":1,"a":2}`), &m).Error())
 	s.ErrorIs(Unmarshal([]byte(`{"a":1,"a":2}`), &m), ErrDuplicateKey)
 
 	var str string
 	err := Unmarshal([]byte("\"a\xffb\""), &str)
 	s.ErrorIs(err, ErrInvalidUTF8)
-	s.Equal("invalid UTF-8 in a string at byte offset 2", err.Error())
+	s.Equal("reading a string: invalid UTF-8 at byte offset 2", err.Error())
 	s.ErrorIs(Unmarshal([]byte(`"\ud800"`), &str), ErrInvalidUTF8, "a lone surrogate")
 
 	err = Unmarshal([]byte(`{} x`), &m)
@@ -221,7 +221,7 @@ func (s *ConformanceSuite) strictRefusal(in string) *StrictError {
 
 func (s *ConformanceSuite) TestUnmarshalStrictRefusesARepeatedKey() {
 	strict := s.strictRefusal(`{"a":1,"a":2}`)
-	s.Equal(`duplicate key "a" at byte offset 7`, strict.Error())
+	s.Equal(`duplicate key: "a" at byte offset 7`, strict.Error())
 	s.Equal(int64(7), strict.Offset)
 	s.ErrorIs(strict, ErrDuplicateKey)
 }
@@ -326,7 +326,7 @@ func (s *ConformanceSuite) refusesInvalidUTF8(v any) {
 	s.Require().ErrorIs(err, ErrInvalidUTF8)
 	var encode *EncodeError
 	s.Require().ErrorAs(err, &encode)
-	s.Equal("codec: cannot encode: invalid UTF-8 in a string", err.Error())
+	s.Equal("codec: cannot encode: writing a string: invalid UTF-8", err.Error())
 }
 
 func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8InAMapKey() {

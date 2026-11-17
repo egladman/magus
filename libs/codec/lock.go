@@ -38,11 +38,11 @@ var errLockHeld = errors.New("lock held")
 // holder is doing. fn does not run when the lock is not acquired.
 func WithLock(ctx context.Context, path string, wait time.Duration, fn func() error) (err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("codec: lock %s: %w", path, err)
+		return fmt.Errorf("lock %s: %w", path, err)
 	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
-		return fmt.Errorf("codec: lock %s: %w", path, err)
+		return fmt.Errorf("lock %s: %w", path, err)
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil {
@@ -54,7 +54,7 @@ func WithLock(ctx context.Context, path string, wait time.Duration, fn func() er
 	}
 	defer func() {
 		if uerr := unlock(f); uerr != nil {
-			err = errors.Join(err, fmt.Errorf("codec: unlock %s: %w", path, uerr))
+			err = errors.Join(err, fmt.Errorf("unlock %s: %w", path, uerr))
 		}
 	}()
 	return fn()
@@ -71,7 +71,7 @@ func acquire(ctx context.Context, f *os.File, path string, wait time.Duration) e
 			return nil
 		}
 		if !errors.Is(err, errLockHeld) {
-			return fmt.Errorf("codec: lock %s: %w", path, err)
+			return fmt.Errorf("lock %s: %w", path, err)
 		}
 		if !time.Now().Before(deadline) {
 			return fmt.Errorf("codec: another process has held the lock at %s for more than %s,"+

@@ -150,8 +150,8 @@ func (e *UnsupportedError) Error() string {
 	if e.Field != "" {
 		at += "." + e.Field
 	}
-	return fmt.Sprintf("codec: this build (encoding/json) cannot %s %s: %s holds %s, which encoding/json/v2 reads and writes differently;"+
-		" give the type its own MarshalJSON and UnmarshalJSON, or build with GOEXPERIMENT=jsonv2", e.Op, e.Type, at, e.Reason)
+	return fmt.Sprintf("codec: this build (encoding/json) cannot %s %s: %s holds %s, which encoding/json/v2 reads and writes differently,"+
+		" so give the type its own MarshalJSON and UnmarshalJSON, or build with GOEXPERIMENT=jsonv2", e.Op, e.Type, at, e.Reason)
 }
 
 // Marshal returns the JSON encoding of v: map keys sorted, nil slices and maps as null,
@@ -230,7 +230,7 @@ func MarshalWithUnknown(v any, unknown map[string]RawMessage) ([]byte, error) {
 	out := slices.Clone(b[:len(b)-1])
 	for _, name := range slices.Sorted(maps.Keys(unknown)) {
 		if _, ok := declared[name]; ok {
-			return nil, &EncodeError{Err: fmt.Errorf("%w %q: the type declares it and the unknown members carry it too", ErrDuplicateKey, name)}
+			return nil, &EncodeError{Err: fmt.Errorf("%w: %q: the type declares it and the unknown members carry it too", ErrDuplicateKey, name)}
 		}
 		key, err := Marshal(name)
 		if err != nil {
@@ -258,7 +258,7 @@ func MarshalWithUnknown(v any, unknown map[string]RawMessage) ([]byte, error) {
 // `codec:"unknown"`: the strict walk reads such a type's own fields rather than leaving the
 // type to its UnmarshalJSON, so an authored record keeps no member it does not declare.
 func UnmarshalWithUnknown(data []byte, v any) (map[string]RawMessage, error) {
-	t, _ := targetOf(v)
+	t, _ := pointee(v)
 	if t == nil || t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("codec: unknown members are kept by a struct, and %T does not point to one", v)
 	}
@@ -464,7 +464,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	if s.pos < len(s.data) && s.data[s.pos] != '"' {
 		return fmt.Errorf("codec: a duration is a string such as \"1h30m0s\", not %s", b)
 	}
-	text, err := s.str()
+	text, err := s.stringLiteral()
 	if err != nil {
 		return err
 	}
@@ -505,10 +505,10 @@ func (d *StrictDecoder) More() bool {
 func (d *StrictDecoder) Delim(want byte) error {
 	d.s.skipSeparator()
 	if d.s.pos >= len(d.s.data) {
-		return d.refuse(d.s.errAt(d.s.pos, io.ErrUnexpectedEOF))
+		return d.refuse(d.s.errorAt(d.s.pos, io.ErrUnexpectedEOF))
 	}
 	if got := d.s.data[d.s.pos]; got != want {
-		return d.refuse(d.s.errAt(d.s.pos, fmt.Errorf("want %q, got %s", string(want), quoteChar(got))))
+		return d.refuse(d.s.errorAt(d.s.pos, fmt.Errorf("want %q, got %s", string(want), quoteChar(got))))
 	}
 	d.s.pos++
 	return nil
@@ -518,18 +518,18 @@ func (d *StrictDecoder) Delim(want byte) error {
 func (d *StrictDecoder) Name() (string, error) {
 	d.s.skipSeparator()
 	if d.s.pos >= len(d.s.data) {
-		return "", d.refuse(d.s.errAt(d.s.pos, io.ErrUnexpectedEOF))
+		return "", d.refuse(d.s.errorAt(d.s.pos, io.ErrUnexpectedEOF))
 	}
 	if c := d.s.data[d.s.pos]; c != '"' {
-		return "", d.refuse(d.s.errAt(d.s.pos, fmt.Errorf("want a member name, got %s", quoteChar(c))))
+		return "", d.refuse(d.s.errorAt(d.s.pos, fmt.Errorf("want a member name, got %s", quoteChar(c))))
 	}
-	name, err := d.s.str()
+	name, err := d.s.stringLiteral()
 	if err != nil {
 		return "", d.refuse(err)
 	}
 	d.s.skipSpace()
 	if d.s.pos >= len(d.s.data) || d.s.data[d.s.pos] != ':' {
-		return "", d.refuse(d.s.errAt(d.s.pos, errors.New("want ':' after a member name")))
+		return "", d.refuse(d.s.errorAt(d.s.pos, errors.New("want ':' after a member name")))
 	}
 	d.s.pos++
 	return name, nil
@@ -539,7 +539,7 @@ func (d *StrictDecoder) Name() (string, error) {
 func (d *StrictDecoder) Decode(v any) error {
 	d.s.skipSeparator()
 	start := d.s.pos
-	t, rv := targetOf(v)
+	t, rv := pointee(v)
 	if err := refuseDecode(t); err != nil {
 		return &StrictError{Offset: int64(start), Err: err}
 	}
@@ -559,7 +559,7 @@ func (d *StrictDecoder) Decode(v any) error {
 func (d *StrictDecoder) End() error {
 	d.s.skipSpace()
 	if d.s.pos < len(d.s.data) {
-		return d.refuse(d.s.errAt(d.s.pos, ErrTrailingData))
+		return d.refuse(d.s.errorAt(d.s.pos, ErrTrailingData))
 	}
 	return nil
 }
@@ -577,9 +577,9 @@ func (d *StrictDecoder) refuse(err error) error {
 	return &StrictError{Offset: int64(d.s.pos), Err: err}
 }
 
-// targetOf is the value v points at and its type, or neither when v is not a non-nil
+// pointee is the value v points at and its type, or neither when v is not a non-nil
 // pointer, which the decoders refuse in their own words.
-func targetOf(v any) (reflect.Type, reflect.Value) {
+func pointee(v any) (reflect.Type, reflect.Value) {
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return nil, reflect.Value{}
@@ -624,7 +624,7 @@ type scanner struct {
 	fields map[reflect.Type]*fieldSet
 }
 
-func (s *scanner) errAt(off int, err error) *SyntaxError {
+func (s *scanner) errorAt(off int, err error) *SyntaxError {
 	return &SyntaxError{Offset: int64(off), Err: err}
 }
 
@@ -662,7 +662,7 @@ func (s *scanner) document(t reflect.Type, v reflect.Value) error {
 	}
 	s.skipSpace()
 	if s.pos < len(s.data) {
-		return s.errAt(s.pos, ErrTrailingData)
+		return s.errorAt(s.pos, ErrTrailingData)
 	}
 	return nil
 }
@@ -670,10 +670,10 @@ func (s *scanner) document(t reflect.Type, v reflect.Value) error {
 func (s *scanner) value(depth int, t reflect.Type, v reflect.Value) error {
 	s.skipSpace()
 	if s.pos >= len(s.data) {
-		return s.errAt(s.pos, io.ErrUnexpectedEOF)
+		return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 	}
 	if depth > maxDepth {
-		return s.errAt(s.pos, fmt.Errorf("nesting deeper than %d", maxDepth))
+		return s.errorAt(s.pos, fmt.Errorf("nesting deeper than %d", maxDepth))
 	}
 	c := s.data[s.pos]
 	if c == 'n' {
@@ -690,7 +690,7 @@ func (s *scanner) value(depth int, t reflect.Type, v reflect.Value) error {
 	case c == '[':
 		return s.array(depth, t, v)
 	case c == '"':
-		_, err := s.str()
+		_, err := s.stringLiteral()
 		return err
 	case c == 't':
 		return s.literal("true")
@@ -699,7 +699,7 @@ func (s *scanner) value(depth int, t reflect.Type, v reflect.Value) error {
 	case c == '-' || isDigit(c):
 		return s.number()
 	}
-	return s.errAt(s.pos, fmt.Errorf("invalid character %s looking for the start of a value", quoteChar(c)))
+	return s.errorAt(s.pos, fmt.Errorf("invalid character %s looking for the start of a value", quoteChar(c)))
 }
 
 // null sets v to its zero value when likeV2 asks for it and encoding/json would leave it
@@ -752,7 +752,7 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 	if t != nil {
 		switch t.Kind() {
 		case reflect.Struct:
-			fs = s.fieldsOf(t)
+			fs = s.cachedFields(t)
 		case reflect.Map:
 			elem = t.Elem()
 		}
@@ -767,26 +767,26 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 	for {
 		s.skipSpace()
 		if s.pos >= len(s.data) {
-			return s.errAt(s.pos, io.ErrUnexpectedEOF)
+			return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 		}
 		if c := s.data[s.pos]; c != '"' {
-			return s.errAt(s.pos, fmt.Errorf("invalid character %s looking for the start of an object key", quoteChar(c)))
+			return s.errorAt(s.pos, fmt.Errorf("invalid character %s looking for the start of an object key", quoteChar(c)))
 		}
 		at := s.pos
-		name, err := s.str()
+		name, err := s.stringLiteral()
 		if err != nil {
 			return err
 		}
 		if _, dup := seen[name]; dup {
-			return s.errAt(at, fmt.Errorf("%w %q", ErrDuplicateKey, name))
+			return s.errorAt(at, fmt.Errorf("%w: %q", ErrDuplicateKey, name))
 		}
 		seen[name] = struct{}{}
 		s.skipSpace()
 		if s.pos >= len(s.data) {
-			return s.errAt(s.pos, io.ErrUnexpectedEOF)
+			return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 		}
 		if c := s.data[s.pos]; c != ':' {
-			return s.errAt(s.pos, fmt.Errorf("invalid character %s after an object key", quoteChar(c)))
+			return s.errorAt(s.pos, fmt.Errorf("invalid character %s after an object key", quoteChar(c)))
 		}
 		s.pos++
 		s.emit(':')
@@ -815,7 +815,7 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 		}
 		s.skipSpace()
 		if s.pos >= len(s.data) {
-			return s.errAt(s.pos, io.ErrUnexpectedEOF)
+			return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 		}
 		switch c := s.data[s.pos]; c {
 		case ',':
@@ -826,7 +826,7 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 			s.emit('}')
 			return nil
 		default:
-			return s.errAt(s.pos, fmt.Errorf("invalid character %s after an object member", quoteChar(c)))
+			return s.errorAt(s.pos, fmt.Errorf("invalid character %s after an object member", quoteChar(c)))
 		}
 	}
 }
@@ -865,7 +865,7 @@ func (s *scanner) array(depth int, t reflect.Type, v reflect.Value) error {
 		}
 		s.skipSpace()
 		if s.pos >= len(s.data) {
-			return s.errAt(s.pos, io.ErrUnexpectedEOF)
+			return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 		}
 		switch c := s.data[s.pos]; c {
 		case ',':
@@ -876,7 +876,7 @@ func (s *scanner) array(depth int, t reflect.Type, v reflect.Value) error {
 			s.emit(']')
 			return length(i + 1)
 		default:
-			return s.errAt(s.pos, fmt.Errorf("invalid character %s after an array element", quoteChar(c)))
+			return s.errorAt(s.pos, fmt.Errorf("invalid character %s after an array element", quoteChar(c)))
 		}
 	}
 }
@@ -886,11 +886,11 @@ func (s *scanner) literal(want string) error {
 	got := s.data[s.pos:end]
 	for i := range got {
 		if got[i] != want[i] {
-			return s.errAt(s.pos+i, fmt.Errorf("invalid character %s in literal %s", quoteChar(got[i]), want))
+			return s.errorAt(s.pos+i, fmt.Errorf("invalid character %s in literal %s", quoteChar(got[i]), want))
 		}
 	}
 	if len(got) < len(want) {
-		return s.errAt(end, io.ErrUnexpectedEOF)
+		return s.errorAt(end, io.ErrUnexpectedEOF)
 	}
 	s.emit(got...)
 	s.pos = end
@@ -905,13 +905,13 @@ func (s *scanner) number() error {
 	}
 	switch {
 	case s.pos >= len(s.data):
-		return s.errAt(s.pos, io.ErrUnexpectedEOF)
+		return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 	case s.data[s.pos] == '0':
 		s.pos++
 	case isDigit(s.data[s.pos]):
 		s.digits()
 	default:
-		return s.errAt(s.pos, fmt.Errorf("invalid character %s in numeric literal", quoteChar(s.data[s.pos])))
+		return s.errorAt(s.pos, fmt.Errorf("invalid character %s in numeric literal", quoteChar(s.data[s.pos])))
 	}
 	if s.pos < len(s.data) && s.data[s.pos] == '.' {
 		s.pos++
@@ -936,10 +936,10 @@ func (s *scanner) number() error {
 
 func (s *scanner) needDigit() error {
 	if s.pos >= len(s.data) {
-		return s.errAt(s.pos, io.ErrUnexpectedEOF)
+		return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 	}
 	if !isDigit(s.data[s.pos]) {
-		return s.errAt(s.pos, fmt.Errorf("invalid character %s in numeric literal", quoteChar(s.data[s.pos])))
+		return s.errorAt(s.pos, fmt.Errorf("invalid character %s in numeric literal", quoteChar(s.data[s.pos])))
 	}
 	return nil
 }
@@ -950,15 +950,15 @@ func (s *scanner) digits() {
 	}
 }
 
-// str reads the string at s.pos and returns it unescaped.
-func (s *scanner) str() (string, error) {
+// stringLiteral reads the string at s.pos and returns it unescaped.
+func (s *scanner) stringLiteral() (string, error) {
 	s.pos++
 	from := s.pos
 	var b []byte
 	escaped := false
 	for {
 		if s.pos >= len(s.data) {
-			return "", s.errAt(s.pos, io.ErrUnexpectedEOF)
+			return "", s.errorAt(s.pos, io.ErrUnexpectedEOF)
 		}
 		c := s.data[s.pos]
 		switch {
@@ -984,16 +984,16 @@ func (s *scanner) str() (string, error) {
 			b = utf8.AppendRune(b, r)
 			from = s.pos
 		case c < 0x20:
-			return "", s.errAt(s.pos, fmt.Errorf("invalid character %s in a string", quoteChar(c)))
+			return "", s.errorAt(s.pos, fmt.Errorf("invalid character %s in a string", quoteChar(c)))
 		case c < utf8.RuneSelf:
 			s.pos++
 		default:
 			r, n := utf8.DecodeRune(s.data[s.pos:])
 			if r == utf8.RuneError && n == 1 {
 				if !utf8.FullRune(s.data[s.pos:]) {
-					return "", s.errAt(len(s.data), io.ErrUnexpectedEOF)
+					return "", s.errorAt(len(s.data), io.ErrUnexpectedEOF)
 				}
-				return "", s.errAt(s.pos, fmt.Errorf("%w in a string", ErrInvalidUTF8))
+				return "", s.errorAt(s.pos, fmt.Errorf("reading a string: %w", ErrInvalidUTF8))
 			}
 			s.pos += n
 		}
@@ -1004,7 +1004,7 @@ func (s *scanner) str() (string, error) {
 func (s *scanner) escape() (rune, error) {
 	at := s.pos
 	if s.pos+1 >= len(s.data) {
-		return 0, s.errAt(len(s.data), io.ErrUnexpectedEOF)
+		return 0, s.errorAt(len(s.data), io.ErrUnexpectedEOF)
 	}
 	c := s.data[s.pos+1]
 	s.pos += 2
@@ -1043,14 +1043,14 @@ func (s *scanner) escape() (rune, error) {
 				return pair, nil
 			}
 		}
-		return 0, s.errAt(at, fmt.Errorf("%w in a string", ErrInvalidUTF8))
+		return 0, s.errorAt(at, fmt.Errorf("reading a string: %w", ErrInvalidUTF8))
 	}
-	return 0, s.errAt(at, fmt.Errorf("invalid escape sequence %q in a string", s.data[at:s.pos]))
+	return 0, s.errorAt(at, fmt.Errorf("invalid escape sequence %q in a string", s.data[at:s.pos]))
 }
 
 func (s *scanner) hex4(at int) (rune, error) {
 	if at+4 > len(s.data) {
-		return 0, s.errAt(len(s.data), io.ErrUnexpectedEOF)
+		return 0, s.errorAt(len(s.data), io.ErrUnexpectedEOF)
 	}
 	var r rune
 	for i, c := range s.data[at : at+4] {
@@ -1063,7 +1063,7 @@ func (s *scanner) hex4(at int) (rune, error) {
 		case 'A' <= c && c <= 'F':
 			d = c - 'A' + 10
 		default:
-			return 0, s.errAt(at+i, fmt.Errorf("invalid character %s in a \\u escape", quoteChar(c)))
+			return 0, s.errorAt(at+i, fmt.Errorf("invalid character %s in a \\u escape", quoteChar(c)))
 		}
 		r = r<<4 | rune(d)
 	}
@@ -1141,7 +1141,7 @@ func (fs *fieldSet) foldMatch(name string) (string, bool) {
 	return "", false
 }
 
-func (s *scanner) fieldsOf(t reflect.Type) *fieldSet {
+func (s *scanner) cachedFields(t reflect.Type) *fieldSet {
 	if fs, ok := s.fields[t]; ok {
 		return fs
 	}
