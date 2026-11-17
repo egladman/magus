@@ -142,7 +142,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: JSON Lines draws one closed row per record`, async ($, on) => {
     engine(on)
     await $.session.start({ cwd: '/w', surface, isInteractive: true })
-    const rows = ['{"api_version":"safetyscissors.job/v1alpha1","id":"a"}', '{"api_version":"safetyscissors.job/v1alpha1","id":"b"}']
+    const rows = [
+      '{"api_version":"safetyscissors.job/v1alpha1","id":"a"}',
+      '{"api_version":"safetyscissors.job/v1alpha1","id":"b"}',
+    ]
     const ui = await mount($, surface, 't3', BASH(rows.join('\n')))
     expect(await ui.find({ type: 'Text', text: 'JSON Lines · 2 records' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'json#0' })).toBeDefined()

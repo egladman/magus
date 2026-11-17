@@ -357,7 +357,11 @@ const pushPrompt = { permission: { bash: { "git push": "ask", "git push *": "ask
 type Status = "ask" | "deny" | "allow";
 
 test("an unknown decision refuses the call, never allows it", async () => {
-  stubBun(() => ({ api_version: "safetyscissors.verdict/v1alpha1", decision: "maybe", reason: "?" }));
+  stubBun(() => ({
+    api_version: "safetyscissors.verdict/v1alpha1",
+    decision: "maybe",
+    reason: "?",
+  }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -409,7 +413,10 @@ test("an ask no push prompt can match refuses", async () => {
 test("permission.ask answers a push prompt from the verdict", async () => {
   const cases: Array<[Canned, Status]> = [
     [deferred, "ask"],
-    [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "advise", context: "gate ran" }, "ask"],
+    [
+      { api_version: "safetyscissors.verdict/v1alpha1", decision: "advise", context: "gate ran" },
+      "ask",
+    ],
     [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "pass" }, "deny"],
     [ask, "ask"],
     [deny, "deny"],
