@@ -56,7 +56,13 @@ interface AgentBeat {
 
 const AGENT_HOST = "claude";
 const AGENT_BEATS: readonly AgentBeat[] = [
-  { minutesAgo: 6, kind: "command", session: "sess-orchestrator", action: "Bash", verdict: "defer" },
+  {
+    minutesAgo: 6,
+    kind: "command",
+    session: "sess-orchestrator",
+    action: "Bash",
+    verdict: "defer",
+  },
   {
     minutesAgo: 9,
     kind: "command",
