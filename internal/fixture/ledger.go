@@ -2,6 +2,7 @@ package fixture
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -32,7 +33,9 @@ func SeedLeases(tb testing.TB, leases ...jobtypes.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
 	root, cacheDir = testkit.NewRepository(tb, nil).Root(), tb.TempDir()
-	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root})
+	// One declaration time for every lease, so which came first falls to the id.
+	at := time.Now()
+	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root, Clock: func() time.Time { return at }})
 	for _, lease := range leases {
 		if lease.Validated == 0 {
 			lease.Validated = 1

@@ -156,6 +156,9 @@ type Location struct {
 	// Build identifies the build whose results the footprint cache holds. Empty is the
 	// running build ([buildinfo.Build]); a test names another.
 	Build string
+	// Clock is the store's clock for every time it stamps. Nil is time.Now; a fixture
+	// holds it still so the rows it seeds share one declaration time.
+	Clock func() time.Time
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
 	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
@@ -192,7 +195,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
+	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), clock: loc.Clock,
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, spawnCeiling: loc.SpawnCeiling, owners: loc.Owners, priceContext: loc.PriceContext,
 		migrations: jobMigrations()}}
 	s.path, s.err = jobsPath(loc)
