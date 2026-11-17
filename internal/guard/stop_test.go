@@ -154,6 +154,14 @@ func (s *StopUnfiledSuite) TestAFiledResultLetsTheChildStop() {
 	s.NotEqual(decisionDeny, v.Decision)
 }
 
+func (s *StopUnfiledSuite) TestADeliveredHandbackLetsTheChildStop() {
+	row := s.row()
+	s.tries = []types.Attempt{{Job: row.ID, N: 1, Status: types.AttemptStatus{Started: 10, Ended: 15, End: types.AttemptEndHandback}}}
+	v := s.stop(row, "SubagentStop", s.subagent())
+	s.NotEqual(string(denyRuleStopUnfiled), v.Rule)
+	s.NotEqual(decisionDeny, v.Decision)
+}
+
 func (s *StopUnfiledSuite) TestARootStopIsNotJudged() {
 	v := s.stop(s.row(), "Stop", nil)
 	s.NotEqual(string(denyRuleStopUnfiled), v.Rule)

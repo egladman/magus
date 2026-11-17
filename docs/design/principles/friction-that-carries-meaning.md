@@ -22,7 +22,7 @@ follows.
   [No silent defaults](../judgment/no-silent-defaults.md) requires.
 - **Time delay.** A pause sits in front of an act that cannot be taken back,
   never inside the loop that verifies. The first Ctrl+C only arms a
-  three-second window (`confirmWindow`, [`cmd/magus/interrupt.go`](https://github.com/egladman/magus/blob/main/cmd/magus/interrupt.go)). The
+  three-second window (`confirmWindow`, [`internal/cache/interrupt.go`](https://github.com/egladman/magus/blob/main/internal/cache/interrupt.go)). The
   `push-unverified` guard rule stops a push at a commit that neither a green
   gate nor passing narrow runs over its changed files cover.
 - **Engage the body.** The verb names the physical act, and the person does it
@@ -77,7 +77,7 @@ page, and until it is, its smoothness is unexamined rather than chosen.
 
 ## Enforced by
 
-- The `push-unverified` guard rule, `confirmWindow` in [`cmd/magus/interrupt.go`](https://github.com/egladman/magus/blob/main/cmd/magus/interrupt.go),
+- The `push-unverified` guard rule, `confirmWindow` in [`internal/cache/interrupt.go`](https://github.com/egladman/magus/blob/main/internal/cache/interrupt.go),
   and the coded refusals linked above.
 - [Rolling out a stricter rule](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#rolling-out-a-stricter-rule):
   a new rule never charges a change that did not cause its finding.

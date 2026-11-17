@@ -46,8 +46,8 @@ func TestEnvelopeWatchReadsAWatcherByShape(t *testing.T) {
 func TestWatchSubjectsNormalizeWhatIsWaitedOn(t *testing.T) {
 	t.Parallel()
 	same := []string{
-		`until ! pgrep -f "magus run test"; do sleep 15; done`,
-		`sleep 240; until ! pgrep -f "magus run test"; do sleep 20; done`,
+		`until ! pkill -0 -f "magus run test"; do sleep 15; done`,
+		`sleep 240; until ! pkill -0 -f "magus run test"; do sleep 20; done`,
 	}
 	assert.Equal(t, watchSubjects(same[0], DialectBash), watchSubjects(same[1], DialectBash))
 	assert.Equal(t, []string{"pid:4242"}, watchSubjects("while kill -0 4242; do sleep 20; done", DialectBash))
@@ -96,10 +96,11 @@ func TestMonitorOnABackgroundedCommandsProcessIsADuplicate(t *testing.T) {
 		string(denyRuleMonitorDuplicate): {Decision: builtin.Deny},
 		string(denyRuleBusyWait):         {Decision: builtin.Advise},
 		string(denyRuleProcessPoll):      {Decision: builtin.Advise},
+		string(denyRuleProcessSignal):    {Decision: builtin.Advise},
 	}}
 	run := Judge(ctx, raised, Request{Input: "timeout 600 go version", Session: "watchers", Host: "claude-code", Agent: "w1", CallBackground: true})
 	require.NotEqual(t, "deny", run.Decision, run.Reason)
-	v := Judge(ctx, raised, Request{Input: monitorCall(t, "w1", `until ! pgrep -f "go version"; do sleep 15; done`), Host: "claude-code"})
+	v := Judge(ctx, raised, Request{Input: monitorCall(t, "w1", `until ! pkill -f "go version"; do sleep 15; done`), Host: "claude-code"})
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorDuplicate)}, judgedAs(v))
 }
 

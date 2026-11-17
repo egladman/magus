@@ -651,6 +651,7 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 
 	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *types.Job) {
 		u.Paths.Write, u.Goals = []string{"other.go"}, nil
+		u.Deviations = []types.Deviation{{Code: types.JobRecordInvalid, Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Nil(t, unclaimed.Requires, "a row that drops its last claim is writable by an older magus again")
@@ -1509,21 +1510,12 @@ func (s *applyDroppedGoalsSuite) TestANarrowingThatDropsGoalsIsRefused() {
 	s.Require().ErrorIs(err, types.JobRecordInvalid)
 }
 
-func (s *applyDroppedGoalsSuite) TestTheRefusalCarriesOneRestoreEditPerDroppedGoal() {
-	rec := s.record([]string{"notes/a.txt"})
+func (s *applyDroppedGoalsSuite) TestTheRefusalNamesEachDroppedGoal() {
+	err := s.apply(s.record([]string{"notes/a.txt"}))
 
-	_, edits := FixApply(s.T().Context(), s.store, []types.Declaration{rec}, config.Jobs{}, nil, nil)
-
-	s.Require().Len(edits["w"], 2)
-	s.Equal("keep-a", edits["w"][0].AddGoal.ID)
-	s.Equal("keep-b", edits["w"][1].AddGoal.ID)
-}
-
-func (s *applyDroppedGoalsSuite) TestFixRestoresEveryDroppedGoalSoTheRecordApplies() {
-	fixed, _ := FixApply(s.T().Context(), s.store, []types.Declaration{s.record([]string{"notes/a.txt"})}, config.Jobs{}, nil, nil)
-
-	s.Require().NoError(s.apply(fixed[0]))
-	s.Len(fixed[0].Goals, 2)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `drops its goal "keep-a"`)
+	s.Contains(err.Error(), `drops its goal "keep-b"`)
 }
 
 func (s *applyDroppedGoalsSuite) TestDroppingGoalsWithoutReleasingAPathIsKept() {

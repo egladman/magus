@@ -28,8 +28,7 @@ export fun mgs_getName() > str { return "claude-code"; }
 // The command runs the checkout's own ./magus when it is executable, so the binary that
 // built the tree judges it; an older magus on PATH cannot load a policy that reads a newer
 // field. Only a checkout without one falls back to PATH's magus. With neither the command
-// exits 127, which Claude Code reports and does not treat as a block: the guard is open
-// until one resolves.
+// exits 127, which claude_fails_closed turns into a block.
 final HOOK_DIR = "\"$CLAUDE_PROJECT_DIR\"";
 
 // Claude Code's Bash tool waits 120000 ms on a command that names no timeout and lets one
@@ -134,28 +133,67 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 
 fun claude_command(hook: HookCommand) > str {
     final command = claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
+    // Async: Claude Code waits on nothing it says, so it has no failure to block.
     if (hook.script == DURATION_SCRIPT) { return command + " # magus:harness"; }
-    return command;
+    return claude_fails_closed(command, ceilingS: hook.timeoutS - 1, stops: claude_stops(hook.event));
+}
+
+// Claude Code runs the call of a hook that exits anything but 0 or 2, and of one past its
+// timeout, so a guard that could not start was a guard that allowed everything: one
+// session logged 2,158 such failures. Exit 2 blocks with stderr as the reason
+// (code.claude.com/docs/en/hooks, "Exit code 2 behavior"). A magus that starts but cannot
+// load the workspace already answers with exit 2, naming the repair it lets through.
+//
+// A stop is the exception: exit 2 there sends the agent back to work no rule can judge,
+// so a stop that could not be judged ends, with exit 1, the error Claude Code shows the
+// person without blocking.
+final FAILED = "magus guard could not judge this call, so it is refused: its hook exited $s before magus answered, and 127 means no magus was found. Get this workspace a magus from your own terminal, as its setup guide says.";
+final TIMED_OUT = "magus guard could not judge this call, so it is refused: its hook ran past CEILINGs. Run magus doctor from your own terminal.";
+final STOP_FAILED = "magus guard could not judge this stop, so it ends unjudged: its hook exited $s before magus answered, and 127 means no magus was found. Get this workspace a magus from your own terminal, as its setup guide says.";
+final STOP_TIMED_OUT = "magus guard could not judge this stop, so it ends unjudged: its hook ran past CEILINGs. Run magus doctor from your own terminal.";
+
+// claude_stops reports an event whose failed hook ends the agent's turn rather than blocks.
+fun claude_stops(event: str) > bool {
+    return event == "Stop" or event == "SubagentStop";
+}
+
+// claude_fails_closed runs command with its stdin and keeps its exit 0 or 2, or 0 or 1 for
+// a stop, and turns any other exit, or a run past ceilingS, into exit 2, or 1 for a stop.
+// The wrapper is a function the glue invocation is handed to, so the line still ends in
+// that invocation, which is how magus finds its own entries. The watchdog kills the
+// shell's own pid, which interrupts the wait; a foreground child would hold the trap
+// until it ended.
+fun claude_fails_closed(command: str, ceilingS: int, stops: bool) > str {
+    final at = command.indexOf("\"$m\" buzz ") ?? 0;
+    final launch = command.sub(0, len: at);
+    final run = command.sub(at, len: command.len() - at);
+    final code = if (stops) 1 else 2;
+    final failed = if (stops) STOP_FAILED else FAILED;
+    final timedOut = (if (stops) STOP_TIMED_OUT else TIMED_OUT).replace("CEILING", with: "{ceilingS}");
+    return launch + "fail_closed() \{ exec 3<&0; trap 'kill $c 2>/dev/null; echo \"" + timedOut + "\" >&2; exit {code}' TERM; "
+        + "\"$@\" <&3 & c=$!; (sleep {ceilingS}; kill -TERM $$) </dev/null >/dev/null 2>&1 & w=$!; "
+        + "wait $c; s=$?; kill $w 2>/dev/null; [ \"$s\" -eq 0 ] || [ \"$s\" -eq {code} ] || \{ echo \"" + failed + "\" >&2; exit {code}; }; exit $s; }; "
+        + "fail_closed " + run;
 }
 
 fun claude_guard_command() > str {
-    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [<str>]));
+    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 fun claude_observe_command() > str {
-    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-observe", flags: [<str>]));
+    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-observe", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 fun claude_rehydrate_command() > str {
-    return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: [<str>]));
+    return claude_fails_closed(claude_checkout(buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 fun claude_checkpoint_command() > str {
-    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]));
+    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: true);
 }
 
 fun claude_session_command() > str {
-    return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]));
+    return claude_fails_closed(claude_checkout(buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 // Something must answer, so PATH magus stands in for a missing ./magus. In a
@@ -552,9 +590,19 @@ test "every tool call reaches the guard through one entry" {
     assert\equal("{(pre.entries[1]["hooks"] as [any])[0]["command"]}", claude_observe_command(), "the observer records the path a Read reached");
 }
 
+// claude_glue is the glue command claude_fails_closed wrapped, its launch included, and
+// a command it did not wrap whole.
+fun claude_glue(command: str) > str {
+    final wrap = command.indexOf("fail_closed() \{ ");
+    final runs = command.indexOf("; fail_closed ");
+    if (wrap == null or runs == null) { return command; }
+    return command.sub(0, len: wrap!) + command.sub(runs! + 14, len: command.len() - runs! - 14);
+}
+
 test "the glue commands are the plain argv every machine shares" {
     final head = "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
-    foreach (cmd in claude_commands()) {
+    foreach (full in claude_commands()) {
+        final cmd = claude_glue(full);
         assert\isTrue(cmd.startsWith(head), "the same string on every machine, checkout binary first: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null and cmd.replace(" # magus:harness", with: "").indexOf("#") == null, "a shipped Buzz template, no marker but the ownership one: {cmd}");
         foreach (meta in ["&&", "|", ">", "$(", "`", "bash"]) {
@@ -566,10 +614,30 @@ test "the glue commands are the plain argv every machine shares" {
         }
         assert\isTrue(cmd.indexOf("proofread") == null, "the reply check is opt-in, never shipped: {cmd}");
     }
-    assert\equal(claude_guard_command(), head + "magus-command.buzz -- --agent-name claude-code", "the guard entry");
-    assert\isTrue(claude_session_command().endsWith("magus-session.buzz -- --env-file \"$CLAUDE_ENV_FILE\""), "the file the Bash tool sources");
+    assert\equal(claude_glue(claude_guard_command()), head + "magus-command.buzz -- --agent-name claude-code", "the guard entry");
+    assert\isTrue(claude_glue(claude_session_command()).endsWith("magus-session.buzz -- --env-file \"$CLAUDE_ENV_FILE\""), "the file the Bash tool sources");
     assert\isTrue(claude_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
-    assert\isTrue(claude_checkpoint_command().endsWith(" -- --agent-name claude-code"), "Stop checkpoint");
+    assert\isTrue(claude_glue(claude_checkpoint_command()).endsWith(" -- --agent-name claude-code"), "Stop checkpoint");
+}
+
+test "every hook Claude Code waits on fails closed" {
+    foreach (hook in mgs_listHooks()) {
+        final cmd = claude_command(hook);
+        if (hook.script == DURATION_SCRIPT) {
+            assert\isTrue(cmd.indexOf("exit 2") == null, "nothing waits on the async recorder: {cmd}");
+            continue;
+        }
+        if (claude_stops(hook.event)) {
+            assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this stop") != null and cmd.indexOf("exit 2") == null,
+                "a failed stop ends the turn, never sends the agent back: {cmd}");
+        } else {
+            assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this call") != null, "an exit but 0 or 2 is a block: {cmd}");
+        }
+        assert\isTrue(cmd.indexOf("(sleep {hook.timeoutS - 1}; kill -TERM $$)") != null, "the watchdog fires before Claude Code stops waiting: {cmd}");
+        assert\isTrue(cmd.indexOf("exit $s; }; fail_closed \"$m\" buzz ") != null, "a pass and a block keep their own exit: {cmd}");
+        final tail = if (hook.flags.len() > 0) "/{hook.script}.buzz -- {hook.flags.join(" ")}" else "/{hook.script}.buzz";
+        assert\isTrue(cmd.endsWith(tail), "the line ends in the glue invocation, which is how magus finds its entries: {cmd}");
+    }
 }
 
 test "mgs_getLimits carries what the wiring no longer renders" {

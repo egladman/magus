@@ -4,8 +4,8 @@ import "context"
 
 type envRefusalKey struct{}
 
-// WithEnvRefusal hands RunHook the MGS1046 error startup found, for it to answer as the
-// verdict instead of judging the input.
+// WithEnvRefusal hands RunHook the MGS1046 error startup found, for it to answer as a
+// call nothing judged.
 func WithEnvRefusal(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, envRefusalKey{}, err)
 }
@@ -13,7 +13,7 @@ func WithEnvRefusal(ctx context.Context, err error) context.Context {
 type staleConfigKey struct{}
 
 // WithStaleConfig hands RunHook a magus.yaml failure this build
-// predates. The guard judges it as a stale binary's load failure.
+// predates, for it to answer as a call nothing judged.
 func WithStaleConfig(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, staleConfigKey{}, err)
 }

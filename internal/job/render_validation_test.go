@@ -28,26 +28,6 @@ func TestRenderValidationNumbersEveryProblemWithItsFix(t *testing.T) {
 		"  2. [MGS3039] nothing grades the job\n", buf.String(), "a record-wide problem has no field, and one without a fix has no fix line")
 }
 
-func TestApplyValidationsGroupsApplysProblemsByRecord(t *testing.T) {
-	t.Parallel()
-
-	err := errors.Join(
-		prefixed("b", types.JobProblems{{Code: types.JobUngraded, Message: "nothing grades the job", Fix: "add a check"}}).Error(),
-		prefixed("a", types.JobProblems{{Code: types.JobCheckUnrunnable, Message: "no such target"}, {Code: types.JobUngraded, Message: "no grade"}}).Error(),
-	)
-	got, ok := ApplyValidations(err, []string{"a", "b"})
-
-	assert.True(t, ok)
-	require.Len(t, got, 2)
-	assert.Equal(t, "a", got[0].Job.ID, "records come back in the order the ids name them")
-	require.Len(t, got[0].Problems, 2)
-	assert.Equal(t, types.JobProblem{Code: types.JobCheckUnrunnable, Message: "no such target"}, got[0].Problems[0])
-	assert.Equal(t, "nothing grades the job: add a check", got[1].Problems[0].Message, "the fix rides inside the message")
-
-	_, ok = ApplyValidations(errors.Join(err, errors.New("the store could not be read")), []string{"a", "b"})
-	assert.False(t, ok, "an error that is no record's problem is reported as it is")
-}
-
 func TestRenderValidationDryRunPrintsTheRecordItWouldStore(t *testing.T) {
 	t.Parallel()
 
@@ -95,29 +75,22 @@ func TestRenderValidationKeepsLargeDeviationListsOutOfText(t *testing.T) {
 	assert.Equal(t, "permitted 64 (recorded deviations; -o json includes the details)\n", buf.String())
 }
 
-func TestRenderValidationCountsWhatFixWouldApply(t *testing.T) {
+func TestApplyValidationsGroupsApplysProblemsByRecord(t *testing.T) {
 	t.Parallel()
 
-	v := types.JobValidation{Problems: types.JobProblems{
-		{Code: types.GateNotRun, Message: "nothing runs lint", Edit: &types.JobEdit{AddGoal: &types.Goal{ID: "lint"}}},
-		{Code: types.WritePathIsDirectory, Message: "cli is a directory"},
-	}}
-	var buf bytes.Buffer
-	RenderValidation(&buf, v, false)
-	assert.Equal(t, "2 problems:\n"+
-		"  1. [MGS3045] nothing runs lint\n"+
-		"  2. [MGS3018] cli is a directory\n"+
-		"--fix would apply 1 of them\n", buf.String())
-}
+	err := errors.Join(
+		prefixed("b", types.JobProblems{{Code: types.JobUngraded, Message: "nothing grades the job", Fix: "add a check"}}).Error(),
+		prefixed("a", types.JobProblems{{Code: types.JobCheckUnrunnable, Message: "no such target"}, {Code: types.JobUngraded, Message: "no grade"}}).Error(),
+	)
+	got, ok := ApplyValidations(err, []string{"a", "b"})
 
-func TestApplyValidationsKeepsEachProblemsEdit(t *testing.T) {
-	t.Parallel()
+	assert.True(t, ok)
+	require.Len(t, got, 2)
+	assert.Equal(t, "a", got[0].Job.ID, "records come back in the order the ids name them")
+	require.Len(t, got[0].Problems, 2)
+	assert.Equal(t, types.JobProblem{Code: types.JobCheckUnrunnable, Message: "no such target"}, got[0].Problems[0])
+	assert.Equal(t, "nothing grades the job: add a check", got[1].Problems[0].Message, "the fix rides inside the message")
 
-	edit := &types.JobEdit{AddWritePath: "docs/x.md"}
-	err := prefixed("a", types.JobProblems{{Code: types.OutputOutsideWritePaths, Message: "x regenerates docs/x.md", Edit: edit}}).Error()
-
-	got, ok := ApplyValidations(err, []string{"a"})
-
-	require.True(t, ok)
-	assert.Same(t, edit, got[0].Problems[0].Edit)
+	_, ok = ApplyValidations(errors.Join(err, errors.New("the store could not be read")), []string{"a", "b"})
+	assert.False(t, ok, "an error that is no record's problem is reported as it is")
 }

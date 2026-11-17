@@ -139,19 +139,64 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 }
 
 fun codex_command(hook: HookCommand) > str {
-    return buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    return codex_fails_closed(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags), stops: codex_stops(hook.event));
 }
 
 fun codex_guard_command() > str {
-    return buzzCommand(HOOK_DIR, script: "magus-command", flags: codex_guard_flags());
+    return codex_fails_closed(buzzCommand(HOOK_DIR, script: "magus-command", flags: codex_guard_flags()), stops: false);
+}
+
+fun codex_stop_command() > str {
+    return codex_fails_closed(buzzCommand(HOOK_DIR, script: "magus-command", flags: codex_guard_flags()), stops: true);
 }
 
 fun codex_rehydrate_command() > str {
-    return buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: codex_rehydrate_flags());
+    return codex_fails_closed(buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: codex_rehydrate_flags()), stops: false);
 }
 
 fun codex_checkpoint_command() > str {
-    return namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]);
+    return codex_fails_closed(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]), stops: true);
+}
+
+// Codex marks a hook that exits anything but 0 or 2, or runs past its timeout, as failed
+// and runs the call, so a guard that could not start allowed everything. Exit 2 blocks
+// with stderr as the reason (https://learn.chatgpt.com/docs/hooks). A magus that starts
+// but cannot load the workspace already answers with exit 2, naming the repair it lets
+// through. Each entry names no timeout, so Codex waits its default 600s and the watchdog
+// fires a second before.
+//
+// A stop is the exception: a block there sends the agent back to work no rule can judge,
+// so a stop that could not be judged ends with exit 1, a failed hook Codex reports.
+final CEILING_S = 599;
+final FAILED = "magus guard could not judge this call, so it is refused: its hook exited $s before magus answered, and 127 means no magus was found. Get this workspace a magus from your own terminal, as its setup guide says.";
+final TIMED_OUT = "magus guard could not judge this call, so it is refused: its hook ran past {CEILING_S}s. Run magus doctor from your own terminal.";
+final STOP_FAILED = "magus guard could not judge this stop, so it ends unjudged: its hook exited $s before magus answered, and 127 means no magus was found. Get this workspace a magus from your own terminal, as its setup guide says.";
+final STOP_TIMED_OUT = "magus guard could not judge this stop, so it ends unjudged: its hook ran past {CEILING_S}s. Run magus doctor from your own terminal.";
+
+// codex_stops reports an event whose failed hook ends the agent's turn rather than blocks.
+fun codex_stops(event: str) > bool {
+    return event == "Stop" or event == "SubagentStop";
+}
+
+// codex_fails_closed runs command with its stdin and keeps its exit 0 or 2, or 0 or 1 for
+// a stop, and turns any other exit, or a run past CEILING_S, into exit 2, or 1 for a
+// stop. Copied from claude_fails_closed, which also picks the binary first: each spell is
+// copied and edited on its own.
+fun codex_fails_closed(command: str, stops: bool) > str {
+    final code = if (stops) 1 else 2;
+    final failed = if (stops) STOP_FAILED else FAILED;
+    final timedOut = if (stops) STOP_TIMED_OUT else TIMED_OUT;
+    return "fail_closed() \{ exec 3<&0; trap 'kill $c 2>/dev/null; echo \"" + timedOut + "\" >&2; exit {code}' TERM; "
+        + "\"$@\" <&3 & c=$!; (sleep {CEILING_S}; kill -TERM $$) </dev/null >/dev/null 2>&1 & w=$!; "
+        + "wait $c; s=$?; kill $w 2>/dev/null; [ \"$s\" -eq 0 ] || [ \"$s\" -eq {code} ] || \{ echo \"" + failed + "\" >&2; exit {code}; }; exit $s; }; "
+        + "fail_closed " + command;
+}
+
+// codex_glue is the glue command codex_fails_closed wrapped.
+fun codex_glue(command: str) > str {
+    final runs = command.indexOf("; fail_closed ");
+    if (runs == null) { return command; }
+    return command.sub(runs! + 14, len: command.len() - runs! - 14);
 }
 
 fun codex_entry(h: CodexHook) > {str: any} {
@@ -396,15 +441,30 @@ test "every hook appears in the entries, so the drift check magus runs passes" {
 
 test "every glue command is a plain argv that names this host, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
-    assert\isTrue(codex_guard_command().endsWith(named), "command hook, with the host name its one argument");
-    assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
+    assert\isTrue(codex_glue(codex_guard_command()).endsWith(named), "command hook, with the host name its one argument");
+    assert\isTrue(codex_glue(codex_checkpoint_command()).endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
-    assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
+    assert\isTrue(codex_glue(codex_rehydrate_command()).endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     foreach (hook in mgs_listHooks()) {
-        final cmd = codex_command(hook);
-        assert\isTrue(cmd.startsWith("magus buzz -C . -s "), "name the working directory without an environment prefix or POSIX shell: {cmd}");
+        final cmd = codex_glue(codex_command(hook));
+        assert\isTrue(cmd.startsWith("magus buzz -C . -s "), "name the working directory without an environment prefix: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
         assert\isTrue(cmd.indexOf("--tool-rows") == null, "magus finds the tool rows by host: {cmd}");
+    }
+}
+
+test "every hook fails closed" {
+    foreach (hook in mgs_listHooks()) {
+        final cmd = codex_command(hook);
+        assert\isTrue(cmd.startsWith("fail_closed() \{ exec 3<&0; trap "), "the watchdog arms first: {cmd}");
+        if (codex_stops(hook.event)) {
+            assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this stop") != null and cmd.indexOf("exit 2") == null,
+                "a failed stop ends the turn, never sends the agent back: {cmd}");
+        } else {
+            assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this call") != null, "an exit but 0 or 2 is a block: {cmd}");
+        }
+        assert\isTrue(cmd.indexOf("(sleep 599; kill -TERM $$)") != null, "the watchdog fires before Codex stops waiting: {cmd}");
+        assert\isTrue(cmd.endsWith("; fail_closed " + codex_glue(cmd)), "the line ends in the glue invocation, which is how magus finds its entries: {cmd}");
     }
 }
 
@@ -459,7 +519,7 @@ test "the entries cover the tool, subagent, session, Stop and message events" {
     assert\equal("{start.entries[0]["matcher"]}", SESSION_START_MATCHER, "every start that is not a compaction");
     assert\equal("{start.entries[1]["matcher"]}", "compact", "the moment state was lost");
     assert\equal(codex_commands("Stop").len(), 2, "the guard, then the checkpoint: the reply check is opt-in");
-    assert\equal(codex_commands("Stop")[0], codex_guard_command(), "a block sends the agent back to work");
+    assert\equal(codex_commands("Stop")[0], codex_stop_command(), "a block sends the agent back to work");
     assert\equal(codex_commands("Stop")[1], codex_checkpoint_command(), "records where the work stands");
     final message = codex_block("UserPromptSubmit")!;
     assert\isTrue(message.entries[0]["matcher"] == null, "Codex ignores a matcher on this event");

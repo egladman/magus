@@ -13,6 +13,7 @@ exec git add magusfile.buzz magus.yaml spells/acme/spell.buzz
 exec git -c user.email=a@b -c user.name=a commit -q -m init
 
 # 30 GiB untouched for years and 25 GiB just used, against a 20 GiB budget.
+# The 6h fence holds the young file, and so does 1h, the fence the trim tightens to.
 mkdir acmecache/ab
 exec truncate -s 30G acmecache/ab/old
 exec touch -t 202001010000 acmecache/ab/old
@@ -20,7 +21,7 @@ exec truncate -s 25G acmecache/ab/young
 
 exec magus buzz -e 'import "magus/reclaimdisk" as r; r\reclaimNow();'
 stdout '^magus: disk '
-stdout '^Did: trimmed 30\.0 GiB of the acme spell''s ACMECACHE; 25\.0 GiB left, past its 20480 MiB budget and all newer than the 6h fence\.$'
+stdout '^Did: trimmed 30\.0 GiB of the acme spell''s ACMECACHE; 25\.0 GiB left, past its 20480 MiB budget and all newer than the 1h fence, tightened from 6h\.$'
 ! exists acmecache/ab/old
 exists acmecache/ab/young
 

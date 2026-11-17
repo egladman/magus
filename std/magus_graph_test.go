@@ -207,7 +207,7 @@ func (c *countingGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequ
 func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
-	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
+	eval := types.WithEvalOnce(types.WithWorkspace(t.Context(), ws))
 	for range 3 {
 		_, err := MagusDir(eval, "internal/httpx")
 		require.NoError(t, err)
@@ -216,30 +216,93 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, ws.builds, "four members in one evaluation")
 
-	_, err = MagusDir(types.WithEvalMemo(eval), "internal/httpx")
+	_, err = MagusDir(types.WithEvalOnce(eval), "internal/httpx")
 	require.NoError(t, err)
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
 }
 
-// A refs lookup asks for the shards of its own symbol. One evaluation
-// builds that scope once, while a different symbol builds its own.
-func TestRefsMemoizesPerSymbolScope(t *testing.T) {
+// Inside an evaluation refs reads the all-symbols graph, the one a seeded query
+// reads, so two symbols and a query are one build.
+func TestRefsReadsTheEvaluationsSymbolGraph(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
-	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
-	for range 2 {
-		_, err := MagusRefs(eval, graphSymbol, types.KnowledgeRefsOptions{})
+	eval := types.WithEvalOnce(types.WithWorkspace(t.Context(), ws))
+	for _, sym := range []string{graphSymbol, "symbol:example.com/x Bar#"} {
+		_, err := MagusRefs(eval, sym, types.KnowledgeRefsOptions{})
 		require.NoError(t, err)
 	}
-	assert.Equal(t, countingGraphs{
-		builtGraphWorkspace: ws.builtGraphWorkspace,
-		builds:              1,
-		reqs:                []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}},
-	}, *ws)
-
-	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", types.KnowledgeRefsOptions{})
+	_, err := MagusQuery(eval, "kind=symbol "+graphSymbol, types.KnowledgeQueryOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, 2, ws.builds, "a second symbol is a second scope")
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.AllSymbols}}, ws.reqs)
+}
+
+// A context with no evaluation, such as the MCP worker's or the REPL's, keeps the
+// by-reference scope and builds each time.
+func TestRefsWithoutAnEvaluationKeepsTheReferenceScope(t *testing.T) {
+	t.Parallel()
+	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
+	ctx := types.WithWorkspace(t.Context(), ws)
+	_, err := MagusRefs(ctx, graphSymbol, types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
+}
+
+// An evaluation that has ended behaves as a nil holder does: refs builds the by-reference
+// scope instead of paying a full merge.
+func TestRefsAfterTheEvaluationEndedKeepsTheReferenceScope(t *testing.T) {
+	t.Parallel()
+	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
+	eval := types.WithEvalOnce(types.WithWorkspace(t.Context(), ws))
+	types.EvalOnceFromContext(eval).End()
+	_, err := MagusRefs(eval, graphSymbol, types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
+}
+
+// definedSymbols is a workspace whose graph holds one symbol per id, each labeled name and
+// defined by its own file.
+func definedSymbols(t *testing.T, name string, ids ...string) context.Context {
+	g := knowledge.NewGraph()
+	for i, id := range ids {
+		file := fmt.Sprintf("file:pkg/%d.go", i)
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name})
+		g.AddEdge(types.KnowledgeEdge{Source: file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
+	}
+	return types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
+}
+
+const (
+	decideRuntime = "symbol:example.com/x `example.com/x/volatility`/Runtime#Decide()."
+	decideVerdict = "symbol:example.com/x `example.com/x/queue`/CarryVerdict#Decide()."
+)
+
+func TestRefsRefusesANameSharedByTwoSymbols(t *testing.T) {
+	t.Parallel()
+	ctx := definedSymbols(t, "Decide", decideRuntime, decideVerdict)
+
+	_, err := MagusRefs(ctx, "Decide", types.KnowledgeRefsOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `magus\graph().refs: "Decide" names 2 symbols defined in this workspace`)
+	assert.ErrorContains(t, err, decideRuntime)
+	assert.ErrorContains(t, err, decideVerdict)
+}
+
+func TestRefsResolvesAnExactIDOfASharedName(t *testing.T) {
+	t.Parallel()
+	ctx := definedSymbols(t, "Decide", decideRuntime, decideVerdict)
+
+	got, err := MagusRefs(ctx, decideVerdict, types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, decideVerdict, got.Symbol)
+}
+
+func TestRefsResolvesANameWithOneMatch(t *testing.T) {
+	t.Parallel()
+	ctx := definedSymbols(t, "Open", decideRuntime)
+
+	got, err := MagusRefs(ctx, "Open", types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, decideRuntime, got.Symbol)
 }
 
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared

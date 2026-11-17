@@ -31,15 +31,35 @@ that declared configuration; user-account plugin activation remains a separate
 step owned by the person.
 
 The second cost of such a layer is the one nobody sees until it matters. A
-guard you did not wire is a guard whose failure mode you do not know, and this
-one fails OPEN by design, so a hook that quietly stopped judging looks exactly
-like a session with nothing to deny. So a shipped template announces its
-fail-open arms rather than exiting quietly. One template is exempt, and the test
-declares it rather than leaving it to be discovered: the path template stays
-silent. An empty response from a file-write rule already means allow, a notice
-on every file edit was judged the worse noise, and hearing about it there is
-opt-in. Whoever runs the guard should be able to read what it does and repair
-it without us.
+guard you did not wire is a guard whose failure mode you do not know. So the
+failure mode is fixed, and it is the same on every host: a guard that cannot
+judge a call refuses it. A magus.yaml the binary cannot read, a bad `MAGUS_*`
+value, a crash, a timeout and a missing binary all end the same way. The one
+call that passes is the workspace's own repair, the line that gets it a magus
+that can judge again: the bootstrap for a checkout that builds magus from
+source, `magus self update` for one that installs a release. The refusal names
+it.
+
+Fail-closed is the principle, not a fallback. A hook that fails open looks
+exactly like a session with nothing to deny, and one session logged 2,158
+failed hooks, every PreToolUse, Stop and UserPromptSubmit hook, while its
+`./magus` was older than its magus.yaml; the host read each failure as a
+non-blocking error, and no rule held. The wiring is where every failure is
+visible, so the wiring enforces it, in each host's own blocking signal: an
+exit 2 for Claude Code and Codex, `failClosed` for Cursor. magus answers its
+own startup failure the same way, where it can still answer, and so does
+`magus shell` when it cannot read its configuration or environment. The hook
+glue, which a running magus interprets, reads the same declarations when the
+magus it asks crashes. A missing binary leaves nothing to name the repair, so
+every host refuses that call outright, the repair with it, and the OpenCode
+plugin, which no magus runs, refuses a crash the same way rather than keep a
+second parser of repair lines in its wasm. A stop is the
+one event a failure lets through, loudly: refusing it would send the agent
+back to work no rule can judge, and ending is the act that leaves nothing
+unjudged behind.
+
+Whoever runs the guard should be able to read what it does and repair it
+without us.
 
 The same holds for credentials: the guard is a seatbelt, not a boundary against
 a process running as you, which can read any file magus can. So the guard
@@ -58,8 +78,12 @@ that never mints a wider one, rather than claiming a sandbox it does not have
   that reason, chosen by which flag the wrapper passed.
 - The `magus-guard-coverage:` line each template carries feeds a parity gate
   that fails when a host was never asked about a decision the contract grew.
-- `TestFailOpenArmsAnnounceThemselves` fails the build when a template stops
-  announcing a fail-open arm.
+- `TestFailOpenArmsAnnounceThemselves` fails the build when a template's arm
+  for a call no magus judged stops refusing it and saying so.
+- Each harness spell's tests fail when a hook entry it renders can exit
+  without the host's block, and the `hook_fails_closed_*` testscripts run the
+  rendered wiring against an unreadable magus.yaml, a bad `MAGUS_*` value and a
+  missing binary.
 
 ## Good
 

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -436,9 +437,7 @@ func RenderFiles(w io.Writer, report types.FileReport, files []types.FileEntry, 
 	}
 	if len(report.Overlaps) > 0 {
 		fmt.Fprintln(w, "declarations covering more than one of these paths:")
-		for _, c := range report.Overlaps {
-			fmt.Fprintf(w, "  %-6s %-24s %-24s %s\n", c.Role, ClaimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
-		}
+		writeOverlaps(w, report.Overlaps)
 	}
 }
 
@@ -453,4 +452,40 @@ func RenderModules(w io.Writer, out []types.ModuleEntry) {
 		}
 	}
 	fmt.Fprintln(w, "\nRun `magus describe module <name>` for a module's methods and signatures.")
+}
+
+// writeOverlaps renders each set of paths once, then the declarations covering exactly
+// that set. Declarations that cover the same paths are the common case, and printing the
+// paths per declaration grew the text with paths times declarations.
+func writeOverlaps(w io.Writer, overlaps []types.FileClaim) {
+	var order []string
+	groups := map[string][]types.FileClaim{}
+	for _, c := range overlaps {
+		k := strings.Join(c.Paths, ", ")
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], c)
+	}
+	for _, k := range order {
+		fmt.Fprintf(w, "  %s\n", k)
+		for _, c := range groups[k] {
+			fmt.Fprintf(w, "    %-6s %-24s %s\n", c.Role, ClaimLabel(c), c.Glob)
+		}
+	}
+}
+
+// ParseSchema decodes an embedded JSON Schema document and returns it with the sorted
+// names of its top-level properties, the two shapes a --schema flag renders besides the
+// raw text.
+func ParseSchema(raw string) (doc map[string]any, names []string, err error) {
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		return nil, nil, fmt.Errorf("parse embedded schema: %w", err)
+	}
+	props, _ := doc["properties"].(map[string]any)
+	for k := range props {
+		names = append(names, k)
+	}
+	slices.Sort(names)
+	return doc, names, nil
 }

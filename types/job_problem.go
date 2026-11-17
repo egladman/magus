@@ -2,8 +2,8 @@ package types
 
 import (
 	"errors"
-	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
@@ -23,54 +23,6 @@ type JobProblem struct {
 	Message string `json:"message"`
 	// Fix is the edit to the record that clears the problem.
 	Fix string `json:"fix"`
-	// Edit is Fix as data, set only where the fix needs no judgment: `--fix` applies it. A
-	// problem without one is the caller's to decide.
-	Edit *JobEdit `json:"edit,omitempty"`
-}
-
-// JobEdit is one mechanical change to a record. Exactly one field is set.
-type JobEdit struct {
-	AddWritePath string     `json:"add_write_path,omitempty"`
-	AddGoal      *Goal      `json:"add_goal,omitempty"`
-	AddDeviation *Deviation `json:"add_deviation,omitempty"`
-}
-
-// Apply makes e on d and reports whether d changed: an entry d already holds, or a goal id
-// it already uses, is left alone.
-func (e JobEdit) Apply(d *Declaration) bool {
-	switch {
-	case e.AddWritePath != "":
-		if slices.Contains(d.Paths.Write, e.AddWritePath) {
-			return false
-		}
-		d.Paths.Write = append(d.Paths.Write, e.AddWritePath)
-	case e.AddGoal != nil:
-		if slices.ContainsFunc(d.Goals, func(g Goal) bool { return g.ID == e.AddGoal.ID }) {
-			return false
-		}
-		d.Goals = append(d.Goals, *e.AddGoal)
-	case e.AddDeviation != nil:
-		if slices.Contains(d.Deviations, *e.AddDeviation) {
-			return false
-		}
-		d.Deviations = append(d.Deviations, *e.AddDeviation)
-	default:
-		return false
-	}
-	return true
-}
-
-// String is e as a person reads it in a list of what `--fix` did.
-func (e JobEdit) String() string {
-	switch {
-	case e.AddWritePath != "":
-		return fmt.Sprintf("added %q to paths.write", e.AddWritePath)
-	case e.AddGoal != nil:
-		return fmt.Sprintf("added the goal %q (%s)", e.AddGoal.ID, e.AddGoal.Check)
-	case e.AddDeviation != nil:
-		return fmt.Sprintf("permitted %s %q (%s)", e.AddDeviation.Code, e.AddDeviation.Subject, e.AddDeviation.Reason)
-	}
-	return "no edit"
 }
 
 // Error renders p as a DiagnosticError, so errors.Is matches its code. The text is the
@@ -85,7 +37,7 @@ func (p JobProblem) Error() *DiagnosticError {
 // JobProblems are the problems of one record, in record order.
 type JobProblems []JobProblem
 
-// Error joins each problem as a [*JobProblemError] in record order, or returns nil when there
+// Error joins each problem as a [*DiagnosticError] in record order, or returns nil when there
 // are none.
 func (ps JobProblems) Error() error {
 	if len(ps) == 0 {
@@ -93,29 +45,9 @@ func (ps JobProblems) Error() error {
 	}
 	errs := make([]error, len(ps))
 	for i, p := range ps {
-		errs[i] = &JobProblemError{Problem: p}
+		errs[i] = p.Error()
 	}
 	return errors.Join(errs...)
-}
-
-// JobProblemError is a problem as an error that keeps the problem, so a caller handed the
-// joined error recovers each one's Edit. It reads and unwraps as [JobProblem.Err].
-type JobProblemError struct {
-	Problem JobProblem
-}
-
-func (e *JobProblemError) Error() string { return e.Problem.Error().Error() }
-func (e *JobProblemError) Unwrap() error { return e.Problem.Error() }
-
-// Fixable counts the problems of ps that carry an Edit.
-func (ps JobProblems) Fixable() int {
-	n := 0
-	for _, p := range ps {
-		if p.Edit != nil {
-			n++
-		}
-	}
-	return n
 }
 
 // Permit splits ps into the problems a deviation in ds matches by code and subject and the
@@ -123,7 +55,7 @@ func (ps JobProblems) Fixable() int {
 // [Declaration.Problems] reports it as JobRecordInvalid.
 func (ps JobProblems) Permit(ds []Deviation) (kept, permitted JobProblems) {
 	for _, p := range ps {
-		if Permissible(p.Code) && slices.ContainsFunc(ds, func(d Deviation) bool { return d.Permits(p) }) {
+		if p.Permissible() && slices.ContainsFunc(ds, func(d Deviation) bool { return d.Permits(p) }) {
 			permitted = append(permitted, p)
 			continue
 		}
@@ -156,6 +88,17 @@ func (d Deviation) Permits(p JobProblem) bool {
 	}
 	matched, _ := doublestar.Match(d.Subject, p.Subject)
 	return matched
+}
+
+// DropsSubject opens the subject of a problem that a re-declaration of a live job would
+// erase a declared field: "drops paths.write". A deviation naming it is the record saying so.
+const DropsSubject = "drops "
+
+// Permissible reports whether p may be permitted: its code is [Permissible], or it is a
+// record refused for dropping a declared field of a live job, which the record may accept
+// by naming that field.
+func (p JobProblem) Permissible() bool {
+	return Permissible(p.Code) || p.Code == JobRecordInvalid && strings.HasPrefix(p.Subject, DropsSubject)
 }
 
 // Permissible reports whether a problem of code c may be permitted: only a judgment about how

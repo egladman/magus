@@ -461,6 +461,19 @@ func TestAssessScopedWithoutANarrowableTest(t *testing.T) {
 	}), rep.Lines())
 }
 
+// TestAssessMemberWithUntouchedInputsStillRuns: a member's cache key holds more than the
+// inputs it declares, so a member whose declared inputs the change misses still runs
+// and the cache decides whether to replay it.
+func TestAssessMemberWithUntouchedInputsStillRuns(t *testing.T) {
+	in := fixtureInputs(map[string]Prover{".go": tableProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: "."}}}},
+		Classified{Path: "a/a.go", Class: ClassCode})
+	in.Projects[0].TargetChains["ci"] = append(in.Projects[0].TargetChains["ci"], types.ChainStep{Target: "release"})
+	rep := Assess(context.Background(), in)
+	require.Equal(t, check.RiskScoped, rep.Tier)
+	assert.True(t, slices.ContainsFunc(gateLines(rep), func(l string) bool { return strings.Contains(l, "release") }), rep.Lines())
+	assert.False(t, slices.ContainsFunc(rep.Lines(), func(l string) bool { return strings.Contains(l, "skipped") }), rep.Lines())
+}
+
 func TestHigher(t *testing.T) {
 	order := []check.Tier{check.RiskTrivial, check.RiskMechanical, check.RiskScoped, check.RiskFull}
 	for i, a := range order {

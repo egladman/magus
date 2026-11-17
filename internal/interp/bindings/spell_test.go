@@ -1057,7 +1057,7 @@ func (alwaysTerminalProbe) Size(fd uintptr) (width, height int, err error) { ret
 // Without this the op ran, the tool failed on its own terms, and magus reported a
 // build failure for a project with nothing wrong with it.
 func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
-	readinessMemo.Clear()
+	readinessOnce.Clear()
 	readiness := map[string]spells.Tool{
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
@@ -1074,7 +1074,7 @@ func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
 // socket and asks whether the daemon is running. Paraphrasing it discarded the most
 // actionable line available, so the probe's output must reach the error.
 func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
-	readinessMemo.Clear()
+	readinessOnce.Clear()
 	readiness := map[string]spells.Tool{
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "echo 'Cannot connect to the daemon at /var/run/x.sock' >&2; exit 1"}}},
 	}
@@ -1088,7 +1088,7 @@ func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
 
 // A silent probe still produces a usable error rather than a dangling colon.
 func TestReadinessErrorWithoutProbeOutput(t *testing.T) {
-	readinessMemo.Clear()
+	readinessOnce.Clear()
 	readiness := map[string]spells.Tool{
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
@@ -1102,7 +1102,7 @@ func TestReadinessErrorWithoutProbeOutput(t *testing.T) {
 
 // A passing probe lets the op through.
 func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
-	readinessMemo.Clear()
+	readinessOnce.Clear()
 	readiness := map[string]spells.Tool{
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}},
 	}
@@ -1112,7 +1112,7 @@ func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 
 // An op whose tool declares no probe is never gated: the hadolint-beside-docker case.
 func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
-	readinessMemo.Clear()
+	readinessOnce.Clear()
 	readiness := map[string]spells.Tool{
 		"docker": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
@@ -1122,8 +1122,8 @@ func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
 }
 
 // The probe forks, so it must run once per (bin, dir) and not once per op.
-func TestReadinessProbeIsMemoized(t *testing.T) {
-	readinessMemo.Clear()
+func TestReadinessProbeRunsOncePerBinAndDir(t *testing.T) {
+	readinessOnce.Clear()
 	dir := t.TempDir()
 	// A probe that succeeds only while the marker is absent: if it ran twice, the
 	// second call would see the file it created and fail.
@@ -1134,7 +1134,7 @@ func TestReadinessProbeIsMemoized(t *testing.T) {
 
 	require.NoError(t, checkReady(context.Background(), readiness, op, dir))
 	require.NoError(t, checkReady(context.Background(), readiness, op, dir),
-		"probe re-ran; a forked check must be memoized per (bin, dir)")
+		"probe re-ran; a forked check must run once per (bin, dir)")
 }
 
 // The grace period is interactive-only, and this pins the half that would otherwise
@@ -1142,7 +1142,7 @@ func TestReadinessProbeIsMemoized(t *testing.T) {
 // Waiting there burns the grace period per project to reach the same failure, and
 // nobody is going to start a daemon mid-run.
 func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
-	readinessMemo.Clear()
+	readinessOnce.Clear()
 	readiness := map[string]spells.Tool{
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
@@ -1157,14 +1157,14 @@ func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
 		"a non-interactive run waited %s; the grace period must not apply without a TTY", elapsed)
 }
 
-// TestReadinessCancelledProbeIsNotMemoized proves a run cancelled mid-probe (Ctrl-C)
-// does not poison the memo for the process's remaining lifetime. Before the fix,
+// TestReadinessCancelledProbeIsNotKept proves a run cancelled mid-probe (Ctrl-C)
+// does not poison readinessOnce for the process's remaining lifetime. Before the fix,
 // checkReady stored whatever probeUntilReady returned unconditionally, including
 // ctx.Err() from the interactive wait loop's `case <-ctx.Done()` branch, so one
 // cancelled run made every later op on the same (bin, dir) fail with "context
 // canceled" for as long as the daemon lived, even once the tool was actually ready.
-func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
-	readinessMemo.Clear()
+func TestReadinessCancelledProbeIsNotKept(t *testing.T) {
+	readinessOnce.Clear()
 	prev := termkit.SystemProbe
 	termkit.SystemProbe = alwaysTerminalProbe{}
 	defer func() { termkit.SystemProbe = prev }()
@@ -1183,8 +1183,8 @@ func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, context.Canceled), "want context.Canceled, got %v", err)
 
-	if _, hit := readinessMemo.Load("faketool\x00" + dir); hit {
-		t.Fatal("a cancelled probe's outcome must not be memoized")
+	if _, hit := readinessOnce.Load("faketool\x00" + dir); hit {
+		t.Fatal("a cancelled probe's outcome must not be kept")
 	}
 
 	// A later call with a live context must re-probe rather than return the stale

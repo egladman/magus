@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
@@ -118,7 +119,7 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 	bindDisplayFlags(fset)
 	af := flaggen.BindAgent(fset)
 	fset.Usage = func() { agentUsage(os.Stderr) }
-	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
+	if err := command.Parse(fset, commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	form, err := agent.ParseForm(af.SkillForm)
@@ -273,7 +274,7 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 	id := fset.String("id", "", "harness descriptor ID; omit to install every magusfile-wired provider")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
+	if err := command.Parse(fset, commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -333,7 +334,7 @@ func agentHarnessLinksCommand(ctx context.Context, rootOverride string, args []s
 	stdin := fset.Bool("stdin", false, "read destination-to-source links as JSON from stdin")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
+	if err := command.Parse(fset, commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -454,7 +455,7 @@ func agentHarnessVerifyCommand(ctx context.Context, rootOverride string, args []
 	id := fset.String("id", "", "harness descriptor ID; omit to verify every magusfile-wired provider")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
+	if err := command.Parse(fset, commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -543,7 +544,7 @@ func agentAdoptionCommand(args []string) error {
 	bindDisplayFlags(fset)
 	af := flaggen.BindAgentAdoption(fset)
 	fset.Usage = func() { guard.WriteAdoptionUsage(os.Stderr) }
-	if err := fset.Parse(args); err != nil {
+	if err := command.Parse(fset, args); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()

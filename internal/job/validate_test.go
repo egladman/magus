@@ -3,9 +3,12 @@ package job
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
@@ -330,6 +334,51 @@ func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 	assert.NotContains(t, codes(widened.Problems), types.JobRecordInvalid, "a shape the row already had is not the update's")
 }
 
+func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	seed(t, s, types.Job{
+		ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: forkCheck(),
+		Agent: &agent.Spec{Instructions: "do the thing"},
+		Goals: []types.Goal{{ID: "g", Kind: types.GoalKindCheck, Check: *forkCheck()}},
+	})
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	wiped := func(u *types.Job) {
+		u.Agent, u.Paths.Write, u.Check, u.Goals = nil, nil, nil, nil
+	}
+	v := validateMerge(t.Context(), s, rows, "w", wiped, config.Jobs{}, nil)
+	var subjects []string
+	for _, p := range v.Problems {
+		if p.Code == types.JobRecordInvalid && strings.HasPrefix(p.Subject, types.DropsSubject) {
+			subjects = append(subjects, p.Subject)
+		}
+	}
+	assert.ElementsMatch(t, []string{"drops agent.instructions", "drops paths.write", "drops check", "drops goals"}, subjects)
+
+	said := func(u *types.Job) {
+		wiped(u)
+		u.Deviations = []types.Deviation{
+			{Code: types.JobRecordInvalid, Subject: "drops agent.instructions", Reason: "the job is reset"},
+			{Code: types.JobRecordInvalid, Subject: "drops paths.write", Reason: "the job is reset"},
+			{Code: types.JobRecordInvalid, Subject: "drops check", Reason: "the job is reset"},
+			{Code: types.JobRecordInvalid, Subject: "drops goals", Reason: "the job is reset"},
+		}
+	}
+	v = validateMerge(t.Context(), s, rows, "w", said, config.Jobs{}, nil)
+	for _, p := range v.Problems {
+		assert.False(t, strings.HasPrefix(p.Subject, types.DropsSubject), "a deviation naming the erasure permits it: %s", p.Subject)
+	}
+	assert.Len(t, v.Permitted, 4)
+
+	kept := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	for _, p := range kept.Problems {
+		assert.False(t, strings.HasPrefix(p.Subject, types.DropsSubject), "an update that keeps the fields drops none")
+	}
+}
+
 func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	t.Parallel()
 
@@ -611,4 +660,186 @@ func (s *FootprintMayExtendSuite) TestWritingOnlyTestsCannotExtend() {
 
 func (s *FootprintMayExtendSuite) TestAReadOnlyRowCannotExtend() {
 	s.False(FootprintMayExtend(s.root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"run/run.go"}}}))
+}
+
+// LintGoalTrackedFilesSuite pins that a derived lint goal skips the files the VCS ignores and
+// keeps every other one, tracked or not.
+type LintGoalTrackedFilesSuite struct {
+	suite.Suite
+}
+
+func TestLintGoalTrackedFilesSuite(t *testing.T) { suite.Run(t, new(LintGoalTrackedFilesSuite)) }
+
+func (s *LintGoalTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([]string, string) {
+	st := NewStore(tempLocation(s.T(), repo.Root())).InWorkspace(ws)
+	var notes bytes.Buffer
+	st.notices = &notes
+	merged, err := resolveMerge(s.T().Context(), st, nil, "w", func(u *types.Job) {
+		u.Paths.Write, u.Check = []string{"skills/**"}, forkCheck()
+	}, nil)
+	s.Require().NoError(err)
+	var row types.Job
+	merged(&row)
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	s.Require().GreaterOrEqual(i, 0, "goals: %v", row.Goals)
+	return row.Goals[i].Check.Args, notes.String()
+}
+
+func (s *LintGoalTrackedFilesSuite) workspace(root string) Workspace {
+	top := &types.Project{
+		Path:             ".",
+		MagusfileTargets: []string{"ci", "lint", "test"},
+		TargetInputs:     map[string][]types.InputRef{"lint": {{Glob: "**/*.md"}}},
+		TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}},
+	}
+	return Workspace{Projects: []*types.Project{top}, Ignored: VCSIgnored(s.T().Context(), root)}
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAnIgnoredFileIsLeftOutAndEveryOtherKept() {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":       "skills/installed/\n",
+		"skills/kept/a.md": "# a\n",
+	})
+	write := func(rel string) {
+		p := filepath.Join(repo.Root(), filepath.FromSlash(rel))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+		s.Require().NoError(os.WriteFile(p, []byte("# x\n"), 0o644))
+	}
+	write("skills/installed/b.md")
+	write("skills/installed/forced.md")
+	repo.Git("add", "-f", "skills/installed/forced.md")
+	repo.Git("commit", "-q", "-m", "force-add an ignored path")
+	write("skills/new/c.md")
+
+	args, note := s.resolve(repo, s.workspace(repo.Root()))
+
+	s.Equal([]string{"skills/installed/forced.md", "skills/kept/a.md", "skills/new/c.md"}, args,
+		"the tracked, the force-added and the not yet tracked file stay; the ignored one goes")
+	s.Contains(note, "left 1 ignored file(s) out of the lint goal")
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAnUnaskableVCSKeepsEveryFileAndSaysSo() {
+	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
+	ws := s.workspace(repo.Root())
+	ws.Ignored = nil
+
+	args, note := s.resolve(repo, ws)
+
+	s.Equal([]string{"skills/kept/a.md"}, args)
+	s.Contains(note, "keeps every one")
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNamesTheError() {
+	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
+	ws := s.workspace(repo.Root())
+	ws.Ignored = func([]string) ([]string, error) { return nil, errors.New("git check-ignore: exit status 128") }
+
+	args, note := s.resolve(repo, ws)
+
+	s.Equal([]string{"skills/kept/a.md"}, args)
+	s.Contains(note, "keeps every written file")
+	s.Contains(note, "git check-ignore: exit status 128")
+}
+
+func unrunGate() UnrunGate {
+	return UnrunGate{
+		Target: "unit", Project: ".", Source: "**/*.go",
+		Goal: types.Goal{ID: "unit", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "unit", Project: "."}},
+	}
+}
+
+func TestUnrunGateFixAddsTheGoalWithoutAnOwner(t *testing.T) {
+	t.Parallel()
+
+	ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{})
+
+	require.Len(t, ps, 1)
+	assert.Equal(t, `add the goal {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to goals, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`, ps[0].Fix)
+}
+
+func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
+	t.Parallel()
+
+	for _, runs := range []string{"github-actions runs it", integratorRuns} {
+		ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{runs: runs})
+
+		require.Len(t, ps, 1)
+		assert.Equal(t, fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs), ps[0].Fix)
+	}
+}
+
+func TestUnrunLintGateFixStaysTheGoalWhoeverOwnsTheRest(t *testing.T) {
+	t.Parallel()
+
+	lint := unrunGate()
+	lint.Target = lintTarget
+
+	ps := unrunGateProblems([]UnrunGate{lint}, gateOwner{runs: "github-actions runs it"})
+
+	require.Len(t, ps, 1)
+	assert.Contains(t, ps[0].Fix, "add the goal ")
+	assert.NotContains(t, ps[0].Fix, "since github-actions")
+}
+
+func TestIntegratorGatesAskForNoFix(t *testing.T) {
+	t.Parallel()
+
+	gate := unrunGate()
+	gate.IntegratorGates = true
+
+	assert.Empty(t, unrunGateProblems([]UnrunGate{gate}, gateOwner{}))
+}
+
+func TestRegeneratedOutputFixOffersTheWritePathOrADeviation(t *testing.T) {
+	t.Parallel()
+
+	ps := regeneratedProblems([]RegeneratedOutput{{Target: ".:man-generate", Output: "manpage/*.1", Source: "cli/registry.go"}})
+
+	require.Len(t, ps, 1)
+	assert.Equal(t, `add "manpage/*.1" to paths.write, or permit it in deviations: {"code":"MGS3044","subject":"manpage/*.1","reason":"the root regenerates it"}`, ps[0].Fix)
+}
+
+// declaredGateSuite pins which owner the workspace declares for a worker's gates.
+type declaredGateSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestDeclaredGate(t *testing.T) { suite.Run(t, new(declaredGateSuite)) }
+
+func (s *declaredGateSuite) SetupTest() {
+	store, _ := validateWorkspace(s.T())
+	s.store = store
+}
+
+func (s *declaredGateSuite) writeConfig(body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.store.root, "magus.yaml"), []byte(body), 0o644))
+}
+
+func (s *declaredGateSuite) TestRemoteGateOwnsIt() {
+	s.writeConfig("ci:\n  remote_gate: github-actions\n")
+
+	s.Equal(gateOwner{runs: "github-actions runs it"}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+}
+
+func (s *declaredGateSuite) TestNoOwnerWithoutAConfigOrParent() {
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+}
+
+func (s *declaredGateSuite) TestIntegratingParentOwnsIt() {
+	parent := types.Job{ID: "integrate", State: types.StateRunning, Integrates: []string{"a-branch"}}
+
+	s.Equal(gateOwner{runs: integratorRuns}, declaredGateOwner(s.store.root, []types.Job{parent}, types.Job{ID: "w", Parent: "integrate"}))
+}
+
+func (s *declaredGateSuite) TestAnIntegrationJobOwnsItsOwnGates() {
+	s.writeConfig("ci:\n  remote_gate: github-actions\n")
+
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "integrate", Integrates: []string{"a-branch"}}))
+}
+
+func (s *declaredGateSuite) TestUnreadableConfigDeclaresNoOwner() {
+	s.writeConfig("ci: [\n")
+
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
 }

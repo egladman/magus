@@ -1640,10 +1640,14 @@ fun changelogProblems(title: str, facts: Facts) > [str] {
         return ["malformed changelog fragment(s); fix each to the format changes/README.md gives:\n  "
             + malformed.join("\n  ")];
     }
-    if (entries\owed(title, changed: facts.changed).len() == 0) {
+    var marked = false;
+    foreach (path in facts.added) {
+        if (entries\hasBreakingEntry(facts.texts[path] ?? "")) { marked = true; }
+    }
+    if (entries\owed(title, changed: facts.changed).len() == 0 and !marked) {
         return [<str>];
     }
-    final owing = entries\problem(title, changed: facts.changed, added: facts.added);
+    final owing = entries\problem(title, changed: facts.changed, added: facts.added, marked: marked);
     if (owing == "") {
         return [<str>];
     }
@@ -2576,12 +2580,13 @@ test "a feat that ships code with no fragment is denied with the fix, and a frag
         diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
     std\assert(refactor.decision == magus\GuardDecision.allow, message: "a title that owes no entry needs none: " + refactor.reason);
 
-    final fragments = fs\glob("changes/unreleased/*.md") catch [<fs\Path>];
-    if (fragments.len() > 0) {
-        final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
-            diff: facts(shippedDiff([fragments[0].value])), judge: passing(), once: helpers\counter());
-        std\assert(settled.decision == magus\GuardDecision.allow, message: "a well-formed fragment: " + settled.reason);
-    }
+    final dir = fs\tempDir("fragment") catch "";
+    final fragment = fs\join(dir, "key.md");
+    fs\writeFile(fragment, content: "### Fixed\n\n- **The cache key hashes in sorted order.** Equal maps share one key.\n") catch void;
+    final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(shippedDiff([fragment])), judge: passing(), once: helpers\counter());
+    std\assert(settled.decision == magus\GuardDecision.allow, message: "a well-formed fragment: " + settled.reason);
+    fs\removeAll(dir) catch void;
 }
 
 test "a fragment that fails lint is denied even when the title owes none" {

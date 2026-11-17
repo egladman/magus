@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -16,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
@@ -131,7 +134,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// callers it is unreliable everywhere.
 	bindDisplayFlags(fset)
 	fset.Usage = func() { shellUsage(fset.Output()) }
-	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
+	if err := command.Parse(fset, commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	// --transport is how installed glue says a host called; a person typing this names none.
@@ -257,4 +260,21 @@ func hookEmit(out io.Writer, opts output.Options, decision string, verdict any) 
 		return emitNames(out, []string{decision})
 	}
 	return writeFormatted(out, opts, verdict)
+}
+
+// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
+// in, whose magus cannot start for root, since a host runs a failed hook's call.
+func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
+	if sub == "shell" {
+		return mapExitCode(shellCommand(guard.WithStaleConfig(ctx, cause), subArgs)), true
+	}
+	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
+	if sub != "buzz" || termkit.StdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
+		return 0, false
+	}
+	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
+	if reason != "" {
+		fmt.Fprintln(os.Stderr, reason)
+	}
+	return answer.ExitCode(), true
 }

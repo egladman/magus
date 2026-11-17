@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,8 +30,10 @@ import (
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -1795,7 +1798,7 @@ func TestToolWindowIgnoresUnconstrainedTools(t *testing.T) {
 }
 
 // probedSpell is tsSpell with the version prober injected, so these tests exercise the
-// real probeTools path without forking anything. The counter is what proves memoization,
+// real probeTools path without forking anything. The counter is what proves each probe runs once,
 // which is the only reason probeTools threads two outputs out of one pass.
 func probedSpell(name, tool string, key spells.VersionKey, out func(dir string) (string, error), calls *int) *spells.Spell {
 	return spells.NewSpell(name,
@@ -1896,7 +1899,7 @@ func TestProbeToolsRefusesAPresentToolThatCannotBeProbed(t *testing.T) {
 	assert.Equal(t, map[string][]string{"console": {"typescript:node:v22.14.0"}}, lines, "a reader keeps every other project")
 	require.Contains(t, failed, "api")
 	assert.ErrorIs(t, failed["api"], types.ToolUnprobeable)
-	assert.Equal(t, 1, calls, "the per-project pass replays the memo instead of probing again")
+	assert.Equal(t, 1, calls, "the per-project pass replays the probes instead of probing again")
 }
 
 // Output carrying no version is the same contract as a failed probe for the gate's
@@ -1913,9 +1916,9 @@ func TestProbeToolsLeavesUnparsableOutputOutOfTheGate(t *testing.T) {
 	assert.Empty(t, full)
 }
 
-// Memoization is on (spell, dir, tool), so two projects in one directory cost one spawn.
+// Probes are kept per (spell, dir, tool), so two projects in one directory cost one spawn.
 // Without it the gate would multiply forks by the number of projects sharing a tree.
-func TestProbeToolsMemoizesAcrossProjectsSharingADir(t *testing.T) {
+func TestProbeToolsRunsOnceAcrossProjectsSharingADir(t *testing.T) {
 	calls := 0
 	sp := probedSpell("go", "go", spells.VersionKey{}, func(string) (string, error) { return "go1.26.5", nil }, &calls)
 	a := &types.Project{Path: "a", Dir: "/tmp/same", ResolvedSpells: []*spells.Spell{sp}}
@@ -2777,6 +2780,171 @@ func TestInvokeSpellHandsItsCostToTheStep(t *testing.T) {
 
 	assert.Equal(t, int64(4096), types.PeakRSS(step))
 	assert.Equal(t, int64(700), types.CPUMs(step))
+}
+
+func TestAttemptEvaluationSuite(t *testing.T) { suite.Run(t, new(attemptEvaluationSuite)) }
+
+// attemptEvaluationSuite pins what an attempt's evaluation holds while it runs and that
+// each of the three Invoke sites ends it.
+type attemptEvaluationSuite struct {
+	suite.Suite
+	mu      sync.Mutex
+	holders []*types.EvalOnce
+}
+
+func (s *attemptEvaluationSuite) SetupTest() { s.holders = nil }
+
+const graphReadingMagusfile = `import "magus";
+export fun alone(ctx: magus\Context, args: [str]) > void !> any { magus\graph().stats(); }
+export fun composed(ctx: magus\Context, args: [str]) > void !> any { magus\graph().stats(); ctx.needs(member); }
+export fun member(ctx: magus\Context, args: [str]) > void !> any { magus\graph().stats(); }
+`
+
+// recordHolder notes the evaluation the context carries. A build outside any evaluation,
+// which the run makes for its own planning, carries none and is not an attempt's.
+func (s *attemptEvaluationSuite) recordHolder(ctx context.Context) {
+	h := types.EvalOnceFromContext(ctx)
+	if h == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.holders = append(s.holders, h)
+}
+
+func (s *attemptEvaluationSuite) distinctHolders() []*types.EvalOnce {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []*types.EvalOnce
+	for _, h := range s.holders {
+		if !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// openGraphReader opens a workspace of graphReadingMagusfile whose warm graph builder
+// records the evaluation of every build it is asked for.
+func (s *attemptEvaluationSuite) openGraphReader() *Magus {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":     ".magus/\n",
+		"magusfile.buzz": graphReadingMagusfile,
+	})
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	warm := m.warmKnowledgeGraph()
+	build := warm.rebuild
+	warm.rebuild = func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
+		s.recordHolder(ctx)
+		return build(ctx, refresh)
+	}
+	return m
+}
+
+func (s *attemptEvaluationSuite) run(m *Magus, target string) {
+	s.T().Helper()
+	s.Require().NoError(m.Run(context.Background(), []types.Target{{Path: ".", Name: target}}))
+}
+
+func (s *attemptEvaluationSuite) builds() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.holders)
+}
+
+func (s *attemptEvaluationSuite) TestNeedsChildReadsItsCallersGraph() {
+	m := s.openGraphReader()
+	s.run(m, "alone")
+	alone := s.builds()
+	s.Positive(alone, "the body read the graph")
+
+	s.run(m, "composed")
+	s.Equal(2*alone, s.builds(), "a ctx.needs child reads its caller's graph, so composed builds as often as alone")
+}
+
+func (s *attemptEvaluationSuite) TestAttemptKeepsNoGraphOnceItReturns() {
+	m := s.openGraphReader()
+	s.run(m, "composed")
+
+	// The attempt's own evaluation, and the one opening magus\graph() builds its symbol
+	// index digest on.
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 2)
+	for _, h := range holders {
+		v, err := h.Do("magus:knowledge-graph", func() (any, error) { return "sentinel", nil })
+		s.Require().NoError(err)
+		s.Equal("sentinel", v, "the ended evaluation computes instead of returning a graph")
+	}
+}
+
+func (s *attemptEvaluationSuite) TestHealthyRunSaysNothingAboutAnEndedEvaluation() {
+	m := s.openGraphReader()
+	logged := testkit.CaptureLog(s.T(), slog.LevelDebug, func() { s.run(m, "composed") })
+	s.NotContains(logged, "evaluation already ended")
+}
+
+func (s *attemptEvaluationSuite) TestARetryGetsItsOwnEvaluation() {
+	var calls atomic.Int32
+	spellName := register.Spell(s.T(), "zzz-attempt-evaluation-retry",
+		spells.WithTargets("flaky"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			s.recordHolder(ctx)
+			if calls.Add(1) == 1 {
+				return nil, errors.New("boom")
+			}
+			return nil, nil
+		}),
+	)
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".",
+		WithSpell(spellName),
+		WithTarget("flaky", RetryOnVolatile("a fixture that fails its first call")),
+	)
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(w.Root(), "history.json")
+	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+
+	s.run(m, "flaky")
+
+	s.Equal(int32(2), calls.Load(), "the first call fails and is retried")
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 2, "each attempt has its own evaluation")
+	for _, h := range holders {
+		s.True(h.Ended())
+	}
+}
+
+func (s *attemptEvaluationSuite) invokeOnce(ctx context.Context) {
+	s.T().Helper()
+	sp := spells.NewSpell("zzz-attempt-evaluation-site", spells.WithTargets("work"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			s.recordHolder(ctx)
+			return nil, nil
+		}))
+	s.Require().NoError(invokeSpell(ctx, &types.Project{Path: ".", Dir: s.T().TempDir()}, "work", sp))
+}
+
+func (s *attemptEvaluationSuite) TestTheRuntimeSiteEndsItsEvaluation() {
+	rt := volatility.NewRuntime(nil, "", volatility.Config{}, nil, false)
+	s.invokeOnce(volatility.WithRuntime(s.T().Context(), rt))
+
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 1)
+	s.True(holders[0].Ended())
+}
+
+func (s *attemptEvaluationSuite) TestTheSiteWithoutARuntimeEndsItsEvaluation() {
+	s.invokeOnce(s.T().Context())
+
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 1)
+	s.True(holders[0].Ended())
 }
 
 type countingObserver struct {
@@ -3829,4 +3997,78 @@ func (s *ciRepairSuite) TestWriteDeclaredByAMemberIsNotTheTargetsOwn() {
 	}
 	s.False(declaresOwnWrite(p, "format"))
 	s.True(declaresOutput(p, "format"), "the chain-walking neighbour still sees it")
+}
+
+// resolveCounter is a telemetry provider that counts the spell compiles a run makes,
+// by spell name; every other method is observability.Nop's.
+type resolveCounter struct {
+	observability.Nop
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (c *resolveCounter) Enabled() bool { return true }
+
+func (c *resolveCounter) RecordBuzzSpellResolve(_ context.Context, r observability.BuzzSpellResolve) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.counts == nil {
+		c.counts = map[string]int{}
+	}
+	c.counts[r.Spell]++
+}
+
+func (c *resolveCounter) compiles(spell string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.counts[spell]
+}
+
+var _ observability.Provider = (*resolveCounter)(nil)
+
+func TestSpellCompiledOncePerRunSuite(t *testing.T) { suite.Run(t, new(spellCompiledOncePerRunSuite)) }
+
+// spellCompiledOncePerRunSuite pins how often a run compiles a spell its magusfiles import.
+type spellCompiledOncePerRunSuite struct{ suite.Suite }
+
+func importedSpell(name string) string {
+	return fmt.Sprintf("export fun mgs_getName() > str { return %q; }\n", name)
+}
+
+func (s *spellCompiledOncePerRunSuite) open(tree map[string]string) (*Magus, *resolveCounter) {
+	tree[".gitignore"] = ".magus/\n"
+	repo := testkit.NewRepository(s.T(), tree)
+	counter := &resolveCounter{}
+	m, err := Open(context.Background(), repo.Root(), workspace.WithTelemetryProvider(counter), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	return m, counter
+}
+
+func (s *spellCompiledOncePerRunSuite) TestRunCompilesAnImportedSpellOnce() {
+	m, counter := s.open(map[string]string{
+		"spells/compiledonce.buzz": importedSpell("compiledonce"),
+		"magusfile.buzz": `import "magus";
+import "spells/compiledonce";
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(one, two); }
+export fun one(ctx: magus\Context, args: [str]) > void {}
+export fun two(ctx: magus\Context, args: [str]) > void {}
+`,
+	})
+
+	s.Require().NoError(m.Run(context.Background(), []types.Target{{Path: ".", Name: "ci"}}))
+	s.Equal(1, counter.compiles("compiledonce"))
+}
+
+func (s *spellCompiledOncePerRunSuite) TestRepairPassCompilesTheSpellAgain() {
+	m, counter := s.open(map[string]string{
+		"spells/repaircompiled.buzz": importedSpell("repaircompiled"),
+		"a.txt":                      "messy\n",
+		"magusfile.buzz": `import "spells/repaircompiled";
+` + ciRepairMagusfile + ciNeedsTidy,
+	})
+
+	err := m.RunCI(context.Background(), []types.Target{{Path: ".", Name: "ci"}}, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Equal(3, counter.compiles("repaircompiled"), "verify, repair and verify again are three runs, each compiling the spell once")
 }

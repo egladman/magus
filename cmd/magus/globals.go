@@ -82,7 +82,7 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	// Reorder so a flag may follow a positional (`magus run build --explain`);
 	// stdlib flag otherwise stops at the first positional. Done after binding so the
 	// full flag set (config + display + local) is known for value detection.
-	if err := fs.Parse(commands.ReorderFlagsFirst(fs, quiet.ExpandVerbosityArgs(args))); err != nil {
+	if err := command.Parse(fs, commands.ReorderFlagsFirst(fs, quiet.ExpandVerbosityArgs(args))); err != nil {
 		return nil, err
 	}
 	if flagWasSet(fs, "tee") {

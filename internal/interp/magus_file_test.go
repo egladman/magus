@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -40,57 +41,114 @@ func TestImportProbesIsFileMatchesStat(t *testing.T) {
 	assert.Equal(t, statIsFile(rel), probes.IsFile(rel), "relative path")
 }
 
+// mark records path as a plain module the way a read does: from a stat of the file.
+func mark(t *testing.T, probes *ImportProbes, path string) {
+	t.Helper()
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+	probes.MarkNotSpell(path, fi.Size(), fi.ModTime())
+}
+
 func TestImportProbesSealedStatsAgain(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "late.buzz")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
 	ctx, seal := WithImportProbes(t.Context())
 	probes := ImportProbesFromContext(ctx)
-	probes.MarkNotSpell(path)
-	require.False(t, probes.IsFile(path))
+	mark(t, probes, path)
+	require.True(t, probes.NotSpell(path))
 
 	seal()
-	require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
-	assert.True(t, probes.IsFile(path))
 	assert.False(t, probes.NotSpell(path))
 }
 
-func TestImportProbesNotSpellIsPerLoad(t *testing.T) {
+func TestImportProbesNotSpellIsPerLoadOrRun(t *testing.T) {
+	root := t.TempDir()
+	x, y := filepath.Join(root, "x.buzz"), filepath.Join(root, "y.buzz")
+	require.NoError(t, os.WriteFile(x, []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(y, []byte("y"), 0o644))
 	var none *ImportProbes
-	none.MarkNotSpell("/x.buzz")
-	assert.False(t, none.NotSpell("/x.buzz"))
+	none.MarkNotSpell(x, 1, time.Time{})
+	assert.False(t, none.NotSpell(x))
 	assert.Nil(t, ImportProbesFromContext(t.Context()))
 
 	ctx, seal := WithImportProbes(t.Context())
 	defer seal()
 	probes := ImportProbesFromContext(ctx)
-	probes.MarkNotSpell("/x.buzz")
-	assert.True(t, probes.NotSpell("/x.buzz"))
-	assert.False(t, probes.NotSpell("/y.buzz"))
+	mark(t, probes, x)
+	assert.True(t, probes.NotSpell(x))
+	assert.False(t, probes.NotSpell(y))
 }
 
-func TestImportProbesSpellAtIsPerLoadAndAbsolute(t *testing.T) {
+func TestImportProbesNotSpellMissesOnAFileChangedSinceTheMark(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "m.buzz")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
+	ctx, seal := WithImportProbes(t.Context())
+	defer seal()
+	probes := ImportProbesFromContext(ctx)
+	mark(t, probes, path)
+	require.True(t, probes.NotSpell(path))
+
+	require.NoError(t, os.WriteFile(path, []byte("xy"), 0o644))
+	assert.False(t, probes.NotSpell(path), "a file of another size stayed marked")
+
+	mark(t, probes, path)
+	require.True(t, probes.NotSpell(path))
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(path, later, later))
+	assert.False(t, probes.NotSpell(path), "a file of another modification time stayed marked")
+
+	mark(t, probes, path)
+	require.NoError(t, os.Remove(path))
+	assert.False(t, probes.NotSpell(path), "a deleted file stayed marked")
+}
+
+func TestImportProbesSpellAtIsPerLoadOrRunAndAbsolute(t *testing.T) {
 	var none *ImportProbes
-	none.RecordSpellAt("/s/spell.buzz", &spells.Descriptor{Name: "s"})
-	_, known := none.SpellAt("/s/spell.buzz")
+	none.RecordSpellAt("/s/spell.buzz", "/w", "src", spells.Descriptor{Name: "s"})
+	_, _, known := none.SpellAt("/s/spell.buzz", "/w", "src")
 	assert.False(t, known)
 
 	ctx, seal := WithImportProbes(t.Context())
 	probes := ImportProbesFromContext(ctx)
-	spec := &spells.Descriptor{Name: "s"}
-	probes.RecordSpellAt("/s/spell.buzz", spec)
-	probes.RecordSpellAt("/none.buzz", nil)
-	probes.RecordSpellAt(filepath.Join("rel", "spell.buzz"), spec)
+	spec := spells.Descriptor{Name: "s"}
+	probes.RecordSpellAt("/s/spell.buzz", "/w", "src", spec)
+	probes.RecordSpellAt(filepath.Join("rel", "spell.buzz"), "/w", "src", spec)
 
-	got, known := probes.SpellAt("/s/spell.buzz")
+	got, notSpell, known := probes.SpellAt("/s/spell.buzz", "/w", "src")
 	assert.True(t, known)
-	assert.Same(t, spec, got)
-	got, known = probes.SpellAt("/none.buzz")
-	assert.True(t, known)
-	assert.Nil(t, got)
-	_, known = probes.SpellAt(filepath.Join("rel", "spell.buzz"))
+	assert.False(t, notSpell)
+	assert.Equal(t, spec, got)
+	_, _, known = probes.SpellAt(filepath.Join("rel", "spell.buzz"), "/w", "src")
 	assert.False(t, known, "a relative candidate names a different file per project")
 
 	seal()
-	_, known = probes.SpellAt("/s/spell.buzz")
+	_, _, known = probes.SpellAt("/s/spell.buzz", "/w", "src")
 	assert.False(t, known)
+}
+
+func TestImportProbesSpellAtMissesOnOtherBytesOrDirectory(t *testing.T) {
+	ctx, seal := WithImportProbes(t.Context())
+	defer seal()
+	probes := ImportProbesFromContext(ctx)
+	probes.RecordSpellAt("/s/spell.buzz", "/a", "v1", spells.Descriptor{Name: "s"})
+
+	_, _, sameBytes := probes.SpellAt("/s/spell.buzz", "/a", "v1")
+	_, _, otherBytes := probes.SpellAt("/s/spell.buzz", "/a", "v2")
+	_, _, otherDir := probes.SpellAt("/s/spell.buzz", "/b", "v1")
+
+	assert.True(t, sameBytes)
+	assert.False(t, otherBytes)
+	assert.False(t, otherDir)
+}
+
+func TestImportProbesSpellAtHandsBackANotSpellRecord(t *testing.T) {
+	ctx, seal := WithImportProbes(t.Context())
+	defer seal()
+	probes := ImportProbesFromContext(ctx)
+	probes.RecordNotSpellAt("/s/mention.buzz", "/a", "v1")
+
+	_, notSpell, known := probes.SpellAt("/s/mention.buzz", "/a", "v1")
+	assert.True(t, known)
+	assert.True(t, notSpell)
 }

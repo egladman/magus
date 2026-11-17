@@ -176,6 +176,8 @@ func newBuzzRunner(ctx context.Context) *interp.ScriptRunner {
 			RegisterSpellDecls:     bindings.RegisterSpellDecls,
 			RegisterMagusNamespace: bindings.RegisterMagusNamespace,
 			DeclareMagusTypes:      bindings.DeclareMagusTypes,
+			// No workspace is open, so no magus.yaml override applies.
+			RegisterSpellImports: func(sess *buzz.Session) { bindings.RegisterSpellImports(sess, nil) },
 		},
 		Phase: observability.TraceFromContext(ctx).Phase,
 		Record: func(ctx context.Context, root string, rec interp.ScriptRecord) error {
@@ -247,7 +249,10 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 	}
 	rows, err := readJobRows(ctx, here)
 	if err != nil {
-		return "", err
+		// The rows only bind the run to a lease. A store this magus cannot read
+		// is no reason to lose the run's record.
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: the job store cannot be read (%v); the run is recorded without a lease\n", err)
+		return "", nil
 	}
 	return scriptCheckHolder(rows, here, script), nil
 }

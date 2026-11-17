@@ -58,8 +58,7 @@ exec magus job fork sibling --read-only --instructions 'read the pricing code' -
 stdout '^checkout .*sibling: made for job sibling at '
 exists $WORK/sibling/magusfile.buzz
 
-# A checkpoint this checkout cannot place (MGS3041) is refused, and --fix does not move it
-# (job_fork_fix_checkpoint.txtar).
+# A checkpoint this checkout cannot place (MGS3041) is refused.
 ! exec magus job fork moved --read-only --instructions 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved
 stderr '\[MGS3041\] checkpoint: checkpoint "0123456789abcdef0123456789abcdef01234567" names no revision this repository holds'
 ! exists $WORK/moved

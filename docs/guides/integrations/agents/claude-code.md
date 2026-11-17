@@ -219,21 +219,27 @@ workspace does not merely answer badly; it never runs the script at all.
 Claude Code treats a hook that exits non-zero with any code other than 2 as a
 [non-blocking error](https://code.claude.com/docs/en/hooks): the first line of its
 stderr appears in the transcript as a `<hook name> hook error` notice, and the tool
-call goes ahead UNJUDGED. A bare `magus` with none on PATH exits 127 that way, and
-a whole session once ran with every guard rule open.
+call goes ahead unjudged. One session logged 2,158 of them, every rule open, while its
+`./magus` could not read its magus.yaml.
 
-So with no magus on PATH every hook runs open: each exits 127, Claude Code shows
-the notice, and the call goes ahead unjudged. Start Claude Code from a shell whose
-PATH finds one. This repository's `mise.toml` puts the checkout root first on PATH,
+So the wiring fails closed. Each entry runs the glue under a watchdog one second
+short of the entry's timeout, and turns any exit but 0 or 2, or a run past the
+watchdog, into exit 2: the call is refused with the reason on stderr. A bare `magus`
+with none on PATH exits 127 and is refused that way. A magus that starts but cannot
+read magus.yaml or a `MAGUS_*` value answers the hook itself with exit 2, naming the
+repair, and lets that one line run: the bootstrap in a checkout of magus,
+`magus self update` anywhere else. A stop that cannot be judged ends instead, with
+exit 1, since refusing it would send the agent back to work no rule can judge.
+Start Claude Code from a shell whose PATH finds a magus. This repository's `mise.toml` puts the checkout root first on PATH,
 so an activated shell finds the checkout's own `./magus` once
 `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` has
 built it.
 
-A magus that is present but too old to run `magus shell` at all fails open the same
+A magus that is present but too old to run `magus shell` at all is refused the same
 way, with its own error as the notice. `magus doctor` and `magus agent harness verify
 --id claude-code` report that before a session starts; verify runs each wired command
-against a synthetic event and checks the verdict comes back. The glue never blocks on a
-failure of its own: a verdict it cannot obtain is reported and the call proceeds.
+against a synthetic event and checks the verdict comes back. A verdict the glue cannot
+obtain refuses the call; only the repair line passes.
 
 A magus that runs but cannot load the workspace is different, because the verdict it
 renders comes from the built-in rules alone and the workspace's own rules judged
@@ -673,10 +679,15 @@ It adds these to a session:
   name gives no shade, such as `auto`, the rows stay untinted and the tab says so.
   Claude Code's own task list cannot be styled by a mod, so only this pane is tinted.
 - A warning or a held prompt when you submit after the prompt cache has expired,
-  priced from a rates table you can replace through the mod's `ratesFile` setting.
-  There is no countdown: the moment that matters is the submit.
+  priced from magus's model prices: the `models` file `magus agent harness install`
+  writes to `.claude/magus/tools/`, from the harness spell's `mgs_listModels`, the
+  table the guard prices with too. Without that file nothing is priced, and the
+  band above the prompt names the install that writes it. There is no countdown:
+  the moment that matters is the submit.
 - Cost gates, each priced from the same table. The cache and price step gates are
-  `off`, `warn` (a toast) or `confirm`, `warn` by default. The price step gate acts
+  `off`, `warn` (a toast) or `confirm`, `confirm` by default. Each gate speaks once per response, so a second
+  submit before the next response, queued mid-turn or sent after a hold, goes
+  through without a word. The price step gate acts
   when the context the next prompt re-sends is at or within `priceStepMarginTokens`
   of a model's prompt-size price step, past which every request costs more, and
   `confirm` holds the prompt once and suggests `/compact`. The subagent gate is `off`
@@ -684,11 +695,18 @@ It adds these to a session:
   `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input rate; 0 turns it off) and
   refuses the spawn before it starts, pointing to the read-only `magus-scout` agent
   or `model: haiku`. The budget gate acts once the session's spend passes
-  `sessionBudgetUsd` (0 by default, which is off), and `confirm` holds the prompt
-  once. A subagent's token count is shown, never flagged: context size is not billed
+  `sessionBudgetUsd` (0 by default, which is off), and holds the prompt once by
+  default (`budgetGate`: `off`, `warn` or `confirm`). A subagent's token count is shown, never flagged: context size is not billed
   cost.
-- The session's spend, main conversation and subagents together, at the top of the
-  pane.
+- What the session and the day have cost, on the status line:
+  `≈$1.75 session · ≈$12.40 today`. The session figure is Claude Code's own
+  total, the one `/cost` shows; the day adds each session's growth to a total in
+  the mod's store, so a session past midnight splits across both days. Where
+  Claude Code reports no total, the mod's sum at magus's prices stands in,
+  marked `(magus prices)`. Every figure is an estimate at list price, never the
+  bill.
+  The pane shows the same total with the mod's split by main conversation and
+  subagents.
 - The machine build budget, read from `magus server status -o json` every 15 seconds and
   around each Bash call that runs magus: each holder's pid, target, slots, memory,
   age and checkout, the callers waiting for a seat, and the
@@ -706,11 +724,19 @@ It adds these to a session:
   command that prints it. Pressing one opens a pane with that command's output and a
   Copy command button. Where the host opens links itself and no press reaches the
   mod, the link opens the page on [output refs](../../../concepts/cache/output-refs.md).
+  When that output is JSON, the pane draws it as the tree below.
+- A tree in place of every tool result whose text is JSON or JSON Lines: each
+  object and array starts closed and opens on a press, keys, brackets and value
+  types keep JSON's colors, and Raw shows the text. A record's `api_version`,
+  `kind` and name head its row while it is closed. JSON Lines draws one row per
+  record. The text around one JSON value, such as `Exit code 1` before it or a
+  command's summary after it, still draws. The terminal draws it in the result
+  block; desktop, VS Code and mobile draw it inside the call's row.
 
 Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
 `priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,
-`sessionBudgetUsd`, `budgetGate` and `ratesFile`. A `spawnGate` of `warn`, and the
-settings `cacheWarnMinutes`, `subagentTokenBudget` and `ratesStaleDays`, are gone.
+`sessionBudgetUsd` and `budgetGate`. A `spawnGate` of `warn`, and the settings
+`ratesFile`, `cacheWarnMinutes`, `subagentTokenBudget` and `ratesStaleDays`, are gone.
 The mod reads a spawn's model from the call, then
 the agent's definition file under `.claude/agents`, then
 `CLAUDE_CODE_SUBAGENT_MODEL`, then the session; a built-in or plugin agent it cannot
@@ -800,7 +826,7 @@ magus doctor
 fails when it is older than your working tree; **guard wiring** probes it with a
 known-denied command and then looks for a host config that invokes a current
 template; **agent skills** grades the installed copies against the running binary
-and `--fix` reinstalls whatever it reports stale.
+and names the reinstall command for whatever it reports stale.
 
 Commit `.claude/settings.json` once you are happy with it. Until a checkout has
 that file, its guard rules are correct and entirely unenforced, with nothing in

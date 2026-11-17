@@ -602,10 +602,16 @@ func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
 	return v
 }
 
-func (s *staleConfigSuite) TestAStateChangeIsRefusedAsAStaleBinary() {
+func (s *staleConfigSuite) TestAStateChangeIsRefusedAsUnjudged() {
 	v := s.judge("touch notes.txt")
-	s.Contains(v.Reason, "built from another contract than this tree carries")
-	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
+	s.Equal("deny", v.Decision)
+	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
+	s.Contains(v.Reason, "hack/dev/bootstrap-checkout.buzz -- --here --verify-ready")
+}
+
+func (s *staleConfigSuite) TestAReadIsRefusedToo() {
+	v := s.judge("cat README.md")
+	s.Equal("deny", v.Decision, "no policy loaded to say which reads the workspace guards")
 }
 
 func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
@@ -627,8 +633,8 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	s.Require().NoError(err)
 	var v types.GuardJudgment
 	s.Require().NoError(json.Unmarshal(body, &v), string(body))
-	s.Contains(v.Reason, "built from another contract than this tree carries")
-	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
+	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
+	s.Equal("deny", v.Decision)
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
 }
 

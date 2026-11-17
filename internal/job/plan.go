@@ -310,7 +310,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 }
 
 // droppedGoalProblems is one problem per goal next lacks, when it also
-// gives up a write path. Each edit restores one, so --fix restores all.
+// gives up a write path.
 func droppedGoalProblems(prev, next types.Job) types.JobProblems {
 	if subset(prev.Paths.Write, next.Paths.Write) {
 		return nil
@@ -320,12 +320,10 @@ func droppedGoalProblems(prev, next types.Job) types.JobProblems {
 		if slices.ContainsFunc(next.Goals, func(n types.Goal) bool { return n.ID == g.ID }) {
 			continue
 		}
-		restore := g
 		ps = append(ps, types.JobProblem{
 			Code: types.JobRecordInvalid, Field: "goals", Subject: g.ID,
 			Message: fmt.Sprintf("the record releases a write path of %s and drops its goal %q", prev.ID, g.ID),
 			Fix:     fmt.Sprintf("keep the goal %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
-			Edit:    &types.JobEdit{AddGoal: &restore},
 		})
 	}
 	return ps
@@ -560,11 +558,14 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 	paths := append(slices.Clone(probe.Paths.Write), placed...)
 	if ws, why := store.loadedWorkspace(); why == "" {
 		probe.Goals, probe.Paths.Write = goals, paths
-		if added := lintGoals(store.root, probe, ws, store.checkGrader()); len(added) > 0 {
+		if added, notes := lintGoals(ctx, store.root, probe, ws, store.checkGrader()); len(added) > 0 {
 			goals = append(slices.Clone(goals), added...)
 			out := store.notices
 			if out == nil {
 				out = os.Stderr
+			}
+			for _, n := range notes {
+				fmt.Fprintf(out, "job: %s: %s\n", id, n)
 			}
 			for _, g := range added {
 				fmt.Fprintf(out, "job: %s: added the goal %q (%d files): the write paths include Go source and no check or goal runs lint\n", id, g.ID, len(g.Check.Args))

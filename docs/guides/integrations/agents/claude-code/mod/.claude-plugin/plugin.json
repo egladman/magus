@@ -7,7 +7,7 @@
       "type": "string",
       "title": "Cache expiry gate",
       "description": "What happens when you submit after the prompt cache expired: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn"
+      "default": "confirm"
     },
     "gateMinTokens": {
       "type": "number",
@@ -25,7 +25,7 @@
       "type": "string",
       "title": "Price step gate",
       "description": "What happens when the context the next prompt re-sends is at or near a model's prompt-size price step, past which every request costs more: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn"
+      "default": "confirm"
     },
     "priceStepMarginTokens": {
       "type": "number",
@@ -55,13 +55,7 @@
       "type": "string",
       "title": "Session budget gate",
       "description": "What happens when you submit after the session's spend passed the budget: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn"
-    },
-    "ratesFile": {
-      "type": "string",
-      "title": "Rates file",
-      "description": "Absolute path to your own rates JSON (same shape as the mod's rates.json). Empty uses the mod's.",
-      "default": ""
+      "default": "confirm"
     }
   },
   "author": {

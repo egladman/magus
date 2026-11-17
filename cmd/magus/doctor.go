@@ -18,17 +18,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func doctorCommand(ctx context.Context, root string, rc runConfig, args []string) error {
-	var probe, fix, list bool
+func doctorCommand(ctx context.Context, root string, args []string) error {
+	var probe, list bool
 	_, err := commandParse("doctor", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&probe, "probe", false,
 			"Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
-		fs.BoolVar(&fix, "fix", false,
-			"Run the remedy each finding names, where one exists (see --dry-run to list them first)")
 		fs.BoolVar(&list, "list", false,
 			"Print every check magus would run - name, subject, and MGS code - without running any of them")
 		command.NegatedBoolVar(fs, &probe, "probe")
-		command.NegatedBoolVar(fs, &fix, "fix")
 		command.NegatedBoolVar(fs, &list, "list")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
@@ -101,29 +98,6 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 
 	if err := emitDoctor(opts, out); err != nil {
 		return err
-	}
-	if fix {
-		if err := doctor.ApplyFixes(ctx, os.Stdout, out, globalCfg.DryRun, func(ctx context.Context, sub string, args []string) error {
-			return dispatchSub(ctx, root, rc, sub, args)
-		}); err != nil {
-			return err
-		}
-		// A dry run applied nothing, so there is nothing new to judge: it lists the
-		// remedies and exits 0 even where the workspace is unhealthy, which is what
-		// doctor_agent_skills.txtar pins against a deliberately imperfect fixture.
-		if globalCfg.DryRun {
-			return nil
-		}
-		// The report above described the workspace BEFORE the remedies ran, so its
-		// summary is no longer what is true. Re-run the checks for the count to gate on,
-		// rather than returning nil, which reported a still-broken workspace as healthy
-		// to anything scripting `doctor --fix`. ws is reused: every remedy writes a file
-		// the checks re-read here, and none changes the shape magus.Inspect models.
-		out = doctor.Run(ctx, root, ws, wsErr, dopts...)
-		if out.Summary.Fail > 0 {
-			return fmt.Errorf("magus doctor: %d check(s) still failing after --fix", out.Summary.Fail)
-		}
-		return nil
 	}
 	if out.Summary.Fail > 0 {
 		return fmt.Errorf("magus doctor: %d check(s) failed", out.Summary.Fail)

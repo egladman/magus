@@ -2155,12 +2155,9 @@ func TestStageAllServesTheSamePathsThroughLsFiles(t *testing.T) {
 // names the lock holder. Measured 2026-09-15: pgrep -fl 'magus|go-build'.
 func TestGuardDeniesProcessPoll(t *testing.T) {
 	for _, cmd := range []string{
-		`pgrep -fl magus`,
-		`pgrep -fl 'magus|go-build|go build'`,
 		`ps -p 85665`,
 		`ps -p 85665 -o pid,etime,command`,
-		`pidof magus`,
-		`bash -c 'pgrep -fl magus'`,
+		`bash -c 'ps -p 85665'`,
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
@@ -2186,11 +2183,34 @@ func TestShellRulesAdviseWhenSetToAdvise(t *testing.T) {
 	}
 }
 
+// pgrep cannot tell the caller's process from another session's and fails here as
+// operation not permitted.
+func TestGuardDeniesProcessLookup(t *testing.T) {
+	for _, cmd := range []string{
+		`pgrep -fl magus`,
+		`pgrep -fl 'magus|go-build|go build'`,
+		`pidof magus`,
+		`/usr/bin/pgrep -f magus`,
+		`bash -c 'pgrep -fl magus'`,
+	} {
+		v := Evaluate(strict(testDependencies()), cmd)
+		assert.Equal(t, denyRuleProcessLookup, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "background-task notification", cmd)
+		assert.Contains(t, v.Deny, "magus server status", cmd)
+		assert.Contains(t, v.Why, "magus job wait", cmd)
+		require.Len(t, v.Next, 1, cmd)
+		assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run, cmd)
+	}
+	assert.NotEmpty(t, advised(Evaluate(advising(testDependencies(), "process-lookup"), "pgrep magus")))
+}
+
 func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
 	for _, cmd := range []string{
+		`echo 'ps -p 4242'`,
 		`echo 'pgrep -fl magus'`,
 		`./magus server status --watch=15s`,
 	} {
+		assert.NotEqual(t, denyRuleProcessLookup, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }

@@ -1,0 +1,48 @@
+import "fs";
+import "magus";
+
+magus\project({
+    // No spell claims .buzz, so this line declares the mark's script a source.
+    "sources": ["assets/*.buzz", "*.md"],
+});
+
+// generate draws the mark into assets/gen/. It clears that directory first,
+// so an output dropped from the script leaves no stale SVG behind.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["assets/*.buzz"]);
+    ctx.writesFiles(["assets/gen/*.svg"]);
+    fs\removeAll("assets/gen");
+    _ = magus\cmd("buzz", args: ["assets/mark.buzz", "assets/gen"]);
+}
+
+// test runs the in-file test blocks.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["assets/*.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "assets/mark.buzz"]);
+}
+
+// lint type-checks the mark's script and fails on any BZZ diagnostic. --check
+// exits 0 on a warning, so lint grades the output itself.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["assets/*.buzz"]);
+    final res = magus\cmd("buzz", args: ["--check", "assets/mark.buzz"], opts: magus\CommandOptions{quiet = true});
+    final found = mut [<str>];
+    foreach (line in res.stderr.split("\n")) {
+        if (line.indexOf("[BZZ") != null) {
+            found.append(line);
+        }
+    }
+    if (found.len() > 0) {
+        foreach (line in found) {
+            magus\log.error(line);
+        }
+        throw "lint: buzz --check reported {found.len()} diagnostic(s)";
+    }
+}
+
+// ci regenerates the mark, then runs lint and test.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    ctx.needs(lint);
+    ctx.needs(test);
+}

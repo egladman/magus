@@ -3,6 +3,8 @@ package testkit
 import (
 	"bytes"
 	"io"
+	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -36,6 +38,33 @@ func CaptureStdout(tb TB, fn func()) string {
 func CaptureStderr(tb TB, fn func()) string {
 	tb.Helper()
 	return capture(tb, &os.Stderr, fn)
+}
+
+// CaptureLog runs fn with the default slog logger writing text records at level and
+// above to a buffer, and returns what was written.
+//
+// It sees every record that reaches slog.Default: the slog package functions, a logger
+// derived from the default while fn runs, and the log package. A logger built before the
+// call keeps its own handler and is not seen. The swap is process-wide, so it fails a
+// test that is, or later becomes, parallel, the way tb.Setenv does.
+//
+// The buffer is safe for the goroutines fn starts. The previous default logger, and the
+// log package's output and flags that slog.SetDefault rewires, are restored before
+// CaptureLog returns, including when fn ends the test with t.FailNow or runtime.Goexit.
+// A record logged after it returns goes to the restored logger and is not in the result.
+func CaptureLog(tb TB, level slog.Leveler, fn func()) string {
+	tb.Helper()
+	tb.Setenv("TESTKIT_CAPTURE_NOT_PARALLEL", "1")
+	var buf lockedBuffer
+	prev, out, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: level})))
+	defer func() {
+		slog.SetDefault(prev)
+		log.SetOutput(out)
+		log.SetFlags(flags)
+	}()
+	fn()
+	return buf.String()
 }
 
 func capture(tb TB, target **os.File, fn func()) (out string) {

@@ -102,7 +102,16 @@ export type CacheState = {
 
 // What the session has spent, in USD, priced from the rates table. isPartial: a response
 // ran on a model the table does not price, so the totals are a floor.
-export type Spend = { mainUsd: number; agentUsd: number; isPartial: boolean }
+// claudeUsd is Claude Code's own session total, as /cost has it; null where
+// it keeps none, and the mod's sum stands in. dayUsd is today's total across
+// sessions.
+export type Spend = {
+  mainUsd: number
+  agentUsd: number
+  isPartial: boolean
+  claudeUsd?: number | null
+  dayUsd?: number | null
+}
 
 // One claim on the machine build budget: an entry of broker.capacity.holders in
 // `magus server status -o json`.
@@ -186,6 +195,10 @@ export type RefView = {
   isLoading: boolean
 }
 
+// How one drawn JSON result is opened: the node paths expanded, and whether
+// the raw text shows in place of the tree.
+export type JsonView = { open: string[]; isRaw: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
     magus: {
@@ -209,6 +222,8 @@ declare module 'claude-code' {
       // The `theme` row of /config, read at session start and on each change.
       theme: string | null
       ref: RefView | null
+      // One per tool result the JSON explorer draws, by its tool_use_id.
+      json: StateFamily<JsonView>
     }
   }
 }

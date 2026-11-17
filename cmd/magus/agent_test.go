@@ -507,16 +507,16 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 		// while the restatement spent 10,105 of the 19,113 description bytes a host loads into
 		// every prompt.
 		//
-		// Now the twin is standalone and the primary carries one clause naming it. That is the
-		// only path by which a reader holding the short copy can learn the fuller one exists.
+		// Now the twin is standalone and names its primary. The primary carries no pointer
+		// to the twin: a description cannot route, so the sentence it used to carry was dropped.
 		assert.NotContains(t, twin.Description, def.Description,
 			"%s must stand alone, not restate %s: the restatement was half of every session's skill-description budget", twin.Name, def.Name)
 		assert.Contains(t, twin.Description, def.Name,
 			"%s must name the skill it is a fuller copy of", twin.Name)
 		primary, ok := byName[def.Name]
 		require.True(t, ok)
-		assert.Contains(t, primary.Description, agent.FullTwinName(def.Name),
-			"%s must name its twin, or a reader holding the short copy can never discover it", def.Name)
+		assert.NotContains(t, primary.Description, agent.FullTwinName(def.Name),
+			"%s must not carry the twin pointer sentence any more", def.Name)
 	}
 }
 

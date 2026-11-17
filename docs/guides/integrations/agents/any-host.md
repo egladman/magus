@@ -15,8 +15,8 @@ That is a [standing decision](../../../design/judgment/the-host-wiring-is-yours.
 rather than a gap waiting to be filled. A codec per host would cost magus upkeep
 as the products change, and it would cost you more than it costs magus: wiring you
 did not write is wiring you cannot repair on the afternoon your host changes
-its event shape, and this guard fails OPEN, so a hook that quietly stopped
-judging looks exactly like a session with nothing to deny. Read the template
+its event shape, and a hook that quietly stopped judging looks exactly like a
+session with nothing to deny unless its wiring fails closed. Read the template
 once and it is yours.
 
 Any host that can run a command and read its output fits.
@@ -91,13 +91,15 @@ Three decisions are yours to make:
   error and then fails OPEN is disarmed by an advisory rather than merely deaf to
   it. Suppressed, an advise renders nothing at all. None of the four documented
   hosts needs it today.
-- **What happens when magus cannot be found or cannot judge.** Failing open
-  keeps the session usable and is what every shipped template does when magus is
-  missing or too old to run `magus shell`. Say so visibly rather than exiting
-  quietly, because an unguarded session you know about beats one you do not. A
-  magus that runs but cannot load the workspace is not that case: `magus shell`
-  itself denies every call that changes state, so the template only has to carry
-  the deny to the model. The orchestrator or the person rebuilds `./magus`; a
+- **What happens when magus cannot be found or cannot judge.** Refuse the call,
+  in your host's own blocking signal, and say why. Every shipped wiring does:
+  a hook that crashed, timed out, found no magus or ran one too old to answer
+  blocks its call, and only the workspace's repair line passes. A stop that
+  cannot be judged ends instead, loudly. A magus that starts but cannot read its
+  configuration answers a `magus buzz -s` glue itself with exit 2 and the repair
+  on stderr. A magus that runs but cannot load the workspace answers `magus
+  shell` with a deny for every call that changes state, so the template only
+  has to carry the deny to the model. The orchestrator or the person rebuilds `./magus`; a
   leased worker asks the orchestrator to place one.
 
 If you contribute the result back, add a `magus-guard-coverage: schema=2` line

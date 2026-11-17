@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/stretchr/testify/suite"
 )
 
 func ExampleWalk() {
@@ -221,4 +222,44 @@ func TestACommandRecordNamesTheClikitCommandGroup(t *testing.T) {
 	if record.Spec.Name != "tool" {
 		t.Errorf("the spec's root is %q, want tool", record.Spec.Name)
 	}
+}
+
+type ParseSuite struct{ suite.Suite }
+
+func TestParseSuite(t *testing.T) { suite.Run(t, new(ParseSuite)) }
+
+func (s *ParseSuite) flagSet(usage func()) (*flag.FlagSet, *strings.Builder) {
+	fs := flag.NewFlagSet("job fork", flag.ContinueOnError)
+	fs.String("goals", "", "")
+	fs.String("check", "", "")
+	fs.Usage = usage
+	out := &strings.Builder{}
+	fs.SetOutput(out)
+	return fs, out
+}
+
+func (s *ParseSuite) TestUnknownFlagNamesTheNearestFlagWithoutUsage() {
+	called := false
+	fs, out := s.flagSet(func() { called = true })
+	err := Parse(fs, []string{"--goal", "y"})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "flag provided but not defined: -goal: did you mean -goals? `magus job fork -h`")
+	s.Contains(err.Error(), "`magus job fork -h`")
+	s.False(called)
+	s.Empty(out.String())
+}
+
+func (s *ParseSuite) TestDistantFlagGetsNoSuggestion() {
+	fs, _ := s.flagSet(func() {})
+	err := Parse(fs, []string{"--zzzzzzzz"})
+	s.Require().Error(err)
+	s.NotContains(err.Error(), "did you mean")
+}
+
+func (s *ParseSuite) TestHelpStillPrintsFullUsage() {
+	called := false
+	fs, _ := s.flagSet(func() { called = true })
+	err := Parse(fs, []string{"-h"})
+	s.ErrorIs(err, flag.ErrHelp)
+	s.True(called)
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -450,4 +451,71 @@ func TypedDefault[T any](f Flag) (T, error) {
 		return zero, fmt.Errorf("flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default)
 	}
 	return v, nil
+}
+
+// Parse parses args into fs. -h still prints the full help; any other failure
+// returns one error naming the nearest flag and the command's -h instead of
+// dumping the whole usage, which an agent reads as context.
+func Parse(fs *flag.FlagSet, args []string) error {
+	usage, out := fs.Usage, fs.Output()
+	fs.Usage = func() {}
+	fs.SetOutput(io.Discard)
+	err := fs.Parse(args)
+	fs.Usage = usage
+	fs.SetOutput(out)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, flag.ErrHelp):
+		if usage != nil {
+			usage()
+		} else {
+			fmt.Fprintf(out, "Usage of %s:\n", fs.Name())
+			fs.PrintDefaults()
+		}
+		return err
+	}
+	suggestion := ""
+	if name, ok := strings.CutPrefix(err.Error(), "flag provided but not defined: -"); ok {
+		if near := nearestFlag(fs, name); near != "" {
+			suggestion = "did you mean -" + near + "? "
+		}
+	}
+	cmd := strings.TrimSpace(strings.TrimPrefix("magus "+fs.Name(), "magus magus"))
+	if cmd == "" {
+		cmd = "magus"
+	}
+	return fmt.Errorf("%w: %s`%s -h` lists the flags", err, suggestion, cmd)
+}
+
+// nearestFlag is the registered flag closest to name by edit distance, or ""
+// when none is near enough to be a typo.
+func nearestFlag(fs *flag.FlagSet, name string) string {
+	best, bestDist := "", 3
+	fs.VisitAll(func(f *flag.Flag) {
+		if d := editDistance(name, f.Name); d < bestDist {
+			best, bestDist = f.Name, d
+		}
+	})
+	return best
+}
+
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
 }

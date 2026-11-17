@@ -445,6 +445,34 @@ func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
 	s.Regexp(`^ref  \S+\n$`, string(printed))
 }
 
+func (s *BuzzRecordSuite) TestAStaleJobStoreRecordsTheRunWithoutALease() {
+	s.T().Setenv("BAGGAGE", "")
+	// recordLease keys the store by the resolved root, and a temp dir is a symlink on macOS.
+	root, err := filepath.EvalSymlinks(s.root)
+	s.Require().NoError(err)
+	store, err := openJobs(s.T().Context(), root, jobOpen{})
+	s.Require().NoError(err)
+	path, err := store.Path()
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(os.WriteFile(path, []byte(`{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}`+"\n"), 0o644))
+
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	saved := os.Stderr
+	os.Stderr = w
+	recErr := recordBuzzRun(s.T().Context(), root, "p.buzz", "code", nil, true, nil, time.Now(), nil)
+	os.Stderr = saved
+	s.Require().NoError(w.Close())
+	printed, err := io.ReadAll(r)
+	s.Require().NoError(err)
+
+	s.Require().NoError(recErr)
+	s.Contains(string(printed), "recorded without a lease")
+	s.Contains(string(printed), path)
+	s.Regexp(`ref  \S+\n$`, string(printed))
+}
+
 func (s *BuzzRecordSuite) TestRecordReturnsTheReasonWhenTheStoreCannotWrite() {
 	dir, err := magus.ResolveCacheDir(s.root)
 	s.Require().NoError(err)
@@ -860,6 +888,26 @@ func TestBuzzRunner_CheckFileMagusTypesNeedTheModulesOwnImport(t *testing.T) {
 			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
 		})
 	}
+}
+
+// A magusfile's spell import resolves under --check, which reads the file by the
+// loader's embedded rules without --embedded. A misspelled one still fails BZZ2001.
+func TestBuzzRunner_CheckFileResolvesSpellImports(t *testing.T) {
+	dir := t.TempDir()
+	known := writeBuzz(t, dir, "known.buzz", "import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n")
+	typo := writeBuzz(t, dir, "typo.buzz", "import \"magus/spell/gooo\";\n")
+	r := scriptRunnerOver(&scriptOpens{})
+
+	diags, err := r.CheckFile(t.Context(), known, false)
+	require.NoError(t, err)
+	assert.Empty(t, diags)
+
+	diags, err = r.CheckFile(t.Context(), typo, false)
+	require.NoError(t, err)
+	require.Len(t, diags, 1)
+	assert.Contains(t, diags[0].String(), "BZZ2001")
+	assert.Contains(t, diags[0].String(), "magus/spell/gooo")
+	require.Error(t, r.Check(t.Context(), []string{typo}, false))
 }
 
 func TestBuzzRunner_CheckFailsOnAWarning(t *testing.T) {

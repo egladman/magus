@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,8 +13,6 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
@@ -406,51 +403,4 @@ func BuildServerInfo(ctx context.Context, src ServerSource) ServerInfo {
 		})
 	}
 	return di
-}
-
-// ApplyFixes runs the remedy each non-OK finding names.
-//
-// It dispatches EXISTING magus subcommands, never a private repair routine, and that is
-// the safety property rather than an implementation detail: --fix can only do things you
-// could have typed yourself and can inspect afterwards. A finding whose remedy needs
-// judgment (narrow this over-wide glob, or accept that the key is deliberately volatile?)
-// declares no Fix and stays a report, which is why this can be blunt about running what
-// it is given.
-//
-// Nothing here writes config directly either. A config-shaped remedy is spelled `config
-// set ...`, so the one thing in magus that edits config stays the one thing that edits
-// config.
-//
-// Failures are reported and do not stop the rest: the findings are independent, and a
-// remedy that cannot run is a thing to say, not a reason to leave the others unapplied.
-func ApplyFixes(ctx context.Context, w io.Writer, out types.DoctorReport, dryRun bool, dispatch func(ctx context.Context, sub string, args []string) error) error {
-	var ran, failed int
-	for _, c := range out.Checks {
-		if c.Status == check.OK || len(c.Fix) == 0 {
-			continue
-		}
-		cmdline := "magus " + strings.Join(c.Fix, " ")
-		if dryRun {
-			fmt.Fprintf(w, "would fix %s: %s\n", c.Name, cmdline)
-			continue
-		}
-		fmt.Fprintf(w, "fixing %s: %s\n", c.Name, cmdline)
-		if err := dispatch(ctx, c.Fix[0], c.Fix[1:]); err != nil {
-			slog.ErrorContext(ctx, c.Name, attr.Notice(""), attr.Component("magus doctor --fix"), attr.Error(err))
-			failed++
-			continue
-		}
-		ran++
-	}
-	switch {
-	case dryRun:
-		return nil
-	case ran == 0 && failed == 0:
-		fmt.Fprintln(w, "nothing to fix: no finding named a remedy magus can run")
-	case failed > 0:
-		return fmt.Errorf("magus doctor --fix: %d of %d remedy/remedies failed", failed, ran+failed)
-	default:
-		fmt.Fprintf(w, "\napplied %d remedy/remedies; re-run `%s` to confirm\n", ran, hint.Doctor)
-	}
-	return nil
 }

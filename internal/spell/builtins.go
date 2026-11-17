@@ -435,7 +435,7 @@ type magusNamespace struct {
 
 // magusNamespaces are the nested namespaces decls imports, in import order.
 func magusNamespaces(decls string) ([]magusNamespace, error) {
-	prog, err := buzz.ParseEmbedded(decls)
+	prog, err := parsecache.Shared().ParseEmbedded(decls)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +525,7 @@ func RecordSource(decls string) (string, error) {
 }
 
 func recordDecls(src string) (string, []magusRecord, error) {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return "", nil, err
 	}

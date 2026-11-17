@@ -539,19 +539,6 @@ func (c *Catalog) RenderedSkills(form types.SkillForm) ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Cross-referenced, which reverses an earlier decision and is worth saying why.
-		// The old reasoning was that a pointer here spends context on every short skill to
-		// say what the twin's own entry already says. That held while the twin's entry
-		// RESTATED this one in full; now it is a standalone line, so the pair costs about
-		// 900 bytes of back-references against the ~8.6KB the restatement used to spend.
-		//
-		// The link is what makes the twin reachable at all. A reader with the short copy in
-		// hand and a step it left underspecified has no way to learn the fuller copy exists
-		// unless this entry says so, and browsing for it is exactly what nobody did:
-		// measured, 12 of 15 twins were never loaded once.
-		if form == types.SkillFormBoth {
-			primary.Description += fmt.Sprintf(" A fuller copy with the worked examples kept is installed as %s; load that one if this leaves a step underspecified.", FullTwinName(def.Name))
-		}
 		skills = append(skills, primary)
 
 		if form != types.SkillFormBoth {
@@ -986,10 +973,10 @@ var (
 // grades stale or missing: every location it discovers comes from a harness
 // descriptor (see HarnessSkillLocations), whose ID is validated non-empty at
 // load, so "harness install --id" always clears the finding. Doctor's
-// structured --fix (internal/doctor's checkAgentSkills) calls this directly,
+// structured Fix (internal/doctor's checkAgentSkills) calls this directly,
 // and the free-text Detail sentences below go through ReinstallHint rather
-// than building their own copy, so the printed remedy and the one --fix runs
-// are always the same command.
+// than building their own copy, so the two printed remedies are always the
+// same command.
 func ReinstallCommand(id string) []string {
 	return []string{"agent", "harness", "install", "--id", id}
 }

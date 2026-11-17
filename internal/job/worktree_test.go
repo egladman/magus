@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -237,13 +238,26 @@ func TestInstallProjectsNamesOwnersWithAnInstallTarget(t *testing.T) {
 		{Path: "libs/xdg"},
 	}
 	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}}
-	assert.Equal(t, "docs", InstallProjects(t.TempDir(), row, projects))
+	assert.Equal(t, "docs", InstallProjects(t.TempDir(), dirWith(t, "docs"), row, projects))
 }
 
 func TestInstallProjectsSaysNoneForAGoOnlyJob(t *testing.T) {
 	t.Parallel()
 	projects := []*types.Project{{Path: "."}, {Path: "docs", MagusfileTargets: []string{"install"}}}
-	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{Paths: types.JobPaths{Write: []string{"main.go"}}}, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), types.Job{Paths: types.JobPaths{Write: []string{"main.go"}}}, projects))
+}
+
+func TestInstallProjectsSkipsAProjectTheCheckoutLacks(t *testing.T) {
+	t.Parallel()
+	checkout := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(checkout, "docs"), 0o755))
+	projects := []*types.Project{
+		{Path: "docs", MagusfileTargets: []string{"install"}},
+		{Path: "libs/embed/train", MagusfileTargets: []string{"install"}},
+	}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/a.md", "libs/embed/train/x.go"}}}
+	assert.Equal(t, "docs", InstallProjects(t.TempDir(), checkout, row, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), row, projects))
 }
 
 func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
@@ -253,7 +267,9 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	s.notices = &notes
 	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
-	_, err := validateDryFork(t.Context(), s.Quiet(), "w", merge)
+	quiet := s.view()
+	quiet.notices = io.Discard
+	_, err := validateDryFork(t.Context(), quiet, "w", merge)
 	require.NoError(t, err)
 	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
 	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())
@@ -262,7 +278,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 func TestInstallProjectsSaysNoneForAReadOnlyJob(t *testing.T) {
 	t.Parallel()
 	projects := []*types.Project{{Path: "docs", MagusfileTargets: []string{"install"}}}
-	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{ReadOnly: true}, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), types.Job{ReadOnly: true}, projects))
 }
 
 func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
@@ -1364,4 +1380,14 @@ func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	read, err := file.ReadLines(cache.Path)
 	s.Require().NoError(err)
 	s.Len(read.Lines, 1)
+}
+
+// dirWith is a temp root holding the named directories.
+func dirWith(t *testing.T, names ...string) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, n := range names {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, n), 0o755))
+	}
+	return root
 }

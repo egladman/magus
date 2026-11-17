@@ -336,15 +336,18 @@ func BinaryContract(ctx context.Context, bin string) string {
 
 // InstallProjects is the comma-joined projects with an install target that own
 // a file row writes, "none" when no such project does. A project whose spells
-// are unresolved cannot list its targets, so it is left out.
-func InstallProjects(root string, row types.Job, projects []*types.Project) string {
+// are unresolved cannot list its targets, so it is left out. So is a project
+// whose directory checkout lacks: the workspace loads once per process, so the
+// checkout's own declarations cannot be read, and a missing directory is the
+// signal that its revision predates the project.
+func InstallProjects(root, checkout string, row types.Job, projects []*types.Project) string {
 	if row.ReadOnly {
 		return noInstall
 	}
 	var found []string
 	for _, f := range writtenFiles(root, row) {
 		p := owningProject(projects, f)
-		if p != nil && runsTarget(p, "install") && !slices.Contains(found, p.Path) {
+		if p != nil && runsTarget(p, "install") && !slices.Contains(found, p.Path) && dirExists(filepath.Join(checkout, filepath.FromSlash(p.Path))) {
 			found = append(found, p.Path)
 		}
 	}
@@ -353,6 +356,11 @@ func InstallProjects(root string, row types.Job, projects []*types.Project) stri
 	}
 	slices.Sort(found)
 	return strings.Join(found, ",")
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // InstallTargets is the sorted paths of the projects that declare an install

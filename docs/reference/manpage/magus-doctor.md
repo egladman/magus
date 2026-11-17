@@ -41,9 +41,6 @@ without running any, so the name can be looked up rather than provoked.
 
 ## Options
 
-**--[no-]fix** (default: off)
-: Run the remedy each finding names, where one exists (see --dry-run to list them first)
-
 **--[no-]list** (default: off)
 : Print every check magus would run (name, subject, and MGS code) without running any of them
 

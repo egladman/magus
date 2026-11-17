@@ -7,3 +7,7 @@ func (c *lookupCache) Get(k string) int { return c.m[k] }
 type PathMemo[K comparable] struct{ m map[K]string } // want `type PathMemo is an optimization with no Benchmark in cache`
 
 func (p PathMemo[K]) Get(k K) string { return p.m[k] }
+
+type ProbeOnce struct{ v int } // want `type ProbeOnce is an optimization with no Benchmark in cache`
+
+func (p *ProbeOnce) Get() int { return p.v }

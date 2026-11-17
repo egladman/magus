@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/egladman/magus/project"
@@ -47,27 +48,49 @@ func runTarget(ctx context.Context, req spells.InvokeRequest) (any, error) {
 }
 
 // ImportProbes answers the path probes import resolution makes while a workspace
-// loads, from one directory listing per directory instead of one stat per
-// candidate path. A nil *ImportProbes, or one whose load has ended, stats every
-// path, so callers need no nil check. Safe for concurrent use.
+// loads or a run executes, from one directory listing per directory instead of one
+// stat per candidate path, and remembers each imported spell's descriptor. A nil
+// *ImportProbes, or one that has been sealed, stats every path and remembers
+// nothing, so callers need no nil check. Safe for concurrent use.
 type ImportProbes struct {
 	mu       sync.Mutex
 	sealed   bool
 	dirs     map[string]*probeDir
-	notSpell map[string]struct{}
-	spellAt  map[string]*spells.Descriptor
+	notSpell map[string]fileStamp
+	spellAt  map[spellKey]spellEntry
+}
+
+// spellKey names one compile: a spell's descriptor depends on the importing
+// directory, a search root for the spell's own imports and the working directory of
+// a run-mode load.
+type spellKey struct{ path, dir string }
+
+// spellEntry is one recorded compile. notSpell means the module ran and exported no
+// spell, so spec is empty.
+type spellEntry struct {
+	src      string
+	spec     spells.Descriptor
+	notSpell bool
+}
+
+// fileStamp is what a stat says about a file: the size and modification time a
+// not-a-spell mark was made against.
+type fileStamp struct {
+	size    int64
+	modTime time.Time
 }
 
 type importProbesKey struct{}
 
-// WithImportProbes attaches a fresh ImportProbes to ctx for one workspace load. The
-// returned seal ends it: every later probe stats the filesystem again, so no answer
-// outlives the load, including in a long-lived server.
+// WithImportProbes attaches a fresh ImportProbes to ctx for one workspace load or one
+// run. The returned seal ends it: every later probe stats the filesystem again, so no
+// answer outlives that unit, including in a long-lived server. A nested attach
+// shadows the outer one for the contexts derived from it.
 func WithImportProbes(ctx context.Context) (context.Context, func()) {
 	p := &ImportProbes{
 		dirs:     make(map[string]*probeDir),
-		notSpell: make(map[string]struct{}),
-		spellAt:  make(map[string]*spells.Descriptor),
+		notSpell: make(map[string]fileStamp),
+		spellAt:  make(map[spellKey]spellEntry),
 	}
 	seal := func() {
 		p.mu.Lock()
@@ -78,7 +101,8 @@ func WithImportProbes(ctx context.Context) (context.Context, func()) {
 	return context.WithValue(ctx, importProbesKey{}, p), seal
 }
 
-// ImportProbesFromContext returns the load's ImportProbes, or nil outside a load.
+// ImportProbesFromContext returns the ImportProbes in force, or nil outside a load
+// or a run.
 func ImportProbesFromContext(ctx context.Context) *ImportProbes {
 	p, _ := ctx.Value(importProbesKey{}).(*ImportProbes)
 	return p
@@ -87,13 +111,13 @@ func ImportProbesFromContext(ctx context.Context) *ImportProbes {
 // IsFile reports whether path exists and is not a directory, following symlinks:
 // the answer os.Stat gives.
 //
-// optimization: answer from a per-load directory listing instead of os.Stat.
+// optimization: answer from a per-load or per-run directory listing instead of os.Stat.
 //
-//	measured: describe targets on this repo, 442 stats to 32 directory opens;
-//	  BenchmarkResolveLocalSpellImport in bindings -55% sec/op, -62% B/op, -50%
+//	measured: at workspace load only; describe targets on this repo, 442 stats
+//	  to 32 directory opens; BenchmarkResolveLocalSpellImport in bindings -55% sec/op, -62% B/op, -50%
 //	  allocs/op (benchstat -col /probes, n=10).
-//	trade-off: a file created during the load after its directory was listed is
-//	  not seen until the next load.
+//	trade-off: a file created after its directory was listed is not seen until
+//	  the load or run ends.
 //	assumes: a name missing from a listing is missing to stat, unless it could match
 //	  an entry case-insensitively (darwin, windows), which falls back to os.Stat.
 func (p *ImportProbes) IsFile(path string) bool {
@@ -112,64 +136,93 @@ func (p *ImportProbes) IsFile(path string) bool {
 	return found && !mode.IsDir()
 }
 
-// NotSpell reports whether MarkNotSpell recorded path during this load.
+// NotSpell reports whether MarkNotSpell recorded path before the seal and the file
+// still has the size and modification time it was marked with. It costs one stat.
 func (p *ImportProbes) NotSpell(path string) bool {
 	if p == nil {
 		return false
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	_, ok := p.notSpell[path]
-	return ok
+	marked, ok := p.notSpell[path]
+	p.mu.Unlock()
+	if !ok {
+		return false
+	}
+	fi, err := os.Stat(path)
+	return err == nil && fi.Size() == marked.size && fi.ModTime().Equal(marked.modTime)
 }
 
 // MarkNotSpell records that the file at path is a plain module, not a spell, so a
-// later import of it this load skips reading it again.
-func (p *ImportProbes) MarkNotSpell(path string) {
+// later import of it skips reading it again. size and modTime come from a stat of
+// the file taken before it was read, so a file rewritten during the read does not
+// stay marked.
+//
+// trade-off: a rewrite of the same size inside the filesystem's timestamp
+// granularity is not seen until the run ends.
+func (p *ImportProbes) MarkNotSpell(path string, size int64, modTime time.Time) {
 	if p == nil {
 		return
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.sealed {
-		p.notSpell[path] = struct{}{}
+		p.notSpell[path] = fileStamp{size: size, modTime: modTime}
 	}
 }
 
-// SpellAt reports what RecordSpellAt recorded this load for the absolute candidate
-// path. known is false when nothing was; a nil spec with known true means no spell
-// loads from path. The spec is shared, so callers must not modify it.
+// SpellAt returns what a compile of the absolute path, imported from directory dir,
+// recorded for exactly the bytes src. notSpell is true when that compile found a
+// module that exports no spell. known is false when nothing was recorded, when the
+// file's bytes or the importing directory differ, or after the seal. The descriptor
+// shares its slices, maps and pointers, so callers must not modify it; nothing
+// writes them after decode.
 //
-// optimization: memoize each spell import candidate by its absolute path.
+// optimization: compile each imported spell once per path, importing directory and
+// bytes.
 //
-//	measured: describe targets on this repo answers 70 of 328 candidates from the
-//	  memo; BenchmarkResolveLocalSpellImport in bindings -5% allocs/op, sec/op
-//	  within noise (benchstat, n=10).
-//	trade-off: a spell file edited during the load keeps its first descriptor
-//	  until the next load.
+//	measured: importing one spell four times, BenchmarkResolveImportedSpell in
+//	  bindings -75% B/op, -75% allocs/op, -70% sec/op (medians of n=6, not
+//	  benchstat; the other lines here are n=10).
+//	trade-off: the file is still read on every import; a helper module the spell
+//	  itself imports is not part of the key, so an edit to it mid-run is not seen
+//	  until the run ends.
 //	assumes: the key is absolute; a relative import string such as
 //	  ../../hack/magusfile/index names a different file from each project.
-func (p *ImportProbes) SpellAt(path string) (spec *spells.Descriptor, known bool) {
+func (p *ImportProbes) SpellAt(path, dir, src string) (spec spells.Descriptor, notSpell, known bool) {
 	if p == nil {
-		return nil, false
+		return spells.Descriptor{}, false, false
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	spec, known = p.spellAt[path]
-	return spec, known
+	e, ok := p.spellAt[spellKey{path, dir}]
+	if !ok || e.src != src {
+		return spells.Descriptor{}, false, false
+	}
+	return e.spec, e.notSpell, true
 }
 
-// RecordSpellAt records the outcome of resolving the absolute candidate path, nil
-// when no spell loads from it. A relative path, or a load that has ended, records
-// nothing.
-func (p *ImportProbes) RecordSpellAt(path string, spec *spells.Descriptor) {
+// RecordSpellAt records a successful compile of the absolute path from directory dir
+// over the bytes src. A failed compile is never recorded: only a compile that
+// produced a descriptor has an answer to remember. A relative path, or probes that
+// have been sealed, record nothing.
+func (p *ImportProbes) RecordSpellAt(path, dir, src string, spec spells.Descriptor) {
+	p.record(path, dir, spellEntry{src: src, spec: spec})
+}
+
+// RecordNotSpellAt records that running the absolute path from directory dir over the
+// bytes src found a module that exports no spell. The same rules as RecordSpellAt.
+func (p *ImportProbes) RecordNotSpellAt(path, dir, src string) {
+	p.record(path, dir, spellEntry{src: src, notSpell: true})
+}
+
+func (p *ImportProbes) record(path, dir string, e spellEntry) {
 	if p == nil || !filepath.IsAbs(path) {
 		return
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.sealed {
-		p.spellAt[path] = spec
+		p.spellAt[spellKey{path, dir}] = e
 	}
 }
 

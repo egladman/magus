@@ -9,7 +9,7 @@ package vm
 // compiles to a no-op.
 
 // HeapStats is a snapshot of the global object heap. This build has no table,
-// so only the interning counters move: interning pins strings here too.
+// so only the string counters move: interning pins strings here too.
 type HeapStats struct {
 	Objects         int
 	Peak            int
@@ -17,14 +17,21 @@ type HeapStats struct {
 	InternedBytes   int
 	// UnownedObjects is 0: the collector reclaims every object here.
 	UnownedObjects int
+	// BufferedStrings and BufferedBytes count the buffered strings made and
+	// the arrays their buffers allocated. The collector reclaims both here,
+	// so they count what was made, not what is held.
+	BufferedStrings int
+	BufferedBytes   int
 }
 
-// ReadHeapStats reports the interning counters. The table counts are zero:
+// ReadHeapStats reports the string counters. The table counts are zero:
 // this build has no global heap table.
 func ReadHeapStats() HeapStats {
 	return HeapStats{
 		InternedStrings: int(internedStrings.Load()),
 		InternedBytes:   int(internedBytes.Load()),
+		BufferedStrings: int(bufferedStrings.Load()),
+		BufferedBytes:   int(bufferedBytes.Load()),
 	}
 }
 

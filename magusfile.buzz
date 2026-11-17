@@ -914,7 +914,7 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
         throw "pr-changelog: malformed changelog fragment(s); changes/README.md has the format:\n  "
             + malformed.join("\n  ");
     }
-    final problem = changelog\problem(title, changed: changed, added: added);
+    final problem = changelog\problem(title, changed: changed, added: added, marked: changelog\marksBreaking(added));
     if (problem != "") {
         throw "pr-changelog: against {base}: {problem}";
     }
@@ -2527,6 +2527,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "docs/guides/integrations/agents/magusfile.buzz",
                     "libs/conventions/magusfile.buzz", "libs/proofread/magusfile.buzz",
                     "libs/apiversion/magusfile.buzz",
+                    "libs/safetyscissors/magusfile.buzz", "libs/safetyscissors/README.md", "libs/safetyscissors/assets/*.buzz",
                     "libs/apiversion/**/*.go", "libs/apiversion/**/*.md",
                     "libs/result/result.buzz", "libs/result/*.go",
                    // proofread's staleness check hashes the labeled cases the binary embeds.
@@ -2569,7 +2570,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/proofread/**/*.go", "libs/proofread/train/**/*.go",
                     "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                     "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go", "libs/text/**/*.go", "libs/termkit/**/*.go",
-                    "libs/clikit/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
+                    "libs/clikit/**/*.go", "libs/embed/**/*.go", "libs/train/**/*.go",
                     "**/*.ts", "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                     "docs/guides/integrations/agents/**/*.tsx",
@@ -2579,19 +2580,20 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                     "libs/scipbuzz/**/*.buzz", "libs/testpairing/**/*.buzz", "libs/textsearch/**/*.buzz",
                     "libs/xdg/**/*.buzz", "libs/text/**/*.buzz", "libs/clikit/**/*.buzz", "libs/termkit/**/*.buzz", "libs/embed/**/*.buzz",
-                    "libs/embed/train/**/*.buzz", "libs/proofread/train/**/*.buzz",
+                    "libs/train/**/*.buzz", "libs/proofread/train/**/*.buzz",
                     "proto/**/*.buzz",
                     "**/*.css", "console/**/*.css", "docs/**/*.css",
                     "**/*.html", "console/**/*.html", "docs/**/*.html",
                     "**/*.mjs", "console/**/*.mjs",
                     "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",
-                    "docs/guides/integrations/agents/**/*.yaml", "libs/textsearch/**/*.yaml",
+                    "docs/guides/integrations/agents/**/*.yaml", "libs/textsearch/**/*.yaml", "libs/train/**/*.yaml",
                     "proto/**/*.yaml",
                     "**/*.yml", "libs/testpairing/**/*.yml",
                     "proto/**/*.proto", "**/*.txtar"]);
     // Rules reading magus\graph() unscoped freshen every index.
     // Freshen them all under this lock: the child is refused it (MGS3007).
-    _ = magus\graph().precedents();
+    // A bare magus\graph() freshens without mining precedents; the child mines its own.
+    _ = magus\graph();
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
@@ -2635,7 +2637,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
         ctx.needs(proofreadlib\proofread_build);
     } else {
-        ctx.needs(install_linter, conventions, harness_drift);
+        ctx.needs(install_linter, conventions, harness_drift, conventions_test);
     }
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
@@ -2696,8 +2698,9 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
     golangci\linkFresh();
     final failures = mut [<str>];
     // The rules judge from the symbol indexes.
-    // magus\graph().precedents() freshens them, as in conventions.
-    _ = magus\graph().precedents();
+    // magus\graph() freshens them, as in conventions.
+    // A bare magus\graph() freshens without mining precedents; the child mines its own.
+    _ = magus\graph();
     if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
         failures.append("hack/lint/run.buzz reported findings above");
     }
@@ -2947,7 +2950,7 @@ export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
 // report to for a person to review. Not a `test` charm: this reads the knowledge graph in
 // the cache and those three variables, and so cannot share test's cache entry.
 export fun retrieval_eval_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["testdata/retrieval/*"]);
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "testdata/retrieval/*"]);
     ctx.writesFiles(["testdata/retrieval/baseline.jsonl"], editsExistingSource: true);
     final env = mut {"GOEXPERIMENT": "jsonv2"};
     foreach (name in ["MAGUS_EVAL_CANDIDATE", "MAGUS_EVAL_REPORT_ONLY", "MAGUS_RETRIEVAL_EVAL_BASELINE"]) {
@@ -2968,6 +2971,23 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     // Explicit args replace go-test's `./...`, so this compiles one package under cgo.
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
+}
+
+// Runs the tests that read the whole tree as data. A sized gate narrows `test` to the
+// packages that depend on a change, which drops these; lint is never narrowed, so they
+// run here whenever a file they read moves. They still run again in a whole `test`.
+export fun conventions_test(ctx: magus\Context, args: [str]) > void !> any {
+    // The formatters rewrite the Go files this reads (MGS4008).
+    ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
+        testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format);
+    ctx.readsFiles(["**/*.go", "**/*.buzz", "**/*.md", "**/*.sh", "**/*.ts", "**/*.js", "**/*.mjs",
+                    "go.mod", "go.sum", "go.work", "go.work.sum"]);
+    final names = ["TestNoEnvironmentSniffing", "TestEveryDiagnosticCodeHasARaiseSite",
+                   "TestEveryReadMagusEnvVarIsRegistered", "TestStoreMechanicsLiveInInternalFile",
+                   "TestStoresAreJSONLines", "TestCommentsNameSymbolsThatExist",
+                   "TestNoDirectEncodingJSONImport", "TestRevealCallsStayCapped"];
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-run", "^(" + names.join("|") + ")$", "-count=1", ".", "./internal/json", "./internal/secret"] + args});
 }
 
 // Runs internal/sandbox's tests with landlock required. test skips the

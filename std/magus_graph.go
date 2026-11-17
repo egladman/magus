@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
@@ -36,37 +37,40 @@ func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, err
 	if !ok {
 		return nil, fmt.Errorf("magus\\%s: this workspace has no knowledge graph", member)
 	}
-	if memo := types.EvalMemoFromContext(ctx); memo != nil {
-		return memoGraphs{g: g, memo: memo}, nil
+	if once := types.EvalOnceFromContext(ctx); once != nil && !once.Ended() {
+		return onceGraphs{g: g, once: once}, nil
 	}
 	return g, nil
 }
 
-// memoGraphs answers every graph read of one evaluation from one build.
+// onceGraphs answers every graph read of one evaluation from one build.
 // So a figure calling magus\graph().dir per box builds the graph once.
-type memoGraphs struct {
+type onceGraphs struct {
 	g    knowledgeGraphs
-	memo *types.EvalMemo
+	once *types.EvalOnce
 }
 
-// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
-func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds. A by-reference
+// scope is built as every symbol: N refs calls share one merge, and a lone one pays a full
+// merge instead of the small one.
+func (m onceGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if req.Refresh {
 		return m.g.KnowledgeGraph(ctx, req)
 	}
 	key := "graph"
 	if req.Symbols.Loaded() {
-		key = "graph+symbols:" + req.Symbols.Ref()
+		req.Symbols = types.AllSymbols
+		key = "graph+symbols:"
 	}
-	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
+	return onceGraph(m.once, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 }
 
-func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
+func (m onceGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	type gaps struct {
 		list   []types.KnowledgeSymbolGap
 		probed bool
 	}
-	v, _ := m.memo.Do("symbol-gaps", func() (any, error) {
+	v, _ := m.once.Do("symbol-gaps", func() (any, error) {
 		list, probed := m.g.SymbolGaps(ctx)
 		return gaps{list, probed}, nil
 	})
@@ -74,8 +78,8 @@ func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap,
 	return got.list, got.probed
 }
 
-func memoGraph(memo *types.EvalMemo, key string, build func() (*knowledge.Graph, error)) (*knowledge.Graph, error) {
-	v, err := memo.Do(key, func() (any, error) { return build() })
+func onceGraph(once *types.EvalOnce, key string, build func() (*knowledge.Graph, error)) (*knowledge.Graph, error) {
+	v, err := once.Do(key, func() (any, error) { return build() })
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +193,11 @@ func MagusPath(ctx context.Context, node, to string, opts types.KnowledgePathOpt
 }
 
 // MagusRefs backs magus\graph().refs: a symbol's definition and its users.
-// It is the record `magus refs -o json` prints.
-// A symbol nothing defines is an
-// answer carrying a verdict, never a raise: absent and unknown are different facts and a
-// caller branches on answer.verdict to tell them apart.
+// It is the record `magus refs -o json` prints, and it takes the command line's rule for a
+// bare name: one that labels more than one symbol raises, naming each, and a caller asks
+// again with a symbol ID. A symbol nothing defines is an answer carrying a verdict, never a
+// raise: absent and unknown are different facts and a caller branches on answer.verdict to
+// tell them apart.
 func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptions) (types.KnowledgeRefsOutput, error) {
 	if symbol == "" {
 		return types.KnowledgeRefsOutput{}, errors.New("magus\\graph().refs: needs a symbol ID or a name that resolves to one")
@@ -207,6 +212,13 @@ func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptio
 	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.SymbolsMentioning(symbol)})
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
+	}
+	if named := kg.SymbolsNamed(symbol); len(named) > 1 {
+		quoted := make([]string, len(named))
+		for i, id := range named {
+			quoted[i] = strconv.Quote(id)
+		}
+		return types.KnowledgeRefsOutput{}, fmt.Errorf("magus\\graph().refs: %q names %d symbols defined in this workspace, so ask for one by id: %s", symbol, len(named), strings.Join(quoted, ", "))
 	}
 	out, ok := kg.Refs(symbol)
 	if !ok {

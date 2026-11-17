@@ -1,0 +1,62 @@
+# `magus job fork --stdin` declares, so a record it cannot read as a declaration is refused
+# and the live row stays as it was: one naming no api_version (the record that once reset a
+# live job to an empty row), and a claim, which `magus job apply` takes.
+[!exec:git] skip 'the job diffs against a git checkpoint'
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'pricing'
+
+stdin $WORK/wave.json
+exec magus job fork --stdin
+exec magus describe job wave/w -o template='{{.job.paths.write}}'
+stdout '^\[pricing/total\.sh pricing/tax\.sh\]$'
+
+stdin $WORK/unversioned.json
+! exec magus job fork --stdin
+stderr 'MGS3037'
+stderr 'carries no api_version'
+stderr 'add "api_version": "magus\.job/v1alpha1" to the record'
+! stdout .
+exec magus describe job wave/w -o template='{{.job.paths.write}}'
+stdout '^\[pricing/total\.sh pricing/tax\.sh\]$'
+
+stdin $WORK/claim.json
+! exec magus job fork --stdin
+stderr 'a claim, not a declaration'
+stderr 'job apply --stdin'
+exec magus describe job wave/w -o template='{{.job.paths.write}}'
+stdout '^\[pricing/total\.sh pricing/tax\.sh\]$'
+
+-- wave.json --
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh", "pricing/tax.sh"]}, "check": {"target": "test", "project": "."}}
+-- unversioned.json --
+{"id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "refs:total"}]}
+-- claim.json --
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+-- .gitignore --
+.magus/
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+// test runs the pricing scripts.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["pricing/*.sh"]);
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(test);
+}
+-- pricing/total.sh --
+echo 0
+-- pricing/tax.sh --
+echo 0

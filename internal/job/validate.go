@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // validateMerge holds a merge into job id, against the plan rows, to every rule a stored
@@ -81,6 +82,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	if updates {
 		ps = append(ps, newProblems(rowDeclaration(prev).Problems(), rowDeclaration(merged).Problems())...)
 		ps = append(ps, ungradedProblems(merged)...)
+		ps = append(ps, droppedProblems(prev, merged)...)
 		var goals []types.Goal
 		for _, gate := range merged.Goals {
 			if !slices.ContainsFunc(prev.Goals, func(g types.Goal) bool { return g.ID == gate.ID }) {
@@ -138,6 +140,32 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	return v
 }
 
+// droppedProblems is each declared field of the live row prev that merged leaves empty:
+// the instructions, the write paths, the check and the goals. A record that re-declares a
+// live job without them erases what its holder was given, so it is refused unless a
+// deviation on the field's "drops <field>" subject says the erasure is meant.
+func droppedProblems(prev, merged types.Job) types.JobProblems {
+	var ps types.JobProblems
+	dropped := func(field string, held, kept bool) {
+		if !held || kept {
+			return
+		}
+		subject := types.DropsSubject + field
+		reason := fmt.Sprintf("the record leaves %s empty and %s declared it", field, prev.ID)
+		ps = append(ps, types.JobProblem{
+			Code: types.JobRecordInvalid, Field: field, Subject: subject,
+			Message: fmt.Sprintf("this record would erase %s's %s", prev.ID, field),
+			Fix: fmt.Sprintf("send the %s the job holds, or name the erasure: {\"code\":%q,\"subject\":%q,\"reason\":%q}",
+				field, types.JobRecordInvalid, subject, reason),
+		})
+	}
+	dropped("agent.instructions", prev.Instructions() != "", merged.Instructions() != "")
+	dropped("paths.write", len(prev.Paths.Write) > 0, len(merged.Paths.Write) > 0)
+	dropped("check", prev.Check != nil, merged.Check != nil)
+	dropped("goals", len(prev.Goals) > 0, len(merged.Goals) > 0)
+	return ps
+}
+
 // cheapRefusalSkip is the Unchecked entry of a new row contendedFork refuses.
 const cheapRefusalSkip = "the symbol, claim, test, check and workspace checks and the write proof: not run," +
 	" since this fork already contends with a live job; fork again once it does not"
@@ -187,23 +215,75 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 // lintGoals is a lint goal per project whose lint reads a file the row writes
 // and nothing runs. It only reports, and over the written files alone: a
 // finding elsewhere is not the worker's. See [ranOver] for a soft path.
-func lintGoals(root string, row types.Job, ws Workspace, grader CheckGrader) []types.Goal {
+//
+// A file the VCS ignores is left out: a write glob also matches installed files nobody
+// wrote. A file not yet tracked stays, since the args are fixed at fork time and a path the
+// worker will create is untracked then. The notes say how many files were left out, or that
+// the VCS could not be asked and every file was kept.
+func lintGoals(ctx context.Context, root string, row types.Job, ws Workspace, grader CheckGrader) (goals []types.Goal, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
-		return nil
+		return nil, nil
 	}
 	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.Paths.Soft, f) })
 	slices.Sort(written)
-	var goals []types.Goal
 	gates, _ := unrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored), gradeWith(grader, root, row))
+	var lint []UnrunGate
 	for _, g := range gates {
 		if g.Target == lintTarget && !g.IntegratorGates {
-			goal := g.Goal
-			goal.Check.NoDefaultCharms = true
-			goal.Check.Args = filesIn(g.Project, written)
-			goals = append(goals, goal)
+			lint = append(lint, g)
 		}
 	}
-	return goals
+	if len(lint) == 0 {
+		return nil, nil
+	}
+	written, note := withoutIgnored(ctx, root, ws, written)
+	if note != "" {
+		notes = append(notes, note)
+	}
+	for _, g := range lint {
+		goal := g.Goal
+		goal.Check.NoDefaultCharms = true
+		goal.Check.Args = filesIn(g.Project, written)
+		goals = append(goals, goal)
+	}
+	return goals, notes
+}
+
+// withoutIgnored is files less those the VCS ignores, and a note when it left some out or
+// could not be asked. A tracked file stays even when an ignore rule covers it: IgnoredFiles
+// answers from the rules alone, so a force-added file is asked of TrackedFiles too.
+func withoutIgnored(ctx context.Context, root string, ws Workspace, files []string) ([]string, string) {
+	if len(files) == 0 {
+		return files, ""
+	}
+	if ws.Ignored == nil {
+		return files, "no version control could be asked which written files it ignores, so the lint goal keeps every one"
+	}
+	ignored, err := ws.Ignored(files)
+	if err != nil {
+		return files, fmt.Sprintf("the lint goal keeps every written file: %v", err)
+	}
+	if len(ignored) == 0 {
+		return files, ""
+	}
+	drop := make(map[string]bool, len(ignored))
+	for _, f := range ignored {
+		drop[f] = true
+	}
+	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.VCS != nil {
+		tracked, err := res.VCS.TrackedFiles(ctx, root, ignored)
+		if err != nil {
+			return files, fmt.Sprintf("%s could not say which ignored files it tracks (%v), so the lint goal keeps every written file", res.Name, err)
+		}
+		for _, f := range tracked {
+			delete(drop, f)
+		}
+	}
+	kept := slices.DeleteFunc(slices.Clone(files), func(f string) bool { return drop[f] })
+	if left := len(files) - len(kept); left > 0 {
+		return kept, fmt.Sprintf("left %d ignored file(s) out of the lint goal", left)
+	}
+	return kept, ""
 }
 
 // filesIn is the files under project, relative to it. The root project holds every file.
@@ -299,9 +379,6 @@ type gateOwner struct {
 	// runs is the reason a GateNotRun deviation gives,
 	// empty when no owner is declared.
 	runs string
-	// unread is a magus.yaml that did not load, which
-	// [broadClaimProblems] reports. No edit is guessed then.
-	unread bool
 }
 
 // declaredGateOwner is the owner the workspace declares for
@@ -315,7 +392,8 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 	cfg, err := config.LoadWorkspaceOnly(root)
 	switch {
 	case err != nil:
-		return gateOwner{unread: true}
+		// [broadClaimProblems] reports the config that did not load; no owner is guessed.
+		return gateOwner{}
 	case cfg.CI.RemoteGate != "":
 		return gateOwner{runs: cfg.CI.RemoteGate + " runs it"}
 	case row.Parent == "":
@@ -334,7 +412,7 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 // IntegratorDeviations is one deviation per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
 // path touches stays its owner's, and one a deviation of row accepts already needs no new one.
-func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.Deviation {
+func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []types.Deviation {
 	var deviations []types.Deviation
 	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
 		glob, _, _ := strings.Cut(o.Output, " !")
@@ -536,7 +614,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merg
 		})
 	}
 	owner := declaredGateOwner(store.root, rows, merged)
-	ps = append(ps, regeneratedProblems(regenerated, merged.Paths.Deny, owner)...)
+	ps = append(ps, regeneratedProblems(regenerated)...)
 	gates, undecided := unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged))
 	ps = append(ps, unrunGateProblems(gates, owner)...)
 	unchecked = append(unchecked, undecided...)
@@ -634,44 +712,22 @@ func listNames(names []string) string {
 }
 
 // regeneratedProblems is each output as OutputOutsideWritePaths, its Subject the output.
-// One a deny path touches carries no Edit: the record kept it from the job on purpose.
-// With a declared owner, the Edit permits the output for the integrator.
-func regeneratedProblems(outputs []RegeneratedOutput, deny []string, owner gateOwner) types.JobProblems {
+func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(outputs))
 	for _, o := range outputs {
-		p := types.JobProblem{
+		ps = append(ps, types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: o.Output,
 			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
 			Fix: fmt.Sprintf(`add %q to paths.write, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
-		}
-		glob, _, _ := strings.Cut(o.Output, " !")
-		denied := slices.ContainsFunc(deny, func(d string) bool { return types.PathsIntersect(d, glob) })
-		switch {
-		case denied || owner.unread:
-		case owner.runs != "":
-			p.Edit = &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates}}
-		default:
-			p.Edit = regeneratedEdit(o.Output)
-		}
-		ps = append(ps, p)
+		})
 	}
 	return ps
 }
 
-// regeneratedEdit adds output to the write paths, or permits it for the integrator when it
-// carries an exclusion (`gen/*.go !gen/*_test.go`), which no write path can spell.
-func regeneratedEdit(output string) *types.JobEdit {
-	if strings.Contains(output, " !") {
-		return &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: output, Reason: integratorRegenerates}}
-	}
-	return &types.JobEdit{AddWritePath: output}
-}
-
 // unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. A gate no
-// worker may run is the integrator's and raises nothing. The goal a lint gate's Edit adds
-// skips default charms, as [lintGoals] adds it, so --fix lint reports and rewrites nothing.
-// With a declared owner, another gate's Edit is the deviation naming it.
+// worker may run is the integrator's and raises nothing. With a declared owner, the fix is
+// the deviation naming it.
 func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(gates))
 	for _, g := range gates {
@@ -679,10 +735,6 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			continue
 		}
 		subject := fmt.Sprintf("%s %s", g.Target, g.Project)
-		add := g.Goal
-		if g.Target == lintTarget {
-			add.Check.NoDefaultCharms = true
-		}
 		goal, _ := json.Marshal(g.Goal)
 		p := types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
@@ -690,15 +742,8 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			Fix: fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				goal, types.GateNotRun, subject),
 		}
-		switch {
-		case g.Target == lintTarget:
-			p.Edit = &types.JobEdit{AddGoal: &add}
-		case owner.unread:
-		case owner.runs != "":
+		if g.Target != lintTarget && owner.runs != "" {
 			p.Fix = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
-			p.Edit = &types.JobEdit{AddDeviation: &types.Deviation{Code: types.GateNotRun, Subject: subject, Reason: owner.runs}}
-		default:
-			p.Edit = &types.JobEdit{AddGoal: &add}
 		}
 		ps = append(ps, p)
 	}
