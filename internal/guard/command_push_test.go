@@ -188,6 +188,12 @@ func (s *PushLineShapeSuite) TestAPushInsideASubstitutionIsUnknown() {
 	s.Equal("`git push` runs inside a command substitution, whose words magus does not place before the line runs", got.Unknown)
 }
 
+func (s *CommandPushSuite) TestAPushOptionsValueIsNotADryRun() {
+	got := s.read(Dependencies{}, "git push -o --dry-run origin HEAD:topic")
+	s.Require().NotNil(got, "--dry-run is -o's value, sent to the server")
+	s.Equal(s.head, got.Revision)
+}
+
 func (s *CommandPushSuite) TestADryRunPublishesNothing() {
 	s.Nil(s.read(Dependencies{}, "git push --dry-run origin HEAD:topic"))
 }
@@ -224,6 +230,18 @@ func (s *PullRequestPushSuite) TestAHeredocBodyIsNotAWordThatDecidesWhatIsPublis
 	got := s.read(Dependencies{}, "gh pr create --title x --body \"$(cat <<'EOF'\nWhy it is.\nEOF\n)\"")
 	s.Require().NotNil(got)
 	s.Empty(got.Unknown)
+	s.Equal(s.head, got.Revision)
+}
+
+func (s *PullRequestPushSuite) TestABodyOfDashHIsNotHelp() {
+	got := s.read(Dependencies{}, "gh pr create --title x --body '-h'")
+	s.Require().NotNil(got)
+	s.Equal(s.head, got.Revision)
+}
+
+func (s *PullRequestPushSuite) TestABodyOfDryRunIsNotADryRun() {
+	got := s.read(Dependencies{}, "gh pr create --body --dry-run --title x")
+	s.Require().NotNil(got)
 	s.Equal(s.head, got.Revision)
 }
 

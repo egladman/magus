@@ -192,11 +192,43 @@ func publishes(c hint.Invocation) bool {
 }
 
 // sendsNothing reports a push or `gh pr create` that only prints: --dry-run (git's -n too)
-// or --help.
+// or --help, given as an option and not as an option's value: `git push -o --dry-run` and
+// `gh pr create --body -h` publish.
 func sendsNothing(c hint.Invocation) bool {
-	return slices.ContainsFunc(pushWords(c), func(a string) bool {
+	return slices.ContainsFunc(optionWords(c), func(a string) bool {
 		return a == "--dry-run" || a == "--help" || a == "-h" || c.Name == "git" && a == "-n"
 	})
+}
+
+// valuedOptions are, per tool, the push options whose value may be the next word.
+var valuedOptions = map[string][]string{
+	"git": {"-o", "--push-option", "--repo", "--receive-pack", "--exec"},
+	"gh":  ghValued,
+	"jj":  {"-r", "--revisions", "-c", "--change", "-b", "--bookmark", "--remote", "-R", "--repository", "--config", "--at-op"},
+	"hg":  {"-r", "--rev", "-b", "--branch", "-B", "--bookmark", "-e", "--ssh", "--remotecmd"},
+	"sl":  {"-r", "--rev", "-b", "--branch", "-B", "--bookmark", "-e", "--ssh", "--remotecmd", "--to"},
+}
+
+// optionWords are the words of a push call that are options, with every option's value
+// left out.
+func optionWords(c hint.Invocation) []string {
+	valued := valuedOptions[filepath.Base(c.Name)]
+	words := pushWords(c)
+	var out []string
+	for i := 0; i < len(words); i++ {
+		a := words[i]
+		if a == "--" {
+			break
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		out = append(out, a)
+		if _, _, joined := strings.Cut(a, "="); !joined && slices.Contains(valued, a) {
+			i++
+		}
+	}
+	return out
 }
 
 // deletesOnly reports a push that removes remote names and publishes no commit.
