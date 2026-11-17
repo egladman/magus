@@ -3599,6 +3599,10 @@ func gitCommitIDs(ctx context.Context, root string, revs []string) (map[string]s
 	return ids, nil
 }
 
+// emptyTreeID is git's empty tree in a SHA-1 repository. A SHA-256 repository does not
+// know it, so a TextOnly merge there fails, naming the object, rather than run drivers.
+const emptyTreeID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
 // MergeTrees implements types.TreeMerger with `merge-tree --write-tree`, which exits 1 when
 // the merge conflicts: an answer, read as one.
 func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) (types.TreeMergeResult, error) {
@@ -3609,6 +3613,10 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 		return types.TreeMergeResult{}, err
 	}
 	args := []string{"merge-tree", "--write-tree", "--no-messages", "-z"}
+	if m.TextOnly {
+		// The empty tree holds no .gitattributes, so no path names a merge driver.
+		args = append([]string{"--attr-source=" + emptyTreeID}, args...)
+	}
 	if m.Base != "" {
 		args = append(args, "--merge-base="+m.Base)
 	}

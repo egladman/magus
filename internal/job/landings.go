@@ -305,7 +305,7 @@ func contentLanded(ctx context.Context, driver types.VCSDriver, row job.Job, hea
 // checkpoint onto target leaves target's tree as it is, with no conflict.
 // A backend that cannot merge trees reports false.
 func mergeChangesNothing(ctx context.Context, driver types.VCSDriver, root, checkpoint string, head, target types.Commit) bool {
-	merged, err := driver.MergeTrees(ctx, root, types.TreeMerge{Base: checkpoint, Ours: target.ID, Theirs: head.ID})
+	merged, err := driver.MergeTrees(ctx, root, types.TreeMerge{Base: checkpoint, Ours: target.ID, Theirs: head.ID, TextOnly: true})
 	if err != nil || len(merged.Conflicts) > 0 {
 		return false
 	}

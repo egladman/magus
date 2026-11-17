@@ -1125,6 +1125,10 @@ type TreeMerge struct {
 	Base string
 	// Theirs is merged onto Ours.
 	Ours, Theirs string
+	// TextOnly merges without the repository's attributes, so no custom merge driver
+	// runs. A probe asking only whether a merge would change anything sets it: the
+	// workspace's merge driver regenerates a file, which is too slow to run per row.
+	TextOnly bool
 }
 
 // TreeMergeResult is what a three-way merge of trees produced.
