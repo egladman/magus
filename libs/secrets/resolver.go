@@ -276,7 +276,7 @@ func (r *Resolver) fetch(callerCtx context.Context, key resolvedKey) (Secret, er
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(callerCtx), r.timeouts.longest())
 	defer cancel()
 
-	val, err := r.fetchFrom(ctx, key)
+	val, err := r.askProvider(ctx, key)
 	if err != nil {
 		return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: err}
 	}
@@ -290,9 +290,9 @@ func (r *Resolver) fetch(callerCtx context.Context, key resolvedKey) (Secret, er
 	return val, nil
 }
 
-// fetchFrom asks key's provider for its reference, falling back to the built-in when
+// askProvider asks key's provider for its reference, falling back to the built-in when
 // none is selected, which keeps an unconfigured caller working off its environment.
-func (r *Resolver) fetchFrom(ctx context.Context, key resolvedKey) (Secret, error) {
+func (r *Resolver) askProvider(ctx context.Context, key resolvedKey) (Secret, error) {
 	if key.provider == "" {
 		return envProvider{}.Fetch(ctx, key.ref)
 	}

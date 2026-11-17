@@ -28,12 +28,12 @@ func (s *ResolverSuite) SetupTest() {
 }
 
 // ctx is the test's context carrying the suite's resolver.
-func (s *ResolverSuite) ctx() context.Context { return WithResolver(s.T().Context(), s.r) }
+func (s *ResolverSuite) resolverContext() context.Context { return WithResolver(s.T().Context(), s.r) }
 
 // read reads ref through the context's resolver, failing the test on an error.
 func (s *ResolverSuite) read(ref string) Secret {
 	s.T().Helper()
-	ctx := s.ctx()
+	ctx := s.resolverContext()
 	v, err := ResolverFromContext(ctx).Read(ctx, ref)
 	s.Require().NoError(err)
 	return v
@@ -169,7 +169,7 @@ func (s *ResolverSuite) TestReadCollapsesConcurrentReadsOfOneReference() {
 	errs := make([]error, 8)
 	for i := range 8 {
 		wg.Go(func() {
-			v, err := s.r.Read(s.ctx(), "SHARED_REF")
+			v, err := s.r.Read(s.resolverContext(), "SHARED_REF")
 			got[i], errs[i] = v.Reveal(), err
 		})
 	}
@@ -198,7 +198,7 @@ func (s *ResolverSuite) TestReadOutlivesTheFirstCallersCancellation() {
 		}
 	}))
 
-	first, cancelFirst := context.WithCancel(s.ctx())
+	first, cancelFirst := context.WithCancel(s.resolverContext())
 	firstErr := make(chan error, 1)
 	go func() {
 		_, err := s.r.Read(first, "SHARED_REF")
@@ -208,7 +208,7 @@ func (s *ResolverSuite) TestReadOutlivesTheFirstCallersCancellation() {
 
 	second := make(chan Secret, 1)
 	go func() {
-		v, err := s.r.Read(s.ctx(), "SHARED_REF")
+		v, err := s.r.Read(s.resolverContext(), "SHARED_REF")
 		s.NoError(err)
 		second <- v
 	}()
@@ -224,7 +224,7 @@ func (s *ResolverSuite) TestReadOutlivesTheFirstCallersCancellation() {
 }
 
 func (s *ResolverSuite) TestReadRejectsEmptyReference() {
-	_, err := s.r.Read(s.ctx(), "")
+	_, err := s.r.Read(s.resolverContext(), "")
 	var re *ReadError
 	s.Require().ErrorAs(err, &re)
 	s.Equal("secrets: read: empty reference", err.Error())
@@ -241,7 +241,7 @@ func (s *ResolverSuite) TestWithProviderDerivesWithoutChangingTheOriginal() {
 }
 
 func (s *ResolverSuite) TestReadUnderANamedProviderNeedsAnOpener() {
-	_, err := s.r.WithProvider("vault").Read(s.ctx(), "REF")
+	_, err := s.r.WithProvider("vault").Read(s.resolverContext(), "REF")
 	s.Require().ErrorContains(err, "has no opener")
 	s.Require().ErrorContains(err, `secrets: read "REF" via provider "vault"`)
 }
@@ -250,13 +250,13 @@ func (s *ResolverSuite) TestReadSurfacesProviderOpenFailures() {
 	s.r = NewResolver(WithOpener(func(context.Context, string) (Provider, error) {
 		return nil, errors.New("spell not registered")
 	})).WithProvider("missing-spell")
-	_, err := s.r.Read(s.ctx(), "ANY")
+	_, err := s.r.Read(s.resolverContext(), "ANY")
 	s.Require().ErrorContains(err, "missing-spell", "the error names the provider that failed to open")
 }
 
 func (s *ResolverSuite) TestReadRejectsAnEmptyValueFromAProvider() {
 	s.withProvider("blank", providerFunc(func(context.Context, string) (Secret, error) { return Secret{}, nil }))
-	_, err := s.r.Read(s.ctx(), "REF")
+	_, err := s.r.Read(s.resolverContext(), "REF")
 	s.Require().ErrorContains(err, "empty value", "a blank credential must fail here, not at whatever consumes it")
 }
 
@@ -295,8 +295,8 @@ func (s *ResolverSuite) TestPackageLevelRedactorsFollowTheContext() {
 	s.T().Setenv("SECRETS_TEST_PKG", "pkg-level-token")
 	s.read("SECRETS_TEST_PKG")
 
-	s.Equal("a=***", string(Redact(s.ctx(), []byte("a=pkg-level-token"))))
-	s.Equal("a=***", RedactString(s.ctx(), "a=pkg-level-token"))
+	s.Equal("a=***", string(Redact(s.resolverContext(), []byte("a=pkg-level-token"))))
+	s.Equal("a=***", RedactString(s.resolverContext(), "a=pkg-level-token"))
 	s.Equal("a=pkg-level-token", RedactString(context.Background(), "a=pkg-level-token"))
 
 	// A nil context reaches these from log handlers that have none to hand them, and
