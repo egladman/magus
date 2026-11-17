@@ -30,7 +30,7 @@ func TestSpawnUnvalidatedRefusesARowNothingChecked(t *testing.T) {
 
 	t.Run("an unstamped row is refused with the fix", func(t *testing.T) {
 		v := spawn(t, title, 0)
-		require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnUnvalidated)}, judgedAs(v), v.Context)
+		require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnUnvalidated)}, judgedAs(v), v.Context)
 		assert.Contains(t, v.Reason, "job guard-facts carries no `validated` stamp")
 		assert.Contains(t, v.Reason, "magus job fork guard-facts --dry-run")
 		assert.Contains(t, v.Reason, "magus job apply -f <record>")

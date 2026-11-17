@@ -163,14 +163,14 @@ guard.
 
 **A missing arm renders empty.** `HOST_RESPONSE` carries both a deny arm and an
 advise arm. A template missing one does not fail loudly; it renders nothing, and
-every host reads nothing as allow. Claude Code's `--path` wiring once rendered
+every host reads nothing as no objection. Claude Code's `--path` wiring once rendered
 only the deny arm, so every advisory it produced was silently dropped, while the
 shipped path template had the opposite gap and dropped denials.
 
-**A pass and a broken guard both render nothing.** A pass exits 0 with empty
+**A defer and a broken guard both render nothing.** A defer exits 0 with empty
 output because there was nothing to say. A binary that cannot run (too old for
 `session hook`, unable to load the workspace, half-written by a concurrent build) exits
-non-zero with empty output. Printing that as a pass disables every rule with
+non-zero with empty output. Printing that as a defer disables every rule with
 nothing anywhere saying so. Both templates discriminate on status and emptiness
 together, and announce the second case. The announcement names its evidence
 (the binary path they resolved, that binary's version, and the first line it
@@ -348,5 +348,5 @@ magus session hook -o template
 ```
 
 The last one lists the fields available to `-o template`. A deny exits 2 with
-the verdict on stdout; a pass and an advise exit 0. See [The guard](guard.md)
+the verdict on stdout; a defer and an advise exit 0. See [The guard](guard.md)
 for the rules behind the verdicts.

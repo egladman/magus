@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"mvdan.cc/sh/v3/syntax"
@@ -341,7 +342,7 @@ func askUnrenderedDeny(subject string) string {
 // "" otherwise. Asking the root let two pull requests out ungated. A worker's
 // refusal also sends the commit to the orchestrator. A push whose reads ran
 // out of budget before any covered it was not judged, and is refused.
-func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason string) {
+func gradePushWithoutGate(ev pushEvidence, lease string) (decision verdict.Decision, reason string) {
 	cover, commit := ev.cover, ev.commit
 	if ev.lapse.cut != "" && !cover.admits() {
 		return refusePush(ev.lapse.reason(commit), lease)
@@ -374,13 +375,13 @@ func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason strin
 
 // refusePush is the deny for a push, head saying why, bound to job lease
 // unless "".
-func refusePush(head, lease string) (decision, reason string) {
+func refusePush(head, lease string) (decision verdict.Decision, reason string) {
 	gate := fmt.Sprintf("Or run `%s`, which waits for the build budget itself, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
 		hint.Affected.With(string(types.TargetCI)))
 	if lease != "" {
-		return decisionDeny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
+		return verdict.Deny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
 	}
-	return decisionDeny, head + gate
+	return verdict.Deny, head + gate
 }
 
 // movedPushReason refuses a push that follows, on the same line, a command that moves the

@@ -91,10 +91,10 @@ stdin command.txt
 ! exec magus shell -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
 stdout 'permissionDecision'
 
-# arguments work without stdin, and a benign command passes
+# arguments work without stdin, and a benign command defers
 stdin pass-command.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 -- command.txt --
 git stash

@@ -12,22 +12,25 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/internal/enum"
 )
 
-// Decision is what a rule answers. The zero value allows, so an empty Verdict{} is the
-// pass a rule returns when it has nothing to say.
+// Decision is what a rule or the judge answers about a call. None of them says yes: a
+// defer is no objection, and the host's own permission flow decides the call. The zero
+// value defers, so an empty Verdict{} is what a rule returns when it has nothing to say.
 type Decision string
 
 const (
-	// Allow adds nothing to the built-in verdict.
-	Allow Decision = "allow"
+	// Defer adds nothing to the built-in verdict and leaves the call to the host.
+	Defer Decision = "defer"
 	// Advise lets the call through with context for the caller.
 	Advise Decision = "advise"
+	// Ask blocks the call until the person approves it through the host's own prompt.
+	Ask Decision = "ask"
 	// Deny blocks the call.
 	Deny Decision = "deny"
 )
 
-func decisions() enum.Set[Decision] { return enum.Set[Decision]{Allow, Advise, Deny} }
+func decisions() enum.Set[Decision] { return enum.Set[Decision]{Defer, Advise, Ask, Deny} }
 
-// Values lists the decisions a rule may return, excluding the zero value.
+// Values lists the declared decisions, excluding the zero value.
 func (d Decision) Values() []string { return decisions().Strings() }
 
 // Valid reports whether d is a declared decision or unset.
@@ -60,18 +63,20 @@ func (e *UnknownDecisionError) Error() string {
 }
 
 // rank orders decisions by strictness, so merging two verdicts keeps the stricter. An
-// undeclared decision ranks as deny: a verdict nobody can read must not pass as allow.
+// undeclared decision ranks as deny: a verdict nobody can read must not defer.
 func (d Decision) rank() int {
 	switch d {
-	case "", Allow:
+	case "", Defer:
 		return 0
 	case Advise:
 		return 1
+	case Ask:
+		return 2
 	}
-	return 2
+	return 3
 }
 
-// Verdict is what a rule returns. The zero value allows.
+// Verdict is what a rule returns. The zero value defers.
 type Verdict struct {
 	Decision Decision
 	// Reason is shown to the caller: the refusal for a deny, the context for an advise.
@@ -137,7 +142,7 @@ func ValidateRuleName(name string) error {
 }
 
 // Stricter merges two verdicts on one call, keeping the stricter decision and its rule:
-// deny over advise over allow. When both carry the same decision their reasons are both
+// deny over ask over advise over defer. When both carry the same decision their reasons are both
 // kept, once each, so two rules that agree on a deny still explain themselves; the merge
 // reports under a's rule, or b's when a names none, since one verdict reports under one
 // rule.

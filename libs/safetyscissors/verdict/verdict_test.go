@@ -13,7 +13,7 @@ func TestDecision(t *testing.T) { suite.Run(t, new(DecisionSuite)) }
 // UnmarshalText is the one door from a name to a decision, so it is where a misspelling
 // stops, and an empty name stays unset.
 func (s *DecisionSuite) TestUnmarshalTextAcceptsEachDecisionAndUnset() {
-	for _, name := range []string{"", "allow", "advise", "deny"} {
+	for _, name := range []string{"", "defer", "advise", "ask", "deny"} {
 		var d Decision
 		s.Require().NoError(d.UnmarshalText([]byte(name)), name)
 		s.Equal(Decision(name), d)
@@ -26,8 +26,17 @@ func (s *DecisionSuite) TestUnmarshalTextRefusesAnUndeclaredDecision() {
 	var unknown *UnknownDecisionError
 	s.Require().ErrorAs(err, &unknown)
 	s.Equal("block", unknown.Decision)
-	s.EqualError(err, `verdict: unknown guard decision "block" (want one of [allow advise deny])`)
+	s.EqualError(err, `verdict: unknown guard decision "block" (want one of [defer advise ask deny])`)
 	s.Equal(Deny, d, "a refused name leaves the decision as it was")
+}
+
+func (s *DecisionSuite) TestUnmarshalTextRefusesTheRetiredNames() {
+	for _, name := range []string{"pass", "allow"} {
+		var d Decision
+		var unknown *UnknownDecisionError
+		s.Require().ErrorAs(d.UnmarshalText([]byte(name)), &unknown, name)
+		s.Equal(name, unknown.Decision)
+	}
 }
 
 func (s *DecisionSuite) TestStringRendersUnsetByName() {
@@ -41,26 +50,35 @@ func (s *DecisionSuite) TestMarshalTextWritesTheName() {
 	s.Equal("advise", string(got))
 }
 
-// A decision outside the declared set never reads as allow: it outranks advise and ties
-// with deny, so a verdict nothing can interpret still blocks.
+// A decision outside the declared set never defers: it outranks ask and ties with deny,
+// so a verdict nothing can interpret still blocks.
 func (s *DecisionSuite) TestStricterTreatsAnUnknownDecisionAsDeny() {
 	unknown := Verdict{Decision: "block", Reason: "typo"}
 	s.Equal(unknown, Stricter(Verdict{}, unknown))
 	s.Equal(unknown, Stricter(unknown, Verdict{Decision: Advise, Reason: "x"}))
+	s.Equal(unknown, Stricter(Verdict{Decision: Ask, Reason: "x"}, unknown))
 }
 
-func (s *DecisionSuite) TestStricterKeepsDenyOverAllowAndAdvise() {
+func (s *DecisionSuite) TestStricterKeepsDenyOverAskAdviseAndDefer() {
 	deny := Verdict{Decision: Deny, Reason: "unnamed model"}
+	ask := Verdict{Decision: Ask, Reason: "a person approves pushes"}
 	advise := Verdict{Decision: Advise, Reason: "name a model"}
 	s.Equal(deny, Stricter(Verdict{}, deny))
 	s.Equal(deny, Stricter(deny, advise))
 	s.Equal(deny, Stricter(advise, deny))
+	s.Equal(deny, Stricter(ask, deny))
 }
 
-func (s *DecisionSuite) TestStricterKeepsAdviseOverAllow() {
+func (s *DecisionSuite) TestStricterKeepsAskOverAdviseAndDefer() {
+	ask := Verdict{Decision: Ask, Reason: "a person approves pushes"}
+	s.Equal(ask, Stricter(Verdict{Decision: Advise, Reason: "name a model"}, ask))
+	s.Equal(ask, Stricter(ask, Verdict{}))
+}
+
+func (s *DecisionSuite) TestStricterKeepsAdviseOverDefer() {
 	advise := Verdict{Decision: Advise, Reason: "name a model"}
 	s.Equal(advise, Stricter(advise, Verdict{}))
-	s.Equal(Verdict{Decision: Allow}, Stricter(Verdict{Decision: Allow}, Verdict{}), "an explicit allow ties with the zero allow")
+	s.Equal(Verdict{Decision: Defer}, Stricter(Verdict{Decision: Defer}, Verdict{}), "an explicit defer ties with the zero defer")
 }
 
 // Two rules that agree still both explain themselves, and the same reason twice is said

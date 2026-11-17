@@ -750,7 +750,7 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 	})
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
 	ungraded := func(say, why string) verdict.Judgment {
-		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny,
 			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
 	}
 	if _, err := leaseRows(ctx, at); err != nil {
@@ -789,7 +789,7 @@ func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceReposit
 	}
 	v := judgeEdit(ctx, deps, ws.Root(), rel, before, after, o.DryRun)
 	switch v.Decision {
-	case decisionDeny, decisionAsk:
+	case verdict.Deny, verdict.Ask:
 		return v.Rule, strings.TrimSpace(v.Reason)
 	}
 	return "", ""

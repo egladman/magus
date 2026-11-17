@@ -27,14 +27,14 @@ fun judgeCommand(req: CommandRequest) > GuardVerdict {
     if (req.command.indexOf("e2e-advise-probe") != null) {
         return magus\guard.advise("this harness test notes the command. Code word: E2E-ADVISE-@NONCE@");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 fun judgeWrite(req: WriteRequest) > GuardVerdict {
     if (req.path.endsWith("blocked.txt")) {
         return magus\guard.deny("this harness test refuses the write. Code word: E2E-WRITE-@NONCE@");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 fun judgeSpawn(req: SpawnRequest) > GuardVerdict {

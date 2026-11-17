@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // CountedName is one repeated thing and how often it appeared.
@@ -28,7 +29,7 @@ type CountedName struct {
 type commandGroup struct {
 	Program    string   `json:"program"`
 	Count      int      `json:"count"`
-	Pass       int      `json:"pass"`
+	Defer      int      `json:"defer"`
 	Advise     int      `json:"advise"`
 	WouldDeny  int      `json:"would_deny"`
 	HostDenied int      `json:"host_denied"`
@@ -92,12 +93,12 @@ func SummarizeSession(hostSession string, events []session.AgentEvent) ShowSumma
 			}
 			g.Count++
 			switch ev.Verdict {
-			case session.VerdictDeny:
+			case verdict.Deny:
 				g.WouldDeny++
-			case session.VerdictAdvise:
+			case verdict.Advise:
 				g.Advise++
 			default:
-				g.Pass++
+				g.Defer++
 			}
 			if ev.Denied {
 				g.HostDenied++
@@ -173,8 +174,8 @@ func RenderShow(w io.Writer, s ShowSummary) {
 	if len(s.Commands) > 0 {
 		fmt.Fprintln(w, "\nCommands by program, judged against today's rules:")
 		for _, g := range s.Commands {
-			fmt.Fprintf(w, "  %-12s %4d  pass %d  advise %d  deny %d  (host recorded %d denied)",
-				OrDash(g.Program), g.Count, g.Pass, g.Advise, g.WouldDeny, g.HostDenied)
+			fmt.Fprintf(w, "  %-12s %4d  defer %d  advise %d  deny %d  (host recorded %d denied)",
+				OrDash(g.Program), g.Count, g.Defer, g.Advise, g.WouldDeny, g.HostDenied)
 			if len(g.Rules) > 0 {
 				fmt.Fprintf(w, "  %s", strings.Join(g.Rules, ", "))
 			}

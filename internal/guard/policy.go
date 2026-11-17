@@ -329,12 +329,12 @@ type snapshotSource struct {
 }
 
 type snapshotShellRule struct {
-	Name     string   `json:"name"`
-	Decision string   `json:"decision"`
-	Program  string   `json:"program"`
-	Args     []string `json:"args,omitempty"`
-	Reason   string   `json:"reason,omitempty"`
-	Dialect  string   `json:"dialect,omitempty"`
+	Name     string           `json:"name"`
+	Decision verdict.Decision `json:"decision"`
+	Program  string           `json:"program"`
+	Args     []string         `json:"args,omitempty"`
+	Reason   string           `json:"reason,omitempty"`
+	Dialect  string           `json:"dialect,omitempty"`
 }
 
 // snapshotBody is what one load of a workspace's policy decided, as data. The

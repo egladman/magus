@@ -84,8 +84,8 @@ test "an opening quotes the first problem when it fits and points at the list wh
     std\assert(opening("this text breaks a rule", problem: "y".repeat(200)) == "this text breaks a rule; the list below names each", message: "points at the list");
 }
 
-test "a deny is held to the shape, an allow and an advisory are not" {
+test "a deny is held to the shape, a defer and an advisory are not" {
     _ = checked(magus\guard.deny("read it whole: `magus query output <ref>`.\nwhy"), label: "deny");
-    _ = checked(magus\guard.allow(), label: "allow");
+    _ = checked(magus\guard.defer(), label: "defer");
     _ = checked(magus\guard.advise("You are reading one pull request's CI."), label: "advise");
 }

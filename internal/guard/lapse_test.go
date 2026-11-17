@@ -33,7 +33,7 @@ func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request,
 	return JudgeWithin(short, base, req, func(ctx context.Context) verdict.Judgment {
 		setup(ctx)
 		<-release
-		return verdict.Judgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: verdict.Defer}
 	})
 }
 
@@ -53,7 +53,7 @@ func TestLapsedJudgmentStillRefusesAPollingLoop(t *testing.T) {
 	// One session, so the lapses count up past the degrade.
 	for i, line := range append(loops, loops[0]) {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "s1"}, settle)
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleBusyWait)), unworded(v), "lapse %d: %s", i+1, line)
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRuleBusyWait)), unworded(v), "lapse %d: %s", i+1, line)
 	}
 }
 
@@ -65,7 +65,7 @@ func TestLapseBeforeTheLoadGradesByTheLastAppliedSettings(t *testing.T) {
 	req := Request{Input: line, Host: "claude-code", Session: "s1"}
 	nothing := func(context.Context) {}
 
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleBusyWait)), unworded(lapseNow(ctx, t, Dependencies{}, req, nothing)),
+	assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRuleBusyWait)), unworded(lapseNow(ctx, t, Dependencies{}, req, nothing)),
 		"with no settings on record busy-wait denies, as it does by default")
 
 	lowered := strict(Dependencies{}).Builtins
@@ -84,11 +84,11 @@ func TestLapseNeverDegradesADestructiveVerbOrAPush(t *testing.T) {
 	require.NotEmpty(t, want.Deny, "the destructive verb denies by default")
 	for range lapsesBeforeDegrade + 2 {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: reset, Host: "claude-code", Session: "s1"}, nothing)
-		assert.Equal(t, verdictWithRule(decisionDeny, want.RuleName()), unworded(v))
+		assert.Equal(t, verdictWithRule(verdict.Deny, want.RuleName()), unworded(v))
 	}
 	for i := range lapsesBeforeDegrade + 2 {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: "git push origin topic", Host: "claude-code", Session: "s2"}, nothing)
-		assert.Equal(t, verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
@@ -186,7 +186,7 @@ func loaded(ctx context.Context) {
 
 func (s *LapsePersonOnlySuite) TestAShellWriteToALedgerIsRefusedByItsRule() {
 	for i, v := range s.lapses(s.commandRequest("echo x >> proto/buf-breaking.deviations.jsonl"), func(context.Context) {}) {
-		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
 	}
 }
 
@@ -195,7 +195,7 @@ func (s *LapsePersonOnlySuite) TestAnEditAddingALedgerLineIsRefusedByItsRule() {
 		"tool_name": "Edit", "tool_input": map[string]any{"file_path": "x.deviations.jsonl", "old_string": deviationLine, "new_string": deviationLine + "\nadded"}}
 	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
 	for i, v := range s.lapses(req, func(context.Context) {}) {
-		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
 	}
 }
 
@@ -209,37 +209,37 @@ func (s *LapsePersonOnlySuite) TestAnEditDeletingALedgerLineDegrades() {
 
 func (s *LapsePersonOnlySuite) TestAnAgentGrantIsRefusedByItsRule() {
 	for i, v := range s.lapses(s.commandRequest("magus job grant w lease-write"), func(context.Context) {}) {
-		s.Equal(verdictWithRule(decisionDeny, string(denyRuleGrantIsAPersons)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(denyRuleGrantIsAPersons)), unworded(v), "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestAHumanOnlyRunIsNeverDegraded() {
 	for i, v := range s.lapses(s.commandRequest("magus run agent-bench-run ."), loaded) {
-		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestARunReachingAHumanOnlyTargetIsNeverDegraded() {
 	for i, v := range s.lapses(s.commandRequest("magus run bench-all ."), loaded) {
-		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+		s.Equal(verdict.Deny, v.Decision, "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestARunWithPoliciesUnreadIsNeverDegraded() {
 	for i, v := range s.lapses(s.commandRequest("magus run test ."), func(context.Context) {}) {
-		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+		s.Equal(verdict.Deny, v.Decision, "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestARunTheRecordClearsDegrades() {
 	got := s.lapses(s.commandRequest("magus run test ."), loaded)
-	s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(got[0]))
-	s.Equal(decisionAdvise, got[len(got)-1].Decision)
+	s.Equal(verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(got[0]))
+	s.Equal(verdict.Advise, got[len(got)-1].Decision)
 }
 
 func (s *LapsePersonOnlySuite) TestAnOrdinaryCommandStillDegrades() {
 	got := s.lapses(s.commandRequest("touch notes.txt"), func(context.Context) {})
-	s.Equal(decisionAdvise, got[len(got)-1].Decision)
+	s.Equal(verdict.Advise, got[len(got)-1].Decision)
 }
 
 // LapseDegradeSuite pins decision 127: past lapsesBeforeDegrade a subagent's
@@ -290,7 +290,7 @@ func (s *LapseDegradeSuite) lapsedCommand(agent, cwd, line string) verdict.Judgm
 func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInALeasedCheckout() {
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedCommand("a1b2c3", s.own, "make build")
-		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
@@ -299,7 +299,7 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesALineThatCdsIntoALeasedC
 	line := fmt.Sprintf("cd %s && make build", s.own)
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedCommand("a1b2c3", s.session, line)
-		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
@@ -307,7 +307,7 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAnAbsoluteWriteIntoALeas
 	line := fmt.Sprintf("touch %s", filepath.Join(s.own, "std", "module.go"))
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedCommand("a1b2c3", s.session, line)
-		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+		s.Equal(verdict.Deny, v.Decision, "lapse %d", i+1)
 	}
 }
 
@@ -318,7 +318,7 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesABoundWorkerFromTheSessi
 	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1", Lease: "w"}
 	for i := range lapsesBeforeDegrade + 2 {
 		v := lapseNow(s.testContext(), s.T(), Dependencies{}, req, func(context.Context) {})
-		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+		s.Equal(verdict.Deny, v.Decision, "lapse %d", i+1)
 	}
 }
 
@@ -329,7 +329,7 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInAnAdoptedCheckou
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedWrite("a1b2c3", filepath.Join(adopted, "std", "module.go"))
-		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+		s.Equal(verdict.Deny, v.Decision, "lapse %d", i+1)
 	}
 }
 
@@ -339,7 +339,7 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInAnAdoptedCheck
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedCommand("a1b2c3", adopted, "make build")
-		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+		s.Equal(verdict.Deny, v.Decision, "lapse %d", i+1)
 	}
 }
 
@@ -347,46 +347,46 @@ func (s *LapseDegradeSuite) TestDegradedLapsePassesACheckoutWhoseJobEnded() {
 	row := jobtypes.Job{ID: "a", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StatePass, Registered: 1, CheckoutRoot: s.own}
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 	for range lapsesBeforeDegrade {
-		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
+		s.Equal(verdict.Deny, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
 	}
-	s.Equal(decisionAdvise, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
+	s.Equal(verdict.Advise, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapsePassesACommandOutsideEveryCheckout() {
 	scratch := s.T().TempDir()
 	for range lapsesBeforeDegrade {
-		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
+		s.Equal(verdict.Deny, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
 	}
-	s.Equal(decisionAdvise, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
+	s.Equal(verdict.Advise, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsCommandInALeasedCheckout() {
 	for range lapsesBeforeDegrade {
-		s.Equal(decisionDeny, s.lapsedCommand("", s.own, "make build").Decision)
+		s.Equal(verdict.Deny, s.lapsedCommand("", s.own, "make build").Decision)
 	}
-	s.Equal(decisionAdvise, s.lapsedCommand("", s.own, "make build").Decision)
+	s.Equal(verdict.Advise, s.lapsedCommand("", s.own, "make build").Decision)
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInALeasedCheckout() {
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedWrite("a1b2c3", filepath.Join(s.own, "std", "module.go"))
-		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+		s.Equal(verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapsePassesAWriteOutsideEveryCheckout() {
 	scratch := s.T().TempDir()
 	for range lapsesBeforeDegrade {
-		s.Equal(decisionDeny, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
+		s.Equal(verdict.Deny, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
 	}
-	s.Equal(decisionAdvise, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
+	s.Equal(verdict.Advise, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsWriteInALeasedCheckout() {
 	for range lapsesBeforeDegrade {
-		s.Equal(decisionDeny, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
+		s.Equal(verdict.Deny, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
 	}
-	s.Equal(decisionAdvise, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
+	s.Equal(verdict.Advise, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
 }
 
 func (s *LapsePersonOnlySuite) testContext() context.Context { return s.layers.of(s.T()) }

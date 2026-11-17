@@ -80,7 +80,7 @@ func TestGradeStallNamesTheExitOnTheVerdictLine(t *testing.T) {
 	t.Parallel()
 	at := location{cacheDir: t.TempDir()}
 	on := withSetting(string(denyRuleStall), builtin.Advise)
-	blocked := verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
+	blocked := verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
 
 	v := gradeStall(on, blocked, "job-a", at)
 	assert.Equal(t, fmt.Sprintf("outside the write paths. Only the root can clear this: exit with `%s`, naming it in unresolved_risks.\nthe rationale",
@@ -108,7 +108,7 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 	}
 
 	first := write()
-	require.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite)}, judgedAs(first))
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseWrite)}, judgedAs(first))
 	assert.Contains(t, first.Reason, hint.JobExit.With("lease-b", "--stdin"))
 	again := write()
 	assert.NotContains(t, again.Reason, hint.JobExit.With("lease-b", "--stdin"), "said once")

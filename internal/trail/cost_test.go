@@ -46,17 +46,17 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		c.ResultChars = new(1000)
 		c.Shadow = map[types.GuardProfile]verdict.Decision{
 			types.GuardProfileStrict: verdict.Deny,
-			types.GuardProfileLight:  verdict.Allow,
+			types.GuardProfileLight:  verdict.Defer,
 		}
 		switch sec {
 		case 1:
 			c.ContextTokens = 100_000
 			c.ToolMs, c.ResultDigest = 40, "r1"
-			c.Decision, c.Rule, c.DelegableClass = "advise", "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
+			c.Decision, c.Rule, c.DelegableClass = verdict.Advise, "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
 		case 15:
-			c.Decision, c.Rule, c.DelegableClass = "advise", "root-repeat", types.DelegableDiff // the next spawn is past the window
+			c.Decision, c.Rule, c.DelegableClass = verdict.Advise, "root-repeat", types.DelegableDiff // the next spawn is past the window
 		case 16:
-			c.Decision, c.Rule = "advise", "spawn-names-model" // not a cost advisory
+			c.Decision, c.Rule = verdict.Advise, "spawn-names-model" // not a cost advisory
 		case 30:
 			c.ContextTokens = 600_000
 		}
@@ -81,7 +81,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		Spawns:     &spawnTally{Total: 2, ByModel: []sessions.CountedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
 		Advisories: &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin},
 		Shadow: []shadowTally{
-			{Profile: types.GuardProfileLight, Decisions: map[verdict.Decision]int{verdict.Allow: 30}},
+			{Profile: types.GuardProfileLight, Decisions: map[verdict.Decision]int{verdict.Defer: 30}},
 			{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 30}},
 		},
 		Dollars: got.Dollars, // pinned below
@@ -117,7 +117,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	base := t.TempDir()
 	for range 2 {
 		AppendAgentCommand(t.Context(), base, AgentCommand{
-			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: "pass",
+			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: verdict.Defer,
 			AgentFacts: types.AgentFacts{
 				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
 				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: new(4000),
@@ -125,7 +125,8 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 			},
 		})
 	}
-	tr := ForSession(t.Context(), base, "s1", 100)
+	tr, err := ForSession(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
 
 	got := SummarizeCost(&tr, fixtureModels())
 
@@ -223,7 +224,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 
 func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	adv := mainCall(0, 1, "m")
-	adv.Decision, adv.Rule = "advise", "root-heavy-command"
+	adv.Decision, adv.Rule = verdict.Advise, "root-heavy-command"
 	main := []SessionCall{adv}
 	for i := 1; i <= followWithin+2; i++ {
 		main = append(main, mainCall(i, 1, "m"))
@@ -237,12 +238,11 @@ func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	assert.Equal(t, 1, outside.Ignored())
 }
 
-// A decision outside allow, advise and deny is counted under its own name, never folded
-// into another.
+// Every declared decision is printed, a zero included, in the declared order.
 func TestShadowTallyPrintsEveryDecision(t *testing.T) {
-	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[verdict.Decision]int{verdict.Advise: 2, "ask": 1}}
+	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[verdict.Decision]int{verdict.Advise: 2, verdict.Ask: 1}}
 
-	assert.Equal(t, "standard 0 allow/2 advise/0 deny/1 ask", tally.String())
+	assert.Equal(t, "standard 0 defer/2 advise/1 ask/0 deny", tally.String())
 }
 
 func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {

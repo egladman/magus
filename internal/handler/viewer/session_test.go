@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
@@ -62,7 +63,7 @@ func TestGetSessionActivityWindowsTheLastWrite(t *testing.T) {
 		loaded(s, 1, session.EventFileRead, "a.go"),
 		loaded(s, 2, session.EventFileWrite, "a.go"),
 		loaded(s, 3, session.EventShellCommand, "go test ./...", func(ev *session.AgentEvent) {
-			ev.Program, ev.Verdict, ev.Exit = "go", session.VerdictPass, 1
+			ev.Program, ev.Verdict, ev.Exit = "go", verdict.Defer, 1
 		}),
 		loaded(s, 4, session.EventHookOutput, "denied: rm -rf /secret"),
 		loaded(s, 5, session.EventSkillLoad, "magus-run"),
@@ -81,7 +82,7 @@ func TestGetSessionActivityWindowsTheLastWrite(t *testing.T) {
 		Transcript: "/home/u/.claude/projects/x/sess-1.jsonl",
 		Wrote:      true,
 		Turns: []*viewerv1.SessionTurn{
-			{Role: tool, Kind: session.EventShellCommand, Program: "go", Verdict: session.VerdictPass, Exit: 1, Time: atMs(3)},
+			{Role: tool, Kind: session.EventShellCommand, Program: "go", Verdict: string(verdict.Defer), Exit: 1, Time: atMs(3)},
 			{Role: tool, Kind: session.EventHookOutput, Time: atMs(4)},
 			{Role: tool, Kind: session.EventSkillLoad, Text: "magus-run", Time: atMs(5)},
 			{Role: tool, Kind: session.EventFileWrite, Text: "a.go", Time: atMs(6)},

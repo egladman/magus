@@ -38,7 +38,7 @@ func TestBuildGuard(t *testing.T) {
 		got := reg.ShellRules()
 		assert.Equal(t, []workspace.ShellRule{{
 			Name:     "no-curl-prod",
-			Decision: "deny",
+			Decision: string(verdict.Deny),
 			Program:  "curl",
 			Args:     []string{"https://prod.example/health"},
 			Reason:   "do not hit prod",
@@ -370,7 +370,7 @@ import "magus";
 
 magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     if (magus\guard.once("told")) { return magus\guard.advise("spawn told"); }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (magus\guard.once("told")) { return magus\guard.advise("command told"); }
@@ -531,7 +531,7 @@ func TestSpawnRuleFailuresAreErrors(t *testing.T) {
 	cases := []struct {
 		name, body, want string
 	}{
-		{"throws", `if (req.host == "") { throw "boom"; } return magus\guard.allow();`, "the rule raised"},
+		{"throws", `if (req.host == "") { throw "boom"; } return magus\guard.defer();`, "the rule raised"},
 		// Declared to return `any`, not `GuardVerdict`: a rule statically typed to return
 		// GuardVerdict cannot return a str at all (BZZ1005 catches it before this runs),
 		// so exercising decodeGuardVerdict's runtime check needs a looser signature.
@@ -559,12 +559,12 @@ func TestSpawnRuleAllowAllows(t *testing.T) {
 	rule, err := loadSpawnRule(t, `
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict { return magus\guard.allow(); });
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict { return magus\guard.defer(); });
 `)
 	require.NoError(t, err)
 	got, err := rule(t.Context(), types.SpawnRequest{}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, verdict.Verdict{Decision: verdict.Allow}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Defer}, got)
 }
 
 // Each way of registering a rule the guard could not honor stops the load with MGS1045.
@@ -724,8 +724,8 @@ func (s *StopRuleBindingSuite) TestRegisteringTwiceIsMisdeclared() {
 	err := s.sess.Exec(s.testContext(), `
 import "magus";
 
-magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.allow());
-magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.defer());
+magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.defer());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")
@@ -781,8 +781,8 @@ func (s *StepRuleBindingSuite) TestEachKindKeepsItsOwnRule() {
 import "magus";
 import "magus/agent";
 
-magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
-magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
 `))
 	s.Equal([]string{"egress", "refund"}, s.steps.Kinds())
 }
@@ -792,8 +792,8 @@ func (s *StepRuleBindingSuite) TestRegisteringAKindTwiceIsMisdeclared() {
 import "magus";
 import "magus/agent";
 
-magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
-magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")
@@ -805,7 +805,7 @@ func (s *StepRuleBindingSuite) TestAKindNamedForASeamIsMisdeclared() {
 import "magus";
 import "magus/agent";
 
-magus\guard.step("step", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("step", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")
@@ -821,7 +821,7 @@ func (s *StepRuleBindingSuite) TestAProjectMagusfileIsMisdeclared() {
 import "magus";
 import "magus/agent";
 
-magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")

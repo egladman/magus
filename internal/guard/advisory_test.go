@@ -136,15 +136,15 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 
 	held := heldAdvice{v: v}
 	gate := hint.NewGate(t.TempDir(), "s1")
-	first := verdict.Judgment{Decision: "pass"}
+	first := verdict.Judgment{Decision: verdict.Defer}
 	whys := map[string]string{}
 	held.speak(gate, &first, whys)
-	assert.Equal(t, verdict.Judgment{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(rule), Context: v.Context}, first)
 	assert.Equal(t, v.Why, whys[v.Context], "the rationale is noted for the stored advice")
 
-	again := verdict.Judgment{Decision: "pass"}
+	again := verdict.Judgment{Decision: verdict.Defer}
 	held.speak(gate, &again, whys)
-	assert.Equal(t, "pass", again.Decision, "once per session")
+	assert.Equal(t, verdict.Defer, again.Decision, "once per session")
 }
 
 func TestSymbolSearchAdvisesWhenSetToAdvise(t *testing.T) {

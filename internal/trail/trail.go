@@ -20,8 +20,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +32,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -89,10 +93,10 @@ type AgentCommand struct {
 	Tool       string
 	Command    string
 	Path       string
-	Decision   string
+	Decision   verdict.Decision
 	Reason     string
 	Context    string
-	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
+	// Rule is the catalogued rule behind a deny, advise or ask; empty for a defer.
 	Rule      string
 	Lease     string
 	LeaseFrom job.LeaseSource
@@ -141,7 +145,7 @@ type agentCommandRequest struct {
 
 type agentCommandResponse struct {
 	APIVersion types.APIVersion `json:"api_version"`
-	Decision   string           `json:"decision"`
+	Decision   verdict.Decision `json:"decision"`
 	Reason     string           `json:"reason,omitempty"`
 	Context    string           `json:"context,omitempty"`
 	Rule       string           `json:"rule,omitempty"`
@@ -149,6 +153,34 @@ type agentCommandResponse struct {
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
+}
+
+// RetiredDecisionError is an agent-command blob holding "pass" or "allow", the names the
+// guard's defer had before its decisions became defer, advise, ask and deny. A reader
+// refuses the store rather than drop the observation from what it counts.
+type RetiredDecisionError struct {
+	// Store is the activity directory the blob was read from, and Ref the blob.
+	Store    string
+	Ref      string
+	Decision string
+}
+
+func (e *RetiredDecisionError) Error() string {
+	return fmt.Sprintf("activity: %s holds the retired guard decision %q in blob %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
+}
+
+// retiredDecisions are the decision names no build after the defer rename writes.
+func retiredDecisions() []string { return []string{"pass", "allow"} }
+
+// decodeAgentBlob decodes the agent-command blob ref under base into v. A retired decision
+// is a [*RetiredDecisionError]; any other failure is returned as is.
+func decodeAgentBlob(base, ref string, raw []byte, v any) error {
+	err := codec.Unmarshal(raw, v)
+	var unknown *verdict.UnknownDecisionError
+	if errors.As(err, &unknown) && slices.Contains(retiredDecisions(), unknown.Decision) {
+		return &RetiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: unknown.Decision}
+	}
+	return err
 }
 
 // redactFailures redacts each failure's error text, which quotes workspace code and may
@@ -227,7 +259,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	}
 	preview := "observed"
 	if command.Decision != "" {
-		preview = "guard: " + command.Decision
+		preview = "guard: " + string(command.Decision)
 	}
 	Append(ctx, base, trailtypes.Event{
 		Ts:            time.Now().UnixMilli(),
@@ -269,7 +301,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // process's own assertion about itself, recorded verbatim and corroborated by nothing. NO
 // verdict may key on it; a spawn stays outside the guard whatever it claims. Named
 // DeclaredModel rather than Model because "model" already names the guard's reply CHANNEL in
-// its coverage vocabulary (deny=model, advise=model, pass=none), and a bare Model field here
+// its coverage vocabulary (deny=model, advise=model, defer=none), and a bare Model field here
 // would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
 	Workspace string

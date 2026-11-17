@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // TestHookWiringSubjectNamesEveryDocumentedHost walks the paths the four guide pages
@@ -58,7 +60,7 @@ func TestHookWiringSubjectIsSilentEverywhereElse(t *testing.T) {
 func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
 	g := gradeHookWiringWrite("/repo", "harness/wiring", false, ".claude/settings.json")
 
-	require.Equal(t, "deny", g.Decision)
+	require.Equal(t, verdict.Deny, g.Decision)
 	assert.Contains(t, g.Reason, "harness/wiring", "the denial must name the lease it refused")
 	assert.Contains(t, g.Reason, ".claude/settings.json", "the denial must name the file")
 	assert.Contains(t, g.Reason, "hook wiring", "the denial must say what the file IS")
@@ -73,7 +75,7 @@ func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
 func TestGradeHookWiringWriteDeniesAnAgentAttributedSession(t *testing.T) {
 	g := gradeHookWiringWrite("/repo", "", true, ".claude/settings.json")
 
-	require.Equal(t, "deny", g.Decision, "an agent-attributed session with no lease must still be denied")
+	require.Equal(t, verdict.Deny, g.Decision, "an agent-attributed session with no lease must still be denied")
 	assert.Contains(t, g.Reason, ".claude/settings.json", "the denial must name the file")
 	assert.Contains(t, g.Reason, "hook wiring", "the denial must say what the file IS")
 	assert.Contains(t, g.Reason, "agent", "the denial must say attribution, not binding, is why")
@@ -89,7 +91,7 @@ func TestGradeHookWiringWriteDeniesAnAgentAttributedSession(t *testing.T) {
 func TestGradeHookWiringWriteAdvisesAPersonsOwnSession(t *testing.T) {
 	g := gradeHookWiringWrite("/repo", "", false, ".cursor/hooks.json")
 
-	require.Equal(t, writeGrade{Decision: "advise", Context: g.Context, Why: g.Why, Kind: advisoryHookWiring}, g,
+	require.Equal(t, writeGrade{Decision: verdict.Advise, Context: g.Context, Why: g.Why, Kind: advisoryHookWiring}, g,
 		"a standing fact is said once per session")
 	assert.Contains(t, g.Context, ".cursor/hooks.json")
 	assert.Contains(t, g.Why, "next session start", "the advisory must say when the edit takes effect")

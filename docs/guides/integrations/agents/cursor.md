@@ -195,11 +195,19 @@ as on every other host. The tool name is part of the key because Cursor reuses o
 2026.10.01). A filed verdict whose after-call event never came is removed after a
 day.
 
-The shell is gated on `preToolUse`, and a command that passes runs exactly as Cursor
-sent it. Cursor already gives a command empty stdin (probed live), and magus
+The shell is gated on `preToolUse`, and a command the guard defers runs exactly as
+Cursor sent it. Cursor already gives a command empty stdin (probed live), and magus
 transforms nothing a host sends, on this host or any other. `beforeShellExecution` then sees the same line, recognizes it as already
-judged, and allows it; it judges only a command `preToolUse` never saw, which keeps
+judged, and defers it; it judges only a command `preToolUse` never saw, which keeps
 it as the fallback.
+
+The guard never answers yes. Its decisions are defer, advise, ask and deny, and a
+defer is no objection. Cursor must answer every gating event, so the script answers
+a defer or an advise with Cursor's own `permission: "ask"`, never `allow`: Cursor's
+approval flow decides the call. On `beforeShellExecution` and `beforeMCPExecution`
+that is Cursor's prompt, so a command or MCP call the guard defers now meets it;
+Cursor's own allowlist and auto-run settings still apply. `allow` is written only
+for events no guard judged, such as `subagentStart`.
 
 A run of a `human_only` target gets the verdict `ask`. Cursor documents `ask` on
 `preToolUse` as accepted by its schema and not enforced, so that event files the
@@ -319,10 +327,10 @@ sources:
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 36
-// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model
-// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
+// magus-guard-template: 37
+// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model
+// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model defer=none ask=human
 
 import "std";
 import "flags";
@@ -342,6 +350,11 @@ import "lib/hook" as hook;
 final SESSION_BRIEF_MAX_BYTES = 16384;
 
 final ALLOW = `{"permission":"allow"}`;
+
+// DEFER answers a call the guard defers or advises. The guard never answers yes, and
+// Cursor must answer every gating event, so this is Cursor's ask: its own approval flow
+// decides the call. ALLOW stays for the events no guard judged.
+final DEFER = `{"permission":"ask"}`;
 
 // The only reply a beforeSubmitPrompt hook owes Cursor: the message goes through.
 final SUBMIT_CONTINUE = `{"continue":true}`;
@@ -847,8 +860,8 @@ fun blockedAsk(reason: str, command: str) > str {
 }
 
 // gateReply renders a verdict for a gating event. An ask is a prompt where
-// the event shows one, else a deny. Pass and advise allow: advice waits for
-// the after-call event. An unknown decision is refused, never consent.
+// the event shows one, else a deny. A defer or an advise is DEFER, Cursor's ask:
+// advice waits for the after-call event. An unknown decision is refused, never consent.
 // A deny shows the person its first line. A blocked ask keeps its whole text:
 // its last line says what the person must do.
 fun gateReply(v: Verdict, eventName: str, command: str) > str {
@@ -863,7 +876,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         if (rendersPrompt(eventName)) { return askReply(v.reason); }
         return blockedAsk(v.reason, command: command);
     }
-    if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
+    if (v.decision == "defer" or v.decision == "advise") { return DEFER; }
     if (v.decision == UNJUDGED and hook\recovers(command, root: v.root)) {
         return json\stringify({
             "permission": "allow",
@@ -908,7 +921,7 @@ fun gateShell(scope: Scope, event: any?) > str {
         remember("ask", parts: [scope.session, command], value: v.reason);
         return ALLOW;
     }
-    if (v.decision == "pass" or v.decision == "advise") {
+    if (v.decision == "defer" or v.decision == "advise") {
         remember("shell", parts: [scope.session, command], value: "");
     }
     return gateReply(v, eventName: "preToolUse", command: command);
@@ -1254,7 +1267,7 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
         final command = hook\field(event, dotPath: "command");
         final asked = recall("ask", parts: [scope.session, command]);
         if (asked != null) { return askReply(asked!); }
-        if (recall("shell", parts: [scope.session, command]) != null) { return ALLOW; }
+        if (recall("shell", parts: [scope.session, command]) != null) { return DEFER; }
         return gateCall(scope, event: event, payload: command, asPath: false);
     }
     if (eventName == "preToolUse") { return gateTool(scope, event: event); }
@@ -1338,6 +1351,20 @@ test "while no magus judges, Cursor lets the repair magus supplied alone run" {
     std\assert(refused["permission"] == "deny", message: "{refused}");
     env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
     env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
+}
+
+test "a defer or an advise is Cursor's ask, never its allow" {
+    foreach (decision in ["defer", "advise"]) {
+        final v = Verdict{ decision = decision, reason = "", context = "fyi" };
+        final reply: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: "ls")) catch {<str: any>};
+        std\assert(reply["permission"] == "ask", message: "{decision}: {reply}");
+    }
+}
+
+test "a retired decision is refused" {
+    final v = Verdict{ decision = "pass", reason = "", context = "" };
+    final reply: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: "ls")) catch {<str: any>};
+    std\assert(reply["permission"] == "deny", message: "{reply}");
 }
 ```
 

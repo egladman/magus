@@ -425,11 +425,12 @@ var glueCoverageHost = regexp.MustCompile(`magus-guard-coverage:.*\bhost=(\S+)`)
 // glueVerdicts are the decisions `magus shell` renders, plus one it never does. The values
 // are fixed here rather than taken from a run so the rendered bytes belong to the test, and
 // the reason carries the characters a naive template would break on. The unknown decision
-// stands in for a contract that grew after a copy was installed: it must never render as
-// an allow.
+// stands in for a contract that grew after a copy was installed, and the retired pass for
+// one that shrank: neither may render as a yes.
 var glueVerdicts = []map[string]any{
 	{"decision": "deny", "reason": `git stash is denied here: "quoted" & <angled>`},
 	{"decision": "advise", "context": "magus workspace: `magus refs <sym>` for code"},
+	{"decision": "defer"},
 	{"decision": "pass"},
 	{"decision": "ask", "reason": `pushing abc1234, which no passing gate covers: "quoted" & <angled>`},
 	{"decision": "maybe", "reason": "a decision no template knows"},
@@ -613,7 +614,7 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 						decision = ""
 					}
 					switch decision {
-					case "maybe":
+					case "maybe", "pass":
 						assert.Contains(t, text, "deny", "%s (%s) must refuse a decision it does not know, never allow it", name, a.label)
 					case "ask":
 						assert.NotEmpty(t, text, "%s (%s) renders an ask as nothing, which the host takes as allow", name, a.label)
@@ -668,18 +669,19 @@ func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
 	})
 	t.Run("approval request for a prompted run", func(t *testing.T) {
 		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "ask"))
-		assert.Contains(t, render(t, "magus run agent-bench-run .", "PermissionRequest", "pass"), `"behavior":"allow"`)
+		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "defer"),
+			"a defer is no decision: the person answers Codex's prompt")
 	})
 	t.Run("run no rule prompts for", func(t *testing.T) {
 		got := render(t, "magus run lint .", "PreToolUse", "ask")
 		assert.Contains(t, got, `"permissionDecision":"deny"`)
 		assert.Contains(t, got, "own terminal")
-		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "pass"), "allow",
-			"a pass is not consent to a prompt magus did not configure")
+		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "defer"), "allow",
+			"a defer is not consent to any prompt")
 	})
 }
 
-// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a pass renders
+// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a defer renders
 // nothing and an advise renders its context alone, whatever the host or the tool. Claude
 // Code and Cursor already give a shell command a closed stdin, Codex never did, and a
 // rewrite would take a command out of reach of the person's own permission rules.
@@ -696,9 +698,9 @@ func TestGlueNeverRewritesTheCommand(t *testing.T) {
 			tmpl, err := template.New(tc.label).Funcs(funcs).Option("missingkey=error").Parse(body)
 			require.NoError(t, err)
 
-			var pass strings.Builder
-			require.NoError(t, tmpl.Execute(&pass, map[string]any{"decision": "pass"}))
-			assert.Empty(t, pass.String(), "a pass renders nothing")
+			var deferred strings.Builder
+			require.NoError(t, tmpl.Execute(&deferred, map[string]any{"decision": "defer"}))
+			assert.Empty(t, deferred.String(), "a defer renders nothing")
 
 			var advise strings.Builder
 			require.NoError(t, tmpl.Execute(&advise, map[string]any{"decision": "advise", "context": "said once"}))
@@ -886,10 +888,10 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 					switch verdict["decision"] {
 					case "ask":
 						assert.Equal(t, "ask", reply["permission"], "an ask is Cursor's own approval prompt")
-					case "pass", "advise":
-						assert.Equal(t, "allow", reply["permission"])
+					case "defer", "advise":
+						assert.Equal(t, "ask", reply["permission"], "the guard never answers yes: a defer is Cursor's ask")
 					default:
-						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
+						assert.Equal(t, "deny", reply["permission"], "only defer and advise go to Cursor's prompt; %s must not", verdict["decision"])
 					}
 				case "advise":
 					if verdict["decision"] == "advise" {

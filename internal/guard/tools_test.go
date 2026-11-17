@@ -222,18 +222,18 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 		return toolEnvelope(t, "paging-tools", root, "Read", map[string]any{"file_path": abs, "offset": float64(offset), "limit": float64(limit)})
 	}
 
-	assert.NotEqual(t, "deny", judge("a1", bash("sed -n 1,40p paged.go")).Decision)
-	assert.NotEqual(t, "deny", judge("a1", read(41, 40)).Decision, "a read tool's window counts with the shell's")
+	assert.NotEqual(t, verdict.Deny, judge("a1", bash("sed -n 1,40p paged.go")).Decision)
+	assert.NotEqual(t, verdict.Deny, judge("a1", read(41, 40)).Decision, "a read tool's window counts with the shell's")
 	refused := judge("a1", bash("sed -n 81,121p paged.go"))
 	refusedShape, _ := spoken(refused)
-	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, refusedShape)
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleReadPaging)}, refusedShape)
 	again, _ := spoken(judge("a1", read(81, 41)))
 	assert.Equal(t, refusedShape, again, "the same window through the read tool is refused too")
 
-	assert.NotEqual(t, "deny", judge("a2", read(1, 40)).Decision)
-	assert.NotEqual(t, "deny", judge("a2", bash("sed -n 41,80p paged.go")).Decision)
-	assert.Equal(t, "deny", judge("a2", read(81, 41)).Decision, "the third window, by the read tool")
-	assert.Equal(t, "deny", judge("a2", bash("sed -n 81,121p paged.go")).Decision, "and again by the shell")
+	assert.NotEqual(t, verdict.Deny, judge("a2", read(1, 40)).Decision)
+	assert.NotEqual(t, verdict.Deny, judge("a2", bash("sed -n 41,80p paged.go")).Decision)
+	assert.Equal(t, verdict.Deny, judge("a2", read(81, 41)).Decision, "the third window, by the read tool")
+	assert.Equal(t, verdict.Deny, judge("a2", bash("sed -n 81,121p paged.go")).Decision, "and again by the shell")
 }
 
 func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
@@ -247,18 +247,18 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 	lowered := withSetting(string(denyRuleUnjudgedStep), builtin.Advise)
 	first := call(lowered, "unjudged-advise", "mcp__browser__click")
 	firstShape, firstText := spoken(first)
-	assert.Equal(t, verdict.Judgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedStep)}, firstShape, "set to advise, it advises")
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleUnjudgedStep)}, firstShape, "set to advise, it advises")
 	assert.Contains(t, firstText, "mcp__browser__click")
-	assert.Equal(t, decisionPass, call(lowered, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
+	assert.Equal(t, verdict.Defer, call(lowered, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
 
 	denied := call(Dependencies{}, "unjudged-deny", "mcp__browser__click")
 	deniedShape, deniedText := spoken(denied)
-	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
 	assert.Contains(t, deniedText, "mcp__browser__click")
 
-	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedStep), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
+	assert.Equal(t, verdict.Defer, call(withSetting(string(denyRuleUnjudgedStep), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
 		"an inert tool is never named")
-	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedStep), builtin.Off), "unjudged-off", "mcp__browser__click").Decision)
+	assert.Equal(t, verdict.Defer, call(withSetting(string(denyRuleUnjudgedStep), builtin.Off), "unjudged-off", "mcp__browser__click").Decision)
 }
 
 // The read-only fast path: a call to an inert tool is answered before the rules load, which
@@ -270,14 +270,14 @@ func TestJudgeWithinAnswersAnInertCallWithoutLoadingRules(t *testing.T) {
 	judged := 0
 	judge := func(context.Context) verdict.Judgment {
 		judged++
-		return verdict.Judgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: verdict.Defer}
 	}
 	request := func(tool string, input map[string]any) Request {
 		return Request{Input: toolEnvelope(t, "fast", root, tool, input), Host: "claude-code", Form: "buzz", Session: "fast", Tools: tools}
 	}
 
 	v := JudgeWithin(ctx, Dependencies{}, request("TodoWrite", map[string]any{"todos": []any{}}), judge)
-	assert.Equal(t, decisionPass, v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 	assert.Equal(t, 0, judged, "nothing loaded for a todo list")
 
 	JudgeWithin(ctx, Dependencies{}, request("Skill", map[string]any{"skill": "magus-run"}), judge)
@@ -340,7 +340,7 @@ func TestEnteringATreeNoJobOwnsIsRefused(t *testing.T) {
 	input := toolEnvelope(t, "enter-other", root, "EnterWorktree", map[string]any{"path": other})
 	v := Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code", Dir: root, Tools: testTools(t)})
 	shape, text := spoken(v)
-	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleSiblingCheckout)}, shape)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSiblingCheckout)}, shape)
 	assert.Contains(t, text, other)
 }
 

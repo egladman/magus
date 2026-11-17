@@ -102,7 +102,11 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 		}
 		switch e.Kind {
 		case trailtypes.KindAgentCommand:
-			if obs, ok := feedbackObservation(s.base, e); ok {
+			obs, ok, err := feedbackObservation(s.base, e)
+			if err != nil {
+				return out, err
+			}
+			if ok {
 				out.Observations = append(out.Observations, obs)
 			}
 		case trailtypes.KindAgentSpawn:
@@ -123,30 +127,41 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 	return out, nil
 }
 
-func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool) {
+// feedbackObservation reads one agent-command event's blobs. It reports false for an event
+// whose request blob is gone or undecodable, and a [*RetiredDecisionError] for a blob
+// holding a retired guard decision.
+func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool, error) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
+	var retired *RetiredDecisionError
 	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
-	if err != nil || codec.Unmarshal(raw, &req) != nil {
-		return trailrecord.Observation{}, false
+	if err != nil {
+		return trailrecord.Observation{}, false, nil
+	}
+	if err := decodeAgentBlob(base, e.RequestRef, raw, &req); errors.As(err, &retired) {
+		return trailrecord.Observation{}, false, err
+	} else if err != nil {
+		return trailrecord.Observation{}, false, nil
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {
 		if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
-			_ = codec.Unmarshal(raw, &resp)
+			if err := decodeAgentBlob(base, e.ResponseRef, raw, &resp); errors.As(err, &retired) {
+				return trailrecord.Observation{}, false, err
+			}
 		}
 	}
 	obs := trailrecord.Observation{
 		At: e.Ts, Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
-		Decision: resp.Decision, Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,
+		Decision: string(resp.Decision), Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,
 		Nexts: servedNexts(fmt.Sprintf("%s\n%s", resp.Reason, resp.Context)),
 	}
 	if req.Command != "" {
 		obs.Shape = CommandShape(req.Command)
 		obs.Shapes = CommandShapes(req.Command)
 	}
-	return obs, true
+	return obs, true, nil
 }
 
 // eventsInWindow decodes the events of the trail at base whose Ts falls in [since, until],

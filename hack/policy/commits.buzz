@@ -361,7 +361,7 @@ export fun decideCommit(programs: [helpers\Program], baseBranch: str) > GuardVer
         }
     }
     if (problems.len() == 0) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     var fix = plainFix;
     if (baseBranch != "") {
@@ -402,7 +402,7 @@ test "a plain lowercase imperative subject passes in every tool" {
         ["jj", "desc", "--message=trim a fragment"],
     ]) {
         final v = ask(call);
-        std\assert(v.decision == magus\GuardDecision.allow, message: "{call.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.defer, message: "{call.join(" ")}: {v.reason}");
     }
 }
 
@@ -436,7 +436,7 @@ test "each subject rule is named when broken" {
 
 test "the words of a subject are proofread's, not this rule's" {
     foreach (subject in ["added a vale spell", "fixing the key", "trim a fragment.", "x".repeat(101), "add a robust vale spell"]) {
-        std\assert(ask(["git", "commit", "-m", subject]).decision == magus\GuardDecision.allow, message: "judged by proofread's commit-message kind: {subject}");
+        std\assert(ask(["git", "commit", "-m", subject]).decision == magus\GuardDecision.defer, message: "judged by proofread's commit-message kind: {subject}");
     }
 }
 
@@ -492,8 +492,8 @@ test "a commit on the base branch keeps its prefix out of the wording rules" {
     final onBase = fun (subject: str) > GuardVerdict {
         return judged(helpers\vcsRequest([["git", "commit", "-m", subject]]), baseBranch: "main");
     };
-    std\assert(onBase("fix(cache): keep the key stable").decision == magus\GuardDecision.allow, message: "conventional");
-    std\assert(onBase("feat(proofread): adds a vale spell").decision == magus\GuardDecision.allow, message: "mood is proofread's");
+    std\assert(onBase("fix(cache): keep the key stable").decision == magus\GuardDecision.defer, message: "conventional");
+    std\assert(onBase("feat(proofread): adds a vale spell").decision == magus\GuardDecision.defer, message: "mood is proofread's");
 }
 
 test "an attribution is found in any case, on any line" {
@@ -524,7 +524,7 @@ test "a commit on the base branch takes the conventional subject" {
         ["jj", "describe", "-m", "docs: README framing; one line per audience"],
     ]) {
         final v = onBase(call);
-        std\assert(v.decision == magus\GuardDecision.allow, message: "{call.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.defer, message: "{call.join(" ")}: {v.reason}");
     }
     final plain = onBase(["git", "commit", "-m", "trim a fragment"]);
     std\assert(plain.decision == magus\GuardDecision.deny, message: "a plain subject on the base branch");
@@ -550,7 +550,7 @@ test "every problem is named, once, across chained commits" {
 
 test "a line that only mentions a commit, and other version-control calls, stay silent" {
     final quiet = helpers\request([["rg", "git commit"], ["echo", "git", "commit", "-m", "Bad."]]);
-    std\assert(judged(quiet, baseBranch: "").decision == magus\GuardDecision.allow, message: "no version control ran");
+    std\assert(judged(quiet, baseBranch: "").decision == magus\GuardDecision.defer, message: "no version control ran");
     foreach (call in [
         ["git", "log", "-m", "Bad."],
         ["git", "help", "commit"],
@@ -560,7 +560,7 @@ test "a line that only mentions a commit, and other version-control calls, stay 
         ["jj", "new", "-m", "Bad."],
         ["jj", "describe", "-h"],
     ]) {
-        std\assert(ask(call).decision == magus\GuardDecision.allow, message: call.join(" "));
+        std\assert(ask(call).decision == magus\GuardDecision.defer, message: call.join(" "));
     }
 }
 
@@ -579,8 +579,8 @@ test "a message written through a heredoc substitution is judged from its body" 
         std\assert(v.reason.indexOf(want) != null, message: want);
     }
     final plain = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs("git commit -m \"$(cat <<'EOF'\ntrim a fragment\nEOF\n)\""));
-    std\assert(judged(plain, baseBranch: "").decision == magus\GuardDecision.allow, message: "a one-line heredoc subject passes");
-    std\assert(judged(programs, baseBranch: "").decision == magus\GuardDecision.allow, message: "a value known only at run time goes unjudged");
+    std\assert(judged(plain, baseBranch: "").decision == magus\GuardDecision.defer, message: "a one-line heredoc subject passes");
+    std\assert(judged(programs, baseBranch: "").decision == magus\GuardDecision.defer, message: "a value known only at run time goes unjudged");
 }
 
 test "no message sends the reader to a skill" {

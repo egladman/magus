@@ -115,7 +115,7 @@ func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now t
 		return verdict.Judgment{}, false
 	}
 	v, judged, resumes := judgeStopTasks(deps, said, env, resumesFrom, now)
-	if env.AgentID != "" && v.Decision != decisionDeny && !resumes {
+	if env.AgentID != "" && v.Decision != verdict.Deny && !resumes {
 		said.Touch(stoppedAgentKind(env.AgentID))
 	}
 	return v, judged
@@ -162,7 +162,7 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	}
 	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:   decisionAdvise,
+		Decision:   verdict.Advise,
 		Rule:       string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
 			plural.Word(len(tasks), "a shell command", "shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
@@ -175,7 +175,7 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
 	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:   decisionDeny,
+		Decision:   verdict.Deny,
 		Rule:       string(denyRuleBackgroundLeft),
 		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
 			stoppableTasks(tasks, now), why),
@@ -187,7 +187,7 @@ func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) verdict.J
 func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
 	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:   decisionAdvise,
+		Decision:   verdict.Advise,
 		Rule:       string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
 			why, plural.Word(len(tasks), "A shell command", "Shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
@@ -333,7 +333,7 @@ func subagentStopped(raw string) bool {
 // unless the host resumes the subagent itself (see resumedStop).
 func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v verdict.Judgment) (bool, error) {
 	switch {
-	case v.Decision == decisionDeny:
+	case v.Decision == verdict.Deny:
 		return false, nil
 	case sessionEnded(raw):
 		_, ended, err := store.EndSession(ctx, c)

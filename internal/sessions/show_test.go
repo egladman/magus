@@ -38,7 +38,7 @@ func TestShowGroupsCommandsByProgram(t *testing.T) {
 
 	assert.Contains(t, out, "host h1")
 	assert.Contains(t, out, "go ")
-	assert.Contains(t, out, "pass 2", "the stand-in rules pass both commands")
+	assert.Contains(t, out, "defer 2", "the stand-in rules defer both commands")
 	assert.Contains(t, out, "host recorded 1 denied")
 	assert.Contains(t, out, "magus-run")
 	assert.Contains(t, out, "internal/foo.go")

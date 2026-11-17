@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
@@ -34,7 +35,7 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 	AppendAgentCommand(context.Background(), base, AgentCommand{
-		Host: "claude-code", Session: "one", Tool: "shell.command", Command: "magus run test .", Decision: "pass",
+		Host: "claude-code", Session: "one", Tool: "shell.command", Command: "magus run test .", Decision: verdict.Defer,
 	})
 
 	feedback, err = RecentGuardFeedback(t.Context(), base, "one", 100)
@@ -103,16 +104,16 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
-	deny := func(lease, rule, decision string) {
+	deny := func(lease, rule string, decision verdict.Decision) {
 		AppendAgentCommand(t.Context(), base, AgentCommand{
 			Host: "claude-code", Session: "one", Tool: "shell.command", Command: "edit " + rule,
 			Decision: decision, Reason: rule + " says no", Rule: rule, Lease: lease,
 		})
 	}
-	deny("wave/a", "lease-write", "deny")
-	deny("wave/a", "", "pass")
-	deny("wave/b", "focus-read", "deny")
-	deny("wave/a", "raw-tool", "deny")
+	deny("wave/a", "lease-write", verdict.Deny)
+	deny("wave/a", "", verdict.Defer)
+	deny("wave/b", "focus-read", verdict.Deny)
+	deny("wave/a", "raw-tool", verdict.Deny)
 
 	got, known, err := LeaseDenials(t.Context(), base, "wave/a", 0, 64)
 	require.NoError(t, err)
@@ -157,6 +158,6 @@ func recordFeedbackCommand(t *testing.T, base, host, session, command string) {
 	t.Helper()
 	AppendAgentCommand(context.Background(), base, AgentCommand{
 		Host: host, Session: session, Tool: "shell.command", Command: command,
-		Decision: "deny", Reason: "run through magus", Rule: "raw-tool",
+		Decision: verdict.Deny, Reason: "run through magus", Rule: "raw-tool",
 	})
 }

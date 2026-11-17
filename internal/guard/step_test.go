@@ -188,7 +188,7 @@ func (s *stepRecordSuite) TestAnUndeclaredKindSentToJudgeIsDenied() {
 
 	j := Judge(ctx, Dependencies{}, Request{Input: s.record(step)})
 
-	s.Equal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: j.Reason, Rule: string(denyRuleUnjudgedStep)}, j)
+	s.Equal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: j.Reason, Rule: string(denyRuleUnjudgedStep)}, j)
 	s.Contains(j.Reason, `kind "refund"`)
 }
 
@@ -199,7 +199,7 @@ func (s *stepRecordSuite) TestAStepJudgeCannotReadIsDenied() {
 
 	j := Judge(ctx, Dependencies{}, Request{Input: s.record(step)})
 
-	s.Equal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: j.Reason, Rule: string(denyRuleStepInput)}, j)
+	s.Equal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: j.Reason, Rule: string(denyRuleStepInput)}, j)
 	s.Contains(j.Reason, "api_version")
 }
 
@@ -219,28 +219,28 @@ type stricterStepSuite struct {
 
 func TestStricterStep(t *testing.T) { suite.Run(t, new(stricterStepSuite)) }
 
-func stepJudged(decision, text string) verdict.Judgment {
-	if decision == decisionAdvise {
+func stepJudged(decision verdict.Decision, text string) verdict.Judgment {
+	if decision == verdict.Advise {
 		return verdict.Judgment{Decision: decision, Context: text}
 	}
 	return verdict.Judgment{Decision: decision, Reason: text}
 }
 
 func (s *stricterStepSuite) TestADenyOutranksAnAsk() {
-	s.Equal(decisionDeny, stricterStep(stepJudged(decisionAsk, "a"), stepJudged(decisionDeny, "d")).Decision)
+	s.Equal(verdict.Deny, stricterStep(stepJudged(verdict.Ask, "a"), stepJudged(verdict.Deny, "d")).Decision)
 }
 
 func (s *stricterStepSuite) TestTwoAdvisoriesKeepBothContexts() {
-	s.Equal("one\n\ntwo", stricterStep(stepJudged(decisionAdvise, "one"), stepJudged(decisionAdvise, "two")).Context)
+	s.Equal("one\n\ntwo", stricterStep(stepJudged(verdict.Advise, "one"), stepJudged(verdict.Advise, "two")).Context)
 }
 
 func (s *stricterStepSuite) TestTwoDeniesKeepTheFirst() {
-	s.Equal("first", stricterStep(stepJudged(decisionDeny, "first"), stepJudged(decisionDeny, "second")).Reason)
+	s.Equal("first", stricterStep(stepJudged(verdict.Deny, "first"), stepJudged(verdict.Deny, "second")).Reason)
 }
 
 func (s *stricterStepSuite) TestTheStricterKeepsTheFirstLease() {
-	a := stepJudged(decisionPass, "")
+	a := stepJudged(verdict.Defer, "")
 	a.Lease = "task"
 
-	s.Equal("task", stricterStep(a, stepJudged(decisionDeny, "d")).Lease)
+	s.Equal("task", stricterStep(a, stepJudged(verdict.Deny, "d")).Lease)
 }

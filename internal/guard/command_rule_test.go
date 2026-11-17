@@ -56,7 +56,7 @@ func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 	require.NotEmpty(t, at.dir)
 	probe := &commandRuleProbe{}
 	v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 	require.Len(t, probe.asked, 1)
 	assert.Equal(t, types.CommandRequest{
 		Host: "claude-code", Session: "8f2c6a1e",
@@ -239,9 +239,9 @@ func TestCommandInvocations(t *testing.T) {
 func TestCommandRuleStrengthensOnly(t *testing.T) {
 	t.Run("a built-in deny stands", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
-		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Allow}}
+		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Defer}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "git stash", Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.NotEqual(t, workspaceCommandRule, v.Rule)
 		assert.Empty(t, probe.asked)
 	})
@@ -260,13 +260,13 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		ctx, _ := spawnFixture(t)
 		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Batch-poll instead."}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh pr checks 1", Host: "claude-code"})
-		assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: "advise", Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
+		assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Advise, Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
 	})
 	t.Run("an allow changes nothing", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
-		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Allow}}
+		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Defer}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code"})
-		assert.Equal(t, "pass", v.Decision)
+		assert.Equal(t, verdict.Defer, v.Decision)
 		require.Len(t, probe.asked, 1)
 	})
 }
@@ -312,17 +312,17 @@ func readCommandBlob(t *testing.T, cacheDir string, e trailtypes.Event) commandB
 // an agent's edit to the policy can tighten it but not loosen it.
 func TestCommandRulesKeepTheStricterSide(t *testing.T) {
 	deny := verdict.Verdict{Decision: verdict.Deny, Reason: "no watching"}
-	allow := verdict.Verdict{Decision: verdict.Allow}
+	allow := verdict.Verdict{Decision: verdict.Defer}
 	cases := []struct {
 		name           string
 		live, approved *verdict.Verdict
-		want           string
+		want           verdict.Decision
 		decidedBy      string
 	}{
-		{"a tightening in the working tree applies at once", &deny, &allow, "deny", decidedByWorktree},
-		{"a loosening in the working tree waits for approval", &allow, &deny, "deny", decidedByApproved},
-		{"a rule deleted from the working tree still answers from the approved side", nil, &deny, "deny", decidedByApproved},
-		{"no approved side runs the working tree alone", &allow, nil, "pass", ""},
+		{"a tightening in the working tree applies at once", &deny, &allow, verdict.Deny, decidedByWorktree},
+		{"a loosening in the working tree waits for approval", &allow, &deny, verdict.Deny, decidedByApproved},
+		{"a rule deleted from the working tree still answers from the approved side", nil, &deny, verdict.Deny, decidedByApproved},
+		{"no approved side runs the working tree alone", &allow, nil, verdict.Defer, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -354,7 +354,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedCommandRule(t *testing.T) {
 		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return approved, nil },
 	}
 	v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Contains(t, v.Reason, "no watching")
 }
 
@@ -398,7 +398,7 @@ func TestSlowWorkingTreeCommandRuleIsNamedWithItsBudget(t *testing.T) {
 	}}
 
 	v := Judge(ctx, deps, Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Regexp(t, `the working tree's magus\\guard\.command rule did not answer within \d+ms`, v.Reason)
 }
 
@@ -476,14 +476,14 @@ func TestCommandRuleAdviceStandsDownOnAServedCommand(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Batch-poll instead."}}
 	v, rec := gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
-		verdict.Judgment{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
-	assert.Equal(t, "pass", v.Decision)
+		verdict.Judgment{Decision: verdict.Defer}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
+	assert.Equal(t, verdict.Defer, v.Decision)
 	assert.Empty(t, rec.decidedBy)
 
 	probe.answer = verdict.Verdict{Decision: verdict.Deny, Reason: "no"}
 	v, _ = gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
-		verdict.Judgment{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
-	assert.Equal(t, "deny", v.Decision, "its deny still holds")
+		verdict.Judgment{Decision: verdict.Defer}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
+	assert.Equal(t, verdict.Deny, v.Decision, "its deny still holds")
 }
 
 // slowCompiles is a telemetry provider for one load that counts its Buzz compile phases and
@@ -592,7 +592,7 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 		return []verdict.Decision{decide(rules.CommandRule()), decide(approved)}
 	}
 
-	assert.Equal(t, []verdict.Decision{verdict.Allow, verdict.Deny}, judge("allow()"))
+	assert.Equal(t, []verdict.Decision{verdict.Defer, verdict.Deny}, judge("allow()"))
 
 	moved := 0
 	require.NoError(t, filepath.WalkDir(worktreeStore, func(path string, d fs.DirEntry, err error) error {

@@ -80,7 +80,7 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gdeadbee", "pass", "affected", "ci")
 		assert.Equal(t, gateAbsent, gateCoverageAt(dir, "abc1234"))
 		decision, _ := gradePushWithoutGate(pushEvidence{cover: gateCoverageAt(dir, "abc1234"), commit: "abc1234"}, "")
-		assert.Equal(t, decisionDeny, decision)
+		assert.Equal(t, verdict.Deny, decision)
 	})
 
 	t.Run("a green NON-gate run is not coverage", func(t *testing.T) {
@@ -245,20 +245,20 @@ func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...jo
 func TestUngatedPushDeniesWhetherOrNotTheCallerRendersAsk(t *testing.T) {
 	for _, renders := range []bool{true, false} {
 		v := judgePushAs(t, renders, "", "")
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234", "the refusal names what it refused")
 		assert.NotContains(t, v.Reason, "predates approval prompts")
 	}
 
 	gated := judgePushAs(t, false, "pass", "")
-	assert.Contains(t, []string{decisionPass, decisionAdvise}, gated.Decision, "a covered push passes")
+	assert.Contains(t, []verdict.Decision{verdict.Defer, verdict.Advise}, gated.Decision, "a covered push passes")
 }
 
 // TestUngatedPushDeniesTheOrchestrator pins that the root is refused with the gate named:
 // pull requests went out with no local gate when the root was only asked.
 func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	v := judgePush(t, "", "")
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
+	assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v))
 	assert.Contains(t, v.Reason, "abc1234", "the refusal names the commit it publishes")
 	assert.Contains(t, v.Reason, "no `ci` run is recorded")
 	assert.NotContains(t, v.Reason, "Approving")
@@ -267,7 +267,7 @@ func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	assert.Contains(t, full, "affected ci")
 
 	failed := judgePush(t, "fail", "")
-	assert.Equal(t, decisionDeny, failed.Decision)
+	assert.Equal(t, verdict.Deny, failed.Decision)
 	assert.Contains(t, failed.Reason, "failed")
 }
 
@@ -279,7 +279,7 @@ func TestGhPrCreateMeetsThePushGate(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir), 0o755))
 		deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v), line)
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v), line)
 		assert.Contains(t, v.Reason, "abc1234", line)
 	}
 	for _, line := range []string{"gh pr view 12", "gh pr list"} {
@@ -302,11 +302,11 @@ func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 	line := "git push -q -u origin topic && gh pr merge topic --squash --admin"
 
 	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, decisionDeny, v.Decision, "the line is refused whichever rule speaks")
+	assert.Equal(t, verdict.Deny, v.Decision, "the line is refused whichever rule speaks")
 
 	probe.answer = verdict.Verdict{Decision: verdict.Advise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
+	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Deny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
 	assert.NotContains(t, v.Reason, "batch it")
 }
 
@@ -320,7 +320,7 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	ctx, _ := fleetFixture(t, lease)
 	v := Judge(ctx, Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }},
 		Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true})
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRuleLeaseVCS)), unworded(v))
+	assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRuleLeaseVCS)), unworded(v))
 	assert.NotContains(t, v.Reason, "\nsee: ", "the rule's page is in the stored verdict")
 	full := storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
 	assert.Contains(t, full, lease.ID)
@@ -328,7 +328,7 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	assert.NotContains(t, strings.ToLower(full), "say so")
 
 	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateAbsent, commit: "abc1234"}, lease.ID)
-	assert.Equal(t, decisionDeny, decision)
+	assert.Equal(t, verdict.Deny, decision)
 	assert.Contains(t, reason, lease.ID)
 	assert.Contains(t, reason, "workers do not publish")
 }
@@ -343,14 +343,14 @@ func TestUngatedPushDeniesARootSessionHoldingItsOwnLease(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 	v := Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true, Host: "claude-code", Session: "root-session"})
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
+	assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v))
 	assert.NotContains(t, v.Reason, "workers do not publish")
 }
 
 // TestGatedPushIsNeverRefused pins that a covered push passes.
 func TestGatedPushIsNeverRefused(t *testing.T) {
 	v := judgePush(t, "pass", "")
-	assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision)
+	assert.Contains(t, []verdict.Decision{verdict.Defer, verdict.Advise}, v.Decision)
 }
 
 // TestLocatePushFollowsTheLine pins which directory a push runs in, and that a directory
@@ -503,25 +503,25 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 
 	t.Run("an ungated checkout is refused, though the hook's own is gated", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, dashC)
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 		assert.NotContains(t, v.Reason, "abc1234")
 	})
 
 	t.Run("a gated checkout passes, though the hook's own is not", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, dashC)
-		assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision)
+		assert.Contains(t, []verdict.Decision{verdict.Defer, verdict.Advise}, v.Decision)
 	})
 
 	t.Run("a leading cd relocates it the same way", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string { return fmt.Sprintf("cd %s && git push", b) })
-		assert.Equal(t, decisionDeny, v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.Contains(t, v.Reason, "def5678")
 	})
 
 	t.Run("a plain push still grades the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git push" })
-		assert.Equal(t, decisionDeny, v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 
@@ -529,19 +529,19 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string {
 			return fmt.Sprintf("git --no-pager -c color.ui=never -C %s -P push origin HEAD:refs/heads/x", b)
 		})
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 	})
 
 	t.Run("a pager option does not hide a push from the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git -P push" })
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 
 	t.Run("a directory only the shell knows keeps the advisory", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, false, func(string) string { return `git -C "$T" push` })
-		assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryPushGate)), unworded(v))
+		assert.Equal(t, verdictWithRule(verdict.Advise, string(advisoryPushGate)), unworded(v))
 	})
 }
 
@@ -580,7 +580,7 @@ func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
 	}
 	for _, line := range refused {
 		v := Judge(gated(t), deps, Request{Input: line, RendersAsk: true})
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v), line)
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(denyRulePushUnverified)), unworded(v), line)
 		assert.Contains(t, v.Reason, "in a separate call", line)
 	}
 
@@ -593,7 +593,7 @@ func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
 	ctx := gated(t)
 	for _, line := range passes {
 		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-		assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision, line)
+		assert.Contains(t, []verdict.Decision{verdict.Defer, verdict.Advise}, v.Decision, line)
 	}
 }
 
@@ -603,7 +603,7 @@ func TestPushAfterACommitStandsDownWithNoRunLog(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 	v := Judge(ctx, deps, Request{Input: "git commit -m x && git push", RendersAsk: true})
-	assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision)
+	assert.Contains(t, []verdict.Decision{verdict.Defer, verdict.Advise}, v.Decision)
 }
 
 func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gated, replayed string) {
@@ -704,7 +704,7 @@ func (s *GateScopeSuite) TestAProjectPassAloneCoversNoPush() {
 
 	s.Equal(gateProjectScoped, coverageAtPush(ctx, repo, other))
 	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateProjectScoped, commit: other[:12]}, "")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "covered named projects, not every project the branch affects")
 }
 
@@ -731,7 +731,7 @@ func (s *GateScopeSuite) TestAPreScopeVerdictSaysItReadsAsProjectScope() {
 
 	s.Equal(gateUnscoped, gateVerdictAt(s.T().Context(), root, commit[:12]))
 	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateUnscoped, commit: commit[:12]}, "")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "recorded before gate records named their scope, so it reads as project scope")
 }
 
@@ -915,7 +915,7 @@ func (s *NarrowPushSuite) TestAnUncoveredFileIsRefusedByName() {
 	ev := s.push(head)
 	s.Equal(gateAbsent, ev.cover)
 	decision, reason := gradePushWithoutGate(ev, "")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "No passing run covers 1 of the 2 files changed since "+s.gated[:12])
 	s.Contains(reason, "  b.go: run `")
 	s.Contains(reason, "lint . -- b.go`")
@@ -928,7 +928,7 @@ func (s *NarrowPushSuite) TestNoGateAndNoRunsIsRefused() {
 	ev := s.push(head)
 	s.Equal(gateAbsent, ev.cover)
 	decision, reason := gradePushWithoutGate(ev, "")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, fmt.Sprintf("the merge base with %s, since no ancestor has a passing `ci`", s.gated))
 	s.Contains(reason, "  a.go: run `")
 	s.Contains(reason, "run test .`")
@@ -1033,7 +1033,7 @@ func (s *NarrowPushSuite) TestTheWaiverStillAdmits() {
 		_, err := WaiveGate(ctx, store, waived, "CI gates the release branch")
 		s.Require().NoError(err)
 	})
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 	s.Contains(v.Context, "abc1234 goes out ungated under the waiver")
 }
 
@@ -1146,7 +1146,7 @@ func (s *RemoteGatePushSuite) TestPushGateStillRefusesAFailedGateUnderARemoteGat
 	ev := s.push(head)
 	s.Equal(gateFailed, ev.cover)
 	decision, _ := gradePushWithoutGate(ev, "")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 }
 
 func (s *RemoteGatePushSuite) TestPushGateWithoutARemoteGateRefusesAsToday() {
@@ -1155,7 +1155,7 @@ func (s *RemoteGatePushSuite) TestPushGateWithoutARemoteGateRefusesAsToday() {
 	ev := s.push(head)
 	s.Equal(gateAbsent, ev.cover)
 	decision, reason := gradePushWithoutGate(ev, "")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "no `ci` run is recorded at this commit")
 }
 

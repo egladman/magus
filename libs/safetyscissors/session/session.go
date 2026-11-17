@@ -45,6 +45,7 @@ import (
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // APIVersion stamps every record this build writes. Readers IGNORE what they cannot
@@ -389,7 +390,8 @@ type Fold struct {
 // line is skipped and counted in Skipped rather than failing the read, so one killed
 // process cannot make the whole history unreadable. A file listed by the directory but
 // gone by the time it is opened was pruned by another process mid-fold; it counts as
-// neither an invocation nor damage. Only an unreadable DIRECTORY is an error.
+// neither an invocation nor damage. Only an unreadable DIRECTORY is an error, and a
+// loaded event holding a retired guard decision, which is a [*RetiredDecisionError].
 //
 // It stops early and returns ctx.Err() as is once ctx is done.
 func ReadAll(ctx context.Context, dir string) (Fold, error) {
@@ -408,9 +410,13 @@ func ReadAll(ctx context.Context, dir string) (Fold, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
 			continue
 		}
-		records, skipped, legacy, vanished := readFile(filepath.Join(dir, e.Name()))
+		path := filepath.Join(dir, e.Name())
+		records, skipped, legacy, vanished := readFile(path)
 		if vanished {
 			continue
+		}
+		if err := refuseRetiredDecision(path, records); err != nil {
+			return Fold{}, err
 		}
 		fold.Invocations++
 		fold.Records = append(fold.Records, records...)
@@ -449,6 +455,39 @@ type StoreError struct {
 func (e *StoreError) Error() string { return fmt.Sprintf("session: %s %s: %v", e.Op, e.Path, e.Err) }
 
 func (e *StoreError) Unwrap() error { return e.Err }
+
+// RetiredDecisionError is a loaded event whose verdict is "pass" or "allow", the names
+// the guard's defer had before its decisions became defer, advise, ask and deny. The
+// store is refused rather than read around it: a skipped event would drop out of every
+// count with nothing said.
+type RetiredDecisionError struct {
+	// Path is the invocation file holding the event.
+	Path     string
+	Decision string
+}
+
+func (e *RetiredDecisionError) Error() string {
+	return fmt.Sprintf("session: %s holds the retired guard decision %q: delete that file, or clear the store, and run `magus session load` again to re-judge it", e.Path, e.Decision)
+}
+
+// retiredDecisions are the decision names no build after the defer rename writes.
+func retiredDecisions() []string { return []string{"pass", "allow"} }
+
+// refuseRetiredDecision returns a [*RetiredDecisionError] for the first loaded event in
+// records, read from path, that holds a retired decision.
+func refuseRetiredDecision(path string, records []Record) error {
+	for _, rec := range records {
+		if rec.Kind != KindAgentEvent {
+			continue
+		}
+		var ev AgentEvent
+		var unknown *verdict.UnknownDecisionError
+		if err := codec.Unmarshal(rec.Payload, &ev); errors.As(err, &unknown) && slices.Contains(retiredDecisions(), unknown.Decision) {
+			return &RetiredDecisionError{Path: path, Decision: unknown.Decision}
+		}
+	}
+	return nil
+}
 
 // sortRecords puts a fold in the (Ts, Invocation, Seq) order every reader downstream is
 // specified against. Anything that assembles a [Fold] outside [ReadAll] has to apply it
@@ -664,15 +703,6 @@ func EventKinds() []string {
 // ValidEventKind reports whether kind is one a store keeps.
 func ValidEventKind(kind string) bool { return slices.Contains(EventKinds(), kind) }
 
-// The verdicts a re-judged shell command carries in [AgentEvent.Verdict]: what today's
-// rules say about it. One set here so the loader that writes them and the readers that
-// count them cannot drift on a literal.
-const (
-	VerdictPass   = "pass"
-	VerdictAdvise = "advise"
-	VerdictDeny   = "deny"
-)
-
 // Agent is which model produced an event and which release of its host ran it: one fact
 // ("what produced this"), not two, so it is one value rather than a pair of loose fields
 // that happen to travel together. Both are opaque strings, compared for change only;
@@ -715,10 +745,10 @@ type AgentEvent struct {
 	Transcript string `json:"transcript,omitempty"`
 	// Program is the command's resolved program name, arguments dropped.
 	Program string `json:"program,omitempty"`
-	// Verdict is what today's rules say about the command, one of the Verdict constants.
-	// It is re-judged at load time rather than read off the transcript, so it answers
-	// whether the CURRENT rules would have caught a past command.
-	Verdict string `json:"verdict,omitempty"`
+	// Verdict is what today's rules say about the command: defer, advise or deny. It is
+	// re-judged at load time rather than read off the transcript, so it answers whether
+	// the CURRENT rules would have caught a past command.
+	Verdict verdict.Decision `json:"verdict,omitempty"`
 	// Rule names the deny rule or the advisory kind behind Verdict. The rule's own
 	// argument is deliberately absent: it renders the resolved argv, which is the content
 	// Text is barred from carrying.

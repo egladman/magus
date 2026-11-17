@@ -125,7 +125,7 @@ type Event struct {
 	// the join from a verdict to the guard_policy event that introduced its rules.
 	PolicyDigest string `json:"policy_digest,omitempty"`
 	// DecidedBy is which side reached a verdict: builtin, worktree, or approved, joined
-	// with "+" when a workspace rule added its advice to a built-in one. Empty on a pass,
+	// with "+" when a workspace rule added its advice to a built-in one. Empty on a defer,
 	// which nothing decided.
 	DecidedBy string `json:"decided_by,omitempty"`
 	// Binary and BinaryVersion name the binary that judged a hook call, and Cwd the

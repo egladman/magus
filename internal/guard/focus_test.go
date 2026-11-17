@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -90,7 +91,7 @@ func TestFocusReadOperands(t *testing.T) {
 func TestFocusVerdictAdvisesWithoutALease(t *testing.T) {
 	got := focusVerdict(appFocus(t), nil, "", "/ws", "/ws/app", []string{"../libs/ui/theme.css"})
 	// The prose is checked by substring below, so it is copied across rather than spelled out.
-	assert.Equal(t, focusGrade{Decision: "advise", Rel: "libs/ui/theme.css", Context: got.Context, Why: got.Why, Brief: got.Brief}, got)
+	assert.Equal(t, focusGrade{Decision: verdict.Advise, Rel: "libs/ui/theme.css", Context: got.Context, Why: got.Why, Brief: got.Brief}, got)
 	assert.Contains(t, got.Why, "app, libs/core", "the rationale names the focus, behind the ref")
 	assert.Contains(t, got.Context, "belongs to project libs/ui")
 	assert.Contains(t, got.Context, "outside this session's focus")
@@ -129,7 +130,7 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 	require.True(t, ok)
 
 	got := focusVerdict(focus, nil, "lease-a", "/ws", "/ws", []string{"web/server.go"})
-	assert.Equal(t, "deny", got.Decision)
+	assert.Equal(t, verdict.Deny, got.Decision)
 	assert.Contains(t, got.Reason, "outside the focus lease lease-a was given (app)")
 	// The actor, not the tool: naming the tool reads as permission, and two personas
 	// widened their own row on it.
@@ -147,7 +148,7 @@ func TestFocusVerdictWideningIsWhatTheLeaseDeclares(t *testing.T) {
 	// The write paths alone deny the read...
 	narrow, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
 	require.True(t, ok)
-	assert.Equal(t, "deny", focusVerdict(narrow, nil, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
+	assert.Equal(t, verdict.Deny, focusVerdict(narrow, nil, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
 
 	// ...and a declared focus is the one thing that opens it, without handing the
 	// lease the right to WRITE what it may now read.
@@ -180,12 +181,12 @@ func TestFocusVerdictAllowsAWildcardDeclaredPath(t *testing.T) {
 	assert.ElementsMatch(t, []string{"app", "libs/core"}, focus.Projects)
 
 	assert.Empty(t, focusVerdict(focus, declared, "lease-a", "/ws", "/ws", []string{"web/README.md"}).Decision)
-	assert.Equal(t, "deny", focusVerdict(focus, declared, "lease-a", "/ws", "/ws", []string{"web/server.go"}).Decision)
+	assert.Equal(t, verdict.Deny, focusVerdict(focus, declared, "lease-a", "/ws", "/ws", []string{"web/server.go"}).Decision)
 }
 
 func TestFocusVerdictReportsTheFirstOperandThatLeaves(t *testing.T) {
 	got := focusVerdict(appFocus(t), nil, "", "/ws", "/ws/app", []string{"app/a.go", "../web/b.go", "../libs/ui/c.css"})
-	assert.Equal(t, focusGrade{Decision: "advise", Rel: "web/b.go", Context: got.Context, Why: got.Why, Brief: got.Brief}, got,
+	assert.Equal(t, focusGrade{Decision: verdict.Advise, Rel: "web/b.go", Context: got.Context, Why: got.Why, Brief: got.Brief}, got,
 		"one explanation per command, not one per operand")
 }
 

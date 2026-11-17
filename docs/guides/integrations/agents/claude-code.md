@@ -452,7 +452,7 @@ across releases (`Task` historically, `Agent` currently); a finished spawn under
 other name records no child id.
 
 It records; it does not judge. A lease prompt is prose, so the command rules
-never run against it and the verdict is always a pass: a prompt that mentions a
+never run against it and the verdict is always a defer: a prompt that mentions a
 denied command describes it rather than runs it, and that holds whether or not
 the caller named a model: magus asks the question, it does not grade the
 answer. A later decision may add an advisory or a deny keyed on the declared

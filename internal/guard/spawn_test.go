@@ -343,10 +343,10 @@ func TestSkillReadIsRecordedAndJudged(t *testing.T) {
 	var judged []types.CommandRequest
 	deps := Dependencies{CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 		judged = append(judged, req)
-		return verdict.Verdict{Decision: verdict.Allow}, nil
+		return verdict.Verdict{Decision: verdict.Defer}, nil
 	}}
 	v := Judge(ctx, deps, Request{Input: read, Host: "cursor", ObservesSkillLoads: true})
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 	assert.True(t, skillLoaded(hint.NewGate(cacheDir, hookAttribution{Host: "cursor", Session: "c1"}.skillsKey()), agent.MustSkill("magus-run")))
 	require.Len(t, judged, 1, "the read reaches the command rules")
 	assert.Equal(t, "cat "+skill, judged[0].Command)
@@ -424,7 +424,7 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 
 	spawn := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "spawn_agent",
 		"tool_input": map[string]any{"message": "gAAAAencrypted", "task_name": "worker", "agent_type": "default", "description": "orchestrator/impl guard-facts"}})
-	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+	require.NotEqual(t, verdict.Deny, spawn.Decision, spawn.Reason)
 	codex(map[string]any{"hook_event_name": "SubagentStart", "agent_id": "019e-child"})
 
 	write := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "agent_id": "019e-child",
@@ -463,12 +463,12 @@ func TestAForegroundChildThatCannotBePlacedIsAdvisedNotRefused(t *testing.T) {
 	for name, tc := range map[string]struct {
 		claim    string
 		spawns   []string
-		decision string
+		decision verdict.Decision
 		contains string
 	}{
-		"declaring no lease":              {"", []string{"job-a", "job-b"}, "advise", "none of the 2 waiting spawn(s) names this caller"},
-		"declaring a job no spawn names":  {"job-c", []string{"job-a", "job-b"}, "advise", "runs under no lease"},
-		"declaring a job two spawns name": {"job-a", []string{"job-a", "job-a"}, "deny", "2 waiting spawns name job job-a"},
+		"declaring no lease":              {"", []string{"job-a", "job-b"}, verdict.Advise, "none of the 2 waiting spawn(s) names this caller"},
+		"declaring a job no spawn names":  {"job-c", []string{"job-a", "job-b"}, verdict.Advise, "runs under no lease"},
+		"declaring a job two spawns name": {"job-a", []string{"job-a", "job-a"}, verdict.Deny, "2 waiting spawns name job job-a"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newForegroundFleet(t, "job-a", "job-b", "job-c")
@@ -521,7 +521,7 @@ func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
 	file("scout", "explore the cache layer")
 	scout := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "scout",
 		"agent_type": "Explore", "transcript_path": transcript, "tool_input": map[string]any{"command": "ls"}})
-	assert.Equal(t, "pass", scout.Decision, scout.Reason+scout.Context)
+	assert.Equal(t, verdict.Defer, scout.Decision, scout.Reason+scout.Context)
 	assert.Empty(t, scout.Lease, "a subagent no waiting spawn names joins none")
 	file("agent-c", "orchestrator/impl job-c")
 	assert.Equal(t, "job-c", write("agent-c", "job-c").Lease, "the scout left job-c's spawn waiting for its own child")
@@ -583,7 +583,7 @@ func (f foregroundFleet) spawn(t *testing.T, job string) {
 	t.Setenv(trail.EnvBaggage, "")
 	spawn := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent",
 		"tool_input": map[string]any{"prompt": "implement it", "subagent_type": "general-purpose", "run_in_background": false, "description": "orchestrator/impl " + job}})
-	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+	require.NotEqual(t, verdict.Deny, spawn.Decision, spawn.Reason)
 }
 
 func (f foregroundFleet) write(t *testing.T, agentID, job string) verdict.Judgment {

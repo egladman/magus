@@ -65,7 +65,7 @@ func TestJudgeCommandReturnsADenyAsAJudgment(t *testing.T) {
 
 	j, err := m.JudgeCommand(t.Context(), "s1", m.Root(), "ls")
 	require.NoError(t, err)
-	assert.Equal(t, string(verdict.Deny), j.Decision)
+	assert.Equal(t, verdict.Deny, j.Decision)
 	assert.Contains(t, j.Reason, "Not in this workspace.")
 	assert.NotEmpty(t, j.Rule, "every verdict names its rule")
 }
@@ -75,7 +75,7 @@ func TestJudgeWriteJudgesThePathAsAWrite(t *testing.T) {
 
 	j, err := m.JudgeWrite(t.Context(), "s1", m.Root(), "notes.txt")
 	require.NoError(t, err)
-	assert.Equal(t, string(verdict.Deny), j.Decision)
+	assert.Equal(t, verdict.Deny, j.Decision)
 	assert.Contains(t, j.Reason, "No writes here.")
 }
 
@@ -112,7 +112,7 @@ func (s *authorityJudgeSuite) TestRulesThatDoNotLoadAreJudgedByTheApprovedOnes()
 	j, err := m.JudgeCommand(s.T().Context(), "s1", m.Root(), "ls")
 
 	s.Require().NoError(err)
-	s.Equal(string(verdict.Deny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
@@ -128,7 +128,7 @@ func (s *authorityJudgeSuite) TestACommittedLooseningWaitsOnTheAuthorityTheCalle
 
 	j := s.judge(ContextWithAuthority(s.T().Context(), target))
 
-	s.Equal(string(verdict.Deny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
@@ -251,7 +251,7 @@ func (s *jobReaderSuite) TestATaskWithNoAuthorityIsRefusedWork() {
 	j := s.judge("")
 	s.Contains(j.Reason, "lease task records no authority")
 	s.Equal(verdict.Judgment{
-		APIVersion: j.APIVersion, Decision: string(verdict.Deny), Reason: j.Reason, Context: j.Context,
+		APIVersion: j.APIVersion, Decision: verdict.Deny, Reason: j.Reason, Context: j.Context,
 		Rule: "lease-authority", Lease: "task", LeaseFrom: j.LeaseFrom, NextSteps: j.NextSteps,
 	}, j)
 }
@@ -308,7 +308,7 @@ func (s *judgeStepSuite) step(kind, name string, input map[string]any) step.Step
 
 // stepDenied is the whole judgment a step-level deny under rule returns.
 func stepDenied(rule, reason string) verdict.Judgment {
-	return verdict.Judgment{APIVersion: hostagent.GuardAPIVersion, Decision: string(verdict.Deny), Reason: reason, Rule: rule}
+	return verdict.Judgment{APIVersion: hostagent.GuardAPIVersion, Decision: verdict.Deny, Reason: reason, Rule: rule}
 }
 
 var shellSpec = step.Spec{Kind: "shell", Capabilities: []string{string(types.ToolRuns)}, Command: "/command"}
@@ -336,7 +336,7 @@ func (s *judgeStepSuite) TestARunsSpecJudgesItsCommand() {
 	j, err := s.open(WithStepSpecs(shellSpec)).Judge(s.T().Context(), s.step("shell", "bash", map[string]any{"command": "ls"}))
 
 	s.Require().NoError(err)
-	s.Equal(string(verdict.Deny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
@@ -346,7 +346,7 @@ func (s *judgeStepSuite) TestAWritesSpecJudgesEachPath() {
 	j, err := s.open(WithStepSpecs(spec)).Judge(s.T().Context(), s.step("memory", "notes", map[string]any{"files": []any{"notes.txt"}}))
 
 	s.Require().NoError(err)
-	s.Equal(string(verdict.Deny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "No writes here.")
 }
 
@@ -390,7 +390,7 @@ func (s *judgeStepSuite) TestAGoRulesPassLeavesTheStepPassing() {
 	j, err := m.Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": 20.0}))
 
 	s.Require().NoError(err)
-	s.Equal("pass", j.Decision)
+	s.Equal(verdict.Defer, j.Decision)
 }
 
 func (s *judgeStepSuite) TestAGoRuleErrorIsAJudgmentNotMade() {
@@ -409,7 +409,7 @@ func (s *judgeStepSuite) TestAnInertSpecPasses() {
 	j, err := s.open(WithStepSpecs(spec)).Judge(s.T().Context(), s.step("plan", "todo", map[string]any{"items": []any{"ls"}}))
 
 	s.Require().NoError(err)
-	s.Equal("pass", j.Decision)
+	s.Equal(verdict.Defer, j.Decision)
 }
 
 func (s *judgeStepSuite) TestAWrongAPIVersionIsAnError() {
@@ -490,7 +490,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	j, err := m.Judge(s.T().Context(), st)
 
 	s.Require().NoError(err)
-	s.Equal(string(verdict.Deny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "No spawns here: ticket summary.")
 }
 
@@ -535,7 +535,7 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     if (req.step.name == "card") {
         return magus\guard.deny("Card refunds need a person.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -582,7 +582,7 @@ func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
 	m, err := Open(s.T().Context(), repo.Root(), WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.allow());\n"
+	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.defer());\n"
 	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), []byte(loosened), 0o644))
 
 	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
@@ -595,7 +595,7 @@ func (s *buzzStepRuleSuite) TestARuleForAnotherKindLeavesTheSpecUnjudgedAtOpen()
 	_, err := s.open(`import "magus";
 import "magus/agent";
 
-magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
 `)
 
 	s.ErrorContains(err, `magus\guard.step`)
@@ -608,7 +608,7 @@ import "magus/agent";
 
 magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     if (req.step.name == "card") { throw "ledger unreachable"; }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `)
 	s.Require().NoError(err)
@@ -641,6 +641,6 @@ func (s *stepRemedySuite) TestADenyServesItsRemedyCommand() {
 	j, err := m.Judge(s.T().Context(), st)
 
 	s.Require().NoError(err)
-	s.Equal(string(verdict.Deny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.NotEmpty(j.NextSteps, "the deny serves a remedy command")
 }

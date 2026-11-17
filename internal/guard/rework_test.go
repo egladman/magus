@@ -158,14 +158,14 @@ func (s *ContinueToExitedWorkerSuite) continueWorker(state jobtypes.State) verdi
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerAdvisesTheRoot() {
 	v := s.continueWorker(jobtypes.StateExited)
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "job guard-facts is exited; widen it yourself with `")
 	s.Contains(v.Context, "job exec guard-facts")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnEndedWorkerAdvisesTheRoot() {
 	v := s.continueWorker(jobtypes.StatePass)
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "job guard-facts is pass; fork a new job for more work")
 }
 
@@ -178,7 +178,7 @@ func (s *ContinueToExitedWorkerSuite) TestContinueToAStoppedWorkerSaysNothing() 
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnOtherwiseEndedNoReturnWorkerAdvisesFork() {
 	v := s.continueWorker(jobtypes.StateNoReturn)
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "fork a new job for more work")
 	s.NotContains(v.Context, "job exec guard-facts")
 }
@@ -190,7 +190,7 @@ func (s *ContinueToExitedWorkerSuite) TestContinueToARunningWorkerSaysNothing() 
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerNeverDenies() {
 	v := s.continueWorker(jobtypes.StateExited)
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (f reworkFixture) testContext(t *testing.T) context.Context {

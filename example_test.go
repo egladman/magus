@@ -326,7 +326,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("Build through the target: magus run build api", {"rule": "targets-only"});
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -436,7 +436,7 @@ func Example_aProgramThatIsItsOwnHarness() {
 			fmt.Println("judge:", err)
 			return
 		}
-		if j.Decision == "deny" {
+		if j.Decision == verdict.Deny {
 			reason, _, _ := strings.Cut(j.Reason, "\n")
 			fmt.Printf("denied %q: %s\n", command, reason)
 			continue

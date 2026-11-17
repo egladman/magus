@@ -49,7 +49,7 @@ func stallRowKind(rule string) hint.MarkerKind {
 // The exit rides the verdict line rather than a next command: a worker is never served a
 // command that writes outside its write paths, and the job store is outside them.
 func gradeStall(deps Dependencies, judged verdict.Judgment, lease string, at location) verdict.Judgment {
-	if judged.Decision != decisionDeny || lease == "" || !unclearable[judged.Rule] {
+	if judged.Decision != verdict.Deny || lease == "" || !unclearable[judged.Rule] {
 		return judged
 	}
 	if deps.settingLookup(string(denyRuleStall)).Decision == builtin.Off || stallGate(at.cacheDir, lease).AlreadyFired(stallRowKind(judged.Rule)) {
@@ -125,7 +125,7 @@ func observeStall(ctx context.Context, at location, who hookAttribution, lease s
 	rec := readStall(gate)
 	s := recalledSettings(at.cacheDir)[string(denyRuleStall)]
 	switch judged.Decision {
-	case decisionDeny:
+	case verdict.Deny:
 		level := stallLevel(rec, judged.Rule, s)
 		rec.Refusals++
 		rec.Run++
@@ -135,7 +135,7 @@ func observeStall(ctx context.Context, at location, who hookAttribution, lease s
 		if level == 3 && s.Decision > builtin.Off && !gate.MarkFired(stallRowKind(judged.Rule)) {
 			fileStallRow(ctx, at, who, lease, judged, rec)
 		}
-	case decisionPass, decisionAdvise:
+	case verdict.Defer, verdict.Advise:
 		if rec.Run > 0 {
 			rec.Run, rec.Last = 0, ""
 			writeStall(gate, rec)

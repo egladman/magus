@@ -150,7 +150,7 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 		"tool_input": input,
 	})
 	if err != nil {
-		return verdict.Judgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: verdict.Defer}
 	}
 	// Judged as its own call, so it must not end the outer call's mark of a judgment in
 	// progress.
@@ -208,14 +208,14 @@ func judgeHeredocWrites(ctx context.Context, deps Dependencies, req Request, who
 			written[w.path] = content
 		}
 		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, w.path, content); v.Decision {
-		case decisionDeny:
+		case verdict.Deny:
 			first, _, _ := strings.Cut(v.Reason, "\n")
 			return ShellVerdict{
 				Deny: fmt.Sprintf("this heredoc writes %s, and that write is refused [%s]: %s", w.name, v.Rule, first),
 				Why:  "A here-document into a file is a file write, judged by the rules the host's write tool meets.\n" + v.Reason,
 				Rule: denyRule{Name: denyRuleHeredocWrite, Arg: v.Rule},
 			}
-		case decisionAdvise:
+		case verdict.Advise:
 			if advised.Context == "" {
 				advised = ShellVerdict{
 					Context: fmt.Sprintf("magus workspace: this heredoc writes %s, judged as that write [%s]: %s", w.name, v.Rule, v.Context),

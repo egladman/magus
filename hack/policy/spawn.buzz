@@ -70,7 +70,7 @@ fun lineage(title: str) > Lineage? {
 // nothing, so it passes both.
 export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str, once: fun (key: str) > bool) > GuardVerdict {
     if (spawn.kind != magus\SpawnKind.spawn) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final row = decideNamedJob(spawn, rows: rows, unreadable: unreadable);
     if (row.decision == magus\GuardDecision.deny) {
@@ -138,7 +138,7 @@ fun decideNamedJob(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) >
             + "`magus job fork {found!.id}-here --write-paths <paths> --instructions \"<what done means>\"` (no --checkout), "
             + "then spawn with `{line!.parent}/integrate {found!.id}-here`.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // descends reports whether job is ancestor or has ancestor in its parent chain.
@@ -227,7 +227,7 @@ fun judged(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVe
 test "a live row passes" {
     foreach (title in ["orchestrator/review naming-advisory", "orchestrator/feat guard-command", "orchestrator/docs changelog-fragments"]) {
         final v = judged(request(title, isolated: true), rows: store, unreadable: "");
-        std\assert(v.decision == magus\GuardDecision.allow, message: title);
+        std\assert(v.decision == magus\GuardDecision.defer, message: title);
     }
 }
 
@@ -259,12 +259,12 @@ test "an ended row is denied" {
 
 test "a nested id resolves under the title's parent" {
     final v = judged(request("v050-prep/scout scout-callers", isolated: false), rows: store, unreadable: "");
-    std\assert(v.decision == magus\GuardDecision.allow, message: "v050-prep/scout-callers");
+    std\assert(v.decision == magus\GuardDecision.defer, message: "v050-prep/scout-callers");
 }
 
 test "a leased spawner hands out only its own tree" {
     final mine = Spawn{ kind = magus\SpawnKind.spawn, title = "v050-prep/scout scout-callers", isolated = false, lease = "v050-prep" };
-    std\assert(judged(mine, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a child of the lease");
+    std\assert(judged(mine, rows: store, unreadable: "").decision == magus\GuardDecision.defer, message: "a child of the lease");
     final other = Spawn{ kind = magus\SpawnKind.spawn, title = "v050-prep/review elsewhere", isolated = false, lease = "v050-prep" };
     final v = judged(other, rows: store, unreadable: "");
     std\assert(v.decision == magus\GuardDecision.deny, message: "a row outside the lease");
@@ -297,7 +297,7 @@ test "the isolation refusal gives its rationale with the first refusal only" {
     std\assert(later.decision == magus\GuardDecision.deny, message: "later still refused");
     std\assert(later.reason.indexOf("isolation: \"worktree\"") != null, message: "later keeps the remedy");
     std\assert(later.reason.indexOf("312 writes") == null, message: "later omits the rationale");
-    std\assert(decideSpawn(request("orchestrator/review naming-advisory", isolated: true), rows: store, unreadable: "", once: once).decision == magus\GuardDecision.allow, message: "an isolated spawn is told nothing");
+    std\assert(decideSpawn(request("orchestrator/review naming-advisory", isolated: true), rows: store, unreadable: "", once: once).decision == magus\GuardDecision.defer, message: "an isolated spawn is told nothing");
 }
 
 test "a code-changing spawn without its own checkout is denied" {
@@ -320,16 +320,16 @@ test "an integrate spawn is refused for a row bound to another checkout, naming 
     final denied = judged(at("orchestrator/integrate land"), rows: rows, unreadable: "");
     std\assert(denied.decision == magus\GuardDecision.deny, message: "bound elsewhere");
     std\assert(denied.reason.indexOf("`/w/other`") != null and denied.reason.indexOf("magus job fork land-here") != null, message: denied.reason);
-    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == magus\GuardDecision.allow, message: "bound here");
-    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == magus\GuardDecision.allow, message: "bound to none");
-    std\assert(judged(Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == magus\GuardDecision.allow,
+    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == magus\GuardDecision.defer, message: "bound here");
+    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == magus\GuardDecision.defer, message: "bound to none");
+    std\assert(judged(Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == magus\GuardDecision.defer,
         message: "a spawn whose checkout is unread");
 }
 
 test "a thinking role, an isolated worker and a continue pass" {
-    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a review");
-    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "isolated");
-    std\assert(judged(Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false }, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue");
+    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == magus\GuardDecision.defer, message: "a review");
+    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == magus\GuardDecision.defer, message: "isolated");
+    std\assert(judged(Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false }, rows: store, unreadable: "").decision == magus\GuardDecision.defer, message: "a continue");
 }
 
 test "a spawn differing only in agent type gets the same verdict" {
@@ -378,10 +378,10 @@ test "a brief that forbids the build or builds something else passes" {
         "Run `go run ./cmd/magus-utils` and `./magus run buzz-test .`.",
         "",
     ]) {
-        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: prompt);
+        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.defer, message: prompt);
     }
     final continued = Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false, prompt = "Run `magus run go-build .`" };
-    std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue starts nothing");
+    std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.defer, message: "a continue starts nothing");
 }
 
 test "a brief for a job that owns its checkout may not teach the build either" {
@@ -421,10 +421,10 @@ export object ForkCounts {
 // a note, because refusing on its shape would stop forks that integrate.
 export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > GuardVerdict {
     if (counts.branchesUnknown != "" or counts.finishedBranches.len() < limit) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final facts = "{counts.finishedBranches.len()} finished branch(es) off the base: {counts.finishedBranches.join(", ")}; "
         + "{describePublished(counts)}{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
@@ -671,11 +671,11 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
             counts = withoutLanded(counts, landed: landedReader());
         }
         final judged = decideFork(fork, counts: counts, limit: limit);
-        if (judged.decision != magus\GuardDecision.allow) {
+        if (judged.decision != magus\GuardDecision.defer) {
             return judged;
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // forkRecord is the --stdin record of the fork at programs[at], from a heredoc,
@@ -739,7 +739,7 @@ test "a branch a remote ref holds stops counting, and the denial says how many w
     };
     final trimmed = withoutPublished(waiting(12), published: onRemote);
     std\assert(trimmed.finishedBranches.len() == 2 and trimmed.publishedSkipped == 10, message: "{trimmed.finishedBranches}");
-    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.allow, message: "published work waits on nothing");
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.defer, message: "published work waits on nothing");
     final stillOver = withoutPublished(waiting(12), published: fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(branch == "done-0");
     });
@@ -754,7 +754,7 @@ test "a branch the base already holds stops counting, and the denial says how ma
     };
     final trimmed = withoutLanded(waiting(12), landed: squashed);
     std\assert(trimmed.finishedBranches.len() == 1 and trimmed.landedSkipped == 11, message: "{trimmed.finishedBranches}");
-    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.allow, message: "landed work waits on nothing");
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.defer, message: "landed work waits on nothing");
     final stillOver = withoutLanded(waiting(12), landed: fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(branch == "done-0");
     });
@@ -800,24 +800,24 @@ test "a branch that is on no remote ref stays counted, and an unreadable one say
 
 test "raising the limit lets the same fork through" {
     final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit + 1);
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
 }
 
 test "commits alone never refuse" {
     final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(0, commits: 100000), limit: finishedBranchLimit);
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
 }
 
 test "below the limit, integrating, or a child of a job passes" {
     final over = waiting(10);
-    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: waiting(9), limit: 10).decision == magus\GuardDecision.allow, message: "below");
-    std\assert(decideFork(mandate\Fork{ id = "land", integrates = ["done-0"] }, counts: over, limit: 10).decision == magus\GuardDecision.allow, message: "integrates");
-    std\assert(decideFork(mandate\Fork{ id = "child", parent = "next" }, counts: over, limit: 10).decision == magus\GuardDecision.allow, message: "child");
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: waiting(9), limit: 10).decision == magus\GuardDecision.defer, message: "below");
+    std\assert(decideFork(mandate\Fork{ id = "land", integrates = ["done-0"] }, counts: over, limit: 10).decision == magus\GuardDecision.defer, message: "integrates");
+    std\assert(decideFork(mandate\Fork{ id = "child", parent = "next" }, counts: over, limit: 10).decision == magus\GuardDecision.defer, message: "child");
 }
 
 test "a branch count that could not be read never refuses" {
     final unknown = ForkCounts{ branchesUnknown = "version control is disabled here" };
-    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: unknown, limit: 0).decision == magus\GuardDecision.allow, message: "unknown");
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: unknown, limit: 0).decision == magus\GuardDecision.defer, message: "unknown");
 }
 
 test "a line reads the fork's record from a heredoc, a redirect, an echo or a cat" {
@@ -831,11 +831,11 @@ test "a line reads the fork's record from a heredoc, a redirect, an echo or a ca
     };
     final stdin = forkProgram(["--stdin"]);
     final heredoc = "./magus job fork --stdin <<'EOF'\n{integrating}\nEOF";
-    std\assert(decideForkLine([stdin], line: heredoc, read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.allow, message: "heredoc");
-    std\assert(decideForkLine([stdin], line: "./magus job fork --stdin < land.json", read: file, facts: over, limit: 10).decision == magus\GuardDecision.allow, message: "redirect");
+    std\assert(decideForkLine([stdin], line: heredoc, read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.defer, message: "heredoc");
+    std\assert(decideForkLine([stdin], line: "./magus job fork --stdin < land.json", read: file, facts: over, limit: 10).decision == magus\GuardDecision.defer, message: "redirect");
     std\assert(decideForkLine([stdin], line: "./magus job fork --stdin < plain.json", read: file, facts: over, limit: 10).decision == magus\GuardDecision.deny, message: "a redirected plain fork");
     final echo = helpers\Program{ name = "echo", args = [integrating], repeats = false };
-    std\assert(decideForkLine([echo, stdin], line: "echo x | ./magus job fork --stdin", read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.allow, message: "echo");
+    std\assert(decideForkLine([echo, stdin], line: "echo x | ./magus job fork --stdin", read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.defer, message: "echo");
     final cat = helpers\Program{ name = "cat", args = ["plain.json"], repeats = false };
     std\assert(decideForkLine([cat, stdin], line: "cat plain.json | ./magus job fork --stdin", read: file, facts: over, limit: 10).decision == magus\GuardDecision.deny, message: "cat");
 }
@@ -859,6 +859,6 @@ test "a named fork is judged, a child reads no facts, and another command passes
         std\assert(false, message: "a child reads no facts");
         return ForkCounts{};
     };
-    std\assert(decideForkLine([forkProgram(["kid", "--parent", "next"])], line: "./magus job fork kid --parent next", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.allow, message: "a child");
-    std\assert(decideForkLine([helpers\Program{ name = "magus", args = ["ls", "jobs"], repeats = false }], line: "./magus ls jobs", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.allow, message: "another verb");
+    std\assert(decideForkLine([forkProgram(["kid", "--parent", "next"])], line: "./magus job fork kid --parent next", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.defer, message: "a child");
+    std\assert(decideForkLine([helpers\Program{ name = "magus", args = ["ls", "jobs"], repeats = false }], line: "./magus ls jobs", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.defer, message: "another verb");
 }

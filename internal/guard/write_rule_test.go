@@ -76,7 +76,7 @@ func TestWriteRuleSeesTheWrittenText(t *testing.T) {
 			v := Judge(ctx, Dependencies{WriteRule: probe.rule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": tc.input,
 			})})
-			assert.NotEqual(t, "deny", v.Decision)
+			assert.NotEqual(t, verdict.Deny, v.Decision)
 			require.Len(t, probe.asked, 1)
 			want := tc.want
 			want.Host, want.Session, want.Path, want.Workspace, want.Role = "claude-code", "s1", path, root, types.AgentRoleRoot
@@ -137,12 +137,12 @@ func TestWriteRulesKeepTheStricterSide(t *testing.T) {
 		WriteRule:         (&writeRuleProbe{}).rule(),
 		ApprovedWriteRule: func(context.Context) (workspace.WriteRule, error) { return approved, nil },
 	}, Request{Input: path, IsPath: true, Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 
 	ctx, root, _ = writeFixture(t)
 	broken := &writeRuleProbe{err: errors.New("magus\\guard.write: the rule raised: boom")}
 	v = Judge(ctx, Dependencies{WriteRule: broken.rule()}, Request{Input: filepath.Join(root, "x.go"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", v.Decision)
+	assert.Equal(t, verdict.Advise, v.Decision)
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
 }
 
@@ -172,7 +172,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 		policy := filepath.Join(root, "hack", "policy", "guard.buzz")
 		RecordPolicy(t.Context(), cacheDir, root, PolicyState{Digest: "d1", WriteRule: true, Files: []string{filepath.Join(root, "magusfile.buzz"), policy}}, false)
 		v := Judge(ctx, lapsedLoad, Request{Input: policy, IsPath: true, Host: "claude-code", Session: "s1"})
-		assert.Equal(t, "advise", v.Decision)
+		assert.Equal(t, verdict.Advise, v.Decision)
 		assert.Contains(t, v.Context, spared)
 	})
 
@@ -193,11 +193,11 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 			},
 		}
 		v := Judge(ctx, deps, Request{Input: filepath.Join(root, "hack", "policy", "guard.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
-		assert.Equal(t, "advise", v.Decision, "a relative source is the workspace's")
+		assert.Equal(t, verdict.Advise, v.Decision, "a relative source is the workspace's")
 		assert.Contains(t, v.Context, spared)
 
 		other := Judge(ctx, deps, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"})
-		assert.Equal(t, "deny", other.Decision, "any other write is still denied")
+		assert.Equal(t, verdict.Deny, other.Decision, "any other write is still denied")
 	})
 
 	t.Run("a policy source whose approved side did not answer", func(t *testing.T) {
@@ -219,14 +219,14 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 		waitForLapsedWork(t)
 		for name, deps := range unanswered {
 			v := judge(ctx, deps, repo.Root())
-			assert.Equal(t, "advise", v.Decision, "%s: no policy change is pending, so the committed rule stands", name)
+			assert.Equal(t, verdict.Advise, v.Decision, "%s: no policy change is pending, so the committed rule stands", name)
 			assert.Contains(t, v.Context, spared, name)
 		}
 
 		_, outside, _ := writeFixture(t)
 		for name, deps := range unanswered {
 			v := judge(WithLocation(t.Context(), t.TempDir(), outside, outside), deps, outside)
-			assert.Equal(t, "advise", v.Decision, "%s: in no repository the working tree is the whole policy", name)
+			assert.Equal(t, verdict.Advise, v.Decision, "%s: in no repository the working tree is the whole policy", name)
 		}
 
 		for pending, file := range map[string][2]string{
@@ -238,7 +238,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 			repo.Write(file[0], file[1])
 			for name, deps := range unanswered {
 				v := judge(ctx, deps, repo.Root())
-				assert.Equal(t, "deny", v.Decision, "%s, %s", pending, name)
+				assert.Equal(t, verdict.Deny, v.Decision, "%s, %s", pending, name)
 				assert.Contains(t, v.Reason, "magus ran out of time judging this file write", "%s, %s", pending, name)
 			}
 		}
@@ -247,7 +247,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 	t.Run("any other file", func(t *testing.T) {
 		ctx, root, _ := writeFixture(t)
 		v := Judge(ctx, lapsedLoad, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"})
-		assert.Equal(t, "deny", v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
 	})
 }

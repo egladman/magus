@@ -3,15 +3,16 @@ package trail
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // GuardFeedback is a deduplicated pattern in pre-tool observations. It is not
@@ -56,7 +57,10 @@ func RecentGuardFeedback(ctx context.Context, base, session string, limit int) (
 		followed   map[sessionKey]bool
 	}
 	candidates := map[string]*candidate{}
-	for command := range agentCommands(base, events) {
+	for command, err := range agentCommands(base, events) {
+		if err != nil {
+			return nil, err
+		}
 		event, request, response := command.event, command.request, command.response
 		if session != "" && request.Session != session {
 			continue
@@ -74,7 +78,7 @@ func RecentGuardFeedback(ctx context.Context, base, session string, limit int) (
 		if key.session == "" || key.host == "" {
 			continue
 		}
-		if response.Decision != "deny" && isMagusRunRequest(request.Command) {
+		if response.Decision != verdict.Deny && isMagusRunRequest(request.Command) {
 			for _, c := range candidates {
 				if c.Rule == "raw-tool" && c.perSession[key] > 0 {
 					c.followed[key] = true
@@ -82,7 +86,7 @@ func RecentGuardFeedback(ctx context.Context, base, session string, limit int) (
 			}
 			continue
 		}
-		if response.Decision != "deny" || response.Rule == "" {
+		if response.Decision != verdict.Deny || response.Rule == "" {
 			continue
 		}
 		fingerprint := fmt.Sprintf("%s\x00%s", response.Rule, request.Tool)
@@ -144,8 +148,11 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 	})
 	held := slices.DeleteFunc(events, func(e trailtypes.Event) bool { return e.Lease != lease || e.Ts < from })
 	var out []job.Denial
-	for command := range agentCommands(base, held) {
-		if command.response.Decision != "deny" {
+	for command, err := range agentCommands(base, held) {
+		if err != nil {
+			return nil, false, err
+		}
+		if command.response.Decision != verdict.Deny {
 			continue
 		}
 		out = append(out, job.Denial{
@@ -169,24 +176,39 @@ type agentCommand struct {
 	response agentCommandResponse
 }
 
-// agentCommands yields the agent-command events among events, in their order, whose request
-// and response blobs both read and decode. An event whose blobs rotated away is skipped.
-func agentCommands(base string, events []trailtypes.Event) iter.Seq[agentCommand] {
-	return func(yield func(agentCommand) bool) {
+// agentCommands yields the agent-command events among events, in their order, whose
+// request and response blobs both read and decode. An event whose blobs rotated away is
+// skipped; a blob holding a retired guard decision is yielded as a
+// [*RetiredDecisionError], and nothing after it.
+func agentCommands(base string, events []trailtypes.Event) iter.Seq2[agentCommand, error] {
+	return func(yield func(agentCommand, error) bool) {
+		var retired *RetiredDecisionError
 		for _, event := range events {
 			if event.Kind != trailtypes.KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
 				continue
 			}
 			command := agentCommand{event: event}
 			raw, err := trailtypes.ReadBlob(base, event.RequestRef)
-			if err != nil || codec.Unmarshal(raw, &command.request) != nil {
+			if err != nil {
+				continue
+			}
+			if err := decodeAgentBlob(base, event.RequestRef, raw, &command.request); errors.As(err, &retired) {
+				yield(agentCommand{}, err)
+				return
+			} else if err != nil {
 				continue
 			}
 			raw, err = trailtypes.ReadBlob(base, event.ResponseRef)
-			if err != nil || codec.Unmarshal(raw, &command.response) != nil {
+			if err != nil {
 				continue
 			}
-			if !yield(command) {
+			if err := decodeAgentBlob(base, event.ResponseRef, raw, &command.response); errors.As(err, &retired) {
+				yield(agentCommand{}, err)
+				return
+			} else if err != nil {
+				continue
+			}
+			if !yield(command, nil) {
 				return
 			}
 		}

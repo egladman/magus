@@ -183,7 +183,7 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 
 	v := Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	assert.Equal(t, decisionPass, v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.Len(t, commands, 1)
 	got := commands[0]
@@ -205,7 +205,9 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	calls := trail.ForSession(t.Context(), cacheDir, "s1", 10).Calls
+	tr, err := trail.ForSession(t.Context(), cacheDir, "s1", 10)
+	require.NoError(t, err)
+	calls := tr.Calls
 	require.Len(t, calls, 1)
 	got := calls[0]
 	got.At = time.Time{}
@@ -220,7 +222,9 @@ func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	calls := trail.ForSession(t.Context(), cacheDir, "s1", 10).Calls
+	tr, err := trail.ForSession(t.Context(), cacheDir, "s1", 10)
+	require.NoError(t, err)
+	calls := tr.Calls
 	require.Len(t, calls, 2)
 	assert.Equal(t, []string{"call", "result"}, calls[0].Unobserved)
 	assert.Equal(t, []string{"result"}, calls[1].Unobserved)
@@ -250,7 +254,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 		DecidedBy:    decidedByBuiltin,
 	}, e)
 
-	deps.ShellRules = []WorkspaceShellRule{{Name: "no-curl", Decision: "deny", Program: "curl", Reason: "not here"}}
+	deps.ShellRules = []WorkspaceShellRule{{Name: "no-curl", Decision: verdict.Deny, Program: "curl", Reason: "not here"}}
 	Judge(ctx, deps, Request{Input: "curl https://example.com", Host: "claude-code", Session: "s1"})
 	commands = trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.Len(t, commands, 2)

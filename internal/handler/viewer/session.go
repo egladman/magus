@@ -112,7 +112,7 @@ func turnToProto(ev session.AgentEvent) *viewerv1.SessionTurn {
 		Kind:        ev.Kind,
 		Program:     ev.Program,
 		Time:        tsFromMs(ev.AtMs),
-		Verdict:     ev.Verdict,
+		Verdict:     string(ev.Verdict),
 		Rule:        ev.Rule,
 		Exit:        int32(ev.Exit),
 		Denied:      ev.Denied,

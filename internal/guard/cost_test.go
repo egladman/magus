@@ -351,7 +351,7 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	assert.Equal(t, types.AgentFacts{Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported}, observed, "an observation records the thread alone")
 	assert.Empty(t, calls, "and counts nothing")
 
-	got := observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", verdict.Judgment{Decision: decisionPass})
+	got := observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", verdict.Judgment{Decision: verdict.Defer})
 	assert.Equal(t, types.AgentFacts{
 		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, DelegableClass: types.DelegableSearch,
 		ContextTokens: 100000, ContextModel: "claude-opus-5-5",
@@ -372,9 +372,9 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	assert.Equal(t, 1, st.Repeats[lineDigest("rg -n Judge .")])
 	assert.Equal(t, 4, st.Results["Bash"])
 
-	observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", verdict.Judgment{Decision: decisionDeny})
+	observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", verdict.Judgment{Decision: verdict.Deny})
 	assert.Equal(t, 1, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a refused call never ran")
-	observeCall(ctx, at, "/r/a.go", who, hookToolWrite, "", verdict.Judgment{Decision: decisionPass})
+	observeCall(ctx, at, "/r/a.go", who, hookToolWrite, "", verdict.Judgment{Decision: verdict.Defer})
 	assert.Empty(t, readCostState(hint.NewGate(cache, who.factsKey())).Repeats, "a write starts the repeats over")
 	noteMainSpawn(at, who, "", "")
 	assert.Zero(t, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a spawn starts the streak over")

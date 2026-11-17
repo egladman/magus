@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -85,7 +86,7 @@ type LoadSummary struct {
 
 // RejudgeFunc runs a past command through today's rules and reports what they would say
 // now: the program, the verdict, and the rule or advisory behind it.
-type RejudgeFunc func(text string) (program, verdict, rule string)
+type RejudgeFunc func(text string) (program string, decision verdict.Decision, rule string)
 
 // ReadLoadStream decodes the stream, judges what it must, and returns the events
 // worth storing on the summary, with the counts and the per-line diagnostics.

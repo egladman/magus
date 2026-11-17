@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // errMissingImport is what a tree reports when a magusfile imports a file that is not there:
@@ -89,12 +90,12 @@ func TestMissingImportAllowsRestoringTheNamedFile(t *testing.T) {
 		// A built-in advice on the same line (revert-classify) keeps its rule, with this
 		// advice added to its context.
 		v := judgeUnloaded(ctx, deps, line)
-		assert.Equal(t, decisionAdvise, v.Decision, line)
+		assert.Equal(t, verdict.Advise, v.Decision, line)
 		assert.Contains(t, v.Context, "puts back hack/policy/guard.buzz", line)
 	}
 
 	write := Judge(ctx, deps, Request{Input: filepath.Join(root, "hack", "policy", "guard.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, decisionAdvise, write.Decision)
+	assert.Equal(t, verdict.Advise, write.Decision)
 	assert.Contains(t, write.Context, "puts back hack/policy/guard.buzz")
 
 	for _, line := range []string{
@@ -127,7 +128,7 @@ func TestAnyFileTheLoadErrorNamesMayBeRestored(t *testing.T) {
 		"git checkout -- hack/policy/guard.buzz",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
-		assert.NotEqual(t, decisionDeny, v.Decision, line)
+		assert.NotEqual(t, verdict.Deny, v.Decision, line)
 		assert.Contains(t, v.Context, "puts back hack/policy/guard.buzz, which the load error names", line)
 	}
 	for _, line := range []string{
@@ -135,10 +136,10 @@ func TestAnyFileTheLoadErrorNamesMayBeRestored(t *testing.T) {
 		"git restore policy/guard.buzz",
 		"git mv hack/policy/guard.old.buzz hack/policy/guard.buzz",
 	} {
-		assert.Equal(t, decisionDeny, judgeUnloaded(ctx, deps, line).Decision, line)
+		assert.Equal(t, verdict.Deny, judgeUnloaded(ctx, deps, line).Decision, line)
 	}
 	write := Judge(ctx, deps, Request{Input: filepath.Join(root, "hack", "policy", "guard.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, decisionDeny, write.Decision, "a write is an edit, not a restore")
+	assert.Equal(t, verdict.Deny, write.Decision, "a write is an edit, not a restore")
 }
 
 // A load failure that names no file leaves the restore denied.
@@ -159,5 +160,5 @@ func TestBootstrapRunsWhileAnImportDoesNotResolve(t *testing.T) {
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDependencies(errMissingImport), ward.BootstrapCommand)
-	assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
+	assert.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
 }

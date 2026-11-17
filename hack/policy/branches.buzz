@@ -864,7 +864,7 @@ final release = $"^v[0-9]";
 export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun (source: str) > Topic, once: fun (key: str) > bool) > GuardVerdict {
     final pushes = findPushes(programs, current: current);
     if (pushes.len() == 0) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (remote.unreadable != "") {
         return magus\guard.deny("a push to the base branch cannot be told from a topic branch; fix the checkout's version control, then push again\n"
@@ -921,19 +921,19 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
     if (advice.len() > 0) {
         return magus\guard.advise(advice.join("\n\n"));
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // decideAuthority denies a line that publishes anything to a caller that may not.
 export fun decideAuthority(programs: [helpers\Program], caller: Pusher) > GuardVerdict {
     if (!publishes(programs)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final denial = authorityDenial(caller);
     if (denial != "") {
         return magus\guard.deny(denial);
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // publishes: the line pushes in any tool magus drives, or opens a pull request.
@@ -1128,7 +1128,7 @@ test "a good name, the base branch and a version pass" {
         ["git", "push", "origin", "v0.5.0"],
     ]) {
         final v = decideNames(helpers\vcsRequest([argv]), current: "x", remote: remote([<str>]), topic: practical, once: helpers\counter());
-        std\assert(v.decision == magus\GuardDecision.allow, message: "{argv.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.defer, message: "{argv.join(" ")}: {v.reason}");
     }
 }
 
@@ -1140,7 +1140,7 @@ test "a push whose base cannot be resolved is denied, naming why" {
     verdict\assertVerdict(v.reason, label: "an unreadable base");
     std\assert(v.reason.indexOf("`/gone`") != null, message: v.reason);
     final commit = helpers\vcsRequest([["git", "commit", "-m", "x"]]);
-    std\assert(decideNames(commit, current: "main", remote: broken, topic: practical, once: helpers\counter()).decision == magus\GuardDecision.allow,
+    std\assert(decideNames(commit, current: "main", remote: broken, topic: practical, once: helpers\counter()).decision == magus\GuardDecision.defer,
         message: "a line that pushes nothing is not judged");
 }
 
@@ -1150,7 +1150,7 @@ test "a topic miss alone advises once" {
     final first = decideNames(push, current: "practical-gates", remote: remote([<str>]), topic: practical, once: once);
     std\assert(first.decision == magus\GuardDecision.advise, message: "advised: {first.reason}");
     std\assert(first.reason.indexOf("comparison-practical-gates") != null, message: "serves a topical name");
-    std\assert(decideNames(push, current: "practical-gates", remote: remote([<str>]), topic: practical, once: once).decision == magus\GuardDecision.allow, message: "once");
+    std\assert(decideNames(push, current: "practical-gates", remote: remote([<str>]), topic: practical, once: once).decision == magus\GuardDecision.defer, message: "once");
 }
 
 test "an update to a branch the remote has, and a pull request, are judged once per session" {
@@ -1161,7 +1161,7 @@ test "an update to a branch the remote has, and a pull request, are judged once 
     std\assert(first.decision == magus\GuardDecision.deny, message: "first");
     verdict\assertVerdict(first.reason, label: "an update to a known branch");
     std\assert(first.reason.indexOf("already has") != null, message: "says why it lets the next one through");
-    std\assert(decideNames(push, current: "feat/practical-gates-e9x4tl", remote: known, topic: practical, once: once).decision == magus\GuardDecision.allow, message: "then the update goes through");
+    std\assert(decideNames(push, current: "feat/practical-gates-e9x4tl", remote: known, topic: practical, once: once).decision == magus\GuardDecision.defer, message: "then the update goes through");
     final fresh = helpers\vcsRequest([["git", "push", "origin", "HEAD:feat/other-a1b2c3"]]);
     final counter = helpers\counter();
     std\assert(decideNames(fresh, current: "", remote: known, topic: practical, once: counter).decision == magus\GuardDecision.deny, message: "a new branch");
@@ -1169,7 +1169,7 @@ test "an update to a branch the remote has, and a pull request, are judged once 
     final pr = helpers\request([["gh", "pr", "create", "--head", "fix/thing", "--fill"]]);
     final prOnce = helpers\counter();
     std\assert(decideNames(pr, current: "", remote: remote([<str>]), topic: practical, once: prOnce).decision == magus\GuardDecision.deny, message: "a pull request");
-    std\assert(decideNames(pr, current: "", remote: remote([<str>]), topic: practical, once: prOnce).decision == magus\GuardDecision.allow, message: "once");
+    std\assert(decideNames(pr, current: "", remote: remote([<str>]), topic: practical, once: prOnce).decision == magus\GuardDecision.defer, message: "once");
 }
 
 test "only the main session may publish" {
@@ -1188,7 +1188,7 @@ test "only the main session may publish" {
     ];
     final why = ["lease branch-names", "spawned as", "subagent `a534fcfe`", "no session"];
     foreach (line in lines) {
-        std\assert(decideAuthority(line, caller: root).decision == magus\GuardDecision.allow, message: "the main session");
+        std\assert(decideAuthority(line, caller: root).decision == magus\GuardDecision.defer, message: "the main session");
         foreach (i, caller in denied) {
             final v = decideAuthority(line, caller: caller);
             std\assert(v.decision == magus\GuardDecision.deny, message: why[i]);
@@ -1197,7 +1197,7 @@ test "only the main session may publish" {
         }
     }
     final commit = helpers\vcsRequest([["git", "commit", "-m", "add the rule"]]);
-    std\assert(decideAuthority(commit, caller: denied[0]).decision == magus\GuardDecision.allow, message: "a worker still commits");
+    std\assert(decideAuthority(commit, caller: denied[0]).decision == magus\GuardDecision.defer, message: "a worker still commits");
 }
 
 test "a host-generated suffix or claude prefix is refused with the rename command" {

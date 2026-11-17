@@ -136,7 +136,7 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			ctx, _ := spawnFixture(t)
 			probe := &spawnRuleProbe{}
 			v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: tc.event, Host: tc.host})
-			assert.Equal(t, "pass", v.Decision)
+			assert.Equal(t, verdict.Defer, v.Decision)
 			require.Len(t, probe.asked, 1, "the rule is asked once per event")
 			at, _ := ctx.Value(locationKey{}).(location)
 			tc.want.Checkout = at.workspace
@@ -160,7 +160,7 @@ func TestSpawnRuleIsNotAskedAboutACommand(t *testing.T) {
 // asked when one stands.
 func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	probe := &spawnRuleProbe{answer: verdict.Verdict{Decision: verdict.Allow}}
+	probe := &spawnRuleProbe{answer: verdict.Verdict{Decision: verdict.Defer}}
 	v := Judge(ctx, strict(Dependencies{SpawnRule: probe.rule()}), Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
 	assert.Equal(t, verdictWithRule("deny", string(denySpawnUnbriefed)), unworded(v), "the built-in reason stands")
 	assert.Empty(t, probe.asked)
@@ -225,12 +225,12 @@ func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	deny := &spawnRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "Name a model."}}
 	v := Judge(ctx, Dependencies{SpawnRule: deny.rule()}, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
+	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Deny, Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
 
 	ctx, _ = spawnFixture(t)
 	advise := &spawnRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Add a Done when section."}}
 	v = Judge(ctx, Dependencies{SpawnRule: advise.rule()}, Request{Input: cursorGlueEnvelope, Host: "cursor"})
-	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
+	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Advise, Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
 }
 
 // A broken rule judges nothing, following guard.shell's fail-open stance on a workspace
@@ -254,17 +254,17 @@ func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 // so an unapproved edit can tighten but never loosen.
 func TestSpawnRulesKeepTheStricterSide(t *testing.T) {
 	deny := verdict.Verdict{Decision: verdict.Deny, Reason: "unnamed model"}
-	allow := verdict.Verdict{Decision: verdict.Allow}
+	allow := verdict.Verdict{Decision: verdict.Defer}
 	cases := []struct {
 		name           string
 		live, approved *verdict.Verdict
-		want           string
+		want           verdict.Decision
 		decidedBy      string
 	}{
-		{"a tightening in the working tree applies at once", &deny, &allow, "deny", decidedByWorktree},
-		{"a loosening in the working tree waits for approval", &allow, &deny, "deny", decidedByApproved},
-		{"no approved side runs the working tree alone", &allow, nil, "pass", ""},
-		{"a rule deleted from the working tree still answers from the approved side", nil, &deny, "deny", decidedByApproved},
+		{"a tightening in the working tree applies at once", &deny, &allow, verdict.Deny, decidedByWorktree},
+		{"a loosening in the working tree waits for approval", &allow, &deny, verdict.Deny, decidedByApproved},
+		{"no approved side runs the working tree alone", &allow, nil, verdict.Defer, ""},
+		{"a rule deleted from the working tree still answers from the approved side", nil, &deny, verdict.Deny, decidedByApproved},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,7 +295,7 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 		return nil, errors.New("approved magusfile: magusfile.buzz:3:1: expected expression")
 	}}
 	v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "advise", v.Decision)
+	assert.Equal(t, verdict.Advise, v.Decision)
 	assert.Contains(t, v.Context, "The approved magus\\guard.spawn rule judged nothing: the rule could not be resolved")
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this spawn.")
 
@@ -400,11 +400,11 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 	cases := []struct {
 		name     string
 		approved verdict.Verdict
-		want     string
+		want     verdict.Decision
 		by       string
 	}{
-		{"an approved deny still denies", verdict.Verdict{Decision: verdict.Deny, Reason: "Name a model."}, "deny", decidedByApproved},
-		{"an approved allow reports the failure", verdict.Verdict{Decision: verdict.Allow}, "advise", ""},
+		{"an approved deny still denies", verdict.Verdict{Decision: verdict.Deny, Reason: "Name a model."}, verdict.Deny, decidedByApproved},
+		{"an approved defer reports the failure", verdict.Verdict{Decision: verdict.Defer}, verdict.Advise, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -416,7 +416,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 			}
 			v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
-			if tc.want == "advise" {
+			if tc.want == verdict.Advise {
 				assert.Contains(t, v.Context, "failed to load")
 				assert.Contains(t, v.Context, loadErr.Error())
 				assert.Contains(t, v.Context, "Only the built-in rules and the approved magus\\guard.spawn rule applied to this spawn.")
@@ -470,11 +470,11 @@ func TestSpawnRuleSeesTheCallersParent(t *testing.T) {
 	finished := `{"session_id":"8f2c6a1e","hook_event_name":"PostToolUse","tool_name":"Agent",` +
 		`"tool_input":{"description":"orchestrator/brisk-heron/implement adr 0002","prompt":"Implement ADR 0002.","name":"brisk-heron"},` +
 		`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
-	assert.Equal(t, "pass", Judge(ctx, deps, Request{Input: finished, Host: "claude-code"}).Decision)
+	assert.Equal(t, verdict.Defer, Judge(ctx, deps, Request{Input: finished, Host: "claude-code"}).Decision)
 	require.Len(t, probe.asked, 1, "a finished spawn call is recorded, not judged")
 	anonymous := `{"session_id":"8f2c6a1e","hook_event_name":"PostToolUse","tool_name":"Agent",` +
 		`"tool_input":{"prompt":"Implement ADR 0002."},"tool_response":"done"}`
-	assert.Equal(t, "pass", Judge(ctx, deps, Request{Input: anonymous, Host: "claude-code"}).Decision)
+	assert.Equal(t, verdict.Defer, Judge(ctx, deps, Request{Input: anonymous, Host: "claude-code"}).Decision)
 	require.Len(t, probe.asked, 1, "a finished call naming no child is still not judged a second time")
 
 	helper := `{"session_id":"8f2c6a1e","agent_id":"a1b2c3","agent_type":"general-purpose","hook_event_name":"PreToolUse",` +
@@ -758,7 +758,7 @@ func TestContinueTargetCarriesTheTargetsSpawnFacts(t *testing.T) {
 			deps := Dependencies{SpawnRule: probe.rule()}
 			transcript := writeTranscript(t, transcriptUser, transcriptFirstTurn, transcriptLastTurn, transcriptToolReply)
 			stop := func() {
-				assert.Equal(t, "pass", Judge(ctx, deps, Request{Input: subagentStop(t, "a1b2c3", transcript), Host: "claude-code"}).Decision)
+				assert.Equal(t, verdict.Defer, Judge(ctx, deps, Request{Input: subagentStop(t, "a1b2c3", transcript), Host: "claude-code"}).Decision)
 			}
 			if tc.stopped && tc.stopFirst {
 				stop()
@@ -914,7 +914,7 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 			require.Len(t, rows, 1)
 			assert.Equal(t, want, outcome{
 				Lease:        v.Lease,
-				Denied:       v.Decision == "deny",
+				Denied:       v.Decision == verdict.Deny,
 				ReportedBase: rows[0].ReportedBase,
 				Registered:   rows[0].Registered != 0,
 			})
@@ -961,13 +961,13 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 		})})
 	}
 	type graded struct {
-		Decision string
+		Decision verdict.Decision
 		Lease    string
 		From     jobtypes.LeaseSource
 	}
 	inside, outside := edit("internal/guard/guard.go"), edit("internal/job/store.go")
-	assert.Equal(t, graded{"pass", "guard-facts", jobtypes.LeaseSourceAgent}, graded{inside.Decision, inside.Lease, jobtypes.LeaseSource(inside.LeaseFrom)})
-	assert.Equal(t, graded{"deny", "guard-facts", jobtypes.LeaseSourceAgent}, graded{outside.Decision, outside.Lease, jobtypes.LeaseSource(outside.LeaseFrom)})
+	assert.Equal(t, graded{verdict.Defer, "guard-facts", jobtypes.LeaseSourceAgent}, graded{inside.Decision, inside.Lease, jobtypes.LeaseSource(inside.LeaseFrom)})
+	assert.Equal(t, graded{verdict.Deny, "guard-facts", jobtypes.LeaseSourceAgent}, graded{outside.Decision, outside.Lease, jobtypes.LeaseSource(outside.LeaseFrom)})
 
 	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: workerCache, Root: workerRoot}).List()
 	require.NoError(t, err)
@@ -1323,7 +1323,7 @@ type graded struct {
 }
 
 func gradedAs(v verdict.Judgment) graded {
-	return graded{v.Decision == "deny", v.Lease, jobtypes.LeaseSource(v.LeaseFrom)}
+	return graded{v.Decision == verdict.Deny, v.Lease, jobtypes.LeaseSource(v.LeaseFrom)}
 }
 
 // TestASubagentsExecNeverBindsItsParent is the 2026-09-26 incident. An orchestrator spawned
@@ -1341,7 +1341,7 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 
 	// The foreground spawn's PreToolUse; its PostToolUse lands only after the child stops.
 	foreground := strings.Replace(claudeSpawnEnvelope, `"run_in_background":true`, `"run_in_background":false`, 1)
-	require.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: foreground, Host: "claude-code"}).Decision)
+	require.NotEqual(t, verdict.Deny, Judge(ctx, Dependencies{}, Request{Input: foreground, Host: "claude-code"}).Decision)
 
 	took := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "./magus job exec "+research.ID), Host: "claude-code"})
 	require.Equal(t, graded{}, gradedAs(took), "the child held nothing when it took the job")
@@ -1517,7 +1517,7 @@ func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: m.ApprovedSpawnRule},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
+	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Deny, Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 }
 
 // Resolving the approved rule is the one part of a spawn an agent can slow down, so running
@@ -1526,7 +1526,7 @@ func TestSlowApprovedRuleDenies(t *testing.T) {
 	m := loadRules(t, committedSpawnRule(t, `import "magus";
 
 magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `))
 	require.NotNil(t, m.SpawnRule())
@@ -1733,15 +1733,15 @@ func TestSpawnIntoAFullBuildBudgetIsAdvised(t *testing.T) {
 	}}
 
 	standBudget(t, budget.Snapshot{BudgetSlots: 2, HeldSlots: 1})
-	assert.Equal(t, "pass", spawn("budget-room", "").Decision, "a free slot says nothing")
+	assert.Equal(t, verdict.Defer, spawn("budget-room", "").Decision, "a free slot says nothing")
 
 	standBudget(t, full)
 	v := spawn("budget-full", "")
-	require.Equal(t, verdict.Judgment{Decision: "advise", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
+	require.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleSleepPoll)}, judgedAs(v))
 	assert.Contains(t, v.Context, "slots 2/2")
 	assert.Contains(t, v.Context, "go-test . in /w/a, has held its seat 6m")
-	assert.Equal(t, "advise", spawn("budget-full", "").Decision, "each spawn into a full budget hears it")
-	assert.Equal(t, "pass", spawn("budget-worker", "a1b2c3").Decision, "a worker reports a full budget rather than waiting on it")
+	assert.Equal(t, verdict.Advise, spawn("budget-full", "").Decision, "each spawn into a full budget hears it")
+	assert.Equal(t, verdict.Defer, spawn("budget-worker", "a1b2c3").Decision, "a worker reports a full budget rather than waiting on it")
 }
 
 func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T) {
@@ -1805,7 +1805,7 @@ func (s *SpawnUnisolatedSuite) writer() jobtypes.Job {
 
 func (s *SpawnUnisolatedSuite) TestIsolatedWritingRowWithNoCheckoutIsDenied() {
 	v := s.spawn(s.writer(), true, nil)
-	require.Equal(s.T(), verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnUnisolatedRow)}, judgedAs(v), v.Context)
+	require.Equal(s.T(), verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnUnisolatedRow)}, judgedAs(v), v.Context)
 	assert.Contains(s.T(), v.Reason, "magus job fork guard-facts --checkout <dir>")
 }
 

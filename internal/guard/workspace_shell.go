@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // WorkspaceShellRule is one additive shell rule declared by magus\guard.shell in
@@ -17,7 +18,7 @@ import (
 // regex.
 type WorkspaceShellRule struct {
 	Name     string
-	Decision string // "deny" or "advise"
+	Decision verdict.Decision // deny or advise
 	Program  string
 	Args     []string
 	Reason   string
@@ -51,12 +52,12 @@ func matchWorkspaceShell(rules []WorkspaceShellRule, command string, d Dialect) 
 			continue
 		}
 		switch r.Decision {
-		case decisionDeny:
+		case verdict.Deny:
 			return ShellVerdict{
 				Deny: r.Reason,
 				Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)},
 			}
-		case decisionAdvise:
+		case verdict.Advise:
 			if advise.Context == "" {
 				advise = ShellVerdict{Context: r.Reason, Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)}}
 			}
@@ -75,7 +76,7 @@ func denyUnparsedWorkspaceShell(rules []WorkspaceShellRule, command string) Shel
 	})
 	for _, r := range rules {
 		prog := filepath.Base(r.Program)
-		if r.Decision != decisionDeny || prog == "" || prog == "." {
+		if r.Decision != verdict.Deny || prog == "" || prog == "." {
 			continue
 		}
 		if !slices.ContainsFunc(words, func(w string) bool { return w == r.Program || filepath.Base(w) == prog }) {

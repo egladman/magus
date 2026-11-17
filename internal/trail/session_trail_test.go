@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // The lineage join: a loaded transcript and the guard's live observations share the host
@@ -13,11 +15,12 @@ import (
 // which lease, and whom it spawned.
 func TestSessionTrailHereJoinsThisCheckoutsTrail(t *testing.T) {
 	cacheDir := t.TempDir()
-	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass", Lease: "fleet/w1"})
+	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
 	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
 	AppendAgentSpawn(t.Context(), cacheDir, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
 
-	tr := SessionTrailHere(t.Context(), cacheDir, "s1")
+	tr, err := SessionTrailHere(t.Context(), cacheDir, "s1")
+	require.NoError(t, err)
 	require.NotNil(t, tr)
 	var out strings.Builder
 	RenderSessionTrail(&out, tr)
@@ -28,7 +31,9 @@ func TestSessionTrailHereJoinsThisCheckoutsTrail(t *testing.T) {
 
 func TestSessionTrailHereIsNilForASessionThatRanElsewhere(t *testing.T) {
 	cacheDir := t.TempDir()
-	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass"})
+	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 
-	assert.Nil(t, SessionTrailHere(t.Context(), cacheDir, "s2"))
+	missing, err := SessionTrailHere(t.Context(), cacheDir, "s2")
+	require.NoError(t, err)
+	assert.Nil(t, missing)
 }

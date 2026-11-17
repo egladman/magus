@@ -66,7 +66,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 		"pattern": "func HandleRequest", "path": "internal/api/handler.go",
 		"output_mode": "content", "-A": 20,
 	})})
-	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleGrepReader)}, judgedAs(body), body.Reason)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleGrepReader)}, judgedAs(body), body.Reason)
 	assert.Contains(t, body.Reason, "refs HandleRequest --source")
 
 	glob := Judge(ctx, deps, Request{Input: envelope("Glob", map[string]any{"pattern": "**/handler.go", "path": "internal/api"})})
@@ -78,11 +78,11 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 		"the answer itself is in the stored verdict")
 
 	text := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{"pattern": "serves one request", "path": "internal"})})
-	assert.NotEqual(t, "deny", text.Decision, text.Reason)
+	assert.NotEqual(t, verdict.Deny, text.Decision, text.Reason)
 
 	textContext := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{
 		"pattern": "serves one request", "path": "internal/api/handler.go",
 		"output_mode": "content", "-C": 3,
 	})})
-	assert.NotEqual(t, "deny", textContext.Decision, textContext.Reason)
+	assert.NotEqual(t, verdict.Deny, textContext.Decision, textContext.Reason)
 }

@@ -50,7 +50,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, judged verdict.
 	if deps.WriteRule == nil && deps.ApprovedWriteRule == nil && deps.LoadFailure == nil {
 		return judged, workspaceRuleRecord{}
 	}
-	if judged.Decision == decisionDeny {
+	if judged.Decision == verdict.Deny {
 		return judged, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
@@ -99,7 +99,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, judged verdict.
 		return judgedCall{seam: seamWrite, changes: !outsideAnyWorkspace(path, at), what: "this file write", lease: lease, path: path, guardSource: isGuardSource(deps, at, path)}
 	}, at)
 	decided := ""
-	if judged.Decision != decisionPass {
+	if judged.Decision != verdict.Defer {
 		decided = decidedByBuiltin
 	}
 	judged, decided = applyWorkspaceAnswer(judged, decided, asked, workspaceWriteRule)

@@ -59,7 +59,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("no watching here");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 -- policy-allow.buzz --
 namespace policy;
@@ -67,7 +67,7 @@ namespace policy;
 import "magus";
 
 export fun judge(req: CommandRequest) > GuardVerdict {
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 -- bash.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "gh run watch 123", "description": "watch ci"}}

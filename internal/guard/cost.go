@@ -706,7 +706,7 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 		out.DelegableClass = delegableClass(input, at)
 		free = costFree(input, at)
 	}
-	ran := judged.Decision == decisionPass || judged.Decision == decisionAdvise
+	ran := judged.Decision == verdict.Defer || judged.Decision == verdict.Advise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
 		var st costState

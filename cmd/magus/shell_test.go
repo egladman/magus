@@ -304,7 +304,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, verdict.Judgment{
 		APIVersion: v.APIVersion,
-		Decision:   "deny",
+		Decision:   verdict.Deny,
 		Reason:     "Name a model.",
 		Rule:       v.Rule, // the rule's catalogued name is pinned by the guard's own tests
 		Lease:      v.Lease,
@@ -324,7 +324,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	require.Error(t, err)
 
 	v := judgeSpawnAt(t, root)
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.True(t, strings.HasPrefix(v.Reason, "Name a model.\n\n"), v.Reason)
 	assert.Contains(t, v.Reason, "The working tree's magus\\guard.spawn rule judged nothing: the magusfile failed to load")
 
@@ -333,7 +333,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, verdict.Judgment{
 		APIVersion: v.APIVersion,
-		Decision:   "deny",
+		Decision:   verdict.Deny,
 		Reason:     v.Reason, // checked above
 		Rule:       "workspace:command",
 		Lease:      v.Lease,
@@ -365,13 +365,13 @@ magus\guard.command(p\judge);
 	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"policy/a.buzz":  rule("a", `magus\guard.deny("Not in this repository.")`),
-		"policy/b.buzz":  rule("b", `magus\guard.allow()`),
+		"policy/b.buzz":  rule("b", `magus\guard.defer()`),
 		"magusfile.buzz": importing("a"),
 	})
 	root, write := repo.Root(), repo.Write
 
 	write("magusfile.buzz", importing("b"))
-	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
+	write("policy/a.buzz", rule("a", `magus\guard.defer()`))
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 
@@ -390,7 +390,7 @@ magus\guard.command(p\judge);
 // committed rule can be fixed, and is refused once a change is pending.
 func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	testkit.Isolate(t)
-	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.defer();\n});\n"
 	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
 	root := repo.Root()
 	resetWorkspaceMemo(t)
@@ -405,12 +405,12 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	}
 
 	v := judge()
-	assert.Equal(t, "advise", v.Decision, v.Reason)
+	assert.Equal(t, verdict.Advise, v.Decision, v.Reason)
 	assert.Contains(t, v.Context, "lets it through, because the guard loads this file itself")
 
 	repo.Write("magusfile.buzz", allow+"// pending\n")
 	v = judge()
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
 }
 
@@ -463,7 +463,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}
 	first := judge()
-	require.Equal(t, "deny", first.Decision, first.Reason)
+	require.Equal(t, verdict.Deny, first.Decision, first.Reason)
 	again := judge()
 	ref := regexp.MustCompile(`grd[0-9a-f]{16}`).FindString(again.Reason)
 	require.NotEmpty(t, ref, "a repeat deny cites its full verdict: %s", again.Reason)
@@ -645,7 +645,7 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 
 func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
-	s.NotEqual("deny", v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 // hookAudienceSuite pins decision 110 per host: a deny shows the person its first line, and
@@ -722,7 +722,7 @@ func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
 }
 
 func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
-	verdict, err := codec.Marshal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
+	verdict, err := codec.Marshal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: audienceReason})
 	s.Require().NoError(err)
 	s.T().Setenv("GLUE_VERDICT", string(verdict))
 	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,

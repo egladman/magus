@@ -36,7 +36,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	if deadlineErr != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:   "deny",
+			Decision:   verdict.Deny,
 			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", deadlineErr.Error()),
 		}
 		if err := e.writeVerdict(out, opts, verdict); err != nil {
@@ -58,7 +58,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	if readError != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:   "deny",
+			Decision:   verdict.Deny,
 			// "from stdin" is accurate whichever way this command is called: an operand
 			// is read off argv and cannot fail, so a read error is always the piped path.
 			Reason: fmt.Sprintf("magus shell could not read its input from stdin: %s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", readError.Error()),
@@ -87,7 +87,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	if cause := cmp.Or(envRefusal, staleConfig); cause != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		root, _ := e.FindRoot(judgeRoot)
 		answer, reason := UnjudgedEvent(root, input, cause)
-		verdict := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason, Rule: answer.Rule()}
+		verdict := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Decision(answer.Decision()), Reason: reason, Rule: answer.Rule()}
 		if verdict.Decision == "advise" {
 			verdict.Reason, verdict.Context = "", reason
 		}
@@ -133,7 +133,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 		if !sf.Observe && !sf.Message && sf.Duration == 0 {
 			verdict := verdict.Judgment{
 				APIVersion: agent.GuardAPIVersion,
-				Decision:   "deny",
+				Decision:   verdict.Deny,
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
 					refusal.err.Error(), refusal.next.Run),
 				NextSteps: []types.NextStep{refusal.next},

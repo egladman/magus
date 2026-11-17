@@ -28,7 +28,7 @@ const shellAndCommandRules = `import "magus";
 magus\guard.shell({"name": "no-frobnicate", "decision": "deny", "program": "frobnicate", "reason": "Not here."});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 

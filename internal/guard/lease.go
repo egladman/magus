@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -4079,7 +4080,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	})
 	for _, w := range slices.Concat(candidates, destinations, removed) {
 		if target, placed := w.place(home); placed {
-			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
+			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == verdict.Deny {
 				return g.Reason
 			}
 		}
@@ -4098,7 +4099,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if !inside {
 			// Outside, the file-write rules refuse magus's own
 			// directories and any other checkout, parent or nested.
-			if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+			if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == verdict.Deny {
 				return g.Reason
 			}
 			continue
@@ -4128,7 +4129,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			continue
 		}
 		// A worker builds its own magus at a product path; no hook runs it.
-		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny && !slices.Contains(products(), rel) {
+		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == verdict.Deny && !slices.Contains(products(), rel) {
 			return g.Reason
 		}
 	}
@@ -4220,7 +4221,7 @@ func denyPatchOutsideLease(ctx context.Context, deps Dependencies, me jobtypes.J
 		if !placed {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, me.ID, target); g.Decision == decisionDeny {
+		if g := gradeLeasedWrite(ctx, deps, me.ID, target); g.Decision == verdict.Deny {
 			return g.Reason
 		}
 	}
@@ -4244,7 +4245,7 @@ func denyPickOutsideLease(ctx context.Context, deps Dependencies, me jobtypes.Jo
 		if !placed {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, me.ID, target); g.Decision == decisionDeny {
+		if g := gradeLeasedWrite(ctx, deps, me.ID, target); g.Decision == verdict.Deny {
 			return g.Reason
 		}
 	}

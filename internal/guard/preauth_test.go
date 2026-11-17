@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -279,7 +280,7 @@ func servedAs(call Request, role servedRole) Request {
 func gradeServed(t *testing.T, ctx context.Context, deps Dependencies, call Request, role, id, run string) {
 	t.Helper()
 	call.Input, call.DryRun = run, true
-	if v := Judge(ctx, deps, call); v.Decision == decisionDeny {
+	if v := Judge(ctx, deps, call); v.Decision == verdict.Deny {
 		t.Errorf("the %q next serves %q, which the guard refuses for a %s:\n%s", id, run, role, v.Reason)
 	}
 }
@@ -347,7 +348,7 @@ func servedFixtures(ctx context.Context) []servedFixture {
 			call := servedAs(Request{Input: "gh pr checks 183"}, role)
 			call.DryRun = true
 			v := Judge(ctx, deps, call)
-			require.Equal(t, decisionAdvise, v.Decision, "a one-shot gh pr checks is advised to every role")
+			require.Equal(t, verdict.Advise, v.Decision, "a one-shot gh pr checks is advised to every role")
 			_, said := spoken(v)
 			// It names more than one read; the caller needs one it can run.
 			var runnable []string
@@ -357,7 +358,7 @@ func servedFixtures(ctx context.Context) []servedFixture {
 					continue
 				}
 				call.Input = read
-				if Judge(ctx, deps, call).Decision != decisionDeny {
+				if Judge(ctx, deps, call).Decision != verdict.Deny {
 					runnable = append(runnable, read)
 				}
 			}
@@ -371,7 +372,7 @@ func servedFixtures(ctx context.Context) []servedFixture {
 			started := bgTime(t, "2026-10-13T11:37:41.120Z")
 			v, ok := judgeStop(strict(Dependencies{}), hint.Gate{}, subagentStop(t, role.call.Agent, writeTranscript(t, bgSearchCall, bgSearchResult)), "", started.Add(time.Hour))
 			require.True(t, ok)
-			require.Equal(t, decisionDeny, v.Decision)
+			require.Equal(t, verdict.Deny, v.Decision)
 			assert.NotContains(t, v.Reason, "completion notice", "a subagent refused its stop cannot wait for a notice that comes after it")
 			var next []string
 			for _, m := range taskStopRe.FindAllStringSubmatch(v.Reason, -1) {
@@ -449,7 +450,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				if call.Input != "" {
 					probe := call
 					probe.DryRun = true
-					if Judge(ctx, deps, probe).Decision == decisionDeny {
+					if Judge(ctx, deps, probe).Decision == verdict.Deny {
 						return
 					}
 				}

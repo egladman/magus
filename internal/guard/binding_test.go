@@ -63,7 +63,7 @@ func (s *ExitedHolderBindingSuite) setState(state jobtypes.State) {
 // store does once the line runs.
 func (s *ExitedHolderBindingSuite) exitOwnJob() {
 	v := s.judge("./magus job exit held-job --stdin <<'EOF'\n{\"api_version\":\"magus.job-result/v1alpha1\",\"changed_paths\":[],\"unresolved_risks\":[]}\nEOF", false)
-	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.Require().NotEqual(verdict.Deny, v.Decision, v.Reason)
 	s.setState(jobtypes.StateExited)
 }
 
@@ -77,34 +77,34 @@ func (s *ExitedHolderBindingSuite) TestOwnClientExitKeepsTheBinding() {
 		"agent_id": s.who.Agent, "agent_type": "general-purpose",
 		"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; magus\job("held-job").exit();`}})
 	v := Judge(s.testContext(), Dependencies{}, Request{Input: input, Host: s.who.Host})
-	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.Require().NotEqual(verdict.Deny, v.Decision, v.Reason)
 	s.setState(jobtypes.StateExited)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestPassedWaitReleasesTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job wait held-job", true).Decision)
 	s.setState(jobtypes.StatePass)
-	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
+	s.NotEqual(verdict.Deny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestFailedWaitReleasesTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job wait held-job", true).Decision)
 	s.setState(jobtypes.StateFail)
-	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
+	s.NotEqual(verdict.Deny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestRejectedWaitKeepsTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job wait held-job", true).Decision)
 	s.setState(jobtypes.StateExited)
-	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
+	s.NotEqual(verdict.Deny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestRmReleasesTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("magus job rm held-job --force", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("magus job rm held-job --force", false).Decision)
 	_, err := s.store.Delete(s.testContext(), heldJob, true)
 	s.Require().NoError(err)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
@@ -113,7 +113,7 @@ func (s *ExitedHolderBindingSuite) TestRmReleasesTheBinding() {
 // The 10-29 trail lost the lease at a `job exit --schema` read, which only
 // prints the schema.
 func (s *ExitedHolderBindingSuite) TestExitSchemaReadKeepsTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job exit held-job --schema", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job exit held-job --schema", false).Decision)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }
 
@@ -140,7 +140,7 @@ func (s *ExitedHolderBindingSuite) TestGlobalDryRunWaitKeepsTheBinding() {
 func (s *ExitedHolderBindingSuite) TestExecOfANewJobAfterOwnExitRebinds() {
 	s.exitOwnJob()
 	v := s.judge("./magus job exec next-job", false)
-	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.Require().NotEqual(verdict.Deny, v.Decision, v.Reason)
 	s.Equal(job.Binding{Job: "next-job"}, boundJob(s.who, s.at))
 }
 
@@ -249,7 +249,7 @@ func (s *BindOnExecSuite) TestARowEndedWithItsSessionHereBinds() {
 func (s *ExitedHolderBindingSuite) TestForkOutsideTheTreeAfterOwnExitIsRefused() {
 	s.exitOwnJob()
 	v := s.judge("magus job fork other-job --parent other --read-only", false)
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 }
 
 func (s *ExitedHolderBindingSuite) testContext() context.Context { return s.layers.of(s.T()) }

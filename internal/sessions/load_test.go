@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,12 +16,12 @@ import (
 
 // firstWordRejudge stands in for the guard's rules, which this package cannot import: it
 // names the first word as the program and passes every command.
-func firstWordRejudge(text string) (program, verdict, rule string) {
+func firstWordRejudge(text string) (program string, decision verdict.Decision, rule string) {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
-		return "", session.VerdictPass, ""
+		return "", verdict.Defer, ""
 	}
-	return fields[0], session.VerdictPass, ""
+	return fields[0], verdict.Defer, ""
 }
 
 // loadStream does what `magus session load --file` does: read the stream, then store

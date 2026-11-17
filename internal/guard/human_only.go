@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -38,7 +39,7 @@ func (p humanOnlyPair) ref() string { return fmt.Sprintf("%s:%s", p.project, p.t
 // human_only target through a chain, or when a leased worker names one; "ask" when a
 // session no lease binds names one; "" when none does or the workspace cannot be read.
 // lapsed marks a deny that judged nothing: the policy read ran out of time.
-func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command string) (decision, reason string, lapsed bool) {
+func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command string) (decision verdict.Decision, reason string, lapsed bool) {
 	cmds, ok := ParseCommands(command)
 	if !ok {
 		return "", "", false
@@ -60,7 +61,7 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 			call := judgedCall{what: fmt.Sprintf("`%s`", elideCommand(command))}
 			lapse := ruleLapse{budget: hookBudget, said: lapseWording{"reading this workspace's target policies", "finish"}}
 			log.markLapseDenied()
-			return decisionDeny, lapseReason(call, lapse, isDryRun(ctx)), true
+			return verdict.Deny, lapseReason(call, lapse, isDryRun(ctx)), true
 		}
 		return "", "", false
 	}
@@ -73,7 +74,7 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 
 // gradeHumanOnlyPairs is gradeHumanOnly's verdict once it knows the human_only targets
 // the runs reach.
-func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, command, root string, runs []targetRun, pairs []humanOnlyPair) (decision, reason string) {
+func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, command, root string, runs []targetRun, pairs []humanOnlyPair) (decision verdict.Decision, reason string) {
 	line := elideCommand(command)
 	var composed, unread []humanOnlyPair
 	for _, p := range pairs {
@@ -91,7 +92,7 @@ func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, co
 			fmt.Fprintf(&b, "- %s: %s\n", p.ref(), p.reason)
 		}
 		b.WriteString("An argv the script computes, or a script that does not parse, could name any of these, so the call is refused rather than asked about.")
-		return decisionDeny, b.String()
+		return verdict.Deny, b.String()
 	}
 	if len(composed) > 0 {
 		var b strings.Builder
@@ -100,7 +101,7 @@ func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, co
 			fmt.Fprintf(&b, "- %s: %s\n", p.ref(), p.reason)
 		}
 		b.WriteString("A run that skipped them and reported green would be a pass the push gate trusts, so the whole line is refused; the person may run it from their own terminal.")
-		return decisionDeny, b.String()
+		return verdict.Deny, b.String()
 	}
 	var facts strings.Builder
 	reasons := make([]string, 0, len(pairs))
@@ -113,9 +114,9 @@ func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, co
 	// worker. The
 	// declared reasons ride the first line, the one a fork quotes when it refuses the check.
 	if me, ok := actingLiveLease(ctx, deps, actingLease); actingLease != "" && (!ok || workerRole(me, deps.caller) != "") {
-		return decisionDeny, fmt.Sprintf("`%s` runs a target a person runs (%s), and this session is bound to job %s; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n%s", line, strings.Join(reasons, "; "), actingLease, facts.String())
+		return verdict.Deny, fmt.Sprintf("`%s` runs a target a person runs (%s), and this session is bound to job %s; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n%s", line, strings.Join(reasons, "; "), actingLease, facts.String())
 	}
-	return decisionAsk, fmt.Sprintf("%sTo run it yourself: %s", facts.String(), line)
+	return verdict.Ask, fmt.Sprintf("%sTo run it yourself: %s", facts.String(), line)
 }
 
 // humanOnlyRun renders the run that names p, for the line the reason opens with.

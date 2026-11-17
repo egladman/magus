@@ -966,7 +966,7 @@ export interface AgentCallView {
   atMs: number;
   host: string;
   tool: string; // the host tool name: shell.command, file.write, or an MCP tool
-  decision: "deny" | "advise" | "pass" | "";
+  decision: "deny" | "advise" | "defer" | "";
   mcp: boolean;
 }
 
@@ -1003,12 +1003,12 @@ export interface AgentEventWire {
 
 // guardDecision reads the verdict off the event LINE rather than fetching its response blob.
 //
-// trail.AppendAgentCommand writes preview as "guard: deny" / "guard: advise" / "guard: pass", so
+// trail.AppendAgentCommand writes preview as "guard: deny" / "guard: advise" / "guard: defer", so
 // the decision is already in the listing. Fetching it properly would mean one GetPayload round trip
 // per row, which for a 200-event window is 200 requests to render one tile.
-export function guardDecision(preview: string): "deny" | "advise" | "pass" | "" {
-  const m = /^guard:\s*(deny|advise|pass)$/.exec(preview.trim());
-  return m ? (m[1] as "deny" | "advise" | "pass") : "";
+export function guardDecision(preview: string): "deny" | "advise" | "defer" | "" {
+  const m = /^guard:\s*(deny|advise|defer)$/.exec(preview.trim());
+  return m ? (m[1] as "deny" | "advise" | "defer") : "";
 }
 
 export function mapAgentActivity(events: AgentEventWire[], now: number): AgentActivityView {

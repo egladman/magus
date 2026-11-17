@@ -202,7 +202,7 @@ func (e HookEnv) delegateToCheckout(ctx context.Context, input string, opts outp
 	case DelegateKilledUnanswered:
 		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:   "deny",
+			Decision:   verdict.Deny,
 			Reason:     fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
 		}
 		if werr := e.writeVerdict(out, opts, verdict); werr != nil {

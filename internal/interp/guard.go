@@ -110,7 +110,7 @@ func guardRulesFilter(prog *ast.Program, lookup buzz.ImportLookup) {
 // answer. Every other member, and the namespace itself passed or aliased, is
 // treated as registering one, so a member added later is kept by default.
 var guardVerdicts = map[string]bool{
-	"allow": true, "advise": true, "deny": true, "once": true, "count": true, "binary": true,
+	"defer": true, "advise": true, "ask": true, "deny": true, "once": true, "count": true, "binary": true,
 }
 
 // guardRootSet is how a file names the magus\guard namespace: through the

@@ -88,14 +88,14 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 }
 
 // registerVerdictMembers binds the members every function rule builds its answer with:
-// allow/advise/deny, and once/count for state that lasts the calling session.
+// defer/advise/ask/deny, and once/count for state that lasts the calling session.
 func registerVerdictMembers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
 	// One per session, so a rule called on every hook reads the enum cases once.
 	enums := ffi.SessionEnums(ctx, sess, "magus")
-	guardMap.MapSet("allow", directVal(obs, "magus.guard.allow", func(context.Context, []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectGuardVerdict(verdict.Verdict{Decision: verdict.Allow}, enums), nil
+	guardMap.MapSet("defer", directVal(obs, "magus.guard.defer", func(context.Context, []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectGuardVerdict(verdict.Verdict{Decision: verdict.Defer}, enums), nil
 	}))
-	for _, decision := range []verdict.Decision{verdict.Advise, verdict.Deny} {
+	for _, decision := range []verdict.Decision{verdict.Advise, verdict.Ask, verdict.Deny} {
 		member := string(decision)
 		guardMap.MapSet(member, directVal(obs, "magus.guard."+member, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			if len(args) < 1 || len(args) > 2 || !args[0].IsString() || strings.TrimSpace(args[0].AsString()) == "" {
@@ -233,7 +233,7 @@ func callFunctionRule(ctx context.Context, sess *buzz.Session, rule vm.Value, me
 func decodeGuardVerdict(name string, v vm.Value) (verdict.Verdict, error) {
 	fields, ok := v.MapView()
 	if !ok {
-		return verdict.Verdict{}, fmt.Errorf(`%s: the rule returned %s, not a GuardVerdict, return magus\guard.allow(), magus\guard.advise(text) or magus\guard.deny(text)`, name, v.Kind())
+		return verdict.Verdict{}, fmt.Errorf(`%s: the rule returned %s, not a GuardVerdict, return magus\guard.defer(), magus\guard.advise(text), magus\guard.ask(text) or magus\guard.deny(text)`, name, v.Kind())
 	}
 	var out verdict.Verdict
 	if d, ok := fields.MapGet("decision"); ok && !d.IsNull() {
@@ -264,7 +264,7 @@ func decodeGuardVerdict(name string, v vm.Value) (verdict.Verdict, error) {
 			}
 		}
 	}
-	if (out.Decision == verdict.Deny || out.Decision == verdict.Advise) && out.Reason == "" {
+	if (out.Decision == verdict.Deny || out.Decision == verdict.Ask || out.Decision == verdict.Advise) && out.Reason == "" {
 		return verdict.Verdict{}, fmt.Errorf(`%s: the rule returned %s with no reason, which tells the agent nothing`, name, out.Decision)
 	}
 	return out, nil

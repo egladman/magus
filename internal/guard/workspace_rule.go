@@ -19,15 +19,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The decisions a GuardJudgment carries. A workspace rule answers advise or deny, spelled by
-// types; pass and ask exist only on the wire.
-const (
-	decisionPass   = "pass"
-	decisionAsk    = "ask"
-	decisionAdvise = string(verdict.Advise)
-	decisionDeny   = string(verdict.Deny)
-)
-
 // The sides a verdict can be decided by, recorded on the trail so a deny links to the
 // policy that produced it.
 const (
@@ -470,9 +461,10 @@ func gatedCalls(seam functionSeam) string {
 }
 
 // applyWorkspaceAnswer merges a workspace rule's answer into the built-in verdict, which
-// decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
-// fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
-// on a built-in ask is dropped, as every notice is on an ask. A deny denyUnloaded made is
+// decided names the side of. Strengthen only: a deny replaces whatever stood, an ask
+// replaces anything short of a deny, an advise fills a defer or is added to a built-in
+// advice, and a defer changes nothing. An advise on a built-in ask is dropped, as every
+// notice is on an ask. A deny denyUnloaded made is
 // filed under its own built-in rule, with its next left unserved for the caller's shapeDeny
 // to grade.
 //
@@ -489,10 +481,12 @@ func applyWorkspaceAnswer(judged verdict.Judgment, decided string, asked rulesAn
 	}
 	switch {
 	case answer.Decision == verdict.Deny:
-		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: judged.Lease, NextSteps: remedies(asked.next)}, asked.by
-	case answer.Decision == verdict.Advise && judged.Decision == decisionPass:
-		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: judged.Lease}, asked.by
-	case answer.Decision == verdict.Advise && judged.Decision == decisionAdvise:
+		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Deny, Reason: answer.Reason, Rule: rule, Lease: judged.Lease, NextSteps: remedies(asked.next)}, asked.by
+	case answer.Decision == verdict.Ask && judged.Decision != verdict.Deny:
+		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Ask, Reason: answer.Reason, Rule: rule, Lease: judged.Lease}, asked.by
+	case answer.Decision == verdict.Advise && judged.Decision == verdict.Defer:
+		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Advise, Context: answer.Reason, Rule: rule, Lease: judged.Lease}, asked.by
+	case answer.Decision == verdict.Advise && judged.Decision == verdict.Advise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		judged.Context += "\n\n" + answer.Reason
 		return judged, fmt.Sprintf("%s%s%s", decided, decidedByJoin, asked.by)
@@ -505,12 +499,12 @@ func applyWorkspaceAnswer(judged verdict.Judgment, decided string, asked rulesAn
 func applyRuleFailureNote(judged verdict.Judgment, note string, kind hint.MarkerKind) verdict.Judgment {
 	switch {
 	case note == "":
-	case judged.Decision == decisionDeny || judged.Decision == decisionAsk:
+	case judged.Decision == verdict.Deny || judged.Decision == verdict.Ask:
 		judged.Reason += "\n\n" + note
-	case judged.Decision == decisionAdvise:
+	case judged.Decision == verdict.Advise:
 		judged.Context += "\n\n" + note
 	default:
-		judged.Decision, judged.Context, judged.Rule = decisionAdvise, note, string(kind)
+		judged.Decision, judged.Context, judged.Rule = verdict.Advise, note, string(kind)
 	}
 	return judged
 }

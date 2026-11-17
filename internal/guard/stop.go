@@ -35,19 +35,19 @@ func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who ho
 	if env.StopHookActive != nil && *env.StopHookActive {
 		return verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:   decisionAdvise,
+			Decision:   verdict.Advise,
 			Rule:       string(denyRuleStopUnfiled),
 			Context: fmt.Sprintf("magus workspace: job %s stopped a second time with no filed result, and stop-unfiled let it through; "+
 				"`magus job wait %s` shows the row never passed.", row.ID, row.ID),
 		}, true
 	}
-	decision := decisionDeny
+	decision := verdict.Deny
 	if setting.Decision == builtin.Advise {
-		decision = decisionAdvise
+		decision = verdict.Advise
 	}
 	v := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: string(denyRuleStopUnfiled)}
 	say := unfiledStopReason(row)
-	if decision == decisionDeny {
+	if decision == verdict.Deny {
 		v.Reason = say
 	} else {
 		v.Context = say

@@ -128,7 +128,7 @@ type shadowTally struct {
 	Decisions map[verdict.Decision]int `json:"decisions"`
 }
 
-// String renders t as its profile and a count of every decision: allow, advise and deny
+// String renders t as its profile and a count of every decision: defer, advise, ask and deny
 // always, then any other decision recorded.
 func (t shadowTally) String() string {
 	declared := verdict.Decision("").Values()
@@ -295,7 +295,7 @@ func sumDelegable(main []SessionCall) *delegableShare {
 func tallyAdvisories(main []SessionCall, spawns []costSpawn) *advisoryOutcome {
 	out := &advisoryOutcome{Within: followWithin}
 	for i, call := range main {
-		if call.Decision != string(verdict.Advise) || !slices.Contains(costAdviceRules, call.Rule) {
+		if call.Decision != verdict.Advise || !slices.Contains(costAdviceRules, call.Rule) {
 			continue
 		}
 		out.Given++
@@ -321,7 +321,7 @@ func tallyShadow(main []SessionCall) []shadowTally {
 			if byProfile[p] == nil {
 				byProfile[p] = map[verdict.Decision]int{}
 			}
-			byProfile[p][cmp.Or(d, verdict.Allow)]++
+			byProfile[p][cmp.Or(d, verdict.Defer)]++
 		}
 	}
 	if len(byProfile) == 0 {

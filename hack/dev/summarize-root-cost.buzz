@@ -116,7 +116,7 @@ export fun fold(shows: [str]) > result\Result::<Rollup> {
             if (decisions == null) {
                 continue;
             }
-            foreach (verdict in ["allow", "advise", "deny"]) {
+            foreach (verdict in ["defer", "advise", "deny"]) {
                 final key = "{profile}/{verdict}";
                 verdicts[key] = (verdicts[key] ?? 0) + std\toInt(decisions[verdict] ?? 0);
             }
@@ -145,8 +145,8 @@ export fun fold(shows: [str]) > result\Result::<Rollup> {
     }
     final shadow = mut [<str>];
     foreach (profile in PROFILES) {
-        if (verdicts.hasKey("{profile}/allow")) {
-            shadow.append("{profile} {count(verdicts, key: "{profile}/allow")} allow/{count(verdicts, key: "{profile}/advise")} advise/{count(verdicts, key: "{profile}/deny")} deny");
+        if (verdicts.hasKey("{profile}/defer")) {
+            shadow.append("{profile} {count(verdicts, key: "{profile}/defer")} defer/{count(verdicts, key: "{profile}/advise")} advise/{count(verdicts, key: "{profile}/deny")} deny");
         }
     }
 
@@ -281,7 +281,7 @@ final MEASURED = `\{"session": "a", "cost": \{
   "delegable": \{"chars": 600, "total": 1000\},
   "spawns": \{"total": 3, "by_model": [\{"name": "claude-sonnet-5-5", "count": 2\}, \{"name": "", "count": 1\}]\},
   "advisories": \{"given": 4, "followed": 1, "within": 10\},
-  "shadow": [\{"profile": "light", "decisions": \{"allow": 80, "advise": 10, "deny": 0\}\}, \{"profile": "strict", "decisions": \{"allow": 70, "advise": 10, "deny": 10\}\}],
+  "shadow": [\{"profile": "light", "decisions": \{"defer": 80, "advise": 10, "deny": 0\}\}, \{"profile": "strict", "decisions": \{"defer": 70, "advise": 10, "deny": 10\}\}],
   "dollars": \{"billing": "metered", "calls": 90, "floor_usd": 12.3\}
 \}\}`;
 
@@ -306,7 +306,7 @@ test "totals add up and name how many sessions measured each section" {
         "  delegable: 40% of 2000 result chars; measured in 2 of 2 session(s)",
         "  spawns: 4 (claude-sonnet-5-5 3, none declared 1)",
         "  advisories: 5 given, 1 followed by a spawn, 4 ignored; measured in 2 of 2 session(s)",
-        "  shadow: light 80 allow/10 advise/0 deny; strict 70 allow/10 advise/10 deny",
+        "  shadow: light 80 defer/10 advise/0 deny; strict 70 defer/10 advise/10 deny",
         "  dollars: $12.34 cache-read floor; priced in 2 of 2 session(s)",
     ], message: "rollup");
 }

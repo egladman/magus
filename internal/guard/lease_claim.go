@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -36,7 +37,7 @@ func denyLeaseClaim(me jobtypes.Job, rel string, req jobtypes.ClaimRequest, proo
 	if !ok {
 		return writeGrade{}
 	}
-	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleLeaseClaim), Reason: denial{
+	return writeGrade{Decision: verdict.Deny, Rule: string(denyRuleLeaseClaim), Reason: denial{
 		Say: fmt.Sprintf("magus workspace: %s is outside the write paths of lease %s, and magus proves it in scope (%s); claim the job with the command served next, then retry this write.",
 			rel, me.ID, req.Because),
 		Why: proof + ". The store proves it again when the record applies, and refuses it if another live job holds the path or a deny path covers it.",

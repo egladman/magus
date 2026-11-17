@@ -265,7 +265,7 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (verdict.Judgment, bool) {
 	log := &phaseLog{start: time.Now()}
 	v := Judge(context.WithValue(ctx, phaseLogKey{}, log), deps, req)
-	return v, v.Decision == decisionDeny && log.lapseDenied()
+	return v, v.Decision == verdict.Deny && log.lapseDenied()
 }
 
 // JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
@@ -286,7 +286,7 @@ func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (verdict.J
 // rules for a todo list costs the host a hook's worth of waiting.
 func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) verdict.Judgment) verdict.Judgment {
 	if inertCall(req) {
-		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	}
 	if req.DryRun {
 		return judge(ctx)
@@ -435,7 +435,7 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 
 // unjudged is the verdict for a hook call whose judgment did not answer within the bound,
 // in the stance a lapsed workspace rule phase takes: a call that changes state is denied
-// and one that only reads passes with a note. A call with nothing to judge passes as it
+// and one that only reads defers with a note. A call with nothing to judge defers as it
 // would have. It ends the call's judgment mark, since the host got its answer in time.
 //
 // The built-in rules that read only the call run first (lapsedRules), and what they refuse
@@ -450,7 +450,7 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 // job's checkout, are never degraded.
 func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) verdict.Judgment {
 	elapsed := time.Since(log.start)
-	pass := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	deferred := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	input, isPath, callDir := req.Input, req.IsPath, ""
 	if filepath.IsAbs(req.Dir) {
@@ -474,7 +474,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	mark := begunJudgment(ctx)
 	mark.end()
 	if req.Observe || req.Message || input == "" || (isEnvelope && (env.NothingToJudge || env.LoadedSkill != "")) {
-		return pass
+		return deferred
 	}
 	stalled, isStalled := log.stalled()
 	finished := log.finished()
@@ -497,27 +497,27 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		pushes = slices.ContainsFunc(cmds, isPush)
 		writesOutside = call.changes && !pushes && writesOnlyOutside(input, d, callDir, hookLocation(ctx, base).workspace, userHome())
 	}
-	verdict := pass
-	verdict.Lease, verdict.LeaseFrom = lease, string(leaseFrom)
+	judged := deferred
+	judged.Lease, judged.LeaseFrom = lease, string(leaseFrom)
 	inARow := mark.recordLapse()
 	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir, callDir)
 	switch {
 	case builtins.Deny != "":
-		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
+		judged.Decision, judged.Reason, judged.Rule = verdict.Deny, builtins.Deny, builtins.RuleName()
 	case writesOutside:
-		verdict = applyRuleFailureNote(verdict, unjudgedOutsideNote(), advisoryUnfinished)
+		judged = applyRuleFailureNote(judged, unjudgedOutsideNote(), advisoryUnfinished)
 	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes ||
 		!isPath && lapsedPersonOnly(ctx, base, log, hookLocation(ctx, base).workspace, input) ||
 		lapsedInJobCheckout(ctx, base, who, lease, isPath, input, callDir, effectiveDialect(base.ShellDialect))):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
-		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, lapseReason(call, lapse, false), string(advisoryUnfinished)
+		judged.Decision, judged.Reason, judged.Rule = verdict.Deny, lapseReason(call, lapse, false), string(advisoryUnfinished)
 	case call.changes:
 		where := stallSite(stalled, isStalled, finished)
-		verdict = applyRuleFailureNote(verdict, degradedNote(call, where, inARow), advisoryUnfinished)
+		judged = applyRuleFailureNote(judged, degradedNote(call, where, inARow), advisoryUnfinished)
 	default:
-		verdict = applyRuleFailureNote(verdict, unjudgedNote(), advisoryUnfinished)
+		judged = applyRuleFailureNote(judged, unjudgedNote(), advisoryUnfinished)
 	}
 	row := &phaseLog{start: log.start, done: finished}
 	if isStalled {
@@ -525,8 +525,8 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	row.done = append(row.done, timedPhase(phaseAnswer, elapsed, hookBudget, true))
 	ctx = context.WithValue(ctx, phaseLogKey{}, row)
-	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, lease, "", "", "", verdict, workspaceRuleRecord{}, base.judging(callDir))
-	return verdict
+	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, lease, "", "", "", judged, workspaceRuleRecord{}, base.judging(callDir))
+	return judged
 }
 
 // lapsedInJobCheckout reports a call a lease boundary exists to grade: a bound

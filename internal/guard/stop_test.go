@@ -124,7 +124,7 @@ func (s *StopUnfiledSuite) subagent() map[string]any {
 
 func (s *StopUnfiledSuite) TestAnUnfiledLeasedChildIsRefusedNamingTheExit() {
 	v := s.stop(s.row(), "SubagentStop", s.subagent())
-	s.Equal(ruledAs(decisionDeny, string(denyRuleStopUnfiled)), judgedAs(v))
+	s.Equal(ruledAs(verdict.Deny, string(denyRuleStopUnfiled)), judgedAs(v))
 	s.Contains(v.Reason, "`magus job exit spec/worker --stdin`")
 	s.Contains(v.Reason, "magus job exit --schema")
 }
@@ -133,7 +133,7 @@ func (s *StopUnfiledSuite) TestAReadOnlyRowFilesAnEmptyChangeList() {
 	row := s.row()
 	row.ReadOnly, row.Paths.Write = true, nil
 	v := s.stop(row, "SubagentStop", s.subagent())
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, `"changed_paths": []`)
 }
 
@@ -141,7 +141,7 @@ func (s *StopUnfiledSuite) TestTheSecondStopPassesAndSaysSo() {
 	fields := s.subagent()
 	fields["stop_hook_active"] = true
 	v := s.stop(s.row(), "SubagentStop", fields)
-	s.Equal(ruledAs(decisionAdvise, string(denyRuleStopUnfiled)), judgedAs(v))
+	s.Equal(ruledAs(verdict.Advise, string(denyRuleStopUnfiled)), judgedAs(v))
 	s.Contains(v.Context, "`magus job wait spec/worker`")
 }
 
@@ -150,7 +150,7 @@ func (s *StopUnfiledSuite) TestAFiledResultLetsTheChildStop() {
 	s.tries = []jobtypes.Attempt{filedTry(row.ID)}
 	v := s.stop(row, "SubagentStop", s.subagent())
 	s.NotEqual(string(denyRuleStopUnfiled), v.Rule)
-	s.NotEqual(decisionDeny, v.Decision)
+	s.NotEqual(verdict.Deny, v.Decision)
 }
 
 func (s *StopUnfiledSuite) TestADeliveredHandbackLetsTheChildStop() {
@@ -158,7 +158,7 @@ func (s *StopUnfiledSuite) TestADeliveredHandbackLetsTheChildStop() {
 	s.tries = []jobtypes.Attempt{{Job: row.ID, N: 1, Status: jobtypes.AttemptStatus{Started: 10, Ended: 15, End: jobtypes.AttemptEndHandback}}}
 	v := s.stop(row, "SubagentStop", s.subagent())
 	s.NotEqual(string(denyRuleStopUnfiled), v.Rule)
-	s.NotEqual(decisionDeny, v.Decision)
+	s.NotEqual(verdict.Deny, v.Decision)
 }
 
 func (s *StopUnfiledSuite) TestARootStopIsNotJudged() {

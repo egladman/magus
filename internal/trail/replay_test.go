@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -255,12 +256,13 @@ func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 // in this checkout, under which lease, and whom it handed work to.
 func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "ls", Decision: "pass", Lease: "fleet/w1"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "git commit -m x", Decision: "deny", Lease: "fleet/w1"})
-	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "rm -rf", Decision: "deny"})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "git commit -m x", Decision: verdict.Deny, Lease: "fleet/w1"})
+	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "rm -rf", Decision: verdict.Deny})
 	AppendAgentSpawn(context.Background(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
 
-	got := ForSession(t.Context(), base, "s1", 100)
+	got, err := ForSession(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
 	require.Len(t, got.Spawns, 1)
 	require.Len(t, got.Calls, 2)
 	assert.Equal(t, SessionTrail{
@@ -269,13 +271,30 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 		Leases:   []string{"fleet/w1", "fleet/w1-child"},
 		Spawns:   []SessionSpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
 		Calls: []SessionCall{
-			{At: got.Calls[0].At, Decision: "pass", Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
-			{At: got.Calls[1].At, Decision: "deny", Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+			{At: got.Calls[0].At, Decision: verdict.Defer, Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+			{At: got.Calls[1].At, Decision: verdict.Deny, Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
 		},
 	}, got)
 
-	assert.Zero(t, ForSession(t.Context(), base, "", 100).Commands, "no session id joins nothing")
-	assert.Zero(t, ForSession(t.Context(), t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
+	none, err := ForSession(t.Context(), base, "", 100)
+	require.NoError(t, err)
+	assert.Zero(t, none.Commands, "no session id joins nothing")
+	absent, err := ForSession(t.Context(), t.TempDir(), "s1", 100)
+	require.NoError(t, err)
+	assert.Zero(t, absent.Commands, "an absent store is empty, not an error")
+}
+
+// A response blob written before the defer rename holds "pass", and the read refuses it
+// with the store to clear rather than count the call as undecided.
+func TestForSessionRefusesARetiredDecision(t *testing.T) {
+	base := t.TempDir()
+	ref, _ := WriteBlob(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
+	Append(t.Context(), base, trailtypes.Event{Ts: 1, Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}, Action: toolShell, ResponseRef: ref})
+
+	_, err := ForSession(t.Context(), base, "s1", 100)
+	var retired *RetiredDecisionError
+	require.ErrorAs(t, err, &retired)
+	assert.Equal(t, RetiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: "pass"}, *retired)
 }
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
@@ -288,16 +307,17 @@ func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
 	chars := 5000
 	passed := types.AgentFacts{Thread: types.AgentThreadMain, DelegableClass: types.DelegableSearch, ResultChars: &chars}
 	record(t, base, AgentCommand{
-		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "advise", Rule: "root-heavy-command", AgentFacts: advised,
+		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: verdict.Advise, Rule: "root-heavy-command", AgentFacts: advised,
 	})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "pass", AgentFacts: passed})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: verdict.Defer, AgentFacts: passed})
 	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
 	AppendAgentSpawn(t.Context(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
 
-	got := ForSession(t.Context(), base, "s1", 100)
+	got, err := ForSession(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
 	require.Len(t, got.Calls, 2, "another session's calls are not this one's")
-	assert.Equal(t, SessionCall{At: got.Calls[0].At, Decision: "advise", Rule: "root-heavy-command", Action: toolShell, AgentFacts: advised}, got.Calls[0])
-	assert.Equal(t, SessionCall{At: got.Calls[1].At, Decision: "pass", Action: toolShell, AgentFacts: passed}, got.Calls[1])
+	assert.Equal(t, SessionCall{At: got.Calls[0].At, Decision: verdict.Advise, Rule: "root-heavy-command", Action: toolShell, AgentFacts: advised}, got.Calls[0])
+	assert.Equal(t, SessionCall{At: got.Calls[1].At, Decision: verdict.Defer, Action: toolShell, AgentFacts: passed}, got.Calls[1])
 	require.Len(t, got.Spawns, 1)
 	assert.Equal(t, SessionSpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
 }
@@ -375,7 +395,8 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	record(s.T(), base, AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 5,
 		AgentFacts: types.AgentFacts{CallDigest: "c", Unobserved: []string{"result"}}})
 
-	got := ForSession(s.T().Context(), base, "s1", 100)
+	got, err := ForSession(s.T().Context(), base, "s1", 100)
+	s.Require().NoError(err)
 	s.Require().Len(got.Calls, 3)
 	s.Equal("w1", got.Calls[0].Worker)
 	s.Equal([]string{"result"}, got.Calls[2].Unobserved)

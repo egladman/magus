@@ -79,14 +79,14 @@ func TestCompatMarkerAdvisesAWorkerAndFilesOneRow(t *testing.T) {
 
 	got := gradeLeasedEdit(ctx, Dependencies{}, "lease-b", file, addsCompat)
 	wantGrade := got
-	wantGrade.Decision, wantGrade.Kind = decisionAdvise, hint.MarkerKind(denyRuleCompatMarker)
+	wantGrade.Decision, wantGrade.Kind = verdict.Advise, hint.MarkerKind(denyRuleCompatMarker)
 	require.Equal(t, wantGrade, got)
 	assert.Contains(t, got.Context, "adds `compat(until:` to cmd/magus/old.go")
 	assert.Contains(t, got.Context, "unresolved_risks")
 	assert.Contains(t, got.Why, "never refused")
 
 	again := gradeLeasedEdit(ctx, Dependencies{}, "lease-b", file, writeFields{Content: "package magus\n\n// Deprecated: use New.\n// Deprecated: twice.\nfunc Old() {}\n"})
-	assert.Equal(t, decisionAdvise, again.Decision, "every addition is advised")
+	assert.Equal(t, verdict.Advise, again.Decision, "every addition is advised")
 	assert.Contains(t, again.Context, "adds `Deprecated:`")
 
 	rows := attentionRows(t, root)
@@ -116,12 +116,12 @@ func TestCompatMarkerStaysQuiet(t *testing.T) {
 	})
 	t.Run("a write the boundary refuses keeps its deny", func(t *testing.T) {
 		got := gradeLeasedEdit(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal", "ledger", "store.go"), addsCompat)
-		assert.Equal(t, decisionDeny, got.Decision)
+		assert.Equal(t, verdict.Deny, got.Decision)
 	})
 	t.Run("a dry run advises and files nothing", func(t *testing.T) {
 		dry, cancel := withDryRunDeadline(ctx)
 		defer cancel()
-		assert.Equal(t, decisionAdvise, gradeLeasedEdit(dry, Dependencies{}, "lease-b", file, addsCompat).Decision)
+		assert.Equal(t, verdict.Advise, gradeLeasedEdit(dry, Dependencies{}, "lease-b", file, addsCompat).Decision)
 		assert.False(t, stallGate(hookLocation(ctx, Dependencies{}).cacheDir, "lease-b").AlreadyFired(hint.MarkerKind(denyRuleCompatMarker)))
 	})
 	for _, r := range attentionRows(t, root) {
@@ -140,9 +140,9 @@ func TestCompatMarkerThroughJudge(t *testing.T) {
 		})})
 	}
 
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(denyRuleCompatMarker)), unworded(edit("lease-b", true)))
+	assert.Equal(t, verdictWithRule(verdict.Advise, string(denyRuleCompatMarker)), unworded(edit("lease-b", true)))
 	assert.Empty(t, attentionRows(t, root), "a dry run writes nothing")
 
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(denyRuleCompatMarker)), unworded(edit("lease-b", false)))
+	assert.Equal(t, verdictWithRule(verdict.Advise, string(denyRuleCompatMarker)), unworded(edit("lease-b", false)))
 	assert.Len(t, attentionRows(t, root), 1)
 }

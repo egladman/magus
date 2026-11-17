@@ -443,7 +443,8 @@ const guardPolicy = `import "magus";
 
 A deny is an answer, not an error: `err` is nil, `Decision` is `deny`, `Rule` names the
 rule and `Reason` is written for the agent. Its first line is the remedy; later lines
-point at the full verdict. A pass has `Decision` set to `pass`. `JudgeWrite` judges a
+point at the full verdict. A call with no objection has `Decision` set to `verdict.Defer`,
+which leaves it to the host's own permission flow. `JudgeWrite` judges a
 file write the same way.
 
 ```go

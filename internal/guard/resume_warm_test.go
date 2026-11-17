@@ -54,7 +54,7 @@ func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
 	f.putRow(t, job.Job{ID: "gate-fits", State: job.StateRunning, HolderStopped: time.Now().Unix(), Paths: job.Paths{Write: []string{"internal/cache/machine.go"}}})
 
 	v := f.spawn(t)
-	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
 	assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message")
 	assert.Contains(t, v.Reason, "to end gate-fits with `magus job exit gate-fits --stdin` and then take regress-fix",
 		"a resumed worker whose row is in flight must end it before it may take the next")
@@ -89,7 +89,7 @@ func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			v := warmFixture(t, tc.follow).spawn(t)
 
-			require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
+			require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
 			assert.Contains(t, v.Reason, "job regress-fix "+tc.link)
 			assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message, or set")
 			assert.NotContains(t, v.Reason, "SendMessage", "magus names no host's message tool")
@@ -133,7 +133,7 @@ func TestSpawnWarmWorkerRemedyPassesTheGuard(t *testing.T) {
 		"tool_input": map[string]any{"to": warmAgent, "message": "The order test regressed; fix it."},
 	}), Host: "claude-code"})
 
-	assert.NotEqual(t, "deny", v.Decision, v.Reason)
+	assert.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
 }
 
 func TestFindWarmWorker(t *testing.T) {

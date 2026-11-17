@@ -908,7 +908,7 @@ call through an older daemon is answered by the older build.
 Wire your host's subagent tool to the same `magus session hook` call as the
 rest of [the guard](guard.md). A payload carrying a `prompt` rather than a
 command or a file path is a delegation: magus records it as an `agent_spawn`
-event on the local Activity Trail and returns `pass` without evaluating a single
+event on the local Activity Trail and returns `defer` without evaluating a single
 rule.
 
 That exemption is the point, not an oversight. There is no command and no path

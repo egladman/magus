@@ -381,6 +381,27 @@ func (s *ReadSuite) TestUnknownKindsAndFieldsAreIgnoredNotRejected() {
 	}, summaries[0])
 }
 
+// A loaded event written before the guard's defer rename holds "pass", and the store is
+// refused with the file to clear rather than read with that event missing.
+func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
+	for _, retired := range []string{"pass", "allow"} {
+		dir := s.T().TempDir()
+		path := filepath.Join(dir, "sess1.jsonl")
+		body := `{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"agent_event","ts":10,` +
+			`"payload":{"host":"h1","event":"shell.command","ref":"r1","at":10,"verdict":"` + retired + `"}}`
+		s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
+
+		_, err := ReadAll(s.T().Context(), dir)
+		var refused *RetiredDecisionError
+		s.Require().ErrorAs(err, &refused, retired)
+		s.Equal(RetiredDecisionError{Path: path, Decision: retired}, *refused)
+		s.Contains(err.Error(), "magus session load", "the error says how to recover")
+
+		_, err = FoldAgentEvents(s.T().Context(), dir)
+		s.Require().ErrorAs(err, &refused, "the cached fold refuses it too")
+	}
+}
+
 func (s *ReadSuite) TestSummarizeOrdersMostRecentFirst() {
 	dir := s.T().TempDir()
 	writeRaw(&s.Suite, dir, "old", []Record{{V: APIVersion, Invocation: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})

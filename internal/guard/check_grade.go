@@ -147,7 +147,7 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 		return job.CheckVerdict{Deferred: why}
 	}
 	declared, lapsed := judge(row)
-	if declared.Decision != string(verdict.Deny) {
+	if declared.Decision != verdict.Deny {
 		return job.CheckVerdict{}
 	}
 	if lapsed {
@@ -157,10 +157,10 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 	compiling := job.CompilingCheck()
 	baseline.Check = &compiling
 	baselineVerdict, lapsed := judge(baseline)
-	if baselineVerdict.Decision == string(verdict.Deny) && lapsed {
+	if baselineVerdict.Decision == verdict.Deny && lapsed {
 		return deferLapse(baselineVerdict)
 	}
-	if baselineVerdict.Decision == string(verdict.Deny) {
+	if baselineVerdict.Decision == verdict.Deny {
 		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
 		return job.CheckVerdict{NotGraded: fmt.Sprintf("the guard denies this worker `%s` as well, so the deny describes the binary or the workspace and not the check: %s", compiling, first)}
 	}

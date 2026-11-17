@@ -11,7 +11,7 @@ fun result(blocked: bool, reason: str, context: str, status: str, mcp: str) > {s
 
 fun decide(verdict: {str: str}, promptable: bool) > {str: str} {
     final decision = verdict["decision"] ?? "unjudged";
-    if (decision == "pass") { return result(false, reason: "", context: "", status: "", mcp: "false"); }
+    if (decision == "defer") { return result(false, reason: "", context: "", status: "", mcp: "false"); }
     if (decision == "advise") { return result(false, reason: "", context: verdict["context"] ?? "", status: "", mcp: "false"); }
     if (decision == "ask" and promptable) { return result(false, reason: "", context: "", status: "", mcp: "false"); }
     if (decision == "deny") { return result(true, reason: "[magus guard] {verdict["reason"] ?? "call denied"}", context: "", status: "", mcp: "false"); }
@@ -21,10 +21,11 @@ fun decide(verdict: {str: str}, promptable: bool) > {str: str} {
     return result(true, reason: "[magus guard] magus guard could not judge this call: {verdict["why"] ?? "unrecognized verdict"}; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path.", context: "", status: "", mcp: "false");
 }
 
+// permission maps a verdict onto OpenCode's permission status. The guard never answers
+// yes: a defer or an advise is no status, so OpenCode's own permission flow decides.
 fun permission(verdict: {str: str}) > {str: str} {
     final decision = verdict["decision"] ?? "unjudged";
     var status = "";
-    if (decision == "pass" or decision == "advise") { status = "allow"; }
     if (decision == "ask") { status = "ask"; }
     if (decision == "deny") { status = "deny"; }
     return result(false, reason: "", context: "", status: status, mcp: "false");

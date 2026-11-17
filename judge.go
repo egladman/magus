@@ -143,7 +143,7 @@ func (m *Magus) judgeRun(ctx context.Context, o run, lines []string) error {
 		if err != nil {
 			return err
 		}
-		if j.Decision == string(verdict.Deny) {
+		if j.Decision == verdict.Deny {
 			return &verdict.DeniedError{Judgment: j}
 		}
 	}

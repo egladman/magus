@@ -12,24 +12,24 @@ import (
 )
 
 func (s *routeDenySuite) TestAHostWithNoAgentChannelGetsTheVerdictLineAlone() {
-	deny := verdict.Judgment{Decision: "deny", Reason: audienceReason}
+	deny := verdict.Judgment{Decision: verdict.Deny, Reason: audienceReason}
 	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"display"}}, true, deny)
 	s.Equal("a text search the graph answers", got.Reason)
 }
 
 func (s *routeDenySuite) TestAHostWithAnAgentChannelKeepsTheWholeReason() {
-	deny := verdict.Judgment{Decision: "deny", Reason: audienceReason}
+	deny := verdict.Judgment{Decision: verdict.Deny, Reason: audienceReason}
 	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"display", "capture", "notice"}}, true, deny)
 	s.Equal(audienceReason, got.Reason)
 }
 
 func (s *routeDenySuite) TestLimitsWithNoChannelsLeaveTheReasonWhole() {
-	deny := verdict.Judgment{Decision: "deny", Reason: audienceReason}
+	deny := verdict.Judgment{Decision: verdict.Deny, Reason: audienceReason}
 	s.Equal(audienceReason, routeDeny(s.T().Context(), types.Limits{}, true, deny).Reason)
 }
 
 func (s *routeDenySuite) TestAnAdviseIsNeverCut() {
-	advise := verdict.Judgment{Decision: "advise", Context: audienceReason}
+	advise := verdict.Judgment{Decision: verdict.Advise, Context: audienceReason}
 	s.Equal(advise, routeDeny(s.T().Context(), types.Limits{Channels: []string{"display"}}, true, advise))
 }
 

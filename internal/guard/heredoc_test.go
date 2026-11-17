@@ -63,21 +63,21 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 		if strings.Contains(req.Content, "forbidden") {
 			return verdict.Verdict{Decision: verdict.Deny, Reason: "that word is not allowed here"}, nil
 		}
-		return verdict.Verdict{Decision: verdict.Allow}, nil
+		return verdict.Verdict{Decision: verdict.Defer}, nil
 	}}
 	judge := func(line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "heredoc", Host: "claude-code", Dir: root})
 	}
 
 	v := judge("cat > notes.md <<'EOF'\na forbidden word\nEOF")
-	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleHeredocWrite)}, judgedAs(v), v.Context)
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleHeredocWrite)}, judgedAs(v), v.Context)
 	assert.Contains(t, v.Reason, "that word is not allowed here")
 	require.NotEmpty(t, seen)
 	assert.Equal(t, filepath.Join(root, "notes.md"), seen[0].Path)
 	assert.Equal(t, "a forbidden word\n", seen[0].Content)
 
-	assert.NotEqual(t, "deny", judge("cat > notes.md <<'EOF'\nan allowed word\nEOF").Decision)
-	assert.NotEqual(t, "deny", judge("cat > notes.md <<EOF\n$forbidden\nEOF").Decision, "an expanding body is not judged")
+	assert.NotEqual(t, verdict.Deny, judge("cat > notes.md <<'EOF'\nan allowed word\nEOF").Decision)
+	assert.NotEqual(t, verdict.Deny, judge("cat > notes.md <<EOF\n$forbidden\nEOF").Decision, "an expanding body is not judged")
 
 	// The root appending to its plan under ~/.claude writes the home's file, not ./~/.claude.
 	home, err := os.UserHomeDir()
@@ -104,7 +104,7 @@ func TestHeredocAppendMeetsTheWriteRulesAsTheWholeFile(t *testing.T) {
 	var seen []string
 	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		seen = append(seen, req.Content)
-		return verdict.Verdict{Decision: verdict.Allow}, nil
+		return verdict.Verdict{Decision: verdict.Defer}, nil
 	}}
 	judge := func(line string) {
 		seen = nil
@@ -127,14 +127,14 @@ func TestEveryPathOfAPatchIsJudged(t *testing.T) {
 		if filepath.Base(req.Path) == "second.go" {
 			return verdict.Verdict{Decision: verdict.Deny, Reason: "second.go is off limits"}, nil
 		}
-		return verdict.Verdict{Decision: verdict.Allow}, nil
+		return verdict.Verdict{Decision: verdict.Defer}, nil
 	}}
 	patch := "*** Begin Patch\n*** Add File: first.go\n+package a\n*** Update File: second.go\n@@\n-x\n+y\n*** End Patch\n"
 	v := Judge(ctx, deps, Request{Host: "codex", Tools: testTools(t), Input: hookJSON(t, map[string]any{
 		"session_id": "patch", "cwd": root, "hook_event_name": "PreToolUse", "tool_name": "apply_patch",
 		"tool_input": map[string]any{"command": patch},
 	})})
-	require.Equal(t, "deny", v.Decision, v.Context)
+	require.Equal(t, verdict.Deny, v.Decision, v.Context)
 	assert.Contains(t, v.Reason, "second.go is off limits")
 	assert.Contains(t, v.Reason, "second.go: ", "the refusal names the file it is about")
 }

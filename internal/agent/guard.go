@@ -18,15 +18,6 @@ import "github.com/egladman/magus/libs/safetyscissors/verdict"
 // re-downloaded before it guards again.
 const GuardAPIVersion = verdict.APIVersion
 
-// guardDecisions is every decision a verdict can carry. A new entry here is a
-// promise that all four host glues can express it; the dogfood parity test is
-// what collects on that promise.
-//
-// "ask" blocks the call until the PERSON approves it through the host's own prompt. It
-// is never an escape the agent can clear, and a glue that cannot prompt renders it as a
-// deny, never as an allow.
-var guardDecisions = []string{"pass", "advise", "deny", "ask"}
-
 // guardInputs is every input the guard judges: a shell command, a file path
 // an edit is about to write (`magus shell --path`), or an MCP tool call
 // (a tool name plus a params object, forwarded whole rather than reduced to a
@@ -254,14 +245,29 @@ var guardInputs = []string{"command", "path", "mcp"}
 // magus-command.buzz asks only under default, acceptEdits and auto.
 // cursor-hook.buzz renders an ask only on beforeShellExecution and
 // beforeMCPExecution. A 34 copy can let either run with no prompt.
-const GuardTemplateVersion = 36
+//
+// 37: the guard never answers yes. Its decisions are defer, advise, ask and deny, and the
+// envelope is magus.guard/v1alpha2. magus-command.buzz, magus-path.buzz and the OpenCode
+// plugin write no permission decision for a defer, so the host's own flow decides, and
+// cursor-hook.buzz answers a defer with Cursor's ask. A 36 copy meets "defer" as an
+// unknown decision and refuses every call until it is re-installed.
+const GuardTemplateVersion = 37
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.
 const GuardTemplateMarker = "magus-guard-template:"
 
-// GuardDecisions returns every decision a verdict can carry.
-func GuardDecisions() []string { return append([]string(nil), guardDecisions...) }
+// GuardDecisions returns every decision a verdict can carry. A new entry here is a
+// promise that all four host glues can express it; the dogfood parity test is what
+// collects on that promise.
+//
+// None of them says yes. A defer is no objection: a glue writes no permission decision
+// for it, so the host's own permission flow decides the call. An ask blocks the call
+// until the PERSON approves it through the host's own prompt. It is never an escape the
+// agent can clear, and a glue that cannot prompt renders it as a deny.
+func GuardDecisions() []string {
+	return []string{string(verdict.Defer), string(verdict.Advise), string(verdict.Deny), string(verdict.Ask)}
+}
 
 // GuardInputs returns every input the guard judges.
 func GuardInputs() []string { return append([]string(nil), guardInputs...) }

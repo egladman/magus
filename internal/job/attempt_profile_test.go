@@ -7,13 +7,14 @@ import (
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // call records one guard observation of lease's holder in the trail at base.
-func call(t *testing.T, base, lease, tool string, tokens int64, decision string) {
+func call(t *testing.T, base, lease, tool string, tokens int64, decision verdict.Decision) {
 	t.Helper()
 	trail.AppendAgentCommand(t.Context(), base, trail.AgentCommand{
 		Host: "claude-code", Session: "s1", Lease: lease, Tool: tool, Path: "internal/job/x.go",
@@ -26,11 +27,11 @@ func TestAttemptWorkFoldsTheHoldersCallsUpToAndAfterItsFirstWrite(t *testing.T) 
 
 	base := t.TempDir()
 	since := time.Now().Unix() - 1
-	call(t, base, "a", "file.read", 10_000, "pass")
-	call(t, base, "a", "shell.command", 20_000, "deny")
-	call(t, base, "other", "file.write", 99_000, "pass")
-	call(t, base, "a", "file.write", 30_000, "pass")
-	call(t, base, "a", "file.write", 50_000, "pass")
+	call(t, base, "a", "file.read", 10_000, verdict.Defer)
+	call(t, base, "a", "shell.command", 20_000, verdict.Deny)
+	call(t, base, "other", "file.write", 99_000, verdict.Defer)
+	call(t, base, "a", "file.write", 30_000, verdict.Defer)
+	call(t, base, "a", "file.write", 50_000, verdict.Defer)
 
 	got, calls := attemptWork(t.Context(), base, "a", since)
 	assert.Len(t, calls, 4, "one fact per call of this holder")
@@ -54,8 +55,8 @@ func TestAttemptWorkLeavesTheContextUnknownWhenACallReportedNone(t *testing.T) {
 
 	base := t.TempDir()
 	since := time.Now().Unix() - 1
-	call(t, base, "a", "file.read", 0, "pass")
-	call(t, base, "a", "file.write", 30_000, "pass")
+	call(t, base, "a", "file.read", 0, verdict.Defer)
+	call(t, base, "a", "file.write", 30_000, verdict.Defer)
 
 	got, _ := attemptWork(t.Context(), base, "a", since)
 
@@ -72,7 +73,7 @@ func TestAttemptWorkOfAHolderThatNeverWroteHasNoSetupFigures(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
-	call(t, base, "a", "file.read", 10_000, "pass")
+	call(t, base, "a", "file.read", 10_000, verdict.Defer)
 
 	got, _ := attemptWork(t.Context(), base, "a", time.Now().Unix()-1)
 
@@ -89,7 +90,7 @@ func TestAttemptWorkIsUnknownWithoutAnObservedCall(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
-	call(t, base, "other", "file.write", 10_000, "pass")
+	call(t, base, "other", "file.write", 10_000, verdict.Defer)
 	work := func(base string, since int64) *types.JobWork {
 		w, _ := attemptWork(t.Context(), base, "a", since)
 		return w
@@ -98,7 +99,7 @@ func TestAttemptWorkIsUnknownWithoutAnObservedCall(t *testing.T) {
 	assert.Nil(t, work(t.TempDir(), 0), "an empty trail")
 	assert.Nil(t, work("", 0), "no trail placed")
 
-	call(t, base, "a", "file.write", 10_000, "pass")
+	call(t, base, "a", "file.write", 10_000, verdict.Defer)
 	assert.Nil(t, work(base, time.Now().Unix()+60), "calls before the attempt began are not its")
 }
 

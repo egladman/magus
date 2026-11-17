@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -175,7 +176,7 @@ func (s *NarrowPushSuite) TestAPushWhoseRevisionReadIsCutIsRefusedNamingTheRead(
 	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())
 	decision, reason := gradePushWithoutGate(ev, "")
 
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "magus did not judge pushing this revision: reading the pushed revision did not finish within ")
 	s.Contains(reason, "refused, never let through")
 	s.NoError(deadline.Err(), "the push left judgeReserve to the rules")
@@ -205,7 +206,7 @@ func (s *NarrowPushSuite) TestAWorkerWhosePushLapsesIsSentToItsOrchestrator() {
 	ev := pushCoverageWithin(s.T().Context(), time.Millisecond, s.deps, s.at, "git push", DialectBash, s.repo.Root())
 	decision, reason := gradePushWithoutGate(ev, "fix-a-thing")
 
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "magus did not judge pushing this revision")
 	s.Contains(reason, "bound to job fix-a-thing")
 }
@@ -231,7 +232,7 @@ func (s *NarrowPushSuite) TestAPushWhoseWorkspaceOpenLapsesIsRefusedNamingTheOpe
 
 	s.Equal(phaseInspect, ev.lapse.cut)
 	s.LessOrEqual(ev.lapse.budget, 20*time.Millisecond, "the open's own budget, not the push's")
-	s.Equal(decisionDeny, decision)
+	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, fmt.Sprintf("magus did not judge pushing %s: opening the workspace to weigh the changed files ", head[:12]))
 }
 

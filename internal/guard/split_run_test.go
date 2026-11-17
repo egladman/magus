@@ -152,9 +152,9 @@ func TestSplitRunRaisedToDenyRefusesEveryFiring(t *testing.T) {
 		v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1"})
 		return verdict.Judgment{Decision: v.Decision, Rule: v.Rule}
 	}
-	refused := verdict.Judgment{Decision: "deny", Rule: string(advisorySplitRun)}
+	refused := verdict.Judgment{Decision: verdict.Deny, Rule: string(advisorySplitRun)}
 
-	assert.Equal(t, verdict.Judgment{Decision: "pass"}, judge("magus run lint ."), "a first call has nothing to compare against")
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Defer}, judge("magus run lint ."), "a first call has nothing to compare against")
 	assert.Equal(t, refused, judge("magus run lint docs"))
 	assert.Equal(t, refused, judge("magus run lint web"), "the second firing refuses too")
 }

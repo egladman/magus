@@ -62,11 +62,11 @@ type SpawnAboveParentTierSuite struct {
 func TestSpawnAboveParentTierSuite(t *testing.T) { suite.Run(t, new(SpawnAboveParentTierSuite)) }
 
 func (s *SpawnAboveParentTierSuite) advised() verdict.Judgment {
-	return verdict.Judgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}
+	return verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleSpawnAboveParentTier)}
 }
 
 func (s *SpawnAboveParentTierSuite) denied() verdict.Judgment {
-	return verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}
+	return verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnAboveParentTier)}
 }
 
 // pricedRows price sonnet and opus by alias at the tiers the declaration maps.
@@ -183,7 +183,7 @@ func (s *SpawnAboveParentTierSuite) TestASubagentSpawnedOnNoModelInheritsTheSess
 
 	v := judgeSpawnBy(ctx, s.T(), deps, "a2", "opus")
 
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "above the session's model, which this agent inherited, sonnet")
 }
 
@@ -248,7 +248,7 @@ func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
 
 	v := judgeSpawnBy(ctx, s.T(), deps, "", "claude-sonnet-5-5-20261001")
 
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "add a row for claude-sonnet-5-5-20261001")
 }
 
@@ -279,21 +279,21 @@ func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsAliasResolvesASpawn() {
 func (s *SpawnAboveParentTierSuite) TestAPrefixedAliasIsNoAlias() {
 	v := s.judgeAliased("top-1")
 
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "add a row for top-1")
 }
 
 func (s *SpawnAboveParentTierSuite) TestAnAliasInAnotherCaseIsNoAlias() {
 	v := s.judgeAliased("Top")
 
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "add a row for Top")
 }
 
 func (s *SpawnAboveParentTierSuite) TestARowWithNoTierNamesNone() {
 	v := s.judgeAliased("fable")
 
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, "add a row for fable")
 }
 

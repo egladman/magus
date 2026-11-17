@@ -3,7 +3,7 @@ package verdict
 import "github.com/egladman/magus/libs/apiversion"
 
 // APIVersion is the version of the Judgment envelope, carried as api_version.
-const APIVersion = apiversion.APIVersion("magus.guard/v1alpha1")
+const APIVersion = apiversion.APIVersion("magus.guard/v1alpha2")
 
 // Judgment is the neutral result of judging one call (a shell command, a write, a spawn,
 // a tool call): exactly one decision, carrying the field that decision needs. This
@@ -11,16 +11,17 @@ const APIVersion = apiversion.APIVersion("magus.guard/v1alpha1")
 // response dialects live in the documentation, never in code.
 type Judgment struct {
 	APIVersion apiversion.APIVersion `json:"api_version"`
-	// Decision is pass, advise, deny or ask. It is wider than a rule's Decision: a
-	// judgment can pass without any rule allowing, and can ask a person.
-	Decision string `json:"decision"`
+	// Decision is defer, advise, ask or deny. A defer is no objection: the host's own
+	// permission flow decides the call.
+	Decision Decision `json:"decision"`
 	// Reason is a deny's block reason, written for the model.
 	Reason string `json:"reason,omitempty"`
 	// Context is an advise's context, injected alongside the allowed call.
 	Context string `json:"context,omitempty"`
 	// Rule names the catalogued rule or advisory that produced this judgment, and is set
 	// on every deny, advise and ask. Hosts render Reason and Context; Rule is what a
-	// person looks up, reports as a false positive, or greps a trail for. Empty on a pass.
+	// person looks up, reports as a false positive, or greps a trail for. Empty on a
+	// defer.
 	Rule string `json:"rule,omitempty"`
 	// Lease is the job this judgment was graded under, empty when the call named none.
 	// It tells a typo'd id, a finished job and no lease apart.

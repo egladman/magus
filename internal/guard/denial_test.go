@@ -36,7 +36,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	judge := func(host, transport, input string) string {
 		v := Judge(ctx, strict(testDependencies()), Request{Input: input, Host: host, Form: transport})
-		require.Equal(t, "deny", v.Decision, "%s/%s", host, transport)
+		require.Equal(t, verdict.Deny, v.Decision, "%s/%s", host, transport)
 		return v.Reason
 	}
 	short := func(reason string) bool { return strings.HasPrefix(reason, "denied again [whole-tree]: ") }
@@ -73,9 +73,9 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
 	}
 
-	require.Equal(t, "deny", judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")
-	require.Equal(t, "pass", judge("buzz", skill).Decision)
-	assert.NotEqual(t, "deny", judge("sh", spawn).Decision, "the load reported by the Buzz form clears the sh form's spawn")
+	require.Equal(t, verdict.Deny, judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")
+	require.Equal(t, verdict.Defer, judge("buzz", skill).Decision)
+	assert.NotEqual(t, verdict.Deny, judge("sh", spawn).Decision, "the load reported by the Buzz form clears the sh form's spawn")
 
 	codex := hookAttribution{Host: "codex", Form: "sh", Session: session}
 	assert.NotEqual(t, hookAttribution{Host: "claude-code", Session: session}.factsKey(), codex.factsKey(),

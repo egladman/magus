@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +25,7 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 	// The row's own branches do scope it: a merge's conflict is its holder's.
 	if me.Integrating() {
 		if branch := integratedBranchChanging(ctx, checkout, me, rel); branch != "" {
-			return writeGrade{Decision: decisionAdvise,
+			return writeGrade{Decision: verdict.Advise,
 				Context: fmt.Sprintf("magus workspace: %s is in scope for lease %s: %s, a branch it integrates, changed it.", rel, me.ID, branch),
 				Why:     "The row names its branches, so the paths their merges bring are its to settle, as `git checkout` and `git commit` of them already are."}, ""
 		}
@@ -66,7 +67,7 @@ func integratedBranchChanging(ctx context.Context, checkout string, me jobtypes.
 
 // claimedAdvice is the one line a write passes with once magus claimed its path for me.
 func claimedAdvice(me jobtypes.Job, d job.AutoClaim) writeGrade {
-	return writeGrade{Decision: decisionAdvise,
+	return writeGrade{Decision: verdict.Advise,
 		Context: fmt.Sprintf("magus workspace: claimed %s for lease %s by %s: %s.", d.Request.Path, me.ID, d.Request.Because, d.Proof),
 		Why: fmt.Sprintf("The claim is recorded on the job as `%s` records one, and `%s` lists the path among its write paths.",
 			hint.JobApply, hint.DescribeJob.With(me.ID))}
@@ -74,7 +75,7 @@ func claimedAdvice(me jobtypes.Job, d job.AutoClaim) writeGrade {
 
 // withStop adds to a refusal's verdict line why magus did not claim the path itself.
 func withStop(g writeGrade, stop string) writeGrade {
-	if g.Decision != decisionDeny {
+	if g.Decision != verdict.Deny {
 		return g
 	}
 	say, why, _ := strings.Cut(g.Reason, "\n")

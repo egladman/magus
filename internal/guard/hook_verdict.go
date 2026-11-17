@@ -50,11 +50,11 @@ func (e HookEnv) writeVerdict(out io.Writer, opts output.Options, verdict verdic
 		case "advise":
 			fmt.Fprintf(out, "%s %s\n", decisionLabel("advise", verdict.Rule), verdict.Context)
 		default:
-			fmt.Fprintln(out, "pass")
+			fmt.Fprintln(out, "defer")
 		}
 		return nil
 	}
-	return e.Emit(out, opts, verdict.Decision, verdict)
+	return e.Emit(out, opts, string(verdict.Decision), verdict)
 }
 
 // decisionLabel opens a text verdict with the decision and, where the rule can identify

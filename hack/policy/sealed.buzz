@@ -53,10 +53,10 @@ export fun sealedDir(roots: Roots) > str {
 // line substitutes or redirects.
 export fun decideSealed(programs: [helpers\Program], line: str, roots: Roots) > GuardVerdict {
     if (!namesSealed(programs, line: line, roots: roots)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (carriesTextOnly(programs) and !readsIndirectly(line)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     return magus\guard.deny(sealedDenial);
 }
@@ -303,7 +303,7 @@ test "a pattern that matches the sealed name is denied" {
     ]) {
         std\assert(judged(line, argvs: [["cat", "x"]], roots: ada).decision == magus\GuardDecision.deny, message: line);
     }
-    std\assert(judged("cat ~/.cache/proofread/calibration/lab*/round4/scores.json", argvs: [["cat", "x"]], roots: ada).decision == magus\GuardDecision.allow, message: "a pattern that cannot match sealed");
+    std\assert(judged("cat ~/.cache/proofread/calibration/lab*/round4/scores.json", argvs: [["cat", "x"]], roots: ada).decision == magus\GuardDecision.defer, message: "a pattern that cannot match sealed");
 }
 
 test "a recursive search from a directory above the sealed one is denied; a plain listing is not" {
@@ -323,7 +323,7 @@ test "a recursive search from a directory above the sealed one is denied; a plai
         ["rg", "never", "~/.cache/proofread/other"],
         ["grep", "never", "~/.cache/proofread/calibration/labels/round4/scores.json"],
     ]) {
-        std\assert(judged(argv.join(" "), argvs: [argv], roots: ada).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(judged(argv.join(" "), argvs: [argv], roots: ada).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 
@@ -339,14 +339,14 @@ test "the labels directory, a sibling that only starts with sealed and unrelated
         "cat libs/proofread/internal/calibrate/cases/claim.txtar",
         "ls ~/.cache/other/sealed",
     ]) {
-        std\assert(judged(line, argvs: [["cat", "x"]], roots: ada).decision == magus\GuardDecision.allow, message: line);
+        std\assert(judged(line, argvs: [["cat", "x"]], roots: ada).decision == magus\GuardDecision.defer, message: line);
     }
 }
 
 test "a message or an echo that only names the directory is allowed; a substitution or another program is not" {
     final commit = helpers\vcsRequest([["git", "commit", "-m", "stop reading ~/.cache/proofread/calibration/sealed"]]);
-    std\assert(decideSealed(commit, line: "git commit -m \"stop reading ~/.cache/proofread/calibration/sealed\"", roots: ada).decision == magus\GuardDecision.allow, message: "commit message");
-    std\assert(judged("echo ~/.cache/proofread/calibration/sealed", argvs: [["echo", "x"]], roots: ada).decision == magus\GuardDecision.allow, message: "echo");
+    std\assert(decideSealed(commit, line: "git commit -m \"stop reading ~/.cache/proofread/calibration/sealed\"", roots: ada).decision == magus\GuardDecision.defer, message: "commit message");
+    std\assert(judged("echo ~/.cache/proofread/calibration/sealed", argvs: [["echo", "x"]], roots: ada).decision == magus\GuardDecision.defer, message: "echo");
     std\assert(judged("echo $(cat ~/.cache/proofread/calibration/sealed/a)", argvs: [["echo", "x"]], roots: ada).decision == magus\GuardDecision.deny, message: "substitution");
     std\assert(judged("echo ~/.cache/proofread/calibration/sealed && cat ~/.cache/proofread/calibration/sealed/a", argvs: [["echo", "x"], ["cat", "x"]], roots: ada).decision == magus\GuardDecision.deny, message: "echo then cat");
     std\assert(decideSealed([<helpers\Program>], line: "cat ~/.cache/proofread/calibration/sealed/a", roots: ada).decision == magus\GuardDecision.deny, message: "a line that did not parse");

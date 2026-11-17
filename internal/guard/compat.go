@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -73,7 +74,7 @@ func gradeCompatMarker(ctx context.Context, deps Dependencies, at location, who 
 	}
 	say := fmt.Sprintf("magus workspace: this write adds %s to %s: leave it out and name it in unresolved_risks, since the root decides whether code stays for an old caller.",
 		quotedList(added), shown)
-	return writeGrade{Decision: decisionAdvise, Kind: hint.MarkerKind(denyRuleCompatMarker),
+	return writeGrade{Decision: verdict.Advise, Kind: hint.MarkerKind(denyRuleCompatMarker),
 		Key:     hint.MarkerKind(fmt.Sprintf("%s-%s", string(denyRuleCompatMarker), lineDigest(say))),
 		Context: say,
 		Why: fmt.Sprintf("A marker labels code kept for older data, artifacts or callers, and keeping it is a judgment about who still consumes the old behavior. "+

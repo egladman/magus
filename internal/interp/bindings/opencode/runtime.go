@@ -252,7 +252,7 @@ func decodeResult(value vm.Value) (dispatchResult, error) {
 	}
 	block, mcp, status := field(value, "block"), field(value, "mcp"), field(value, "status")
 	if (block != "true" && block != "false") || (mcp != "true" && mcp != "false") ||
-		(status != "" && status != "ask" && status != "allow" && status != "deny") {
+		(status != "" && status != "ask" && status != "deny") {
 		return dispatchResult{}, errors.New("harness runtime: malformed Buzz decision")
 	}
 	return dispatchResult{Block: block == "true", Reason: field(value, "reason"), Context: field(value, "context"), Status: status, MCP: mcp == "true"}, nil
@@ -355,7 +355,7 @@ func verdictEnvelope(stdout string) (map[string]codec.RawMessage, string) {
 
 // guardAPIVersion is agent.GuardAPIVersion. The wasm build imports
 // neither package, so a test in each pins the same literal.
-const guardAPIVersion = "magus.guard/v1alpha1"
+const guardAPIVersion = "magus.guard/v1alpha2"
 
 func schemaMismatch(envelope map[string]codec.RawMessage) string {
 	var version string
@@ -375,7 +375,7 @@ func decideVerdict(envelope map[string]codec.RawMessage) guardVerdict {
 	verdict := guardVerdict{APIVersion: guardAPIVersion, Decision: decision}
 	ok := false
 	switch decision {
-	case "pass":
+	case "defer":
 		return verdict
 	case "deny", "ask":
 		verdict.Reason, ok = stringMember(envelope, "reason")

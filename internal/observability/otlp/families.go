@@ -333,7 +333,7 @@ func (p *otelProvider) RecordAgentCall(ctx context.Context, c observability.Agen
 	for profile, decision := range c.Shadow {
 		p.agentCost.shadow.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("profile", profile.String()),
-			attribute.String("decision", string(cmp.Or(decision, verdict.Allow))),
+			attribute.String("decision", string(cmp.Or(decision, verdict.Defer))),
 		))
 	}
 }

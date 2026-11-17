@@ -259,10 +259,10 @@ func kTokens(n int64) string { return fmt.Sprintf("%dk", n/1000) }
 func applyFindings(markers hint.Gate, judged verdict.Judgment, findings []costFinding, from types.ThreadSource) verdict.Judgment {
 	for _, f := range findings {
 		if f.deny && from == types.ThreadReported {
-			return verdict.Judgment{APIVersion: judged.APIVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: judged.Lease, LeaseFrom: judged.LeaseFrom}
+			return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Deny, Reason: f.say, Rule: string(f.rule), Lease: judged.Lease, LeaseFrom: judged.LeaseFrom}
 		}
 	}
-	if judged.Decision != decisionPass && judged.Decision != decisionAdvise {
+	if judged.Decision != verdict.Defer && judged.Decision != verdict.Advise {
 		return judged
 	}
 	for _, f := range findings {
@@ -271,11 +271,11 @@ func applyFindings(markers hint.Gate, judged verdict.Judgment, findings []costFi
 		if held == "" {
 			continue
 		}
-		if judged.Decision == decisionAdvise {
+		if judged.Decision == verdict.Advise {
 			judged.Context += "\n\n" + held
 			continue
 		}
-		judged.Decision, judged.Context, judged.Rule = decisionAdvise, held, string(f.rule)
+		judged.Decision, judged.Context, judged.Rule = verdict.Advise, held, string(f.rule)
 	}
 	return judged
 }
@@ -289,7 +289,7 @@ func (d Dependencies) settingLookup(rule string) builtin.Setting {
 // gradeMainCommand judges a shell command of a session's unleased main thread by the cost
 // rules. A served next is magus's own suggestion and is left alone.
 func gradeMainCommand(ctx context.Context, deps Dependencies, judged verdict.Judgment, in commandRuleInput, who hookAttribution, at location) verdict.Judgment {
-	if judged.Decision == decisionDeny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
+	if judged.Decision == verdict.Deny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
 		return judged
 	}
 	thread, from := callerThread(at.cacheDir, who, in.lease)
@@ -357,7 +357,7 @@ func readsOutputRef(line string) bool {
 // midway through a merge or a cherry-pick may resolve a conflict, which is integration, so
 // it is advised and never refused there. A notes path is never judged.
 func gradeMainWrite(deps Dependencies, judged verdict.Judgment, path string, lease string, who hookAttribution, at location) verdict.Judgment {
-	if judged.Decision == decisionDeny || lease != "" || at.cacheDir == "" || notesPath(path, at) {
+	if judged.Decision == verdict.Deny || lease != "" || at.cacheDir == "" || notesPath(path, at) {
 		return judged
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
@@ -423,7 +423,7 @@ var levelSettings = sync.OnceValue(func() map[types.GuardProfile]map[string]buil
 func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]verdict.Decision {
 	out := map[types.GuardProfile]verdict.Decision{}
 	for level, settings := range levelSettings() {
-		decision := verdict.Allow
+		decision := verdict.Defer
 		for _, f := range mainFindings(func(rule string) builtin.Setting { return settings[rule] }, st, c) {
 			if f.deny && c.from == types.ThreadReported {
 				decision = verdict.Deny
@@ -441,7 +441,7 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]verdict.Dec
 // workspace's declaration, never by name or price; a spawn bound to no row, or to a row
 // forked with no declaration, has nothing to compare.
 func gradeSpawnModel(deps Dependencies, judged verdict.Judgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) verdict.Judgment {
-	if judged.Decision == decisionDeny || !env.IsSpawn || at.cacheDir == "" {
+	if judged.Decision == verdict.Deny || !env.IsSpawn || at.cacheDir == "" {
 		return judged
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
@@ -449,7 +449,7 @@ func gradeSpawnModel(deps Dependencies, judged verdict.Judgment, env hookRequest
 	bound := false
 	if row, ok := titled(); ok {
 		if d := unknownRowSpawnDenial(deps, row); d.refused() {
-			judged.Decision, judged.Reason, judged.Rule = decisionDeny, d.Say, string(denyRuleLeaseRowUnknown)
+			judged.Decision, judged.Reason, judged.Rule = verdict.Deny, d.Say, string(denyRuleLeaseRowUnknown)
 			return judged
 		}
 		forked, bound = boundModelTier(deps, row)

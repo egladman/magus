@@ -163,10 +163,10 @@ func TestHookCmd(t *testing.T) {
 	// A repeat in the same session, so the structured form carries the short reason.
 	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
-	assert.Contains(t, got, `"api_version": "magus.guard/v1alpha1"`)
+	assert.Contains(t, got, `"api_version": "magus.guard/v1alpha2"`)
 	assert.Contains(t, got, `"reason": "denied again [whole-tree]: `)
 
-	// A template renders a host dialect; pass renders empty, deny fills it.
+	// A template renders a host dialect; defer renders empty, deny fills it.
 	tpl := `template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}`
 	assert.Contains(t, run("git stash", "-o", tpl), `"permissionDecision":"deny"`)
 	assert.Empty(t, strings.TrimSpace(run("ls", "-o", tpl)))
@@ -175,7 +175,7 @@ func TestHookCmd(t *testing.T) {
 	assert.Equal(t, "deny\n", run("git stash", "-o", "name"))
 
 	// Fail open on empty stdin.
-	assert.Equal(t, "pass\n", run(""))
+	assert.Equal(t, "defer\n", run(""))
 }
 
 // TestShellRefusesAnUnquotedCommand: several operands means the quotes were left off, and
@@ -221,7 +221,7 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 	// --observe carries no verdict, so it keeps the documented "always exits 0".
 	out.Reset()
 	require.NoError(t, hookStdin(ctx, truncated(), &out, []string{"--observe", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 }
 
 // hookCommandEvent is the trail event a shell hook is expected to append for one command or
@@ -342,7 +342,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	emptyCtx := WithLocation(context.Background(), emptyDir, "/repo/magus", "")
 	out.Reset()
 	require.NoError(t, hookStdin(emptyCtx, strings.NewReader(""), &out, nil))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 	events, err = trailtypes.ReadRecent(ctx, emptyDir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
@@ -360,7 +360,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &out,
 		[]string{"--agent-name", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -382,17 +382,17 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		Workspace: "/repo/magus",
 		Action:    "shell.command",
 		Outcome:   trailtypes.OutcomeOK,
-		Preview:   "guard: pass",
+		Preview:   "guard: defer",
 		Cwd:       wd,
 	}, got)
 
 	body, err := trailtypes.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls",`+
-		`"thread":"main","thread_from":"inferred","shadow":{"off":"allow","light":"allow","standard":"allow","strict":"allow"}}`, string(body))
+		`"thread":"main","thread_from":"inferred","shadow":{"off":"defer","light":"defer","standard":"defer","strict":"defer"}}`, string(body))
 	body, err = trailtypes.ReadBlob(dir, responseRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":"defer"}`, string(body))
 }
 
 // TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
@@ -403,7 +403,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &out, []string{"-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -429,16 +429,16 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--observe", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	// A reach is recorded under its own label, not as a write. Its preview is "observed", not
-	// "guard: pass". The trail already distinguishes the two, and recording a verdict here
+	// "guard: defer". The trail already distinguishes the two, and recording a verdict here
 	// would have every read claim the guard ran and cleared it: the exact conflation --observe
-	// exists to remove. The wire verdict the host reads is still pass.
+	// exists to remove. The wire verdict the host reads is still defer.
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.read", "observed"), got)
 
 	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
@@ -458,7 +458,7 @@ func TestHookCmd_ObserveOutranksPath(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "--observe", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -476,7 +476,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 	var out bytes.Buffer
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"s1","transcript_path":"/tmp/t.jsonl","tool_input":{"command":"ls"}}`
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out, []string{"-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -501,7 +501,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("internal/trail/trail.go"), &out,
 		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -525,7 +525,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(""), &out, []string{"--observe", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -556,7 +556,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out,
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -596,7 +596,7 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(`{"tool_input":{"prompt":"go and audit the store"}}`),
 		&out, []string{"-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 
 	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
@@ -640,7 +640,7 @@ func TestHookPathMode(t *testing.T) {
 				input = "/nonexistent/elsewhere.txt"
 			}
 			require.NoError(t, hookStdin(ctx, strings.NewReader(input), &out, tt.args))
-			assert.Equal(t, "pass\n", out.String(),
+			assert.Equal(t, "defer\n", out.String(),
 				"an unclassifiable path says nothing: an advisory fired on a guess trains the reader to ignore it")
 		})
 	}
@@ -666,7 +666,7 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 	var out bytes.Buffer
 	ctx := WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 	require.NoError(t, hookStdin(ctx, strings.NewReader(payload), &out, []string{"-o", "name", "--agent-name", "claude-code"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 }
 
 // shellStep runs `magus shell` over step's record from a host whose rows
@@ -691,7 +691,7 @@ func TestShellJudgesAToolStepAsTheEnvelopeItStandsFor(t *testing.T) {
 	verdict, err := shellStep(t, step)
 
 	require.NoError(t, err)
-	assert.Equal(t, "pass\n", verdict, "an inert tool's step passes as its envelope does")
+	assert.Equal(t, "defer\n", verdict, "an inert tool's step passes as its envelope does")
 }
 
 func TestShellDeniesAStepOfAKindNoRowDeclares(t *testing.T) {
@@ -811,7 +811,7 @@ func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
 	}
 
 	assert.Contains(t, run(), "magus-skill-authoring")
-	assert.Equal(t, "pass\n", run(),
+	assert.Equal(t, "defer\n", run(),
 		"the repeat is silence, not the new-directory advisory stepping into the gap this rule left")
 }
 
@@ -832,16 +832,16 @@ func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 		// Spelled bare, so it resolves inside this package's own directory: a path
 		// naming a directory that does not exist yet draws the new-directory advisory,
 		// which is a different rule answering and would say nothing about this one.
-		"a source file":           {input: "guard_cache.go", path: true, want: "pass\n"},
-		"a sibling directory":     {input: ".magus-notes/a.md", path: true, want: "pass\n"},
+		"a source file":           {input: "guard_cache.go", path: true, want: "defer\n"},
+		"a sibling directory":     {input: ".magus-notes/a.md", path: true, want: "defer\n"},
 		"appending to a journal":  {input: "echo x >> .magus/advisories/anon.served-next", want: "deny\n"},
 		"removing the whole dir":  {input: "rm -rf .magus", want: "deny\n"},
 		"an in-place marker edit": {input: "sed -i 's/a/b/' .magus/lease", want: "deny\n"},
 		"copying over the marker": {input: "cp foo .magus/lease", want: "deny\n"},
-		"reading a log":           {input: "cat .magus/logs/x.log", want: "pass\n"},
-		"reading a captured run":  {input: "./magus query output outabc", want: "pass\n"},
-		"binding through magus":   {input: "./magus session lease adj/x", want: "pass\n"},
-		"a sibling name":          {input: "echo x >> .magus-notes/a.md", want: "pass\n"},
+		"reading a log":           {input: "cat .magus/logs/x.log", want: "defer\n"},
+		"reading a captured run":  {input: "./magus query output outabc", want: "defer\n"},
+		"binding through magus":   {input: "./magus session lease adj/x", want: "defer\n"},
+		"a sibling name":          {input: "echo x >> .magus-notes/a.md", want: "defer\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx, root, _ := hookFleet(t)
@@ -903,7 +903,7 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 
 	var unleased bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(command), &unleased, []string{"-o", "name"}))
-	assert.Equal(t, "pass\n", unleased.String(), "a caller naming no lease is scoped by nobody's row")
+	assert.Equal(t, "defer\n", unleased.String(), "a caller naming no lease is scoped by nobody's row")
 }
 
 // TestHookCmdJudgesTheMCPLedgerInput is the decision table for the transport the CLI
@@ -925,9 +925,9 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"**\"]}});", own)), "deny\n"},
 		"clearing the board":    {client(`magus\workspace().clearJobs();`), "deny\n"},
 		"exec elsewhere":        {client(`magus\job("harness/other").register();`), "deny\n"},
-		"exec its own":          {client(fmt.Sprintf("magus\\job(%s).register();", own)), "pass\n"},
-		"listing the plan":      {client(`magus\workspace().jobs();`), "pass\n"},
-		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}});", own)), "pass\n"},
+		"exec its own":          {client(fmt.Sprintf("magus\\job(%s).register();", own)), "defer\n"},
+		"listing the plan":      {client(`magus\workspace().jobs();`), "defer\n"},
+		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}});", own)), "defer\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.
 		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}, \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
 		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}, \"criteria\": \"something else\"});", own)), "deny\n"},
@@ -1001,7 +1001,7 @@ func TestHookCmdNoticesATerminalLease(t *testing.T) {
 	var second bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &second,
 		[]string{"--lease", done.ID, "--session", "session-terminal"}))
-	assert.Equal(t, "pass\n", second.String(), "a standing fact is said once per session")
+	assert.Equal(t, "defer\n", second.String(), "a standing fact is said once per session")
 }
 
 // TestHookVerdictCarriesTheActingLease pins the field on the wire, which is what lets a
@@ -1084,7 +1084,7 @@ func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 		`"tool_name":"mcp__magus__client","tool_input":{"script":"import \"magus\"; fun main(args: [str]) > any !> str { return magus\\cmd(\"affected\", [\"ci\", \"--plan\"]); }"}}`
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out, []string{"--lease", lease.ID, "-o", "name"}))
-	assert.Equal(t, "pass\n", out.String())
+	assert.Equal(t, "defer\n", out.String())
 }
 
 // TestHookCmdStandsDownOnAServedNext is the rule in place: the same command is denied by a
@@ -1105,7 +1105,7 @@ func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 	var cleared bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(command), &cleared,
 		[]string{"--lease", narrowLease().ID, "--session", "session-preauth", "-o", "name"}))
-	assert.Equal(t, "pass\n", cleared.String(),
+	assert.Equal(t, "defer\n", cleared.String(),
 		"magus refusing the command magus served is the tool disagreeing with itself")
 }
 
@@ -1299,7 +1299,7 @@ func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out,
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
-	require.Equal(t, "pass\n", out.String(), "a skill load carries nothing to judge")
+	require.Equal(t, "defer\n", out.String(), "a skill load carries nothing to judge")
 }
 
 // TestHookCmd_RefusesSpawnBeforeTheBrief is spawn-before-skill end to end.
@@ -1324,7 +1324,7 @@ func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 	var unobserved bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &unobserved,
 		[]string{"--agent-name", "blind", "-o", "name"}))
-	assert.Equal(t, "pass\n", unobserved.String(),
+	assert.Equal(t, "defer\n", unobserved.String(),
 		"a wiring that cannot report a skill load must not be held to having reported one")
 
 	var refused bytes.Buffer
@@ -1339,7 +1339,7 @@ func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 	var allowed bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &allowed,
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
-	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
+	assert.Equal(t, "defer\n", allowed.String(), "the brief is read once per session, not per spawn")
 }
 
 // The host-call flags reach the guard: a worker's backgrounded magus run is refused, the
@@ -1360,8 +1360,8 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 		return v
 	}
 	refused := run("--call-background")
-	assert.Equal(t, []string{"deny", "worker-background-run"}, []string{refused.Decision, refused.Rule})
-	assert.Equal(t, "pass", run("--call-timeout", "10m").Decision)
+	assert.Equal(t, []string{string(verdict.Deny), "worker-background-run"}, []string{string(refused.Decision), refused.Rule})
+	assert.Equal(t, verdict.Defer, run("--call-timeout", "10m").Decision)
 }
 
 func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
@@ -1373,7 +1373,9 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 
-	calls := trail.ForSession(ctx, cacheDir, "s1", 10).Calls
+	tr, err := trail.ForSession(ctx, cacheDir, "s1", 10)
+	require.NoError(t, err)
+	calls := tr.Calls
 	require.Len(t, calls, 1)
 	calls[0].At = time.Time{}
 	assert.Equal(t, trail.SessionCall{
@@ -1392,7 +1394,7 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 		[]string{"--duration", "420ms", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 	var v verdict.Judgment
 	require.NoError(t, codec.Unmarshal(out.Bytes(), &v), out.String())
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 
 	events, err := trailtypes.ReadRecent(ctx, cacheDir, 1)
 	require.NoError(t, err)

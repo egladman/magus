@@ -297,7 +297,7 @@ export fun rank(tier: str) > int {
 // mandate's budget, naming the split a person may run. It never splits.
 fun decideBudget(id: str, m: Mandate, row: JobFacts, got: Assessed) > GuardVerdict {
     if (got.lines >= 0 and got.lines <= m.budget) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final split = "magus buzz hack/dev/split-into-branches.buzz -- --by symbols --base {row.checkpoint} --budget {m.budget}";
     final counted = if (got.lines < 0) "its scoped and full lines could not be counted" else "{got.lines} lines in scoped or full paths, above the mandate's budget of {m.budget}";
@@ -453,7 +453,7 @@ export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jo
         }
     }
     if (!inForce(m, now: now)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final mandate = m!;
     final bodies = plainHeredocs(line);
@@ -463,11 +463,11 @@ export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jo
     }
     foreach (p in programs) {
         final judged = decideProgram(p, body: body, m: mandate, jobs: jobs, assess: assess);
-        if (judged.decision != magus\GuardDecision.allow) {
+        if (judged.decision != magus\GuardDecision.defer) {
             return judged;
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 fun decideProgram(p: helpers\Program, body: str, m: Mandate, jobs: [JobFacts], assess: fun (id: str) > Assessed) > GuardVerdict {
@@ -501,7 +501,7 @@ fun decideProgram(p: helpers\Program, body: str, m: Mandate, jobs: [JobFacts], a
             }
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 fun madeUnder(jobs: [JobFacts], id: str, m: Mandate) > bool {
@@ -536,10 +536,10 @@ fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [Job
                     + "ADR 0019 section 5: a mandate deletes only work made under it.");
             }
         }
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (what != "fork") {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final fork = readFork(p, body: body);
     if (!fork.known) {
@@ -552,11 +552,11 @@ fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [Job
     }
     foreach (id in fork.integrates) {
         final held = decideHold(id, m: m, jobs: jobs, assess: assess);
-        if (held.decision != magus\GuardDecision.allow) {
+        if (held.decision != magus\GuardDecision.defer) {
             return held;
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // decideHold holds an unsettled job for review when its proven tier is above the mandate's
@@ -570,7 +570,7 @@ export fun decideHold(id: str, m: Mandate, jobs: [JobFacts], assess: fun (id: st
     }
     final got = assess(id);
     if (rank(got.tier) <= rank(m.tolerance)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     return deny("{id} is held for review: unsettled at tier {got.tier}, above the mandate's tolerance {m.tolerance}; fork the next row\n"
         + "ADR 0019 section 4. Evidence:\n" + got.evidence.join("\n"));
@@ -596,7 +596,7 @@ export fun decideWrite(path: str, workspace: str, m: Mandate?, now: int) > Guard
         return deny("the mandate file is written by `hack/dev/issue-mandate.buzz`, run by the person\nADR 0019 section 8.");
     }
     if (!inForce(m, now: now)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final rel = relative(path, workspace: workspace);
     foreach (reserved in reservedPaths) {
@@ -605,7 +605,7 @@ export fun decideWrite(path: str, workspace: str, m: Mandate?, now: int) > Guard
                 + "ADR 0019 section 5.");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // StopFacts is what the Stop rule reads of a stop.
@@ -763,7 +763,7 @@ fun mandateEnded(m: Mandate?, now: int) > bool {
 // With nothing else waiting it refuses once.
 export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
     if (facts.role != "root") {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (facts.running.len() > 0) {
         return magus\guard.advise(runningLine(facts.running, now: now), opts: {"rule": "idle-stop"});
@@ -772,7 +772,7 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
     foreach (r in q.jobs) {
         if (r.state == magus\JobState.running) {
             if (r.holderStopped == 0) {
-                return magus\guard.allow();
+                return magus\guard.defer();
             }
             if (!r.paused) {
                 stopped.append(r.id);
@@ -780,13 +780,13 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
         }
     }
     if (mandateEnded(m, now: now)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final ready = forkable(q, m: m, now: now);
     final unmerged = unmergedLines(q.unmerged);
     if (ready.len() == 0 and unmerged.len() == 0) {
         if (stopped.len() == 0 or facts.stopHookActive) {
-            return magus\guard.allow();
+            return magus\guard.defer();
         }
         final reason = "this stop is refused: a stopped worker's row has no result\n{stoppedLine(stopped)}";
         return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
@@ -798,7 +798,7 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
     }
     if (!inForce(m, now: now)) {
         if (facts.stopHookActive) {
-            return magus\guard.allow();
+            return magus\guard.defer();
         }
         return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
     }
@@ -869,39 +869,39 @@ test "issuing or revoking a mandate is denied to the root and its workers, in fo
     final issue = magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "issue", "--until", "07:30"]);
     std\assert(decideCommand(issue, line: "", m: null, jobs: store, now: 0, assess: fullTier).decision == magus\GuardDecision.deny, message: "issue");
     std\assert(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "revoke"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "revoke");
-    std\assert(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "report"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "report");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "report"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.defer, message: "report");
 }
 
 test "a fork inside the mandate is allowed and new scope is denied while it is in force" {
     final child = magusLine(["job", "fork", "naming-lint/tests", "--parent", "naming-lint"]);
-    std\assert(decideCommand(child, line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "child of a named row");
+    std\assert(decideCommand(child, line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.defer, message: "child of a named row");
     final scope = magusLine(["job", "fork", "new-idea"]);
     final denied = decideCommand(scope, line: "", m: issued, jobs: store, now: 2000, assess: fullTier);
     std\assert(denied.decision == magus\GuardDecision.deny, message: "new scope");
     std\assert(denied.reason.indexOf("naming-lint, go-indexer") != null, message: "names the mandate");
     std\assert(decideCommand(child, line: "", m: issued, jobs: store, now: 6000, assess: fullTier).decision == magus\GuardDecision.deny, message: "past the end, every fork waits for a revoke");
-    std\assert(decideCommand(scope, line: "", m: Mandate{ action = "revoke", at = 6000 }, jobs: store, now: 7000, assess: fullTier).decision == magus\GuardDecision.allow, message: "revoked, the mandate holds nothing");
+    std\assert(decideCommand(scope, line: "", m: Mandate{ action = "revoke", at = 6000 }, jobs: store, now: 7000, assess: fullTier).decision == magus\GuardDecision.defer, message: "revoked, the mandate holds nothing");
     std\assert(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "apply");
 }
 
 test "a --stdin fork is read from its heredoc and one the line does not carry is denied" {
     final line = "./magus job fork --stdin <<'EOF'\n\{\"id\":\"naming-lint/land\",\"parent\":\"naming-lint\",\"integrates\":[\"go-indexer\"]\}\nEOF";
     final stdin = magusLine(["job", "fork", "--stdin"]);
-    std\assert(decideCommand(stdin, line: line, m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "a settled job is integrated at any tier");
+    std\assert(decideCommand(stdin, line: line, m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.defer, message: "a settled job is integrated at any tier");
     std\assert(decideCommand(stdin, line: "./magus job fork --stdin < job.json", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "unread record");
 }
 
 test "an unsettled job above the tolerance is held for review and one at or below it is integrated" {
     std\assert(decideHold("late", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.deny, message: "risks above tolerance");
-    std\assert(decideHold("late", m: issued, jobs: store, assess: mechanicalTier).decision == magus\GuardDecision.allow, message: "at tolerance");
+    std\assert(decideHold("late", m: issued, jobs: store, assess: mechanicalTier).decision == magus\GuardDecision.defer, message: "at tolerance");
     std\assert(decideHold("naming-lint", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.deny, message: "not passed is unsettled");
-    std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.allow, message: "settled");
+    std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.defer, message: "settled");
     final held = decideHold("late", m: issued, jobs: store, assess: fullTier);
     std\assert(held.reason.indexOf("x.go: full (unproven)") != null, message: "carries the evidence");
 }
 
 test "a settled job over the budget is held and names the split, one within it is integrated" {
-    std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.allow, message: "120 lines is within 400");
+    std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.defer, message: "120 lines is within 400");
     final held = decideHold("go-indexer", m: issued, jobs: store, assess: largeTier);
     std\assert(held.decision == magus\GuardDecision.deny, message: "900 lines is past 400");
     std\assert(held.reason.indexOf("900 lines in scoped or full paths, above the mandate's budget of 400") != null, message: held.reason);
@@ -947,16 +947,16 @@ test "merge, push, grant and deleting older work are reserved under a mandate" {
     std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "push");
     std\assert(decideCommand(magusLine(["job", "grant", "x"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "grant");
     std\assert(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "older row");
-    std\assert(decideCommand(magusLine(["job", "rm", "naming-lint/docs"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "row made under the mandate");
+    std\assert(decideCommand(magusLine(["job", "rm", "naming-lint/docs"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.defer, message: "row made under the mandate");
     std\assert(decideCommand(helpers\vcsRequest([["git", "branch", "-D", "landing"]]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "older branch");
-    std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", m: null, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "no mandate adds nothing");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", m: null, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.defer, message: "no mandate adds nothing");
 }
 
 test "reserved paths are denied only under a mandate and the mandate file always" {
     std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", m: issued, now: 2000).decision == magus\GuardDecision.deny, message: "decision");
     std\assert(decideWrite("/w/magus.yaml", workspace: "/w", m: issued, now: 2000).decision == magus\GuardDecision.deny, message: "config");
-    std\assert(decideWrite("/w/internal/guard/x.go", workspace: "/w", m: issued, now: 2000).decision == magus\GuardDecision.allow, message: "code");
-    std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", m: null, now: 2000).decision == magus\GuardDecision.allow, message: "no mandate");
+    std\assert(decideWrite("/w/internal/guard/x.go", workspace: "/w", m: issued, now: 2000).decision == magus\GuardDecision.defer, message: "code");
+    std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", m: null, now: 2000).decision == magus\GuardDecision.defer, message: "no mandate");
 }
 
 test "an idle root stop is refused once with no mandate and every time under one" {
@@ -967,10 +967,10 @@ test "an idle root stop is refused once with no mandate and every time under one
     std\assert(once.decision == magus\GuardDecision.deny, message: "first stop");
     std\assert(once.reason.indexOf("naming-lint") != null, message: "names the row");
     std\assert(once.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
-    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "second stop");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "second stop");
     std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.deny, message: "under a mandate");
-    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, m: issued, now: 6000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "past the end");
-    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: q, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a worker");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, m: issued, now: 6000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "past the end");
+    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: q, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "a worker");
 }
 
 test "a running row lets the root stop, and so do rows paused, blocked or waiting on a dependency" {
@@ -978,11 +978,11 @@ test "a running row lets the root stop, and so do rows paused, blocked or waitin
     final skip = fun (rows: [str]) > void {};
     final root = StopFacts{ role = "root", stopHookActive = false };
     final running = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }, JobFacts{ id = "go-indexer", state = magus\JobState.running }] };
-    std\assert(decideStop(root, q: running, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a worker will wake it");
+    std\assert(decideStop(root, q: running, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "a worker will wake it");
     final held = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared, paused = true }, JobFacts{ id = "go-indexer", state = magus\JobState.declared, dependsOn = ["gone"] }] };
-    std\assert(decideStop(root, q: held, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "paused and waiting");
+    std\assert(decideStop(root, q: held, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "paused and waiting");
     final blocked = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }], blocked = ["naming-lint"] };
-    std\assert(decideStop(root, q: blocked, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "blocked");
+    std\assert(decideStop(root, q: blocked, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "blocked");
 }
 
 test "a stopped holder's row refuses the root's stop once and never reads as a running worker" {
@@ -997,13 +997,13 @@ test "a stopped holder's row refuses the root's stop once and never reads as a r
     std\assert(refused.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
     std\assert(refused.reason.indexOf("continue that worker") != null, message: "names the continuation and no tool");
     _ = verdict\checked(refused, label: "stopped holder");
-    std\assert(decideStop(again, q: alone, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "the second stop stands");
-    std\assert(decideStop(again, q: alone, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "once under a mandate too");
+    std\assert(decideStop(again, q: alone, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "the second stop stands");
+    std\assert(decideStop(again, q: alone, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "once under a mandate too");
 
     final beside = Queue{ jobs = [alone.jobs[0], JobFacts{ id = "naming-lint", state = magus\JobState.running }] };
-    std\assert(decideStop(root, q: beside, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a running worker still wakes the root");
+    std\assert(decideStop(root, q: beside, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "a running worker still wakes the root");
     final paused = Queue{ jobs = [JobFacts{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500, paused = true }] };
-    std\assert(decideStop(root, q: paused, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a person paused it");
+    std\assert(decideStop(root, q: paused, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "a person paused it");
 }
 
 test "a stopped holder's row does not let the root idle with work queued" {
@@ -1052,9 +1052,9 @@ test "finished work off the branch refuses the root's stop, naming the row, its 
     std\assert(refused.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
     std\assert(refused.reason.indexOf("go-indexer at abc123") != null, message: "row and head");
     std\assert(refused.reason.indexOf("Remedy: merge abc123") != null, message: "remedy");
-    std\assert(decideStop(root, q: Queue{ jobs = doneStore }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "nothing off the branch");
-    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a person present can still stop on the second");
-    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a worker");
+    std\assert(decideStop(root, q: Queue{ jobs = doneStore }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "nothing off the branch");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "a person present can still stop on the second");
+    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "a worker");
 }
 
 test "a deferred item refuses the stop and an unknown read is never taken as merged" {
@@ -1073,8 +1073,8 @@ test "a row with only unresolved risks lets the root stop, with no mandate and u
     final skip = fun (rows: [str]) > void {};
     final root = StopFacts{ role = "root", stopHookActive = false };
     final risks = JobUnmergedReport{ risks = [JobUnmerged{ job = "go-indexer", item = "a caveat", why = "listed", remedy = "dismiss it" }] };
-    std\assert(decideStop(root, q: Queue{ jobs = doneStore, unmerged = risks }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "no mandate");
-    std\assert(decideStop(root, q: Queue{ jobs = doneStore, unmerged = risks }, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "under a mandate");
+    std\assert(decideStop(root, q: Queue{ jobs = doneStore, unmerged = risks }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "no mandate");
+    std\assert(decideStop(root, q: Queue{ jobs = doneStore, unmerged = risks }, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "under a mandate");
 }
 
 test "a long report names the first facts and points at the whole list" {

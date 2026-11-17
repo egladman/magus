@@ -75,7 +75,7 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 	assert.Contains(t, got.Why, "server stop")
 
 	write := gradeLeasedEdit(ctx, deps, row.ID, filepath.Join(root, "cmd/magus/agent.go"), writeFields{})
-	require.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, verdict.Judgment{Decision: write.Decision, Rule: write.Rule})
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseRowUnknown)}, verdict.Judgment{Decision: write.Decision, Rule: write.Rule})
 	assert.Contains(t, write.Reason, "widens_paths")
 
 	assert.Equal(t, denyRuleLeaseRowUnknown, roleScopedCommandRules()[0].name, "judged before any rule that reads the row")
@@ -162,7 +162,7 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, row.ID, filepath.Join(root, "cmd/magus/agent.go"), writeFields{}).Decision)
 
 	outside := gradeLeasedEdit(ctx, Dependencies{}, row.ID, filepath.Join(root, "README.md"), writeFields{})
-	require.Equal(t, decisionDeny, outside.Decision, "the other rules still judge the row")
+	require.Equal(t, verdict.Deny, outside.Decision, "the other rules still judge the row")
 	assert.NotEqual(t, string(denyRuleLeaseRowUnknown), outside.Rule)
 }
 
@@ -226,7 +226,7 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 	at := location{cacheDir: t.TempDir()}
 
-	got := gradeSpawnModel(deps, verdict.Judgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
+	got := gradeSpawnModel(deps, verdict.Judgment{Decision: verdict.Defer}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
 		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
 
 	assert.Contains(t, got.Reason, "widens_paths")
@@ -234,7 +234,7 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 	assert.Contains(t, got.Reason, "restart the daemon")
 	assert.Contains(t, unknownRowSpawnDenial(deps, row).Why, "`./magus server stop`, then `./magus server start`")
 	got.Reason = ""
-	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, got)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseRowUnknown)}, got)
 }
 
 func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
@@ -242,10 +242,10 @@ func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
 	titled := func() (jobtypes.Job, bool) { return row, true }
 	at := location{cacheDir: t.TempDir()}
 
-	got := gradeSpawnModel(Dependencies{}, verdict.Judgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
+	got := gradeSpawnModel(Dependencies{}, verdict.Judgment{Decision: verdict.Defer}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
 		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
 
-	assert.NotEqual(t, decisionDeny, got.Decision)
+	assert.NotEqual(t, verdict.Deny, got.Decision)
 }
 
 func withUnknown(row jobtypes.Job, member string) jobtypes.Job {

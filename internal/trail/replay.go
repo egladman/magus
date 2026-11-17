@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"context"
+	"errors"
 	"github.com/egladman/magus/types/diff"
 	"os"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -337,11 +339,10 @@ func startRun(call SessionCall) *RepeatRun {
 // The facts are the caller's; see AgentCommand. A fact the record did not carry reads as
 // its zero value, except Thread, which reads as types.AgentThreadUnknown.
 //
-// Decision is the hook verdict's (pass, ask, advise or deny), not a rule's
-// verdict.Decision, which has no pass or ask.
+// Decision is the hook verdict's: defer, advise, ask or deny.
 type SessionCall struct {
 	At       time.Time
-	Decision string
+	Decision verdict.Decision
 	Rule     string
 	// Worker is the host's subagent id, empty for the main thread. ToolMs is
 	// the host's tool time, set on tool-time rows only.
@@ -367,16 +368,18 @@ type SessionSpawn struct {
 
 // ForSession folds the trail at base for one host session, reading at most limit recent
 // events. A trail that cannot be read is an empty result, never an error: the join is context
-// for a transcript that stands on its own.
-func ForSession(ctx context.Context, base, session string, limit int) SessionTrail {
+// for a transcript that stands on its own. A blob holding a retired guard decision is the
+// one error, a [*RetiredDecisionError], since reading around it would miscount the session.
+func ForSession(ctx context.Context, base, session string, limit int) (SessionTrail, error) {
 	var out SessionTrail
 	if session == "" {
-		return out
+		return out, nil
 	}
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
-		return out
+		return out, nil
 	}
+	var retired *RetiredDecisionError
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
 		if e.Session != session {
@@ -388,16 +391,22 @@ func ForSession(ctx context.Context, base, session string, limit int) SessionTra
 			call := SessionCall{At: time.UnixMilli(e.Ts), Action: e.Action, Worker: e.Agent, ToolMs: e.DurationMs, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
-				if codec.Unmarshal(raw, &resp) == nil {
+				switch err := decodeAgentBlob(base, e.ResponseRef, raw, &resp); {
+				case errors.As(err, &retired):
+					return SessionTrail{}, err
+				case err == nil:
 					call.Decision, call.Rule = resp.Decision, resp.Rule
-					if resp.Decision == "deny" {
+					if resp.Decision == verdict.Deny {
 						out.Denied++
 					}
 				}
 			}
 			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentCommandRequest
-				if codec.Unmarshal(raw, &req) == nil {
+				switch err := decodeAgentBlob(base, e.RequestRef, raw, &req); {
+				case errors.As(err, &retired):
+					return SessionTrail{}, err
+				case err == nil:
 					call.AgentFacts = req.AgentFacts
 					call.Thread = cmp.Or(call.Thread, types.AgentThreadUnknown)
 				}
@@ -423,7 +432,7 @@ func ForSession(ctx context.Context, base, session string, limit int) SessionTra
 		}
 	}
 	out.Repeats = repeats(out.Calls)
-	return out
+	return out, nil
 }
 
 // AgentActivity is the newest guard observation one checkout's trail holds: when a host

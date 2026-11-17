@@ -51,12 +51,12 @@ interface AgentBeat {
   // The lease a spawn handed down, or the lease a command ran under.
   unit?: string;
   leaseFrom?: string;
-  verdict?: "pass" | "deny";
+  verdict?: "defer" | "deny";
 }
 
 const AGENT_HOST = "claude";
 const AGENT_BEATS: readonly AgentBeat[] = [
-  { minutesAgo: 6, kind: "command", session: "sess-orchestrator", action: "Bash", verdict: "pass" },
+  { minutesAgo: 6, kind: "command", session: "sess-orchestrator", action: "Bash", verdict: "defer" },
   {
     minutesAgo: 9,
     kind: "command",
@@ -73,7 +73,7 @@ const AGENT_BEATS: readonly AgentBeat[] = [
     action: "Edit",
     unit: "worker/ui-logs",
     leaseFrom: "flag",
-    verdict: "pass",
+    verdict: "defer",
   },
   {
     minutesAgo: 14,
@@ -87,7 +87,7 @@ const AGENT_BEATS: readonly AgentBeat[] = [
     kind: "command",
     session: "sess-orchestrator",
     action: "Bash",
-    verdict: "pass",
+    verdict: "defer",
   },
 ];
 

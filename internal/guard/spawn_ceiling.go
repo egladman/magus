@@ -32,7 +32,7 @@ const denyRuleSpawnAboveParentTier denyRuleName = "spawn-above-parent-tier"
 // spawn named. A subagent spawned on no model is taken to run on the session's, inferred,
 // and an inferred ceiling only advises.
 func gradeSpawnCeiling(deps Dependencies, judged verdict.Judgment, env hookRequest, who hookAttribution, at location, lease string) verdict.Judgment {
-	if judged.Decision == decisionDeny || !env.IsSpawn || env.DeclaredModel == "" || at.cacheDir == "" || deps.ModelTiers == nil {
+	if judged.Decision == verdict.Deny || !env.IsSpawn || env.DeclaredModel == "" || at.cacheDir == "" || deps.ModelTiers == nil {
 		return judged
 	}
 	s := deps.settingLookup(string(denyRuleSpawnAboveParentTier))

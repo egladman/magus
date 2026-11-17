@@ -332,7 +332,11 @@ func sessionShow(ctx context.Context, root string, args []string) error {
 	}
 
 	out := sessionShowOutput{ShowSummary: sessions.SummarizeSession(rest[0], events)}
-	out.Trail = sessionTrailHere(root, rest[0])
+	tr, err := sessionTrailHere(ctx, root, rest[0])
+	if err != nil {
+		return err
+	}
+	out.Trail = tr
 	out.Cost = trail.SummarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -508,12 +512,12 @@ func checkoutCacheDir(root string) string {
 	return cacheDir
 }
 
-func sessionTrailHere(root, session string) *trail.SessionTrail {
+func sessionTrailHere(ctx context.Context, root, session string) (*trail.SessionTrail, error) {
 	cacheDir := checkoutCacheDir(root)
 	if cacheDir == "" {
-		return nil
+		return nil, nil
 	}
-	return trail.SessionTrailHere(context.Background(), cacheDir, session)
+	return trail.SessionTrailHere(ctx, cacheDir, session)
 }
 
 func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {

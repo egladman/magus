@@ -11,20 +11,20 @@ func (s *StopRuleSuite) TestAReplyHandingOverADeniedCommandIsRefused() {
 	v := s.judge(Dependencies{}, s.reply("Run this yourself:\n\n```bash\ngit add -A\n```\n", false))
 	s.Contains(v.Reason, "this reply hands the person `git add -A`")
 	v.Reason = ""
-	s.Equal(verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleBriefCommand)}, v)
+	s.Equal(verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleBriefCommand)}, v)
 }
 
 func (s *StopRuleSuite) TestASecondStopLetsAHandedCommandThrough() {
 	v := s.judge(Dependencies{}, s.reply("```bash\ngit add -A\n```\n", true))
-	s.NotEqual(decisionDeny, v.Decision)
+	s.NotEqual(verdict.Deny, v.Decision)
 }
 
 func (s *StopRuleSuite) TestAHandedBlockShownToForbidItPasses() {
 	v := s.judge(Dependencies{}, s.reply("Never run this:\n```bash\ngit add -A\n```\n", false))
-	s.NotEqual(decisionDeny, v.Decision)
+	s.NotEqual(verdict.Deny, v.Decision)
 }
 
 func (s *StopRuleSuite) TestAHandedAllowedCommandAndProsePass() {
 	v := s.judge(Dependencies{}, s.reply("Done. `git add -A` was refused, so:\n\n```bash\ngit status\n```\n", false))
-	s.NotEqual(decisionDeny, v.Decision)
+	s.NotEqual(verdict.Deny, v.Decision)
 }

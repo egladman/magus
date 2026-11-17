@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -20,7 +21,7 @@ func denyOwnBinaryWrite(lease, writePath string) writeGrade {
 		if filepath.Base(p) != "magus" || findMagusCheckout(dir) != dir {
 			continue
 		}
-		return writeGrade{Decision: decisionDeny, Reason: denial{
+		return writeGrade{Decision: verdict.Deny, Reason: denial{
 			Say: fmt.Sprintf("magus workspace: %s is a checkout's own magus binary; lease %s runs the one placed for it.", writePath, lease),
 			Why: fmt.Sprintf("Only the workspace's bootstrap and build targets write that file. The hooks and the guard run it by name, so a lease that writes it picks the guard its own calls are judged by. `%s` shows what the job holds.", hint.DescribeJob.With(lease)),
 		}.full()}
@@ -44,7 +45,7 @@ func denyMagusStateWrite(lease, writePath string) writeGrade {
 		if !within(dest, d.dir) {
 			continue
 		}
-		return writeGrade{Decision: decisionDeny, Reason: denial{
+		return writeGrade{Decision: verdict.Deny, Reason: denial{
 			Say: fmt.Sprintf("magus workspace: %s is in magus's own %s directory (%s); record a result with `%s`.",
 				writePath, d.kind, d.dir, hint.JobExit.With(lease, "--stdin")),
 			Why: fmt.Sprintf("Only magus commands write that directory. It holds the job store and the other records every verdict is computed from, lease %s's write paths included, so a write there by hand rewrites the boundary it is graded against. `%s` shows what the job holds.",

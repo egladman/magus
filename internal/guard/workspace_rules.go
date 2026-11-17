@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -973,7 +974,7 @@ func (r *WorkspaceRules) ShellRules() ([]WorkspaceShellRule, Dialect) {
 	for i, s := range src {
 		out[i] = WorkspaceShellRule{
 			Name:     s.Name,
-			Decision: s.Decision,
+			Decision: verdict.Decision(s.Decision),
 			Program:  s.Program,
 			Args:     s.Args,
 			Reason:   s.Reason,

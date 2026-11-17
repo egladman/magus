@@ -341,7 +341,7 @@ func TestAgentCostFamilyCollects(t *testing.T) {
 	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{
 		Thread: types.AgentThreadMain, ContextModel: "claude-opus-5-5", ContextTokens: 300_000,
 		Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: &large,
-		Shadow: map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Allow},
+		Shadow: map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Defer},
 	}})
 	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{
 		ContextTokens: 5000, DelegableClass: types.DelegableSearch, ResultChars: &small, Billing: types.AgentBillingMetered,
@@ -379,6 +379,6 @@ func TestAgentCostFamilyCollects(t *testing.T) {
 	}, sumAttrs(t, rm, "magus.agent.billing"))
 	assert.Equal(t, map[attribute.Set]int64{
 		attribute.NewSet(attribute.String("profile", "strict"), attribute.String("decision", "deny")): 1,
-		attribute.NewSet(attribute.String("profile", "light"), attribute.String("decision", "allow")): 1,
+		attribute.NewSet(attribute.String("profile", "light"), attribute.String("decision", "defer")): 1,
 	}, sumAttrs(t, rm, "magus.agent.shadow.verdicts"))
 }

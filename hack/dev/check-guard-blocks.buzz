@@ -49,7 +49,7 @@ export object Case {
     // tool is the Claude Code tool name; route maps it to each host's own.
     tool: str,
     input: {str: any},
-    // expect is the weakest verdict that counts as blocking: pass, advise, ask or deny.
+    // expect is the weakest verdict that counts as blocking: defer, advise, ask or deny.
     expect: str,
     // agent sends the call as a subagent's.
     agent: bool,
@@ -72,7 +72,7 @@ export object Route {
 }
 
 export object Observed {
-    // verdict is deny, ask, advise or pass, dead when the call would run unjudged, or
+    // verdict is deny, ask, advise or defer, dead when the call would run unjudged, or
     // skipped.
     verdict: str,
     rule: str,
@@ -311,7 +311,7 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
             note = "exited {code}, which the host reads as a non-blocking error and runs the call{tail}" };
     }
     if (stdout.trim() == "") {
-        return Observed{ verdict = "pass", rule = "", note = "" };
+        return Observed{ verdict = "defer", rule = "", note = "" };
     }
     final reply = json\parse(stdout) catch null;
     if (reply == null) {
@@ -334,7 +334,7 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
     if (context != "") {
         return Observed{ verdict = "advise", rule = ruleOf(context), note = "" };
     }
-    return Observed{ verdict = "pass", rule = "", note = "" };
+    return Observed{ verdict = "defer", rule = "", note = "" };
 }
 
 fun deadNoticeIn(stderr: str) > str {
@@ -374,6 +374,10 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
         permission = "{reply!["permission"] ?? ""}";
         reason = "{reply!["agent_message"] ?? (reply!["user_message"] ?? "")}";
     }
+    // A bare ask is the glue's defer: Cursor's own prompt decides, and the guard said nothing.
+    if (permission == "ask" and reason == "") {
+        return Observed{ verdict = "defer", rule = "", note = "" };
+    }
     if (permission == "deny" or permission == "ask") {
         return Observed{ verdict = permission, rule = ruleOf(reason), note = "" };
     }
@@ -381,7 +385,7 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
     if (notice != "") {
         return Observed{ verdict = "dead", rule = "", note = notice };
     }
-    return Observed{ verdict = "pass", rule = "", note = "" };
+    return Observed{ verdict = "defer", rule = "", note = "" };
 }
 
 export fun classifyHost(host: str, h: HookCommand, code: int, stdout: str, stderr: str, overran: bool) > Observed {
@@ -438,7 +442,7 @@ fun advised(name: str, command: str) > Case {
 }
 
 // ADVISING_HOSTS can hand an advisory back to the model. The others can only allow or
-// refuse, so an advise-strength rule answers pass there by design.
+// refuse, so an advise-strength rule answers defer there by design.
 final ADVISING_HOSTS = ["claude-code"];
 
 // meets reports whether host's verdict is at least as strong as expect.
@@ -446,7 +450,7 @@ export fun meets(host: str, verdict: str, expect: str) > bool {
     if (verdict == "dead") {
         return false;
     }
-    if (expect == "advise" and verdict == "pass" and ADVISING_HOSTS.indexOf(host) == null) {
+    if (expect == "advise" and verdict == "defer" and ADVISING_HOSTS.indexOf(host) == null) {
         return true;
     }
     return strength(verdict) >= strength(expect);
@@ -911,15 +915,16 @@ test "Claude Code and Codex replies classify the way the host reads them" {
     assert\equal(classify(127, stdout: "", stderr: "magus: not found", overran: false).verdict, want: "dead", message: "127");
     assert\equal(classify(2, stdout: "", stderr: "denied again [sed-in-place]: no", overran: false).rule, want: "sed-in-place", message: "exit 2");
     assert\equal(classify(0, stdout: "", stderr: "", overran: true).verdict, want: "dead", message: "timeout");
-    assert\equal(classify(0, stdout: "", stderr: "", overran: false).verdict, want: "pass", message: "silence");
+    assert\equal(classify(0, stdout: "", stderr: "", overran: false).verdict, want: "defer", message: "silence");
 }
 
 test "Cursor replies classify by permission, exit 2 and failClosed" {
     final deny = classifyCursor(0, stdout: `\{"permission":"deny","user_message":"x","agent_message":"no.\nsee: https://eli.gladman.cc/magus/reference/rules/output-pipe/"\}`, stderr: "", overran: false, failClosed: false);
     assert\equal("{deny.verdict} {deny.rule}", want: "deny output-pipe", message: "deny");
     assert\equal(classifyCursor(0, stdout: `\{"permission":"ask","user_message":"y"\}`, stderr: "", overran: false, failClosed: false).verdict, want: "ask", message: "ask");
-    assert\equal(classifyCursor(0, stdout: `\{"permission":"allow"\}`, stderr: "", overran: false, failClosed: false).verdict, want: "pass", message: "allow");
-    assert\equal(classifyCursor(0, stdout: "", stderr: "", overran: false, failClosed: false).verdict, want: "pass", message: "no opinion");
+    assert\equal(classifyCursor(0, stdout: `\{"permission":"allow"\}`, stderr: "", overran: false, failClosed: false).verdict, want: "defer", message: "allow");
+    assert\equal(classifyCursor(0, stdout: `\{"permission":"ask"\}`, stderr: "", overran: false, failClosed: false).verdict, want: "defer", message: "a bare ask is the glue's defer");
+    assert\equal(classifyCursor(0, stdout: "", stderr: "", overran: false, failClosed: false).verdict, want: "defer", message: "no opinion");
     final unjudged = classifyCursor(0, stdout: `\{"permission":"allow"\}`, stderr: "cursor-hook.buzz: x\nmagus guard is NOT running: magus is not on PATH", overran: false, failClosed: false);
     assert\equal("{unjudged.verdict} {unjudged.note}", want: "dead magus guard is NOT running: magus is not on PATH", message: "allow beside a notice");
     assert\equal(classifyCursor(2, stdout: "", stderr: "[raw-tool] no", overran: false, failClosed: false).rule, want: "raw-tool", message: "exit 2");
@@ -930,7 +935,7 @@ test "Cursor replies classify by permission, exit 2 and failClosed" {
 }
 
 test "the strongest verdict wins, and no matching entry is a dead guard" {
-    final got = strongest([Observed{ verdict = "pass", rule = "", note = "" }, Observed{ verdict = "deny", rule = "r", note = "" }]);
+    final got = strongest([Observed{ verdict = "defer", rule = "", note = "" }, Observed{ verdict = "deny", rule = "r", note = "" }]);
     assert\equal(got.verdict, want: "deny", message: "deny wins");
     assert\equal(strongest([<Observed>]).verdict, want: "dead", message: "unmatched");
 }
@@ -1011,10 +1016,10 @@ test "rows render grouped per host and any weak row fails the report" {
     assert\equal(lines[lines.len() - 1], want: "guard LETS THROUGH: 1 of 2 calls answered weaker than expected", message: "verdict");
 }
 
-test "an advisory reads as pass on a host with no advice channel, and a dead guard never meets" {
-    assert\equal(meets("cursor", verdict: "pass", expect: "advise"), want: true, message: "cursor cannot advise");
-    assert\equal(meets("claude-code", verdict: "pass", expect: "advise"), want: false, message: "claude-code can");
+test "an advisory reads as defer on a host with no advice channel, and a dead guard never meets" {
+    assert\equal(meets("cursor", verdict: "defer", expect: "advise"), want: true, message: "cursor cannot advise");
+    assert\equal(meets("claude-code", verdict: "defer", expect: "advise"), want: false, message: "claude-code can");
     assert\equal(meets("claude-code", verdict: "deny", expect: "advise"), want: true, message: "stronger meets");
-    assert\equal(meets("codex", verdict: "pass", expect: "deny"), want: false, message: "a deny is never excused");
+    assert\equal(meets("codex", verdict: "defer", expect: "deny"), want: false, message: "a deny is never excused");
     assert\equal(meets("cursor", verdict: "dead", expect: "advise"), want: false, message: "dead");
 }

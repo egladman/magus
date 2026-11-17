@@ -147,7 +147,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 		Event:     "PreToolUse",
 		Tool:      "Bash",
 		Command:   "magus run test .",
-		Decision:  "pass",
+		Decision:  verdict.Defer,
 	})
 
 	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
@@ -163,7 +163,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 		Workspace: "/repo/magus",
 		Action:    "Bash",
 		Outcome:   trailtypes.OutcomeOK,
-		Preview:   "guard: pass",
+		Preview:   "guard: defer",
 	}), event)
 
 	request, err := trailtypes.ReadBlob(dir, event.RequestRef)
@@ -183,12 +183,12 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
 	require.NoError(t, codec.Unmarshal(response, &gotResponse))
-	require.Equal(t, agentCommandResponse{APIVersion: agentCommandAPIVersion, Decision: "pass"}, gotResponse)
+	require.Equal(t, agentCommandResponse{APIVersion: agentCommandAPIVersion, Decision: verdict.Defer}, gotResponse)
 }
 
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: "pass"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: verdict.Defer})
 	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events)
@@ -196,7 +196,7 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 
 func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: "pass", GuardMs: 278})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: verdict.Defer, GuardMs: 278})
 
 	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
@@ -223,11 +223,11 @@ func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
-		Tool: "Bash", Command: "ls", Decision: "pass",
+		Tool: "Bash", Command: "ls", Decision: verdict.Defer,
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2", Cwd: "/work/tree/console",
 		Phases: []trailtypes.Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
 	})
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: "pass"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: verdict.Defer})
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
 		Child: "Explore", Context: "look",
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0", Cwd: "/work/tree",
@@ -256,7 +256,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 		Origin:        job.Origin{EntryPoint: job.EntryPointHook},
 		Action:        "Bash",
 		Outcome:       trailtypes.OutcomeOK,
-		Preview:       "guard: pass",
+		Preview:       "guard: defer",
 		Binary:        "/work/tree/magus",
 		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
 		Cwd:           "/work/tree/console",
@@ -278,7 +278,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 
 func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: verdict.Advise, Context: "record the decision"})
 
 	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
@@ -305,7 +305,7 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	require.NoError(t, codec.Unmarshal(response, &gotResponse))
 	require.Equal(t, agentCommandResponse{
 		APIVersion: agentCommandAPIVersion,
-		Decision:   "advise",
+		Decision:   verdict.Advise,
 		Context:    "record the decision",
 	}, gotResponse)
 }
@@ -321,9 +321,9 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 		Billing:        types.AgentBillingMetered,
 		DelegableClass: types.DelegableSearch,
 		ResultChars:    &chars,
-		Shadow:         map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Allow},
+		Shadow:         map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Defer},
 	}
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: "pass", AgentFacts: want})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: verdict.Defer, AgentFacts: want})
 
 	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
@@ -546,7 +546,7 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: job.LeaseSourceMarker})
 	// A supplied lease that fails the charset is not stamped, and nothing stands in for it.
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: verdict.Defer})
 
 	events, err := trailtypes.ReadRecent(t.Context(), dir, 3)
 	require.NoError(t, err)

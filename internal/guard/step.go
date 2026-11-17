@@ -226,7 +226,7 @@ func JudgeStep(ctx context.Context, deps Dependencies, req Request, st step.Step
 	}
 	// The Judge calls below must not end a mark their caller owns.
 	ctx = context.WithValue(context.WithValue(ctx, judgingStepKey{}, true), judgmentMarkKey{}, judgmentMark{})
-	judged := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass, Lease: req.Lease}
+	judged := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer, Lease: req.Lease}
 	row, ok := deps.Steps.covering(st.Kind, st.Name)
 	if !ok {
 		return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, fmt.Sprintf(
@@ -282,7 +282,7 @@ const workspaceStepRule = workspaceShellPrefix + "step"
 func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, stepReq step.Request, row stepSpec, judged verdict.Judgment) verdict.Judgment {
 	step := stepReq.Step
 	unjudged := deps.Steps.unjudged(row)
-	if judged.Decision == decisionDeny {
+	if judged.Decision == verdict.Deny {
 		return judged
 	}
 	var worktree steps.Rule
@@ -314,17 +314,17 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 	asked := askWorkspaceRules(ctx, seamStep, deps, resolve, bind(worktree))
 	denyLapse(&asked, judgedCall{seam: seamStep, changes: row.changes(), what: fmt.Sprintf("this %s step", step.Kind), lease: judged.Lease})
 	decided := ""
-	if judged.Decision != decisionPass {
+	if judged.Decision != verdict.Defer {
 		decided = decidedByBuiltin
 	}
 	judged, _ = applyWorkspaceAnswer(judged, decided, asked, workspaceStepRule)
-	if unjudged && len(asked.answered) == 0 && judged.Decision != decisionDeny {
+	if unjudged && len(asked.answered) == 0 && judged.Decision != verdict.Deny {
 		return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, noStepRuleReason(step, asked.failures))
 	}
-	if note := seamFailureNote(seamStep, "this step stands on the other rules alone", asked); note != "" && judged.Decision != decisionDeny {
+	if note := seamFailureNote(seamStep, "this step stands on the other rules alone", asked); note != "" && judged.Decision != verdict.Deny {
 		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
-		if judged.Decision == decisionPass {
-			judged.Decision = decisionAdvise
+		if judged.Decision == verdict.Defer {
+			judged.Decision = verdict.Advise
 		}
 	}
 	return judged
@@ -449,9 +449,9 @@ func judgeStepBuiltins(ctx context.Context, deps Dependencies, req Request, st s
 func gradeStepDeny(deps Dependencies, judged verdict.Judgment, rule denyRuleName, reason string) verdict.Judgment {
 	switch g := deps.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); {
 	case g.Deny != "":
-		judged.Decision, judged.Reason, judged.Rule = decisionDeny, g.Deny, string(rule)
+		judged.Decision, judged.Reason, judged.Rule = verdict.Deny, g.Deny, string(rule)
 	case g.Context != "":
-		judged.Decision, judged.Context, judged.Rule = decisionAdvise, g.Context, string(rule)
+		judged.Decision, judged.Context, judged.Rule = verdict.Advise, g.Context, string(rule)
 	}
 	return judged
 }
@@ -468,24 +468,24 @@ func stepRuleJudgment(st step.Step, v verdict.Verdict) (verdict.Judgment, error)
 		}
 	}
 	rule := stepRulePrefix + cmp.Or(v.Rule, st.Kind)
-	j := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	j := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	switch v.Decision {
 	case verdict.Deny:
-		j.Decision, j.Reason, j.Rule = decisionDeny, v.Reason, rule
+		j.Decision, j.Reason, j.Rule = verdict.Deny, v.Reason, rule
 	case verdict.Advise:
-		j.Decision, j.Context, j.Rule = decisionAdvise, v.Reason, rule
+		j.Decision, j.Context, j.Rule = verdict.Advise, v.Reason, rule
 	}
 	return j, nil
 }
 
-// stepDecisionRank orders decisions by strictness, deny first and pass last.
-func stepDecisionRank(d string) int {
+// stepDecisionRank orders decisions by strictness, deny first and defer last.
+func stepDecisionRank(d verdict.Decision) int {
 	switch d {
-	case decisionDeny:
+	case verdict.Deny:
 		return 3
-	case decisionAsk:
+	case verdict.Ask:
 		return 2
-	case decisionAdvise:
+	case verdict.Advise:
 		return 1
 	}
 	return 0
@@ -500,7 +500,7 @@ func stricterStep(a, b verdict.Judgment) verdict.Judgment {
 		b.Lease, b.LeaseFrom = cmp.Or(a.Lease, b.Lease), cmp.Or(a.LeaseFrom, b.LeaseFrom)
 		b.APIVersion = cmp.Or(a.APIVersion, b.APIVersion)
 		return b
-	case ra == rb && ra == stepDecisionRank(decisionAdvise) && b.Context != "" && b.Context != a.Context:
+	case ra == rb && ra == stepDecisionRank(verdict.Advise) && b.Context != "" && b.Context != a.Context:
 		a.Context = strings.TrimSpace(strings.Join([]string{a.Context, b.Context}, "\n\n"))
 	}
 	return a
@@ -565,7 +565,7 @@ func declaredStep(ctx context.Context, input string, table StepTable) (step.Step
 func judgeStepRecord(ctx context.Context, deps Dependencies, req Request, st step.Step) verdict.Judgment {
 	j, err := JudgeStep(ctx, deps, req, st)
 	if err != nil {
-		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleStepInput),
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Rule: string(denyRuleStepInput),
 			Reason: fmt.Sprintf("magus workspace: the step could not be judged: %v. Nothing was judged, so it is blocked rather than cleared.", err)}
 	}
 	return j

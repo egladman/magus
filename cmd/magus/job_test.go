@@ -991,7 +991,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("a worker does not build magus");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1040,7 +1040,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("judged from the wrong directory");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1093,7 +1093,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("builds are refused here");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1171,7 +1171,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.role == magus\AgentRole.worker) {
         return magus\guard.deny("the hook binary is older than the tree\nrebuild it");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 

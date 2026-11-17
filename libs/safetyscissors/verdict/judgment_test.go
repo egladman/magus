@@ -18,7 +18,7 @@ func TestJudgment(t *testing.T) { suite.Run(t, new(JudgmentSuite)) }
 func (s *JudgmentSuite) TestWireShapeKeepsEveryKeyInOrder() {
 	full := Judgment{
 		APIVersion: "magus.guard/v1alpha3",
-		Decision:   "deny",
+		Decision:   Deny,
 		Reason:     "no <b>",
 		Context:    "fyi",
 		Rule:       "some-rule",
@@ -43,16 +43,28 @@ func (s *JudgmentSuite) TestWireShapeKeepsEveryKeyInOrder() {
 	s.Equal(full, back)
 }
 
-func (s *JudgmentSuite) TestAPassNamesOnlyItsDecision() {
-	pass, err := codec.Marshal(Judgment{APIVersion: APIVersion, Decision: "pass"})
+func (s *JudgmentSuite) TestADeferNamesOnlyItsDecision() {
+	deferred, err := codec.Marshal(Judgment{APIVersion: APIVersion, Decision: Defer})
 	s.Require().NoError(err)
-	s.Equal(`{"api_version":"magus.guard/v1alpha1","decision":"pass"}`, string(pass))
+	s.Equal(`{"api_version":"magus.guard/v1alpha2","decision":"defer"}`, string(deferred))
+}
+
+// The retired names are refused on the way in, so an envelope from an older build fails
+// loudly instead of reading as a yes.
+func (s *JudgmentSuite) TestUnmarshalRefusesTheRetiredDecisions() {
+	for _, name := range []string{"pass", "allow"} {
+		var back Judgment
+		err := codec.Unmarshal([]byte(`{"api_version":"magus.guard/v1alpha1","decision":"`+name+`"}`), &back)
+		var unknown *UnknownDecisionError
+		s.Require().ErrorAs(err, &unknown, name)
+		s.Equal(name, unknown.Decision)
+	}
 }
 
 // A refused call reports the deny itself: its reason as the message, and the whole
 // judgment for a caller that reads the rule or the remedy.
 func (s *JudgmentSuite) TestDeniedErrorCarriesTheJudgment() {
-	deny := Judgment{Decision: "deny", Reason: "run it through the target", Rule: "raw-tool"}
+	deny := Judgment{Decision: Deny, Reason: "run it through the target", Rule: "raw-tool"}
 	var err error = &DeniedError{Judgment: deny}
 
 	s.Equal(deny.Reason, err.Error())

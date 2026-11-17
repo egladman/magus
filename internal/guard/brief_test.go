@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -126,12 +127,12 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 		return string(raw)
 	}
 	unbound := Judge(ctx, deps, Request{Input: message("ghost"), Host: "claude-code"})
-	assert.Equal(t, "deny", unbound.Decision, "a message to an agent magus never saw is graded as a brief")
+	assert.Equal(t, verdict.Deny, unbound.Decision, "a message to an agent magus never saw is graded as a brief")
 	assert.Contains(t, unbound.Reason, string(denyRuleWorkerCheckOnly))
 
 	Judge(ctx, deps, Request{Input: finishedSpawn(t, "orchestrator/feat guard/slice", "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 	bound := Judge(ctx, deps, Request{Input: message("brisk-heron"), Host: "claude-code"})
-	assert.NotEqual(t, "deny", bound.Decision, bound.Reason)
+	assert.NotEqual(t, verdict.Deny, bound.Decision, bound.Reason)
 }
 
 // Both a spawn and a continuation carry a brief, so both reach the rule through Judge.
@@ -159,7 +160,7 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, strict(Dependencies{}), Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
-	assert.NotEqual(t, "deny", v.Decision)
+	assert.NotEqual(t, verdict.Deny, v.Decision)
 
 	ctx, _ = spawnFixture(t)
 	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
@@ -322,26 +323,26 @@ func TestBriefGradingExplainsAPass(t *testing.T) {
 	})
 	t.Run("the same brief is refused once the row is named", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", "JOB ID: figures/flow\n"+offCheck), Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.Contains(t, v.Reason, "job figures/flow's worker to run `lint`")
 	})
 	t.Run("the spawn title names the row the brief does not", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", offCheck), Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, verdict.Deny, v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, "job figures/flow's worker to run `lint`")
 	})
 	t.Run("a forbidding line is passed, and says so", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Never run `./magus run lint docs`; the orchestrator does.\nFinish with `./magus run diagrams_generate docs`."), Host: "claude-code"})
-		assert.Equal(t, "advise", v.Decision)
+		assert.Equal(t, verdict.Advise, v.Decision)
 		assert.Contains(t, v.Context, "is not graded: the line forbids the run")
 	})
 	t.Run("the row's own check needs no words", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Run `./magus run diagrams_generate docs` once."), Host: "claude-code"})
-		assert.Equal(t, "pass", v.Decision, v.Context)
+		assert.Equal(t, verdict.Defer, v.Decision, v.Context)
 	})
 	t.Run("an integrate spawn is not held to its row's check", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/integrate figures/flow", "JOB ID: figures/flow\nRun `./magus run go-build .`, then "+offCheck), Host: "claude-code"})
-		assert.NotEqual(t, "deny", v.Decision, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
 		assert.Contains(t, v.Context, "the spawn's role is integrate")
 	})
 }

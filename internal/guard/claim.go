@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -128,21 +129,21 @@ func growNarrowedHold(ctx context.Context, at location, checkout string, me jobt
 	row, added, err := job.NarrowHold(ctx, job.NewStore(loc), me.ID, rel, touched, "")
 	switch {
 	case err != nil && narrowed:
-		return writeGrade{Decision: decisionAdvise,
+		return writeGrade{Decision: verdict.Advise,
 			Context: fmt.Sprintf("magus workspace: lease %s holds %s by %s, and this write lands outside them; the claims did not grow: %v.",
 				me.ID, rel, quotedClaims(rel, mine), err),
 			Why: "`magus job wait` grades your changes to the file against your claims, so it will report this one."}
 	case err != nil:
-		return writeGrade{Decision: decisionAdvise,
+		return writeGrade{Decision: verdict.Advise,
 			Context: fmt.Sprintf("magus workspace: lease %s still holds %s whole through a pattern: %v.", me.ID, rel, err),
 			Why:     "magus narrows a pattern's hold on a file to the declarations its holder writes, so other jobs may claim the rest; this one stays whole."}
 	case narrowed:
-		return writeGrade{Decision: decisionAdvise,
+		return writeGrade{Decision: verdict.Advise,
 			Context: fmt.Sprintf("magus workspace: lease %s's hold on %s grew by %s; it now holds the file by %s.",
 				me.ID, rel, quotedPaths(added), quotedClaims(rel, claimsOn(row.Paths.Write, rel))),
 			Why: fmt.Sprintf("magus narrowed your hold on %s to the declarations you change. A write to one nobody claims adds it to your claims, and `magus job wait` grades your changes against them.", rel)}
 	}
-	return writeGrade{Decision: decisionAdvise,
+	return writeGrade{Decision: verdict.Advise,
 		Context: fmt.Sprintf("magus workspace: lease %s now holds %s by %s; the rest of the file is released for other jobs to claim.",
 			me.ID, rel, quotedClaims(rel, claimsOn(row.Paths.Write, rel))),
 		Why: fmt.Sprintf("Your write paths cover %s only through a pattern, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
@@ -178,7 +179,7 @@ func coveredOnlyByPattern(me jobtypes.Job, rel string) bool {
 }
 
 func denyClaimedDeclaration(me, owner jobtypes.Job, rel, claim, declaration string, mine []string) writeGrade {
-	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleClaimedDeclaration), Reason: denial{
+	return writeGrade{Decision: verdict.Deny, Rule: string(denyRuleClaimedDeclaration), Reason: denial{
 		Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, a declaration lease %s claims; "+leaseActorClause(fmt.Sprintf("re-partition the plan, or release %s#%s once lease %s has finished with it", rel, claim, owner.ID)),
 			declaration, rel, owner.ID),
 		Why: fmt.Sprintf("You claim %s in %s. Lease %s (%s) claims it as %s#%s and is %s right now, and you are lease %s. Two agents editing one declaration is the collision a claim exists to prevent; this guard is where it gets read.\n"+

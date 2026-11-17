@@ -76,18 +76,18 @@ export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool
     foreach (call in calls) {
         if (readsRunLog(call)) {
             if (once("ci-log-read")) { return magus\guard.advise(ciLogAdvice); }
-            return magus\guard.allow();
+            return magus\guard.defer();
         }
         if (pollsQueue(call)) {
             if (once("queue-poll")) { return magus\guard.advise(queuePollAdvice); }
-            return magus\guard.allow();
+            return magus\guard.defer();
         }
         if (readsOneCI(call)) {
             if (once("ci-batch-poll")) { return magus\guard.advise(ciStatusAdvice); }
-            return magus\guard.allow();
+            return magus\guard.defer();
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // GhCall is one gh invocation: its arguments, and whether something runs it again and
@@ -320,7 +320,7 @@ test "a one-shot CI status read is allowed, advising the failure artifact reader
         std\assert(v.reason.indexOf(failureReader) != null, message: v.reason);
         std\assert(v.reason.indexOf(rootFailureReader) != null, message: "names a read a root handing out work may run");
         std\assert(v.reason.indexOf("gh pr list") == null, message: "does not route back to status summaries");
-        std\assert(judged(request, once: once).decision == magus\GuardDecision.allow, message: "only once");
+        std\assert(judged(request, once: once).decision == magus\GuardDecision.defer, message: "only once");
         std\assert(judged(helpers\request([ ["loop:"] + argv ]), once: once).decision == magus\GuardDecision.deny,
             message: "a repeated status read still watches");
     }
@@ -342,7 +342,7 @@ test "one-shot log reads remain available when failure artifacts are missing" {
         std\assert(v.decision == magus\GuardDecision.advise, message: argv.join(" "));
         std\assert(v.reason.indexOf(failureRunReader) != null, message: v.reason);
         std\assert(v.reason.indexOf("without target artifacts") != null, message: v.reason);
-        std\assert(judged(request, once: once).decision == magus\GuardDecision.allow, message: "only once");
+        std\assert(judged(request, once: once).decision == magus\GuardDecision.defer, message: "only once");
         std\assert(judged(helpers\request([ ["loop:"] + argv ]), once: once).decision == magus\GuardDecision.deny,
             message: "repeated log reads still watch");
     }
@@ -361,7 +361,7 @@ test "polling the merge queue through GitHub is advised once per session" {
     }
     final poll = helpers\request([["gh", "run", "list", "--workflow", "queue.yaml"]]);
     std\assert(judged(poll, once: once).decision == magus\GuardDecision.advise, message: "first");
-    std\assert(judged(poll, once: once).decision == magus\GuardDecision.allow, message: "only once");
+    std\assert(judged(poll, once: once).decision == magus\GuardDecision.defer, message: "only once");
 }
 
 test "PR content, artifact retrieval and unrelated programs stay silent" {
@@ -375,7 +375,7 @@ test "PR content, artifact retrieval and unrelated programs stay silent" {
         ["watch", "-n", "5", "free", "-m"],
         ["git", "status"],
     ]) {
-        std\assert(ask(argv).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(ask(argv).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 
@@ -453,7 +453,7 @@ test "one read of a pull request's state, and a loop over its content, stay sile
         [["loop:", "gh", "api", "repos/egladman/magus/pulls/300/files"]],
     ]) {
         final v = judged(helpers\request(argvs), once: helpers\counter());
-        std\assert(v.decision == magus\GuardDecision.allow, message: argvs[0].join(" "));
+        std\assert(v.decision == magus\GuardDecision.defer, message: argvs[0].join(" "));
     }
 }
 
@@ -505,7 +505,7 @@ test "disabling or reading auto-merge, and other gh calls, stay silent" {
         ["git", "log", "--grep", "--auto"],
         ["echo", "gh", "pr", "merge", "--auto"],
     ]) {
-        std\assert(ask(argv).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(ask(argv).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 
@@ -521,6 +521,6 @@ test "unqueuing a pull request and other gh calls stay silent" {
         ["gh", "pr", "view", "12", "--json", "autoMergeRequest"],
         ["gh", "api", "repos/egladman/magus/collaborators/egladman/permission", "--jq", ".permission == \"admin\""],
     ]) {
-        std\assert(ask(argv).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(ask(argv).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }

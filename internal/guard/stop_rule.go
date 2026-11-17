@@ -31,7 +31,7 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, judged verdict.J
 	if deps.StopRule == nil && deps.ApprovedStopRule == nil {
 		return judged
 	}
-	if judged.Decision == decisionDeny || !slices.Contains(stopEvents, who.Event) {
+	if judged.Decision == verdict.Deny || !slices.Contains(stopEvents, who.Event) {
 		return judged
 	}
 	env, ok := decodeStop(raw)
@@ -55,14 +55,14 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, judged verdict.J
 	}
 	asked := askWorkspaceRules(ctx, seamStop, deps, resolve, bind(deps.StopRule))
 	decided := ""
-	if judged.Decision != decisionPass {
+	if judged.Decision != verdict.Defer {
 		decided = decidedByBuiltin
 	}
 	judged, _ = applyWorkspaceAnswer(judged, decided, asked, workspaceStopRule)
-	if note := stopFailureNote(asked); note != "" && judged.Decision != decisionDeny {
+	if note := stopFailureNote(asked); note != "" && judged.Decision != verdict.Deny {
 		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
-		if judged.Decision == decisionPass {
-			judged.Decision = decisionAdvise
+		if judged.Decision == verdict.Defer {
+			judged.Decision = verdict.Advise
 		}
 	}
 	return judged

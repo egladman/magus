@@ -45,13 +45,13 @@ func directiveNote(err error) string {
 // adviseMessage answers a person's prompt. The prompt carries an open
 // advisory only where the wiring renders context; elsewhere the stop does.
 func adviseMessage(ctx context.Context, at location, who hookAttribution, rendersContext bool) verdict.Judgment {
-	v := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	v := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	if !rendersContext {
 		return v
 	}
 	directive, note := showDirectives(ctx, at, who)
 	if text := strings.TrimSpace(strings.Join([]string{directive, note}, "\n\n")); text != "" {
-		v.Decision, v.Context = decisionAdvise, text
+		v.Decision, v.Context = verdict.Advise, text
 	}
 	return v
 }
@@ -72,7 +72,7 @@ func endsRootTurn(raw string, who hookAttribution) bool {
 // adviseStop holds a root stop that v lets through, to show the session the
 // advisories it has not seen. A stop v already holds shows them next time.
 func adviseStop(ctx context.Context, at location, who hookAttribution, raw string, v verdict.Judgment) verdict.Judgment {
-	if v.Decision == decisionDeny || !endsRootTurn(raw, who) {
+	if v.Decision == verdict.Deny || !endsRootTurn(raw, who) {
 		return v
 	}
 	directive, note := showDirectives(ctx, at, who)
@@ -82,7 +82,7 @@ func adviseStop(ctx context.Context, at location, who hookAttribution, raw strin
 	if directive == "" {
 		return v
 	}
-	v.Decision, v.Reason, v.Rule = decisionDeny, directive, string(denyRulePersonAdvisory)
+	v.Decision, v.Reason, v.Rule = verdict.Deny, directive, string(denyRulePersonAdvisory)
 	return v
 }
 

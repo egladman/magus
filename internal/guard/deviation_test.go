@@ -178,7 +178,7 @@ func (s *deviationAuthorSuite) TestAnEditReachesTheRuleWithNoLease() {
 	payload := `{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"a.deviations.jsonl","old_string":"","new_string":"x"}}`
 	got := Judge(s.T().Context(), testDependencies(), Request{Input: payload})
 	got.Reason, got.NextSteps = "", nil
-	s.Equal(verdict.Judgment{APIVersion: got.APIVersion, Decision: decisionDeny, Rule: string(denyRuleDeviationAuthor)}, got)
+	s.Equal(verdict.Judgment{APIVersion: got.APIVersion, Decision: verdict.Deny, Rule: string(denyRuleDeviationAuthor)}, got)
 }
 
 func (s *deviationAuthorSuite) TestTheRuleSaysItIsASeatbelt() {

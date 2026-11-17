@@ -524,14 +524,24 @@ var Magus = Module{
 					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req step.Request) (verdict.Verdict, error)) error)(nil),
 				},
 				{
-					Name:    "allow",
-					Doc:     "The verdict a spawn, command, write, stop or step rule returns to add nothing.",
+					Name: "defer",
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to add nothing: no objection, " +
+						"so the host's own permission flow decides the call. The guard never answers yes.",
 					Returns: []Ret{{Object: "GuardVerdict"}},
 					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name: "advise",
 					Doc: "The verdict a spawn, command, write, stop or step rule returns to let the call through with text for the agent. " +
+						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
+					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
+					Returns: []Ret{{Object: "GuardVerdict"}},
+					Extern:  (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
+				},
+				{
+					Name: "ask",
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to block the call until the person " +
+						"approves it through the host's own prompt, with text saying why. A wiring that cannot prompt refuses the call instead. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
 					Returns: []Ret{{Object: "GuardVerdict"}},

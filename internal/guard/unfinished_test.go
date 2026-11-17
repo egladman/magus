@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // deadPID is the pid of a process that has exited: this test binary, run to no test.
@@ -81,7 +83,7 @@ func TestJudgeReportsChecksThatNeverFinished(t *testing.T) {
 	markOwnedBy(t, cacheDir, FactsKey("claude-code", "s1"), time.Now().Add(-time.Minute), deadPID(t))
 
 	first := Judge(ctx, Dependencies{}, Request{Host: "claude-code", Session: "s1", Input: "ls"})
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(first))
+	assert.Equal(t, verdictWithRule(verdict.Advise, string(advisoryUnfinished)), unworded(first))
 	assert.Contains(t, first.Context, unfinishedNote(1))
 
 	again := Judge(ctx, Dependencies{}, Request{Host: "claude-code", Session: "s1", Input: "ls"})

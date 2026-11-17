@@ -51,7 +51,7 @@ func judgeUnloaded(ctx context.Context, deps Dependencies, line string) verdict.
 // It returns the full verdict stored behind the ref.
 func shortDeny(t *testing.T, cacheDir string, v verdict.Judgment, rule denyRuleName, say string) string {
 	t.Helper()
-	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
+	assert.Equal(t, verdictWithRule(verdict.Deny, string(rule)), unworded(v))
 	ref := verdictRef.FindString(v.Reason)
 	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", v.Reason)
 	shown, cited, ok := strings.Cut(v.Reason, "\ndetails: ")
@@ -72,7 +72,7 @@ func servedDeny(t *testing.T, cacheDir string, v verdict.Judgment, rule denyRule
 	require.Len(t, v.NextSteps, 1, v.Reason)
 	assert.Equal(t, verdict.NextStep(next), v.NextSteps[0])
 	v.NextSteps = nil
-	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
+	assert.Equal(t, verdictWithRule(verdict.Deny, string(rule)), unworded(v))
 	shown, cited, ok := strings.Cut(v.Reason, "\ndetails: ")
 	require.True(t, ok, v.Reason)
 	ref := verdictRef.FindString(cited)
@@ -140,7 +140,7 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
-		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", line, v.Reason)
 	}
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
@@ -176,7 +176,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 	assert.Equal(t, unloadNoBinary, unloadCause(ctx, deps.LoadFailure, location{workspace: root}, ""))
 
 	v := judgeUnloaded(ctx, deps, "touch notes.txt")
-	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
+	assert.Equal(t, verdict.Deny, v.Decision, v.Reason)
 	assert.Contains(t, v.Reason, "relink ./magus, alone on its line")
 }
 
@@ -199,7 +199,7 @@ func TestUnloadedTreeWithoutAVisibleRuleDeniesAChange(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ownCheckout(t, ctx, false)
 	v := judgeUnloaded(ctx, unloadedDependencies(errMissingMember), "touch notes.txt")
-	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
+	assert.Equal(t, verdict.Deny, v.Decision, v.Reason)
 }
 
 // A ./magus older than the tree denies an edit, a spawn, a push and a state-writing magus
@@ -227,7 +227,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
-		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", line, v.Reason)
 	}
 }
 
@@ -281,26 +281,26 @@ func (s *StaleBinaryRemedySuite) TestTheRootIsToldToRelink() {
 
 func (s *StaleBinaryRemedySuite) TestAWorkerIsToldToAskForAPlacement() {
 	v := s.worker("s1", "touch internal/ledger/notes.txt")
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "ask the main session to place a ./magus that loads this workspace")
 	s.NotContains(v.Reason, ward.RelinkAt(s.root))
 }
 
 func (s *StaleBinaryRemedySuite) TestTheWorkersPlacementPasses() {
 	v := s.worker("p", workerPlacementRun)
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *StaleBinaryRemedySuite) TestAWorkersRelinkIsDenied() {
-	s.Equal(decisionDeny, s.worker("r", ward.RelinkAt(s.root)).Decision)
+	s.Equal(verdict.Deny, s.worker("r", ward.RelinkAt(s.root)).Decision)
 }
 
 func (s *StaleBinaryRemedySuite) TestAWorkersRebuildIsDenied() {
-	s.Equal(decisionDeny, s.worker("w", "./magus run go-build .").Decision)
+	s.Equal(verdict.Deny, s.worker("w", "./magus run go-build .").Decision)
 }
 
 func (s *StaleBinaryRemedySuite) TestAWorkersBootstrapIsDenied() {
-	s.Equal(decisionDeny, s.worker("wb", ward.BootstrapCommand).Decision)
+	s.Equal(verdict.Deny, s.worker("wb", ward.BootstrapCommand).Decision)
 }
 
 // A worker whose placed ./magus was built ahead of its checkout fast-forwards its own branch
@@ -317,7 +317,7 @@ func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
 
 	for i, line := range []string{"git merge --ff-only f1980cc5c", "git merge f1980cc5c3224cc9fca99c41a9f03415fd77db4b --ff-only"} {
 		v := judge("ff"+strconv.Itoa(i), line)
-		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", line, v.Reason)
 	}
 	for i, line := range []string{
 		"git merge f1980cc5c",
@@ -327,7 +327,7 @@ func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
 		"git merge --ff-only f1980cc5c && git push",
 	} {
 		v := judge("other"+strconv.Itoa(i), line)
-		assert.Equal(t, decisionDeny, v.Decision, line)
+		assert.Equal(t, verdict.Deny, v.Decision, line)
 	}
 }
 
@@ -347,14 +347,14 @@ func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
 		"export BAGGAGE=magus.lease=scout && ./magus job exit scout --stdin <<'EOF'\n{}\nEOF",
 	} {
 		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line, Lease: "scout"})
-		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", line, v.Reason)
 
 		writer := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "writer " + line, Lease: "lease-a"})
-		assert.Equal(t, decisionDeny, writer.Decision, line)
+		assert.Equal(t, verdict.Deny, writer.Decision, line)
 	}
 	for _, line := range []string{"./magus buzz probe.buzz", "./magus job fork x --read-only", "./magus job exit scout > out.json"} {
 		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line, Lease: "scout"})
-		assert.Equal(t, decisionDeny, v.Decision, line)
+		assert.Equal(t, verdict.Deny, v.Decision, line)
 	}
 }
 
@@ -371,7 +371,7 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 	deps := strict(testDependencies())
 
 	orchestrator := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, decisionAdvise, orchestrator.Decision, orchestrator.Reason)
+	assert.Equal(t, verdict.Advise, orchestrator.Decision, orchestrator.Reason)
 
 	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	next, ok := placementNext(own, denyRuleRawTool, "lease-a")
@@ -389,7 +389,7 @@ func TestBootstrapNamesTheMissingPlacementScriptToAWorker(t *testing.T) {
 	line := "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 	worker := Judge(ctx, strict(testDependencies()), Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	assert.Equal(t, decisionDeny, worker.Decision)
+	assert.Equal(t, verdict.Deny, worker.Decision)
 	assert.Contains(t, worker.Reason, "no script serves "+placementSituation)
 	assert.Empty(t, worker.NextSteps)
 }
@@ -405,16 +405,16 @@ func TestRelinkReplacesTheBootstrapOverAStaleBinary(t *testing.T) {
 	bootstrap := "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 	orchestrator := Judge(ctx, deps, Request{Input: bootstrap, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, decisionDeny, orchestrator.Decision, orchestrator.Reason)
+	assert.Equal(t, verdict.Deny, orchestrator.Decision, orchestrator.Reason)
 	assert.Contains(t, orchestrator.Reason, ward.RelinkAt(root))
 
 	worker := Judge(ctx, deps, Request{Input: bootstrap, Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	assert.Equal(t, decisionDeny, worker.Decision, worker.Reason)
+	assert.Equal(t, verdict.Deny, worker.Decision, worker.Reason)
 
 	unleased := Judge(ctx, deps, Request{Input: ward.RelinkAt(""), Host: "claude-code", Session: "r"})
-	assert.NotEqual(t, decisionDeny, unleased.Decision, unleased.Reason)
+	assert.NotEqual(t, verdict.Deny, unleased.Decision, unleased.Reason)
 	leased := Judge(ctx, deps, Request{Input: ward.RelinkAt(""), Host: "claude-code", Session: "rlease-a", Lease: "lease-a"})
-	assert.Equal(t, decisionDeny, leased.Decision, "a worker's relink leaves a binary no row pins")
+	assert.Equal(t, verdict.Deny, leased.Decision, "a worker's relink leaves a binary no row pins")
 }
 
 // Each hook row records the magus that judged the call and the directory the host said it
@@ -796,7 +796,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 		"diff non-text": mcpEnvelope(t, "diff", map[string]any{"op": 7}),
 	} {
 		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: "s1"})
-		assert.NotEqual(t, decisionDeny, v.Decision, "%s: %s", name, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", name, v.Reason)
 	}
 }
 
@@ -810,7 +810,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	worker := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "client", map[string]any{"script": "x"}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
+	want := verdictWithRule(verdict.Deny, string(denyRuleStaleBinary))
 	next, ok := placementNext(root, denyRuleStaleBinary, "lease-a")
 	require.True(t, ok)
 	want.NextSteps = []verdict.NextStep{verdict.NextStep(next)}
@@ -819,7 +819,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	assert.NotContains(t, worker.Reason, ward.RelinkAt(root))
 
 	reads := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "status", map[string]any{}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	assert.NotEqual(t, decisionDeny, reads.Decision, reads.Reason)
+	assert.NotEqual(t, verdict.Deny, reads.Decision, reads.Reason)
 }
 
 // Every magus MCP tool is classified, so a new one cannot reach a stale binary unjudged.
@@ -1047,28 +1047,28 @@ func (s *LoadRecoverySuite) judge(line string) verdict.Judgment {
 func (s *LoadRecoverySuite) TestAnAbortPasses() {
 	for _, verb := range []string{"merge", "cherry-pick", "rebase"} {
 		v := s.judge(fmt.Sprintf("git %s --abort", verb))
-		s.NotEqual(decisionDeny, v.Decision, "%s: %s", verb, v.Reason)
+		s.NotEqual(verdict.Deny, v.Decision, "%s: %s", verb, v.Reason)
 	}
 }
 
 func (s *LoadRecoverySuite) TestAKeepResetToACheckpointPasses() {
 	v := s.judge("git reset --keep " + s.checkpoint[:9])
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *LoadRecoverySuite) TestAMergeResetToACheckpointPasses() {
 	v := s.judge("git reset --merge " + s.checkpoint)
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *LoadRecoverySuite) TestAResetToARevisionNoRowRecordsIsDenied() {
-	s.Equal(decisionDeny, s.judge("git reset --keep HEAD").Decision)
+	s.Equal(verdict.Deny, s.judge("git reset --keep HEAD").Decision)
 }
 
 func (s *LoadRecoverySuite) TestAResetToADirtyCheckpointIsDenied() {
 	s.push()
 	s.layers = append(s.layers, s.pin(s.checkpoint+"+0123abcd"))
-	s.Equal(decisionDeny, s.judge("git reset --keep "+s.checkpoint).Decision)
+	s.Equal(verdict.Deny, s.judge("git reset --keep "+s.checkpoint).Decision)
 }
 
 func (s *LoadRecoverySuite) git(args ...string) string {
@@ -1089,31 +1089,31 @@ func (s *LoadRecoverySuite) TestARevertOfAnUnpushedCommitPasses() {
 	head := s.git("rev-parse", "HEAD")
 	for _, line := range []string{"git revert " + head, "git revert --no-edit " + head[:9]} {
 		v := s.judge(line)
-		s.NotEqual(decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+		s.NotEqual(verdict.Deny, v.Decision, "%s: %s", line, v.Reason)
 	}
 }
 
 func (s *LoadRecoverySuite) TestARevertOfAPushedCommitIsDenied() {
 	s.push()
-	s.Equal(decisionDeny, s.judge("git revert "+s.git("rev-parse", "HEAD")).Decision)
+	s.Equal(verdict.Deny, s.judge("git revert "+s.git("rev-parse", "HEAD")).Decision)
 }
 
 func (s *LoadRecoverySuite) TestARevertOfSeveralCommitsIsDenied() {
-	s.Equal(decisionDeny, s.judge("git revert HEAD HEAD~1").Decision)
+	s.Equal(verdict.Deny, s.judge("git revert HEAD HEAD~1").Decision)
 }
 
 func (s *LoadRecoverySuite) TestAKeepResetOverUnpushedCommitsPasses() {
 	broken := s.git("rev-parse", "HEAD")
 	s.git("commit", "-q", "--allow-empty", "-m", "more")
 	v := s.judge("git reset --keep " + broken)
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *LoadRecoverySuite) TestAKeepResetOverPushedCommitsIsDenied() {
 	broken := s.git("rev-parse", "HEAD")
 	s.git("commit", "-q", "--allow-empty", "-m", "more")
 	s.push()
-	s.Equal(decisionDeny, s.judge("git reset --keep "+broken).Decision)
+	s.Equal(verdict.Deny, s.judge("git reset --keep "+broken).Decision)
 }
 
 func (s *LoadRecoverySuite) TestAKeepResetToARevisionOffTheBranchIsDenied() {
@@ -1121,30 +1121,30 @@ func (s *LoadRecoverySuite) TestAKeepResetToARevisionOffTheBranchIsDenied() {
 	s.git("commit", "-q", "--allow-empty", "-m", "side")
 	side := s.git("rev-parse", "HEAD")
 	s.git("checkout", "-q", "-")
-	s.Equal(decisionDeny, s.judge("git reset --keep "+side).Decision)
+	s.Equal(verdict.Deny, s.judge("git reset --keep "+side).Decision)
 }
 
 func (s *LoadRecoverySuite) TestASoftResetToACheckpointIsDenied() {
-	s.Equal(decisionDeny, s.judge("git reset --soft "+s.checkpoint).Decision)
+	s.Equal(verdict.Deny, s.judge("git reset --soft "+s.checkpoint).Decision)
 }
 
 func (s *LoadRecoverySuite) TestAChainedResetIsDenied() {
-	s.Equal(decisionDeny, s.judge(fmt.Sprintf("git reset --keep %s && touch x", s.checkpoint)).Decision)
+	s.Equal(verdict.Deny, s.judge(fmt.Sprintf("git reset --keep %s && touch x", s.checkpoint)).Decision)
 }
 
 func (s *LoadRecoverySuite) TestAnAppendOutsideEveryCheckoutPasses() {
 	memory := filepath.Join(s.T().TempDir(), "memory.md")
 	v := s.judge(fmt.Sprintf("cat >> %s <<'EOF'\nnote\nEOF", shellQuoted(memory)))
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *LoadRecoverySuite) TestARedirectIntoTheCheckoutIsDenied() {
-	s.Equal(decisionDeny, s.judge("echo x > notes.txt").Decision)
+	s.Equal(verdict.Deny, s.judge("echo x > notes.txt").Decision)
 }
 
 func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
 	memory := filepath.Join(s.T().TempDir(), "memory.md")
-	s.Equal(decisionDeny, s.judge("touch "+shellQuoted(memory)).Decision)
+	s.Equal(verdict.Deny, s.judge("touch "+shellQuoted(memory)).Decision)
 }
 
 func (s *LoadRecoverySuite) testContext() context.Context { return s.layers.of(s.T()) }

@@ -145,9 +145,9 @@ type Observation struct {
 	// read. One of the two is set.
 	Command string
 	Path    string
-	// Decision is pass, deny, advise or ask; empty for a read, which no rule judges.
+	// Decision is defer, deny, advise or ask; empty for a read, which no rule judges.
 	Decision string
-	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
+	// Rule is the catalogued rule behind a deny, advise or ask; empty for a defer.
 	Rule string
 	// Nexts are the commands the verdict served under `next:`, in order.
 	Nexts []string

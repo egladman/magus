@@ -27,7 +27,7 @@ func foldCachePath(dir, kind string) string {
 
 // foldCacheFormat changes whenever the cached shape or what decides an entry's validity
 // does, so an older cache is refolded rather than read under a new meaning.
-const foldCacheFormat = 2
+const foldCacheFormat = 3
 
 type foldCache struct {
 	Format int                   `json:"format"`
@@ -64,6 +64,9 @@ func FoldAgentEvents(ctx context.Context, dir string) (Fold, error) {
 // rewrites the kind's fold cache under dir, mode 0600 like the invocation files, whenever
 // the files it folded changed. A kind [ValidFileID] refuses is an [*InvalidIDError],
 // since the kind names the cache file.
+//
+// A loaded event holding a retired guard decision is a [*RetiredDecisionError], whatever
+// kind is folded.
 //
 // It reads only the invocation files that changed since the last call for that kind. The
 // fold is cached under dir, keyed by each file's name, size, modification time and inode,
@@ -109,9 +112,13 @@ func FoldKind(ctx context.Context, dir, kind string) (Fold, error) {
 		}
 		entry, ok := prev.Files[e.Name()]
 		if !ok || !entry.sameFile(fi) {
-			records, skipped, legacy, vanished := readFile(filepath.Join(dir, e.Name()))
+			path := filepath.Join(dir, e.Name())
+			records, skipped, legacy, vanished := readFile(path)
 			if vanished {
 				continue
+			}
+			if err := refuseRetiredDecision(path, records); err != nil {
+				return Fold{}, err
 			}
 			entry = foldEntry{Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Ino: inode(fi), Skipped: skipped, Legacy: legacy}
 			for _, rec := range records {

@@ -30,7 +30,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     if (req.target != null and (req.target!.contextTokens ?? 0) > 200000) {
         return magus\guard.deny("{req.target!.agent} carries over 200k tokens of context; spawn fresh with a narrow brief.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 ```
 

@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // claudeLimits are the foreground limits one host's wiring declares: two minutes for a call
@@ -98,7 +99,7 @@ func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorkerBackgroundRun)), unworded(enveloped))
 
 	foreground := Judge(ctx, Dependencies{}, Request{Input: command, Lease: row.ID})
-	assert.NotEqual(t, "deny", foreground.Decision, "a foreground run of the check passes")
+	assert.NotEqual(t, verdict.Deny, foreground.Decision, "a foreground run of the check passes")
 }
 
 func TestDecodeHookEnvelopeReadsHowTheHostRunsACommand(t *testing.T) {
@@ -219,7 +220,7 @@ func TestCheckTimeoutSendsANarrowedRunToTheBoundedForm(t *testing.T) {
 		req := Request{Input: bounded, Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3", CallBackground: background,
 			HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
 		v := Judge(ctx, Dependencies{}, req)
-		assert.NotEqual(t, "deny", v.Decision, "background %v: %s", background, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "background %v: %s", background, v.Reason)
 	}
 }
 

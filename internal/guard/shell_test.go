@@ -1769,9 +1769,9 @@ func TestWorkspaceDenyNamesTheScriptReplacingTheLine(t *testing.T) {
 	servesScript(t, root, "hack/dev/merge-job-branches.buzz", "merge job branches, settling generated conflicts",
 		"replaces:git merge", "replaces:git cherry-pick")
 	deps := strict(Dependencies{scope: workspaceScope{root: root}, ShellRules: []WorkspaceShellRule{
-		{Name: "raw-merge", Decision: decisionDeny, Program: "git", Args: []string{"merge"}, Reason: "merge through the script"},
-		{Name: "raw-pick", Decision: decisionDeny, Program: "git", Args: []string{"cherry-pick"}, Reason: "pick through the script"},
-		{Name: "raw-revert", Decision: decisionDeny, Program: "git", Args: []string{"revert"}, Reason: "no reverts"},
+		{Name: "raw-merge", Decision: verdict.Deny, Program: "git", Args: []string{"merge"}, Reason: "merge through the script"},
+		{Name: "raw-pick", Decision: verdict.Deny, Program: "git", Args: []string{"cherry-pick"}, Reason: "pick through the script"},
+		{Name: "raw-revert", Decision: verdict.Deny, Program: "git", Args: []string{"revert"}, Reason: "no reverts"},
 	}})
 
 	assert.Equal(t, "merge through the script\nThis workspace's script for it, to merge job branches, settling generated conflicts: `magus buzz hack/dev/merge-job-branches.buzz`",
@@ -2758,20 +2758,20 @@ func (s *PersonLeaseSuite) TestOneLeaseHeldHereDoesNotBindThePerson() {
 	s.holdHere("lease-c", "web/**")
 	v := s.edit("docs/readme.md")
 	s.Equal(graded{}, gradedAs(v))
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *PersonLeaseSuite) TestSeveralLeasesHeldHereDoNotDenyThePerson() {
 	s.holdHere("lease-c", "web/**")
 	s.holdHere("lease-d", "docs/**")
 	v := s.edit("docs/readme.md")
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *PersonLeaseSuite) TestAPersonMayWriteTheHookWiringInALeasedCheckout() {
 	s.holdHere("lease-c", "web/**")
 	v := s.edit(".codex/hooks.json")
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 	s.NotEqual(string(denyRuleHookWiringWrite), v.Rule)
 }
 
@@ -2808,12 +2808,12 @@ func (s *PersonLeaseSuite) TestASessionBoundRenameDryRunIsRefusedUntilItNamesIts
 	v := s.judgeBound(renameDryRun)
 	s.Contains(v.Reason, "start the line with `export BAGGAGE=magus.lease=lease-a;`")
 	v.Reason = ""
-	s.Equal(verdict.Judgment{APIVersion: v.APIVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: string(jobtypes.LeaseSourceAgent)}, v)
+	s.Equal(verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Deny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: string(jobtypes.LeaseSourceAgent)}, v)
 }
 
 func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {
 	claimed := s.judgeBound(claimForLeaseA + renameDryRun)
-	s.NotEqual(decisionDeny, claimed.Decision, claimed.Reason)
+	s.NotEqual(verdict.Deny, claimed.Decision, claimed.Reason)
 
 	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")), "outside the row")
@@ -2907,13 +2907,13 @@ func (s *PersonLeaseSuite) TestAnOpenedWorkspaceIsNeverJudgedByTheProcessWorking
 
 func (s *PersonLeaseSuite) TestTheWiringDenialToAnAgentNamesTheOrchestrator() {
 	g := gradeHookWiringWrite("/repo", "", true, ".codex/hooks.json")
-	s.Equal(decisionDeny, g.Decision)
+	s.Equal(verdict.Deny, g.Decision)
 	s.Contains(g.Reason, "orchestrator")
 }
 
 func (s *PersonLeaseSuite) TestTheWiringAdviceToAPersonNamesNoOrchestrator() {
 	g := gradeHookWiringWrite("/repo", "", false, ".codex/hooks.json")
-	s.Equal(decisionAdvise, g.Decision)
+	s.Equal(verdict.Advise, g.Decision)
 	s.NotContains(g.Context+g.Why, "orchestrator")
 }
 

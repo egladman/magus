@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -622,7 +623,7 @@ func TestJudgeWorktreeRemove(t *testing.T) {
 	clean, dirty := r.add("clean"), r.add("wip")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty, "wip.txt"), nil, 0o644))
 
-	assert.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
+	assert.NotEqual(t, verdict.Deny, Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
 	v := Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + dirty})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorktreeRemove)), unworded(v))
 }
