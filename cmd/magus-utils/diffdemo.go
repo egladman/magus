@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // diffdemo renders a unified patch into the wire shape the console's Diff app consumes,
@@ -45,7 +45,7 @@ func runDiffDemo(args []string) error {
 		return fmt.Errorf("diffdemo: %s parsed to no files", *patchPath)
 	}
 
-	body, err := json.MarshalIndent(files, "", "  ")
+	body, err := codec.MarshalIndent(files, "", "  ")
 	if err != nil {
 		return fmt.Errorf("diffdemo: %w", err)
 	}

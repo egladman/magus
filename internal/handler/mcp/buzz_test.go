@@ -19,7 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/transform"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -88,7 +88,7 @@ func decodeBuzzResult(t *testing.T, res *mcplib.CallToolResult) transform.Result
 	t.Helper()
 	require.False(t, res.IsError, allText(res))
 	var got transform.Result
-	require.NoError(t, json.Unmarshal([]byte(allText(res)), &got))
+	require.NoError(t, codec.Unmarshal([]byte(allText(res)), &got))
 	return got
 }
 
@@ -123,14 +123,14 @@ func TestBuzzToolRoundTripsInputThroughServeStdio(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, lines.Scan(), "no reply to %s: %v", frame, lines.Err())
 		var got rpcFrame
-		require.NoError(t, json.Unmarshal(lines.Bytes(), &got))
+		require.NoError(t, codec.Unmarshal(lines.Bytes(), &got))
 		require.Empty(t, got.Error, "%s", got.Error)
 		return got
 	}
 	exchange(initializeFrame)
 	_, err := io.WriteString(inW, initializedFrame+"\n")
 	require.NoError(t, err)
-	call, err := json.Marshal(map[string]any{
+	call, err := codec.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
 		"params": map[string]any{"name": hint.ToolBuzz.String(), "arguments": map[string]any{
 			"script": `fun transform(input: any, args: [str]) > any { return input; }`,
@@ -141,11 +141,11 @@ func TestBuzzToolRoundTripsInputThroughServeStdio(t *testing.T) {
 	require.NoError(t, err)
 	reply := exchange(string(call))
 	var result toolResult
-	require.NoError(t, json.Unmarshal(reply.Result, &result))
+	require.NoError(t, codec.Unmarshal(reply.Result, &result))
 	require.Len(t, result.Content, 1)
 	require.False(t, result.IsError, result.Content[0].Text)
 	var got transform.Result
-	require.NoError(t, json.Unmarshal([]byte(result.Content[0].Text), &got))
+	require.NoError(t, codec.Unmarshal([]byte(result.Content[0].Text), &got))
 	assert.JSONEq(t, `{"projects":["api","web"]}`, string(got.JSON))
 	require.NoError(t, inW.Close())
 	require.NoError(t, <-served)

@@ -9,15 +9,18 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"mvdan.cc/sh/v3/syntax"
 )
 
 // JudgeCommand judges command, a shell line about to run in dir, as the guard hook judges
 // an agent's command: the compiled rules, the workspace's magus\guard rules beside their
 // approved copies, and what session did before. The lease ctx carries (see
-// types.WithJobLease) is the one the call acts under. The judgment is recorded on the
+// job.WithLease) is the one the call acts under. The judgment is recorded on the
 // workspace's trail as a hook's is.
 //
 // A deny is a judgment, returned with its Reason, Rule and Next and a nil error; a rule
@@ -26,7 +29,7 @@ import (
 // A working tree whose rules do not load is judged by its approved
 // sources, as the hook judges it. The error is a
 // *types.EngineNotLinkedError: no Buzz engine loads either side.
-func (m *Magus) JudgeCommand(ctx context.Context, session, dir, command string) (types.GuardJudgment, error) {
+func (m *Magus) JudgeCommand(ctx context.Context, session, dir, command string) (verdict.Judgment, error) {
 	return m.judge(ctx, guard.Request{Input: command, Dir: dir, Session: session})
 }
 
@@ -42,34 +45,34 @@ func ContextWithAuthority(ctx context.Context, revision string) context.Context 
 
 // JudgeWrite is JudgeCommand for a file an edit is about to write: path, absolute or
 // relative to dir.
-func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (types.GuardJudgment, error) {
+func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (verdict.Judgment, error) {
 	return m.judge(ctx, guard.Request{Input: path, IsPath: true, Dir: dir, Session: session})
 }
 
-// Judge judges step against the specs WithStepSpecs declared. The built-in
+// Judge judges st against the specs WithStepSpecs declared. The built-in
 // rules judge the command and paths its spec points at, then each StepRule
 // judges it, then the workspace's magus\guard.step rule for its kind, beside
 // its approved copy. The strictest decision wins. Judge never changes, holds
 // or takes the step. An undeclared kind is a deny. The error is a step
 // that cannot be judged, or a failed StepRule.
-func (m *Magus) Judge(ctx context.Context, step agent.Step) (types.GuardJudgment, error) {
-	req := guard.Request{Dir: step.Dir, Session: step.Session, Agent: step.Agent, Lease: types.JobLeaseFromContext(ctx)}
+func (m *Magus) Judge(ctx context.Context, st step.Step) (verdict.Judgment, error) {
+	req := guard.Request{Dir: st.Dir, Session: st.Session, Agent: st.Agent, Lease: job.LeaseFromContext(ctx)}
 	req.Authority, _ = ctx.Value(authorityKey{}).(string)
 	authority := guard.ResolveAuthority(ctx, guard.Dependencies{CacheDir: m.guardCacheDir, JobReader: m.jobReader}, req)
 	deps, err := m.guardDependenciesAt(ctx, authority)
 	if err != nil {
-		return types.GuardJudgment{}, err
+		return verdict.Judgment{}, err
 	}
-	return guard.JudgeStep(ctx, deps, req, step)
+	return guard.JudgeStep(ctx, deps, req, st)
 }
 
-func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgment, error) {
-	req.Lease = types.JobLeaseFromContext(ctx)
+func (m *Magus) judge(ctx context.Context, req guard.Request) (verdict.Judgment, error) {
+	req.Lease = job.LeaseFromContext(ctx)
 	req.Authority, _ = ctx.Value(authorityKey{}).(string)
 	authority := guard.ResolveAuthority(ctx, guard.Dependencies{CacheDir: m.guardCacheDir, JobReader: m.jobReader}, req)
 	deps, err := m.guardDependenciesAt(ctx, authority)
 	if err != nil {
-		return types.GuardJudgment{}, err
+		return verdict.Judgment{}, err
 	}
 	return guard.Judge(ctx, deps, req), nil
 }
@@ -116,7 +119,7 @@ func (m *Magus) guardDependenciesAt(ctx context.Context, authority guard.CallAut
 		return guard.Dependencies{}, deps.LoadFailure
 	}
 	deps.Workspace = m.Root()
-	deps.ModelTiers = func() *agent.ModelTierSet { return m.ModelTiers(ctx) }
+	deps.ModelTiers = func() *tier.Set { return m.ModelTiers(ctx) }
 	deps.TierRule = m.spawnRule
 	deps.JobReader = m.jobReader
 	deps.Steps = m.steps
@@ -140,8 +143,8 @@ func (m *Magus) judgeRun(ctx context.Context, o run, lines []string) error {
 		if err != nil {
 			return err
 		}
-		if j.Decision == string(types.GuardDeny) {
-			return &types.GuardDeniedError{Judgment: j}
+		if j.Decision == verdict.Deny {
+			return &verdict.DeniedError{Judgment: j}
 		}
 	}
 	return nil

@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // jobGrant is `magus job grant`, a person's approval lowering one rule for one job, or
@@ -78,9 +78,9 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 		fmt.Printf("revoked %s's grant of %s\n", id, rule)
 		return nil
 	}
-	var emit func(types.JobGrant) error
+	var emit func(jobtypes.Grant) error
 	if opts.Format != outputText {
-		emit = func(g types.JobGrant) error { return emitRecord(opts, g, []string{rule}) }
+		emit = func(g jobtypes.Grant) error { return emitRecord(opts, g, []string{rule}) }
 	}
 	return guard.GrantJobRule(ctx, store, os.Stdout, emit, id, rule, lasting)
 }

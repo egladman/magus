@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -31,7 +31,7 @@ func (s *cacheStamp) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 	var v types.APIVersion
-	if err := json.Unmarshal(b, &v); err != nil {
+	if err := codec.Unmarshal(b, &v); err != nil {
 		return err
 	}
 	*s = cacheStamp(v)
@@ -50,7 +50,7 @@ func loadWSCache(root string) (*wsCache, bool) {
 		return nil, false
 	}
 	var c wsCache
-	if err := json.Unmarshal(data, &c); err != nil {
+	if err := codec.Unmarshal(data, &c); err != nil {
 		return nil, false
 	}
 	if c.APIVersion != cacheStamp(cacheAPIVersion) {
@@ -87,7 +87,7 @@ func saveWSCache(root string, ws *types.Workspace, dirMtimes map[string]int64) {
 		Projects:   projects,
 		DirMtimes:  dirMtimes,
 	}
-	data, err := json.Marshal(c)
+	data, err := codec.Marshal(c)
 	if err != nil {
 		return
 	}

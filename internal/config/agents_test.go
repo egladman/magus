@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,10 +32,9 @@ func TestAgentsDecodesAndValidates(t *testing.T) {
 `)
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
-	assert.Equal(t, []types.ModelPricing{
-		{ID: "claude-flat-1", Window: 1_000_000, Input: 1},
-		{ID: "claude-next-1", Window: 2_000_000, Input: 3, Output: 15, CacheWrite5m: 3.75,
-			CacheWrite1h: 6, CacheRead: 0.3, LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
+	assert.Equal(t, []model.Row{
+		{ID: "claude-flat-1", Window: 1_000_000, Price: budget.Price{Input: 1}},
+		{ID: "claude-next-1", Window: 2_000_000, Price: budget.Price{Input: 3, Output: 15, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, LongContext: &budget.PriceStep{Above: 200_000, Multiplier: 2}}},
 	}, cfg.Agents.ModelOverrides(), "a model with no price_step has no LongContext")
 	agents := cfg.Agents
 	agents.Models = nil

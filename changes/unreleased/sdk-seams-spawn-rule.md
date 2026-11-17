@@ -1,3 +1,3 @@
 ### Added
 
-- **`SpawnRule`, `WithSpawnRule` and `TierCeiling`, the reference rule, are new.**
+- **`SpawnRule` and `WithSpawnRule` are new, with `tier.Ceiling` from `libs/safetyscissors/tier` as the reference rule.**

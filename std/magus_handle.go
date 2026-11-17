@@ -9,8 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	difftypes "github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/trail"
 	"maps"
 	"os"
 	"path/filepath"
@@ -18,8 +16,11 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
+	"github.com/egladman/magus/types/trail"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
@@ -65,14 +66,14 @@ func MagusSessionOpen(ctx context.Context, opts trail.ReadOptions) (types.Sessio
 
 // MagusJobOpen backs magus\job(id): the stored row. An id no row carries
 // raises, since a handle on a row that is not there answers nothing.
-func MagusJobOpen(ctx context.Context, id string) (types.Job, error) {
+func MagusJobOpen(ctx context.Context, id string) (jobtypes.Job, error) {
 	list, err := MagusListJob(ctx)
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
-	i := slices.IndexFunc(list.Jobs, func(j types.Job) bool { return j.ID == id })
+	i := slices.IndexFunc(list.Jobs, func(j jobtypes.Job) bool { return j.ID == id })
 	if i < 0 {
-		return types.Job{}, fmt.Errorf("magus\\job: no row has id %q, and `magus job ls` lists the ids", id)
+		return jobtypes.Job{}, fmt.Errorf("magus\\job: no row has id %q, and `magus job ls` lists the ids", id)
 	}
 	return list.Jobs[i], nil
 }
@@ -449,16 +450,16 @@ func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any)
 
 // MagusWorkspaceJobs answers Workspace.jobs.
 // It reads the workspace on ctx and raises MGS1022 outside one.
-func MagusWorkspaceJobs(ctx context.Context, _ types.MagusWorkspace) (types.JobList, error) {
+func MagusWorkspaceJobs(ctx context.Context, _ types.MagusWorkspace) (jobtypes.List, error) {
 	return MagusListJob(ctx)
 }
 
 // MagusWorkspacePutJob answers Workspace.putJob.
 // It reads the workspace on ctx and raises MGS1022 outside one.
-func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string, opts map[string]any) (types.Job, error) {
+func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string, opts map[string]any) (jobtypes.Job, error) {
 	put, err := decodeJobPut(opts)
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	return MagusPutJob(ctx, id, put)
 }
@@ -470,12 +471,12 @@ func MagusWorkspaceClearJobs(ctx context.Context, _ types.MagusWorkspace) (int, 
 }
 
 // MagusWorkspaceForkFacts is Workspace.forkFacts, about w's checkout.
-func MagusWorkspaceForkFacts(ctx context.Context, w types.MagusWorkspace) (types.JobForkFacts, error) {
+func MagusWorkspaceForkFacts(ctx context.Context, w types.MagusWorkspace) (jobtypes.ForkFacts, error) {
 	return MagusForkFactsJob(ctx, w.Dir)
 }
 
 // MagusWorkspaceUnmerged is Workspace.unmerged, about w's checkout.
-func MagusWorkspaceUnmerged(ctx context.Context, w types.MagusWorkspace) (types.JobUnmergedReport, error) {
+func MagusWorkspaceUnmerged(ctx context.Context, w types.MagusWorkspace) (jobtypes.UnmergedReport, error) {
 	return MagusUnmergedJob(ctx, w.Dir)
 }
 
@@ -542,47 +543,47 @@ func MagusWorkspaceSkills(ctx context.Context, _ types.MagusWorkspace, opts type
 
 // MagusJobExit is Job.exit(result): files result, or no_return when it is
 // empty.
-func MagusJobExit(ctx context.Context, j types.Job, result map[string]any) (types.Job, error) {
+func MagusJobExit(ctx context.Context, j jobtypes.Job, result map[string]any) (jobtypes.Job, error) {
 	if len(result) == 0 {
 		return MagusAbandonJob(ctx, j.ID)
 	}
 	decoded, err := decodeJobResult(result)
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	return MagusExitJob(ctx, j.ID, decoded)
 }
 
 // MagusJobWait is Job.wait(result): verifies result, or the one exit filed
 // when it is empty.
-func MagusJobWait(ctx context.Context, j types.Job, result map[string]any) (types.JobStatus, error) {
+func MagusJobWait(ctx context.Context, j jobtypes.Job, result map[string]any) (jobtypes.Status, error) {
 	if len(result) == 0 {
 		return MagusWaitJob(ctx, j.ID, nil)
 	}
 	decoded, err := decodeJobResult(result)
 	if err != nil {
-		return types.JobStatus{}, err
+		return jobtypes.Status{}, err
 	}
 	return MagusWaitJob(ctx, j.ID, &decoded)
 }
 
 // decodeJobPut reads a putJob opts map through the store's own decoder.
-func decodeJobPut(opts map[string]any) (types.JobPut, error) {
+func decodeJobPut(opts map[string]any) (jobtypes.Put, error) {
 	return job.DecodePut(opts)
 }
 
 // decodeJobResult reads a result map through the strict, versioned decoder
 // a JSON result uses, so an unknown field is refused here too.
-func decodeJobResult(result map[string]any) (types.JobResult, error) {
-	raw, err := json.Marshal(result)
+func decodeJobResult(result map[string]any) (jobtypes.Result, error) {
+	raw, err := codec.Marshal(result)
 	if err != nil {
-		return types.JobResult{}, fmt.Errorf("magus\\Job: encode result: %w", err)
+		return jobtypes.Result{}, fmt.Errorf("magus\\Job: encode result: %w", err)
 	}
 	return job.DecodeResult(bytes.NewReader(raw))
 }
 
 // MagusJobRegister is Job.register(): takes the job in this checkout.
-func MagusJobRegister(ctx context.Context, j types.Job) (types.JobRegistration, error) {
+func MagusJobRegister(ctx context.Context, j jobtypes.Job) (types.JobRegistration, error) {
 	row, advice, err := MagusRegisterJob(ctx, j.ID)
 	if err != nil {
 		return types.JobRegistration{}, err

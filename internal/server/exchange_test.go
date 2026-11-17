@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
@@ -30,7 +30,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	minted, _, err := store.MintCode(types.GrantOperator, auth.MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
+	minted, _, err := store.MintCode(auth.AccessOperator(), auth.MintRequest{Grant: auth.AccessConsole(), TTL: 12 * time.Hour})
 	require.NoError(t, err)
 	code := minted.Reveal()
 	h := newExchangeHandler(trailDir, slog.New(slog.DiscardHandler))
@@ -47,10 +47,10 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 		Token     string `json:"token"`
 		ExpiresAt string `json:"expires_at"`
 	}
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &got))
 	cred, ok := auth.Verify(got.Token)
 	require.True(t, ok)
-	assert.Equal(t, types.GrantConsole, cred.Grant)
+	assert.Equal(t, auth.AccessConsole(), cred.Grant)
 	expires, err := time.Parse(time.RFC3339, got.ExpiresAt)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(12*time.Hour), expires, time.Minute)
@@ -73,21 +73,21 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 
 	// The redeem is audited, naming the code it spent and the token it minted, never either
 	// secret.
-	events, err := trail.ReadRecent(trailDir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), trailDir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "link.redeem", events[0].Action)
-	blob, err := trail.ReadBlob(trailDir, events[0].RequestRef)
+	blob, err := trailtypes.ReadBlob(trailDir, events[0].RequestRef)
 	require.NoError(t, err)
 	for _, s := range []string{code, got.Token} {
 		assert.NotContains(t, string(blob), s)
 		assert.NotContains(t, events[0].Preview, s)
 	}
 	var rec trail.MintRecord
-	require.NoError(t, json.Unmarshal(blob, &rec))
+	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Equal(t, trail.MintRecord{
-		Minted:  types.Credential{Kind: types.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
+		Minted:  auth.Credential{Kind: auth.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
 		Expires: rec.Expires, // stamped at mint time
-		Minter:  types.Credential{Kind: types.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant},
+		Minter:  auth.Credential{Kind: auth.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant},
 	}, rec)
 }

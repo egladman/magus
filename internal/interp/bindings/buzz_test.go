@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -88,8 +89,9 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	src.Files = []string{path}
 
-	targets, err := interp.Parse(context.Background(), src)
+	parsed, err := interp.Parse(context.Background(), src)
 	require.NoError(t, err)
+	targets := parsed.Targets
 
 	got := make(map[string]bool)
 	for _, tgt := range targets {
@@ -907,7 +909,7 @@ export fun waitOnNoReturn() > void !> any {
 
 	got, err := sess.CallValue(ctx, fn, nil)
 	require.NoError(t, err)
-	assert.Equal(t, string(types.StateNoReturn), got.AsString())
+	assert.Equal(t, string(job.StateNoReturn), got.AsString())
 
 	wait, ok := sess.Exports()["waitOnNoReturn"]
 	require.True(t, ok, "exported Buzz wait entrypoint is missing")

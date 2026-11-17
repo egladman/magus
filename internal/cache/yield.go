@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // A target that never replays is the most expensive kind of misconfiguration, because
@@ -221,7 +221,7 @@ func scanJournal(path string, only map[string]bool, fn func(journalRecord)) erro
 			// than inheriting it.
 			LegacyDurationMs int64 `json:"dur_ms"`
 		}
-		if err := json.Unmarshal(sc.Bytes(), &rec); err != nil || rec.Target == "" {
+		if err := codec.Unmarshal(sc.Bytes(), &rec); err != nil || rec.Target == "" {
 			continue
 		}
 		if rec.Kind != "result" && rec.Kind != "exec" {

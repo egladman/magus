@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -29,7 +30,7 @@ func TestPlanFromChangedPaths(t *testing.T) {
 		"api/main.go":        "package main\n",
 	})
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -87,7 +88,7 @@ func TestPlanCapsCrossShardConcurrency(t *testing.T) {
 		"api/main.go":        "package main\n",
 	})
 
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -107,7 +108,7 @@ func TestPlanCapsCrossShardConcurrency(t *testing.T) {
 // plan describe a diff the caller did not ask for.
 func TestPlanRejectsBothSources(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -127,7 +128,7 @@ func TestPlanReportsAnUnreadableHistory(t *testing.T) {
 		"magusfile.buzz": "",
 		"history.json":   "{ this is not json\n",
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -167,7 +168,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 		"api/magusfile.buzz": "",
 		"api/main.go":        "package main\n",
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m
@@ -215,7 +216,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 `,
 		"main.go": "package main\n",
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	calls, err := directCalls(m.Get("."), "ci")
@@ -307,7 +308,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
 }
 `,
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	_, err = m.planUnits(context.Background(), []types.Target{{Path: "."}}, "ci", nil, nil)
@@ -323,7 +324,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 `,
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	units, err := m.planUnits(context.Background(), []types.Target{{Path: "."}}, "build", nil, nil)
@@ -352,7 +353,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(docs, t
 		"main.go":   "package main\n",
 		"docs/a.md": "a\n",
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m
@@ -436,7 +437,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(lint, t
 		files[dir+"/main.go"] = "package main\n"
 		changed = append(changed, dir+"/main.go")
 	}
-	m, err := Open(context.Background(), writeWorkspace(b, files), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), writeWorkspace(b, files), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -498,7 +499,7 @@ func (s *PlanStageSuite) plan(vetNeeds string) types.ShardPlan {
 		"magusfile.buzz": strings.ReplaceAll(stagedMagusfile, "VET_NEEDS", vetNeeds),
 		"main.go":        "package main\n",
 	})
-	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	plan, err := m.Plan(context.Background(), "ci", PlanOptions{

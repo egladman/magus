@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,14 +26,14 @@ type contact struct {
 func contactStore(t *testing.T, events ...contact) string {
 	t.Helper()
 	dir := t.TempDir()
-	loaded := make([]LoadEvent, 0, len(events))
+	loaded := make([]session.LoadEvent, 0, len(events))
 	for i, e := range events {
-		loaded = append(loaded, LoadEvent{Session: e.session, Event: AgentEvent{
+		loaded = append(loaded, session.LoadEvent{Session: e.session, Event: session.AgentEvent{
 			Host: "test-host", Kind: e.kind, Ref: strconv.Itoa(i),
 			AtMs: e.atMs, Text: e.path, Denied: e.denied,
 		}})
 	}
-	_, err := LoadEvents(t.Context(), dir, loaded, InvocationStart{Workspace: t.TempDir(), Command: "test"})
+	_, err := session.LoadEvents(t.Context(), dir, loaded, session.InvocationStart{Workspace: t.TempDir(), Command: "test"})
 	require.NoError(t, err)
 	return dir
 }
@@ -42,15 +43,15 @@ func TestReadPathContactCountsSessionsNotEvents(t *testing.T) {
 
 	now := time.Now().UnixMilli()
 	dir := contactStore(t,
-		contact{session: "one", kind: EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 3000},
-		contact{session: "one", kind: EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 2000},
-		contact{session: "two", kind: EventFileRead, path: "internal/guard/buzz.go", atMs: now - 1000},
-		contact{session: "two", kind: EventFileWrite, path: "somewhere/else.go", atMs: now},
+		contact{session: "one", kind: session.EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 3000},
+		contact{session: "one", kind: session.EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 2000},
+		contact{session: "two", kind: session.EventFileRead, path: "internal/guard/buzz.go", atMs: now - 1000},
+		contact{session: "two", kind: session.EventFileWrite, path: "somewhere/else.go", atMs: now},
 	)
 
 	assert.Equal(t,
 		PathContact{Sessions: 2, Writes: 2, Reads: 1, Last: time.UnixMilli(now - 1000)},
-		readPathContact(dir, "internal/guard/buzz.go"),
+		readPathContact(t.Context(), dir, "internal/guard/buzz.go"),
 		"one session saving twice is one session, and Last is the newest contact with THIS path")
 }
 
@@ -61,25 +62,25 @@ func TestReadPathContactIgnoresPathlessKinds(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
-		contact{session: "one", kind: EventShellCommand, path: "magusfile.buzz", atMs: 5},
-		contact{session: "one", kind: EventSpawn, path: "magusfile.buzz", atMs: 6},
-		contact{session: "one", kind: EventSkillLoad, path: "magusfile.buzz", atMs: 7},
+		contact{session: "one", kind: session.EventShellCommand, path: "magusfile.buzz", atMs: 5},
+		contact{session: "one", kind: session.EventSpawn, path: "magusfile.buzz", atMs: 6},
+		contact{session: "one", kind: session.EventSkillLoad, path: "magusfile.buzz", atMs: 7},
 	)
 
-	assert.Equal(t, PathContact{}, readPathContact(dir, "magusfile.buzz"))
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, "magusfile.buzz"))
 }
 
 func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
-		contact{session: "one", kind: EventFileWrite, path: "gen/graph.json", atMs: 10, denied: true},
-		contact{session: "one", kind: EventFileWrite, path: "gen/graph.json", atMs: 11},
+		contact{session: "one", kind: session.EventFileWrite, path: "gen/graph.json", atMs: 10, denied: true},
+		contact{session: "one", kind: session.EventFileWrite, path: "gen/graph.json", atMs: 11},
 	)
 
 	assert.Equal(t,
 		PathContact{Sessions: 1, Writes: 2, Denials: 1, Last: time.UnixMilli(11)},
-		readPathContact(dir, "gen/graph.json"))
+		readPathContact(t.Context(), dir, "gen/graph.json"))
 }
 
 // TestReadPathContactLeavesAnUndatedContactUndated pins that a host that recorded no time
@@ -90,20 +91,20 @@ func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
-		contact{session: "one", kind: EventFileWrite, path: "a.go", atMs: 0},
-		contact{session: "one", kind: EventFileRead, path: "a.go", atMs: 0},
+		contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 0},
+		contact{session: "one", kind: session.EventFileRead, path: "a.go", atMs: 0},
 	)
 
-	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, readPathContact(dir, "a.go"))
+	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, readPathContact(t.Context(), dir, "a.go"))
 }
 
 func TestReadPathContactSaysNothingWhenThereIsNothingToSay(t *testing.T) {
 	t.Parallel()
 
-	dir := contactStore(t, contact{session: "one", kind: EventFileWrite, path: "a.go", atMs: 1})
+	dir := contactStore(t, contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 1})
 
-	assert.Equal(t, PathContact{}, readPathContact(dir, "b.go"), "a path no session reached")
-	assert.Equal(t, PathContact{}, readPathContact(dir, ""), "a node that is about no file")
-	assert.Equal(t, PathContact{}, readPathContact("", "a.go"), "no store")
-	assert.Equal(t, PathContact{}, readPathContact(t.TempDir(), "a.go"), "an empty store")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, "b.go"), "a path no session reached")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, ""), "a node that is about no file")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), "", "a.go"), "no store")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), t.TempDir(), "a.go"), "an empty store")
 }

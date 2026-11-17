@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,7 +27,7 @@ func testEnv(stdout, notices io.Writer) RefsEnv {
 		Notices:  notices,
 		Classify: func() textindex.ClassifyFunc { return nil },
 		Format: func(_ output.Options, v any) error {
-			b, err := json.Marshal(v)
+			b, err := codec.Marshal(v)
 			if err != nil {
 				return err
 			}

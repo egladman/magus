@@ -540,7 +540,7 @@ text above is kept as written.
 ### 2026-11-12: `types` imports `types/agent`, not the reverse
 
 "Where the names live" says `types/agent` imports `types` and `types` never imports it.
-The tree says the opposite. `types` imports `types/agent` (`types/job.go`,
+The tree says the opposite. `types` imports `types/agent` (`libs/safetyscissors/job/job.go`,
 `types/harness_contract.go`). `types/agent` imports nothing in magus but
 `internal/json` and `types/enum`, and the compiler refuses the cycle an import of `types`
 would make. So `types/agent` is the leaf, and it cannot name `types.NextStep`,
@@ -556,5 +556,16 @@ What follows for the moves above:
   import cycle, since `types` may already import the leaf.
 - `Capability` moves with its values. Until then a `StepRow` holds
   `types.ToolCapability` values as strings.
+
+The text above is kept as written.
+
+### 2026-11-16: `defer` replaces both `allow` and `pass`
+
+Part 5 renamed the rule side's `allow` to `pass`. Neither name survives. The guard's
+decisions are `defer`, `advise`, `ask` and `deny`, and `defer` means no objection: the
+host's own permission flow decides the call, and no decision reads as yes. A rule's zero
+value is `defer`, `magus\guard.allow()` is `magus\guard.defer()`, and a record holding
+`pass` or `allow` is refused rather than read (ADR 0050, Amendments). Eli ruled this on
+2026-11-16.
 
 The text above is kept as written.

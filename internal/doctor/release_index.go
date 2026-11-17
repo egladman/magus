@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -46,7 +46,7 @@ func (r *runner) checkReleaseIndexExpiry() check.Check {
 	var idx struct {
 		ExpiresAt string `json:"expires_at"`
 	}
-	if err := json.Unmarshal(data, &idx); err != nil {
+	if err := codec.Unmarshal(data, &idx); err != nil {
 		return check.Check{
 			Name: name, Status: check.Fail,
 			Message: fmt.Sprintf("%s does not parse: %v", servedIndexPath, err),

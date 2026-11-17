@@ -10,8 +10,8 @@
   "properties": {
     "api_version": {
       "type": "string",
-      "const": "magus.job/v1alpha1",
-      "description": "Version is the format this record is written in. A reader refuses any other, so no magus acts on a record it cannot read."
+      "const": "safetyscissors.job/v1alpha1",
+      "description": "Version is the format this record is written in. A reader refuses any other, so no reader acts on a record it cannot read."
     },
     "requires": {
       "type": "array",
@@ -76,7 +76,7 @@
     },
     "checkpoint": {
       "type": "string",
-      "description": "Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o name` prints it."
+      "description": "Checkpoint is the working state this lease starts from, as the caller's checkpoint token. See [Job.Checkpoint]."
     },
     "paths": {
       "type": "object",
@@ -114,7 +114,7 @@
           "description": "Soft are the Write entries that overlap nothing until the diff touches them. The store then drops them from Soft."
         }
       },
-      "description": "Paths are what this lease may write and read. See [JobPaths]."
+      "description": "Paths are what this lease may write and read. See [Paths]."
     },
     "depends_on": {
       "type": "array",
@@ -146,7 +146,7 @@
     "brief_format": {
       "type": "string",
       "enum": ["", "markdown", "buzz"],
-      "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to magus.yaml's agents.brief_format. See [Job.BriefFormat]."
+      "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to the workspace's own default. See [Job.BriefFormat]."
     },
     "delivery": {
       "type": "string",
@@ -164,28 +164,7 @@
     "checkout": {
       "type": "string",
       "pattern": "^/",
-      "description": "Checkout is an absolute directory, outside the workspace, where the fork makes a new checkout of the repository for this job at its checkpoint, or at the forking checkout's revision when it names none. The job owns it: see [JobWorktree]. Empty works wherever the job is taken."
-    },
-    "owned_paths": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "compat(until: no client or stored ledger still sends owned_paths, focus or forbidden_paths): see Declaration. Observe it by grepping the leases-*.json archives and the trail for the old keys."
-    },
-    "forbidden_paths": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "LegacyDenyPaths is the pre-rename spelling of paths.deny. compat: see LegacyWritePaths."
-    },
-    "focus": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "LegacyReadPaths is the pre-rename spelling of paths.read. compat: see LegacyWritePaths."
+      "description": "Checkout is an absolute directory, outside the workspace, where the fork makes a new checkout of the repository for this job at its checkpoint, or at the forking checkout's revision when it names none. The job owns it: see [Worktree]. Empty works wherever the job is taken."
     },
     "check": {
       "type": "object",
@@ -194,11 +173,11 @@
         "target": {
           "type": "string",
           "pattern": "^(?:[0-9A-Z_a-z-]+::[0-9A-Z_a-z-]+|[0-9A-Z_a-z-]*)$",
-          "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
+          "description": "Target is the target the check runs, without the runner's run command in front of it. Empty when Script names the check instead."
         },
         "script": {
           "type": "string",
-          "description": "Script is a Buzz script the check runs with `magus buzz --record` in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
+          "description": "Script is a Buzz script the check runs, recorded, in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
         },
         "project": {
           "type": "string",
@@ -209,7 +188,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Args are forwarded to the tool after `--`, never to magus."
+          "description": "Args are forwarded to the tool after `--`, never to the runner."
         },
         "no_default_charms": {
           "type": "boolean",
@@ -217,7 +196,7 @@
         },
         "test": {
           "type": "boolean",
-          "description": "Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and a passing main are different facts, so each is satisfied only by its own run. A script check alone carries it."
+          "description": "Test runs Script's tests instead of its main: passing tests and a passing main are different facts, so each is satisfied only by its own run. A script check alone carries it."
         }
       },
       "oneOf": [
@@ -254,10 +233,6 @@
     "read_only": {
       "type": "boolean",
       "description": "ReadOnly marks a lease that gathers evidence and writes nothing, so empty write paths are correct rather than missing."
-    },
-    "validation": {
-      "type": "string",
-      "description": "Validation is the check as a rendered `magus run` line."
     },
     "goals": {
       "type": "array",
@@ -299,11 +274,11 @@
               "target": {
                 "type": "string",
                 "pattern": "^(?:[0-9A-Z_a-z-]+::[0-9A-Z_a-z-]+|[0-9A-Z_a-z-]*)$",
-                "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
+                "description": "Target is the target the check runs, without the runner's run command in front of it. Empty when Script names the check instead."
               },
               "script": {
                 "type": "string",
-                "description": "Script is a Buzz script the check runs with `magus buzz --record` in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
+                "description": "Script is a Buzz script the check runs, recorded, in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
               },
               "project": {
                 "type": "string",
@@ -314,7 +289,7 @@
                 "items": {
                   "type": "string"
                 },
-                "description": "Args are forwarded to the tool after `--`, never to magus."
+                "description": "Args are forwarded to the tool after `--`, never to the runner."
               },
               "no_default_charms": {
                 "type": "boolean",
@@ -322,7 +297,7 @@
               },
               "test": {
                 "type": "boolean",
-                "description": "Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and a passing main are different facts, so each is satisfied only by its own run. A script check alone carries it."
+                "description": "Test runs Script's tests instead of its main: passing tests and a passing main are different facts, so each is satisfied only by its own run. A script check alone carries it."
               }
             },
             "oneOf": [
@@ -368,10 +343,18 @@
           "signature": {
             "type": "string",
             "description": "Signature is the declaration an ExpectSignature goal holds its one symbol to, in the form the symbol index renders it. A fork that declares none records the indexed one, which is how a stub the root wrote becomes the contract. Zero on every other goal."
+          },
+          "accept": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["witnessed", "attested", "reported"]
+            },
+            "description": "Accept are the bases a run of a GoalKindCheck goal's check may rest on (see [Store.Grade]). A check goal names at least one: [Goal.Resolve] fills none in, so one accepting nothing is a fault, never a goal that takes the strongest or the weakest. Zero on every other kind."
           }
         }
       },
-      "description": "Goals are what done means, graded by `magus job wait`. See [Job.Goals]."
+      "description": "Goals are what done means, graded by [Store.Grade]. See [Job.Goals]."
     },
     "timeout": {
       "type": "string",
@@ -406,7 +389,7 @@
           }
         }
       },
-      "description": "Deviations accept permissible problems (see [Permissible]) on the record's own authority."
+      "description": "Deviations accept permissible problems on the record's own authority."
     },
     "enter": {
       "type": "string",

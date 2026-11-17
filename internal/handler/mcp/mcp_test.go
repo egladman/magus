@@ -5,7 +5,6 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,20 +13,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/server"
-
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -57,7 +60,7 @@ func fixtureMagus(t *testing.T) *magus.Magus {
 	pkg := filepath.Join(root, "pkg")
 	require.NoError(t, os.MkdirAll(pkg, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"name":"pkg"}`), 0o644))
-	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	return m
 }
@@ -160,7 +163,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
@@ -169,14 +172,14 @@ func TestWrapCapturesExchange(t *testing.T) {
 	// across; the refs are required and resolved below.
 	require.NotEmpty(t, ev.ResponseRef)
 	require.NotEmpty(t, ev.RequestRef) // the request arguments were captured too
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:   ev.Ts,
-		Kind: trail.KindMCPToolCall,
+		Kind: trailtypes.KindMCPToolCall,
 		// The MCP client's own name is its host label.
-		Origin:        types.Origin{User: ev.User, UID: ev.UID, EntryPoint: types.EntryPointMCP, Host: "test-agent"},
+		Origin:        job.Origin{User: ev.User, UID: ev.UID, EntryPoint: job.EntryPointMCP, Host: "test-agent"},
 		UserAgent:     "claude-code/1.2.3", // the session User-Agent is recorded on the event
 		Action:        "client",
-		Outcome:       trail.OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		DurationMs:    ev.DurationMs,
 		RequestRef:    ev.RequestRef,
 		ResponseRef:   ev.ResponseRef,
@@ -186,10 +189,10 @@ func TestWrapCapturesExchange(t *testing.T) {
 	}, ev)
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
-	resp, err := trail.ReadBlob(dir, ev.ResponseRef)
+	resp, err := trailtypes.ReadBlob(dir, ev.ResponseRef)
 	require.NoError(t, err)
 	assert.Equal(t, out, string(resp))
-	reqBody, err := trail.ReadBlob(dir, ev.RequestRef)
+	reqBody, err := trailtypes.ReadBlob(dir, ev.RequestRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(reqBody), "query")
 }
@@ -209,10 +212,10 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	_, err := h(context.Background(), callRequest("client", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, trail.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
+	assert.Equal(t, trailtypes.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
 	require.Len(t, *calls, 1)
 	assert.Equal(t, observability.OutcomeError, (*calls)[0].Outcome, "the metric must also see error")
 }
@@ -231,7 +234,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(trail.ContextWithCredential(context.Background(), types.CredentialStdio), callRequest(d.Name, nil))
+		res, err := st.Handler(trail.ContextWithCredential(context.Background(), auth.CredentialStdio()), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
@@ -479,10 +482,10 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
-	res := secret.New()
+	res := secrets.NewResolver()
 	t.Setenv("MCP_TEST_TOKEN", credential)
 	// Provenance is what marks a value as a credential, so resolve it once.
-	got, err := res.Read(secret.ContextWithResolver(t.Context(), res), "MCP_TEST_TOKEN")
+	got, err := res.Read(secrets.WithResolver(t.Context(), res), "MCP_TEST_TOKEN")
 	require.NoError(t, err)
 	require.Equal(t, credential, got.Reveal())
 
@@ -515,10 +518,10 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 func noSecrets(ctx context.Context) context.Context { return ctx }
 
 // wrapWithResolver builds a handler whose trail writes redact against res.
-func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn handlerFn) server.ToolHandlerFunc {
+func wrapWithResolver(t *testing.T, trailDir string, res *secrets.Resolver, fn handlerFn) server.ToolHandlerFunc {
 	t.Helper()
 	return wrap(quietLogger(), func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} },
-		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
+		trailDir, func(ctx context.Context) context.Context { return secrets.WithResolver(ctx, res) },
 		nil, fn)
 }
 
@@ -530,15 +533,15 @@ func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
 	req.Params.Name = "status"
 
 	cases := map[string]struct {
-		cred    types.Credential
+		cred    auth.Credential
 		allowed bool
 	}{
-		"socket peer":   {types.CredentialSocketPeer, true},
-		"connector":     {types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}, true},
-		"operator":      {types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}, true},
-		"console token": {types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, false},
-		"no credential": {types.Credential{}, false},
-		"viewer grant":  {types.Credential{Kind: types.KindSocketPeer, Grant: types.GrantViewer}, false},
+		"socket peer":   {auth.CredentialSocketPeer(), true},
+		"connector":     {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}, true},
+		"operator":      {auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}, true},
+		"console token": {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, false},
+		"no credential": {auth.Credential{}, false},
+		"viewer grant":  {auth.Credential{Kind: auth.KindSocketPeer, Grant: auth.AccessViewer()}, false},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

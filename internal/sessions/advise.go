@@ -8,13 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
 )
@@ -63,13 +65,13 @@ func (e directiveEntry) MarshalJSON() ([]byte, error) {
 	if err := e.valid(); err != nil {
 		return nil, err
 	}
-	return json.Marshal(directiveEntryJSON(e))
+	return codec.Marshal(directiveEntryJSON(e))
 }
 
 // UnmarshalJSON applies MarshalJSON's checks to a line read back.
 func (e *directiveEntry) UnmarshalJSON(b []byte) error {
 	var raw directiveEntryJSON
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := codec.Unmarshal(b, &raw); err != nil {
 		return err
 	}
 	if err := directiveEntry(raw).valid(); err != nil {
@@ -125,16 +127,17 @@ const directiveFile = "advisories.jsonl"
 
 // newDirectiveStore is the store in dir. It touches nothing until used.
 func newDirectiveStore(dir string) DirectiveStore {
-	return DirectiveStore{lines: file.JSONL[directiveEntry]{
+	return DirectiveStore{lines: file.JSONL[directiveEntry]{JSONL: codec.JSONL[directiveEntry]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(dir, directiveFile),
 		Key:  directiveEntry.key,
-	}}
+	}}}
 }
 
 // OpenDirectiveStore is the store of the repository at root, in
 // <XDG state>/magus/advisories/<repo>-<hash12>. It keys on repository
 // identity like [Dir], so every worktree reads one store. It does not live
-// under [Dir], because [Prune] removes files there at retention and an
+// under [Dir], because [session.Prune] removes files there at retention and an
 // advisory stands until retracted. It touches nothing until used.
 func OpenDirectiveStore(root string) (DirectiveStore, error) {
 	base, err := xdg.StateDir()

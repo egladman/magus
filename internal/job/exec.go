@@ -9,18 +9,16 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
-// ErrUnknownJob reports a registration against an id no row carries, and ErrHeldElsewhere
-// one against a running job another checkout holds. Sentinels rather than bare strings so
-// a door can tell a worker's mistake from a store failure; the wrapped messages carry the
-// id and the next step. ErrHeldElsewhere holds until the row changes, so a caller may stop
-// retrying on it, unlike a cancelled context or lock contention.
-var (
-	ErrUnknownJob    = errors.New("job: unknown lease")
-	ErrHeldElsewhere = errors.New("job: another checkout holds the job")
-)
+// ErrHeldElsewhere reports a registration against a running job another checkout holds,
+// as [job.ErrUnknownJob] reports one against an id no row carries. Sentinels rather than
+// bare strings so a door can tell a worker's mistake from a store failure; the wrapped
+// messages carry the id and the next step. ErrHeldElsewhere holds until the row changes,
+// so a caller may stop retrying on it, unlike a cancelled context or lock contention.
+var ErrHeldElsewhere = errors.New("job: another checkout holds the job")
 
 // heldError is ErrHeldElsewhere with the message that names the holder, which reads
 // whole without the sentinel's own text.
@@ -44,7 +42,7 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 // It refuses a job another checkout holds. Wait grades the checkout the row names, so a
 // second taker would silently move that grade off the holder's tree; the job moves only
 // once its holder ends it and it is declared again, which clears the checkout. A job that
-// owns a checkout (see [types.Job.Worktree]) is taken there and nowhere else.
+// owns a checkout (see [job.Job.Worktree]) is taken there and nowhere else.
 //
 // THE BASE VERDICT IS A FACT, NOT A GATE. Every verdict registers, BaseDiverged included: refusing here would
 // leave the orchestrator with no record that a worker went to the wrong base, which is the
@@ -55,24 +53,24 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 // and advances one with the same call, which is right for an orchestrator writing its own
 // plan; a WORKER registering an id nothing declared was handed the wrong id, and a row
 // invented for it would bury that under a plausible-looking ledger entry.
-func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
+func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 	// Read before the lock, since it runs the VCS. The row is read again there.
-	var row types.Job
-	if f, err := s.read(); err == nil {
-		if i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+	var row job.Job
+	if f, err := s.Read(ctx); err == nil {
+		if i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 			row = f.Jobs[i]
 		}
 	}
 	facts, err := s.readExecFacts(ctx, id, row)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	base, full := facts.base, facts.full
-	return s.mutate(ctx, id, asExec, func(cur *types.Job, exists bool, now int64) error {
+	return s.Mutate(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
 				" check the declared ids with `%s` and exec under the id the"+
-				" orchestrator handed you", ErrUnknownJob, id, hint.LsJobs)
+				" orchestrator handed you", job.ErrUnknownJob, id, hint.LsJobs)
 		}
 		// Relative would be resolved against whichever process sweeps the row later.
 		here := ""
@@ -87,37 +85,30 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 		// An exited row taken again where it was taken is its holder sent back to work: it
 		// edits its paths again, so it claims them again. Exited is not terminal, so ADR
 		// 0013 lets the holder's own exec reopen it.
-		reopened := cur.State == types.StateExited && cur.CheckoutRoot != "" && cur.CheckoutRoot == here
+		reopened := cur.State == job.StateExited && cur.CheckoutRoot != "" && cur.CheckoutRoot == here
 		if cur.State.Terminal() || reopened {
-			cur.State = types.StateRunning
+			cur.State = job.StateRunning
 		}
 		cur.ReportedBase = base
 		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full))
 		cur.Registered = now
 		cur.CheckoutRoot = here
-		if cur.State == types.StateDeclared {
-			cur.State = types.StateRunning
+		if cur.State == job.StateDeclared {
+			cur.State = job.StateRunning
 		}
 		return nil
 	})
 }
 
-// rebindsAdopted reports whether row moves prev, which nobody took, from one checkout its
-// fork adopted to another adopted one.
-func rebindsAdopted(prev, row types.Job) bool {
-	return prev.CheckoutRoot == "" && prev.Worktree.Standing() && !prev.Worktree.Made &&
-		row.Worktree.Standing() && !row.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
-}
-
 // execFacts is what taking a job reads from the checkout, ahead of any lock.
 type execFacts struct {
 	base  string
-	moved *types.JobWorktree
+	moved *job.Worktree
 	full  map[string]string
 }
 
 // readExecFacts reads them for row, the zero row when nothing declared id.
-func (s *Store) readExecFacts(ctx context.Context, id string, row types.Job) (execFacts, error) {
+func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job) (execFacts, error) {
 	base, err := s.CheckoutToken(ctx)
 	if err != nil {
 		return execFacts{}, fmt.Errorf("the checkout at %s reports no revision, so there is no base to record for %s,"+
@@ -133,10 +124,10 @@ func (s *Store) readExecFacts(ctx context.Context, id string, row types.Job) (ex
 // execRefusal is why Exec refuses row in the checkout here, nil for none.
 // An adopted checkout nobody took moves to here, on row, when here is at
 // the row's checkpoint.
-func execRefusal(row *types.Job, here string, facts execFacts) error {
+func execRefusal(row *job.Job, here string, facts execFacts) error {
 	if facts.moved != nil && row.CheckoutRoot == "" && row.Worktree.Standing() && !row.Worktree.Made && !row.State.Terminal() {
 		switch compareBase(withFullRevision(row.Checkpoint, facts.full), withFullRevision(facts.base, facts.full)) {
-		case types.BaseMatch, types.BaseRevisionMatch, types.BaseUnknown:
+		case job.BaseMatch, job.BaseRevisionMatch, job.BaseUnknown:
 			row.Worktree = facts.moved
 		default:
 			return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
@@ -154,7 +145,7 @@ func execRefusal(row *types.Job, here string, facts execFacts) error {
 	}
 	// Held means running. A declared row may carry a checkout already,
 	// and it is still the forker's to hand out, not a holder's to keep.
-	if row.State == types.StateRunning && row.CheckoutRoot != "" && row.CheckoutRoot != here {
+	if row.State == job.StateRunning && row.CheckoutRoot != "" && row.CheckoutRoot != here {
 		return heldError{fmt.Sprintf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
 			" its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
 			row.ID, row.CheckoutRoot, row.State, updatedAgo(*row), hint.JobExit.With(row.ID), hint.JobApply)}
@@ -165,10 +156,10 @@ func execRefusal(row *types.Job, here string, facts execFacts) error {
 // ExecRefusal is why [Store.Exec] in the checkout here would refuse row.
 // The guard asks before it binds a caller, so it reads that checkout as
 // Exec does.
-func (s *Store) ExecRefusal(ctx context.Context, row types.Job, here string) error {
+func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error {
 	config := s.storeConfig
 	config.root = here
-	facts, err := (&Store{storeConfig: config}).readExecFacts(ctx, row.ID, row)
+	facts, err := (&Store{storeConfig: config}).open().readExecFacts(ctx, row.ID, row)
 	if err != nil {
 		return err
 	}
@@ -178,7 +169,7 @@ func (s *Store) ExecRefusal(ctx context.Context, row types.Job, here string) err
 // untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork
 // adopted a checkout other than this one: a worker the host isolated in a fresh linked
 // checkout binds the job here instead. nil when row is any other, or this is no linked checkout.
-func (s *Store) untakenElsewhere(ctx context.Context, row types.Job) *types.JobWorktree {
+func (s *Store) untakenElsewhere(ctx context.Context, row job.Job) *job.Worktree {
 	if s.root == "" || row.CheckoutRoot != "" || !row.Worktree.Standing() || row.Worktree.Made {
 		return nil
 	}
@@ -237,19 +228,19 @@ func withFullRevision(token string, full map[string]string) string {
 
 // compareBase compares the checkpoint a lease was handed with the base its worker
 // reported, both as `magus vcs checkpoint -o name` prints them: `<rev>` for a clean tree,
-// `<rev>+<digest>` for a dirty one. See types.JobBaseVerdict for why the answer is not
+// `<rev>+<digest>` for a dirty one. See job.BaseVerdict for why the answer is not
 // a boolean.
-func compareBase(checkpoint, reported string) types.JobBaseVerdict {
+func compareBase(checkpoint, reported string) job.BaseVerdict {
 	checkpoint, reported = strings.TrimSpace(checkpoint), strings.TrimSpace(reported)
 	switch {
 	case checkpoint == "" || reported == "":
-		return types.BaseUnknown
+		return job.BaseUnknown
 	case checkpoint == reported:
-		return types.BaseMatch
+		return job.BaseMatch
 	case checkpointRevision(checkpoint) == checkpointRevision(reported):
-		return types.BaseRevisionMatch
+		return job.BaseRevisionMatch
 	default:
-		return types.BaseDiverged
+		return job.BaseDiverged
 	}
 }
 
@@ -284,13 +275,13 @@ func isHex(s string) bool {
 //
 // Derived from the row, never stored. The verdict is the fact; this is one rendering of
 // it, and a stored sentence would be a second thing to keep true when the wording changes.
-func BaseAdvice(row types.Job) string {
+func BaseAdvice(row job.Job) string {
 	switch row.BaseVerdict {
-	case types.BaseMatch:
+	case job.BaseMatch:
 		return fmt.Sprintf("recorded job %s's base as %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",
 			row.ID, row.ReportedBase)
 
-	case types.BaseRevisionMatch:
+	case job.BaseRevisionMatch:
 		return fmt.Sprintf("recorded job %s's base on revision %s, which IS the revision it was handed,"+
 			" but the uncommitted patch is not: the checkpoint digest is %s and yours is %s."+
 			" A checkpoint is a revision plus a dirty-patch DIGEST, so you share the commit and not the working tree."+
@@ -299,13 +290,13 @@ func BaseAdvice(row types.Job) string {
 			" against the tree you are on.",
 			row.ID, checkpointRevision(row.ReportedBase), describePatchDigest(row.Checkpoint), describePatchDigest(row.ReportedBase))
 
-	case types.BaseDiverged:
+	case job.BaseDiverged:
 		return fmt.Sprintf("recorded job %s's base, and it DIVERGED: your base %s is not the checkpoint %s the job was handed."+
 			" Respawn from %s, or materialize the files you touch from it before you edit them,"+
 			" so what you write lands on the tree the plan was cut against.",
 			row.ID, checkpointRevision(row.ReportedBase), checkpointRevision(row.Checkpoint), checkpointRevision(row.Checkpoint))
 
-	case types.BaseUnknown:
+	case job.BaseUnknown:
 		return fmt.Sprintf("recorded job %s's base as %s. It carries no checkpoint, so there is nothing to compare"+
 			" your base against and the verdict is unknown rather than a match."+
 			" Have the orchestrator put one on the job (`magus vcs checkpoint -o name`) before the next job is cut,"+

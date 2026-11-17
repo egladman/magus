@@ -5,6 +5,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -58,7 +59,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 `)
-	m, err := magus.Open(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), ws.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	resolver := typestest.NewMockConflictResolver(t)
 	resolver.EXPECT().IgnoredPaths(mock.Anything, mock.Anything, mock.Anything).Return(map[string]bool{}, nil)

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/libs/clikit/exit"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
@@ -315,13 +316,13 @@ func resolveVCS(ctx context.Context, root string, m *magus.Magus) (types.VCSReso
 }
 
 // jobRows reads the job store of the workspace at root when asked, for settling by claims.
-func jobRows(ctx context.Context, root string) func() ([]types.Job, error) {
-	return func() ([]types.Job, error) {
+func jobRows(ctx context.Context, root string) func() ([]jobtypes.Job, error) {
+	return func() ([]jobtypes.Job, error) {
 		store, err := openJobs(ctx, root, jobOpen{})
 		if err != nil {
 			return nil, err
 		}
-		return store.List()
+		return store.List(ctx)
 	}
 }
 

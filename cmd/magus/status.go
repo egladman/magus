@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
@@ -41,7 +42,7 @@ func bindStatus(f **flaggen.ServerStatusFlags) func(*flag.FlagSet) {
 }
 
 // queryCapacity is the broker's build budget as status reads it.
-func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
+func queryCapacity(ctx context.Context) (budget.Snapshot, error) {
 	st, err := server.QueryBroker(ctx)
 	return st.Capacity, err
 }
@@ -70,7 +71,7 @@ func status(ctx context.Context, args []string) error {
 
 	if f.Watch == 0 {
 		snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
-		silent, silentErr := loadSilentLeases(time.Now())
+		silent, silentErr := loadSilentLeases(ctx, time.Now())
 		if errors.Is(silentErr, types.NoWorkspaceRoot) {
 			// Status runs anywhere; outside a workspace no row is leased.
 			silentErr = nil
@@ -137,7 +138,7 @@ func status(ctx context.Context, args []string) error {
 
 // loadSilentLeases reads the workspace's silent leased rows. Outside a workspace it returns
 // the NoWorkspaceRoot error, which the caller reads as no rows.
-func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
+func loadSilentLeases(ctx context.Context, now time.Time) ([]guard.SilentLease, error) {
 	root, err := workspace.FindRoot("")
 	if err != nil {
 		return nil, err
@@ -147,7 +148,7 @@ func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
 		return nil, err
 	}
 	loc.DryRun = true
-	rows, err := job.NewStore(loc).List()
+	rows, err := job.NewStore(loc).List(ctx)
 	if err != nil {
 		return nil, err
 	}

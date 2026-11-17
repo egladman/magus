@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // toolLine is a verbatim `tool:` key input, not an invented one: hash.go's
@@ -491,10 +491,10 @@ func TestKeyInputsRedactBothSidesOfAComparison(t *testing.T) {
 	writeMain(t, root, "package main")
 
 	const token = "sk-live-w5a-probe-token"
-	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_KEYINPUT_TOKEN", token)
 	// Reading through the built-in env provider is what registers a value for redaction.
-	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_KEYINPUT_TOKEN")
+	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_KEYINPUT_TOKEN")
 	require.NoError(t, err)
 
 	step := makeStep(root)

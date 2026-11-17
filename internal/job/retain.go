@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // retainEvery is the least time between two retention passes. A pass rides a write that
@@ -22,23 +23,23 @@ const strayTempAge = time.Hour
 
 // over reports whether nobody will act on row again: graded or ended, or exited with its
 // result never collected. Server rows and rows this magus cannot write are never over.
-func over(row types.Job) bool {
+func over(row job.Job) bool {
 	if row.ServerRun() || readOnly(row) != nil {
 		return false
 	}
-	return row.State.Terminal() || row.State == types.StateExited
+	return row.State.Terminal() || row.State == job.StateExited
 }
 
 // retire removes from rows every row that is [over] and untouched for window, and returns
 // what stays and how many went. A row another staying row names as its parent, an
 // ancestor or a dependency stays with it, so no tree loses its root and no queue the row
 // it waits on. A zero window keeps every row.
-func retire(rows []types.Job, now int64, window time.Duration) ([]types.Job, int) {
+func retire(rows []job.Job, now int64, window time.Duration) ([]job.Job, int) {
 	if window <= 0 {
 		return rows, 0
 	}
 	cutoff := now - int64(window/time.Second)
-	byID := make(map[string]types.Job, len(rows))
+	byID := make(map[string]job.Job, len(rows))
 	for _, r := range rows {
 		byID[r.ID] = r
 	}
@@ -63,7 +64,7 @@ func retire(rows []types.Job, now int64, window time.Duration) ([]types.Job, int
 	if len(kept) == len(rows) {
 		return rows, 0
 	}
-	out := make([]types.Job, 0, len(kept))
+	out := make([]job.Job, 0, len(kept))
 	for _, r := range rows {
 		if kept[r.ID] {
 			out = append(out, r)
@@ -76,8 +77,10 @@ func retire(rows []types.Job, now int64, window time.Duration) ([]types.Job, int
 // rows (see [retire]) and removes the archives and stray temp files the window has
 // outlived. A file no pass has stamped is stamped and left whole, so the first pass runs
 // an interval after a store is created or first written by this magus. A jobs.retain that
-// does not read fails the write rather than retire rows by a window nobody chose.
-func (s *Store) retainDue(f *jobsFile, now time.Time) error {
+// does not read fails the write rather than retire rows by a window nobody chose. A pass
+// also prunes the footprint cache (see [Store.pruneFootprints]). It is the module store's
+// [job.WithRetention], run inside every rewrite.
+func (s *Store) retainDue(_ context.Context, f *job.Rows, now time.Time) error {
 	if f.Retained == 0 {
 		f.Retained = now.Unix()
 		return nil
@@ -92,6 +95,7 @@ func (s *Store) retainDue(f *jobsFile, now time.Time) error {
 	f.Retained = now.Unix()
 	f.Jobs, _ = retire(f.Jobs, now.Unix(), window)
 	s.dropExpiredFiles(now, window)
+	s.pruneFootprints(f.Jobs)
 	return nil
 }
 

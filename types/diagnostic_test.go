@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/diagnostics"
 )
@@ -47,6 +48,12 @@ func TestManifestScriptDelegationRoutesToMagusfileDocs(t *testing.T) {
 func TestSpellContractViolatedRoutesToMagusfileDocs(t *testing.T) {
 	assert.Equal(t, "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1051/", CodeURL(SpellContractViolated))
 }
+
+// typesSuite is the package's one testify suite: add a type's tests here as methods
+// named Test<Type>..., not a suite of their own.
+type typesSuite struct{ suite.Suite }
+
+func TestTypesSuite(t *testing.T) { suite.Run(t, new(typesSuite)) }
 
 // SetupSuite registers the MGS catalog as magus's startup does, since origin and collisions
 // derive from the registry.

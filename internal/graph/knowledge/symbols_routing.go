@@ -10,7 +10,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -162,7 +162,7 @@ func (s *Store) writeXref(shards []Shard, man manifest) error {
 		}
 		return nil
 	}
-	b, err := json.Marshal(symbolRouting{ShardsKey: key, Index: index, Labels: buildLabelIndex(shards)})
+	b, err := codec.Marshal(symbolRouting{ShardsKey: key, Index: index, Labels: buildLabelIndex(shards)})
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func (s *Store) readXref() *symbolRouting {
 	path := s.routingPath()
 	r, info, hit, err := decodeFile(path, func(b []byte) (*symbolRouting, error) {
 		var r symbolRouting
-		err := json.Unmarshal(b, &r)
+		err := codec.Unmarshal(b, &r)
 		return &r, err
 	})
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 // admissionBacklog bounds the admissions waiting for the store's writer.
@@ -18,17 +18,17 @@ const admissionBacklog = 256
 const compactEvery = 100
 
 // WithAdmissionLog appends each refusal and each seated wait to log, one
-// types.MachineAdmission per line. Without it the broker keeps only the
+// budget.Admission per line. Without it the broker keeps only the
 // ring `server status` reads. A log with Keep set is compacted to it.
-func WithAdmissionLog(log file.Log[types.MachineAdmission]) Option {
+func WithAdmissionLog(log file.Log[budget.Admission]) Option {
 	return func(o *serveOptions) { o.admissions = &log }
 }
 
 // admissionWriter appends admissions off the broker's lock: an append waits
 // on a file lock, and the broker seats nothing while s.mu is held.
 type admissionWriter struct {
-	log  file.Log[types.MachineAdmission]
-	ch   chan types.MachineAdmission
+	log  file.Log[budget.Admission]
+	ch   chan budget.Admission
 	done chan struct{}
 	warn *slog.Logger
 
@@ -39,11 +39,11 @@ type admissionWriter struct {
 
 // newAdmissionWriter starts the writer for log; nil log is no store, and
 // the writer it returns drops every admission.
-func newAdmissionWriter(log *file.Log[types.MachineAdmission], warn *slog.Logger) *admissionWriter {
+func newAdmissionWriter(log *file.Log[budget.Admission], warn *slog.Logger) *admissionWriter {
 	if log == nil {
 		return nil
 	}
-	w := &admissionWriter{log: *log, ch: make(chan types.MachineAdmission, admissionBacklog), done: make(chan struct{}), warn: warn}
+	w := &admissionWriter{log: *log, ch: make(chan budget.Admission, admissionBacklog), done: make(chan struct{}), warn: warn}
 	go w.run()
 	return w
 }
@@ -75,7 +75,7 @@ func (w *admissionWriter) compact(ctx context.Context) {
 
 // add queues a for the store. A full backlog drops a and says so, since the
 // broker never waits on its own record.
-func (w *admissionWriter) add(a types.MachineAdmission) {
+func (w *admissionWriter) add(a budget.Admission) {
 	if w == nil {
 		return
 	}

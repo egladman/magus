@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/generate"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -268,14 +268,14 @@ func (f freshProfiles) vouches(c coverageSource) bool {
 	if f.file == "" {
 		return false
 	}
-	lines, err := file.ReadLines(f.file)
+	lines, err := codec.ReadLines(f.file)
 	if err != nil {
 		return false
 	}
 	recorded := ""
 	for _, line := range lines.Lines {
 		var e freshProfile
-		if json.Unmarshal(line.Text, &e) == nil && e.Project == c.project && e.Profile == c.coverage.Profile {
+		if codec.Unmarshal(line.Text, &e) == nil && e.Project == c.project && e.Profile == c.coverage.Profile {
 			recorded = e.Digest
 		}
 	}
@@ -294,11 +294,11 @@ func (f freshProfiles) record(c coverageSource) error {
 	if err := pruneFreshProfiles(filepath.Dir(f.file), time.Now().Add(-freshProfileLife)); err != nil {
 		return err
 	}
-	line, err := json.Marshal(freshProfile{Project: c.project, Profile: c.coverage.Profile, Digest: now})
+	line, err := codec.Marshal(freshProfile{Project: c.project, Profile: c.coverage.Profile, Digest: now})
 	if err != nil {
 		return err
 	}
-	return file.AppendLines(f.file, [][]byte{line}, 0o600)
+	return codec.AppendLines(f.file, [][]byte{line}, 0o600)
 }
 
 // pruneFreshProfiles removes each fresh-profile record in dir last written

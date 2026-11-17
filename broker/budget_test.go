@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -21,25 +22,25 @@ import (
 
 // waiters is the broker's parked requests as its status reply lists them, with the
 // moments cleared.
-func waiters(t *testing.T, addr string) []types.MachineWaiter {
+func waiters(t *testing.T, addr string) []budget.Waiter {
 	t.Helper()
 	st, err := QueryStatus(t.Context(), addr)
 	require.NoError(t, err)
 	w := st.Capacity.Waiting
 	for i := range w {
-		w[i].Since, w[i].WaitedMS = time.Time{}, 0
+		w[i].Since, w[i].WaitedMs = time.Time{}, 0
 	}
 	return w
 }
 
 type claimed struct {
-	v   types.MachineVerdict
+	v   budget.Verdict
 	err error
 }
 
 // claimAsync runs c.Claim on its own goroutine and returns once the broker answered or
 // parked it, so the next request queues behind it.
-func claimAsync(t *testing.T, ctx context.Context, addr string, c *Client, claim types.MachineClaim) <-chan claimed {
+func claimAsync(t *testing.T, ctx context.Context, addr string, c *Client, claim budget.Claim) <-chan claimed {
 	t.Helper()
 	before := len(waiters(t, addr))
 	done := make(chan claimed, 1)
@@ -75,13 +76,13 @@ func TestAClaimKeptOutByItsOwnProcessIsParkedUntilARelease(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	first, err := c.Claim(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900}, nil)
+	first, err := c.Claim(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900}, nil)
 	require.NoError(t, err)
 	require.True(t, first.Granted)
 
-	second := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Project: "docs", Target: "lint", MemoryMB: 900, Dir: "/w"})
+	second := claimAsync(t, t.Context(), addr, c, budget.Claim{Project: "docs", Target: "lint", MemoryMB: 900, Dir: "/w"})
 	requirePending(t, second)
-	assert.Equal(t, []types.MachineWaiter{{Project: "docs", Target: "lint", PID: os.Getpid(), MemoryMB: 900, Slots: 1, Dir: "/w", Command: waiters(t, addr)[0].Command, Owner: "unleased"}},
+	assert.Equal(t, []budget.Waiter{{Project: "docs", Target: "lint", PID: os.Getpid(), MemoryMB: 900, Slots: 1, Dir: "/w", Command: waiters(t, addr)[0].Command, Owner: "unleased"}},
 		waiters(t, addr), "status lists the parked claim")
 
 	c.Release(t.Context(), first.ID)
@@ -98,7 +99,7 @@ func TestAParkedQueueLetsSmallClaimsByUntilTheHeadStarves(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, maxOvertakes))
 	c := dial(t, addr)
-	one := types.MachineClaim{Target: "small", Slots: 1}
+	one := budget.Claim{Target: "small", Slots: 1}
 	var held []string
 	for range maxOvertakes {
 		v, err := c.Claim(t.Context(), one, nil)
@@ -106,7 +107,7 @@ func TestAParkedQueueLetsSmallClaimsByUntilTheHeadStarves(t *testing.T) {
 		require.True(t, v.Granted)
 		held = append(held, v.ID)
 	}
-	head := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "wide", Slots: maxOvertakes - 1})
+	head := claimAsync(t, t.Context(), addr, c, budget.Claim{Target: "wide", Slots: maxOvertakes - 1})
 	var small []<-chan claimed
 	for range maxOvertakes + 1 {
 		small = append(small, claimAsync(t, t.Context(), addr, c, one))
@@ -140,7 +141,7 @@ func holdOnlySlot(t *testing.T) (addr string, c *Client, held string) {
 	addr = testAddr(t)
 	serve(t, addr, WithCapacity(0, 1))
 	c = dial(t, addr)
-	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1}, nil)
+	v, err := c.Claim(t.Context(), budget.Claim{Target: "holder", Slots: 1}, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	return addr, c, v.ID
@@ -177,8 +178,8 @@ func TestAParkedQueueSeatsTheHeavierJobFirst(t *testing.T) {
 	for _, w := range []struct {
 		target string
 		weight float64
-	}{{"light", 0.25}, {"unbound", 0}, {"heavy", 1}, {"named-default", types.DefaultJobWeight}} {
-		parked[w.target] = claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: w.target, Slots: 1, Weight: w.weight})
+	}{{"light", 0.25}, {"unbound", 0}, {"heavy", 1}, {"named-default", job.DefaultWeight}} {
+		parked[w.target] = claimAsync(t, t.Context(), addr, c, budget.Claim{Target: w.target, Slots: 1, Weight: w.weight})
 	}
 	assert.Equal(t, []string{"heavy", "unbound", "named-default", "light"}, seatInOrder(t, c, held, parked),
 		"no weight weighs the default, and equal weights stay in the order they asked")
@@ -187,12 +188,12 @@ func TestAParkedQueueSeatsTheHeavierJobFirst(t *testing.T) {
 func TestAParkedQueueStopsLettingHeavierJobsPastAfterMaxOvertakes(t *testing.T) {
 	addr, c, held := holdOnlySlot(t)
 	parked := map[string]<-chan claimed{
-		"light": claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "light", Slots: 1, Weight: 0.25}),
+		"light": claimAsync(t, t.Context(), addr, c, budget.Claim{Target: "light", Slots: 1, Weight: 0.25}),
 	}
 	want := make([]string, 0, maxOvertakes+2)
 	for i := range maxOvertakes + 1 {
 		target := fmt.Sprintf("heavy-%d", i)
-		parked[target] = claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: target, Slots: 1, Weight: 1})
+		parked[target] = claimAsync(t, t.Context(), addr, c, budget.Claim{Target: target, Slots: 1, Weight: 1})
 		want = append(want, target)
 	}
 	want = slices.Insert(want, maxOvertakes, "light")
@@ -203,14 +204,14 @@ func TestAGateStillGoesAheadOfAHeavierJob(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 1))
 	c := dial(t, addr)
-	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1}, nil)
+	v, err := c.Claim(t.Context(), budget.Claim{Target: "holder", Slots: 1}, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
-	heavy := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "heavy", Slots: 1, Weight: 1})
+	heavy := claimAsync(t, t.Context(), addr, c, budget.Claim{Target: "heavy", Slots: 1, Weight: 1})
 
 	gate := NewClient(addr, WithGate(true))
 	t.Cleanup(func() { _ = gate.Close() })
-	gated := claimAsync(t, t.Context(), addr, gate, types.MachineClaim{Target: "ci", Slots: 1})
+	gated := claimAsync(t, t.Context(), addr, gate, budget.Claim{Target: "ci", Slots: 1})
 
 	c.Release(t.Context(), v.ID)
 	assert.True(t, requireAnswer(t, gated).v.Granted)
@@ -222,11 +223,11 @@ func TestAParkedSeatWaitIsSeatedWhenTheSeatsRunEnds(t *testing.T) {
 	serve(t, addr, WithCapacity(0, 10))
 	first := leasedClient(t, addr, "plan/a", "plan", 1)
 	second := leasedClient(t, addr, "plan/b", "plan", 1)
-	v, err := first.Claim(t.Context(), types.MachineClaim{Target: "go-test", Invocation: "1:a"}, nil)
+	v, err := first.Claim(t.Context(), budget.Claim{Target: "go-test", Invocation: "1:a"}, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
-	waiting := claimAsync(t, t.Context(), addr, second, types.MachineClaim{Target: "go-test", Invocation: "2:b"})
+	waiting := claimAsync(t, t.Context(), addr, second, budget.Claim{Target: "go-test", Invocation: "2:b"})
 	requirePending(t, waiting)
 	require.Eventually(t, second.seatWaiting.Load, 5*time.Second, 5*time.Millisecond, "the parked reply names the seat's holder")
 
@@ -241,18 +242,18 @@ func TestAParkedClaimEndsWithItsContextOrItsConnection(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	_, err := c.Claim(t.Context(), types.MachineClaim{Target: "test", MemoryMB: 900}, nil)
+	_, err := c.Claim(t.Context(), budget.Claim{Target: "test", MemoryMB: 900}, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	done := claimAsync(t, ctx, addr, c, types.MachineClaim{Target: "lint", MemoryMB: 900})
+	done := claimAsync(t, ctx, addr, c, budget.Claim{Target: "lint", MemoryMB: 900})
 	cancel()
 	require.ErrorIs(t, requireAnswer(t, done).err, context.Canceled)
 	assert.Eventually(t, func() bool { return len(waiters(t, addr)) == 0 }, 5*time.Second, 5*time.Millisecond,
 		"a cancelled wait leaves the queue")
 
 	other := dial(t, addr)
-	parked := claimAsync(t, t.Context(), addr, other, types.MachineClaim{Target: "build", MemoryMB: 900})
+	parked := claimAsync(t, t.Context(), addr, other, budget.Claim{Target: "build", MemoryMB: 900})
 	require.NoError(t, other.Close())
 	require.Error(t, requireAnswer(t, parked).err)
 	assert.Eventually(t, func() bool { return len(waiters(t, addr)) == 0 }, 5*time.Second, 5*time.Millisecond,
@@ -273,9 +274,9 @@ func TestStoppingTheBrokerRefusesEveryParkedRequest(t *testing.T) {
 			drain := make(chan struct{})
 			stop, _ := serve(t, addr, WithCapacity(1000, 4), WithDrain(drain, time.Minute))
 			c := dial(t, addr)
-			_, err := c.Claim(t.Context(), types.MachineClaim{Target: "test", MemoryMB: 900}, nil)
+			_, err := c.Claim(t.Context(), budget.Claim{Target: "test", MemoryMB: 900}, nil)
 			require.NoError(t, err)
-			done := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "lint", MemoryMB: 900})
+			done := claimAsync(t, t.Context(), addr, c, budget.Claim{Target: "lint", MemoryMB: 900})
 
 			tc.stop(stop, drain)
 			got := requireAnswer(t, done)
@@ -318,10 +319,10 @@ func TestLedgerRecordsNeitherAGrantNorAWaitAsARefusal(t *testing.T) {
 	var l budgetLedger
 	sess := ledgerSession(40, "job-a")
 	conns := ledgerConns(t, sess)
-	c := types.MachineClaim{Project: ".", Target: "go-test", PID: 40}
-	l.claimed(conns, sess, c, types.MachineVerdict{Fits: true, OwnRun: true}, time.Unix(1000, 0))
-	l.claimed(conns, sess, c, types.MachineVerdict{Granted: true, Fits: true, ID: "40.1"}, time.Unix(1001, 0))
-	assert.Empty(t, l.capacity(conns, types.MachineSnapshot{}).Refused)
+	c := budget.Claim{Project: ".", Target: "go-test", PID: 40}
+	l.claimed(conns, sess, c, budget.Verdict{Fits: true, OwnRun: true}, time.Unix(1000, 0))
+	l.claimed(conns, sess, c, budget.Verdict{Granted: true, Fits: true, ID: "40.1"}, time.Unix(1001, 0))
+	assert.Empty(t, l.capacity(conns, budget.Snapshot{}).Refused)
 }
 
 func TestLedgerRemembersTheLastRefusalsNewestFirstWithTheirHolders(t *testing.T) {
@@ -329,31 +330,31 @@ func TestLedgerRemembersTheLastRefusalsNewestFirstWithTheirHolders(t *testing.T)
 	holder, asker := ledgerSession(60, "holder-job"), ledgerSession(61, "")
 	conns := ledgerConns(t, holder, asker)
 	t0 := time.Unix(1000, 0)
-	v := types.MachineVerdict{Fits: true, Holders: []types.MachineClaimant{{Project: ".", Target: "go-test", PID: 60, Slots: 8}}}
+	v := budget.Verdict{Fits: true, Holders: []budget.Claimant{{Project: ".", Target: "go-test", PID: 60, Slots: 8}}}
 	for i := range refusedKeep + 5 {
-		c := types.MachineClaim{Project: ".", Target: fmt.Sprintf("t%d", i), PID: 61, Dir: "/w"}
+		c := budget.Claim{Project: ".", Target: fmt.Sprintf("t%d", i), PID: 61, Dir: "/w"}
 		l.claimed(conns, asker, c, v, t0.Add(time.Duration(i)*time.Second))
 	}
-	r := l.capacity(conns, types.MachineSnapshot{}).Refused
+	r := l.capacity(conns, budget.Snapshot{}).Refused
 	require.Len(t, r, refusedKeep)
 	assert.Equal(t, fmt.Sprintf("t%d", refusedKeep+4), r[0].Target)
 	assert.Equal(t, "t5", r[refusedKeep-1].Target)
-	assert.Equal(t, types.MachineAdmission{
-		At: t0.Add(time.Duration(refusedKeep+4) * time.Second), Outcome: types.AdmissionRefused, PID: 61, Project: ".", Target: r[0].Target, Slots: 1,
+	assert.Equal(t, budget.Admission{
+		At: t0.Add(time.Duration(refusedKeep+4) * time.Second), Outcome: budget.AdmissionRefused, PID: 61, Project: ".", Target: r[0].Target, Slots: 1,
 		Dir: "/w", Owner: "unleased", Fits: true,
-		Holders: []types.MachineClaimant{{Project: ".", Target: "go-test", PID: 60, Slots: 8, Owner: "holder-job"}},
+		Holders: []budget.Claimant{{Project: ".", Target: "go-test", PID: 60, Slots: 8, Owner: "holder-job"}},
 	}, r[0])
 }
 
 func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 	at := time.Date(2026, 10, 24, 9, 40, 55, 0, time.UTC)
-	holder := types.MachineClaimant{Project: ".", Target: "go-test", PID: 1, Slots: 8, Owner: "job-a", Since: at}
-	b, err := json.Marshal(types.MachineSnapshot{
+	holder := budget.Claimant{Project: ".", Target: "go-test", PID: 1, Slots: 8, Owner: "job-a", Since: at}
+	b, err := codec.Marshal(budget.Snapshot{
 		BudgetSlots: 10, HeldSlots: 8,
-		Holders: []types.MachineClaimant{holder},
-		Waiting: []types.MachineWaiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMS: 1500}},
-		Refused: []types.MachineAdmission{{At: at, PID: 3, Project: ".", Target: "ci", Slots: 4, Owner: "spawned by root", Fits: true,
-			Holders: []types.MachineClaimant{holder}}},
+		Holders: []budget.Claimant{holder},
+		Waiting: []budget.Waiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMs: 1500}},
+		Refused: []budget.Admission{{At: at, PID: 3, Project: ".", Target: "ci", Slots: 4, Owner: "spawned by root", Fits: true,
+			Holders: []budget.Claimant{holder}}},
 	})
 	require.NoError(t, err)
 	const holderJSON = `{"project": ".", "target": "go-test", "pid": 1, "slots": 8, "owner": "job-a", "since": "2026-10-24T09:40:55Z"}`
@@ -382,26 +383,26 @@ func (s *StrangerQueueSuite) SetupTest() {
 	s.addr = testAddr(s.T())
 	serve(s.T(), s.addr, WithCapacity(1000, 4))
 	s.stranger = dial(s.T(), s.addr)
-	v, err := s.stranger.Request(s.T().Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900, PID: 1})
+	v, err := s.stranger.Request(s.T().Context(), budget.Claim{Project: "x", Target: "build", MemoryMB: 900, PID: 1})
 	s.Require().NoError(err)
 	s.Require().True(v.Granted)
 	s.held = v.ID
 }
 
 // park claims c on a client of its own, sending each parked verdict to frames.
-func (s *StrangerQueueSuite) park(ctx context.Context, c types.MachineClaim, frames chan types.MachineVerdict) <-chan claimed {
+func (s *StrangerQueueSuite) park(ctx context.Context, c budget.Claim, frames chan budget.Verdict) <-chan claimed {
 	done := make(chan claimed, 1)
 	cl := dial(s.T(), s.addr)
 	go func() {
-		v, err := cl.Claim(ctx, c, func(v types.MachineVerdict) { frames <- v })
+		v, err := cl.Claim(ctx, c, func(v budget.Verdict) { frames <- v })
 		done <- claimed{v, err}
 	}()
 	return done
 }
 
 func (s *StrangerQueueSuite) TestAStrangerHeldClaimParksAndIsSeatedOnRelease() {
-	frames := make(chan types.MachineVerdict, 8)
-	done := s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
+	frames := make(chan budget.Verdict, 8)
+	done := s.park(s.T().Context(), budget.Claim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
 
 	first := <-frames
 	s.False(first.OwnRun, "another invocation keeps it out")
@@ -416,18 +417,18 @@ func (s *StrangerQueueSuite) TestAStrangerHeldClaimParksAndIsSeatedOnRelease() {
 }
 
 func (s *StrangerQueueSuite) TestAHolderChangeResendsOneParkedFrameAndNoChangeSendsNone() {
-	frames := make(chan types.MachineVerdict, 8)
-	done := s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
+	frames := make(chan budget.Verdict, 8)
+	done := s.park(s.T().Context(), budget.Claim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
 	s.Len((<-frames).Holders, 1)
 
 	other := dial(s.T(), s.addr)
-	v, err := other.Request(s.T().Context(), types.MachineClaim{Project: "y", Target: "lint", MemoryMB: 50, PID: 2})
+	v, err := other.Request(s.T().Context(), budget.Claim{Project: "y", Target: "lint", MemoryMB: 50, PID: 2})
 	s.Require().NoError(err)
 	s.Require().True(v.Granted)
 	s.Len((<-frames).Holders, 2, "a new holder is news")
 
 	ctx, cancel := context.WithCancel(s.T().Context())
-	quiet := s.park(ctx, types.MachineClaim{Project: "z", Target: "test", MemoryMB: 900}, make(chan types.MachineVerdict, 8))
+	quiet := s.park(ctx, budget.Claim{Project: "z", Target: "test", MemoryMB: 900}, make(chan budget.Verdict, 8))
 	s.Eventually(func() bool { return len(waiters(s.T(), s.addr)) == 2 }, 5*time.Second, 5*time.Millisecond)
 	cancel()
 	s.Error(requireAnswer(s.T(), quiet).err)
@@ -437,8 +438,8 @@ func (s *StrangerQueueSuite) TestAHolderChangeResendsOneParkedFrameAndNoChangeSe
 }
 
 func (s *StrangerQueueSuite) TestAParkedStrangerWaitIsNoRefusal() {
-	frames := make(chan types.MachineVerdict, 8)
-	done := s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
+	frames := make(chan budget.Verdict, 8)
+	done := s.park(s.T().Context(), budget.Claim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
 	<-frames
 
 	st, err := QueryStatus(s.T().Context(), s.addr)
@@ -449,7 +450,7 @@ func (s *StrangerQueueSuite) TestAParkedStrangerWaitIsNoRefusal() {
 }
 
 func (s *StrangerQueueSuite) TestAClaimLargerThanTheBudgetIsRefusedAtOnce() {
-	got := requireAnswer(s.T(), s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "huge", MemoryMB: 2000}, nil))
+	got := requireAnswer(s.T(), s.park(s.T().Context(), budget.Claim{Project: ".", Target: "huge", MemoryMB: 2000}, nil))
 
 	s.Require().NoError(got.err)
 	s.False(got.v.Fits)
@@ -485,8 +486,8 @@ func (s *ParkedFrameSuite) TestAFrameOlderThanOneAlreadyWrittenIsDropped() {
 	p := &parked{w: &frameWriter{w: &out}, id: 9}
 	stale, fresh := p.nextFrameLocked(), p.nextFrameLocked()
 
-	p.send(fresh, typeParked, parkedReply{Verdict: types.MachineVerdict{HeldSlots: 2}})
-	p.send(stale, typeParked, parkedReply{Verdict: types.MachineVerdict{HeldSlots: 1}})
+	p.send(fresh, typeParked, parkedReply{Verdict: budget.Verdict{HeldSlots: 2}})
+	p.send(stale, typeParked, parkedReply{Verdict: budget.Verdict{HeldSlots: 1}})
 
 	r := newFrameReader(&out)
 	f, err := r.read()
@@ -499,8 +500,8 @@ func (s *ParkedFrameSuite) TestAFrameOlderThanOneAlreadyWrittenIsDropped() {
 }
 
 func (s *ParkedFrameSuite) TestTheKeyCoversWhatTheClientPrints() {
-	base := parkedReply{Verdict: types.MachineVerdict{Fits: true, BudgetMB: 1000, HeldMB: 500, BudgetSlots: 4, HeldSlots: 2,
-		Holders: []types.MachineClaimant{{PID: 7, Project: ".", Target: "lint", Slots: 1, MemoryMB: 100}}}}
+	base := parkedReply{Verdict: budget.Verdict{Fits: true, BudgetMB: 1000, HeldMB: 500, BudgetSlots: 4, HeldSlots: 2,
+		Holders: []budget.Claimant{{PID: 7, Project: ".", Target: "lint", Slots: 1, MemoryMB: 100}}}}
 	more := base
 	more.Verdict.HeldMB = 600
 	s.NotEqual(base.key(), more.key(), "remaining memory")
@@ -508,6 +509,6 @@ func (s *ParkedFrameSuite) TestTheKeyCoversWhatTheClientPrints() {
 	more.Verdict.HeldSlots = 3
 	s.NotEqual(base.key(), more.key(), "remaining slots")
 	more = base
-	more.Verdict.Holders = []types.MachineClaimant{{PID: 7, Project: ".", Target: "lint", Slots: 2, MemoryMB: 100}}
+	more.Verdict.Holders = []budget.Claimant{{PID: 7, Project: ".", Target: "lint", Slots: 2, MemoryMB: 100}}
 	s.NotEqual(base.key(), more.key(), "holder slots")
 }

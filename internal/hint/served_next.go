@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -81,7 +81,7 @@ func AppendServedNext(cacheDir string, next []types.NextStep) {
 	at := time.Now().UnixMilli()
 	lines := make([][]byte, 0, len(next))
 	for _, n := range next {
-		line, err := json.Marshal(ServedNextEntry{AtMs: at, ID: n.ID, Argv: n.Argv})
+		line, err := codec.Marshal(ServedNextEntry{AtMs: at, ID: n.ID, Argv: n.Argv})
 		if err != nil {
 			continue
 		}
@@ -96,7 +96,7 @@ func AppendServedNext(cacheDir string, next []types.NextStep) {
 	// A bounded wait rather than a drop: a lost line is a command magus served and then
 	// refuses, and the holder is only ever appending a few hundred bytes.
 	_ = file.WithLock(context.Background(), journal+".lock", servedNextLockWait, func() error {
-		if err := file.AppendLines(journal, lines, 0o644, file.WithoutSync()); err != nil {
+		if err := codec.AppendLines(journal, lines, 0o644, codec.WithoutSync()); err != nil {
 			return err
 		}
 		rotateServedNext(journal)
@@ -139,7 +139,7 @@ func ReadServedNext(cacheDir string) []ServedNextEntry {
 			continue
 		}
 		var entry ServedNextEntry
-		if err := json.Unmarshal(line, &entry); err != nil || entry.ID == "" || len(entry.Argv) == 0 {
+		if err := codec.Unmarshal(line, &entry); err != nil || entry.ID == "" || len(entry.Argv) == 0 {
 			continue
 		}
 		out = append(out, entry)

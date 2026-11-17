@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -74,7 +75,7 @@ func (e HookEnv) applyHostFacts(ctx context.Context, req *Request) (types.Limits
 // routeDeny is quiet.Wrap's decision for a hook reply: a host whose harness declares no
 // capture channel gets a deny's verdict line alone, since there all a reply carries reaches
 // the person too. Limits that name no usable channel leave the reason whole and say so.
-func routeDeny(ctx context.Context, limits types.Limits, known bool, verdict types.GuardJudgment) types.GuardJudgment {
+func routeDeny(ctx context.Context, limits types.Limits, known bool, verdict verdict.Judgment) verdict.Judgment {
 	if !known || verdict.Decision != "deny" {
 		return verdict
 	}

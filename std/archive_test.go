@@ -15,7 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

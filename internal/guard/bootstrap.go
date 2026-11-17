@@ -24,7 +24,7 @@ import (
 // ownModule is the module this guard was compiled from, read off a type rather than
 // spelled out so a renamed fork still recognizes its own tree. The types package sits
 // directly under the module root.
-var ownModule = path.Dir(reflect.TypeFor[types.GuardJudgment]().PkgPath())
+var ownModule = path.Dir(reflect.TypeFor[types.CommandRequest]().PkgPath())
 
 // goCall is a go command read the way cmd/go reads it: -C in either position it accepts
 // (`go -C dir build`, `go build -C dir`), and the argv from the subcommand on with that
@@ -85,10 +85,10 @@ func (g goCall) buildRoot(cwd string) string {
 func bootstrapArgv() []string { return strings.Fields(ward.BootstrapCommand) }
 
 // bootstrapParts splits bootstrapArgv into its one environment prefix and the go command
-// after it. internal/json refuses to compile without the experiment the prefix sets, and a
-// fresh checkout cannot count on mise to set it; the go-build target sets it for the builds
-// it runs. ok is false when ward.BootstrapCommand no longer has that shape, and then no
-// line is the bootstrap.
+// after it. The magus package refuses to compile without the experiment the prefix sets,
+// and a fresh checkout cannot count on mise to set it; the go-build target sets it for the
+// builds it runs. ok is false when ward.BootstrapCommand no longer has that shape, and
+// then no line is the bootstrap.
 func bootstrapParts() (env string, goArgv []string, ok bool) {
 	argv := bootstrapArgv()
 	if len(argv) < 2 || !strings.Contains(argv[0], "=") || argv[1] != "go" {

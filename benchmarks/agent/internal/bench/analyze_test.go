@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pricing"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit/script"
 )
 
@@ -456,10 +456,10 @@ func assertSameNumbers(t *testing.T, name string, got []byte) {
 		t.Fatal(err)
 	}
 	var gotDoc, wantDoc any
-	if err := json.Unmarshal(got, &gotDoc); err != nil {
+	if err := codec.Unmarshal(got, &gotDoc); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(want, &wantDoc); err != nil {
+	if err := codec.Unmarshal(want, &wantDoc); err != nil {
 		t.Fatal(err)
 	}
 	compareJSON(t, name, gotDoc, wantDoc)

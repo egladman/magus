@@ -1881,7 +1881,7 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
         return magus\guard.advise(opening(advised, advice: true) + "\n  - " + advice.join("\n  - ") + "\n"
             + teaching(advised, advice: true), opts: {"rule": ruleName(advised)});
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // anyReview reports whether one of kinds is a text a review posts.
@@ -2044,7 +2044,7 @@ test "a conventional title and a plain description pass" {
         ["gh", "-R", "egladman/magus", "pr", "edit", "412", "--title=docs: README framing; one line per audience"],
     ]) {
         final v = judged(helpers\request([argv]), line: argv.join(" "), files: {<str: str>});
-        std\assert(v.decision == magus\GuardDecision.allow, message: "{argv.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.defer, message: "{argv.join(" ")}: {v.reason}");
     }
 }
 
@@ -2073,7 +2073,7 @@ test "an advise finding is graded by proofread, so this rule neither denies nor 
     final verdict = Judged{ rule = "verdict", line = 2, message = "Name the behavior 'broken' stands for.", decision = "advise" };
     final v = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(verdict), once: helpers\counter());
-    std\assert(v.decision == magus\GuardDecision.allow, message: "{v.decision}: {v.reason}");
+    std\assert(v.decision == magus\GuardDecision.defer, message: "{v.decision}: {v.reason}");
 }
 
 fun run(ref: str, project: str, target: str, failed: bool) > magus\OutputRecord {
@@ -2110,7 +2110,7 @@ test "a cited ref that names a failed run is denied with its project and target"
 test "a cited ref that names a passing run passes" {
     final runs = {"out1a2b3c4d5e6f": run("out1a2b3c4d5e6f", project: "libs/cache", target: "go-test", failed: false)};
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding(runs, asked: mut [<str>]));
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
 }
 
 test "a cited ref the store lacks is denied and a lookup that failed is advised" {
@@ -2124,7 +2124,7 @@ test "a cited ref the store lacks is denied and a lookup that failed is advised"
 }
 
 test "CI skips the cited refs a checkout cannot hold" {
-    std\assert(citing("`TestX` passed (out1a2b3c4d5e6f).", cited: skipCited).decision == magus\GuardDecision.allow, message: "decideCiting");
+    std\assert(citing("`TestX` passed (out1a2b3c4d5e6f).", cited: skipCited).decision == magus\GuardDecision.defer, message: "decideCiting");
     final found = judgeText(Text{ kind = descriptionKind, title = goodTitle, body = "`TestX` passed (out1a2b3c4d5e6f)." },
         facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
     std\assert(found.denies.len() == 0, message: "judgeText: {found.denies}");
@@ -2154,7 +2154,7 @@ test "a review reply is not held to the runs it cites" {
     final v = decideCiting(helpers\request([["gh", "pr", "comment", "412", "--body", "It passed (out1a2b3c4d5e6f)."]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: passing(), once: helpers\counter(),
         cited: holding({<str: magus\OutputRecord>}, asked: asked));
-    std\assert(v.decision == magus\GuardDecision.allow and asked.len() == 0, message: "{v.reason} {asked}");
+    std\assert(v.decision == magus\GuardDecision.defer and asked.len() == 0, message: "{v.reason} {asked}");
 }
 
 test "proofread reads the title and the description as one pull request" {
@@ -2305,7 +2305,7 @@ test "a commit message's advise finding is graded by proofread and allowed here"
     final claim = Judged{ rule = "claim", line = 1, message = "Put the evidence in the sentence.", decision = "advise" };
     final v = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(claim), once: helpers\counter());
-    std\assert(v.decision == magus\GuardDecision.allow, message: "{v.decision} {v.reason}");
+    std\assert(v.decision == magus\GuardDecision.defer, message: "{v.decision} {v.reason}");
     final low = Judged{ rule = "grade", line = 0, message = "Grade 0.0 is under the minimum of 20." };
     final denied = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(low), once: helpers\counter());
@@ -2332,7 +2332,7 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
     final argv = [["gh", "issue", "create", "--title", "The guard crashes", "--body", "It crashes.\n\nWhoever wrote it forgot."]];
     final graded = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(repro), once: helpers\counter());
-    std\assert(graded.decision == magus\GuardDecision.allow, message: "{graded.decision} {graded.reason}");
+    std\assert(graded.decision == magus\GuardDecision.defer, message: "{graded.decision} {graded.reason}");
     final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(bad), once: helpers\counter());
     std\assert(denied.decision == magus\GuardDecision.deny and denied.rule == "forge-text", message: denied.reason);
@@ -2351,7 +2351,7 @@ test "release notes are judged as written, with no title, budget or shape" {
     std\assert(v.reason.indexOf("Added, Changed, Deprecated, Removed, Fixed or Security") != null, message: "teaches the groups");
     final clean = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\n- **The key is stable.**"]]),
         line: "", files: {<str: str>});
-    std\assert(clean.decision == magus\GuardDecision.allow, message: clean.reason);
+    std\assert(clean.decision == magus\GuardDecision.defer, message: clean.reason);
     final hyphen = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "The key - fixed."]]),
         line: "", files: {<str: str>});
     std\assert(hyphen.decision == magus\GuardDecision.deny, message: "a spaced hyphen is denied in every text");
@@ -2518,16 +2518,16 @@ test "the budget counts the changes the diff proves" {
 
 test "words after the lead past the budget are denied with the budget and why; the lead is free" {
     final small = shipping(0, lines: 10);
-    std\assert(verdictWith(goodTitle, body: sized(110), f: small).decision == magus\GuardDecision.allow, message: "110 is the budget for one change");
+    std\assert(verdictWith(goodTitle, body: sized(110), f: small).decision == magus\GuardDecision.defer, message: "110 is the budget for one change");
     final over = verdictWith(goodTitle, body: sized(111), f: small);
     std\assert(over.decision == magus\GuardDecision.deny, message: over.reason);
     std\assert(over.reason.indexOf("111 words after the lead, past this pull request's budget of 110 (60 + 50 for each of 1 change, the most of 0 changelog fragments, 1 title clause, 0 shipped source files (counting 1) and 10 changed lines outside generated files (counting 1))") != null, message: over.reason);
     std\assert(over.reason.indexOf("split the pull request") != null, message: "names the other fix");
     final wide = verdictWith(goodTitle, body: sized(210), f: shipping(3, lines: 250));
-    std\assert(wide.decision == magus\GuardDecision.allow, message: "three changes earn 210 words: {wide.reason}");
-    std\assert(verdictWith(goodTitle, body: sized(80) + "\n\n```\n" + "code ".repeat(200) + "\n```", f: small).decision == magus\GuardDecision.allow, message: "fenced code is not counted");
+    std\assert(wide.decision == magus\GuardDecision.defer, message: "three changes earn 210 words: {wide.reason}");
+    std\assert(verdictWith(goodTitle, body: sized(80) + "\n\n```\n" + "code ".repeat(200) + "\n```", f: small).decision == magus\GuardDecision.defer, message: "fenced code is not counted");
     final longLead = "word ".repeat(55) + "\n\n" + sized(100).sub(sized(0).len() + 1);
-    std\assert(verdictWith(goodTitle, body: longLead, f: small).decision == magus\GuardDecision.allow, message: "the lead is not counted");
+    std\assert(verdictWith(goodTitle, body: longLead, f: small).decision == magus\GuardDecision.defer, message: "the lead is not counted");
 }
 
 test "a diff that cannot be read is denied with the fetch that makes it readable" {
@@ -2578,14 +2578,14 @@ test "a feat that ships code with no fragment is denied with the fix, and a frag
     std\assert(bare.reason.indexOf("adds no changelog fragment") != null and bare.reason.indexOf("changes/unreleased/<branch>.md") != null, message: bare.reason);
     final refactor = decided(create("refactor(cache): hash the key in sorted order", body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
-    std\assert(refactor.decision == magus\GuardDecision.allow, message: "a title that owes no entry needs none: " + refactor.reason);
+    std\assert(refactor.decision == magus\GuardDecision.defer, message: "a title that owes no entry needs none: " + refactor.reason);
 
     final dir = fs\tempDir("fragment") catch "";
     final fragment = fs\join(dir, "key.md");
     fs\writeFile(fragment, content: "### Fixed\n\n- **The cache key hashes in sorted order.** Equal maps share one key.\n") catch void;
     final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff([fragment])), judge: passing(), once: helpers\counter());
-    std\assert(settled.decision == magus\GuardDecision.allow, message: "a well-formed fragment: " + settled.reason);
+    std\assert(settled.decision == magus\GuardDecision.defer, message: "a well-formed fragment: " + settled.reason);
     fs\removeAll(dir) catch void;
 }
 
@@ -2677,7 +2677,7 @@ test "an area the diff touches and the description never names is a question, no
     std\assert(v.reason.indexOf("why does this touch libs/conventions?") != null, message: v.reason);
     std\assert(v.reason.indexOf("touch internal/guard") == null and v.reason.indexOf("touch docs") == null, message: "named areas ask nothing: {v.reason}");
     final named = verdictWith(goodTitle, body: "The guard keeps the key, the docs say so, and conventions pin it.", f: touched);
-    std\assert(named.decision == magus\GuardDecision.allow, message: named.reason);
+    std\assert(named.decision == magus\GuardDecision.defer, message: named.reason);
 }
 
 test "touchedAreas names projects and top-level packages, generated files and fragments aside" {
@@ -2764,7 +2764,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
             + "\n## Next\n\n- [ ] Check Linux, which CI runs.",
     ]) {
         final v = verdictWith(goodTitle, body: body, f: readable());
-        std\assert(v.decision == magus\GuardDecision.allow, message: "{body}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.defer, message: "{body}: {v.reason}");
     }
     final advised = {
         lead + "\n\nIt now pins the digest.": "prose between the lead and the first heading",
@@ -2844,7 +2844,7 @@ test "other commands and a line that only mentions gh pr create stay silent" {
         ["glab", "mr", "view", "12"],
     ]) {
         final v = judged(helpers\request([argv]), line: argv.join(" "), files: {<str: str>});
-        std\assert(v.decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 
@@ -2961,7 +2961,7 @@ fun calibration() > [Fixture] {
             number = 431,
             title = "feat(cache): carry the caches spells declare; drop config cache --toolchain and --used-within",
             facts = Facts{ known = true, fragments = 2, shipped = 16, lines = 2742 },
-            verdict = "allow",
+            verdict = "defer",
             body = "On a magus miss, a fresh CI runner recompiled the whole tree because Go's own caches were empty. Carrying them took a flag per tool (`--toolchain go`, a proposed `--go-cache`), each naming a fact magus already holds.\n"
                 + "\n"
                 + "- A spell declares which of its sandbox grants are caches; the go spell declares GOCACHE and GOMODCACHE.\n"
@@ -2975,7 +2975,7 @@ fun calibration() > [Fixture] {
             number = 430,
             title = "feat(guard): bind job exec callers in the guard; drop job exec --session and --vacate",
             facts = Facts{ known = true, fragments = 1, shipped = 23, lines = 2251 },
-            verdict = "allow",
+            verdict = "defer",
             body = "`magus job exec` without `--session` bound the whole checkout, even for a read-only job, and the guard then applied that lease's denies to the orchestrator that forked it. A host that gives a subagent its parent's session id made the documented `--session` advice bind the parent too.\n"
                 + "\n"
                 + "- The guard now records the binding when it lets `magus job exec` or `magus_job op=exec` through, keyed exactly on the caller's host, session and subagent ids, with no fallback between keys.\n"
@@ -2988,7 +2988,7 @@ fun calibration() > [Fixture] {
             number = 429,
             title = "docs(decisions): ADR 0003, running an invocation on another operating system",
             facts = Facts{ known = true, fragments = 0, shipped = 0, lines = 201 },
-            verdict = "allow",
+            verdict = "defer",
             body = "Records whether magus should run an invocation on a kernel other than the host's, so a Mac can reproduce Linux-only failures (landlock, /proc, socket path limits) before CI.\n"
                 + "\n"
                 + "- Decided, proposed status: a prefix script in this repository only, `tools/on-linux magus ...`, with a stated contract (read-only mount, explicit environment, no implicit pulls or VM starts, honest exit codes, kernel scope only).\n"
@@ -3027,7 +3027,7 @@ fun calibration() > [Fixture] {
             number = 426,
             title = "feat(vcs): refuse shared-state writes from an older magus; write no keys from init",
             facts = Facts{ known = true, fragments = 1, shipped = 17, lines = 1372 },
-            verdict = "allow",
+            verdict = "defer",
             body = "An older magus overwrote hook sections a newer one had installed, and `init` dumped a full default config whose removed key then broke the newer binary.\n"
                 + "\n"
                 + "- Shared state is stamped with its writer: managed sections (`.gitattributes`, git hooks, hg/sl config), the merge-driver registration, and user and repo config. An older build refuses to overwrite a newer stamp. The error names both builds and how to update.\n"
@@ -3040,7 +3040,7 @@ fun calibration() > [Fixture] {
             number = 425,
             title = "fix(config): make MGS1040 a readable list without dropping a key or line",
             facts = Facts{ known = true, fragments = 1, shipped = 3, lines = 701 },
-            verdict = "allow",
+            verdict = "defer",
             body = "MGS1040 printed one line per occurrence and repeated its stale-binary paragraph for every unknown key.\n"
                 + "\n"
                 + "- Each unknown key prints once, by dotted path (`watch.env`), with every line it appears on and any suggestion or rename.\n"
@@ -3053,7 +3053,7 @@ fun calibration() > [Fixture] {
             number = 424,
             title = "feat(queue): add queue gate --go-cache; carry the go toolchain cache around ci's boxed gate",
             facts = Facts{ known = true, fragments = 1, shipped = 4, lines = 262 },
-            verdict = "allow",
+            verdict = "defer",
             body = "The boxed CI gate withheld the runner's Go caches, so every shard compiled cold.\n"
                 + "\n"
                 + "- `magus queue gate --go-cache <dir>` makes `<dir>/go-build` and `<dir>/pkg/mod` the gate's GOCACHE and GOMODCACHE. The box grants those two paths only, in the go spell's modes.\n"
@@ -3067,7 +3067,7 @@ fun calibration() > [Fixture] {
             number = 423,
             title = "fix(guard): ask the workspace command rule on a built-in ask",
             facts = Facts{ known = true, fragments = 1, shipped = 3, lines = 100 },
-            verdict = "allow",
+            verdict = "defer",
             body = "A push chained with an admin merge (`git push ... && gh pr merge <n> --admin`) only asked: the built-in push-unverified rule answered ask, and the workspace command rule was consulted only on pass or advise. Approving the push ran the admin merge.\n"
                 + "\n"
                 + "- The workspace command and write rules now run on anything but a built-in deny.\n"
@@ -3078,7 +3078,7 @@ fun calibration() > [Fixture] {
             number = 422,
             title = "fix(guard): narrow the rules that deny correct commands",
             facts = Facts{ known = true, fragments = 1, shipped = 8, lines = 1231 },
-            verdict = "allow",
+            verdict = "defer",
             body = "Measured precision put several guard rules well under half: most of their denials blocked correct commands.\n"
                 + "\n"
                 + "- cd: rule deleted, page retired\n"
@@ -3184,7 +3184,7 @@ export fun decideCommitComments(programs: [helpers\Program], read: fun (all: boo
         }
     }
     if (found.len() == 0) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     return magus\guard.deny(verdict\opening("this commit adds a comment that breaks the house style", problem: found[0]) + "\n"
         + comments\houseRules() + "\n\n" + found.join("\n")
@@ -3317,7 +3317,7 @@ test "a commit that adds a long comment is refused, quoting the sentence" {
 test "a commit beside a long legacy comment passes" {
     final legacy = "package p\n\nfunc f() \{\n\t// " + "w ".repeat(40) + "w.\n\tx()\n}\n";
     final v = commitWith([Committed{ path = "a.go", before = legacy, after = legacy + "\nfunc g() \{}\n" }]);
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
 }
 
 test "a commit of Buzz and TypeScript is graded, and another language is not" {
@@ -3326,7 +3326,7 @@ test "a commit of Buzz and TypeScript is graded, and another language is not" {
     std\assert(buzz.reason.indexOf("hack/a.buzz:1: doc comment on an exported declaration") != null, message: buzz.reason);
     final ts = commitWith([Committed{ path = "src/a.ts", before = "", after = doc + "export function f() \{}\n" }]);
     std\assert(ts.reason.indexOf("src/a.ts:1: doc comment on an exported declaration") != null, message: ts.reason);
-    std\assert(commitWith([Committed{ path = "a.py", before = "", after = "# " + "w ".repeat(40) }]).decision == magus\GuardDecision.allow, message: "python");
+    std\assert(commitWith([Committed{ path = "a.py", before = "", after = "# " + "w ".repeat(40) }]).decision == magus\GuardDecision.defer, message: "python");
 }
 
 test "a commit whose files cannot be read is refused, naming why" {
@@ -3477,7 +3477,7 @@ export fun pullRequestOpened(argv: [str]) > {str: str}? {
 // on a fold row or a row naming none, and a stacked row's off its parent head.
 export fun decideDelivery(programs: [helpers\Program], lease: Delivered?, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
     if (lease == null) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final row = lease!;
     foreach (p in programs) {
@@ -3490,7 +3490,7 @@ export fun decideDelivery(programs: [helpers\Program], lease: Delivered?, opens:
             return magus\guard.deny(denial);
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 fun deliveryDenial(row: Delivered, opened: {str: str}) > str {
@@ -3544,7 +3544,7 @@ test "a row naming no delivery is refused, never given a default" {
 }
 
 test "a stacked row's pull request is based on its parent's head" {
-    std\assert(opensWith("stacked", parentHead: "feat/p", argv: ["gh", "pr", "create", "--base", "feat/p"]).decision == magus\GuardDecision.allow, message: "on the parent head");
+    std\assert(opensWith("stacked", parentHead: "feat/p", argv: ["gh", "pr", "create", "--base", "feat/p"]).decision == magus\GuardDecision.defer, message: "on the parent head");
     final off = opensWith("stacked", parentHead: "feat/p", argv: ["gh", "pr", "create", "--base", "main"]);
     std\assert(off.decision == magus\GuardDecision.deny, message: "off the parent head");
     std\assert(off.reason.indexOf("--base feat/p") != null, message: off.reason);
@@ -3553,13 +3553,13 @@ test "a stacked row's pull request is based on its parent's head" {
 }
 
 test "a separate row opens its own pull request" {
-    std\assert(opensWith("separate", parentHead: "", argv: ["gh", "pr", "create"]).decision == magus\GuardDecision.allow, message: "separate");
+    std\assert(opensWith("separate", parentHead: "", argv: ["gh", "pr", "create"]).decision == magus\GuardDecision.defer, message: "separate");
 }
 
 test "a session holding no job, a forge without a verb, and other commands pass" {
     final pr = helpers\request([["gh", "pr", "create"]]);
-    std\assert(decideDelivery(pr, lease: null, opens: pullRequestOpened).decision == magus\GuardDecision.allow, message: "no job");
+    std\assert(decideDelivery(pr, lease: null, opens: pullRequestOpened).decision == magus\GuardDecision.defer, message: "no job");
     final none = fun (argv: [str]) > {str: str}? => null;
-    std\assert(decideDelivery(pr, lease: held("fold", parentHead: ""), opens: none).decision == magus\GuardDecision.allow, message: "no verb");
-    std\assert(opensWith("fold", parentHead: "", argv: ["gh", "pr", "edit", "3"]).decision == magus\GuardDecision.allow, message: "an edit opens none");
+    std\assert(decideDelivery(pr, lease: held("fold", parentHead: ""), opens: none).decision == magus\GuardDecision.defer, message: "no verb");
+    std\assert(opensWith("fold", parentHead: "", argv: ["gh", "pr", "edit", "3"]).decision == magus\GuardDecision.defer, message: "an edit opens none");
 }

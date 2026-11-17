@@ -19,7 +19,7 @@ import (
 
 	"github.com/rogpeppe/go-internal/txtar"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit/e2e"
 	"github.com/egladman/magus/types"
 )
@@ -219,7 +219,7 @@ func (w *workspace) wireReplyCheck(t *testing.T, config, event string, entry map
 		t.Fatal(err)
 	}
 	var doc map[string]any
-	if err := json.Unmarshal(body, &doc); err != nil {
+	if err := codec.Unmarshal(body, &doc); err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
 	hooks, _ := doc["hooks"].(map[string]any)
@@ -236,7 +236,7 @@ func (w *workspace) wireReplyCheck(t *testing.T, config, event string, entry map
 func (w *workspace) harnessPlan(t *testing.T, spell string) types.HarnessInstallation {
 	t.Helper()
 	var plan types.HarnessInstallation
-	if err := json.Unmarshal([]byte(w.magus(t, "describe", "harness", spell, "-o", "json")), &plan); err != nil {
+	if err := codec.Unmarshal([]byte(w.magus(t, "describe", "harness", spell, "-o", "json")), &plan); err != nil {
 		t.Fatalf("describe harness %s: %v", spell, err)
 	}
 	return plan
@@ -260,7 +260,7 @@ func (w *workspace) probeRules(t *testing.T, host string) {
 	// An ask exits nonzero with its reason on stderr: read stdout alone.
 	ask := w.command("magus", "shell", "--agent-name", host, "--renders-ask", "-o", "json", askCommand).Run()
 	var verdict hookResponse
-	if err := json.Unmarshal([]byte(ask.Stdout), &verdict); err != nil || verdict.Decision != "ask" {
+	if err := codec.Unmarshal([]byte(ask.Stdout), &verdict); err != nil || verdict.Decision != "ask" {
 		t.Fatalf("magus shell %q: want an ask from the human_only target, got %v\n%s%s", askCommand, err, ask.Stdout, ask.Stderr)
 	}
 }
@@ -275,7 +275,7 @@ func (w *workspace) allowInSettings(t *testing.T, rule string) {
 		t.Fatal(err)
 	}
 	var doc map[string]any
-	if err := json.Unmarshal(body, &doc); err != nil {
+	if err := codec.Unmarshal(body, &doc); err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
 	permissions, _ := doc["permissions"].(map[string]any)
@@ -297,7 +297,7 @@ func (w *workspace) answerPrompts(t *testing.T, label, bin string, args, extraEn
 	command := e2e.Command{Path: bin, Args: args, Dir: w.dir, Env: append(slices.Clone(w.env), extraEnv...), Timeout: hostTimeout()}
 	result := command.Converse(func(stdin io.WriteCloser, stdout io.Reader) {
 		send := func(v any) {
-			line, err := json.Marshal(v)
+			line, err := codec.Marshal(v)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -317,7 +317,7 @@ func (w *workspace) answerPrompts(t *testing.T, label, bin string, args, extraEn
 					Subtype string `json:"subtype"`
 				} `json:"request"`
 			}
-			if json.Unmarshal(lines.Bytes(), &event) != nil {
+			if codec.Unmarshal(lines.Bytes(), &event) != nil {
 				continue
 			}
 			if event.Type == "result" {
@@ -441,7 +441,7 @@ func copyFile(t *testing.T, src, dst string, mode os.FileMode) {
 
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
-	body, err := json.MarshalIndent(v, "", "  ")
+	body, err := codec.MarshalIndent(v, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
@@ -53,11 +54,11 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	mainBase, worktreeBase := filepath.Join(main, ".magus"), filepath.Join(worktree, ".magus")
 
 	AppendAgentCommand(ctx, mainBase, AgentCommand{Host: "claude-code", Session: "s1", Agent: "a1", Lease: "job-1", Tool: "shell.command",
-		Command: "grep -A5 'func X' a.go", Decision: "deny", Rule: "grep-reader",
+		Command: "grep -A5 'func X' a.go", Decision: verdict.Deny, Rule: "grep-reader",
 		Reason: "reads a body.\nnext:\n  sed -n 1,9p a.go\n      prints it.\nsee: x"})
 	AppendAgentCommand(ctx, worktreeBase, AgentCommand{Host: "claude-code", Session: "s1", Agent: "a1", Tool: "shell.command",
-		Command: "sed -n 1,9p a.go", Decision: "pass", PreauthorizedBy: "deny-grep-reader"})
-	AppendAgentCommand(ctx, mainBase, AgentCommand{Host: "claude-code", Session: "other", Tool: "shell.command", Command: "ls", Decision: "pass"})
+		Command: "sed -n 1,9p a.go", Decision: verdict.Defer, PreauthorizedBy: "deny-grep-reader"})
+	AppendAgentCommand(ctx, mainBase, AgentCommand{Host: "claude-code", Session: "other", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	AppendAgentSpawn(ctx, mainBase, AgentSpawn{Host: "claude-code", Session: "s1", Child: "worker", Context: "lease: job-1\ndo it", DeclaredModel: "opus"})
 	AppendAgentSpawn(ctx, mainBase, AgentSpawn{Host: "claude-code", Session: "s1", Continue: true, Context: "more"})
 
@@ -77,7 +78,7 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 		Lease:    "job-1",
 		Tool:     "shell.command",
 		Command:  "grep -A5 'func X' a.go",
-		Decision: "deny",
+		Decision: string(verdict.Deny),
 		Rule:     "grep-reader",
 		Nexts:    []string{"sed -n 1,9p a.go"},
 		Shape:    "grep -A<n> <arg> <path>",
@@ -96,9 +97,9 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 func TestReadFeedbackDefaultsToTheNewestSession(t *testing.T) {
 	ctx := context.Background()
 	base := filepath.Join(t.TempDir(), ".magus")
-	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "older", Tool: "shell.command", Command: "ls", Decision: "pass"})
+	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "older", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	time.Sleep(2 * time.Millisecond)
-	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "newer", Tool: "shell.command", Command: "pwd", Decision: "pass"})
+	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "newer", Tool: "shell.command", Command: "pwd", Decision: verdict.Defer})
 
 	now := time.Now()
 	got, err := ReadFeedback([]string{base}, FeedbackWindow{Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
@@ -110,7 +111,7 @@ func TestReadFeedbackDefaultsToTheNewestSession(t *testing.T) {
 
 func TestReadFeedbackLeavesOutEventsOutsideTheWindow(t *testing.T) {
 	base := filepath.Join(t.TempDir(), ".magus")
-	AppendAgentCommand(context.Background(), base, AgentCommand{Host: "codex", Session: "s", Tool: "shell.command", Command: "ls", Decision: "pass"})
+	AppendAgentCommand(context.Background(), base, AgentCommand{Host: "codex", Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	future := time.Now().Add(time.Hour)
 	got, err := ReadFeedback([]string{base}, FeedbackWindow{Session: "s", Since: future, Until: future.Add(time.Hour)})
 	require.NoError(t, err)
@@ -125,7 +126,7 @@ func TestFeedbackBasesSharesAnAbsoluteCache(t *testing.T) {
 func TestFeedbackBasesSkipsATrailUntouchedInTheWindow(t *testing.T) {
 	root := t.TempDir()
 	base := filepath.Join(root, ".magus")
-	AppendAgentCommand(context.Background(), base, AgentCommand{Session: "s", Tool: "shell.command", Command: "ls", Decision: "pass"})
+	AppendAgentCommand(context.Background(), base, AgentCommand{Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	old := time.Now().Add(-48 * time.Hour)
 	require.NoError(t, os.Chtimes(eventsPath(base), old, old))
 	assert.Empty(t, FeedbackBases([]string{root}, ".magus", time.Now().Add(-24*time.Hour)))

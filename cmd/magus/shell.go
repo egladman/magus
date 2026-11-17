@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
@@ -55,7 +56,7 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "A person passes the command as one quoted argument; a host pipes it on")
 	fmt.Fprintln(w, "stdin, as plain text or as the JSON envelope it already writes. Same")
 	fmt.Fprintln(w, "command, same verdict, same exit codes. A program that is not a host")
-	fmt.Fprintln(w, "pipes a step record ({\"api_version\": \"magus.step/v1alpha1\", \"kind\": ...});")
+	fmt.Fprintln(w, "pipes a step record ({\"api_version\": \"safetyscissors.step/v1alpha1\", \"kind\": ...});")
 	fmt.Fprintln(w, "a step of kind tool is judged as the envelope it stands for.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
@@ -215,7 +216,7 @@ func hookEnv() guard.HookEnv {
 				return asMagus(ws)
 			})
 		},
-		TierRule: magus.TierCeiling,
+		TierRule: tier.Ceiling,
 		Trace: func(ctx context.Context, phase string) func() {
 			return observability.TraceFromContext(ctx).Phase(phase)
 		},

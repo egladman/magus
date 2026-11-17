@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // advisoryModelTierContextCap advises a leased worker whose context passed the cap of the
@@ -66,7 +66,7 @@ func reportedContext(facts hint.Gate, agentID string) int64 {
 // is kept in the session's facts by row and tier: the declaration is read by opening the
 // workspace, which a worker's every write must not pay for. A declaration that could not be
 // read is not kept, so the next write asks again.
-func tierContextCap(deps Dependencies, facts hint.Gate, row types.Job) int64 {
+func tierContextCap(deps Dependencies, facts hint.Gate, row job.Job) int64 {
 	kind := agentMarkerKind("model-tier-cap-", fmt.Sprintf("%s\x00%s\x00%s", row.ID, row.ModelTier.Name, strconv.Itoa(row.ModelTier.Rank)))
 	path := ""
 	if facts.CacheDir() != "" {
@@ -86,7 +86,9 @@ func tierContextCap(deps Dependencies, facts hint.Gate, row types.Job) int64 {
 	}
 	var limit int64
 	if forked, ok := tierIn(set, row); ok {
-		limit = forked.set.Bounds(forked.tier).MaxContext
+		// tierIn takes the tier from set itself, so Bounds cannot refuse it as foreign.
+		bounds, _ := forked.set.Bounds(forked.tier)
+		limit = bounds.MaxContext
 	}
 	if path != "" {
 		_ = file.ReplaceFile(path, []byte(strconv.FormatInt(limit, 10)), 0o644)

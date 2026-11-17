@@ -26,10 +26,11 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -80,7 +81,7 @@ func decodeStop(raw string) (stopEnvelope, bool) {
 		return stopEnvelope{}, false
 	}
 	var env stopEnvelope
-	if json.Unmarshal([]byte(raw), &env) != nil || env.StopHookActive == nil || env.ToolName != "" {
+	if codec.Unmarshal([]byte(raw), &env) != nil || env.StopHookActive == nil || env.ToolName != "" {
 		return stopEnvelope{}, false
 	}
 	return env, true
@@ -108,22 +109,22 @@ const advisoryBackgroundLeft hint.MarkerKind = "background-left"
 // A subagent's stop that stands is recorded on said, so a later spawn on the job it held is
 // not refused as a second worker (see stoppedAgent). A resumed subagent still holds its
 // job, so its stop is not recorded.
-func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now time.Time) (types.GuardJudgment, bool) {
+func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now time.Time) (verdict.Judgment, bool) {
 	env, ok := decodeStop(raw)
 	if !ok {
-		return types.GuardJudgment{}, false
+		return verdict.Judgment{}, false
 	}
 	v, judged, resumes := judgeStopTasks(deps, said, env, resumesFrom, now)
-	if env.AgentID != "" && v.Decision != decisionDeny && !resumes {
+	if env.AgentID != "" && v.Decision != verdict.Deny && !resumes {
 		said.Touch(stoppedAgentKind(env.AgentID))
 	}
 	return v, judged
 }
 
-func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumesFrom string, now time.Time) (v types.GuardJudgment, judged, resumes bool) {
+func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumesFrom string, now time.Time) (v verdict.Judgment, judged, resumes bool) {
 	setting, ok := deps.setting(string(denyRuleBackgroundLeft))
 	if !ok || setting.Decision == builtin.Off {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	subagent := env.AgentID != ""
 	transcript := env.TranscriptPath
@@ -131,11 +132,11 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		transcript = env.AgentTranscriptPath
 	}
 	if transcript == "" {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	read, err := readBackgroundTranscript(transcript, said.CacheDir(), now)
 	if err != nil {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	resumes, why := hostResumes(resumesFrom, read.hostVersion)
 	if subagent && resumes && len(read.tasks) > 0 {
@@ -144,7 +145,7 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	tasks := slices.DeleteFunc(slices.Clone(read.tasks), func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
 	if subagent && len(tasks) == 0 && len(read.tasks) > 0 {
 		// Stopping is how a subagent waits for these: each notice starts its next turn.
-		return types.GuardJudgment{}, false, true
+		return verdict.Judgment{}, false, true
 	}
 	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
@@ -153,15 +154,15 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		})
 	}
 	if len(tasks) == 0 {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
 	if subagent && setting.Decision == builtin.Deny {
 		return refuseLeftStop(tasks, why, now), true, false
 	}
-	return types.GuardJudgment{
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:   decisionAdvise,
+		Decision:   verdict.Advise,
 		Rule:       string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
 			plural.Word(len(tasks), "a shell command", "shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
@@ -171,10 +172,10 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 // refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
 // call that stops it and the one wait a subagent has for its own run. The first line is
 // the one a host shows the person.
-func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
-	return types.GuardJudgment{
+func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:   decisionDeny,
+		Decision:   verdict.Deny,
 		Rule:       string(denyRuleBackgroundLeft),
 		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
 			stoppableTasks(tasks, now), why),
@@ -183,10 +184,10 @@ func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.Gua
 
 // adviseResumedStop lets a subagent's stop stand while tasks run, since why says its host
 // resumes it when they complete.
-func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
-	return types.GuardJudgment{
+func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:   decisionAdvise,
+		Decision:   verdict.Advise,
 		Rule:       string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
 			why, plural.Word(len(tasks), "A shell command", "Shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
@@ -254,7 +255,7 @@ func partAt(v []int, i int) int {
 // JobBackgroundCommands lists the background commands the session holding row
 // still runs, each with the call that stops it, leaving out those that end on
 // their own. "" for none, and for a transcript it cannot read.
-func JobBackgroundCommands(workspace string, row types.Job, now time.Time) string {
+func JobBackgroundCommands(workspace string, row jobtypes.Job, now time.Time) string {
 	s, ok := newestStamp(row, workspace)
 	if !ok || s.Transcript == "" {
 		return ""
@@ -317,7 +318,7 @@ func sessionEnded(raw string) bool {
 	var env struct {
 		HookEventName string `json:"hook_event_name"`
 	}
-	return json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd"
+	return codec.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd"
 }
 
 // subagentStopped reports a subagent's stop. Cursor's stop names no
@@ -330,9 +331,9 @@ func subagentStopped(raw string) bool {
 // endStoppedSession settles c's row when the guard let raw stand. A
 // SessionEnd ends the row and reports true. A subagent's stop stamps it,
 // unless the host resumes the subagent itself (see resumedStop).
-func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v types.GuardJudgment) (bool, error) {
+func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v verdict.Judgment) (bool, error) {
 	switch {
-	case v.Decision == decisionDeny:
+	case v.Decision == verdict.Deny:
 		return false, nil
 	case sessionEnded(raw):
 		_, ended, err := store.EndSession(ctx, c)
@@ -345,7 +346,7 @@ func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw,
 			errs = append(errs, store.StampHolderStopped(ctx, c))
 		}
 		if !resumed && !waitingStop(raw, now) {
-			errs = append(errs, store.EndCallerAttempt(ctx, c, types.AttemptEndStop, now))
+			errs = append(errs, store.EndCallerAttempt(ctx, c, jobtypes.AttemptEndStop, now))
 		}
 		return false, errors.Join(errs...)
 	}
@@ -555,18 +556,18 @@ type transcriptRecord struct {
 		Prompt string `json:"prompt"`
 	} `json:"attachment"`
 	Message struct {
-		Content json.RawMessage `json:"content"`
+		Content codec.RawMessage `json:"content"`
 	} `json:"message"`
 }
 
 type transcriptBlock struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	Input     map[string]any  `json:"input"`
-	ToolUseID string          `json:"tool_use_id"`
-	Content   json.RawMessage `json:"content"`
-	IsError   bool            `json:"is_error"`
-	Text      string          `json:"text"`
+	Type      string           `json:"type"`
+	ID        string           `json:"id"`
+	Input     map[string]any   `json:"input"`
+	ToolUseID string           `json:"tool_use_id"`
+	Content   codec.RawMessage `json:"content"`
+	IsError   bool             `json:"is_error"`
+	Text      string           `json:"text"`
 }
 
 // liveBackgroundTasks reads a JSONL transcript for the shell commands its agent ran in the
@@ -844,7 +845,7 @@ func (r *taskReader) fold(line []byte) {
 
 func (r *taskReader) read(line []byte) {
 	var rec transcriptRecord
-	if json.Unmarshal(line, &rec) != nil {
+	if codec.Unmarshal(line, &rec) != nil {
 		return
 	}
 	at, _ := time.Parse(time.RFC3339Nano, rec.Timestamp)
@@ -857,14 +858,14 @@ func (r *taskReader) read(line []byte) {
 		r.notices(s, at)
 	}
 	var text string
-	if json.Unmarshal(rec.Message.Content, &text) == nil {
+	if codec.Unmarshal(rec.Message.Content, &text) == nil {
 		if rec.Type != "assistant" {
 			r.notices(text, at)
 		}
 		return
 	}
 	var blocks []transcriptBlock
-	if json.Unmarshal(rec.Message.Content, &blocks) != nil {
+	if codec.Unmarshal(rec.Message.Content, &blocks) != nil {
 		return
 	}
 	for _, b := range blocks {
@@ -952,13 +953,13 @@ func (r *taskReader) callResult(b transcriptBlock) {
 }
 
 // blockText is a result's text, whether the host wrote it as a string or as text blocks.
-func blockText(raw json.RawMessage) string {
+func blockText(raw codec.RawMessage) string {
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if codec.Unmarshal(raw, &s) == nil {
 		return s
 	}
 	var parts []transcriptBlock
-	if json.Unmarshal(raw, &parts) != nil {
+	if codec.Unmarshal(raw, &parts) != nil {
 		return ""
 	}
 	var b strings.Builder

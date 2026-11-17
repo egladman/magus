@@ -1,6 +1,7 @@
 package trail
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -10,14 +11,15 @@ import (
 // asking about a session is asking about.
 const sessionTrailEvents = 5000
 
-// SessionTrailHere folds the trail under cacheDir for the session, or nil when it holds
-// nothing: no trail, or a session that ran elsewhere, reads the same.
-func SessionTrailHere(cacheDir, session string) *SessionTrail {
-	tr := ForSession(cacheDir, session, sessionTrailEvents)
-	if tr.Commands == 0 && len(tr.Spawns) == 0 {
-		return nil
+// SessionTrailHere folds the trail under cacheDir for the session, reporting false when it
+// holds nothing: no trail, or a session that ran elsewhere, reads the same. An error is a
+// trail that could not be read.
+func SessionTrailHere(ctx context.Context, cacheDir, session string) (SessionTrail, bool, error) {
+	tr, err := ForSession(ctx, cacheDir, session, sessionTrailEvents)
+	if err != nil {
+		return SessionTrail{}, false, err
 	}
-	return &tr
+	return tr, tr.Commands > 0 || len(tr.Spawns) > 0, nil
 }
 
 // RenderSessionTrail prints what the guard trail recorded for a session.

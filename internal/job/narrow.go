@@ -13,6 +13,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -42,75 +44,15 @@ func configName(rel string) bool {
 	return path.Base(path.Dir(rel)) == "magusfiles"
 }
 
-// releasedFile reports whether row released file whole, which ends the hold any pattern
-// of its write paths had on it (see [NarrowHold]).
-func releasedFile(row types.Job, file string) bool {
-	return fileRelease(row, file) >= 0
-}
-
-// fileRelease is the index of row's whole-file release of file, or -1.
-func fileRelease(row types.Job, file string) int {
-	file = path.Clean(file)
-	return slices.IndexFunc(row.Releases, func(r types.JobRelease) bool {
-		p, decl := types.SplitClaim(r.Path)
-		return decl == "" && path.Clean(p) == file
-	})
-}
-
-// Narrowed reports whether the store narrowed row's hold on file (see
-// [NarrowHold]): row holds the file by its claims alone.
-func Narrowed(row types.Job, file string) bool {
-	at := fileRelease(row, file)
-	return at >= 0 && row.Releases[at].Narrowed
-}
-
-// releasedReach reports whether entry, a whole-file write path of row, stops
-// short of the file other names. A pattern stops at any release of the file;
-// a literal entry only at a narrowed one.
-func releasedReach(row types.Job, entry, other string) bool {
-	p, decl := types.SplitClaim(entry)
-	if decl != "" {
-		return false
-	}
-	o, _ := types.SplitClaim(other)
-	o = path.Clean(strings.TrimSpace(o))
-	if strings.ContainsAny(o, globMeta) || !coversPath(p, o) {
-		return false
-	}
-	if strings.ContainsAny(p, globMeta) {
-		return releasedFile(row, o)
-	}
-	return Narrowed(row, o)
-}
-
-// heldByPattern reports whether a write path of row with glob metacharacters covers file.
-func heldByPattern(row types.Job, file string) bool {
-	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
-		p, decl := types.SplitClaim(entry)
-		return decl == "" && strings.ContainsAny(p, globMeta) && coversPath(p, file)
-	})
-}
-
-// claimsOnFile are the declarations row's write paths claim in file.
-func claimsOnFile(row types.Job, file string) []string {
-	var out []string
-	for _, entry := range row.Paths.Write {
-		if p, decl := types.SplitClaim(entry); decl != "" && path.Clean(p) == file {
-			out = append(out, decl)
-		}
-	}
-	return out
-}
-
 // stored is the ledger's row for id.
-func (s *Store) stored(id string) (types.Job, error) {
-	rows, err := s.List()
+func (s *Store) stored(ctx context.Context, id string) (job.Job, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	at := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	at := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if at < 0 {
-		return types.Job{}, fmt.Errorf("%q: %w", id, ErrUnknownJob)
+		return job.Job{}, fmt.Errorf("%q: %w", id, job.ErrUnknownJob)
 	}
 	return rows[at], nil
 }
@@ -124,31 +66,31 @@ var errNarrowedAlready = errors.New("job: hold already narrowed")
 //
 // It refuses a pattern, an unreadable footprint, a file no diff driver
 // places, a non-live row, and a declaration another live row claims.
-func NarrowHold(ctx context.Context, store *Store, id, file string, touched []string, takenBy string) (types.Job, []string, error) {
+func NarrowHold(ctx context.Context, store *Store, id, file string, touched []string, takenBy string) (job.Job, []string, error) {
 	if store == nil || store.root == "" {
-		return types.Job{}, nil, errors.New("job: no workspace to narrow a hold in")
+		return job.Job{}, nil, errors.New("job: no workspace to narrow a hold in")
 	}
 	file = path.Clean(strings.TrimSpace(file))
 	if strings.ContainsAny(file, globMeta) {
-		return types.Job{}, nil, fmt.Errorf("job: %s is a pattern, and a declaration lives in one file", file)
+		return job.Job{}, nil, fmt.Errorf("job: %s is a pattern, and a declaration lives in one file", file)
 	}
 	driver, drivers, err := claimDrivers(ctx, store.root, []string{file})
 	if err != nil {
-		return types.Job{}, nil, fmt.Errorf("no claim on %s can be graded, so its hold stays whole: %w", file, err)
+		return job.Job{}, nil, fmt.Errorf("no claim on %s can be graded, so its hold stays whole: %w", file, err)
 	}
 	if drivers[file] == "" {
-		return types.Job{}, nil, fmt.Errorf("no diff driver places the declarations of %s, so its hold stays whole", file)
+		return job.Job{}, nil, fmt.Errorf("no diff driver places the declarations of %s, so its hold stays whole", file)
 	}
 	all, ok := readDeclarations(ctx, driver, store.root, file)
 	if !ok {
-		return types.Job{}, nil, fmt.Errorf("the footprint of %s cannot be read, so its hold stays whole", file)
+		return job.Job{}, nil, fmt.Errorf("the footprint of %s cannot be read, so its hold stays whole", file)
 	}
 	var added []string
-	row, err := store.mutateSeeing(ctx, id, asNarrowing, func(cur *types.Job, exists bool, now int64, rows []types.Job) error {
+	row, err := store.MutateSeeing(ctx, id, job.AsNarrowing, func(cur *job.Job, exists bool, now int64, rows []job.Job) error {
 		added = nil
 		switch {
 		case !exists:
-			return fmt.Errorf("%q: %w", id, ErrUnknownJob)
+			return fmt.Errorf("%q: %w", id, job.ErrUnknownJob)
 		case !Editing(*cur):
 			return fmt.Errorf("job: %s is %s and holds nothing to narrow", id, cur.State)
 		case !wholeFileHeld(*cur, file):
@@ -159,39 +101,39 @@ func NarrowHold(ctx context.Context, store *Store, id, file string, touched []st
 		if err != nil {
 			return err
 		}
-		if len(added) == 0 && Narrowed(*cur, file) {
+		if len(added) == 0 && job.Narrowed(*cur, file) {
 			return errNarrowedAlready
 		}
 		cur.Paths.Write = append(cur.Paths.Write, added...)
-		recordNarrowing(cur, file, takenBy, now, store.digest(ctx, file))
+		recordNarrowing(cur, file, takenBy, now, store.Digest(ctx, file))
 		return nil
 	})
 	if errors.Is(err, errNarrowedAlready) {
-		row, err = store.stored(id)
+		row, err = store.stored(ctx, id)
 		return row, nil, err
 	}
 	if err != nil {
-		return types.Job{}, nil, err
+		return job.Job{}, nil, err
 	}
 	return row, added, nil
 }
 
 // wholeFileHeld reports whether a write path of row covers file whole.
-func wholeFileHeld(row types.Job, file string) bool {
+func wholeFileHeld(row job.Job, file string) bool {
 	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
-		p, decl := types.SplitClaim(entry)
-		return decl == "" && coversPath(p, file)
+		p, decl := job.SplitClaim(entry)
+		return decl == "" && job.CoversPath(p, file)
 	})
 }
 
 // claimedByOther finds a claim on declaration d of file in a live row but id.
-func claimedByOther(rows []types.Job, id, file, d string) (owner, claim string, taken bool) {
+func claimedByOther(rows []job.Job, id, file, d string) (owner, claim string, taken bool) {
 	for _, r := range rows {
 		if r.ID == id || !r.State.Live() {
 			continue
 		}
 		for _, entry := range r.HardPaths() {
-			if p, c := types.SplitClaim(entry); c != "" && path.Clean(p) == file && types.NamesDeclaration(c, d) {
+			if p, c := job.SplitClaim(entry); c != "" && path.Clean(p) == file && job.NamesDeclaration(c, d) {
 				return r.ID, c, true
 			}
 		}
@@ -201,14 +143,14 @@ func claimedByOther(rows []types.Job, id, file, d string) (owner, claim string, 
 
 // liveHolders are the live rows other than id whose write paths cover file, a pattern that
 // released it excepted.
-func liveHolders(rows []types.Job, id, file string) []types.Job {
-	var out []types.Job
+func liveHolders(rows []job.Job, id, file string) []job.Job {
+	var out []job.Job
 	for _, r := range rows {
 		if r.ID == id || !Editing(r) {
 			continue
 		}
 		if slices.ContainsFunc(r.HardPaths(), func(entry string) bool {
-			return covers(entry, file) && !releasedReach(r, entry, file)
+			return job.Covers(entry, file) && !job.ReleasedReach(r, entry, file)
 		}) {
 			out = append(out, r)
 		}
@@ -246,7 +188,7 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 			" %s. %s narrows to what it edits (`%s#<declaration>`, or `%s` without the unused paths) or exits; then `%s` closes this request",
 			holder, file, describeUnused(holder, unused), holder, file, hint.JobApply.With("-f", "<record>"), hint.SessionDispose.With("<request>")),
 	}
-	filed, err := s.FileReleaseRequest(ctx, holder, types.JobReleaseRequest{
+	filed, err := s.FileReleaseRequest(ctx, holder, job.ReleaseRequest{
 		ID: sessions.RequestID(holder, open), File: file, Wanted: wanted, By: open.Lease, Message: open.Message,
 	})
 	if err != nil || !filed {
@@ -257,18 +199,18 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 		return
 	}
 	// The row just answered that this request is new.
-	_ = sessions.AppendRequest(dir, holder, open, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
+	_ = sessions.AppendRequest(ctx, dir, holder, open, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
 }
 
 // FileReleaseRequest puts req on holder's row and stamps its time. It answers
 // false when the row already carries req.ID, which leaves the row unchanged.
-func (s *Store) FileReleaseRequest(ctx context.Context, holder string, req types.JobReleaseRequest) (bool, error) {
+func (s *Store) FileReleaseRequest(ctx context.Context, holder string, req job.ReleaseRequest) (bool, error) {
 	filed := false
-	_, err := s.mutate(ctx, holder, asObservation, func(cur *types.Job, exists bool, now int64) error {
+	_, err := s.Mutate(ctx, holder, job.AsObservation, func(cur *job.Job, exists bool, now int64) error {
 		if !exists {
-			return fmt.Errorf("%q: %w", holder, ErrUnknownJob)
+			return fmt.Errorf("%q: %w", holder, job.ErrUnknownJob)
 		}
-		if slices.ContainsFunc(cur.ReleaseRequests, func(r types.JobReleaseRequest) bool { return r.ID == req.ID }) {
+		if slices.ContainsFunc(cur.ReleaseRequests, func(r job.ReleaseRequest) bool { return r.ID == req.ID }) {
 			return nil
 		}
 		req.At = now
@@ -281,16 +223,16 @@ func (s *Store) FileReleaseRequest(ctx context.Context, holder string, req types
 
 // CloseReleaseRequest drops request id from the row carrying it, if any does.
 func (s *Store) CloseReleaseRequest(ctx context.Context, id string) error {
-	f, err := s.read()
+	f, err := s.Read(ctx)
 	if err != nil {
 		return err
 	}
-	matches := func(r types.JobReleaseRequest) bool { return r.ID == id }
+	matches := func(r job.ReleaseRequest) bool { return r.ID == id }
 	for _, row := range f.Jobs {
 		if !slices.ContainsFunc(row.ReleaseRequests, matches) {
 			continue
 		}
-		_, err := s.mutate(ctx, row.ID, asObservation, func(cur *types.Job, _ bool, _ int64) error {
+		_, err := s.Mutate(ctx, row.ID, job.AsObservation, func(cur *job.Job, _ bool, _ int64) error {
 			cur.ReleaseRequests = slices.DeleteFunc(cur.ReleaseRequests, matches)
 			return nil
 		})
@@ -314,24 +256,14 @@ func ReleaseRequestDisposed(ctx context.Context, root string, req sessions.Atten
 	return NewStore(Location{Root: root, StateBase: base}).CloseReleaseRequest(ctx, req.ID)
 }
 
-// heldRequests are row's release requests for files it still holds. Narrowing
-// past a file answers the request for it.
-func heldRequests(row types.Job) []types.JobReleaseRequest {
-	return slices.DeleteFunc(row.ReleaseRequests, func(r types.JobReleaseRequest) bool {
-		return !slices.ContainsFunc(row.HardPaths(), func(entry string) bool {
-			return covers(entry, r.File) && !releasedReach(row, entry, r.File)
-		})
-	})
-}
-
 // claimTouched answers the `file#<word>` claims cur lacks for the declarations
 // in touched, refusing one that another live row claims.
-func claimTouched(cur types.Job, rows []types.Job, id, file string, touched, all []string) ([]string, error) {
+func claimTouched(cur job.Job, rows []job.Job, id, file string, touched, all []string) ([]string, error) {
 	var added []string
-	held := claimsOnFile(cur, file)
+	held := job.ClaimsOnFile(cur, file)
 	for _, d := range touched {
 		d = strings.TrimSpace(d)
-		if d == "" || d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
+		if d == "" || d == job.Preamble || slices.ContainsFunc(held, func(c string) bool { return job.NamesDeclaration(c, d) }) {
 			continue
 		}
 		if owner, claim, taken := claimedByOther(rows, id, file, d); taken {
@@ -345,12 +277,38 @@ func claimTouched(cur types.Job, rows []types.Job, id, file string, touched, all
 }
 
 // recordNarrowing stores the narrowing release of file on cur, keeping who took it.
-func recordNarrowing(cur *types.Job, file, takenBy string, now int64, digest string) {
-	rel := types.JobRelease{Path: file, Digest: digest, ReleasedAt: now, Narrowed: true, TakenBy: takenBy}
-	if at := fileRelease(*cur, file); at >= 0 {
+func recordNarrowing(cur *job.Job, file, takenBy string, now int64, digest string) {
+	rel := job.Release{Path: file, Digest: digest, ReleasedAt: now, Narrowed: true, TakenBy: takenBy}
+	if at := job.FileRelease(*cur, file); at >= 0 {
 		rel.TakenBy = cmp.Or(takenBy, cur.Releases[at].TakenBy)
 		cur.Releases[at] = rel
 		return
 	}
 	cur.Releases = append(cur.Releases, rel)
+}
+
+// heldByPattern reports whether a write path of row with glob metacharacters covers file.
+func heldByPattern(row job.Job, file string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
+		p, decl := job.SplitClaim(entry)
+		return decl == "" && strings.ContainsAny(p, globMeta) && job.CoversPath(p, file)
+	})
+}
+
+// ReleasedUnderPattern says of each file row released that a pattern of its
+// write paths still names: the release stands, so the pattern does not hold it.
+func ReleasedUnderPattern(row job.Job) []string {
+	var notes []string
+	for _, r := range row.Releases {
+		file, decl := job.SplitClaim(r.Path)
+		if decl != "" || !heldByPattern(row, file) {
+			continue
+		}
+		if claims := job.ClaimsOnFile(row, file); len(claims) > 0 {
+			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `%s#<declaration>`", file, file))
+	}
+	return notes
 }

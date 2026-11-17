@@ -20,10 +20,11 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -241,7 +242,7 @@ func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -661,7 +662,7 @@ func newIndexedWorkspaceUnder(t *testing.T, magusfile string, extra ...string) (
 		opts = append(opts, WithSpell(name))
 	}
 	reg.RegisterProject(".", opts...)
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -873,7 +874,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -1280,7 +1281,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("svc", WithSpell(goSpell))
 	reg.RegisterProject("web", WithSpell(tsSpell))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1634,10 +1635,10 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	reasoned := toDiagnostic(fmt.Errorf("diff: %w",
 		types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale").WithWhy(conformanceSkippedWhy)))
 	assert.Equal(t, conformanceSkippedWhy, reasoned.Why, "-o json carries the reason beside the verdict")
-	encoded, err := json.Marshal(reasoned)
+	encoded, err := codec.Marshal(reasoned)
 	require.NoError(t, err)
 	assert.Contains(t, string(encoded), fmt.Sprintf(`"why":"%s"`, conformanceSkippedWhy))
-	encoded, err = json.Marshal(d)
+	encoded, err = codec.Marshal(d)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
 
@@ -1679,7 +1680,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), ".", spells.DefaultSymbolIndexOp)

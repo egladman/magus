@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // Unjudged is how a hook answers an event no guard policy could judge.
@@ -46,17 +47,17 @@ func (u Unjudged) ExitCode() int {
 // open is answered rather than hung.
 const hookEventWait = 2 * time.Second
 
-// Decision is the `magus shell` verdict that carries u: a pass for the repair, an advise
+// Decision is the `magus shell` verdict that carries u: a defer for the repair, an advise
 // for a stop, whose reason reaches the agent as it ends, and a deny for a refusal.
-func (u Unjudged) Decision() string {
+func (u Unjudged) Decision() verdict.Decision {
 	switch u {
 	case unjudgedRepair:
-		return "pass"
+		return verdict.Defer
 	case unjudgedStop:
-		return "advise"
+		return verdict.Advise
 	case unjudgedRefused:
 	}
-	return "deny"
+	return verdict.Deny
 }
 
 // Rule is the rule a refusal names: stale-binary, the one a glue reads as "this magus

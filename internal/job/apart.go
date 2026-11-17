@@ -5,6 +5,7 @@ import (
 	"path"
 	"slices"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -18,7 +19,7 @@ type Projects func() ([]*types.Project, string)
 // or an untaken holder's. projects is read only once the checkouts differ; when it gives no
 // projects the hold stays and unchecked says the generated-output scope check did not run
 // and why. Fork, apply, the guard and `magus ls jobs` all ask this one question.
-func HeldApart(here string, holder types.Job, projects Projects, paths ...string) (apart bool, unchecked string) {
+func HeldApart(here string, holder job.Job, projects Projects, paths ...string) (apart bool, unchecked string) {
 	there := WorkingCheckout(holder.CheckoutRoot, holder)
 	if here == "" || there == "" || samePath(here, there) {
 		return false, ""
@@ -37,7 +38,7 @@ func HeldApart(here string, holder types.Job, projects Projects, paths ...string
 // output. A glob counts only when it sits within an output glob that carves nothing out:
 // a carved-out file is hand-maintained.
 func generatedEntry(projects []*types.Project, entry string) bool {
-	file, _ := types.SplitClaim(entry)
+	file, _ := job.SplitClaim(entry)
 	file = path.Clean(file)
 	if file == "." || file == "/" {
 		return false
@@ -49,7 +50,7 @@ func generatedEntry(projects []*types.Project, entry string) bool {
 		for _, refs := range p.TargetOutputs {
 			if slices.ContainsFunc(refs, func(ref types.OutputRef) bool {
 				g := ref.Rooted(p.Path)
-				return len(g.Except) == 0 && types.PathWithin(file, g.Pattern)
+				return len(g.Except) == 0 && job.PathWithin(file, g.Pattern)
 			}) {
 				return true
 			}
@@ -64,15 +65,15 @@ func generatedEntry(projects []*types.Project, entry string) bool {
 // whole ground is. A pair kept because the scope check did not run stays whole. projects
 // is read only for a pair whose sides work in different checkouts, so a caller may load
 // the workspace in it.
-func ContendedOverlaps(rows []types.Job, overlaps []types.JobOverlap, projects Projects) []types.JobOverlap {
-	row := func(id string) types.Job {
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+func ContendedOverlaps(rows []job.Job, overlaps []job.Overlap, projects Projects) []job.Overlap {
+	row := func(id string) job.Job {
+		i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 		if i < 0 {
-			return types.Job{ID: id}
+			return job.Job{ID: id}
 		}
 		return rows[i]
 	}
-	var out []types.JobOverlap
+	var out []job.Overlap
 	for _, o := range overlaps {
 		a, b := row(o.JobA), row(o.JobB)
 		apartA := func(p string) bool {

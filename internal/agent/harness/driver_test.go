@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit/e2e"
 )
 
@@ -49,7 +49,7 @@ func claudeDriver() *hostDriver {
 		var out struct {
 			Result string `json:"result"`
 		}
-		if json.Unmarshal([]byte(run.Stdout), &out) == nil {
+		if codec.Unmarshal([]byte(run.Stdout), &out) == nil {
 			return out.Result, run
 		}
 		return run.Stdout, run
@@ -161,7 +161,7 @@ func codexMCPTables(t *testing.T, hint string) string {
 }
 
 func tomlString(s string) string {
-	b, _ := json.Marshal(s)
+	b, _ := codec.Marshal(s)
 	return string(b)
 }
 
@@ -212,7 +212,7 @@ func cursorDriver() *hostDriver {
 		var out struct {
 			Result string `json:"result"`
 		}
-		if json.Unmarshal([]byte(run.Stdout), &out) == nil {
+		if codec.Unmarshal([]byte(run.Stdout), &out) == nil {
 			return out.Result, run
 		}
 		return run.Stdout, run
@@ -272,7 +272,7 @@ func opencodeDriver() *hostDriver {
 		path := filepath.Join(w.dir, "opencode.json")
 		config := map[string]any{}
 		if body, err := os.ReadFile(path); err == nil {
-			if err := json.Unmarshal(body, &config); err != nil {
+			if err := codec.Unmarshal(body, &config); err != nil {
 				t.Fatalf("%s: %v", path, err)
 			}
 		}
@@ -300,7 +300,7 @@ func opencodeText(stdout string) string {
 				Text string `json:"text"`
 			} `json:"part"`
 		}
-		if json.Unmarshal([]byte(line), &ev) == nil && ev.Type == "text" {
+		if codec.Unmarshal([]byte(line), &ev) == nil && ev.Type == "text" {
 			parts = append(parts, ev.Part.Text)
 		}
 	}

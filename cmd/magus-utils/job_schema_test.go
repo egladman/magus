@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -33,7 +34,7 @@ type Fixture struct {
 	// ID is the lease's identity within the plan.
 	ID string @json:"id" schema:"leaseid"@
 	// State is where the lease stands.
-	State types.JobState @json:"state,omitempty"@
+	State job.State @json:"state,omitempty"@
 	// Check is the one check this lease runs.
 	Check *Check @json:"check,omitempty"@
 	// Paths are the paths it may write.
@@ -170,7 +171,7 @@ func TestLeaseIDPatternMatchesTheValidator(t *testing.T) {
 func TestDeviationCodeEnumIsExactlyThePermissibleCodes(t *testing.T) {
 	t.Parallel()
 
-	enum := narrowedSets["DiagnosticCode"]()
+	enum := narrowedSets["Code"]()
 	require.NotEmpty(t, enum)
 	for _, c := range types.AllDiagnosticCodes() {
 		assert.Equal(t, types.Permissible(c), slices.Contains(enum, string(c)), "code %s", c)
@@ -222,7 +223,7 @@ func TestJobRecordsRenderFromTheFilesTheyReach(t *testing.T) {
 
 	paths, _, err := jobSources(jobRecords)
 	require.NoError(t, err)
-	assert.Contains(t, paths, filepath.Join(boundaryRootDir(t), "types", "agent", "spec.go"), "Declaration.Agent reaches agent.Spec")
+	assert.Contains(t, paths, filepath.Join(boundaryRootDir(t), "libs", "safetyscissors", "job", "agent.go"), "Declaration.Agent reaches job.Agent")
 	decls, err := jobDecls(jobRecords)
 	require.NoError(t, err)
 
@@ -282,12 +283,12 @@ func TestWritePathPatternMatchesTheValidator(t *testing.T) {
 		if !tc.accept {
 			continue
 		}
-		for _, p := range (types.Declaration{ID: "j", Paths: types.JobPaths{Write: []string{tc.path}}}).Problems() {
+		for _, p := range types.DeclarationProblems((job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}})) {
 			assert.NotContains(t, p.Field, "paths.write", "%q: %s", tc.path, p.Message)
 		}
 	}
 	for _, refused := range []string{"~/x", "/abs/x", "../x"} {
-		problems := types.Declaration{ID: "j", Paths: types.JobPaths{Write: []string{refused}}}.Problems()
+		problems := types.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
 		assert.NotEmpty(t, problems, "the validator accepts %q, and the pattern refuses it", refused)
 	}
 }
@@ -352,7 +353,7 @@ func renderMarkerFixture(t *testing.T, src string) (map[string]any, error) {
 		return nil, err
 	}
 	var doc map[string]any
-	require.NoError(t, json.Unmarshal(body, &doc))
+	require.NoError(t, codec.Unmarshal(body, &doc))
 	return doc, nil
 }
 
@@ -365,13 +366,13 @@ func TestMarkersConstrainTheStringOrItsItems(t *testing.T) {
 	prop := func(name string) map[string]any { return props[name].(map[string]any) }
 
 	assert.Equal(t, leaseIDPattern(), prop("parent")["pattern"])
-	assert.EqualValues(t, types.MaxJobIDLen, prop("parent")["maxLength"])
+	assert.EqualValues(t, job.MaxIDLen, prop("parent")["maxLength"])
 
 	deps := prop("depends_on")
 	assert.NotContains(t, deps, "pattern", "the array has no charset, its items do")
 	items := deps["items"].(map[string]any)
 	assert.Equal(t, leaseIDPattern(), items["pattern"])
-	assert.EqualValues(t, types.MaxJobIDLen, items["maxLength"])
+	assert.EqualValues(t, job.MaxIDLen, items["maxLength"])
 
 	assert.Equal(t, writePathPattern(), prop("paths")["items"].(map[string]any)["pattern"])
 	assert.Equal(t, durationPattern(), prop("timeout")["pattern"])

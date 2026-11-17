@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -51,8 +51,8 @@ var pluginScopes = []string{"local", "project", "user", "managed"}
 func recordedPluginInstall(root, id string) (pluginInstall, bool, error) {
 	path := filepath.Join(claudePluginsRoot(), installedPluginsFile)
 	var record struct {
-		Version int                        `json:"version"`
-		Plugins map[string]json.RawMessage `json:"plugins"`
+		Version int                         `json:"version"`
+		Plugins map[string]codec.RawMessage `json:"plugins"`
 	}
 	if err := readJSONFile(path, &record); err != nil {
 		return pluginInstall{}, false, err
@@ -176,8 +176,8 @@ func marketplacePluginIsRelative(clone, name string) (bool, error) {
 	path := filepath.Join(clone, filepath.FromSlash(".claude-plugin/marketplace.json"))
 	var catalog struct {
 		Plugins []struct {
-			Name   string          `json:"name"`
-			Source json.RawMessage `json:"source"`
+			Name   string           `json:"name"`
+			Source codec.RawMessage `json:"source"`
 		} `json:"plugins"`
 	}
 	body, err := os.ReadFile(path)

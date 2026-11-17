@@ -13,19 +13,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // TestBuzzCmd_SilentSuppressesUnusedImportWarning verifies -s/--silent, the flag
@@ -63,7 +66,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	w.Write("magus.yaml", fmt.Sprintf("sandbox:\n  mode: %s\n", mode))
 
-	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "fixture workspace must open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -87,10 +90,10 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	require.Error(t, err, "a write outside the workspace must be refused")
 	assert.ErrorContains(t, err, string(types.PathWriteDenied))
 
-	events, rerr := trail.ReadRecent(m.CacheDir(), 10)
+	events, rerr := trailtypes.ReadRecent(ctx, m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	require.Len(t, events, 1, "the refusal must be readable on the trail, as a target's is")
-	assert.Equal(t, trail.KindSandboxDenial, events[0].Kind)
+	assert.Equal(t, trailtypes.KindSandboxDenial, events[0].Kind)
 }
 
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
@@ -101,7 +104,7 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 
 	require.NoError(t, buzzCommand(ctx, "", []string{"-s", script}))
 
-	events, rerr := trail.ReadRecent(m.CacheDir(), 10)
+	events, rerr := trailtypes.ReadRecent(ctx, m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	assert.Empty(t, events, "nothing was refused, so nothing belongs on the trail")
 }
@@ -140,7 +143,7 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	var m *magus.Magus
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
 		var err error
-		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		return m, err
 	})
 	t.Cleanup(func() {
@@ -163,7 +166,7 @@ func TestBuzzCmd_WorkspaceHandleReadsTheScriptsWorkspace(t *testing.T) {
 	var m *magus.Magus
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
 		var err error
-		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		return m, err
 	})
 	t.Cleanup(func() {
@@ -245,7 +248,7 @@ func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root, _ := buzzLazyWorkspace(t, buzzVanillaScript)
 			opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-				return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+				return magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 			})
 			script, err := filepath.Abs(filepath.Join("..", "..", "docs", "guides", "integrations", "agents", name))
 			require.NoError(t, err)
@@ -406,28 +409,28 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
 }
 
-func scriptCheckRow(id, root, script string) types.Job {
-	return types.Job{ID: id, State: types.StateRunning, CheckoutRoot: root, Check: &types.LeaseCheck{Script: script}}
+func scriptCheckRow(id, root, script string) job.Job {
+	return job.Job{ID: id, State: job.StateRunning, CheckoutRoot: root, Check: &job.LeaseCheck{Script: script}}
 }
 
 func (s *BuzzRecordSuite) TestHolderIsTheOneRowCheckingTheScriptHere() {
-	rows := []types.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "other.buzz")}
+	rows := []job.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "other.buzz")}
 	s.Equal("a", scriptCheckHolder(rows, s.root, "./p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestTwoRowsCheckingTheScriptNameNoHolder() {
-	rows := []types.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "p.buzz")}
+	rows := []job.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "p.buzz")}
 	s.Empty(scriptCheckHolder(rows, s.root, "p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestARowInAnotherCheckoutIsNoHolder() {
-	s.Empty(scriptCheckHolder([]types.Job{scriptCheckRow("a", s.T().TempDir(), "p.buzz")}, s.root, "p.buzz"))
+	s.Empty(scriptCheckHolder([]job.Job{scriptCheckRow("a", s.T().TempDir(), "p.buzz")}, s.root, "p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestAnExitedRowIsNoHolder() {
 	row := scriptCheckRow("a", s.root, "p.buzz")
-	row.State = types.StateExited
-	s.Empty(scriptCheckHolder([]types.Job{row}, s.root, "p.buzz"))
+	row.State = job.StateExited
+	s.Empty(scriptCheckHolder([]job.Job{row}, s.root, "p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {

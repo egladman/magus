@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 )
 
 type isolationCase struct {
 	job    isolationJob
-	peers  []types.Job
+	peers  []job.Job
 	risk   float64
 	weight float64
 	level  int
@@ -18,9 +18,9 @@ type isolationCase struct {
 }
 
 var (
-	isolationWriter = types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"docs/a.md"}}}
-	isolationReader = types.Job{ID: "r", ReadOnly: true}
-	isolationPeer   = types.Job{ID: "peer", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/b.md"}}}
+	isolationWriter = job.Job{ID: "w", Paths: job.Paths{Write: []string{"docs/a.md"}}}
+	isolationReader = job.Job{ID: "r", ReadOnly: true}
+	isolationPeer   = job.Job{ID: "peer", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/b.md"}}}
 )
 
 func assertIsolation(t *testing.T, cases map[string]isolationCase) {
@@ -38,10 +38,10 @@ func assertIsolation(t *testing.T, cases map[string]isolationCase) {
 
 func TestChooseIsolationHardSignalsIgnoreTheDials(t *testing.T) {
 	t.Parallel()
-	writer, peers := isolationWriter, []types.Job{isolationPeer}
-	shared := types.JobOverlap{JobA: "peer", JobB: "w", PathsA: []string{"docs/a.md"}, PathsB: []string{"docs/a.md"}}
-	sharedClaims := types.JobOverlap{JobA: "w", JobB: "peer", PathsA: []string{"run.go#a"}, PathsB: []string{"run.go#a"}, Claims: types.ClaimsShared}
-	disjoint := types.JobOverlap{JobA: "w", JobB: "peer", PathsA: []string{"run.go#a"}, PathsB: []string{"run.go#b"}, Claims: types.ClaimsDisjoint}
+	writer, peers := isolationWriter, []job.Job{isolationPeer}
+	shared := job.Overlap{JobA: "peer", JobB: "w", PathsA: []string{"docs/a.md"}, PathsB: []string{"docs/a.md"}}
+	sharedClaims := job.Overlap{JobA: "w", JobB: "peer", PathsA: []string{"run.go#a"}, PathsB: []string{"run.go#a"}, Claims: job.ClaimsShared}
+	disjoint := job.Overlap{JobA: "w", JobB: "peer", PathsA: []string{"run.go#a"}, PathsB: []string{"run.go#b"}, Claims: job.ClaimsDisjoint}
 	assertIsolation(t, map[string]isolationCase{
 		"a binary input builds its own binary": {
 			job: isolationJob{Row: writer, BinaryInputs: []string{"internal/job/worktree.go"}}, level: isolationOwnBuild,
@@ -59,15 +59,15 @@ func TestChooseIsolationHardSignalsIgnoreTheDials(t *testing.T) {
 			reason: "console/gen/x.ts is a generator's output",
 		},
 		"an overlap with no claim gets its own checkout": {
-			job: isolationJob{Row: writer, Overlaps: []types.JobOverlap{shared}}, peers: peers, risk: 1, level: isolationOwnCheckout,
+			job: isolationJob{Row: writer, Overlaps: []job.Overlap{shared}}, peers: peers, risk: 1, level: isolationOwnCheckout,
 			reason: "overlap peer's (docs/a.md) with no disjoint claim",
 		},
 		"an overlap on one claimed declaration gets its own checkout": {
-			job: isolationJob{Row: writer, Overlaps: []types.JobOverlap{sharedClaims}}, peers: peers, risk: 1, level: isolationOwnCheckout,
+			job: isolationJob{Row: writer, Overlaps: []job.Overlap{sharedClaims}}, peers: peers, risk: 1, level: isolationOwnCheckout,
 			reason: "overlap peer's (run.go#a)",
 		},
 		"disjoint claims settle at integration": {
-			job: isolationJob{Row: writer, Overlaps: []types.JobOverlap{disjoint}}, peers: peers, risk: 0.7, level: isolationShared,
+			job: isolationJob{Row: writer, Overlaps: []job.Overlap{disjoint}}, peers: peers, risk: 0.7, level: isolationShared,
 		},
 		"a load file with a live peer leaves the shared checkout": {
 			job: isolationJob{Row: writer, LoadFiles: []string{"magusfile.buzz"}}, peers: peers, risk: 0.7, level: isolationWave,
@@ -85,7 +85,7 @@ func TestChooseIsolationHardSignalsIgnoreTheDials(t *testing.T) {
 func TestChooseIsolationSoftSignalsMoveAWriter(t *testing.T) {
 	t.Parallel()
 	writer, reader := isolationWriter, isolationReader
-	wide := types.Job{ID: "w", Paths: types.JobPaths{Write: make([]string, largeWriteSet+1)}}
+	wide := job.Job{ID: "w", Paths: job.Paths{Write: make([]string, largeWriteSet+1)}}
 	for i := range wide.Paths.Write {
 		wide.Paths.Write[i] = fmt.Sprintf("docs/%d.md", i)
 	}
@@ -102,7 +102,7 @@ func TestChooseIsolationSoftSignalsMoveAWriter(t *testing.T) {
 			job: isolationJob{Row: wide}, risk: 0.7, level: isolationOwnCheckout, reason: "28 write paths, past the 27",
 		},
 		"a write set at the p90 stays lowered": {
-			job: isolationJob{Row: types.Job{ID: "w", Paths: types.JobPaths{Write: wide.Paths.Write[:largeWriteSet]}}}, risk: 0.7, level: isolationShared,
+			job: isolationJob{Row: job.Job{ID: "w", Paths: job.Paths{Write: wide.Paths.Write[:largeWriteSet]}}}, risk: 0.7, level: isolationShared,
 		},
 		"an unmerged dependency raises a lowered writer": {
 			job: isolationJob{Row: writer, UnmergedDependency: "base-job"}, weight: 0.2, level: isolationOwnCheckout,

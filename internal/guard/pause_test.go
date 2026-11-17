@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +32,7 @@ func TestDenyPausedLeaseRefusesARunUntilResume(t *testing.T) {
 func TestDenyPausedLeaseNamesWhyAndLiftsAtTheBound(t *testing.T) {
 	held := narrowLease()
 	held.Paused = 1
-	held.PausedBy, held.PauseReason, held.PausedUntil = types.Origin{User: "eli"}, "release build", time.Now().Add(time.Hour).Unix()
+	held.PausedBy, held.PauseReason, held.PausedUntil = job.Origin{User: "eli"}, "release build", time.Now().Add(time.Hour).Unix()
 	ctx, _ := fleetFixture(t, held)
 	reason := denyPausedLease(ctx, Dependencies{}, held.ID, "magus run go::go-test .")
 	require.True(t, reason.refused())

@@ -3,14 +3,19 @@ package trail
 import (
 	"bufio"
 	"cmp"
+	"context"
+	"errors"
 	"github.com/egladman/magus/types/diff"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -61,18 +66,23 @@ type observation struct {
 // stores hold, since it saw the write happen; a loaded transcript adds the sessions no hook
 // was wired for.
 //
-// Best-effort throughout: an unreadable blob, a missing trail, an absent session store, or
-// a host that supplied no session id all just contribute less. A review must still open when
-// nothing was recorded, which is the normal case for a workspace whose agents have no guard
-// hook wired, and a file nobody touched keeps a nil Touches.
-func AttachTouches(rev *diff.Diff, root, base string) {
+// A missing blob, a missing store, an absent session store, or a host that supplied no
+// session id all just contribute less. A review must still open when nothing was recorded,
+// which is the normal case for a workspace whose agents have no guard hook wired, and a
+// file nobody touched keeps a nil Touches. A blob that does not decode and a session store
+// that refuses its read are returned, joined, after every touch the rest could give is
+// attached.
+func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error {
 	paths := make([]string, len(rev.Files))
 	for i, f := range rev.Files {
 		paths[i] = f.Path
 	}
-	byPath := replayTrail(root, base, paths, DefaultReplayEvents)
+	byPath, errs := replayTrail(ctx, root, base, paths, DefaultReplayEvents)
 	if dir, err := sessions.Dir(root); err == nil {
-		if fold, err := sessions.ReadAll(dir); err == nil {
+		fold, err := session.ReadAll(ctx, dir)
+		if err != nil {
+			errs = errors.Join(errs, err)
+		} else {
 			for path, touches := range replayLoaded(fold, paths) {
 				for _, t := range touches {
 					if !slices.ContainsFunc(byPath[path], func(h diff.Touch) bool { return h.Host == t.Host && h.Session == t.Session }) {
@@ -87,14 +97,18 @@ func AttachTouches(rev *diff.Diff, root, base string) {
 			rev.Files[i].Touches = touches
 		}
 	}
+	return errs
 }
 
-// replayTrail reconstructs, for each of paths, which agent sessions the trail at base saw
-// write it and what they had read first, reading at most limit recent events.
-func replayTrail(root, base string, paths []string, limit int) map[string][]diff.Touch {
-	events, err := ReadRecent(base, limit)
-	if err != nil || len(events) == 0 {
-		return map[string][]diff.Touch{}
+// replayTrail reconstructs, for each of paths, which agent sessions the store at base saw
+// write it and what they had read first, reading at most limit recent events. A store that
+// cannot be read is its error. A request blob that does not decode is skipped and returned
+// in the joined error, which is a [*blobUndecodableError] or a [*retiredDecisionError] per
+// blob.
+func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
+	if err != nil {
+		return map[string][]diff.Touch{}, err
 	}
 
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
@@ -109,16 +123,18 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]diff
 	}
 
 	obs := make([]observation, 0, len(events))
+	var errs []error
 	for _, e := range events {
-		if e.Kind != KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
 		}
-		raw, rerr := ReadBlob(base, e.RequestRef)
+		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
 		if rerr != nil {
 			continue
 		}
 		var req agentCommandRequest
-		if json.Unmarshal(raw, &req) != nil {
+		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		// A hook records the path exactly as its host supplied it, which is an ABSOLUTE path
@@ -136,29 +152,29 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]diff
 			At: time.UnixMilli(e.Ts),
 		})
 	}
-	return touchesRead(obs, paths)
+	return touchesRead(obs, paths), errors.Join(errs...)
 }
 
 // replayLoaded answers replayTrail's question from the loaded transcripts in fold: which
 // sessions wrote each of paths and what they had read first. Loads store the
 // checkout-relative path and the reduced program, so nothing is relativized here; the events
 // are ordered by the host's own clock within each session.
-func replayLoaded(fold sessions.Fold, paths []string) map[string][]diff.Touch {
+func replayLoaded(fold session.Fold, paths []string) map[string][]diff.Touch {
 	var obs []observation
-	for session, ev := range sessions.EachAgentEvent(fold) {
+	for hostSession, ev := range session.EachAgentEvent(fold) {
 		var tool string
 		switch ev.Kind {
-		case sessions.EventFileRead:
+		case session.EventFileRead:
 			tool = toolRead
-		case sessions.EventFileWrite:
+		case session.EventFileWrite:
 			tool = toolWrite
-		case sessions.EventShellCommand:
+		case session.EventShellCommand:
 			tool = toolShell
 		default:
 			continue
 		}
 		obs = append(obs, observation{
-			Host: ev.Host, Session: session, Transcript: ev.Transcript,
+			Host: ev.Host, Session: hostSession, Transcript: ev.Transcript,
 			Tool: tool, Path: ev.Text, Program: ev.Program,
 			At: time.UnixMilli(ev.AtMs),
 		})
@@ -334,11 +350,10 @@ func startRun(call SessionCall) *RepeatRun {
 // The facts are the caller's; see AgentCommand. A fact the record did not carry reads as
 // its zero value, except Thread, which reads as types.AgentThreadUnknown.
 //
-// Decision is the hook verdict's (pass, ask, advise or deny), not a rule's
-// types.GuardDecision, which has no pass or ask.
+// Decision is the hook verdict's: defer, advise, ask or deny.
 type SessionCall struct {
 	At       time.Time
-	Decision string
+	Decision verdict.Decision
 	Rule     string
 	// Worker is the host's subagent id, empty for the main thread. ToolMs is
 	// the host's tool time, set on tool-time rows only.
@@ -363,51 +378,60 @@ type SessionSpawn struct {
 }
 
 // ForSession folds the trail at base for one host session, reading at most limit recent
-// events. A trail that cannot be read is an empty result, never an error: the join is context
-// for a transcript that stands on its own.
-func ForSession(base, session string, limit int) SessionTrail {
+// events. A missing trail is an empty result; one that cannot be read is its error. A blob
+// that cannot be read is left out, since the join is context for a transcript that stands
+// on its own, except one holding a retired guard decision, a [*retiredDecisionError], since
+// reading around it would miscount the session.
+func ForSession(ctx context.Context, base, session string, limit int) (SessionTrail, error) {
 	var out SessionTrail
 	if session == "" {
-		return out
+		return out, nil
 	}
-	events, err := ReadRecent(base, limit)
+	events, err := readRecent(ctx, base, limit)
 	if err != nil {
-		return out
+		return out, err
 	}
+	var retired *retiredDecisionError
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
 		if e.Session != session {
 			continue
 		}
 		switch e.Kind {
-		case KindAgentCommand:
+		case trailtypes.KindAgentCommand:
 			out.Commands++
 			call := SessionCall{At: time.UnixMilli(e.Ts), Action: e.Action, Worker: e.Agent, ToolMs: e.DurationMs, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
-			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
-				if json.Unmarshal(raw, &resp) == nil {
+				switch err := decodeAgentBlob(base, e.ResponseRef, raw, &resp); {
+				case errors.As(err, &retired):
+					return SessionTrail{}, err
+				case err == nil:
 					call.Decision, call.Rule = resp.Decision, resp.Rule
-					if resp.Decision == "deny" {
+					if resp.Decision == verdict.Deny {
 						out.Denied++
 					}
 				}
 			}
-			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentCommandRequest
-				if json.Unmarshal(raw, &req) == nil {
+				switch err := decodeAgentBlob(base, e.RequestRef, raw, &req); {
+				case errors.As(err, &retired):
+					return SessionTrail{}, err
+				case err == nil:
 					call.AgentFacts = req.AgentFacts
 					call.Thread = cmp.Or(call.Thread, types.AgentThreadUnknown)
 				}
 			}
 			out.Calls = append(out.Calls, call)
-		case KindAgentSpawn:
+		case trailtypes.KindAgentSpawn:
 			if e.Action == ActionAgentContinue {
 				continue
 			}
 			sp := SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)}
-			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
-				if json.Unmarshal(raw, &req) == nil {
+				if codec.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
 				}
 			}
@@ -420,7 +444,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 		}
 	}
 	out.Repeats = repeats(out.Calls)
-	return out
+	return out, nil
 }
 
 // AgentActivity is the newest guard observation one checkout's trail holds: when a host
@@ -469,11 +493,11 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 	if sc.Err() != nil || newest == "" {
 		return AgentActivity{}, false
 	}
-	var e Event
-	if json.Unmarshal([]byte(newest), &e) != nil {
+	var e trailtypes.Event
+	if codec.Unmarshal([]byte(newest), &e) != nil {
 		return AgentActivity{}, false
 	}
-	if e.Kind != KindAgentCommand && e.Kind != KindAgentSpawn || e.Ts <= 0 {
+	if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn || e.Ts <= 0 {
 		// A missing timestamp would clock to 1970, which is not time.Time's zero, so
 		// the prompt-cache clock would print an age of half a century with every
 		// window closed instead of taking its documented empty branch.
@@ -508,21 +532,27 @@ func relativize(root, p string) string {
 //
 // Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
 // caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
-func ObservedCounts(base string, limit int) (reads, writes, shell int) {
-	events, err := ReadRecent(base, limit)
+//
+// A trail that cannot be read is its error. A request blob that does not decode is left out
+// of the counts and returned in the joined error, a [*blobUndecodableError] or a
+// [*retiredDecisionError] per blob.
+func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
-		return 0, 0, 0
+		return 0, 0, 0, err
 	}
+	var errs []error
 	for _, e := range events {
-		if e.Kind != KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
 		}
-		raw, rerr := ReadBlob(base, e.RequestRef)
+		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
 		if rerr != nil {
 			continue
 		}
 		var req agentCommandRequest
-		if json.Unmarshal(raw, &req) != nil {
+		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		switch req.Tool {
@@ -534,7 +564,7 @@ func ObservedCounts(base string, limit int) (reads, writes, shell int) {
 			shell++
 		}
 	}
-	return reads, writes, shell
+	return reads, writes, shell, errors.Join(errs...)
 }
 
 // CommandProgram reduces a recorded command line to the program it invoked, dropping every

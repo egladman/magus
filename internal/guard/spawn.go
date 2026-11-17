@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // The multi-agent skill is the one piece of guidance a spawn cannot be written well
@@ -153,7 +153,7 @@ type pendingSpawn struct {
 // recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
 // joined to it. A host whose finished spawn already names the child never reads it.
 func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now time.Time) {
-	body, err := json.Marshal(pendingSpawn{
+	body, err := codec.Marshal(pendingSpawn{
 		Record:    spawnedAgent{Description: env.Spawn.Description, Name: env.Spawn.Name, Model: env.DeclaredModel},
 		Spawner:   spawner,
 		AgentType: env.Spawn.AgentType,
@@ -283,7 +283,7 @@ func hostSpawnTitle(transcript, child string) (title string, ok bool) {
 		var meta struct {
 			Description string `json:"description"`
 		}
-		if json.Unmarshal(body, &meta) == nil && meta.Description != "" {
+		if codec.Unmarshal(body, &meta) == nil && meta.Description != "" {
 			return meta.Description, true
 		}
 	}

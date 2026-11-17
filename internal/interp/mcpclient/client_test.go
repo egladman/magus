@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -132,7 +132,7 @@ func TestMaxRequestBytesHoldsTheLargestRequest(t *testing.T) {
 	for i := range args {
 		args[i] = strings.Repeat(`"`, MaxArgBytes)
 	}
-	wire, err := json.Marshal(Request{Script: strings.Repeat("\n", MaxSourceBytes), Args: args})
+	wire, err := codec.Marshal(Request{Script: strings.Repeat("\n", MaxSourceBytes), Args: args})
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(wire), MaxRequestBytes)
 }
@@ -140,7 +140,7 @@ func TestMaxRequestBytesHoldsTheLargestRequest(t *testing.T) {
 func TestServe(t *testing.T) {
 	t.Setenv(WorkerEnv, "1")
 	t.Setenv(HostEnv, "host-x")
-	wire, err := json.Marshal(Request{Script: `fun main(args: [str]) > str { return "ok"; }`})
+	wire, err := codec.Marshal(Request{Script: `fun main(args: [str]) > str { return "ok"; }`})
 	require.NoError(t, err)
 	var sawWorker, sawHost bool
 	open := func(ctx context.Context) (context.Context, error) {
@@ -153,7 +153,7 @@ func TestServe(t *testing.T) {
 	assert.False(t, sawWorker, "a nested magus would start as another worker")
 	assert.False(t, sawHost, "the script could read the transport channel")
 	var result Result
-	require.NoError(t, json.UnmarshalStrict(stdout.Bytes(), &result))
+	require.NoError(t, codec.UnmarshalStrict(stdout.Bytes(), &result))
 	assert.JSONEq(t, `"ok"`, string(result.JSON))
 }
 

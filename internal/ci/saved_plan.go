@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -38,7 +38,7 @@ func ReadSavedPlan(r io.Reader) (PlanOutput, error) {
 // as written. Keys it does not know are ignored, so a plan from a newer magus still runs.
 func decodeSavedPlan(data []byte) (PlanOutput, error) {
 	var p PlanOutput
-	if err := json.Unmarshal(data, &p); err != nil {
+	if err := codec.Unmarshal(data, &p); err != nil {
 		return PlanOutput{}, RefusePlan("the plan on stdin is not a shard plan: %v", err)
 	}
 	if p.Target == "" {

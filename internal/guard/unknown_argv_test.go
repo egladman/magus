@@ -21,7 +21,7 @@ func TestUnknownMagusArgv(t *testing.T) {
 func (s *UnknownMagusArgvSuite) judge(command string) ShellVerdict {
 	deps := strict(testDependencies())
 	deps.Binary, deps.BinaryVersion = "./magus", "v9.9.9"
-	return Evaluate(deps, command)
+	return Evaluate(s.T().Context(), deps, command)
 }
 
 func (s *UnknownMagusArgvSuite) refused(command string) ShellVerdict {

@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,12 +25,12 @@ import (
 // evidence only when that ref names a real run, and the resolver is deliberately a
 // function rather than a Store method: output records live in a checkout cache while
 // job rows live per repository.
-type AttemptResolver func(context.Context, string) (types.JobAttempt, error)
+type AttemptResolver func(context.Context, string) (job.CapturedRun, error)
 
 // gradedByHolder reports whether row is read-only and declares no check or goal: magus has
 // nothing to grade it by, so the result its holder files is the grade, and [Exit] records
 // pass on it unless the result names an unresolved risk.
-func gradedByHolder(row types.Job) bool {
+func gradedByHolder(row job.Job) bool {
 	return row.ReadOnly && row.Check == nil && len(row.Goals) == 0
 }
 
@@ -41,7 +41,7 @@ const returnedReason = "returned: its holder filed a result, and a read-only row
 // row its holder returned with nothing to grade never reads as one nobody returned. byHolder
 // is a write under the row's lease or from the checkout its holder took it in.
 // filed says prev's live attempt filed a result.
-func endedReason(prev types.Job, filed, byHolder bool) string {
+func endedReason(prev job.Job, filed, byHolder bool) string {
 	switch {
 	case filed:
 		return fmt.Sprintf("ended unverified: its holder filed a result and nobody ran `%s` on it", hint.JobWait.With(prev.ID))
@@ -68,37 +68,37 @@ func endedReason(prev types.Job, filed, byHolder bool) string {
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
 // below id is still working. A row that already ended fails as `<id> already ended <state>
 // <ago>`. A dry-run store returns the row as it would end and writes nothing.
-func Exit(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver) (types.Job, error) {
+func Exit(ctx context.Context, store *Store, id string, result *job.Result, resolve AttemptResolver) (job.Job, error) {
 	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
 	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
-	rows, err := store.unswept()
+	rows, err := store.Unswept(ctx)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
-		return types.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", ErrUnknownJob, id)
+		return job.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", job.ErrUnknownJob, id)
 	}
 	// An ended row is not ended again: a second end would rewrite how the first one ended.
 	if rows[i].State.Terminal() {
-		return types.Job{}, &alreadyEndedError{Row: rows[i]}
+		return job.Job{}, &alreadyEndedError{Row: rows[i]}
 	}
 	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	var filed *types.JobResult
-	update := func(apply func(*types.Job)) (types.Job, error) {
+	var filed *job.Result
+	update := func(apply func(*job.Job)) (job.Job, error) {
 		if store.dryRun {
 			row := rows[i].Clone()
 			apply(&row)
-			if row.State == types.StateNoReturn {
-				row.EndReason = endedReason(rows[i], types.NewJobAttempts(tries).Result(id) != nil, store.endsOwnRow(rows[i]))
+			if row.State == job.StateNoReturn {
+				row.EndReason = endedReason(rows[i], job.NewAttempts(tries).Result(id) != nil, store.endsOwnRow(rows[i]))
 			}
-			store.endDry(row)
+			store.EndDry(row)
 			return row, nil
 		}
 		row, err := store.Update(ctx, id, apply)
@@ -108,33 +108,33 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		if filed != nil {
 			return row, store.fileResult(ctx, id, filed, store.now().Unix())
 		}
-		return row, store.EndAttempt(ctx, id, types.AttemptEndExit, store.now())
+		return row, store.EndAttempt(ctx, id, job.AttemptEndExit, store.now())
 	}
 	if result == nil {
-		return update(func(row *types.Job) { row.State = types.StateNoReturn })
+		return update(func(row *job.Job) { row.State = job.StateNoReturn })
 	}
 	if resolve == nil {
-		return types.Job{}, errors.New("job: no output resolver files a result's validation evidence")
+		return job.Job{}, errors.New("job: no output resolver files a result's validation evidence")
 	}
 	if !rows[i].ReadOnly && emptyResult(*result) {
-		return types.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing: File this shape: %s",
+		return job.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing: File this shape: %s",
 			id, resultShape(rows[i]))
 	}
 	if !rows[i].ReadOnly {
 		tree := WorkTree(store.root, rows[i])
 		dirty, unread := uncommitted(ctx, tree, rows[i])
 		if unread != "" {
-			return types.Job{}, fmt.Errorf("job: %s's result is refused: %s", id, unread)
+			return job.Job{}, fmt.Errorf("job: %s's result is refused: %s", id, unread)
 		}
 		if len(dirty) > 0 {
-			return types.Job{}, fmt.Errorf("job: %s's checkout %s: %d path(s) in it hold uncommitted work (%s), so commit them, then file the result again",
+			return job.Job{}, fmt.Errorf("job: %s's checkout %s: %d path(s) in it hold uncommitted work (%s), so commit them, then file the result again",
 				id, tree, len(dirty), listPaths(dirty))
 		}
 	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
 	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	tree := WorkTree(store.root, rows[i])
 	goals := rows[i].EffectiveGoals()
@@ -142,9 +142,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return rowFiles(tree, Observed{}, *result, store.generated), namedFiles(tree, goals, result.ChangedPaths)
 	}
 	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(tree), changed, store.testSelection()); err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	return update(func(row *types.Job) {
+	return update(func(row *job.Job) {
 		prev := row.Clone()
 		generation := max(row.Generation, 1)
 		stamped := *result
@@ -160,9 +160,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		} else {
 			row.Attempt = nil
 		}
-		row.State = types.StateExited
+		row.State = job.StateExited
 		if gradedByHolder(prev) && len(result.UnresolvedRisks) == 0 {
-			row.State = types.StatePass
+			row.State = job.StatePass
 		}
 	})
 }
@@ -181,10 +181,10 @@ func workspaceDefaultCharms(tree string) []string {
 // charm set included. A goal the row does not declare is left for the wait.
 // changed is what the result claims: exit reads no diff, and the wait does. It
 // loads the workspace, so only a run the check does not name verbatim asks.
-func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string, changed func() ([]string, map[string]bool), selection testSelection) error {
+func refuseWrongRun(row job.Job, primary job.CapturedRun, gates []job.GateAttempt, defaults []string, changed func() ([]string, map[string]bool), selection testSelection) error {
 	goals := row.EffectiveGoals()
-	check := func(id string, attempt types.JobAttempt) error {
-		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == id && g.Kind == types.GoalKindCheck })
+	check := func(id string, attempt job.CapturedRun) error {
+		i := slices.IndexFunc(goals, func(g job.Goal) bool { return g.ID == id && g.Kind == job.GoalKindCheck })
 		if i < 0 || ranCheck(goals[i].Check, attempt, defaults, selection) {
 			return nil
 		}
@@ -193,10 +193,10 @@ func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGa
 			return nil
 		}
 		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files, named, selection))
+			id, attempt.Ref, recordedCommand(attempt), CheckCommand(resolveCheck(goals[i].Check, defaults)), leftOut(goals[i].Check, attempt, files, named, selection))
 	}
 	if primary.Found {
-		if err := check(types.PrimaryGoalID, primary); err != nil {
+		if err := check(job.PrimaryGoalID, primary); err != nil {
 			return err
 		}
 	}
@@ -212,7 +212,7 @@ func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGa
 // rewrite how the first one ended. It asked for what is already true, so [Abandon]
 // reports it beside the rows it ended rather than as a refusal.
 type alreadyEndedError struct {
-	Row types.Job
+	Row job.Job
 }
 
 func (e *alreadyEndedError) Error() string {
@@ -229,43 +229,43 @@ func (e *alreadyEndedError) Error() string {
 // them as its Rejection in the same write, its state left where it was. result=nil uses the
 // result and attempts filed by Exit at the row's generation (see [evidenceAt]), and evidence
 // filed against an earlier spec never passes; a supplied result is resolved in this checkout.
-// A bound store verifies only a row below its own lease (see [Actor.Verifies]).
+// A bound store verifies only a row below its own lease (see [job.Actor.Verifies]).
 //
 // evidence names, per check goal, a run recorded in the waiter's checkout to grade in place
-// of the holder's: the key is the goal id, or [types.PrimaryGoalID] for the job's own
+// of the holder's: the key is the goal id, or [job.PrimaryGoalID] for the job's own
 // check, and the value the run's output ref, which resolve must look up in this checkout
 // alone. Nil or empty grades the filed evidence. See [graded.withWaiterEvidence] for what
 // must hold first.
 //
 // observe reads store's footprint cache and fills it, unless store is a dry run's.
-func Wait(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver, observe Observer, evidence map[string]string) (types.JobStatus, error) {
+func Wait(ctx context.Context, store *Store, id string, result *job.Result, resolve AttemptResolver, observe Observer, evidence map[string]string) (job.Status, error) {
 	if len(evidence) > 0 && result != nil {
-		return types.JobStatus{}, errors.New("job: waiter evidence starts from the result filed with the job, and a supplied result is not that")
+		return job.Status{}, errors.New("job: waiter evidence starts from the result filed with the job, and a supplied result is not that")
 	}
 	ctx = withFootprintCache(ctx, store.footprintCache())
-	jobs, err := store.List()
+	jobs, err := store.List(ctx)
 	if err != nil {
-		return types.JobStatus{}, err
+		return job.Status{}, err
 	}
 	actor := store.Actor()
 	if !actor.Verifies(jobs, id) {
-		return types.JobStatus{}, fmt.Errorf("job: this checkout holds the lease on %s and a holder does not verify its own work", actor.Lease)
+		return job.Status{}, fmt.Errorf("job: this checkout holds the lease on %s and a holder does not verify its own work", actor.Lease)
 	}
-	i := slices.IndexFunc(jobs, func(row types.Job) bool { return row.ID == id })
+	i := slices.IndexFunc(jobs, func(row job.Job) bool { return row.ID == id })
 	if i < 0 {
-		return types.JobStatus{}, fmt.Errorf("job: there is no job %q", id)
+		return job.Status{}, fmt.Errorf("job: there is no job %q", id)
 	}
 
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
-		return types.JobStatus{}, err
+		return job.Status{}, err
 	}
-	filed := types.NewJobAttempts(tries).Result(id)
+	filed := job.NewAttempts(tries).Result(id)
 	var ev graded
 	var prior int
 	if result == nil {
 		if filed == nil {
-			return types.JobStatus{}, fmt.Errorf("job: %s has filed no result", id)
+			return job.Status{}, fmt.Errorf("job: %s has filed no result", id)
 		}
 		ev, prior = evidenceAt(jobs[i], filed)
 	} else {
@@ -273,7 +273,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		ev.result = *result
 		ev.attempt, ev.gateAttempts, err = resolveResultAttempts(ctx, *result, resolve, where)
 		if err != nil {
-			return types.JobStatus{}, err
+			return job.Status{}, err
 		}
 	}
 
@@ -284,24 +284,24 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 	var seen Observed
 	if observe != nil {
 		if seen, err = observe(ctx, inheritGoals(jobs[i], jobs)); err != nil {
-			return types.JobStatus{}, err
+			return job.Status{}, err
 		}
 	}
 	seen.TestSelection = store.testSelection()
-	seen.tries = types.NewJobAttempts(tries)
+	seen.tries = job.NewAttempts(tries)
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritGoals(jobs[i], jobs).EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
 
-	var taken *types.JobIntegration
+	var taken *job.Integration
 	if len(evidence) > 0 {
 		if ev, taken, err = ev.withWaiterEvidence(ctx, store, inheritGoals(jobs[i], jobs), evidence, resolve, seen); err != nil {
-			return types.JobStatus{}, err
+			return job.Status{}, err
 		}
 	}
 
-	var status types.JobStatus
-	_, err = store.mutate(ctx, id, asVerdict, func(row *types.Job, exists bool, now int64) error {
+	var status job.Status
+	_, err = store.Mutate(ctx, id, job.AsVerdict, func(row *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
@@ -318,7 +318,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 				" run %s again and file its result with `%s`", prior, generation, checkLine(held), hint.JobExit.With(id, "--stdin")))
 		}
 		if !status.Verified {
-			row.Rejection = &types.JobRejection{
+			row.Rejection = &job.Rejection{
 				Unmet:              unmetGates(status.Gates),
 				Violations:         slices.Clone(status.Violations[:min(len(status.Violations), maxFolded)]),
 				At:                 now,
@@ -329,7 +329,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 			}
 			return nil
 		}
-		row.State = types.StatePass
+		row.State = job.StatePass
 		row.Rejection = nil
 		if taken != nil {
 			row.WaiterEvidence = gradedTake(*taken, status, now)
@@ -337,7 +337,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return nil
 	})
 	if err != nil {
-		return types.JobStatus{}, err
+		return job.Status{}, err
 	}
 	return status, nil
 }
@@ -347,42 +347,31 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 // Another job may have taken a path. One the result changed keeps the row
 // exited. One it never touched goes to that job. The note says which.
 // filed is the result row's live attempt filed.
-func reclaimForRework(row *types.Job, filed *types.JobResult, rows []types.Job) string {
-	if row.State != types.StateExited {
+func reclaimForRework(row *job.Job, filed *job.Result, rows []job.Job) string {
+	if row.State != job.StateExited {
 		return ""
 	}
 	kept := make([]string, 0, len(row.Paths.Write))
 	var gaveUp []string
 	for _, entry := range row.Paths.Write {
-		file, _ := types.SplitClaim(entry)
-		err := checkClaimPath(types.Job{ID: row.ID}, file, rows)
+		file, _ := job.SplitClaim(entry)
+		err := checkClaimPath(job.Job{ID: row.ID}, file, rows)
 		switch {
 		case err == nil:
 			kept = append(kept, entry)
-		case filed != nil && slices.ContainsFunc(filed.ChangedPaths, func(p string) bool { return types.PathWithin(p, file) }):
+		case filed != nil && slices.ContainsFunc(filed.ChangedPaths, func(p string) bool { return job.PathWithin(p, file) }):
 			return fmt.Sprintf("%s stays exited and holds nothing, since its rework could not re-claim its write paths: %v; it reworks once that job ends, or `magus job fork` declares it again",
 				row.ID, err)
 		default:
 			gaveUp = append(gaveUp, fmt.Sprintf("%s (%v)", entry, err))
 		}
 	}
-	row.State = types.StateRunning
+	row.State = job.StateRunning
 	if len(gaveUp) == 0 {
 		return fmt.Sprintf("%s is running again and holds its write paths again for its rework", row.ID)
 	}
 	row.Paths.Write = kept
 	return fmt.Sprintf("%s is running again for its rework and gave up what it never touched and another job took: %s", row.ID, strings.Join(gaveUp, "; "))
-}
-
-// Verifies reports whether this actor may verify row id: an unbound actor verifies any
-// row, a bound one only a row below its own lease in rows' parent chain. Its own row, a
-// sibling's and an ancestor's stay refused, since each would be work grading itself or
-// its peers.
-func (a Actor) Verifies(rows []types.Job, id string) bool {
-	if !a.Bound() {
-		return true
-	}
-	return slices.ContainsFunc(types.JobAncestors(rows, id), func(r types.Job) bool { return r.ID == a.Lease })
 }
 
 // staleRuns names, by [attemptKey], each of runs that read one of the job's changed paths other
@@ -391,7 +380,7 @@ func (a Actor) Verifies(rows []types.Job, id string) bool {
 // result names, less those generated reports: an output the gate regenerates after the run
 // (MAGUS.md, a gen/ tree) differs from what the run read without the run having graded
 // other work.
-func staleRuns(ctx context.Context, tree string, seen Observed, result types.JobResult, generated func(string) bool, runs ...types.JobAttempt) map[string]string {
+func staleRuns(ctx context.Context, tree string, seen Observed, result job.Result, generated func(string) bool, runs ...job.CapturedRun) map[string]string {
 	if tree == "" {
 		return nil
 	}
@@ -412,7 +401,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 func localSources(paths []string, generated func(string) bool) []string {
 	var out []string
 	for _, c := range paths {
-		if p := cleanPath(c); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
+		if p := job.CleanPath(c); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
 			out = append(out, p)
 		}
 	}
@@ -422,7 +411,7 @@ func localSources(paths []string, generated func(string) bool) []string {
 // rowFiles is what a file-scoped goal's run has to have read: what the job's
 // branch committed, else its diff, and what its result claims. A generated
 // report or a deleted file has nothing to read.
-func rowFiles(tree string, seen Observed, result types.JobResult, generated func(string) bool) []string {
+func rowFiles(tree string, seen Observed, result job.Result, generated func(string) bool) []string {
 	changed := seen.Changed
 	if seen.LandedKnown {
 		changed = seen.Landed
@@ -456,18 +445,18 @@ func (s *Store) generated(p string) bool {
 // CurrentRun answers whether a run is current in tree: its cache key is the one its check
 // would mint there now. A cache HIT replays a run that began before the job's last write,
 // so the clock calls it stale while its inputs are the ones on disk. Nil answers no.
-type CurrentRun func(ctx context.Context, tree string, run types.JobAttempt) bool
+type CurrentRun func(ctx context.Context, tree string, run job.CapturedRun) bool
 
-func (c CurrentRun) holds(ctx context.Context, tree string, run types.JobAttempt) bool {
+func (c CurrentRun) holds(ctx context.Context, tree string, run job.CapturedRun) bool {
 	return c != nil && c(ctx, tree, run)
 }
 
 // attemptKey names one recorded run: its attempt id, which no later run takes over, else its ref.
-func attemptKey(run types.JobAttempt) string { return cmp.Or(run.AttemptID, run.Ref) }
+func attemptKey(run job.CapturedRun) string { return cmp.Or(run.AttemptID, run.Ref) }
 
 // unreadSince says why run did not read each of paths, local slash paths under here, as
 // they read now, or "" when it did.
-func unreadSince(ctx context.Context, here string, paths []string, run types.JobAttempt) string {
+func unreadSince(ctx context.Context, here string, paths []string, run job.CapturedRun) string {
 	name := attemptKey(run)
 	var driver types.VCSDriver
 	if run.Revision != "" && !run.Dirty {
@@ -662,50 +651,50 @@ func sameHead(ctx context.Context, left, right string) bool {
 // verification compares these snapshots to the row's declared gates under the store
 // lock, so an extra or missing reference never becomes authority. where names the
 // checkouts resolve searched, for the refusal.
-func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve AttemptResolver, where string) (types.JobAttempt, []types.JobGateAttempt, error) {
+func resolveResultAttempts(ctx context.Context, result job.Result, resolve AttemptResolver, where string) (job.CapturedRun, []job.GateAttempt, error) {
 	if resolve == nil {
-		return types.JobAttempt{}, nil, errors.New("job: no output resolver files a result's evidence")
+		return job.CapturedRun{}, nil, errors.New("job: no output resolver files a result's evidence")
 	}
-	var primary types.JobAttempt
+	var primary job.CapturedRun
 	if err := refuseOwedReason(result); err != nil {
-		return types.JobAttempt{}, nil, err
+		return job.CapturedRun{}, nil, err
 	}
 	if result.Validation.Owed != "" && result.Validation.Unrun != "" {
-		return types.JobAttempt{}, nil, errors.New("job: the result files its check as both owed and unrun: a check the machine would not seat is owed, and one the environment kept from running is unrun, so name one")
+		return job.CapturedRun{}, nil, errors.New("job: the result files its check as both owed and unrun: a check the machine would not seat is owed, and one the environment kept from running is unrun, so name one")
 	}
 	if ref := result.Validation.OutputRef; ref != "" {
 		if result.Validation.Owed != "" {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as owed and cites output ref %q, and an owed run has no ref, so name one or the other", ref)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: the result files its check as owed and cites output ref %q, and an owed run has no ref, so name one or the other", ref)
 		}
 		if result.Validation.Unrun != "" {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", ref)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: the result files its check as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", ref)
 		}
 		attempt, err := resolve(ctx, ref)
 		if err != nil {
-			return types.JobAttempt{}, nil, err
+			return job.CapturedRun{}, nil, err
 		}
 		if !attempt.Found {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: the result's output ref %q names no run %s recorded", ref, where)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: the result's output ref %q names no run %s recorded", ref, where)
 		}
 		primary = attempt
 	}
 	seen := map[string]bool{}
-	gates := make([]types.JobGateAttempt, 0, len(result.VerificationEvidence))
+	gates := make([]job.GateAttempt, 0, len(result.VerificationEvidence))
 	for _, evidence := range result.VerificationEvidence {
 		switch {
 		case evidence.GateID == "":
-			return types.JobAttempt{}, nil, errors.New("job: each verification_evidence entry requires gate_id")
+			return job.CapturedRun{}, nil, errors.New("job: each verification_evidence entry requires gate_id")
 		case evidence.Owed != "" && evidence.Unrun != "":
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as both owed and unrun, so name one", evidence.GateID)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q is filed as both owed and unrun, so name one", evidence.GateID)
 		case evidence.Owed != "" && evidence.OutputRef != "":
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q, and an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q, and an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
 		case evidence.Unrun != "" && evidence.OutputRef != "":
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", evidence.GateID, evidence.OutputRef)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q is filed as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", evidence.GateID, evidence.OutputRef)
 		case evidence.Owed == "" && evidence.Unrun == "" && evidence.OutputRef == "":
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q names none of output_ref, owed or unrun, so it files nothing", evidence.GateID)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q names none of output_ref, owed or unrun, so it files nothing", evidence.GateID)
 		}
 		if seen[evidence.GateID] {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)
 		}
 		seen[evidence.GateID] = true
 		if evidence.Owed != "" || evidence.Unrun != "" {
@@ -713,12 +702,12 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 		}
 		attempt, err := resolve(ctx, evidence.OutputRef)
 		if err != nil {
-			return types.JobAttempt{}, nil, err
+			return job.CapturedRun{}, nil, err
 		}
 		if !attempt.Found {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q output ref %q names no run %s recorded", evidence.GateID, evidence.OutputRef, where)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q output ref %q names no run %s recorded", evidence.GateID, evidence.OutputRef, where)
 		}
-		gates = append(gates, types.JobGateAttempt{GateID: evidence.GateID, Attempt: attempt})
+		gates = append(gates, job.GateAttempt{GateID: evidence.GateID, Attempt: attempt})
 	}
 	return primary, gates, nil
 }
@@ -726,19 +715,19 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 // refuseOwedReason refuses any owed reason but a missing seat or remote
 // CI, and names where
 // the reasons workers reach for go instead.
-func refuseOwedReason(result types.JobResult) error {
-	owed := map[string]string{types.PrimaryGoalID: result.Validation.Owed}
+func refuseOwedReason(result job.Result) error {
+	owed := map[string]string{job.PrimaryGoalID: result.Validation.Owed}
 	for _, evidence := range result.VerificationEvidence {
 		owed[evidence.GateID] = evidence.Owed
 	}
 	for _, goal := range slices.Sorted(maps.Keys(owed)) {
-		if reason := owed[goal]; reason != "" && reason != types.OwedNoSeat && reason != types.OwedRemoteCI {
+		if reason := owed[goal]; reason != "" && reason != OwedNoSeat && reason != owedRemoteCI {
 			return fmt.Errorf("job: goal %q is filed as owed because %q, and the reasons a run is owed are %q and %q:"+
 				" a check the environment kept from running is filed as unrun with that cause, which fails the job,"+
 				" the integrator regenerates an output outside the write paths, so that files nothing,"+
 				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
 				" and a lint finding in a file this job did not change clears by linting the files it changed",
-				goal, reason, types.OwedNoSeat, types.OwedRemoteCI)
+				goal, reason, OwedNoSeat, owedRemoteCI)
 		}
 	}
 	return nil
@@ -748,7 +737,7 @@ func refuseOwedReason(result types.JobResult) error {
 // and its descendants were taken in (see [Location.Outputs]) when resolve finds no run,
 // and the phrase naming where it looked. A fallback that fails is skipped: a removed
 // worktree has no store left to ask.
-func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptResolver) (AttemptResolver, string) {
+func (s *Store) acrossCheckouts(rows []job.Job, id string, resolve AttemptResolver) (AttemptResolver, string) {
 	const here = "this checkout"
 	if resolve == nil || s.outputs == nil {
 		return resolve, here
@@ -759,7 +748,7 @@ func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptReso
 	}
 	var roots []string
 	for _, row := range rows {
-		if row.ID != id && !slices.ContainsFunc(types.JobAncestors(rows, row.ID), func(a types.Job) bool { return a.ID == id }) {
+		if row.ID != id && !slices.ContainsFunc(job.Ancestors(rows, row.ID), func(a job.Job) bool { return a.ID == id }) {
 			continue
 		}
 		if r := row.CheckoutRoot; r != "" && r != self && !slices.Contains(roots, r) {
@@ -769,7 +758,7 @@ func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptReso
 	if len(roots) == 0 {
 		return resolve, here
 	}
-	return func(ctx context.Context, ref string) (types.JobAttempt, error) {
+	return func(ctx context.Context, ref string) (job.CapturedRun, error) {
 		attempt, err := resolve(ctx, ref)
 		if err != nil || attempt.Found {
 			return attempt, err
@@ -798,31 +787,31 @@ func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptReso
 // filed no result at all.
 //
 // observe reads store's footprint cache and fills it, unless store is a dry run's.
-func GradeGates(ctx context.Context, store *Store, id string, observe Observer) (types.JobStatus, error) {
+func GradeGates(ctx context.Context, store *Store, id string, observe Observer) (job.Status, error) {
 	ctx = withFootprintCache(ctx, store.footprintCache())
-	jobs, err := store.List()
+	jobs, err := store.List(ctx)
 	if err != nil {
-		return types.JobStatus{}, err
+		return job.Status{}, err
 	}
-	i := slices.IndexFunc(jobs, func(row types.Job) bool { return row.ID == id })
+	i := slices.IndexFunc(jobs, func(row job.Job) bool { return row.ID == id })
 	if i < 0 {
-		return types.JobStatus{}, fmt.Errorf("job: there is no job %q", id)
+		return job.Status{}, fmt.Errorf("job: there is no job %q", id)
 	}
 	row := inheritGoals(jobs[i], jobs)
 
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
-		return types.JobStatus{}, err
+		return job.Status{}, err
 	}
-	ev, prior := evidenceAt(jobs[i], types.NewJobAttempts(tries).Result(id))
+	ev, prior := evidenceAt(jobs[i], job.NewAttempts(tries).Result(id))
 	var seen Observed
 	if observe != nil {
 		if seen, err = observe(ctx, row); err != nil {
-			return types.JobStatus{}, err
+			return job.Status{}, err
 		}
 	}
 	seen.TestSelection = store.testSelection()
-	seen.tries = types.NewJobAttempts(tries)
+	seen.tries = job.NewAttempts(tries)
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, row), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, row), row.EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
@@ -839,7 +828,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	// to hold to them: inherited, they report every unfinished job as failing for reasons
 	// that have nothing to do with what was asked. The violations stay in the status, so a
 	// reader still sees them; only the verdict is narrowed to the question.
-	status.Verified = !slices.ContainsFunc(status.Gates, func(g types.VerificationStatus) bool { return !g.Verified })
+	status.Verified = !slices.ContainsFunc(status.Gates, func(g job.VerificationStatus) bool { return !g.Verified })
 	return status, nil
 }
 
@@ -876,25 +865,25 @@ type landing struct {
 //  3. it is declared, nobody ever took it, it was not updated within jobs.stale_after,
 //     and no live child hangs under it, so a root outlives the children still working;
 //     a row queued on a declared or running dependency is waiting, and its clock starts
-//     when the last one ends or exits (see [types.JobIdleSince]);
+//     when the last one ends or exits (see [job.IdleSince]);
 //  4. its holder exited, or it runs with no filed result,
 //     its work landed on the base branch (see [Store.landedOnBase]),
 //     and no live child hangs under it;
-//  5. a holder took it and its deadline passed (see [types.Job.Overdue]): the declared
+//  5. a holder took it and its deadline passed (see [job.Job.Overdue]): the declared
 //     bound is obeyed, not only reported.
 //
 // A landed row ends as no_return rather than pass: landing is not grading, and pass
 // stays the verdict only `magus job wait` records from the job's own evidence. Its
 // end_reason names the base commit.
 //
-// A row a person paused (see [types.Job.PausedAt]) ends by rule 1 alone until its pause
+// A row a person paused (see [job.Job.PausedAt]) ends by rule 1 alone until its pause
 // lapses.
 //
 // Server rows are the server's own maintenance and never swept. An exited row skips rule
 // 2: its holder already returned, and removing the worktree is the normal end of that. A
 // checkout whose stat fails for any reason but absence stays live, since magus cannot
 // tell a gone directory from an unreadable mount.
-func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
+func (w *sweeper) dead(rows []job.Job) ([]ending, error) {
 	rows = slices.Clone(rows)
 	var out []ending
 	for {
@@ -916,8 +905,8 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 			return out, nil
 		}
 		for _, e := range round {
-			i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.id })
-			rows[i].State = types.StateNoReturn
+			i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == e.id })
+			rows[i].State = job.StateNoReturn
 		}
 		out = append(out, round...)
 	}
@@ -933,12 +922,12 @@ func (w *sweeper) proved(id, reason string) bool {
 // round: asked of every live row, a scan of the plan per question made the sweep
 // quadratic in the plan's size.
 type rowIndex struct {
-	byID      map[string]types.Job
+	byID      map[string]job.Job
 	liveChild map[string]bool
 }
 
-func indexRows(rows []types.Job) rowIndex {
-	x := rowIndex{byID: make(map[string]types.Job, len(rows)), liveChild: map[string]bool{}}
+func indexRows(rows []job.Job) rowIndex {
+	x := rowIndex{byID: make(map[string]job.Job, len(rows)), liveChild: map[string]bool{}}
 	for _, r := range rows {
 		x.byID[r.ID] = r
 		if r.Parent != "" && r.State.Live() {
@@ -948,8 +937,8 @@ func indexRows(rows []types.Job) rowIndex {
 	return x
 }
 
-// endedAncestor is [types.EndedAncestor] over the index.
-func (x rowIndex) endedAncestor(id string) (types.Job, bool) {
+// endedAncestor is [job.EndedAncestor] over the index.
+func (x rowIndex) endedAncestor(id string) (job.Job, bool) {
 	seen := map[string]bool{id: true}
 	cur, ok := x.byID[id]
 	for ok && cur.Parent != "" && !seen[cur.Parent] {
@@ -958,11 +947,11 @@ func (x rowIndex) endedAncestor(id string) (types.Job, bool) {
 			return cur, true
 		}
 	}
-	return types.Job{}, false
+	return job.Job{}, false
 }
 
 // reason is why row is dead, or "" when it is not. See [sweeper.dead].
-func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, error) {
+func (w *sweeper) reason(x rowIndex, rows []job.Job, row job.Job) (string, error) {
 	if a, ok := x.endedAncestor(row.ID); ok {
 		kin := "ancestor"
 		if a.ID == row.Parent {
@@ -977,14 +966,14 @@ func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, e
 	if l, ok := w.landed[row.ID]; ok && landingCandidate(row) && l.updated == row.Updated && !liveChild {
 		return l.reason, nil
 	}
-	if row.State != types.StateExited && w.checkoutGone(row.CheckoutRoot) {
+	if row.State != job.StateExited && w.checkoutGone(row.CheckoutRoot) {
 		return fmt.Sprintf("taken in %s, which no longer exists", row.CheckoutRoot), nil
 	}
 	if Editing(row) && row.Registered != 0 && row.Overdue(w.now) {
 		return overdueReason(row, w.now), nil
 	}
 	// Only a registration says a holder took it; a checkout_root without one names no holder.
-	if row.Registered != 0 || row.State != types.StateDeclared {
+	if row.Registered != 0 || row.State != job.StateDeclared {
 		return "", nil
 	}
 	if liveChild {
@@ -994,10 +983,10 @@ func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, e
 	if err != nil {
 		return "", err
 	}
-	if !types.JobStaleAt(rows, row, w.now, window) {
+	if !job.StaleAt(rows, row, w.now, window) {
 		return "", nil
 	}
-	since, _ := types.JobIdleSince(rows, row)
+	since, _ := job.IdleSince(rows, row)
 	return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)",
 		time.Duration(w.now-since)*time.Second, window), nil
 }
@@ -1019,7 +1008,9 @@ func (w *sweeper) checkoutGone(root string) bool {
 // sweep ends every row in f the [sweeper] proves dead, tombstones the binding records
 // whose job's checkout is gone (see [Store.sweepRecords]), and returns the plan as written.
 // A dry-run store ends the rows in the returned plan only.
-func (s *Store) sweep(f jobsFile) (jobsFile, error) {
+//
+// It is the module store's [job.WithSweep], run by every [job.Store.List].
+func (s *Store) sweep(ctx context.Context, f job.Rows) (job.Rows, error) {
 	clock := s.clock
 	if clock == nil {
 		clock = time.Now
@@ -1029,14 +1020,14 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	if s.dryRun {
 		dead, err := w.dead(f.Jobs)
 		if err != nil {
-			return jobsFile{}, err
+			return job.Rows{}, err
 		}
 		endRows(f.Jobs, dead, w.now)
 		return f, nil
 	}
-	f, ended, err := s.endDead(w, f)
+	f, ended, err := s.endDead(ctx, w, f)
 	if err != nil {
-		return jobsFile{}, err
+		return job.Rows{}, err
 	}
 	s.sweepRecords(w, f.Jobs, ended)
 	return f, nil
@@ -1046,13 +1037,13 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 // verdict is reached twice: once lock-free, so a plan with nothing to end costs no lock,
 // and again under the file lock against a fresh read, so a row another process revived in
 // between is not ended on a stale view.
-func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
+func (s *Store) endDead(ctx context.Context, w *sweeper, f job.Rows) (job.Rows, bool, error) {
 	dead, err := w.dead(f.Jobs)
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
 	var ended endings
-	err = s.update(context.Background(), func(cur *jobsFile) error {
+	err = s.Rewrite(ctx, func(cur *job.Rows) error {
 		ended = endings{}
 		var err error
 		if dead, err = w.dead(cur.Jobs); err != nil {
@@ -1061,11 +1052,11 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		endRows(cur.Jobs, dead, w.now)
 		f = *cur
 		if len(dead) == 0 {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		for _, e := range dead {
-			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.id })
-			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
+			i := slices.IndexFunc(cur.Jobs, func(r job.Job) bool { return r.ID == e.id })
+			if err := ended.hold(ctx, s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err
 			}
 		}
@@ -1076,7 +1067,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		out = os.Stderr
 	}
 	if err != nil {
-		return jobsFile{}, false, err
+		return job.Rows{}, false, err
 	}
 	for _, e := range dead {
 		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)
@@ -1084,17 +1075,17 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 			s.noteEnded(e.id, e.reason)
 		}
 	}
-	if err := ended.record(context.Background(), w.now*1000); err != nil {
-		return jobsFile{}, false, err
+	if err := ended.record(ctx, w.now*1000); err != nil {
+		return job.Rows{}, false, err
 	}
 	return f, len(dead) > 0, nil
 }
 
 // endRows ends each of dead in rows as no_return at now.
-func endRows(rows []types.Job, dead []ending, now int64) {
+func endRows(rows []job.Job, dead []ending, now int64) {
 	for _, e := range dead {
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.id })
-		rows[i].State = types.StateNoReturn
+		i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == e.id })
+		rows[i].State = job.StateNoReturn
 		rows[i].EndReason = e.reason
 		rows[i].Landed = e.landed
 		rows[i].Updated = now
@@ -1120,8 +1111,8 @@ type PruneOptions struct {
 //
 //   - a reason the read sweep ends rows for (see [sweeper.dead]);
 //   - its holder exited and nobody collected the result with `magus job wait`;
-//   - it is overdue ([types.Job.Overdue]);
-//   - it is stale ([types.JobStaleAt] against jobs.stale_after) and nobody took it, or
+//   - it is overdue ([job.Job.Overdue]);
+//   - it is stale ([job.StaleAt] against jobs.stale_after) and nobody took it, or
 //     opts.All is set.
 //
 // A declared or running row a holder took and touched within jobs.stale_after is never
@@ -1150,9 +1141,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	}
 	w := &sweeper{now: clock().Unix(), window: func() (time.Duration, error) { return window, nil }, gone: map[string]bool{}}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	f, err := s.read()
+	f, err := s.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1161,7 +1150,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	// So is the work a row ending with its tree holds, read in its checkout. The write
 	// below holds the verdict against a fresh read, so a row that joined a tree since
 	// is refused rather than ended on this view.
-	var taken []types.Job
+	var taken []job.Job
 	if !opts.DryRun {
 		preview, err := w.prunable(f.Jobs, window, opts.All)
 		if err != nil {
@@ -1177,31 +1166,31 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 
 	var out []Ending
 	var ended endings
-	err = s.update(ctx, func(cur *jobsFile) error {
+	err = s.Rewrite(ctx, func(cur *job.Rows) error {
 		ended = endings{}
 		var err error
 		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil {
 			return err
 		}
 		if opts.DryRun || len(out) == 0 {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		fresh, err := w.treeEndings(cur.Jobs, out, window)
 		if err != nil {
 			return err
 		}
 		for _, row := range fresh {
-			if !slices.ContainsFunc(taken, func(r types.Job) bool { return r.ID == row.ID }) {
+			if !slices.ContainsFunc(taken, func(r job.Job) bool { return r.ID == row.ID }) {
 				return fmt.Errorf("job: %s joined a tree this prune ends after it was read, so nothing was ended: prune again to see it", row.ID)
 			}
 		}
 		for _, e := range out {
-			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })
-			cur.Jobs[i].State = types.StateNoReturn
+			i := slices.IndexFunc(cur.Jobs, func(r job.Job) bool { return r.ID == e.ID })
+			cur.Jobs[i].State = job.StateNoReturn
 			cur.Jobs[i].EndReason = e.Reason
 			cur.Jobs[i].Landed = w.proved(e.ID, e.Reason)
 			cur.Jobs[i].Updated = w.now
-			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
+			if err := ended.hold(ctx, s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err
 			}
 		}
@@ -1218,11 +1207,11 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 
 // prunable is what [Store.Prune] ends, repeated to a fixed point like [sweeper.dead]
 // because ending a row orphans its children.
-func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]Ending, error) {
+func (w *sweeper) prunable(rows []job.Job, window time.Duration, all bool) ([]Ending, error) {
 	rows = slices.Clone(rows)
 	var out []Ending
 	for {
-		flagged := types.JobList{Jobs: rows}.Flag(w.now, window)
+		flagged := job.List{Jobs: rows}.Flag(w.now, window)
 		kept := w.worked(rows, window, all)
 		x := indexRows(rows)
 		var round []Ending
@@ -1245,8 +1234,8 @@ func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]
 			return out, nil
 		}
 		for _, e := range round {
-			i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.ID })
-			rows[i].State = types.StateNoReturn
+			i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == e.ID })
+			rows[i].State = job.StateNoReturn
 		}
 		out = append(out, round...)
 	}
@@ -1254,7 +1243,7 @@ func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]
 
 // worked is the ids Prune keeps: every row a holder took and may still be working, every
 // row a person paused until its pause lapses, and every ancestor of one.
-func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[string]bool {
+func (w *sweeper) worked(rows []job.Job, window time.Duration, all bool) map[string]bool {
 	kept := map[string]bool{}
 	for _, row := range rows {
 		paused := row.State.Live() && row.PausedAt(w.now)
@@ -1265,7 +1254,7 @@ func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[s
 			continue
 		}
 		kept[row.ID] = true
-		for _, a := range types.JobAncestors(rows, row.ID) {
+		for _, a := range job.Ancestors(rows, row.ID) {
 			kept[a.ID] = true
 		}
 	}
@@ -1273,17 +1262,17 @@ func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[s
 }
 
 // pruneReason is why Prune ends a row the sweep would keep, or "" when it keeps it too.
-func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.Duration) string {
+func (w *sweeper) pruneReason(row job.Job, flagged job.List, window time.Duration) string {
 	idle := time.Duration(w.now-row.Updated) * time.Second
 	switch {
-	case row.State == types.StateExited:
+	case row.State == job.StateExited:
 		return fmt.Sprintf("exited %s ago and nobody collected its result with `magus job wait`", idle)
 	case slices.Contains(flagged.Overdue, row.ID):
 		return overdueReason(row, w.now)
 	case !slices.Contains(flagged.Stale, row.ID):
 		return ""
 	case row.Registered == 0:
-		since, _ := types.JobIdleSince(flagged.Jobs, row)
+		since, _ := job.IdleSince(flagged.Jobs, row)
 		return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)", time.Duration(w.now-since)*time.Second, window)
 	default:
 		return fmt.Sprintf("taken, then untouched for %s (jobs.stale_after is %s)", idle, window)
@@ -1293,7 +1282,7 @@ func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.
 // overdueReasonPrefix opens the end_reason of a row ended for passing its deadline.
 const overdueReasonPrefix = "overdue: its deadline passed "
 
-func overdueReason(row types.Job, now int64) string {
+func overdueReason(row job.Job, now int64) string {
 	return fmt.Sprintf("%s%s ago", overdueReasonPrefix, time.Duration(now-row.Deadline)*time.Second)
 }
 

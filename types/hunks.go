@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // DiffDriver is a diff driver magus routes files to: the name git knows it by, the files
@@ -453,7 +455,7 @@ const maxHunkEdits = 2000
 // Lines keep their terminators: a CRLF ending or a missing final newline is part of the
 // line. It reports false for binary input (a NUL byte) and for sides more than
 // maxHunkEdits lines apart, where no line diff is attempted.
-func Hunks(path string, old, new []byte, driver DiffDriver) ([]RegionChange, bool) {
+func Hunks(path string, old, new []byte, driver DiffDriver) ([]job.RegionChange, bool) {
 	if bytes.IndexByte(old, 0) >= 0 || bytes.IndexByte(new, 0) >= 0 {
 		return nil, false
 	}
@@ -466,9 +468,9 @@ func Hunks(path string, old, new []byte, driver DiffDriver) ([]RegionChange, boo
 	if driver.Funcname != "" {
 		oldDecls, newDecls = driver.Declarations(o), driver.Declarations(n)
 	}
-	var regions []RegionChange
+	var regions []job.RegionChange
 	// emit splits the 0-based lines [from, to) of side into one region per declaration.
-	emit := func(side RegionSide, from, to int, lines, decls []string) {
+	emit := func(side job.RegionSide, from, to int, lines, decls []string) {
 		var placed []string
 		if decls != nil {
 			placed = PlaceHunk(lines, decls, from, to)
@@ -481,15 +483,15 @@ func Hunks(path string, old, new []byte, driver DiffDriver) ([]RegionChange, boo
 					end++
 				}
 			}
-			regions = append(regions, RegionChange{File: FileChange{Path: path}, Side: side, Lines: [2]int{line + 1, end + 1},
+			regions = append(regions, job.RegionChange{File: job.FileChange{Path: path}, Side: side, Lines: [2]int{line + 1, end + 1},
 				Declaration: decl, Driver: name})
 			line = end + 1
 		}
 	}
 	io, in := 0, 0
 	for _, p := range append(pairs, [2]int{len(o), len(n)}) {
-		emit(RegionOld, io, p[0], o, oldDecls)
-		emit(RegionNew, in, p[1], n, newDecls)
+		emit(job.RegionOld, io, p[0], o, oldDecls)
+		emit(job.RegionNew, in, p[1], n, newDecls)
 		io, in = p[0]+1, p[1]+1
 	}
 	return regions, true

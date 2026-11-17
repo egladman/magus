@@ -7,25 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/edit"
-	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/graph/workspacegraph"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/readlog"
-	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/symbols"
-	"github.com/egladman/magus/libs/oci"
-	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/project"
-	spellpkg "github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
-	"github.com/rogpeppe/go-internal/txtar"
-	"github.com/scip-code/scip/bindings/go/scip"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/proto"
 	"io"
 	"log/slog"
 	"maps"
@@ -36,6 +17,28 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/edit"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/readlog"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project"
+	spellpkg "github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
+	"github.com/rogpeppe/go-internal/txtar"
+	"github.com/scip-code/scip/bindings/go/scip"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 )
 
 // mkGlobalWS writes a single-project workspace with one target and returns its root.
@@ -57,7 +60,7 @@ func TestGlobalKnowledgeGraphSuite(t *testing.T) { suite.Run(t, new(GlobalKnowle
 
 func (s *GlobalKnowledgeGraphSuite) SetupTest() {
 	s.rootA, s.rootB = mkGlobalWS(s.T(), "build"), mkGlobalWS(s.T(), "deploy")
-	ws, err := Inspect(context.Background(), s.rootA, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), s.rootA, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.wsA = ws
 }
@@ -559,7 +562,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
 
-	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 
@@ -1127,7 +1130,7 @@ func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.C
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
 	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
-	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "idx/index.scip"}}}}
 	return root, ws, cfg
@@ -1181,12 +1184,12 @@ func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 		require.True(t, g.HasSymbols(), "the fixture's index is ingested")
-		want, err := json.Marshal(g.Query(input, 0))
+		want, err := codec.Marshal(g.Query(input, 0))
 		require.NoError(t, err)
 
 		out, ranked, err := queryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
 		require.NoError(t, err)
-		got, err := json.Marshal(out)
+		got, err := codec.Marshal(out)
 		require.NoError(t, err)
 		assert.Equalf(t, string(want), string(got), "query %q", input)
 		assert.Equal(t, g.NearestNode(input), ranked.NearestNode(input), "a near miss is found among the same nodes")
@@ -1203,13 +1206,13 @@ func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
-	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	build := func() string {
 		t.Helper()
 		g, err := buildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.New(slog.DiscardHandler))
 		require.NoError(t, err)
-		b, err := json.Marshal(g.Output())
+		b, err := codec.Marshal(g.Output())
 		require.NoError(t, err)
 		return string(b)
 	}
@@ -1456,7 +1459,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
-	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
 	log := slog.New(slog.DiscardHandler)
@@ -1525,7 +1528,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 func newCommit(id string, paths ...string) types.CommitChange {
 	c := types.CommitChange{ID: id}
 	for _, p := range paths {
-		c.Files = append(c.Files, types.FileChange{Path: p})
+		c.Files = append(c.Files, job.FileChange{Path: p})
 	}
 	return c
 }
@@ -1732,7 +1735,7 @@ func (s *cloneWithSymbolsSuite) SetupTest() {
 }
 
 func (s *cloneWithSymbolsSuite) output(g *knowledge.Graph) string {
-	b, err := json.Marshal(g.Output())
+	b, err := codec.Marshal(g.Output())
 	s.Require().NoError(err)
 	return string(b)
 }

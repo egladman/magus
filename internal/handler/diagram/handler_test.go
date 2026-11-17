@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -93,7 +93,7 @@ func TestDiagramsListing(t *testing.T) {
 	var out struct {
 		Diagrams []map[string]any `json:"diagrams"`
 	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []map[string]any{
 		{"id": "projects", "kind": "projects", "title": "Workspace projects"},
 		{"id": "targets:app", "kind": "targets", "title": "Targets in app", "project": "app"},
@@ -115,7 +115,7 @@ func TestDiagramsListingProbesTheIndexWithoutLoadingTheImportGraph(t *testing.T)
 	var out struct {
 		Diagrams []Entry `json:"diagrams"`
 	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	yes := true
 	assert.Equal(t, Entry{ID: "imports", Kind: "imports", Title: "Package imports", Indexed: &yes}, out.Diagrams[len(out.Diagrams)-1])
 	assert.Zero(t, ws.importLoads.Load())
@@ -200,7 +200,7 @@ func TestDiagramRendersProjects(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var out Rendered
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	// The SVG is checked by substring below, so it is copied across.
 	assert.Equal(t, Rendered{
 		ID:    "projects",
@@ -228,7 +228,7 @@ func TestDiagramRendersTargets(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var out Rendered
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []Node{
 		{ID: "external:build", Anchor: "app", Label: "build"},
 		{ID: "external:test", Anchor: "app", Label: "test"},
@@ -244,12 +244,12 @@ func TestDiagramFocusAndDepthCutTheFigure(t *testing.T) {
 	w := get(t, chainWorkspace(), "/api/v1/diagrams/projects?focus=libs/core&depth=1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var out Rendered
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []string{"libs/lib", "libs/core", "libs/base"}, anchors(out.Nodes))
 
 	w = get(t, chainWorkspace(), "/api/v1/diagrams/projects?scope=libs&focus=libs-lib&depth=2")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []string{"libs/lib", "libs/core", "libs/base"}, anchors(out.Nodes), "scope drops app before the walk")
 
 	for _, target := range []string{
@@ -295,7 +295,7 @@ func TestDiagramImportsRefuseWithoutAnIndex(t *testing.T) {
 	w = get(t, ws, "/api/v1/diagrams/imports")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var out Rendered
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []string{"internal/handler/graph", "internal/server", "types"}, anchors(out.Nodes))
 	// Each package is a box built from a Dir record, so its group carries the directory.
 	assert.Contains(t, out.SVG, `data-anchor="internal/handler/graph"`)
@@ -322,7 +322,7 @@ func TestDiagramSourceURL(t *testing.T) {
 	w := get(t, ws, "/api/v1/diagrams/projects?focus=tools&depth=0")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var out Rendered
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Empty(t, out.SourceURL)
 }
 

@@ -7,12 +7,13 @@ import (
 	"log/slog"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // Dependencies hands the guard the workspace facts its rules cannot resolve for
@@ -116,8 +117,8 @@ func (e HookEnv) loadDependenciesAt(ctx context.Context, rootOverride string, au
 	if tools, hook := agent.ToolRowsFromContext(ctx); hook {
 		facts, err := tools.Models()
 		if err == nil {
-			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }
-			deps.ModelTiers = func() *typesagent.ModelTierSet { return facts.Tiers }
+			deps.ModelRows = func() []model.Row { return facts.Rows }
+			deps.ModelTiers = func() *tier.Set { return facts.Tiers }
 			return deps, rules
 		}
 		slog.WarnContext(ctx, "the guard loads the whole workspace for its model rows and tiers, which can miss the hook's deadline",

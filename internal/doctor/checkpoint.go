@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -84,7 +84,7 @@ func configRecordsCheckpoint(root string, body []byte) bool {
 		return true
 	}
 	var decoded any
-	if err := json.Unmarshal(body, &decoded); err != nil {
+	if err := codec.Unmarshal(body, &decoded); err != nil {
 		return false
 	}
 	for _, cmd := range collectJSONStringFields(decoded, "command") {

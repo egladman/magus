@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -299,7 +299,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	if err != nil {
 		return fmt.Errorf("exportArtifact: read manifest: %w", err)
 	}
-	manifestBytes = secret.Redact(ctx, manifestBytes)
+	manifestBytes = secrets.Redact(ctx, manifestBytes)
 	manifestRel, err := filepath.Rel(c.store, c.manifestPath(projectPath, hash))
 	if err != nil {
 		return fmt.Errorf("exportArtifact: manifest path: %w", err)
@@ -330,7 +330,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if relErr != nil {
 			return fmt.Errorf("exportArtifact: log path: %w", relErr)
 		}
-		if err := addSigned(rel, secret.Redact(ctx, logBytes)); err != nil {
+		if err := addSigned(rel, secrets.Redact(ctx, logBytes)); err != nil {
 			return fmt.Errorf("exportArtifact: log: %w", err)
 		}
 	}
@@ -341,9 +341,9 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	// minting a fresh local ref for identical inputs.
 	if c.outputs != nil {
 		if desc, err := c.outputs.newestDescriptor(hash); err == nil {
-			if data, mErr := json.Marshal(desc); mErr == nil {
+			if data, mErr := codec.Marshal(desc); mErr == nil {
 				rel := path.Join("outputs", hash, desc.Attempt+descExt)
-				if err := addSigned(rel, secret.Redact(ctx, data)); err != nil {
+				if err := addSigned(rel, secrets.Redact(ctx, data)); err != nil {
 					return fmt.Errorf("exportArtifact: descriptor: %w", err)
 				}
 			}

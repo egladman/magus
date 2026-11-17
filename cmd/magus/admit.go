@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -14,6 +15,6 @@ func admitUnderBrokerPolicy(ctx context.Context, admit cache.MachineAdmitter, ro
 	if policy == types.BrokerOff {
 		return func() {}, nil
 	}
-	claim := types.MachineClaim{Project: ".", Target: target, MemoryMB: memoryMB, Dir: resolveRootOrEmpty(root)}
+	claim := budget.Claim{Project: ".", Target: target, MemoryMB: memoryMB, Dir: resolveRootOrEmpty(root)}
 	return cache.AdmitMachine(ctx, admit, claim, policy == types.BrokerRequired, globalCfg.BudgetWait)
 }

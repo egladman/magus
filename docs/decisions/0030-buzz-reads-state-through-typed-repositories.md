@@ -36,7 +36,7 @@ skeptic) over the store layer:
 
 ### The Go layer under the doors is uneven
 
-- The persistence primitive is `file.JSONL[T]` (`internal/file/jsonl.go`: `Load`,
+- The persistence primitive is `file.JSONL[T]` (`libs/codec/jsonl.go`: `Load`,
   `Update(fn)` under a lock, `Key`, a `Live` tombstone, compaction by rename). It folds
   entries in order of each key's last line. About ten stores use it.
 - `job.Store` is a real repository: path, line format, two locks and compaction are

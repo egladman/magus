@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -259,7 +260,7 @@ func (s *commitGradeRoutesSuite) TestAnIntegrationCommitThatCannotOpenTheWorkspa
 }
 
 func TestMergesBase(t *testing.T) {
-	row := types.Job{DependsOn: []string{"worker-a", "worker-b"}}
+	row := jobtypes.Job{DependsOn: []string{"worker-a", "worker-b"}}
 	for _, tc := range []struct {
 		name    string
 		operand string
@@ -281,7 +282,7 @@ func TestMergesBase(t *testing.T) {
 	}
 
 	t.Run("a row with no depends_on refuses a job branch", func(t *testing.T) {
-		assert.False(t, mergesBase("worker-a", "main", types.Job{}))
+		assert.False(t, mergesBase("worker-a", "main", jobtypes.Job{}))
 	})
 }
 
@@ -394,8 +395,8 @@ func TestWorkerVCSOp(t *testing.T) {
 }
 
 func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
-	row := types.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
-	merge := func(line string, row types.Job) bool {
+	row := jobtypes.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
+	merge := func(line string, row jobtypes.Job) bool {
 		cmds, ok := ParseCommands(line)
 		require.True(t, ok, line)
 		require.Len(t, cmds, 1, line)
@@ -413,7 +414,7 @@ func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
 	} {
 		assert.False(t, merge(line, row), line)
 	}
-	assert.False(t, merge("git merge --no-ff done-a", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
+	assert.False(t, merge("git merge --no-ff done-a", jobtypes.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
 
 // A landing row commits and fast-forwards its own checkout, with or without -C.
@@ -540,22 +541,22 @@ func TestIntegrationMergeInALoop(t *testing.T) {
 }
 
 func TestMergeRefusalNamesTheBranchesARowIntegrates(t *testing.T) {
-	row := types.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
+	row := jobtypes.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
 	assert.Contains(t, mergeRefusal("734253d9a", "main", row), "or a branch it integrates, merged as <b>, origin/<b>, refs/heads/<b> or refs/remotes/origin/<b>: done-a, done-b.")
 }
 
 func TestMergeRefusalOfARowIntegratingNothingNamesNoBranch(t *testing.T) {
-	assert.NotContains(t, mergeRefusal("734253d9a", "main", types.Job{ID: "worker"}), "integrates")
+	assert.NotContains(t, mergeRefusal("734253d9a", "main", jobtypes.Job{ID: "worker"}), "integrates")
 }
 
 func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
-	row := types.Job{ID: "integrate", Integrates: []string{"done-a"}}
+	row := jobtypes.Job{ID: "integrate", Integrates: []string{"done-a"}}
 	got := map[string]bool{}
 	for _, operand := range []string{"done-a", "other"} {
 		got[operand] = mergesBase(operand, "", row)
 	}
 	assert.Equal(t, map[string]bool{"done-a": true, "other": false}, got)
-	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
+	assert.False(t, mergesBase("done-a", "", jobtypes.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
 
 // standingWorker is a worker row on a checkout its fork made. Each test gets a
@@ -565,7 +566,7 @@ type standingWorker struct {
 	layers ctxLayers
 	repo   worktreeRepo
 	own    string
-	worker types.Job
+	worker jobtypes.Job
 }
 
 func (s *standingWorker) build() {
@@ -574,12 +575,12 @@ func (s *standingWorker) build() {
 	s.worker = narrowLease()
 	s.worker.Parent = "orchestrator"
 	s.worker.CheckoutRoot = s.own
-	s.worker.Worktree = &types.JobWorktree{Root: s.own}
+	s.worker.Worktree = &jobtypes.Worktree{Root: s.own}
 }
 
 func (s *standingWorker) ledger() {
 	s.layers, _ = fleetLayers(s.T(), s.worker)
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.worker}}))
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{s.worker}}))
 }
 
 // judgedWorker is a standingWorker whose suite's tests only judge, so they
@@ -719,7 +720,7 @@ func (s *WorkerReattachSuite) TestFromAnotherCheckoutItNamesItsOwn() {
 func (s *WorkerReattachSuite) TestARowWithNoCheckoutOfItsOwnIsRefused() {
 	row := s.worker
 	row.Worktree = nil
-	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []types.Job{row}})
+	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []jobtypes.Job{row}})
 	s.Contains(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git switch -C "+row.ID), "`git switch`")
 }
 
@@ -750,7 +751,7 @@ func TestWorkerVCSUnboundCommitSuite(t *testing.T) { suite.Run(t, new(UnboundCom
 func (s *UnboundCommitSuite) commit() string {
 	row := s.worker
 	row.CheckoutRoot = ""
-	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []types.Job{row}})
+	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []jobtypes.Job{row}})
 	return denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git commit -m done")
 }
 
@@ -771,7 +772,7 @@ type LeaseWriteMoveSuite struct {
 func TestLeaseWriteMoveSuite(t *testing.T) { suite.Run(t, new(LeaseWriteMoveSuite)) }
 
 func (s *LeaseWriteMoveSuite) hold(writes []string, denies ...string) {
-	layers, root := fleetLayers(s.T(), types.Job{ID: "mover", Paths: types.JobPaths{Write: writes, Deny: denies}, State: types.StateRunning, Registered: 1})
+	layers, root := fleetLayers(s.T(), jobtypes.Job{ID: "mover", Paths: jobtypes.Paths{Write: writes, Deny: denies}, State: jobtypes.StateRunning, Registered: 1})
 	s.layers = layers
 	for _, file := range []string{"libs/old/a.go", "libs/old/sub/b.go"} {
 		s.Require().NoError(os.MkdirAll(filepath.Join(root, filepath.Dir(file)), 0o755))
@@ -867,7 +868,7 @@ type workerRevert struct {
 	suite.Suite
 	at     location
 	repo   worktreeRepo
-	worker types.Job
+	worker jobtypes.Job
 	wt     string
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ import (
 // `ls` renders a type private to cmd/magus; its registry example is the contract instead.
 func TestPipeRecordsNameRealFields(t *testing.T) {
 	rendered := map[string]any{
-		"ls jobs":          types.JobList{},
+		"ls jobs":          job.List{},
 		"describe file":    types.FileReport{},
 		"describe spells":  types.SpellReport{},
 		"describe targets": types.TargetReport{},
@@ -118,7 +119,7 @@ func TestOutputPipeRewrites(t *testing.T) {
 		{"magus describe file a.go | grep output", "`-o name` prints each path"},
 		{"magus ls | cut -d' ' -f1", "{{range .projects}}{{.path}}"},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		got := v.Deny + v.Context
 		assert.Contains(t, got, tc.want, tc.command)
 		assert.Contains(t, got, "needs no pipe: ", tc.command)
@@ -156,7 +157,7 @@ func TestOutputPipeKeepsTheGenericAnswerWithoutARecord(t *testing.T) {
 		{"magus ls | tr 'a' 'b'", "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record"},
 		{"magus agent install | sort", "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record"},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		got := v.Deny + v.Context
 		assert.Contains(t, got, tc.want, tc.command)
 		assert.NotContains(t, got, "slice .", tc.command)
@@ -177,7 +178,7 @@ func TestOutputPipeLeavesCompositionAlone(t *testing.T) {
 		"magus refs TODO --text | tr ':' '\\t'",
 		"magus ls --help | tr -s ' '",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Empty(t, v.Deny, command)
 		assert.NotEqual(t, advisoryGraphPipe, v.Kind, command)
 	}

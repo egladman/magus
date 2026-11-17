@@ -52,13 +52,13 @@ final SYMBOLS = ".magus/symbols";
 final GENERATE_SOURCES = ["cmd/magus-utils/boundary_types.go", "cmd/magus-utils/boundary_decode.go", "cmd/magus-utils/contract.go", "internal/spell/target.go", "internal/spell/host_decls.go", "cmd/magus/main.go"];
 
 // bootstrapArgv is ward.BootstrapCommand as argv for env, which sets the experiment
-// internal/json needs without a shell.
+// magus builds libs/codec with, without a shell.
 export fun bootstrapArgv() > [str] {
     return ["GOEXPERIMENT=jsonv2", "go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."];
 }
 
 // generateArgv is each //go:generate line of a Go source as argv for env, with the experiment
-// internal/json needs. They are read rather than listed here, so a directive added to the
+// magus builds libs/codec with. They are read rather than listed here, so a directive added to the
 // source is run too.
 export fun generateArgv(source: str) > [[str]] {
     final found: mut [[str]] = mut [];

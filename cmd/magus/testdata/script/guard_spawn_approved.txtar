@@ -60,7 +60,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 import "magus";
 
 magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 -- spawn.json --
 {"session_id": "s1", "tool_name": "Agent", "tool_input": {"prompt": "find every caller", "subagent_type": "explore"}}

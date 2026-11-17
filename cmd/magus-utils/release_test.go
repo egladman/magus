@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -37,7 +37,7 @@ func TestReleaseIndexSignAndVerify(t *testing.T) {
 			},
 		},
 	}
-	data, err := json.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", nil))
+	data, err := codec.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", nil))
 	require.NoError(t, err)
 	data = append(data, '\n')
 
@@ -72,7 +72,7 @@ func TestBuildIndexEmitsOnlyTheServedSchema(t *testing.T) {
 		},
 		{Version: "v0.1.0", Date: "2026-07-05", Body: "### Added\n\n- initial", Yanked: true},
 	}
-	data, err := json.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", []string{"deadbeefdeadbeef"}))
+	data, err := codec.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", []string{"deadbeefdeadbeef"}))
 	require.NoError(t, err)
 	require.Equal(t, `{"schema_version":1,"key_id":"testkeyid","revoked":["deadbeefdeadbeef"],"expires_at":"2099-01-01T00:00:00Z","releases":[`+
 		`{"version":"v0.2.0","artifacts":[{"name":"magus_v0.2.0_linux_amd64_static.tar.gz","platform":"linux/amd64","size":"12","sha256":"ab"}]},`+
@@ -89,14 +89,14 @@ func buildIndexForTest(manifests []ReleaseManifest) ReleaseIndex {
 // reader in internal/selfupdate. The two schemas are declared in different
 // packages, so nothing but this stops them drifting apart.
 func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
-	data, err := json.Marshal(buildIndexForTest([]ReleaseManifest{
+	data, err := codec.Marshal(buildIndexForTest([]ReleaseManifest{
 		{Version: "v0.2.0", Artifacts: []ReleaseArtifact{{Name: "magus_v0.2.0_linux_amd64_static.tar.gz"}}},
 		{Version: "v0.3.0", Yanked: true},
 	}))
 	require.NoError(t, err)
 
 	var idx selfupdate.ReleaseIndex
-	require.NoError(t, json.Unmarshal(data, &idx))
+	require.NoError(t, codec.Unmarshal(data, &idx))
 	require.Equal(t, 1, idx.SchemaVersion)
 
 	rel, err := selfupdate.SelectRelease(&idx, "")
@@ -113,7 +113,7 @@ func TestBuildIndexKeepsPrereleasesOutOfReleases(t *testing.T) {
 		{Version: "v0.4.3+build-1", Artifacts: []ReleaseArtifact{{Name: "stable.tar.gz"}}},
 	}
 	idx := buildIndexForTest(manifests)
-	data, err := json.Marshal(idx)
+	data, err := codec.Marshal(idx)
 	require.NoError(t, err)
 	require.Equal(t, `{"schema_version":1,"key_id":"testkeyid","expires_at":"2099-01-01T00:00:00Z",`+
 		`"releases":[{"version":"v0.4.3+build-1","artifacts":[{"name":"stable.tar.gz","platform":"","size":"","sha256":""}]}],`+
@@ -121,7 +121,7 @@ func TestBuildIndexKeepsPrereleasesOutOfReleases(t *testing.T) {
 		string(data))
 
 	var client selfupdate.ReleaseIndex
-	require.NoError(t, json.Unmarshal(data, &client))
+	require.NoError(t, codec.Unmarshal(data, &client))
 	auto, err := selfupdate.SelectRelease(&client, "")
 	require.NoError(t, err)
 	require.Equal(t, "v0.4.3+build-1", auto.Version)
@@ -156,9 +156,9 @@ func TestServedIndexMatchesTheManifests(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
 	require.NoError(t, err)
 	var served ReleaseIndex
-	require.NoError(t, json.Unmarshal(got, &served))
+	require.NoError(t, codec.Unmarshal(got, &served))
 
-	want, err := json.Marshal(buildIndex(mustLoadShippedManifests(t), served.KeyID, served.ExpiresAt, served.Revoked))
+	want, err := codec.Marshal(buildIndex(mustLoadShippedManifests(t), served.KeyID, served.ExpiresAt, served.Revoked))
 	require.NoError(t, err)
 	require.Equal(t, string(want)+"\n", string(got),
 		"docs/gen/public/release/index.json is stale: re-run `magus-utils release-index` and re-sign it")
@@ -181,7 +181,7 @@ func TestServedIndexIsSignedByTheRing(t *testing.T) {
 	signer, err := selfupdate.ReleaseKeys().Verify(data, sig)
 	require.NoError(t, err)
 	var served ReleaseIndex
-	require.NoError(t, json.Unmarshal(data, &served))
+	require.NoError(t, codec.Unmarshal(data, &served))
 	require.Equal(t, signer.ID, served.KeyID, "the index must name the key that signed it")
 }
 
@@ -192,7 +192,7 @@ func TestServedIndexHasNotExpired(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
 	require.NoError(t, err)
 	var served ReleaseIndex
-	require.NoError(t, json.Unmarshal(data, &served))
+	require.NoError(t, codec.Unmarshal(data, &served))
 	require.NotEmpty(t, served.ExpiresAt, "an index with no expires_at can be replayed forever")
 
 	deadline, err := time.Parse(time.RFC3339, served.ExpiresAt)

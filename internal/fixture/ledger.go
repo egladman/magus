@@ -2,12 +2,12 @@ package fixture
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,16 +29,18 @@ func StateBase(tb testing.TB) string {
 //
 // The root is a git repository, so each fork records the authority ADR 0045 has
 // the guard require of a leased call.
-func SeedLeases(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
+func SeedLeases(tb testing.TB, leases ...jobtypes.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
 	root, cacheDir = testkit.NewRepository(tb, nil).Root(), tb.TempDir()
-	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root})
+	// One declaration time for every lease, so which came first falls to the id.
+	at := time.Now()
+	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root, Clock: func() time.Time { return at }})
 	for _, lease := range leases {
 		if lease.Validated == 0 {
 			lease.Validated = 1
 		}
-		_, err := store.Update(tb.Context(), lease.ID, func(cur *types.Job) { *cur = lease })
+		_, err := store.Update(tb.Context(), lease.ID, func(cur *jobtypes.Job) { *cur = lease })
 		require.NoError(tb, err)
 	}
 	return root, cacheDir
@@ -51,29 +53,29 @@ func SeedLeases(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 // consulted. The order is fixed, and callers index it: [0] is lease-a, running and owning
 // internal/ledger/**; [1] is lease-b, declared and owning cmd/magus/** minus its denied
 // subtree.
-func FleetLeases() []types.Job {
-	return []types.Job{
+func FleetLeases() []jobtypes.Job {
+	return []jobtypes.Job{
 		{
 			ID:           "lease-a",
-			Agent:        agent.Instructed("own the ledger store\nacceptance: List stays cheap"),
-			Paths:        types.JobPaths{Write: []string{"internal/ledger/**"}},
-			State:        types.StateRunning,
+			Agent:        jobtypes.Instructed("own the ledger store\nacceptance: List stays cheap"),
+			Paths:        jobtypes.Paths{Write: []string{"internal/ledger/**"}},
+			State:        jobtypes.StateRunning,
 			Checkpoint:   "rev-a",
 			ReportedBase: "rev-a",
-			BaseVerdict:  types.BaseMatch,
+			BaseVerdict:  jobtypes.BaseMatch,
 			Registered:   1,
 		},
 		{
 			ID:    "lease-b",
-			Agent: agent.Instructed("grade writes in the guard"),
-			Paths: types.JobPaths{
+			Agent: jobtypes.Instructed("grade writes in the guard"),
+			Paths: jobtypes.Paths{
 				Write: []string{"cmd/magus/**", "docs/guard.md"},
 				Deny:  []string{"cmd/magus/gen/**"},
 			},
-			State:        types.StateDeclared,
+			State:        jobtypes.StateDeclared,
 			Checkpoint:   "rev-a",
 			ReportedBase: "rev-a",
-			BaseVerdict:  types.BaseMatch,
+			BaseVerdict:  jobtypes.BaseMatch,
 			Registered:   1,
 		},
 	}

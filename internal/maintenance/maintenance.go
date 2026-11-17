@@ -115,7 +115,7 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	}
 	now := time.Now()
 	for _, j := range schedule {
-		if isDue(base, j, now) {
+		if isDue(ctx, base, j, now) {
 			_, _ = proc.SubmitJob(ctx, addr, j.argv, opts.Version)
 		}
 	}
@@ -124,8 +124,8 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 // isDue reports whether j should run now: true if it has never run within the retained trail, or
 // if at least its interval has elapsed since its last run (finish time = recorded start plus
 // duration). Pure over (base, now) so the schedule decision is testable without a live server.
-func isDue(base string, j scheduledJob, now time.Time) bool {
-	ev, ok := trail.LastRun(base, j.action)
+func isDue(ctx context.Context, base string, j scheduledJob, now time.Time) bool {
+	ev, ok := trail.LastRun(ctx, base, j.action)
 	if !ok {
 		return true // never run in the retained trail
 	}

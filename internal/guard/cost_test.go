@@ -19,6 +19,9 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -259,25 +262,24 @@ func fileSize(t *testing.T, path string) int64 {
 
 // fixtureModelRows stand in for the rows a harness spell publishes; no table is built into
 // the guard.
-var fixtureModelRows = []types.ModelPricing{
-	{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-	{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
-	{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10},
-	{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50,
-		LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
-	{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5},
+var fixtureModelRows = []model.Row{
+	{ID: "claude-fable-5-1", Window: 1_000_000, Price: budget.Price{Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50}},
+	{ID: "claude-opus-5-5", Window: 1_000_000, Price: budget.Price{Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20}},
+	{ID: "claude-sonnet-5-5", Window: 1_000_000, Price: budget.Price{Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10}},
+	{ID: "claude-haiku-5-5", Window: 1_000_000, Price: budget.Price{Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50, LongContext: &budget.PriceStep{Above: 100_000, Multiplier: 5}}},
+	{ID: "claude-haiku-4-5", Window: 200_000, Price: budget.Price{Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5}},
 }
 
 func fixtureModelTable() model.Table { return model.InEffect(fixtureModelRows, nil) }
 
-func fixtureModelSource() []types.ModelPricing { return fixtureModelRows }
+func fixtureModelSource() []model.Row { return fixtureModelRows }
 
 // The harness rows cost a workspace load, so billing leaves them unread; agents.models
 // then overrides them field by field.
 func TestModelTableReadsHarnessRowsOnlyForTheTableAndUnderAgentsModels(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	loads := 0
-	at := hookLocation(ctx, Dependencies{ModelRows: func() []types.ModelPricing {
+	at := hookLocation(ctx, Dependencies{ModelRows: func() []model.Row {
 		loads++
 		return fixtureModelRows
 	}})
@@ -289,7 +291,7 @@ func TestModelTableReadsHarnessRowsOnlyForTheTableAndUnderAgentsModels(t *testin
 	opus, ok := at.modelTable().Lookup("claude-opus-5-5")
 	require.True(t, ok)
 	assert.Equal(t, 1, loads)
-	assert.Equal(t, types.ModelPricing{ID: "claude-opus-5-5", Window: 1_000_000, Input: 3, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
+	assert.Equal(t, model.Row{ID: "claude-opus-5-5", Window: 1_000_000, Price: budget.Price{Input: 3, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20}},
 		opus, "agents.models wins, and a field it leaves 0 keeps the harness row")
 	_, ok = at.modelTable().Lookup("claude-haiku-5-5")
 	assert.True(t, ok, "rows agents.models does not mention stay")
@@ -345,11 +347,11 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	}).Return()
 	ctx = observability.WithProvider(ctx, rec)
 
-	observed := observeCall(ctx, at, "/r/a.go", who, hookToolRead, "", types.GuardJudgment{})
+	observed := observeCall(ctx, at, "/r/a.go", who, hookToolRead, "", verdict.Judgment{})
 	assert.Equal(t, types.AgentFacts{Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported}, observed, "an observation records the thread alone")
 	assert.Empty(t, calls, "and counts nothing")
 
-	got := observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", types.GuardJudgment{Decision: decisionPass})
+	got := observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", verdict.Judgment{Decision: verdict.Defer})
 	assert.Equal(t, types.AgentFacts{
 		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, DelegableClass: types.DelegableSearch,
 		ContextTokens: 100000, ContextModel: "claude-opus-5-5",
@@ -370,9 +372,9 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	assert.Equal(t, 1, st.Repeats[lineDigest("rg -n Judge .")])
 	assert.Equal(t, 4, st.Results["Bash"])
 
-	observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", types.GuardJudgment{Decision: decisionDeny})
+	observeCall(ctx, at, "rg -n Judge .", who, hookToolCommand, "", verdict.Judgment{Decision: verdict.Deny})
 	assert.Equal(t, 1, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a refused call never ran")
-	observeCall(ctx, at, "/r/a.go", who, hookToolWrite, "", types.GuardJudgment{Decision: decisionPass})
+	observeCall(ctx, at, "/r/a.go", who, hookToolWrite, "", verdict.Judgment{Decision: verdict.Defer})
 	assert.Empty(t, readCostState(hint.NewGate(cache, who.factsKey())).Repeats, "a write starts the repeats over")
 	noteMainSpawn(at, who, "", "")
 	assert.Zero(t, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a spawn starts the streak over")
@@ -437,7 +439,7 @@ func TestNoteForkReadsEveryShape(t *testing.T) {
 		{"cd /r && ./magus job fork a1", []string{"a1"}},
 		{fmt.Sprintf(`./magus job fork --stdin <<'EOF'
 {"api_version": %q, "id": "a2", "read_only": true}
-EOF`, string(types.JobAPIVersion)), []string{"a2"}},
+EOF`, string(jobtypes.APIVersion)), []string{"a2"}},
 		{`client op=put id="a3" parent="root"`, []string{"a3"}},
 		{`./magus buzz -e 'import "magus"; magus\workspace().putJob("a4", opts: {"parent": "root"});'`, []string{"a4"}},
 		{"./magus job wait a1", nil},
@@ -461,8 +463,8 @@ EOF`, string(types.JobAPIVersion)), []string{"a2"}},
 func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	t.Parallel()
 	judged := time.Unix(1_700_000_000, 0)
-	rows := map[string]types.Job{}
-	live := func(id string) (types.Job, bool) {
+	rows := map[string]jobtypes.Job{}
+	live := func(id string) (jobtypes.Job, bool) {
 		row, ok := rows[id]
 		return row, ok
 	}
@@ -472,8 +474,8 @@ func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	assert.Empty(t, st.Forked, "the store shows no row yet")
 	assert.Len(t, st.Forks, 2)
 
-	rows["old"] = types.Job{ID: "old", State: types.StateRunning, Created: judged.Unix() - 60}
-	rows["a1"] = types.Job{ID: "a1", State: types.StateDeclared, Created: judged.Unix()}
+	rows["old"] = jobtypes.Job{ID: "old", State: jobtypes.StateRunning, Created: judged.Unix() - 60}
+	rows["a1"] = jobtypes.Job{ID: "a1", State: jobtypes.StateDeclared, Created: judged.Unix()}
 	confirmForks(&st, live, judged.Add(2*time.Second))
 	assert.Equal(t, costState{
 		Forked: []string{"a1"},
@@ -660,11 +662,11 @@ func TestRootWorkClassPlacesAHomePathOutsideTheCheckout(t *testing.T) {
 func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
 	t.Parallel()
 	at, _ := orchestratorFixture(t)
-	rows := []types.Job{
-		{ID: "a1", State: types.StateRunning, Check: &types.LeaseCheck{Target: "go-test", Project: "."}},
-		{ID: "a2", State: types.StatePass, Check: &types.LeaseCheck{Target: "lint", Project: "docs"}},
+	rows := []jobtypes.Job{
+		{ID: "a1", State: jobtypes.StateRunning, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}},
+		{ID: "a2", State: jobtypes.StatePass, Check: &jobtypes.LeaseCheck{Target: "lint", Project: "docs"}},
 	}
-	tries := []types.Attempt{filedResult("a2", &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out9"}})}
+	tries := []jobtypes.Attempt{filedResult("a2", &jobtypes.Result{Validation: jobtypes.ResultValidation{OutputRef: "out9"}})}
 	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows, Attempts: tries})
 	forked := costState{Forked: []string{"a1", "a2"}}
 

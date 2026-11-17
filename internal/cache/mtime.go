@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // mtimeEntry records the stat fingerprint and content hash of one file (single-char JSON keys for compactness).
@@ -136,7 +136,7 @@ func (s *mtimeStore) load(ctx context.Context) {
 			f.Close()
 			continue
 		}
-		if err := json.NewDecoder(gz).Decode(&s.shards[key]); err != nil {
+		if err := codec.NewDecoder(gz).Decode(&s.shards[key]); err != nil {
 			// Wipe shard on partial decode to avoid stale-hash false hits.
 			s.shards[key] = make(map[string]mtimeEntry)
 		}
@@ -229,7 +229,7 @@ func (s *mtimeStore) writeShardFile(key byte, data map[string]mtimeEntry) error 
 	path := filepath.Join(s.dir, fmt.Sprintf("%02x.json.gz", key))
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
-	if err := json.NewEncoder(gz).Encode(data); err != nil {
+	if err := codec.NewEncoder(gz).Encode(data); err != nil {
 		_ = gz.Close()
 		return err
 	}

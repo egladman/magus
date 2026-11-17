@@ -5,7 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -238,7 +239,7 @@ func TestFixedRulesAreCompiledRules(t *testing.T) {
 	for name := range fixed {
 		assert.Contains(t, defaults, name)
 		assert.True(t, Fixed(name))
-		assert.Equal(t, []types.GuardDecision{types.GuardDecision(defaults[name].String())}, Verdicts(name), name)
+		assert.Equal(t, []verdict.Decision{verdict.Decision(defaults[name].String())}, Verdicts(name), name)
 	}
 	assert.False(t, Fixed("stage-all"))
 	assert.Equal(t, Deny, defaults["grant-is-a-persons"])
@@ -282,18 +283,18 @@ func TestResolveReportsEveryMisdeclaration(t *testing.T) {
 
 func TestDecisionTextRoundTrips(t *testing.T) {
 	for d, name := range map[decision]string{0: "", Off: "off", Advise: "advise", Deny: "deny"} {
-		got, err := json.Marshal(Setting{Decision: d})
+		got, err := codec.Marshal(Setting{Decision: d})
 		require.NoError(t, err)
 		assert.Contains(t, string(got), fmt.Sprintf(`"decision":%q`, name))
 		var back Setting
-		require.NoError(t, json.Unmarshal(got, &back))
+		require.NoError(t, codec.Unmarshal(got, &back))
 		assert.Equal(t, d, back.Decision)
 	}
 }
 
 func TestDecisionTextRefusesUnknown(t *testing.T) {
 	var s Setting
-	err := json.Unmarshal([]byte(`{"decision":"block"}`), &s)
+	err := codec.Unmarshal([]byte(`{"decision":"block"}`), &s)
 	require.ErrorContains(t, err, `unknown decision "block", give off, advise or deny`)
 	_, err = decision(9).MarshalText()
 	require.EqualError(t, err, "guard decision 9 is not off, advise or deny")
@@ -451,8 +452,8 @@ func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
 }
 
 func TestVerdicts(t *testing.T) {
-	adviseOnly := []types.GuardDecision{types.GuardAdvise}
-	both := []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
+	adviseOnly := []verdict.Decision{verdict.Advise}
+	both := []verdict.Decision{verdict.Advise, verdict.Deny}
 	assert.Equal(t, adviseOnly, Verdicts("stall"), "a rule that never refuses")
 	assert.Equal(t, adviseOnly, Verdicts("guard-unfinished"), "a fixed rule")
 	assert.Equal(t, both, Verdicts("stage-all"), "a recoverable rule a workspace may lower")

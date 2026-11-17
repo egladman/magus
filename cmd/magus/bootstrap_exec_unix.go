@@ -26,7 +26,7 @@ func bootstrapExecInto(target string, argv []string, env []string) {
 	execArgv := append([]string{target}, argv[1:]...)
 	// gosec reads any non-constant exec target as injection. target is a magus binary
 	// path this process resolved for itself, and execing one is the whole function.
-	if err := syscall.Exec(target, execArgv, env); err != nil { //nolint:gosec // G702
+	if err := syscall.Exec(target, execArgv, env); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: exec %s failed: %v\n", target, err)
 	}
 }

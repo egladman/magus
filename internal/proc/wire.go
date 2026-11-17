@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -66,7 +66,7 @@ func refusalMessage(body []byte) string {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if json.Unmarshal(body, &r) == nil {
+	if codec.Unmarshal(body, &r) == nil {
 		if r.Message != "" {
 			return r.Message
 		}
@@ -79,7 +79,7 @@ func refusalMessage(body []byte) string {
 
 // writeJSON answers v as JSON with status.
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if err != nil {
 		status, body = http.StatusInternalServerError, []byte(`{"message":"proc: encode reply"}`)
 	}
@@ -109,7 +109,7 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) error {
 		}
 		return fmt.Errorf("proc: read request: %w", err)
 	}
-	if err := json.Unmarshal(body, v); err != nil {
+	if err := codec.Unmarshal(body, v); err != nil {
 		return fmt.Errorf("proc: decode request: %w", err)
 	}
 	return nil

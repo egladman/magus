@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -205,15 +205,15 @@ type Client struct {
 	ChunkSize int64
 
 	mu         sync.Mutex
-	challenges map[string]challenge      // by registry host
-	tokens     map[tokenKey]types.Secret // bearer tokens by (realm, service, scope)
+	challenges map[string]challenge        // by registry host
+	tokens     map[tokenKey]secrets.Secret // bearer tokens by (realm, service, scope)
 }
 
-// Credentials is a registry login. The password is a [types.Secret], revealed only where
+// Credentials is a registry login. The password is a [secrets.Secret], revealed only where
 // the Authorization header or the token request is built.
 type Credentials struct {
 	Username string
-	Password types.Secret
+	Password secrets.Secret
 }
 
 func (c Credentials) isZero() bool { return c.Username == "" && c.Password.IsZero() }
@@ -484,7 +484,7 @@ func (c *Client) manifest(ctx context.Context, ref Reference) (ocispec.Manifest,
 		}
 	}
 	var m ocispec.Manifest
-	if err := json.Unmarshal(raw, &m); err != nil {
+	if err := codec.Unmarshal(raw, &m); err != nil {
 		return ocispec.Manifest{}, nil, fmt.Errorf("oci: decode %s manifest: %w", ref, err)
 	}
 	return m, raw, nil
@@ -571,7 +571,7 @@ func (a Artifact) Manifest() (RawManifest, error) {
 		}
 		descs = append(descs, d)
 	}
-	body, err := json.Marshal(ocispec.Manifest{
+	body, err := codec.Marshal(ocispec.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
 		MediaType:    ocispec.MediaTypeImageManifest,
 		ArtifactType: a.ArtifactType,
@@ -675,7 +675,7 @@ func (c *Client) tagPage(ctx context.Context, repo Reference, u *url.URL) ([]str
 	var body struct {
 		Tags []string `json:"tags"`
 	}
-	if err := json.Unmarshal(raw, &body); err != nil {
+	if err := codec.Unmarshal(raw, &body); err != nil {
 		return nil, "", fmt.Errorf("oci: list %s: %w", repo, err)
 	}
 	return body.Tags, resp.Header.Get("Link"), nil
@@ -798,9 +798,9 @@ type StatusError struct {
 // is one of the spec's codes, such as MANIFEST_UNKNOWN, DENIED or TOOMANYREQUESTS, or a
 // registry's own.
 type RegistryError struct {
-	Code    string          `json:"code"`
-	Message string          `json:"message"`
-	Detail  json.RawMessage `json:"detail,omitempty"`
+	Code    string           `json:"code"`
+	Message string           `json:"message"`
+	Detail  codec.RawMessage `json:"detail,omitempty"`
 }
 
 func (e *StatusError) Error() string {
@@ -846,7 +846,7 @@ func statusError(resp *http.Response) error {
 	var body struct {
 		Errors []RegistryError `json:"errors"`
 	}
-	if json.Unmarshal(raw, &body) == nil && len(body.Errors) > 0 {
+	if codec.Unmarshal(raw, &body) == nil && len(body.Errors) > 0 {
 		e.Errors = body.Errors
 		return e
 	}

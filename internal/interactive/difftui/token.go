@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // Tokens is the shell's token store as a review call uses it: the operator mints and revokes,
@@ -22,7 +22,7 @@ type Tokens interface {
 }
 
 // SetBearer is where a review's console token leaves for the server's API.
-func SetBearer(req *http.Request, token types.Secret) {
+func SetBearer(req *http.Request, token secrets.Secret) {
 	req.Header.Set("Authorization", "Bearer "+token.Reveal())
 }
 
@@ -37,7 +37,7 @@ const CallTokenTTL = time.Minute
 // carries: they refuse the operator token. ok is false with no server at
 // addr, which writes no record, or on a failed mint.
 // The caller revokes tokenID.
-func MintToken(ctx context.Context, tk Tokens, addr string, ttl time.Duration) (token types.Secret, tokenID string, ok bool) {
+func MintToken(ctx context.Context, tk Tokens, addr string, ttl time.Duration) (token secrets.Secret, tokenID string, ok bool) {
 	warn := func(msg string, why ...any) {
 		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
 	}
@@ -47,15 +47,15 @@ func MintToken(ctx context.Context, tk Tokens, addr string, ttl time.Duration) (
 		if !errors.Is(err, syscall.ECONNREFUSED) {
 			warn("the review is not shared with the server: it did not answer", attr.Error(err))
 		}
-		return types.Secret{}, "", false
+		return secrets.Secret{}, "", false
 	}
 	_ = conn.Close() // a probe: nothing was written on it
-	secret, rec, err := tk.Mint(auth.MintRequest{Grant: types.GrantConsole, TTL: ttl})
+	secret, rec, err := tk.Mint(auth.MintRequest{Grant: auth.AccessConsole(), TTL: ttl})
 	if err != nil {
 		warn("the review is not shared with the server: its console token could not be minted", attr.Error(err))
-		return types.Secret{}, "", false
+		return secrets.Secret{}, "", false
 	}
-	return types.NewSecret(secret), rec.ID, true
+	return secrets.New(secret), rec.ID, true
 }
 
 // RevokeToken deletes the record MintToken wrote.

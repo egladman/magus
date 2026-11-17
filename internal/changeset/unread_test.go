@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/codec"
 )
 
 func TestUnreadHunksListsWhatNoMarkCoversInPatchOrder(t *testing.T) {
@@ -93,7 +93,7 @@ func TestUnreadLoadViewedNamesAnOldJSONFileAndHowToPreserveIt(t *testing.T) {
 
 	_, err := NewStore(dir).LoadViewed()
 
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, old)
 }

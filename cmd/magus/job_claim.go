@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/job/evidence"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // jobClaimEnv is what applying a claim record asks of the command line.
@@ -17,7 +17,7 @@ func jobClaimEnv() job.ClaimEnv {
 	return job.ClaimEnv{
 		Config:    globalCfg,
 		Workspace: jobWorkspace,
-		Callers: func(ctx context.Context, root, name string) ([]types.JobClaimRequest, error) {
+		Callers: func(ctx context.Context, root, name string) ([]jobtypes.ClaimRequest, error) {
 			return evidence.ExpandCallers(ctx, root, name, jobCallersEnv())
 		},
 	}
@@ -36,7 +36,7 @@ func jobCallersEnv() evidence.CallersEnv {
 }
 
 // applyClaim applies the one claim record records holds and prints the proofs.
-func applyClaim(ctx context.Context, root string, records []types.Declaration) error {
+func applyClaim(ctx context.Context, root string, records []jobtypes.Declaration) error {
 	open := func() (*job.Store, error) { return openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun}) }
 	stored, added, err := job.ApplyClaim(ctx, root, records, open, globalCfg.DryRun, jobClaimEnv())
 	if err != nil {

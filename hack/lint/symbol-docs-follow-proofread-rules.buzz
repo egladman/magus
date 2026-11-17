@@ -35,7 +35,7 @@ export fun reads() > [str] {
         "hack/policy/proofread.buzz", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
         "libs/text/**/*.go", "libs/xdg/**/*.go", "libs/clikit/**/*.go", "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
-        "libs/textsearch/**/*.ts"];
+        "libs/textsearch/**/*.ts", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go", "libs/codec/**/*.go"];
 }
 
 // check fails every proofread finding hack/policy/proofread.buzz denies.

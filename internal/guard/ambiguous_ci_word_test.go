@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 func TestAsksAmbiguousCIWord(t *testing.T) {
@@ -70,35 +72,35 @@ func TestAssumesCIWord(t *testing.T) {
 func TestAmbiguousCIWordDeniesAssumingCall(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
-	assert.NotEqual(t, "deny", s.bash("", "./magus affected ci").Decision, "no ambiguous ci word yet")
+	assert.NotEqual(t, verdict.Deny, s.bash("", "./magus affected ci").Decision, "no ambiguous ci word yet")
 
 	v := s.message("get ci passing")
-	assert.Equal(t, "pass", v.Decision, "a message is recorded, never judged")
+	assert.Equal(t, verdict.Defer, v.Decision, "a message is recorded, never judged")
 
 	v = s.bash("", "./magus affected ci")
-	require.Equal(t, []string{"deny", string(denyRuleAmbiguousCIWord)}, []string{v.Decision, v.Rule})
+	require.Equal(t, []string{string(verdict.Deny), string(denyRuleAmbiguousCIWord)}, []string{string(v.Decision), v.Rule})
 	assert.Contains(t, v.Reason, "ambiguous")
 
 	v = s.bash("", "gh run list")
-	require.Equal(t, []string{"deny", string(denyRuleAmbiguousCIWord)}, []string{v.Decision, v.Rule})
+	require.Equal(t, []string{string(verdict.Deny), string(denyRuleAmbiguousCIWord)}, []string{string(v.Decision), v.Rule})
 
 	v = s.write("", ".github/workflows/ci.yaml")
-	require.Equal(t, []string{"deny", string(denyRuleAmbiguousCIWord)}, []string{v.Decision, v.Rule})
+	require.Equal(t, []string{string(verdict.Deny), string(denyRuleAmbiguousCIWord)}, []string{string(v.Decision), v.Rule})
 
-	assert.NotEqual(t, "deny", s.bash("", "./magus affected list").Decision, "a non-ci call is untouched")
+	assert.NotEqual(t, verdict.Deny, s.bash("", "./magus affected list").Decision, "a non-ci call is untouched")
 
 	v = s.message("I mean affected ci, the magus gate")
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 
-	assert.NotEqual(t, "deny", s.bash("", "./magus affected ci").Decision, "a clarifying message clears the gate")
+	assert.NotEqual(t, verdict.Deny, s.bash("", "./magus affected ci").Decision, "a clarifying message clears the gate")
 }
 
 func TestAmbiguousCIWordStaysClearWhenMessageClarifies(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
 	v := s.message(`we need to get "affected ci" passing`)
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 
-	assert.NotEqual(t, "deny", s.bash("", "./magus affected ci").Decision,
+	assert.NotEqual(t, verdict.Deny, s.bash("", "./magus affected ci").Decision,
 		"a message that already names the magus target never arms the rule")
 }

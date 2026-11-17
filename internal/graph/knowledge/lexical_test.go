@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
@@ -181,7 +181,7 @@ func TestExportCarriesNoSectionBody(t *testing.T) {
 	for _, blob := range export.Shards {
 		assert.NotContains(t, string(blob.Bytes), "zanzibar", "a published shard carries no body")
 	}
-	out, err := json.Marshal(mergeShards([]Shard{lexicalDocsShard(body)}).Output())
+	out, err := codec.Marshal(mergeShards([]Shard{lexicalDocsShard(body)}).Output())
 	require.NoError(t, err)
 	assert.NotContains(t, string(out), "zanzibar", "the graph's output carries no body")
 

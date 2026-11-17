@@ -232,20 +232,23 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // file never emits it. There the prompt comes from a rules file the codex harness writes
 // (.codex/rules/magus.rules, a prefix_rule with decision "prompt" on each push verb and
 // on each run of a human_only target), and the PermissionRequest event Codex raises
-// before that prompt reaches this same file, which answers allow for a call the guard
-// passes, leaves an ask to the person, and denies a leased worker's.
+// before that prompt reaches this same file, which writes no decision for a call the guard
+// defers or asks, so the person answers Codex's prompt, and denies a leased worker's.
+//
+// The guard never answers yes. A defer is no objection, and this file writes no
+// permission decision for it, so the host's own permission flow decides the call.
 //
 // An ask is the host's own prompt, never the model's question tool.
-// Where no prompt can happen it renders as a deny, never an allow.
+// Where no prompt can happen it renders as a deny, never a yes.
 // promptBlocker names those cells. systemMessage tells the person why
 // and what to type at their terminal.
-// magus-guard-template: 36
-// magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model pass=none ask=model
-// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
+// magus-guard-template: 37
+// magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model defer=none ask=model
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model defer=none ask=model
 // The mcp and path rows are real: every host wires this file to every tool, so an
 // mcp__magus__* call and a file write reach it as whole events (see hook\wholeEvent), and
 // the same hookSpecificOutput reply it renders for a command carries a deny or an advise on
@@ -287,14 +290,14 @@ final AGENT_SLOT = "__MAGUS_ASK_AGENT__";
 final ASK_BLOCKED = `{{else if eq .decision "ask"}}{"systemMessage":{{toJson (print .reason __MAGUS_ASK_PERSON__)}},"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason __MAGUS_ASK_AGENT__)}}}}`;
 
 // A decision this file does not know is refused, never allowed: the guard contract
-// grows, and a copy older than the growth must not read the new verdict as a pass.
+// grows, and a copy older than the growth must not read the new verdict as a defer.
 final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}`;
 
 // A deny's first line is the verdict, for the display both readers see; the rest (next step,
 // details ref) goes to additionalContext, the capture only the agent reads. A host whose
 // harness declares no capture channel is sent the verdict line alone by `magus shell`.
 final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"additionalContext":{{toJson .}}{{end}}}}`;
-final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
+final DEFER_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "defer"}}`;
 
 // A block's reason sends the agent back to work and shows the person, so it carries the
 // first line and additionalContext the rest. An advise lets the stop through
@@ -308,7 +311,6 @@ final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"
 final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{end}}`;
 
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
-final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
 final PERMISSION_DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson .reason}}}}}{{else if eq .decision "ask"}}`;
 final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}}{{end}}`;
 
@@ -623,16 +625,13 @@ fun adviseBranch() > str {
 }
 
 // permissionResponse answers the approval request Codex raises just before its own
-// prompt. No decision object leaves the prompt to the person; allow skips it, and is
-// answered only for a call a magus prompt rule raised, because this event fires for every
-// approval Codex asks and a pass from the guard is not the person's consent to anything
-// else.
-fun permissionResponse(event: any?, rule: str?) > str {
-    var covered = PERMISSION_NO_DECISION;
-    if (rule != null and codexRuleMissing(event, rule: rule!) == "") { covered = PERMISSION_ALLOW; }
+// prompt. No decision object leaves the prompt to the person, which is the answer for
+// every decision but a deny: a defer from the guard is no objection, never the person's
+// consent.
+fun permissionResponse() > str {
     return PERMISSION_DENY_HEAD + PERMISSION_NO_DECISION
-        + `{{else if eq .decision "pass"}}` + covered
-        + `{{else if eq .decision "advise"}}` + covered
+        + `{{else if eq .decision "defer"}}` + PERMISSION_NO_DECISION
+        + `{{else if eq .decision "advise"}}` + PERMISSION_NO_DECISION
         + PERMISSION_UNKNOWN;
 }
 
@@ -689,14 +688,14 @@ fun main(args: [str]) > void {
     var response = env\get("HOST_RESPONSE") catch "";
     var capabilities = mut [<str>];
     if (response == "" and eventName == "PermissionRequest") {
-        response = permissionResponse(event, rule: promptRule);
+        response = permissionResponse();
         capabilities.append("--renders-ask");
     } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
         response = STOP_REPLY.replace(STOP_EVENT_SLOT, with: eventName);
         if (codex) { response = STOP_REPLY_CODEX; }
     } else if (response == "") {
         response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule, command: commandLine)
-            + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
+            + adviseBranch() + DEFER_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         capabilities.append("--renders-ask");
     }
 
@@ -781,11 +780,11 @@ fun main(args: [str]) > void {
     }
     final by = Guard{ bin = judged.by, payload = payload, response = response, dir = cwd };
 
-    // A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
-    // point of this block. A pass exits 0 with empty output because there was nothing to
+    // A DEFER and a BROKEN GUARD both render nothing, and telling them apart is the whole
+    // point of this block. A defer exits 0 with empty output because there was nothing to
     // say; a binary that cannot run, too old for `magus shell`, unable to load the
     // workspace, half-written by a concurrent build, exits non-zero with empty output, and
-    // printing that as a pass silently disables every rule with nothing anywhere saying so.
+    // printing that as a defer silently disables every rule with nothing anywhere saying so.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         var verdict = failureNotice(by, failed: result);
         if (judged.trail.len() > 0) { verdict = judged.trail.join("\n") + "\n" + verdict; }
@@ -970,8 +969,8 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 36
-// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
+// magus-guard-template: 37
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model defer=none ask=human
 
 import "io";
 import "flags";
@@ -993,7 +992,7 @@ final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToo
 final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this write from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
 
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
-final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
+final DEFER_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "defer"}}`;
 
 
 // What magus's own decoder tests to tell an envelope from a bare path. `\{` escapes the
@@ -1110,7 +1109,7 @@ fun main(args: [str]) > void {
     var response = env\get("HOST_RESPONSE") catch "";
     var rendersAsk = [<str>];
     if (response == "") {
-        response = DENY_HEAD + askBranch + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
+        response = DENY_HEAD + askBranch + adviseBranch() + DEFER_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         rendersAsk = ["--renders-ask"];
     }
 
@@ -1148,7 +1147,7 @@ fun main(args: [str]) > void {
     var trail = "";
     if (judged.trail.len() > 0) { trail = judged.trail.join("\n") + "\n"; }
 
-    // A pass and a broken guard both render nothing; see magus-command.buzz for why
+    // A defer and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         var why = "it could not be run";
@@ -1228,7 +1227,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1351,7 +1350,7 @@ exits 0.
 // digest, and magus records the result as unobserved. HOST_AGENT_PATH names
 // the subagent, which tells a worker from its parent.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 import "std";
 import "io";
@@ -1470,14 +1469,14 @@ guard.
 
 **A missing arm renders empty.** `HOST_RESPONSE` carries both a deny arm and an
 advise arm. A template missing one does not fail loudly; it renders nothing, and
-every host reads nothing as allow. Claude Code's `--path` wiring once rendered
+every host reads nothing as no objection. Claude Code's `--path` wiring once rendered
 only the deny arm, so every advisory it produced was silently dropped, while the
 shipped path template had the opposite gap and dropped denials.
 
-**A pass and a broken guard both render nothing.** A pass exits 0 with empty
+**A defer and a broken guard both render nothing.** A defer exits 0 with empty
 output because there was nothing to say. A binary that cannot run (too old for
 `session hook`, unable to load the workspace, half-written by a concurrent build) exits
-non-zero with empty output. Printing that as a pass disables every rule with
+non-zero with empty output. Printing that as a defer disables every rule with
 nothing anywhere saying so. Both templates discriminate on status and emptiness
 together, and announce the second case. The announcement names its evidence
 (the binary path they resolved, that binary's version, and the first line it
@@ -1564,7 +1563,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1718,7 +1717,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1866,7 +1865,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -2128,7 +2127,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 import "io";
 import "fs";
@@ -2868,7 +2867,7 @@ not a call.
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 import "io";
 import "flags";
@@ -3136,7 +3135,7 @@ exits 0, and declares no `magus-guard-coverage` line: it judges no call.
 //
 // NO magus-guard-coverage line: it carries no verdict on any input.
 //
-// magus-guard-template: 36
+// magus-guard-template: 37
 
 import "io";
 import "std";
@@ -3253,5 +3252,5 @@ magus session hook -o template
 ```
 
 The last one lists the fields available to `-o template`. A deny exits 2 with
-the verdict on stdout; a pass and an advise exit 0. See [The guard](guard.md)
+the verdict on stdout; a defer and an advise exit 0. See [The guard](guard.md)
 for the rules behind the verdicts.

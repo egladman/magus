@@ -416,8 +416,8 @@ body[data-dash-native] { margin: 0; }
   color: var(--pf-t--global--text--color--subtle);
 }
 /* A passed call takes the same green as everything else that passed. */
-.console-dashboard-row.console-dashboard-agents__call[data-decision="pass"] { border-inline-start-color: var(--console-status-ok); }
-.console-dashboard-row.console-dashboard-agents__call[data-decision="pass"] .console-dashboard-agents__notice {
+.console-dashboard-row.console-dashboard-agents__call[data-decision="defer"] { border-inline-start-color: var(--console-status-ok); }
+.console-dashboard-row.console-dashboard-agents__call[data-decision="defer"] .console-dashboard-agents__notice {
   color: var(--console-status-ok);
   background: color-mix(in srgb, var(--console-status-ok) 13%, transparent);
 }

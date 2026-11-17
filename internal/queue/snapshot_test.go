@@ -11,12 +11,12 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/queue/types"
-	magustypes "github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 func fetchedSnapshot(base string, at int64) Snapshot {
 	return Snapshot{
-		Fetched: magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
+		Fetched: job.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
 		Changes: types.Changes{Schema: types.SchemaChanges, Base: base, Changes: []types.Change{
 			{ID: "7", Head: head("7"), Base: base, Branch: "feat", Author: "ann", Method: types.MethodSquash},
 		}},
@@ -119,20 +119,25 @@ func TestSnapshotRecordPlan(t *testing.T) {
 
 func TestSnapshotJoinInflight(t *testing.T) {
 	root := t.TempDir()
-	list := magustypes.JobList{Jobs: []magustypes.Job{{ID: "a", State: magustypes.StateRunning}}}
+	list := jobtypes.List{Jobs: []jobtypes.Job{{ID: "a", State: jobtypes.StateRunning}}}
 
 	got, err := JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, list, got, "never fetched joins nothing")
+	assert.Equal(t, job.InflightList{List: list}, got, "never fetched joins nothing")
 
 	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
 	got, err = JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, magustypes.JobList{
-		Jobs:    list.Jobs,
-		Fetched: &magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
-		Changes: []magustypes.InflightChange{{
-			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: magustypes.AttentionQueue,
+	// The attention type is internal/job's own, so its value is read as the string it carries.
+	require.Len(t, got.Changes, 1)
+	assert.Equal(t, "queue", string(got.Changes[0].Attention))
+	want := job.InflightList{
+		List:    list,
+		Fetched: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
+		Changes: []job.InflightChange{{
+			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true,
 		}},
-	}, got)
+	}
+	want.Changes[0].Attention = got.Changes[0].Attention
+	assert.Equal(t, want, got)
 }

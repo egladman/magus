@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -51,7 +51,7 @@ func (s *Store) readPathIDs() map[string]pathIDEntry {
 		return nil
 	}
 	var idx map[string]pathIDEntry
-	if json.Unmarshal(b, &idx) != nil {
+	if codec.Unmarshal(b, &idx) != nil {
 		return nil
 	}
 	return idx
@@ -84,7 +84,7 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 	}) {
 		return
 	}
-	b, err := json.Marshal(next)
+	b, err := codec.Marshal(next)
 	if err == nil {
 		err = file.WriteFileAtomic(s.pathIDsPath(), b, 0o644)
 	}

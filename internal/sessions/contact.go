@@ -1,13 +1,15 @@
 package sessions
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -59,22 +61,22 @@ func (c PathContact) Touched() bool { return c.Sessions > 0 }
 // record this build cannot decode all report nothing rather than failing the caller. A
 // workspace that has never loaded a transcript is indistinguishable from one whose files
 // no session touched, which is correct: both have nothing to say.
-func readPathContact(dir, path string) PathContact {
+func readPathContact(ctx context.Context, dir, path string) PathContact {
 	var out PathContact
 	if dir == "" || path == "" {
 		return out
 	}
-	fold, err := ReadAgentEvents(dir)
+	fold, err := session.FoldAgentEvents(ctx, dir)
 	if err != nil {
 		return out
 	}
 	var seen []string
 	for _, rec := range fold.Records {
-		if rec.Kind != KindAgentEvent {
+		if rec.Kind != session.KindAgentEvent {
 			continue
 		}
-		var ev AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) != nil {
+		var ev session.AgentEvent
+		if codec.Unmarshal(rec.Payload, &ev) != nil {
 			continue
 		}
 		// compat: see knowledge.go's loadKnowledgeAgentContacts. Loads store the
@@ -90,9 +92,9 @@ func readPathContact(dir, path string) PathContact {
 			continue
 		}
 		switch ev.Kind {
-		case EventFileRead:
+		case session.EventFileRead:
 			out.Reads++
-		case EventFileWrite:
+		case session.EventFileWrite:
 			out.Writes++
 		default:
 			// Every other kind is path-less by construction: a shell command's text is
@@ -139,7 +141,7 @@ func ContactForNode(node types.KnowledgeNode, dir func() (string, error)) *PathC
 	if err != nil {
 		return nil
 	}
-	c := readPathContact(d, path)
+	c := readPathContact(context.Background(), d, path)
 	if !c.Touched() {
 		return nil
 	}

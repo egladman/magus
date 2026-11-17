@@ -27,10 +27,11 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -115,7 +116,7 @@ func queueEvents(t *testing.T, out []byte) []queue.Event {
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
 		var e queue.Event
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &e), "stdout is JSONL only: %q", sc.Text())
+		require.NoError(t, codec.Unmarshal(sc.Bytes(), &e), "stdout is JSONL only: %q", sc.Text())
 		evs = append(evs, e)
 	}
 	return evs
@@ -709,7 +710,7 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		lines []string
 	}
 	keyAll := func() []keyed {
-		w, err := magus.Open(t.Context(), root, magus.WithEnv(os.Environ()), magus.WithSpawnRule(magus.TierCeiling))
+		w, err := magus.Open(t.Context(), root, magus.WithEnv(os.Environ()), magus.WithSpawnRule(tier.Ceiling))
 		require.NoError(t, err)
 		defer func() { _ = w.Close() }()
 		var out []keyed

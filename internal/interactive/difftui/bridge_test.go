@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
 )
 
@@ -49,7 +49,7 @@ func newHeldDiffSession(t *testing.T) *heldDiffSession {
 	s := &heldDiffSession{started: make(chan struct{}), release: make(chan struct{})}
 	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var op sessionOp
-		if err := json.NewDecoder(r.Body).Decode(&op); err != nil {
+		if err := codec.NewDecoder(r.Body).Decode(&op); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -75,7 +75,7 @@ func (s *heldDiffSession) unblock() { s.releaseOnce.Do(func() { close(s.release)
 // bridge is a Bridge pointed at the held session, skipping the attach round trip the queue has no
 // part in.
 func (s *heldDiffSession) bridge() *Bridge {
-	b := &Bridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: types.NewSecret("held")}
+	b := &Bridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: secrets.New("held")}
 	b.start()
 	return b
 }
@@ -309,7 +309,7 @@ func TestDialDiffBridgeCarriesAConsoleTokenAndRevokesIt(t *testing.T) {
 	cred, ok := auth.Verify(presented)
 	require.True(t, ok, "the token is live while the bridge is open")
 	cred.ID, cred.Name = "", ""
-	assert.Equal(t, types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, cred)
+	assert.Equal(t, auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, cred)
 
 	b.Close()
 	_, ok = auth.Verify(presented)
@@ -333,7 +333,7 @@ func (s storeTokens) Mint(req auth.MintRequest) (string, auth.Token, error) {
 	if err != nil {
 		return "", auth.Token{}, err
 	}
-	secret, rec, err := store.Mint(types.GrantOperator, req)
+	secret, rec, err := store.Mint(auth.AccessOperator(), req)
 	if err != nil {
 		return "", auth.Token{}, err
 	}
@@ -345,7 +345,7 @@ func (s storeTokens) Revoke(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = store.Revoke(types.GrantOperator, id)
+	_, err = store.Revoke(auth.AccessOperator(), id)
 	return err
 }
 

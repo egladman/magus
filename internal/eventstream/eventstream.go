@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // fromJournal maps one journal event onto the stream envelope, reporting false
@@ -121,7 +121,7 @@ func (w *Writer) Emit(e events.Event) error {
 	if e.Body == nil || !w.filter.Allows(e.Body.StreamType()) {
 		return nil
 	}
-	line, err := json.Marshal(e)
+	line, err := codec.Marshal(e)
 	if err != nil {
 		return err
 	}

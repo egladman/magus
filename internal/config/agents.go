@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -54,17 +56,15 @@ type AgentModel struct {
 }
 
 // ModelOverrides returns Models as the overrides model.InEffect applies, sorted by id.
-func (a Agents) ModelOverrides() []types.ModelPricing {
-	out := make([]types.ModelPricing, 0, len(a.Models))
+func (a Agents) ModelOverrides() []model.Row {
+	out := make([]model.Row, 0, len(a.Models))
 	for _, id := range slices.Sorted(maps.Keys(a.Models)) {
 		m := a.Models[id]
-		row := types.ModelPricing{
-			ID: id, Window: m.Window, Input: types.USDPerMTok(m.Input), Output: types.USDPerMTok(m.Output),
-			CacheWrite5m: types.USDPerMTok(m.CacheWrite5m), CacheWrite1h: types.USDPerMTok(m.CacheWrite1h),
-			CacheRead: types.USDPerMTok(m.CacheRead),
+		row := model.Row{
+			ID: id, Window: m.Window, Price: budget.Price{Input: budget.USDPerMTok(m.Input), Output: budget.USDPerMTok(m.Output), CacheWrite5m: budget.USDPerMTok(m.CacheWrite5m), CacheWrite1h: budget.USDPerMTok(m.CacheWrite1h), CacheRead: budget.USDPerMTok(m.CacheRead)},
 		}
 		if m.PriceStep > 0 {
-			row.LongContext = &types.PriceStep{Above: m.PriceStep, Multiplier: m.StepFactor}
+			row.LongContext = &budget.PriceStep{Above: m.PriceStep, Multiplier: m.StepFactor}
 		}
 		out = append(out, row)
 	}

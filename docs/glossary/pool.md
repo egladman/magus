@@ -32,6 +32,7 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `gopherbuzz.Pool` (Go)
+- `budget.pool` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

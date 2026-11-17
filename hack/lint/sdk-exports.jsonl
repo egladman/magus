@@ -205,7 +205,6 @@
 {"name":"TargetHandler","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetLabel","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetOption","reason":"option type taken by Open, Run, Plan or a declaration"}
-{"name":"TierCeiling","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"WithBaseRef","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBroker","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBrokerPolicy","reason":"functional option that configures a Run, a Target or a Project declaration"}
@@ -259,3 +258,10 @@
 {"name":"WorkspaceRegistryFromContext","reason":"multi-workspace registry that lets one process serve several roots"}
 {"name":"Magus.TargetSandboxes","reason":"the merge queue hook and a nested magus share one source for every target's sandbox layer"}
 {"name":"UncommittedRepairs","reason":"cmd/magus refuses a ci verdict whose repaired files are not committed; the check lives beside the run that records them"}
+{"name":"CheckGrader","reason":"Magus.CheckGrader returns it; the alias names internal/job's grader so no caller outside the module meets an internal type"}
+{"name":"Magus.CheckGrader","reason":"std's job store door grades a declared check through it, since the guard lives above std"}
+{"name":"ModelRecord","reason":"Magus.Models returns it; the alias names internal/agent/model's row so no caller outside the module meets an internal type"}
+{"name":"ModelRecord.Multiplier","reason":"the long-context surcharge field ModelRecord promotes from budget.Price"}
+{"name":"WithSecrets","reason":"a program embedding magus supplies the secret provider openers and options the workspace's resolver is built with"}
+{"name":"ChoiceConflictError","reason":"Open returns it when two magusfiles name different spells for one workspace-wide choice, and a caller matches it with errors.As"}
+{"name":"ChoiceConflictError.Error","reason":"the error method of the conflict Open returns"}

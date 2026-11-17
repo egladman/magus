@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
@@ -60,10 +61,10 @@ func TestFailureLimiterBoundsItsCallers(t *testing.T) {
 // admitting its valid token, and charges a failure to the TCP peer.
 func TestGuardLimitsOnlyFailures(t *testing.T) {
 	l := NewFailureLimiter(20, 2)
-	verify := func(p string) (types.Credential, bool) {
-		return types.Credential{Grant: types.GrantConnector}, p == "good"
+	verify := func(p string) (auth.Credential, bool) {
+		return auth.Credential{Grant: auth.AccessConnector()}, p == "good"
 	}
-	h, err := ProcedureGuard(rpcerr.FormatJSON, verify, map[string]types.Need{"/mcp": {Scope: types.ScopeMCP, Level: types.LevelWrite}},
+	h, err := ProcedureGuard(rpcerr.FormatJSON, verify, map[string]auth.Need{"/mcp": {Scope: auth.ScopeMCP, Level: auth.LevelWrite}},
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }), WithFailureLimit(l))
 	require.NoError(t, err)
 	send := func(origin, token string) *httptest.ResponseRecorder {

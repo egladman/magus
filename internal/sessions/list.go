@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // RenderInvocations prints the listing `magus session` opens with.
@@ -23,7 +24,7 @@ import (
 // INVOCATION is magus's own id for the process; SESSION is the host's conversation it
 // ran in, a dash when no host delivered one. clock is the prompt-cache clock of the
 // checkout, empty when its trail holds nothing.
-func RenderInvocations(ctx context.Context, root string, w io.Writer, summaries []Summary, fold Fold, dir string, filtered bool, clock PromptCacheClock) error {
+func RenderInvocations(ctx context.Context, root string, w io.Writer, summaries []session.Summary, fold session.Fold, dir string, filtered bool, clock PromptCacheClock) error {
 	renderCheckpoints(ctx, root, w, LatestCheckpoints(fold))
 	if len(summaries) == 0 {
 		if filtered {
@@ -103,7 +104,7 @@ func invocationParent(bySpan map[string]string, parentSpanID string) string {
 // summarizeTargets renders a session's targets as "<target> <project> (<outcome>)",
 // collapsing a repeated target so a session that ran one target over forty projects
 // does not render forty times.
-func summarizeTargets(targets []TargetResult) string {
+func summarizeTargets(targets []session.TargetResult) string {
 	seen := map[string]bool{}
 	var out []string
 	for _, t := range targets {
@@ -157,10 +158,10 @@ func ParseSince(raw string) (time.Time, error) {
 
 // InvocationsInCheckout keeps the invocations that ran in the checkout at root. The store
 // is keyed by repository, so every checkout writes to it.
-func InvocationsInCheckout(summaries []Summary, root string) []Summary {
+func InvocationsInCheckout(summaries []session.Summary, root string) []session.Summary {
 	want := resolvedPath(root)
 	resolved := map[string]string{}
-	out := make([]Summary, 0, len(summaries))
+	out := make([]session.Summary, 0, len(summaries))
 	for _, s := range summaries {
 		// compat(until: no stored invocation lacks a Workspace): one recorded before the
 		// field existed stays, because dropping it would hide history rather than scope it.
@@ -194,12 +195,12 @@ func resolvedPath(p string) string {
 // It filters on LastMs rather than StartedMs so a long-lived invocation that is still
 // working stays listed. The alternative hides exactly the one a person asking "what is
 // happening lately" most wants: one that began before the window and has not stopped.
-func InvocationsSince(summaries []Summary, cutoff time.Time) []Summary {
+func InvocationsSince(summaries []session.Summary, cutoff time.Time) []session.Summary {
 	if cutoff.IsZero() {
 		return summaries
 	}
 	ms := cutoff.UnixMilli()
-	out := make([]Summary, 0, len(summaries))
+	out := make([]session.Summary, 0, len(summaries))
 	for _, s := range summaries {
 		if s.LastMs >= ms {
 			out = append(out, s)

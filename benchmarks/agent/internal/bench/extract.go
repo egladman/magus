@@ -17,7 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pricing"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Tool names whose call counts feed file_reads / re_read_rate.
@@ -84,7 +84,7 @@ func contentText(content any) (string, error) {
 		}
 		return strings.Join(parts, "\n"), nil
 	}
-	raw, err := json.Marshal(content)
+	raw, err := codec.Marshal(content)
 	return string(raw), err
 }
 
@@ -100,7 +100,7 @@ func blockText(block any) (string, error) {
 		case "image":
 			return "[image]", nil
 		}
-		raw, err := json.Marshal(b)
+		raw, err := codec.Marshal(b)
 		return string(raw), err
 	}
 	return "", nil
@@ -252,7 +252,7 @@ func (t *transcript) takeAssistant(message map[string]any) error {
 		}
 	}
 	if id, ok := message["id"]; ok && id != nil {
-		key, err := json.Marshal(id)
+		key, err := codec.Marshal(id)
 		if err != nil {
 			return err
 		}
@@ -405,7 +405,7 @@ func readTranscript(file, runID, defaultModel string) (*transcript, error) {
 			return nil
 		}
 		var rec any
-		if err := json.Unmarshal(line, &rec); err != nil {
+		if err := codec.Unmarshal(line, &rec); err != nil {
 			return fmt.Errorf("%s: malformed transcript.jsonl line: %w", runID, err)
 		}
 		return t.take(rec)
@@ -436,7 +436,7 @@ func readGuardEvents(file string) (events GuardEvents, captured bool, err error)
 	defer fh.Close()
 	err = jsonlLines(fh, func(line []byte) error {
 		var doc any
-		if unmarshalErr := json.Unmarshal(line, &doc); unmarshalErr != nil {
+		if unmarshalErr := codec.Unmarshal(line, &doc); unmarshalErr != nil {
 			return nil //nolint:nilerr // a malformed line is skipped by design; the rest of the trail still counts
 		}
 		event, ok := doc.(map[string]any)
@@ -528,7 +528,7 @@ func readAnswer(runDir string) (counts answerCounts, graded bool, err error) {
 	if err != nil {
 		return answerCounts{}, false, err
 	}
-	if err := json.Unmarshal(raw, &counts); err != nil {
+	if err := codec.Unmarshal(raw, &counts); err != nil {
 		return answerCounts{}, false, fmt.Errorf("%s: answer.json: %w", runDir, err)
 	}
 	if counts.TP < 0 || counts.FP < 0 || counts.FN < 0 {
@@ -552,7 +552,7 @@ func readTiming(runDir string) (timing, error) {
 		return timing{}, err
 	}
 	var t timing
-	if err := json.Unmarshal(raw, &t); err != nil {
+	if err := codec.Unmarshal(raw, &t); err != nil {
 		return timing{}, fmt.Errorf("%s: timing.json: %w", runDir, err)
 	}
 	return t, nil
@@ -570,8 +570,8 @@ func readMeta(runDir string) (raw []byte, control string, err error) {
 	if err != nil {
 		return nil, "", err
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
+	var fields map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &fields); err != nil {
 		return nil, "", fmt.Errorf("%s: meta.json: %w", runDir, err)
 	}
 	for _, name := range requiredMeta {
@@ -580,14 +580,14 @@ func readMeta(runDir string) (raw []byte, control string, err error) {
 		}
 	}
 	var rep float64
-	if err := json.Unmarshal(fields["rep"], &rep); err != nil {
+	if err := codec.Unmarshal(fields["rep"], &rep); err != nil {
 		return nil, "", fmt.Errorf("%s: meta.json rep: %w", runDir, err)
 	}
 	if rep != math.Trunc(rep) {
 		return nil, "", fmt.Errorf("%s: meta.json rep is not an int", runDir)
 	}
 	if kind, ok := fields["control"]; ok {
-		if err := json.Unmarshal(kind, &control); err != nil {
+		if err := codec.Unmarshal(kind, &control); err != nil {
 			return nil, "", fmt.Errorf("%s: meta.json control: %w", runDir, err)
 		}
 	}
@@ -617,7 +617,7 @@ func extractRun(runDir string, table pricing.Table) (RunRecord, error) {
 			return RunRecord{}, fmt.Errorf("%s: meta.json control %q is not golden or null", runDir, control)
 		}
 		c := &controlRun{}
-		if err := json.Unmarshal(raw, c); err != nil {
+		if err := codec.Unmarshal(raw, c); err != nil {
 			return RunRecord{}, fmt.Errorf("%s: meta.json: %w", runDir, err)
 		}
 		c.CheckExit, c.Success = checkExit, success
@@ -625,7 +625,7 @@ func extractRun(runDir string, table pricing.Table) (RunRecord, error) {
 	}
 
 	run := &ScoredRun{}
-	if err := json.Unmarshal(raw, run); err != nil {
+	if err := codec.Unmarshal(raw, run); err != nil {
 		return RunRecord{}, fmt.Errorf("%s: meta.json: %w", runDir, err)
 	}
 	// The runner writes control as "" for a scored run; the row's key is null.
@@ -743,7 +743,7 @@ func (r RunRecord) ID() string {
 // newline.
 func (r RunRecord) JSON() ([]byte, error) {
 	if r.Control != nil {
-		return json.Marshal(r.Control)
+		return codec.Marshal(r.Control)
 	}
-	return json.Marshal(r.Scored)
+	return codec.Marshal(r.Scored)
 }

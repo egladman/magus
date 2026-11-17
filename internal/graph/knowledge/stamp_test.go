@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +51,7 @@ func ensure(t *testing.T, cacheDir string, stamps Stamps, want []ShardClass, in 
 
 func outputJSON(t *testing.T, g *Graph) string {
 	t.Helper()
-	b, err := json.Marshal(g.Output())
+	b, err := codec.Marshal(g.Output())
 	require.NoError(t, err)
 	return string(b)
 }
@@ -104,9 +104,9 @@ func TestEnsureReassemblesAClassWhoseShardChangedUnderTheManifest(t *testing.T) 
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var sf shardFile
-	require.NoError(t, json.Unmarshal(b, &sf))
+	require.NoError(t, codec.Unmarshal(b, &sf))
 	sf.Fingerprint = "written-by-another-build"
-	b, err = json.Marshal(sf)
+	b, err = codec.Marshal(sf)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 

@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 

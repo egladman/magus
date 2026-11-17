@@ -11,8 +11,8 @@ import (
 	"github.com/opencontainers/go-digest"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -20,11 +20,11 @@ import (
 // the workspace's secret provider when spells.registries names the host. Both are the
 // command's to supply: one reads its process's stdin, the other loads its workspace.
 type Login struct {
-	ReadToken func(ctx context.Context) (types.Secret, error)
+	ReadToken func(ctx context.Context) (secrets.Secret, error)
 	// Secrets loads the workspace and returns a context that resolves secrets through
 	// the provider its magusfile selects, with the resolver that registers values for
 	// redaction.
-	Secrets func(ctx context.Context) (context.Context, *secret.Resolver, error)
+	Secrets func(ctx context.Context) (context.Context, *secrets.Resolver, error)
 }
 
 // NewClient builds the client for one registry host. username wins, with the
@@ -59,14 +59,14 @@ func NewClient(ctx context.Context, httpClient *http.Client, spells config.Spell
 
 // registryCredential resolves host's spells.registries entry through r, which registers
 // the value for redaction before returning it.
-func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, types.Secret, error) {
+func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secrets.Resolver) (string, secrets.Secret, error) {
 	entry, ok := spells.Registry(host)
 	if !ok {
-		return "", types.Secret{}, fmt.Errorf("spells.registries has no entry for %s", host)
+		return "", secrets.Secret{}, fmt.Errorf("spells.registries has no entry for %s", host)
 	}
 	pass, err := r.Read(ctx, entry.PasswordRef)
 	if err != nil {
-		return "", types.Secret{}, fmt.Errorf("spells.registries %s: %w", host, err)
+		return "", secrets.Secret{}, fmt.Errorf("spells.registries %s: %w", host, err)
 	}
 	return entry.Username, pass, nil
 }
@@ -75,7 +75,7 @@ func registryCredential(ctx context.Context, spells config.SpellsConfig, host st
 // loading the workspace, so a reference resolves through the built-in environment
 // provider rather than one a magusfile would select.
 func LockClient(httpClient func() *http.Client, spells config.SpellsConfig) func(context.Context, string) (*oci.Client, error) {
-	r := secret.New()
+	r := secrets.NewResolver()
 	return func(ctx context.Context, host string) (*oci.Client, error) {
 		c := &oci.Client{HTTP: httpClient()}
 		if _, ok := spells.Registry(host); !ok {

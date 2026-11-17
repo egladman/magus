@@ -17,6 +17,8 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -94,7 +96,7 @@ type Payload struct {
 	Unintegrated *briefUnintegrated `json:"unintegrated,omitempty"`
 	// Unmerged is what the checkout's branch does not hold, the facts
 	// the stop rule refuses on.
-	Unmerged types.JobUnmergedReport `json:"unmerged"`
+	Unmerged jobtypes.UnmergedReport `json:"unmerged"`
 	// Attention is the open attention queue, the same count `session ls` prints. Nil means
 	// the brief was not gathered, which prints nothing; a store that could not be read is
 	// Unread on a non-nil value, so the two never read as an empty queue.
@@ -286,7 +288,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 		brief.Jobs = &briefJobTree{Unread: snap.Err.Error()}
 		brief.Unmerged.Unknown = snap.Err.Error()
 	} else {
-		rows, tries := snap.Rows, types.NewJobAttempts(snap.Attempts)
+		rows, tries := snap.Rows, jobtypes.NewAttempts(snap.Attempts)
 		brief.Unmerged = job.Unmerged(ctx, root, rows, tries)
 		acting := r.ActingLease(ctx, root)
 		brief.Leases, brief.OtherLeases = briefLeases(rows, acting, root)
@@ -297,8 +299,8 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 		}
 	}
 	brief.Unintegrated = unintegratedBranches(ctx, r, root)
-	brief.Failures = lastRunFailures(r, root)
-	brief.Attention = briefAttentionQueue(r, root)
+	brief.Failures = lastRunFailures(ctx, r, root)
+	brief.Attention = briefAttentionQueue(ctx, r, root)
 	if wired, err := workspace.WiredHarnesses(ws); err == nil {
 		brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, wired...))
 		brief.Rules = ruleLocations(ctx, root, wired...)
@@ -307,7 +309,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 	}
 	brief.PromptCache = r.PromptCache(root, time.Now())
 	if base, err := r.CacheDir(root); err == nil {
-		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
+		if feedback, err := trail.RecentGuardFeedback(ctx, base, "", briefFeedbackEvents); err == nil {
 			for _, item := range feedback {
 				if item.NeedsReview() {
 					item.Evidence = item.Evidence[:min(len(item.Evidence), briefFeedbackEvidence)]
@@ -319,7 +321,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 			}
 		}
 	}
-	brief.Recent = recentLoadedSessions(r.ResolveRoot(root))
+	brief.Recent = recentLoadedSessions(ctx, r.ResolveRoot(root))
 	brief.Console = r.ConsoleURL()
 	return brief
 }
@@ -338,17 +340,17 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 //
 // Best-effort and silent, like every other source feeding the brief: a workspace that
 // loads no transcripts contributes nothing instead of an error.
-func recentLoadedSessions(root string) []briefSession {
+func recentLoadedSessions(ctx context.Context, root string) []briefSession {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return nil
 	}
 	var out []briefSession
-	for _, s := range sessions.Summarize(fold) {
+	for _, s := range session.Summarize(fold) {
 		if s.Events == 0 {
 			continue
 		}
@@ -430,7 +432,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 // same filter the write guard applies, so the brief and the refusals agree about which
 // leases are live. It names those taken in this checkout and the caller's own binding,
 // editing jobs first, up to briefMaxLeases, and counts the rest.
-func briefLeases(rows []types.Job, acting, root string) (leases []briefLease, others int) {
+func briefLeases(rows []jobtypes.Job, acting, root string) (leases []briefLease, others int) {
 	var editing, exited []briefLease
 	for _, row := range rows {
 		if !row.State.Live() {
@@ -473,24 +475,24 @@ func readJobSnapshot(ctx context.Context, r Readers, root string) job.Snapshot {
 	if err != nil {
 		return job.Snapshot{Err: err}
 	}
-	return job.ReadSnapshot(store)
+	return job.ReadSnapshot(ctx, store)
 }
 
 // sessionJobTree is the jobs under this session's root, nil when it owns none. The CLI
 // cannot see the host session, so the checkout names the root: the job acted under here,
 // else the jobs forked from here, each tree only while something in it is live or still
 // holds a checkout.
-func sessionJobTree(ctx context.Context, rows []types.Job, tries types.JobAttempts, acting, root string, vcsOpts types.VCSOptions) *briefJobTree {
-	var tree []types.Job
+func sessionJobTree(ctx context.Context, rows []jobtypes.Job, tries jobtypes.Attempts, acting, root string, vcsOpts types.VCSOptions) *briefJobTree {
+	var tree []jobtypes.Job
 	if acting != "" {
-		tree = types.JobDescendants(rows, acting)
+		tree = jobtypes.Descendants(rows, acting)
 	} else {
 		for _, row := range rows {
 			if row.Parent != "" || row.Worktree == nil || filepath.Clean(row.Worktree.Source) != filepath.Clean(root) {
 				continue
 			}
-			sub := append([]types.Job{row}, types.JobDescendants(rows, row.ID)...)
-			if slices.ContainsFunc(sub, func(j types.Job) bool { return j.State.Live() || j.Worktree.Standing() }) {
+			sub := append([]jobtypes.Job{row}, jobtypes.Descendants(rows, row.ID)...)
+			if slices.ContainsFunc(sub, func(j jobtypes.Job) bool { return j.State.Live() || j.Worktree.Standing() }) {
 				tree = append(tree, sub...)
 			}
 		}
@@ -501,7 +503,7 @@ func sessionJobTree(ctx context.Context, rows []types.Job, tries types.JobAttemp
 	out := &briefJobTree{Root: acting}
 	// The root's own row is not in the tree, so its forks are the top level.
 	for _, line := range job.TreeOrder(withoutParent(tree, acting)) {
-		if line.Job.State == types.StateExited && line.Job.Rejection == nil {
+		if line.Job.State == jobtypes.StateExited && line.Job.Rejection == nil {
 			out.Uncollected = append(out.Uncollected, line.Job.ID)
 		}
 		if len(out.Jobs) == briefMaxJobs {
@@ -517,7 +519,7 @@ func sessionJobTree(ctx context.Context, rows []types.Job, tries types.JobAttemp
 
 // withoutParent clears parent from rows' Parent, so job.TreeOrder places its
 // children at the top level rather than after a row the tree does not carry.
-func withoutParent(rows []types.Job, parent string) []types.Job {
+func withoutParent(rows []jobtypes.Job, parent string) []jobtypes.Job {
 	if parent == "" {
 		return rows
 	}
@@ -531,16 +533,16 @@ func withoutParent(rows []types.Job, parent string) []types.Job {
 }
 
 // briefTreeJob reads one job's row and its checkout.
-func briefTreeJob(ctx context.Context, rows []types.Job, result *types.JobResult, row types.Job, vcsOpts types.VCSOptions) briefJob {
+func briefTreeJob(ctx context.Context, rows []jobtypes.Job, result *jobtypes.Result, row jobtypes.Job, vcsOpts types.VCSOptions) briefJob {
 	job := briefJob{ID: row.ID, State: string(row.State), Checkout: row.CheckoutRoot}
 	if row.Worktree.Standing() {
 		job.Checkout = row.Worktree.Root
 	}
 	for _, dep := range row.DependsOn {
 		d := briefDependency{ID: dep}
-		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == dep }); i >= 0 {
+		if i := slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == dep }); i >= 0 {
 			d.State = string(rows[i].State)
-			d.Satisfied = rows[i].State == types.StatePass
+			d.Satisfied = rows[i].State == jobtypes.StatePass
 		}
 		job.DependsOn = append(job.DependsOn, d)
 	}
@@ -563,23 +565,23 @@ func briefTreeJob(ctx context.Context, rows []types.Job, result *types.JobResult
 
 // briefNextStep is the step the row says comes next, "" when it is the holder's to take
 // or nothing is owed.
-func briefNextStep(rows []types.Job, row types.Job, unpushed *briefUnpushed) string {
+func briefNextStep(rows []jobtypes.Job, row jobtypes.Job, unpushed *briefUnpushed) string {
 	switch row.State {
-	case types.StateExited:
+	case jobtypes.StateExited:
 		return "collect it: " + hint.JobWait.With(row.ID)
-	case types.StateDeclared:
-		if block, blocked := types.JobBlockedOn(rows, row); blocked {
+	case jobtypes.StateDeclared:
+		if block, blocked := jobtypes.BlockedOn(rows, row); blocked {
 			if block.State == "" {
 				return fmt.Sprintf("waits on %s, which no job declares", block.On)
 			}
 			return fmt.Sprintf("waits on %s (%s)", block.On, string(block.State))
 		}
 		return "take it: " + hint.JobExec.With(row.ID)
-	case types.StatePass:
+	case jobtypes.StatePass:
 		if unpushed != nil && unpushed.Count > 0 {
 			return fmt.Sprintf("gate it in its checkout (%s), then push", hint.Affected.With("ci"))
 		}
-	case types.StateFail, types.StateNoReturn:
+	case jobtypes.StateFail, jobtypes.StateNoReturn:
 		return "read why: " + hint.DescribeJob.With(row.ID)
 	}
 	return ""
@@ -591,22 +593,22 @@ func briefNextStep(rows []types.Job, row types.Job, unpushed *briefUnpushed) str
 // The most recent SESSION rather than the most recent failure: a session that has
 // since run green answered the question already, and reporting its predecessor's
 // failures would send a reader after work that is done.
-func lastRunFailures(r Readers, root string) []briefFailure {
+func lastRunFailures(ctx context.Context, r Readers, root string) []briefFailure {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return nil
 	}
-	for _, s := range r.InCheckout(sessions.Summarize(fold), root) {
+	for _, s := range r.InCheckout(session.Summarize(fold), root) {
 		if len(s.Targets) == 0 {
 			continue
 		}
 		var out []briefFailure
 		for _, t := range s.Targets {
-			if t.Outcome != sessions.OutcomeFail {
+			if t.Outcome != session.OutcomeFail {
 				continue
 			}
 			f := briefFailure{Target: t.Target, Project: t.Project, Ref: t.Ref, DiagnosticCode: t.DiagnosticCode, At: briefTime(s.LastMs)}
@@ -623,12 +625,12 @@ func lastRunFailures(r Readers, root string) []briefFailure {
 // briefAttentionQueue reads the store `session ls` reads, through the same
 // [sessions.AttentionQueue]. A queue it cannot read is reported as Unread: silence would
 // read as none open. "Since" is the last activity of the checkout's previous host session.
-func briefAttentionQueue(r Readers, root string) *briefAttention {
+func briefAttentionQueue(ctx context.Context, r Readers, root string) *briefAttention {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return &briefAttention{Unread: err.Error()}
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return &briefAttention{Unread: err.Error()}
 	}
@@ -639,7 +641,7 @@ func briefAttentionQueue(r Readers, root string) *briefAttention {
 	}
 	out.Oldest = &briefAttentionRow{ID: queue[0].ID, Source: queue[0].Source, Outcome: queue[0].Outcome, OpenedMs: queue[0].OpenedMs}
 
-	summaries := r.InCheckout(sessions.Summarize(fold), root)
+	summaries := r.InCheckout(session.Summarize(fold), root)
 	if len(summaries) > 0 {
 		current := summaries[0].Session
 		for _, s := range summaries {
@@ -1040,7 +1042,7 @@ func briefTime(ms int64) string {
 	return time.UnixMilli(ms).Format("2006-01-02 15:04:05")
 }
 
-func claimLines(claims []types.JobClaim) []string {
+func claimLines(claims []jobtypes.Claim) []string {
 	if len(claims) == 0 {
 		return nil
 	}
@@ -1067,7 +1069,7 @@ type Readers struct {
 	// ConsoleURL is where a person opens the console, "" when none is served.
 	ConsoleURL func() string
 	// InCheckout keeps the invocations that ran in the checkout at root.
-	InCheckout func(summaries []sessions.Summary, root string) []sessions.Summary
+	InCheckout func(summaries []session.Summary, root string) []session.Summary
 }
 
 // orDash renders an empty or zero column as a dash.

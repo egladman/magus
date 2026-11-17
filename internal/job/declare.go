@@ -7,13 +7,15 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -23,7 +25,7 @@ func ComposeModelTierMatrix(workspace, user types.ModelTierMatrix) types.ModelTi
 	if user == nil {
 		return workspace
 	}
-	return func(ctx context.Context, req types.ModelTierRequest) (*typesagent.JobModelTier, error) {
+	return func(ctx context.Context, req types.ModelTierRequest) (*tier.Assignment, error) {
 		if workspace != nil {
 			choice, err := workspace(ctx, req)
 			if err != nil || choice != nil {
@@ -100,8 +102,8 @@ func listValues(command, name string, values []string) ([]string, error) {
 // An unparsable check is carried through so Validate names the rule,
 // rather than the row going silently checkless. An agent flag writes the
 // agent section, and models reads the --model word.
-func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) typesagent.Model) (types.Declaration, error) {
-	var d types.Declaration
+func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) job.Model) (job.Declaration, error) {
+	var d job.Declaration
 	for _, l := range []struct {
 		name string
 		from []string
@@ -114,34 +116,70 @@ func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) type
 	} {
 		var err error
 		if *l.to, err = listValues("magus job fork", l.name, l.from); err != nil {
-			return types.Declaration{}, err
+			return job.Declaration{}, err
 		}
 	}
-	d.Schema = types.Schema{Version: types.JobAPIVersion}
+	d.Schema = job.Schema{Version: job.APIVersion}
 	d.ID = id
 	d.Parent, d.Checkpoint, d.Checkout = f.Parent, f.Checkpoint, f.Checkout
-	d.BriefFormat, d.Delivery, d.ReadOnly = types.BriefFormat(f.BriefFormat), f.Delivery, f.ReadOnly
+	d.BriefFormat, d.Delivery, d.ReadOnly = job.BriefFormat(f.BriefFormat), f.Delivery, f.ReadOnly
 	if f.Timeout != 0 {
 		d.Timeout = f.Timeout.String()
 	}
 	if f.Model != "" || f.Instructions != "" || f.NewWorker != "" {
-		d.Agent = &typesagent.Spec{Instructions: f.Instructions, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}
+		d.Agent = &job.Agent{Instructions: f.Instructions, Worker: job.Worker{Type: job.WorkerTypeResumed}}
 		if f.Model != "" {
 			d.Agent.Model = models(f.Model)
 		}
 		if f.NewWorker != "" {
-			d.Agent.Worker = typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: f.NewWorker}
+			d.Agent.Worker = job.Worker{Type: job.WorkerTypeNew, Reason: f.NewWorker}
 		}
 	}
 	if strings.TrimSpace(f.Check) == "" {
 		return d, nil
 	}
-	parsed, err := types.ParseLeaseCheck(f.Check)
+	parsed, err := job.ParseLeaseCheck(f.Check)
 	if err != nil {
-		parsed = types.LeaseCheck{Target: f.Check}
+		parsed = job.LeaseCheck{Target: f.Check}
 	}
 	d.Check = &parsed
 	return d, nil
+}
+
+// resolveAccept is goals with each check goal that names no basis accepting a witnessed
+// run, the run magus's own `magus run` of the check records, and the ids of the goals it
+// defaulted so. The module refuses a check goal accepting nothing, so a declaration magus
+// reads resolves it before it is validated, as the module resolves a goal's expect; a
+// goal naming its bases keeps them.
+func resolveAccept(goals []job.Goal) ([]job.Goal, []string) {
+	if goals == nil {
+		return nil, nil
+	}
+	out := slices.Clone(goals)
+	var defaulted []string
+	for i, g := range out {
+		if len(g.Accept) == 0 && g.Resolve().Kind == job.GoalKindCheck {
+			out[i].Accept = []job.Basis{job.BasisWitnessed}
+			defaulted = append(defaulted, g.ID)
+		}
+	}
+	return out, defaulted
+}
+
+// DefaultedAccept is a check goal a declaration named no bases for, which a fork resolves
+// to accept a witnessed run.
+type DefaultedAccept struct{ Job, Goal string }
+
+func (d DefaultedAccept) String() string {
+	return fmt.Sprintf("%s: check goal %q names no accept, so it defaulted to accept [%s]", d.Job, d.Goal, job.BasisWitnessed)
+}
+
+func defaultedAccepts(id string, goals []string) []DefaultedAccept {
+	out := make([]DefaultedAccept, 0, len(goals))
+	for _, g := range goals {
+		out = append(out, DefaultedAccept{Job: id, Goal: g})
+	}
+	return out
 }
 
 // CheckpointNames reports whether checkpoint's revision is revision, a full
@@ -153,8 +191,8 @@ func CheckpointNames(checkpoint, revision string) bool {
 
 // StackedHead fills a stacked row's parent_head with this checkout's
 // branch. A checkout on no branch has no head to stack on.
-func StackedHead(ctx context.Context, root string, row types.Declaration, opts types.VCSOptions) (types.Declaration, error) {
-	if row.Delivery != types.DeliveryStacked || row.ParentHead != "" {
+func StackedHead(ctx context.Context, root string, row job.Declaration, opts types.VCSOptions) (job.Declaration, error) {
+	if row.Delivery != job.DeliveryStacked || row.ParentHead != "" {
 		return row, nil
 	}
 	refuse := func(why error) error {
@@ -181,12 +219,12 @@ func StackedHead(ctx context.Context, root string, row types.Declaration, opts t
 
 // RetriedDeclaration is the stored spec of the job row names, for a fork naming its id and no
 // spec flag, with row's checkout when --checkout gave one; row as it is when no job has that id.
-func RetriedDeclaration(ctx context.Context, store *Store, row types.Declaration) (types.Declaration, error) {
-	rows, err := store.List()
+func RetriedDeclaration(ctx context.Context, store *Store, row job.Declaration) (job.Declaration, error) {
+	rows, err := store.List(ctx)
 	if err != nil {
 		return row, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.ID })
 	if i < 0 {
 		return row, nil
 	}
@@ -198,14 +236,14 @@ func RetriedDeclaration(ctx context.Context, store *Store, row types.Declaration
 
 // WidenedDeclaration is the job's own spec plus the paths it lacks, so a
 // widening is validated as a whole record is.
-func WidenedDeclaration(store *Store, id string, add []string) (types.Declaration, error) {
-	rows, err := store.List()
+func WidenedDeclaration(ctx context.Context, store *Store, id string, add []string) (job.Declaration, error) {
+	rows, err := store.List(ctx)
 	if err != nil {
-		return types.Declaration{}, err
+		return job.Declaration{}, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
-		return types.Declaration{}, exit.Usagef("no job %s to widen; `%s` lists them", id, hint.LsJobs)
+		return job.Declaration{}, exit.Usagef("no job %s to widen; `%s` lists them", id, hint.LsJobs)
 	}
 	rec := RetryDeclaration(rows[i])
 	rec.Paths.Write = slices.Clone(rec.Paths.Write)
@@ -219,14 +257,41 @@ func WidenedDeclaration(store *Store, id string, add []string) (types.Declaratio
 
 // NarrowedDeclaration is rec without the paths in release; goals stay.
 // A path the job does not hold is refused, so a typo is never a no-op.
-func NarrowedDeclaration(rec types.Declaration, id string, release []string) (types.Declaration, error) {
+func NarrowedDeclaration(rec job.Declaration, id string, release []string) (job.Declaration, error) {
 	rec.Paths.Write = slices.Clone(rec.Paths.Write)
 	for _, p := range release {
 		i := slices.Index(rec.Paths.Write, p)
 		if i < 0 {
-			return types.Declaration{}, exit.Usagef("%s holds no write path %q to release", id, p)
+			return job.Declaration{}, exit.Usagef("%s holds no write path %q to release", id, p)
 		}
 		rec.Paths.Write = slices.Delete(rec.Paths.Write, i, i+1)
 	}
 	return rec, nil
 }
+
+// ParsePauseUntil reads a pause's --until as the unix second it lapses: a duration from now
+// or an RFC3339 instant. Empty is zero, a pause with no bound.
+func ParsePauseUntil(raw string, now time.Time) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d <= 0 {
+			return 0, &pauseUntilError{Until: raw, Reason: "is not ahead of now, as a positive duration (2h) or a later instant is"}
+		}
+		return now.Add(d).Unix(), nil
+	}
+	if at, err := time.Parse(time.RFC3339, raw); err == nil {
+		return at.Unix(), nil
+	}
+	return 0, &pauseUntilError{Until: raw, Reason: "is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z"}
+}
+
+// pauseUntilError is a pause bound [ParsePauseUntil] refuses, and why.
+type pauseUntilError struct {
+	Until  string
+	Reason string
+}
+
+func (e *pauseUntilError) Error() string { return fmt.Sprintf("--until %q %s", e.Until, e.Reason) }

@@ -3,16 +3,18 @@
 //
 // Two layers enforce one Policy. Magus's own checks run at the fs, archive, crypto,
 // http and exec bindings on every platform, and see only what goes through a
-// binding. The kernel layer confines each child magus starts: Command re-executes
-// magus as a launcher that applies a landlock ruleset to itself and then execs the
-// child, so the child and everything it starts are held to the policy. Magus itself
+// binding. The kernel layer confines each child magus starts: Command hands the rules
+// to libs/safetyscissors/sandbox, which re-executes magus as a launcher that applies a
+// landlock ruleset to itself and then execs the child, so the child and everything it
+// starts are held to the policy. This package adds what that module leaves to its
+// caller: the env allowlist, the private temp dir, spell and target scoping, the
+// control-file refusal and the record of each denial. Magus itself
 // is never confined, so in-process Buzz rests on the binding checks alone. A nil
 // Policy means the sandbox is off and every check passes.
 package sandbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -22,15 +24,14 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
-
-// ErrUnsupported is returned by ABI and Command when landlock is unavailable
-// (non-Linux, kernel <5.13, LSM disabled).
-var ErrUnsupported = errors.New("sandbox: kernel sandbox unsupported on this host")
 
 // Policy is the runtime sandbox policy attached to a context and consulted by spell bindings.
 // Immutable after construction; safe for concurrent reads. A nil Policy disables all checks,
@@ -57,7 +58,7 @@ type Policy struct {
 	// derived from config alone. Read only to name the boundary on a denial.
 	Lease string
 	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
-	LeaseFrom types.LeaseSource
+	LeaseFrom job.LeaseSource
 
 	// writtenAt maps a rule's path to the path it was declared at, where following
 	// links moved it. Read by WritesOutside.
@@ -68,7 +69,14 @@ type Policy struct {
 	// gets. nil on a policy assembled by hand, which Scoped returns unchanged.
 	opts *PolicyOptions
 	// lease is the boundary NarrowToLease applied, reapplied to each Scoped policy.
-	lease *leaseBoundary
+	lease *scissors.Boundary
+	// confined is FS as the module policy Command starts children under, built where
+	// the policy is (see withConfinement); confinedErr is why it could not be. Both
+	// zero on a policy assembled by hand.
+	confined    *scissors.Policy
+	confinedErr error
+	// probe answers the kernel's landlock ABI in place of the kernel; nil asks it.
+	probe func() (int, error)
 	// scoped memoizes Scoped by its arguments.
 	scoped *scopedPolicies
 	// Environment notices share a reporting set across scoped policies and value copies,
@@ -149,7 +157,7 @@ func (p *Policy) derive(names []string, target *spells.Sandbox, withProviders bo
 	}
 	q := BuildPolicy(o)
 	if p.lease != nil {
-		q = p.lease.apply(q)
+		q = narrow(q, *p.lease)
 	}
 	q.opts, q.scoped, q.withheld, q.nested = p.opts, p.scoped, p.withheld, p.nested
 	p.scoped.policies[key] = q
@@ -180,7 +188,7 @@ func (p *Policy) WithReadOnlyObjects() (*Policy, error) {
 	q := *p
 	q.FS = filesystem.Ruleset{Rules: rules}
 	q.opts, q.scoped = nil, nil
-	return &q, nil
+	return q.withConfinement(), nil
 }
 
 // scopedPolicies memoizes the policies Scoped builds from one workspace policy.
@@ -270,11 +278,16 @@ func (p *Policy) CheckExec(ctx context.Context, path string) error {
 	return p.check(ctx, filesystem.Exec, path)
 }
 
+// check runs FS.Check, the check a module policy runs, rather than the module
+// policy's own: a policy assembled by hand may hold a rule no bind mode spells.
 func (p *Policy) check(ctx context.Context, access filesystem.Access, path string) error {
 	if p == nil {
 		return nil
 	}
-	err := p.FS.Check(path, access)
+	var err error
+	if denied := p.FS.Check(path, access); denied != nil {
+		err = &scissors.DeniedError{Access: access, Path: path, Lease: p.Lease, LeaseFrom: p.LeaseFrom, Err: denied}
+	}
 	if err == nil && access == filesystem.Write {
 		if abs := filesystem.ResolveRulePath(path); p.controlFile(abs) {
 			err = fmt.Errorf("%w: write of %s: another tool runs code from it later, outside the sandbox", filesystem.ErrDenied, abs)
@@ -364,7 +377,7 @@ func relUnder(abs, root string) (string, bool) {
 }
 
 // recordDenial records a refused access on the run's trail, the producer
-// trail.KindSandboxDenial was declared for.
+// trailtypes.KindSandboxDenial was declared for.
 //
 // It sits in check rather than at each deny site because this is where the decision is
 // MADE: fs, archive, crypto, the http bindings and the exec pre-check all reach the
@@ -385,16 +398,16 @@ func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path
 	if base == "" {
 		return
 	}
-	trail.Append(ctx, base, trail.Event{
+	trail.Append(ctx, base, trailtypes.Event{
 		Ts:   time.Now().UnixMilli(),
-		Kind: trail.KindSandboxDenial,
+		Kind: trailtypes.KindSandboxDenial,
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
 		// declared for itself from the workspace default every run already has.
 		Lease:     p.Lease,
 		LeaseFrom: p.LeaseFrom,
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
 		Action:  fmt.Sprintf("%s of %s", access.String(), path),
-		Outcome: trail.OutcomeError,
+		Outcome: trailtypes.OutcomeError,
 		Error:   err.Error(),
 	})
 }

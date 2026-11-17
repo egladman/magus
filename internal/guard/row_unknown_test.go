@@ -15,9 +15,10 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ward"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // plantUnknownMember appends id's stored record again with a spec
@@ -26,31 +27,31 @@ func plantUnknownMember(t *testing.T, ctx context.Context, id, member string) {
 	t.Helper()
 	at := ctx.Value(locationKey{}).(location)
 	store := job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: at.workspace})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
-	require.True(t, slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }), "%s is seeded", id)
+	require.True(t, slices.ContainsFunc(rows, func(r jobtypes.Job) bool { return r.ID == id }), "%s is seeded", id)
 	path, err := store.Path()
 	require.NoError(t, err)
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	var record map[string]json.RawMessage
+	var record map[string]codec.RawMessage
 	for text := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
 		var line struct {
 			Metadata struct {
 				Name string `json:"name"`
 			} `json:"metadata"`
 		}
-		require.NoError(t, json.Unmarshal([]byte(text), &line))
+		require.NoError(t, codec.Unmarshal([]byte(text), &line))
 		if line.Metadata.Name == id {
-			require.NoError(t, json.Unmarshal([]byte(text), &record))
+			require.NoError(t, codec.Unmarshal([]byte(text), &record))
 		}
 	}
-	var spec map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(record["spec"], &spec))
-	spec[member] = json.RawMessage(`["**"]`)
-	record["spec"], err = json.Marshal(spec)
+	var spec map[string]codec.RawMessage
+	require.NoError(t, codec.Unmarshal(record["spec"], &spec))
+	spec[member] = codec.RawMessage(`["**"]`)
+	record["spec"], err = codec.Marshal(spec)
 	require.NoError(t, err)
-	line, err := json.Marshal(record)
+	line, err := codec.Marshal(record)
 	require.NoError(t, err)
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
@@ -74,7 +75,7 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 	assert.Contains(t, got.Why, "server stop")
 
 	write := gradeLeasedEdit(ctx, deps, row.ID, filepath.Join(root, "cmd/magus/agent.go"), writeFields{})
-	require.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, types.GuardJudgment{Decision: write.Decision, Rule: write.Rule})
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseRowUnknown)}, verdict.Judgment{Decision: write.Decision, Rule: write.Rule})
 	assert.Contains(t, write.Reason, "widens_paths")
 
 	assert.Equal(t, denyRuleLeaseRowUnknown, roleScopedCommandRules()[0].name, "judged before any rule that reads the row")
@@ -115,7 +116,7 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 type RowUnknownVCSLinesSuite struct {
 	suite.Suite
 	layers ctxLayers
-	row    types.Job
+	row    jobtypes.Job
 }
 
 func TestRowUnknownVCSLinesSuite(t *testing.T) {
@@ -161,7 +162,7 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, row.ID, filepath.Join(root, "cmd/magus/agent.go"), writeFields{}).Decision)
 
 	outside := gradeLeasedEdit(ctx, Dependencies{}, row.ID, filepath.Join(root, "README.md"), writeFields{})
-	require.Equal(t, decisionDeny, outside.Decision, "the other rules still judge the row")
+	require.Equal(t, verdict.Deny, outside.Decision, "the other rules still judge the row")
 	assert.NotEqual(t, string(denyRuleLeaseRowUnknown), outside.Rule)
 }
 
@@ -169,7 +170,7 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 type RowUnknownReadOnlyCallerSuite struct {
 	suite.Suite
 	layers ctxLayers
-	row    types.Job
+	row    jobtypes.Job
 	deps   Dependencies
 }
 
@@ -178,7 +179,7 @@ func TestRowUnknownReadOnlyCallerSuite(t *testing.T) {
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) SetupTest() {
-	s.row = types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	s.row = jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateRunning, Registered: 1}
 	s.layers, _ = fleetLayers(s.T(), s.row)
 	plantUnknownMember(s.T(), s.testContext(), s.row.ID, "widens_paths")
 	s.deps = Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
@@ -220,12 +221,12 @@ func (s *RowUnknownReadOnlyCallerSuite) TestACheckoutDeclaringNoHookAsksForAPlac
 
 // The spawn gate refuses a row the hook cannot read before a worker meets it.
 func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
-	row := withUnknown(types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, "widens_paths")
-	titled := func() (types.Job, bool) { return row, true }
+	row := withUnknown(jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared}, "widens_paths")
+	titled := func() (jobtypes.Job, bool) { return row, true }
 	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 	at := location{cacheDir: t.TempDir()}
 
-	got := gradeSpawnModel(deps, types.GuardJudgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
+	got := gradeSpawnModel(deps, verdict.Judgment{Decision: verdict.Defer}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
 		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
 
 	assert.Contains(t, got.Reason, "widens_paths")
@@ -233,21 +234,21 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 	assert.Contains(t, got.Reason, "restart the daemon")
 	assert.Contains(t, unknownRowSpawnDenial(deps, row).Why, "`./magus server stop`, then `./magus server start`")
 	got.Reason = ""
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, got)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseRowUnknown)}, got)
 }
 
 func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
-	row := types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}
-	titled := func() (types.Job, bool) { return row, true }
+	row := jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared}
+	titled := func() (jobtypes.Job, bool) { return row, true }
 	at := location{cacheDir: t.TempDir()}
 
-	got := gradeSpawnModel(Dependencies{}, types.GuardJudgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
+	got := gradeSpawnModel(Dependencies{}, verdict.Judgment{Decision: verdict.Defer}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
 		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
 
-	assert.NotEqual(t, decisionDeny, got.Decision)
+	assert.NotEqual(t, verdict.Deny, got.Decision)
 }
 
-func withUnknown(row types.Job, member string) types.Job {
+func withUnknown(row jobtypes.Job, member string) jobtypes.Job {
 	row.Unknown = []string{"spec." + member}
 	return row
 }

@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // The vcs accessors had no direct unit coverage at all: they were exercised only through
@@ -488,12 +488,12 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	dir := testkit.NewRepository(t, nil).Root()
 
 	ws := types.WithWorkspace(WithCurrentWorkingDirectory(t.Context(), dir), &ledgerWorkspace{cacheDir: t.TempDir(), root: dir})
-	_, err := MagusPutJob(ws, "worker", types.JobPut{Agent: agent.Instructed("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "worker", job.Put{Agent: job.Instructed("ship it"), State: new(job.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")
 	var gitEnv []string
-	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, at string, env []string) error {
+	withVCSLeaseGate(t, func(_ context.Context, row job.Job, backend string, args []string, at string, env []string) error {
 		asked = append(asked, fmt.Sprintf("%s %s %s %s", row.ID, backend, strings.Join(args, " "), at))
 		for _, kv := range env {
 			if strings.HasPrefix(kv, "GIT_DIR=") || strings.HasPrefix(kv, "GIT_INDEX_FILE=") {
@@ -503,7 +503,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 		return refusal
 	})
 
-	_, err = VCSCommand(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, types.VCSCommandOptions{Quiet: true})
+	_, err = VCSCommand(job.WithLease(ws, "worker"), []string{"push", "origin", "main"}, types.VCSCommandOptions{Quiet: true})
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
 
@@ -514,7 +514,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 
 	gitEnv = nil
 	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
-	err = OsWithEnv(types.WithJobLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
+	err = OsWithEnv(job.WithLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
 		cbFunc(func(ctx context.Context) error {
 			_, err := VCSCommand(ctx, []string{"commit", "-m", "x"}, types.VCSCommandOptions{Quiet: true})
 			return err

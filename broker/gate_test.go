@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -30,7 +30,7 @@ func (s *AttributionSuite) client(opts ...ClientOption) *Client {
 	return c
 }
 
-func (s *AttributionSuite) grant(c *Client, claim types.MachineClaim) string {
+func (s *AttributionSuite) grant(c *Client, claim budget.Claim) string {
 	v, err := c.Claim(s.T().Context(), claim, nil)
 	s.Require().NoError(err)
 	s.Require().True(v.Granted, "%+v", v)
@@ -45,10 +45,10 @@ func (s *AttributionSuite) TestWithLeaseOutranksBaggage() {
 
 func (s *AttributionSuite) TestAGateWaitsForAnotherInvocationsSeat() {
 	feature := s.client()
-	held := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "go-test", Slots: 2, PID: 1})
+	held := s.grant(feature, budget.Claim{Project: "libs/x", Target: "go-test", Slots: 2, PID: 1})
 	gate := s.client(WithGate(true))
 
-	member := claimAsync(s.T(), s.T().Context(), s.addr, gate, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1, PID: 3})
+	member := claimAsync(s.T(), s.T().Context(), s.addr, gate, budget.Claim{Project: ".", Target: "go-test", Slots: 1, PID: 3})
 	requirePending(s.T(), member)
 
 	feature.Release(s.T().Context(), held)
@@ -59,10 +59,10 @@ func (s *AttributionSuite) TestAGateWaitsForAnotherInvocationsSeat() {
 
 func (s *AttributionSuite) TestAYoungerGateWaitsBehindTheOlder() {
 	older := s.client(WithGate(true))
-	held := s.grant(older, types.MachineClaim{Project: ".", Target: "lint", Slots: 2, PID: 3})
+	held := s.grant(older, budget.Claim{Project: ".", Target: "lint", Slots: 2, PID: 3})
 	younger := s.client(WithGate(true))
 
-	waiting := claimAsync(s.T(), s.T().Context(), s.addr, younger, types.MachineClaim{Project: "docs", Target: "lint", Slots: 1, PID: 4})
+	waiting := claimAsync(s.T(), s.T().Context(), s.addr, younger, budget.Claim{Project: "docs", Target: "lint", Slots: 1, PID: 4})
 	requirePending(s.T(), waiting)
 
 	older.Release(s.T().Context(), held)
@@ -71,10 +71,10 @@ func (s *AttributionSuite) TestAYoungerGateWaitsBehindTheOlder() {
 
 func (s *AttributionSuite) TestTwoGatesOnDifferentRootsBothFinish() {
 	first, second := s.client(WithGate(true)), s.client(WithGate(true))
-	a := s.grant(first, types.MachineClaim{Project: ".", Target: "ci", Slots: 1, PID: 3, Invocation: "3:a"})
-	b := s.grant(second, types.MachineClaim{Project: ".", Target: "ci", Slots: 1, PID: 4, Invocation: "4:b"})
-	firstMember := claimAsync(s.T(), s.T().Context(), s.addr, first, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1, PID: 3, Invocation: "3:a2", Ancestors: []string{"3:a"}})
-	secondMember := claimAsync(s.T(), s.T().Context(), s.addr, second, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1, PID: 4, Invocation: "4:b2", Ancestors: []string{"4:b"}})
+	a := s.grant(first, budget.Claim{Project: ".", Target: "ci", Slots: 1, PID: 3, Invocation: "3:a"})
+	b := s.grant(second, budget.Claim{Project: ".", Target: "ci", Slots: 1, PID: 4, Invocation: "4:b"})
+	firstMember := claimAsync(s.T(), s.T().Context(), s.addr, first, budget.Claim{Project: ".", Target: "go-test", Slots: 1, PID: 3, Invocation: "3:a2", Ancestors: []string{"3:a"}})
+	secondMember := claimAsync(s.T(), s.T().Context(), s.addr, second, budget.Claim{Project: ".", Target: "go-test", Slots: 1, PID: 4, Invocation: "4:b2", Ancestors: []string{"4:b"}})
 
 	for _, got := range []claimed{requireAnswer(s.T(), firstMember), requireAnswer(s.T(), secondMember)} {
 		s.Require().NoError(got.err)
@@ -86,14 +86,14 @@ func (s *AttributionSuite) TestTwoGatesOnDifferentRootsBothFinish() {
 
 func (s *AttributionSuite) TestAWaitingGateKeepsAFeatureCheckOutOfItsRoom() {
 	feature := s.client()
-	first := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "go-test", Slots: 1, PID: 1})
-	second := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "lint", Slots: 1, PID: 1})
+	first := s.grant(feature, budget.Claim{Project: "libs/x", Target: "go-test", Slots: 1, PID: 1})
+	second := s.grant(feature, budget.Claim{Project: "libs/x", Target: "lint", Slots: 1, PID: 1})
 	gate := s.client(WithGate(true))
-	member := claimAsync(s.T(), s.T().Context(), s.addr, gate, types.MachineClaim{Project: ".", Target: "go-test", Slots: 2, PID: 3})
+	member := claimAsync(s.T(), s.T().Context(), s.addr, gate, budget.Claim{Project: ".", Target: "go-test", Slots: 2, PID: 3})
 
 	feature.Release(s.T().Context(), first)
 	requirePending(s.T(), member)
-	late := claimAsync(s.T(), s.T().Context(), s.addr, s.client(), types.MachineClaim{Project: "libs/y", Target: "go-test", Slots: 1, PID: 5})
+	late := claimAsync(s.T(), s.T().Context(), s.addr, s.client(), budget.Claim{Project: "libs/y", Target: "go-test", Slots: 1, PID: 5})
 	requirePending(s.T(), late)
 
 	feature.Release(s.T().Context(), second)
@@ -103,13 +103,13 @@ func (s *AttributionSuite) TestAWaitingGateKeepsAFeatureCheckOutOfItsRoom() {
 
 func (s *AttributionSuite) TestAMemberOfTheGatesRunWaitsWithIt() {
 	gate := s.client(WithGate(true))
-	s.grant(gate, types.MachineClaim{Project: ".", Target: "ci", Slots: 1, PID: 3, Invocation: "inv-gate"})
+	s.grant(gate, budget.Claim{Project: ".", Target: "ci", Slots: 1, PID: 3, Invocation: "inv-gate"})
 	feature := s.client()
-	held := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "go-test", Slots: 1, PID: 1})
+	held := s.grant(feature, budget.Claim{Project: "libs/x", Target: "go-test", Slots: 1, PID: 1})
 	nested := s.client()
-	s.grant(nested, types.MachineClaim{Project: "docs", Target: "format", Slots: 1, PID: 6, Invocation: "inv-nested", Ancestors: []string{"inv-gate"}})
+	s.grant(nested, budget.Claim{Project: "docs", Target: "format", Slots: 1, PID: 6, Invocation: "inv-nested", Ancestors: []string{"inv-gate"}})
 
-	member := claimAsync(s.T(), s.T().Context(), s.addr, nested, types.MachineClaim{
+	member := claimAsync(s.T(), s.T().Context(), s.addr, nested, budget.Claim{
 		Project: "docs", Target: "lint", Slots: 1, PID: 7, Invocation: "inv-nested-2", Ancestors: []string{"inv-gate"},
 	})
 	requirePending(s.T(), member)

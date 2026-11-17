@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/oci"
 )
@@ -81,7 +81,7 @@ func (r *registry) serve(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		slices.Sort(tags)
-		body, _ := json.Marshal(map[string]any{"tags": tags})
+		body, _ := codec.Marshal(map[string]any{"tags": tags})
 		_, _ = w.Write(body)
 	case strings.Contains(p, "/blobs/"):
 		b, ok := r.blobs[last]

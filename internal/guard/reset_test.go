@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // `git reset --hard <rev>` in a clean checkout no live job was taken in is judged as `git
@@ -18,7 +18,7 @@ import (
 // reset with no revision or one relocated with -C stays whole-tree's.
 func TestHardResetOnACleanUnboundTreeIsJudgedAsASwitch(t *testing.T) {
 	r := newWorktreeRepository(t)
-	judge := func(command string, rows ...types.Job) ShellVerdict {
+	judge := func(command string, rows ...jobtypes.Job) ShellVerdict {
 		ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows})
 		at := location{cacheDir: t.TempDir(), workspace: r.main, dir: r.main}
 		return judgeShellLine(ctx, Dependencies{}, at, r.main, command, DialectBash)
@@ -31,8 +31,8 @@ func TestHardResetOnACleanUnboundTreeIsJudgedAsASwitch(t *testing.T) {
 
 	assert.Equal(t, wholeTree, judge("git reset --hard").Rule, "no revision")
 	assert.Equal(t, wholeTree, judge(fmt.Sprintf("git -C %s reset --hard origin/main", r.main)).Rule, "relocated")
-	assert.Equal(t, wholeTree, judge("git reset --hard origin/main", types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: r.main}).Rule, "a live job")
-	assert.Empty(t, judge("git reset --hard origin/main", types.Job{ID: "w1", State: types.StatePass, CheckoutRoot: r.main}).Deny, "an ended job")
+	assert.Equal(t, wholeTree, judge("git reset --hard origin/main", jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: r.main}).Rule, "a live job")
+	assert.Empty(t, judge("git reset --hard origin/main", jobtypes.Job{ID: "w1", State: jobtypes.StatePass, CheckoutRoot: r.main}).Deny, "an ended job")
 
 	require.NoError(t, os.WriteFile(filepath.Join(r.main, "a.txt"), []byte("edited\n"), 0o644))
 	assert.Equal(t, wholeTree, judge("git reset --hard origin/main").Rule, "a dirty tree")

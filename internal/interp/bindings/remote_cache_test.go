@@ -25,8 +25,8 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/secret"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -228,7 +228,7 @@ func ghaRoundTrip(t *testing.T, emu *remotetest.GHA) {
 	// invoked from inside a run. The spell declares a magus\secret grant, and without a
 	// resolver that is an error rather than a silent unauthenticated request, which is
 	// the correct behaviour and why the test has to look like production here.
-	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
 	require.True(t, store.Active(ctx), "a wired provider is active")
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff}, 10)
 
@@ -295,7 +295,7 @@ func TestGHACacheBackendReachesItsServiceWhileTheStepCannot(t *testing.T) {
 func ghaStore(t *testing.T, emu *remotetest.GHA) (*spellRemoteBackend, context.Context) {
 	t.Helper()
 	emu.Serve(t, "test-token")
-	return ghaBackend(t), secret.ContextWithResolver(context.Background(), secret.New())
+	return ghaBackend(t), secrets.WithResolver(context.Background(), secrets.NewResolver())
 }
 
 // ok=false from CreateCacheEntry means another job holds the reservation, which is not

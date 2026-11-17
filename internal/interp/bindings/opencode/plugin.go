@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 const (
@@ -144,7 +144,7 @@ func truthy(value any) bool {
 	return true
 }
 
-func jsonBody(value any) string { data, _ := json.Marshal(value); return string(data) }
+func jsonBody(value any) string { data, _ := codec.Marshal(value); return string(data) }
 
 func shellArgs() []string {
 	return []string{"shell", "--agent-name", agentName, "--renders-ask", "-o", "json"}
@@ -153,7 +153,7 @@ func shellArgs() []string {
 // fields decodes the call's args as an object, or nil when they are not one.
 func (c toolCall) fields() map[string]any {
 	var fields map[string]any
-	if json.Unmarshal(c.Args, &fields) != nil {
+	if codec.Unmarshal(c.Args, &fields) != nil {
 		return nil
 	}
 	return fields
@@ -310,14 +310,14 @@ func validMilliseconds(ms float64) bool {
 // dispatchJSON runs one event given as JSON and answers its result as JSON.
 func dispatchJSON(ctx context.Context, r *buzzRuntime, data string) (string, error) {
 	var event hookEvent
-	if err := json.Unmarshal([]byte(data), &event); err != nil {
+	if err := codec.Unmarshal([]byte(data), &event); err != nil {
 		return "", fmt.Errorf("harness plugin: event: %w", err)
 	}
 	result, err := r.Dispatch(ctx, event)
 	if err != nil {
 		return "", err
 	}
-	encoded, err := json.Marshal(result)
+	encoded, err := codec.Marshal(result)
 	return string(encoded), err
 }
 
@@ -445,7 +445,7 @@ func (p *plugin) buzzCheck(ctx context.Context, tool string, fields map[string]a
 		Decision string `json:"decision"`
 		Reason   string `json:"reason"`
 	}
-	if json.Unmarshal([]byte(said), &reply) == nil && reply.Decision == "block" {
+	if codec.Unmarshal([]byte(said), &reply) == nil && reply.Decision == "block" {
 		return reply.Reason
 	}
 	return ""
@@ -557,7 +557,7 @@ func replyPrompt(stdout string) string {
 	var response struct {
 		Prompt string `json:"prompt"`
 	}
-	if json.Unmarshal([]byte(stdout), &response) != nil {
+	if codec.Unmarshal([]byte(stdout), &response) != nil {
 		return ""
 	}
 	return response.Prompt
@@ -767,7 +767,7 @@ func (p *plugin) afterTask(ctx context.Context, call toolCall, out toolResult, e
 	p.setParent(out.Child, call.Session)
 	identity := p.whoIs(ctx, call.Session)
 	var data any
-	if err := json.Unmarshal(call.Args, &data); err != nil {
+	if err := codec.Unmarshal(call.Args, &data); err != nil {
 		return edits, err
 	}
 	p.judge(ctx, shellArgs(), p.envelope("PostToolUse", identity, call.Tool, data, map[string]any{"agent_id": out.Child}))

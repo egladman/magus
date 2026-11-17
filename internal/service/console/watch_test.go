@@ -12,8 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // A change under a job's declared write paths is attributed to that job with nothing asked
@@ -32,8 +32,8 @@ func TestJobFeedAttributesAChangeToTheWritePathThatCoversIt(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}}}
-	changes := NewJobFeed(ctx, w, dir, func() []types.Job { return rows }).Subscribe(ctx)
+	rows := []jobtypes.Job{{ID: "pwa/job-watch", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/trail"}}}}
+	changes := NewJobFeed(ctx, w, dir, func() []jobtypes.Job { return rows }).Subscribe(ctx)
 
 	target := filepath.Join(dir, "internal", "trail", "trail.go")
 	retick := time.NewTicker(200 * time.Millisecond)
@@ -83,7 +83,7 @@ func TestJobFeedInvalidateSignalsOnGraphRelevantChange(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	feed := NewJobFeed(ctx, w, dir, func() []types.Job { return nil })
+	feed := NewJobFeed(ctx, w, dir, func() []jobtypes.Job { return nil })
 	invalidate := feed.Invalidate()
 	// A subscriber is opened alongside, because the same batch feeds both halves and the
 	// bug worth pinning is one arm starving the other: an unread subscriber must not stop
@@ -123,7 +123,7 @@ func TestJobFeedExitsOnContextCancel(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	feed := NewJobFeed(ctx, w, dir, func() []types.Job { return nil })
+	feed := NewJobFeed(ctx, w, dir, func() []jobtypes.Job { return nil })
 	invalidate := feed.Invalidate()
 	changes := feed.Subscribe(ctx)
 	cancel()
@@ -150,11 +150,11 @@ func TestJobFeedExitsOnContextCancel(t *testing.T) {
 // asserted rather than raced for: every batch that is graph-relevant signals invalidation,
 // AND every batch reaches every subscriber.
 func TestJobFeedServesInvalidationAndSubscribersFromTheSameBatch(t *testing.T) {
-	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}}}
+	rows := []jobtypes.Job{{ID: "pwa/job-watch", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/trail"}}}}
 	f := &JobFeed{
 		subs:       map[chan job.FeedEvent]struct{}{},
 		root:       "/repo",
-		rows:       func() []types.Job { return rows },
+		rows:       func() []jobtypes.Job { return rows },
 		invalidate: make(chan struct{}, 1),
 	}
 	first := make(chan job.FeedEvent, 8)
@@ -197,7 +197,7 @@ func TestJobFeedSkipsPathsOutsideTheRoot(t *testing.T) {
 	f := &JobFeed{
 		subs:       map[chan job.FeedEvent]struct{}{},
 		root:       "/repo",
-		rows:       func() []types.Job { return nil },
+		rows:       func() []jobtypes.Job { return nil },
 		invalidate: make(chan struct{}, 1),
 	}
 	only := make(chan job.FeedEvent, 4)

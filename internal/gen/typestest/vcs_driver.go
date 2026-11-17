@@ -8,6 +8,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -4276,26 +4277,26 @@ func (_c *MockVCSDriver_Ref_Call) RunAndReturn(run func(ctx context.Context, dir
 }
 
 // Regions provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) Regions(ctx context.Context, root string, base string, files []types.FileChange) ([]types.RegionChange, error) {
+func (_mock *MockVCSDriver) Regions(ctx context.Context, root string, base string, files []job.FileChange) ([]job.RegionChange, error) {
 	ret := _mock.Called(ctx, root, base, files)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Regions")
 	}
 
-	var r0 []types.RegionChange
+	var r0 []job.RegionChange
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []types.FileChange) ([]types.RegionChange, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []job.FileChange) ([]job.RegionChange, error)); ok {
 		return returnFunc(ctx, root, base, files)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []types.FileChange) []types.RegionChange); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []job.FileChange) []job.RegionChange); ok {
 		r0 = returnFunc(ctx, root, base, files)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.RegionChange)
+			r0 = ret.Get(0).([]job.RegionChange)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []types.FileChange) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []job.FileChange) error); ok {
 		r1 = returnFunc(ctx, root, base, files)
 	} else {
 		r1 = ret.Error(1)
@@ -4312,12 +4313,12 @@ type MockVCSDriver_Regions_Call struct {
 //   - ctx context.Context
 //   - root string
 //   - base string
-//   - files []types.FileChange
+//   - files []job.FileChange
 func (_e *MockVCSDriver_Expecter) Regions(ctx interface{}, root interface{}, base interface{}, files interface{}) *MockVCSDriver_Regions_Call {
 	return &MockVCSDriver_Regions_Call{Call: _e.mock.On("Regions", ctx, root, base, files)}
 }
 
-func (_c *MockVCSDriver_Regions_Call) Run(run func(ctx context.Context, root string, base string, files []types.FileChange)) *MockVCSDriver_Regions_Call {
+func (_c *MockVCSDriver_Regions_Call) Run(run func(ctx context.Context, root string, base string, files []job.FileChange)) *MockVCSDriver_Regions_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -4331,9 +4332,9 @@ func (_c *MockVCSDriver_Regions_Call) Run(run func(ctx context.Context, root str
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 []types.FileChange
+		var arg3 []job.FileChange
 		if args[3] != nil {
-			arg3 = args[3].([]types.FileChange)
+			arg3 = args[3].([]job.FileChange)
 		}
 		run(
 			arg0,
@@ -4345,34 +4346,34 @@ func (_c *MockVCSDriver_Regions_Call) Run(run func(ctx context.Context, root str
 	return _c
 }
 
-func (_c *MockVCSDriver_Regions_Call) Return(regionChanges []types.RegionChange, err error) *MockVCSDriver_Regions_Call {
+func (_c *MockVCSDriver_Regions_Call) Return(regionChanges []job.RegionChange, err error) *MockVCSDriver_Regions_Call {
 	_c.Call.Return(regionChanges, err)
 	return _c
 }
 
-func (_c *MockVCSDriver_Regions_Call) RunAndReturn(run func(ctx context.Context, root string, base string, files []types.FileChange) ([]types.RegionChange, error)) *MockVCSDriver_Regions_Call {
+func (_c *MockVCSDriver_Regions_Call) RunAndReturn(run func(ctx context.Context, root string, base string, files []job.FileChange) ([]job.RegionChange, error)) *MockVCSDriver_Regions_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RegionsBetween provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) RegionsBetween(ctx context.Context, root string, path string, before []byte, after []byte) ([]types.RegionChange, error) {
+func (_mock *MockVCSDriver) RegionsBetween(ctx context.Context, root string, path string, before []byte, after []byte) ([]job.RegionChange, error) {
 	ret := _mock.Called(ctx, root, path, before, after)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RegionsBetween")
 	}
 
-	var r0 []types.RegionChange
+	var r0 []job.RegionChange
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []byte, []byte) ([]types.RegionChange, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []byte, []byte) ([]job.RegionChange, error)); ok {
 		return returnFunc(ctx, root, path, before, after)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []byte, []byte) []types.RegionChange); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []byte, []byte) []job.RegionChange); ok {
 		r0 = returnFunc(ctx, root, path, before, after)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.RegionChange)
+			r0 = ret.Get(0).([]job.RegionChange)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []byte, []byte) error); ok {
@@ -4431,12 +4432,12 @@ func (_c *MockVCSDriver_RegionsBetween_Call) Run(run func(ctx context.Context, r
 	return _c
 }
 
-func (_c *MockVCSDriver_RegionsBetween_Call) Return(regionChanges []types.RegionChange, err error) *MockVCSDriver_RegionsBetween_Call {
+func (_c *MockVCSDriver_RegionsBetween_Call) Return(regionChanges []job.RegionChange, err error) *MockVCSDriver_RegionsBetween_Call {
 	_c.Call.Return(regionChanges, err)
 	return _c
 }
 
-func (_c *MockVCSDriver_RegionsBetween_Call) RunAndReturn(run func(ctx context.Context, root string, path string, before []byte, after []byte) ([]types.RegionChange, error)) *MockVCSDriver_RegionsBetween_Call {
+func (_c *MockVCSDriver_RegionsBetween_Call) RunAndReturn(run func(ctx context.Context, root string, path string, before []byte, after []byte) ([]job.RegionChange, error)) *MockVCSDriver_RegionsBetween_Call {
 	_c.Call.Return(run)
 	return _c
 }

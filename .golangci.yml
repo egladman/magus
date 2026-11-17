@@ -168,7 +168,7 @@ linters:
         # types/doc.go's contract: no filesystem, VCS, or process execution. What it
         # forbids is REACHING THE WORLD; string work over paths and host:port stays
         # legal, which is why path/filepath and net are not here. Of magus it may
-        # import only the four packages allowed below. internal/json is one because
+        # import only the four packages allowed below. libs/codec is one because
         # every package that encodes JSON must use it.
         #
         # Every deny ends in `$` because depguard matches prefixes, and `os` would
@@ -177,7 +177,6 @@ linters:
           list-mode: lax
           files:
             - "${base-path}/types/*.go"
-            - "${base-path}/types/agent/*.go"
             - "${base-path}/types/check/*.go"
             - "${base-path}/types/impact/*.go"
             - "${base-path}/types/vcs/*.go"
@@ -188,9 +187,16 @@ linters:
             - github.com/egladman/magus/libs/diagnostics$
             # The version header every record leads with; a leaf library itself.
             - github.com/egladman/magus/libs/apiversion$
-            - github.com/egladman/magus/internal/json$
+            # The claim and memory types a target's sizing and the broker share.
+            - github.com/egladman/magus/libs/safetyscissors/budget$
+            # The rule decision an agent context's shadow tally and a rule record count by.
+            - github.com/egladman/magus/libs/safetyscissors/verdict$
+            # The model tier types a job and a spawn carry.
+            - github.com/egladman/magus/libs/safetyscissors/tier$
+            # The job record, its claim grammar and the origin every record stamps.
+            - github.com/egladman/magus/libs/safetyscissors/job$
+            - github.com/egladman/magus/libs/codec$
             - github.com/egladman/magus/types/enum$
-            - github.com/egladman/magus/types/agent$
             - github.com/egladman/magus/types/check$
             - github.com/egladman/magus/types/impact$
             - github.com/egladman/magus/types/vcs$
@@ -209,7 +215,7 @@ linters:
             - pkg: os/user$
               desc: types is the near-leaf domain package and may not reach the world
             - pkg: github.com/egladman/magus/
-              desc: types may depend on spells, libs/diagnostics, internal/json and its own domain packages, nothing else in magus
+              desc: types may depend on spells, libs/diagnostics, libs/apiversion, libs/safetyscissors/budget, verdict, tier and job, libs/codec and its own domain packages, nothing else in magus
 
         # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:
@@ -366,7 +372,6 @@ linters:
             - {file: std/fs.go, reason: staged}
             - {file: std/magus.go, reason: staged}
             - {file: symbol.go, reason: staged}
-            - {file: types/secret.go, reason: staged}
             - {file: watchdog.go, reason: staged}
 
       secretfields:
@@ -378,7 +383,7 @@ linters:
           # A field that only refers to a secret says so in its name (PasswordRef).
           words: [Password, Passwd, Secret, Token, Tokens, Credential, APIKey, Bearer, SigningKey,
                   PrivateKey, HMAC]
-          hint: hold it as types.Secret, which masks every rendering and reveals only by name
+          hint: hold it as secrets.Secret (libs/secrets), which masks every rendering and reveals only by name
 
       # Results go to stdout through the output emitters, help to stderr when asked,
       # and every other stderr line is a slog record, so -q, -s, why folding, -o jsonl
@@ -537,6 +542,7 @@ linters:
             - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
             - worktree  # git's own term
             - identity  # an English word; id.go and entity.go only make it look like id + entity
+            - baseline  # one word, proofread's own; not base + line
 
       nameoutput:
         type: module
@@ -744,13 +750,13 @@ linters:
         - name: github.com/egladman/magus/cmd/magus.writeFormatted
           tag: json
           arg-pos: 2
-        - name: github.com/egladman/magus/internal/json.Marshal
+        - name: github.com/egladman/magus/libs/codec.Marshal
           tag: json
           arg-pos: 0
-        - name: github.com/egladman/magus/internal/json.MarshalIndent
+        - name: github.com/egladman/magus/libs/codec.MarshalIndent
           tag: json
           arg-pos: 0
-        - name: github.com/egladman/magus/internal/json.Unmarshal
+        - name: github.com/egladman/magus/libs/codec.Unmarshal
           tag: json
           arg-pos: 1
 
@@ -832,6 +838,9 @@ linters:
       # G703/G706: experimental taint analysis (path traversal / log injection)
       #       on trusted local config paths and filenames in a CLI — false positives
       #       (the G304 rationale above applies to the taint variant too).
+      # G702: the taint variant of G204, excluded for its reason: a subprocess path
+      #       here is one magus resolved, such as the checkout's own ./magus the guard
+      #       hands a hook call to (internal/guard/deadline.go).
       # G122: WalkDir TOCTOU on paths under our own cache/workspace dir; not a
       #       threat for a local build cache.
       excludes:
@@ -839,6 +848,7 @@ linters:
         - G304
         - G306
         - G115
+        - G702
         - G703
         - G706
         - G122
@@ -886,7 +896,7 @@ linters:
       - path: ^proto/gen/
         linters: [gochecknoinits]
 
-      # stdversion cannot model GOEXPERIMENT. internal/json/json_v2.go sits behind
+      # stdversion cannot model GOEXPERIMENT. libs/codec/json_v2.go sits behind
       # //go:build goexperiment.jsonv2, where encoding/json/v2 IS available on the
       # go 1.26 this module declares, but the analyzer only reads the go directive
       # and the std API table compiled into the linter, so it calls all 25 symbols
@@ -898,7 +908,7 @@ linters:
       # carries a newer one. Same linter version, same config, opposite verdict -
       # which is the toolchain-mismatch hazard the lint target's comment describes,
       # showing up as findings rather than the panic it caused last time.
-      - path: ^internal/json/
+      - path: ^libs/codec/
         linters: [govet]
         text: stdversion
 
@@ -943,7 +953,7 @@ linters:
         linters: [testpairing]
       - path: ^internal/file/identity_unix\.go$
         linters: [testpairing]
-      - path: ^internal/job/store_unix_test\.go$
+      - path: ^internal/proc/detach_unix\.go$
         linters: [testpairing]
       - path: ^internal/proc/spawn/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
         linters: [testpairing]
@@ -954,6 +964,8 @@ linters:
       - path: ^internal/sessions/adapter_unix\.go$
         linters: [testpairing]
       - path: ^internal/textindex/mmap_unix\.go$
+        linters: [testpairing]
+      - path: ^libs/safetyscissors/job/store_unix_test\.go$
         linters: [testpairing]
 
       # filenames' backlog: concatenations already in the tree when the rule

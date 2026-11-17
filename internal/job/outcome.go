@@ -14,8 +14,9 @@ import (
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // newJobOutcome is row's terminal record, kept in the history file after the row expires.
@@ -25,7 +26,7 @@ import (
 // holder's trail. ChecksRun counts the runs the row kept evidence of: its own check's and one per
 // goal. Retry classifies the attempt from the row alone: an outcome is recorded under the
 // store's lock, where the trail's denials are not read. tries are the store's.
-func newJobOutcome(row types.Job, tries types.JobAttempts, ended int64) types.JobOutcome {
+func newJobOutcome(row job.Job, tries job.Attempts, ended int64) types.JobOutcome {
 	out := types.JobOutcome{
 		Job:          row.ID,
 		Kind:         modelTierKind(row),
@@ -62,7 +63,7 @@ func newJobOutcome(row types.Job, tries types.JobAttempts, ended int64) types.Jo
 // PassLower is the Wilson lower bound of the pass rate, the same bound volatility scores
 // flakiness with. ForksPerID is jobs per distinct job id: above 1, a person re-forked an id
 // after it failed. The other per-job figures are means, except MedianTokens.
-func ModelTierRecords(outcomes []types.JobOutcome, set *agent.ModelTierSet) []types.ModelTierRecord {
+func ModelTierRecords(outcomes []types.JobOutcome, set *tier.Set) []types.ModelTierRecord {
 	type key struct {
 		tier string
 		kind types.JobKind
@@ -92,9 +93,9 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *agent.ModelTierSet) []ty
 		}
 		f.rec.Jobs++
 		switch o.State {
-		case types.StatePass:
+		case job.StatePass:
 			f.rec.Pass++
-		case types.StateFail:
+		case job.StateFail:
 			f.rec.Fail++
 		default:
 			f.rec.NoReturn++
@@ -102,11 +103,11 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *agent.ModelTierSet) []ty
 		// An outcome recorded before attempts were numbered was a first attempt.
 		if o.Attempt <= 1 {
 			f.rec.FirstAttempts++
-			if o.State == types.StatePass {
+			if o.State == job.StatePass {
 				f.rec.FirstPass++
 			}
 		}
-		if o.Retry != types.RetryAsIs {
+		if o.Retry != job.RetryAsIs {
 			f.rec.NotRetryable++
 		}
 		f.ids[o.Job] = struct{}{}
@@ -199,10 +200,10 @@ type endings struct {
 // the attempt its parent was on, and the trail its holder's calls were recorded in, empty
 // when that cannot be placed.
 type heldOutcome struct {
-	row           types.Job
+	row           job.Job
 	parentAttempt int
 	trail         string
-	tries         types.JobAttempts
+	tries         job.Attempts
 }
 
 // hold keeps row's outcome, row having just ended, plan being the rows the write holds.
@@ -210,7 +211,7 @@ type heldOutcome struct {
 // fails the write rather than losing the outcome after it. A dry run writes nothing, a
 // store with no checkout has no workspace to name, and a row that ran at no tier has
 // nothing the lens could rank, so none holds one.
-func (e *endings) hold(s *Store, plan []types.Job, row types.Job) error {
+func (e *endings) hold(ctx context.Context, s *Store, plan []job.Job, row job.Job) error {
 	if s.dryRun || s.root == "" || row.ModelTier == nil {
 		return nil
 	}
@@ -221,12 +222,12 @@ func (e *endings) hold(s *Store, plan []types.Job, row types.Job) error {
 		}
 		e.path = path
 	}
-	all, err := s.Attempts()
+	all, err := s.Attempts(ctx)
 	if err != nil {
 		return err
 	}
-	held := heldOutcome{row: row.Clone(), tries: types.NewJobAttempts(all)}
-	if i := slices.IndexFunc(plan, func(r types.Job) bool { return r.ID == row.Parent }); row.Parent != "" && i >= 0 {
+	held := heldOutcome{row: row.Clone(), tries: job.NewAttempts(all)}
+	if i := slices.IndexFunc(plan, func(r job.Job) bool { return r.ID == row.Parent }); row.Parent != "" && i >= 0 {
 		held.parentAttempt = held.tries.LiveN(row.Parent)
 	}
 	// A trail that cannot be placed leaves the work profile unknown; it fails nothing.
@@ -274,7 +275,7 @@ func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) ty
 			out.Projects = projects
 		}
 	}
-	work, calls := attemptWork(h.trail, h.row.ID, attemptStart(h.row, h.tries))
+	work, calls := attemptWork(ctx, h.trail, h.row.ID, job.AttemptStart(h.row, h.tries))
 	out.Work = work
 	out.Tokens, out.CostUSD = s.priceAttempt(work, calls)
 	return out
@@ -294,24 +295,15 @@ func (s *Store) priceAttempt(work *types.JobWork, calls []types.AgentFacts) (*in
 	return &tokens, &usd
 }
 
-// attemptStart is when row's live attempt began, unix seconds: when the last prior attempt
-// ended, else when the row was created.
-func attemptStart(row types.Job, tries types.JobAttempts) int64 {
-	if prior := tries.Prior(row.ID); len(prior) > 0 {
-		return prior[len(prior)-1].Status.Ended
-	}
-	return row.Created
-}
-
 // assignModelTierWithHistory is [Store.assignModelTier] with the recorded outcomes in the
 // matrix's request. They are read only when a matrix runs, since nothing else reads them.
-func (s *Store) assignModelTierWithHistory(ctx context.Context, row types.Job, plan []types.Job) (agent.JobModelTier, error) {
+func (s *Store) assignModelTierWithHistory(ctx context.Context, row job.Job, plan []job.Job) (tier.Assignment, error) {
 	if s.modelTierMatrix == nil {
 		return s.assignModelTier(ctx, row, plan)
 	}
 	matrix := s.modelTierMatrix
 	withHistory := &Store{storeConfig: storeConfig{modelTiers: s.modelTiers, owners: s.owners}}
-	withHistory.modelTierMatrix = func(ctx context.Context, req types.ModelTierRequest) (*agent.JobModelTier, error) {
+	withHistory.modelTierMatrix = func(ctx context.Context, req types.ModelTierRequest) (*tier.Assignment, error) {
 		records, err := s.tierHistory(ctx)
 		if err != nil {
 			return nil, err
@@ -348,12 +340,16 @@ func (s *Store) jobHistory(ctx context.Context) ([]types.JobOutcome, error) {
 	return h.Jobs, nil
 }
 
+// errNoSuchJob is how an observation's apply declines a row that is not there without
+// inventing a lease nobody declared.
+var errNoSuchJob = errors.New("job: no such lease")
+
 // RecordRework counts one more rework round on job id: its holder handed back and was sent
-// more work. An observation, like [Store.RecordUnattributedWrite]: the guard noting what a
+// more work. An observation, like [job.Store.RecordUnattributedWrite]: the guard noting what a
 // message did is not the row's holder declaring anything. A missing row is not an error,
 // since the job may have been removed between the message and this call.
 func (s *Store) RecordRework(ctx context.Context, id string) error {
-	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, _ int64) error {
+	_, err := s.Mutate(ctx, id, job.AsObservation, func(cur *job.Job, exists bool, _ int64) error {
 		if !exists {
 			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
 		}

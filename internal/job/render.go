@@ -12,30 +12,31 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
 // WithoutEnded is list less the rows that ended, and how many that was. The reports derived
 // from the rows (overlaps, blocked, stale) name live rows only, so only the read-only
 // section can name an ended one.
-func WithoutEnded(list types.JobList) (types.JobList, int) {
+func WithoutEnded(list job.List) (job.List, int) {
 	ended := map[string]bool{}
-	list.Jobs = slices.DeleteFunc(slices.Clone(list.Jobs), func(row types.Job) bool {
+	list.Jobs = slices.DeleteFunc(slices.Clone(list.Jobs), func(row job.Job) bool {
 		if row.State.Terminal() {
 			ended[row.ID] = true
 		}
 		return ended[row.ID]
 	})
-	list.ReadOnly = slices.DeleteFunc(slices.Clone(list.ReadOnly), func(r types.JobReadOnly) bool { return ended[r.Job] })
+	list.ReadOnly = slices.DeleteFunc(slices.Clone(list.ReadOnly), func(r job.ReadOnly) bool { return ended[r.Job] })
 	return list, len(ended)
 }
 
 // PrintInflight renders the in-flight changes grouped by whose turn each is, the ones
 // waiting on the reader first. Unless all is set it lists the reader's changes and
 // counts the rest on one line.
-func PrintInflight(out io.Writer, list types.JobList, all bool) {
+func PrintInflight(out io.Writer, list InflightList, all bool) {
 	f := list.Fetched
 	if f == nil {
 		fmt.Fprintf(out, "in flight: never fetched; `%s queue ls --provider <provider> --base <branch>` reads the open changes\n", hint.BinaryName())
@@ -59,15 +60,15 @@ func PrintInflight(out io.Writer, list types.JobList, all bool) {
 	}
 	groups := []struct {
 		title     string
-		attention types.InflightAttention
+		attention inflightAttention
 	}{
-		{needs, types.AttentionAuthor},
-		{"waiting on review", types.AttentionReview},
-		{"queued, in plan order", types.AttentionQueue},
-		{"not queued", types.AttentionNone},
+		{needs, attentionAuthor},
+		{"waiting on review", attentionReview},
+		{"queued, in plan order", attentionQueue},
+		{"not queued", attentionNone},
 	}
 	for _, g := range groups {
-		var rows []types.InflightChange
+		var rows []InflightChange
 		for _, c := range shown {
 			if c.Attention == g.attention {
 				rows = append(rows, c)
@@ -76,14 +77,14 @@ func PrintInflight(out io.Writer, list types.JobList, all bool) {
 		if len(rows) == 0 {
 			continue
 		}
-		if g.attention == types.AttentionQueue {
+		if g.attention == attentionQueue {
 			slices.SortStableFunc(rows, queueOrder)
 		}
 		fmt.Fprintf(out, "%s (%d)\n", g.title, len(rows))
 		var table strings.Builder
 		w := tabwriter.NewWriter(&table, 0, 0, 2, ' ', 0)
 		for _, c := range rows {
-			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), InflightDetail(c, partitions), inflightJobs(c.Jobs))
+			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), inflightDetail(c, partitions), inflightJobs(c.Jobs))
 		}
 		_ = w.Flush() // writes to a strings.Builder, which never errors
 		// An empty last column leaves the padding before it at the end of the line.
@@ -111,8 +112,8 @@ func PrintInflight(out io.Writer, list types.JobList, all bool) {
 }
 
 // printInflightOthers counts the changes that are not the reader's on one line.
-func printInflightOthers(out io.Writer, changes []types.InflightChange) {
-	counts := map[types.InflightAttention]int{}
+func printInflightOthers(out io.Writer, changes []InflightChange) {
+	counts := map[inflightAttention]int{}
 	for _, c := range changes {
 		if !c.Mine {
 			counts[c.Attention]++
@@ -120,13 +121,13 @@ func printInflightOthers(out io.Writer, changes []types.InflightChange) {
 	}
 	var parts []string
 	for _, a := range []struct {
-		attention types.InflightAttention
+		attention inflightAttention
 		word      string
 	}{
-		{types.AttentionQueue, "queued"},
-		{types.AttentionAuthor, "kicked back"},
-		{types.AttentionReview, "waiting on review"},
-		{types.AttentionNone, "not queued"},
+		{attentionQueue, "queued"},
+		{attentionAuthor, "kicked back"},
+		{attentionReview, "waiting on review"},
+		{attentionNone, "not queued"},
 	} {
 		if n := counts[a.attention]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n, a.word))
@@ -139,7 +140,7 @@ func printInflightOthers(out io.Writer, changes []types.InflightChange) {
 
 // queueOrder puts planned changes first, by partition then position, and keeps the
 // provider's order among the rest.
-func queueOrder(a, b types.InflightChange) int {
+func queueOrder(a, b InflightChange) int {
 	switch {
 	case a.Position == 0 && b.Position == 0:
 		return 0
@@ -155,19 +156,19 @@ func queueOrder(a, b types.InflightChange) int {
 
 // PrintChange names the change job id's checkout carries, whose turn it is, and the
 // changes it touches.
-func PrintChange(out io.Writer, changes []types.InflightChange, id string) {
-	turns := map[types.InflightAttention]string{
-		types.AttentionAuthor: "its author's turn",
-		types.AttentionReview: "waiting on review",
-		types.AttentionQueue:  "the queue's turn",
-		types.AttentionNone:   "not queued",
+func PrintChange(out io.Writer, changes []InflightChange, id string) {
+	turns := map[inflightAttention]string{
+		attentionAuthor: "its author's turn",
+		attentionReview: "waiting on review",
+		attentionQueue:  "the queue's turn",
+		attentionNone:   "not queued",
 	}
 	for _, c := range changes {
 		if !slices.Contains(c.Jobs, id) {
 			continue
 		}
 		line := fmt.Sprintf("\nchange: #%s %s, %s", c.ID, clipTitle(c.Title, 48), turns[c.Attention])
-		if d := InflightDetail(c, 0); d != "" {
+		if d := inflightDetail(c, 0); d != "" {
 			line += ", " + d
 		}
 		fmt.Fprintln(out, line)
@@ -190,7 +191,7 @@ func clipTitle(s string, n int) string {
 	return strings.TrimRight(s[:cut], " ") + "..."
 }
 
-func PrintTree(out io.Writer, report types.JobList) {
+func PrintTree(out io.Writer, report job.List) {
 	if len(report.Jobs) == 0 {
 		fmt.Fprintf(out, "No jobs. Declare one with `%s`, or with the `%s` MCP tool (magus\\workspace().putJob), and every worktree of this repository reads it here.\n",
 			hint.JobFork.With("<job>"), hint.ToolClient)
@@ -250,7 +251,7 @@ func PrintTree(out io.Writer, report types.JobList) {
 	printOverlaps(out, report.Overlaps)
 }
 
-func printOverlaps(out io.Writer, overlaps []types.JobOverlap) {
+func printOverlaps(out io.Writer, overlaps []job.Overlap) {
 	if len(overlaps) == 0 {
 		return
 	}
@@ -259,7 +260,7 @@ func printOverlaps(out io.Writer, overlaps []types.JobOverlap) {
 		fmt.Fprintf(out, "  %s and %s claim common ground\n", o.JobA, o.JobB)
 		fmt.Fprintf(out, "    %s: %s\n", o.JobA, strings.Join(o.PathsA, ", "))
 		fmt.Fprintf(out, "    %s: %s\n", o.JobB, strings.Join(o.PathsB, ", "))
-		if o.Claims == types.ClaimsDisjoint {
+		if o.Claims == job.ClaimsDisjoint {
 			fmt.Fprintln(out, "    claims: disjoint (different declarations of one file: an integration order, not a wait)")
 		} else if o.Claims != "" {
 			fmt.Fprintf(out, "    claims: %s\n", o.Claims)
@@ -271,7 +272,7 @@ func printOverlaps(out io.Writer, overlaps []types.JobOverlap) {
 }
 
 // modelCell is the model the job names, else the model tier the store assigned it.
-func modelCell(row types.Job) string {
+func modelCell(row job.Job) string {
 	requested := row.Agent.RequestedModel()
 	if requested.IsZero() && row.ModelTier != nil {
 		return row.ModelTier.Name
@@ -283,10 +284,10 @@ func modelCell(row types.Job) string {
 // checkout a session job was taken in, and "-" for one nobody has taken. The checkout is
 // the one fact that tells holders apart: every person and agent on a machine runs as the
 // same OS account, and a CLI exec sees no other identity.
-func HolderCell(row types.Job) string {
+func HolderCell(row job.Job) string {
 	switch {
 	case row.ServerRun():
-		return string(types.EntryPointServer)
+		return string(job.EntryPointServer)
 	case row.CheckoutRoot != "":
 		return filepath.Base(row.CheckoutRoot)
 	}
@@ -295,13 +296,13 @@ func HolderCell(row types.Job) string {
 
 // overlapFootprintLine is the footprint verdict under an overlapping pair, or "" when
 // nobody computed one.
-func overlapFootprintLine(f *types.JobOverlapFootprint) string {
+func overlapFootprintLine(f *job.OverlapFootprint) string {
 	switch {
 	case f == nil:
 		return ""
-	case f.Verdict == types.FootprintShared:
+	case f.Verdict == job.FootprintShared:
 		return fmt.Sprintf("footprints: shared (%s)", strings.Join(f.Shared, ", "))
-	case f.Verdict == types.FootprintUnknown:
+	case f.Verdict == job.FootprintUnknown:
 		return fmt.Sprintf("footprints: unknown (%s)", f.Reason)
 	}
 	return "footprints: " + f.Verdict
@@ -318,25 +319,25 @@ type DescribeOutput struct {
 	// magus holds right now. Grading is still a READ: it records nothing, so asking never
 	// advances a job and never blocks the holder still working on it. It is the same
 	// grading `job wait` does, so the two cannot disagree.
-	Goals types.JobStatus `json:"goals" yaml:"goals"`
+	Goals job.Status `json:"goals" yaml:"goals"`
 }
 
 // describedJob is the job as `job apply` reads it. The stored row names no
 // api_version, so the record adds it.
 type describedJob struct {
 	APIVersion types.APIVersion `json:"api_version"`
-	types.Job
+	job.Job
 }
 
 // MarshalJSON prints the job member as a describedJob. The shallower job
 // member shadows Terms' own. YAML is no apply input and keeps the stored row.
 func (o DescribeOutput) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
+	return codec.Marshal(struct {
 		Lease describedJob `json:"job"`
 		Terms
-		Goals types.JobStatus `json:"goals"`
+		Goals job.Status `json:"goals"`
 	}{
-		Lease: describedJob{APIVersion: types.JobAPIVersion, Job: o.Lease},
+		Lease: describedJob{APIVersion: types.APIVersion(job.APIVersion), Job: o.Lease},
 		Terms: o.Terms,
 		Goals: o.Goals,
 	})
@@ -357,7 +358,7 @@ type ForkReport struct {
 }
 
 // PrintEntries lists a job's entries, one line each, or nothing when it has none.
-func PrintEntries(out io.Writer, entries []types.JobEntry) {
+func PrintEntries(out io.Writer, entries []job.Entry) {
 	if len(entries) == 0 {
 		return
 	}
@@ -375,7 +376,7 @@ func PrintEntries(out io.Writer, entries []types.JobEntry) {
 // PrintWorktree says where the checkout a job is bound to stands: made or adopted for it,
 // removed, or kept and why. built is true when the fork just built its ./magus from its own
 // sources.
-func PrintWorktree(out io.Writer, row types.Job, built bool) {
+func PrintWorktree(out io.Writer, row job.Job, built bool) {
 	wt := row.Worktree
 	switch {
 	case wt == nil:
@@ -403,7 +404,7 @@ func PrintWorktree(out io.Writer, row types.Job, built bool) {
 // PrintLandingBootstrap names the build a fork with no checkout of its own needs when the
 // ./magus it lands beside was built before its checkpoint's Go build inputs, and says so
 // when that cannot be told.
-func PrintLandingBootstrap(ctx context.Context, out io.Writer, store *Store, row types.Job) {
+func PrintLandingBootstrap(ctx context.Context, out io.Writer, store *Store, row job.Job) {
 	exe, _ := os.Executable()
 	bootstrap, err := store.LandingBootstrap(ctx, exe, row.Checkpoint)
 	switch {
@@ -446,7 +447,7 @@ func PrintFeedLine(out io.Writer, e FeedEvent) {
 
 func PrintStatus(out io.Writer, s Status) {
 	if s.Verified {
-		fmt.Fprintf(out, "verified %s, recorded %s\n", s.Job, types.StatePass)
+		fmt.Fprintf(out, "verified %s, recorded %s\n", s.Job, job.StatePass)
 	} else {
 		fmt.Fprintf(out, "rejected %s\n", s.Job)
 		for _, violation := range s.Violations {
@@ -513,7 +514,7 @@ func printFootprint(out io.Writer, s Status) {
 			continue
 		}
 		printed = append(printed, line)
-		if slices.ContainsFunc(s.Entries, func(e types.JobEntry) bool { return e.Consumed != 0 && Covers(e.Path, r.File.Path) }) {
+		if slices.ContainsFunc(s.Entries, func(e job.Entry) bool { return e.Consumed != 0 && Covers(e.Path, r.File.Path) }) {
 			line += "  (entered: may be the entrant's write, not the holder's)"
 		}
 		fmt.Fprintf(out, "  %s\n", line)
@@ -527,9 +528,9 @@ type ApplyReport struct {
 }
 
 type ApplyEntry struct {
-	Job     types.Job `json:"job"     yaml:"job"`
-	Created bool      `json:"created" yaml:"created"`
-	Changed []string  `json:"changed" yaml:"changed"`
+	Job     job.Job  `json:"job"     yaml:"job"`
+	Created bool     `json:"created" yaml:"created"`
+	Changed []string `json:"changed" yaml:"changed"`
 	// RegeneratedOutside is computed for a row whose write or deny paths the apply set.
 	RegeneratedOutside []RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
 	// UnrunGates is computed beside it, for the same rows.

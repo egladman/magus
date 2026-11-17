@@ -3,7 +3,8 @@ package types
 import (
 	"context"
 
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 // JobKind is what a job's work is judged by, derived from its row.
@@ -25,7 +26,7 @@ const (
 //
 // An error means the matrix itself failed (it raised, or returned a choice the
 // declaration cannot use), never that it declined: declining is a nil answer.
-type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*agent.JobModelTier, error)
+type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*tier.Assignment, error)
 
 // ModelTierRequest is what a matrix function reads to choose a job's tier: the row's
 // typed declaration plus the workspace's recorded outcomes. ParentRank and DeclaredRank
@@ -33,14 +34,14 @@ type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*agent.Job
 type ModelTierRequest struct {
 	ID, Parent, Instructions             string
 	ReadOnly                             bool
-	Check                                *LeaseCheck
-	Goals                                []Goal
+	Check                                *job.LeaseCheck
+	Goals                                []job.Goal
 	Kind                                 JobKind
 	WritePaths, WriteProjects, ReadPaths []string
 	DependsOn                            []string
 	WriteFiles                           int
 	ParentRank, DeclaredRank             *int
-	Model                                agent.Model
+	Model                                job.Model
 	History                              []ModelTierRecord
 }
 
@@ -86,26 +87,26 @@ type ModelTierRecord struct {
 // outside it. Work is nil when the holder's trail could not be read back to the attempt's
 // start or holds no call of it: unknown, never an idle holder.
 type JobOutcome struct {
-	Job          string                `json:"job"                     yaml:"job"`
-	ModelTier    string                `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
-	Kind         JobKind               `json:"kind"                    yaml:"kind"`
-	Skills       agent.SkillVariant    `json:"skills,omitempty"        yaml:"skills,omitempty"`
-	Model        string                `json:"model,omitempty"         yaml:"model,omitempty"`
-	Source       agent.ModelTierSource `json:"source,omitempty"        yaml:"source,omitempty"`
-	Reason       string                `json:"reason,omitempty"        yaml:"reason,omitempty"`
-	Site         string                `json:"site,omitempty"          yaml:"site,omitempty"`
-	WriteFiles   int                   `json:"write_files"             yaml:"write_files"`
-	State        JobState              `json:"state"                   yaml:"state"`
-	ChecksRun    int                   `json:"checks_run"              yaml:"checks_run"`
-	Tokens       *int64                `json:"usage_tokens,omitzero"   yaml:"usage_tokens,omitempty"`
-	CostUSD      *float64              `json:"usage_cost_usd,omitzero" yaml:"usage_cost_usd,omitempty"`
-	DurationMs   int64                 `json:"duration_ms"             yaml:"duration_ms"`
-	Ended        int64                 `json:"ended"                   yaml:"ended"`
-	ReworkRounds int                   `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
-	Widenings    int                   `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
-	Attempt      int                   `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
-	Retry        RetryChange           `json:"retry,omitempty"         yaml:"retry,omitempty"`
-	Parent       string                `json:"parent,omitempty"        yaml:"parent,omitempty"`
+	Job          string            `json:"job"                     yaml:"job"`
+	ModelTier    string            `json:"model_tier,omitempty"    yaml:"model_tier,omitempty"`
+	Kind         JobKind           `json:"kind"                    yaml:"kind"`
+	Skills       tier.SkillVariant `json:"skills,omitempty"        yaml:"skills,omitempty"`
+	Model        string            `json:"model,omitempty"         yaml:"model,omitempty"`
+	Source       tier.Source       `json:"source,omitempty"        yaml:"source,omitempty"`
+	Reason       string            `json:"reason,omitempty"        yaml:"reason,omitempty"`
+	Site         string            `json:"site,omitempty"          yaml:"site,omitempty"`
+	WriteFiles   int               `json:"write_files"             yaml:"write_files"`
+	State        job.State         `json:"state"                   yaml:"state"`
+	ChecksRun    int               `json:"checks_run"              yaml:"checks_run"`
+	Tokens       *int64            `json:"usage_tokens,omitzero"   yaml:"usage_tokens,omitempty"`
+	CostUSD      *float64          `json:"usage_cost_usd,omitzero" yaml:"usage_cost_usd,omitempty"`
+	DurationMs   int64             `json:"duration_ms"             yaml:"duration_ms"`
+	Ended        int64             `json:"ended"                   yaml:"ended"`
+	ReworkRounds int               `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
+	Widenings    int               `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
+	Attempt      int               `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
+	Retry        job.RetryChange   `json:"retry,omitempty"         yaml:"retry,omitempty"`
+	Parent       string            `json:"parent,omitempty"        yaml:"parent,omitempty"`
 	// ParentAttempt is 0 when the parent row was gone by the time the job ended.
 	ParentAttempt int      `json:"parent_attempt,omitzero" yaml:"parent_attempt,omitempty"`
 	Projects      []string `json:"projects,omitempty"      yaml:"projects,omitempty"`

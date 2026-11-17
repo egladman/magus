@@ -5,17 +5,17 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // worked is a passing outcome that ran durationMs up to ended, with a work profile that
 // loaded setup of context tokens before its first write.
-func worked(job string, ended, durationMs, setup, contextTokens int64, projects ...string) types.JobOutcome {
+func worked(id string, ended, durationMs, setup, contextTokens int64, projects ...string) types.JobOutcome {
 	return types.JobOutcome{
-		Job: job, State: types.StatePass, Ended: ended, DurationMs: durationMs, WriteFiles: 1,
+		Job: id, State: job.StatePass, Ended: ended, DurationMs: durationMs, WriteFiles: 1,
 		Projects: projects,
 		Work: &types.JobWork{
 			Calls: 10, Writes: 2, SetupCalls: 4, Denials: 1,
@@ -145,8 +145,8 @@ func TestStoreGroupingLensReadsTheRecordedOutcomes(t *testing.T) {
 
 	s, _ := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Agent.Model = agent.Model{}
-	endWith(t, s, endWith(t, s, row, types.StateRunning), types.StatePass)
+	row.Agent.Model = job.Model{}
+	endWith(t, s, endWith(t, s, row, job.StateRunning), job.StatePass)
 
 	got, err := s.GroupingLens(t.Context(), nil)
 

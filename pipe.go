@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
@@ -31,10 +32,10 @@ import (
 //
 // The steps are the selected targets and every ctx.needs member they reach, in
 // any project, transitively. A cacheable composer's members name it as Under.
-func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charms, extraArgs []string) []types.MachineClaim {
+func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charms, extraArgs []string) []budget.Claim {
 	size := newClaimSizer(m.measuredRuns(m.loadHistory(ctx)), forecast.NewShape(charms, extraArgs), m.chainReadsCharm)
 	capacity := m.limiter().Capacity()
-	out := make([]types.MachineClaim, 0, len(targets))
+	out := make([]budget.Claim, 0, len(targets))
 	seen := map[types.TargetRef]bool{}
 	var claim func(p *types.Project, target string, composer *cache.Step)
 	claim = func(p *types.Project, target string, composer *cache.Step) {
@@ -58,7 +59,7 @@ func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charm
 		if capacity > 0 {
 			slots = min(slots, capacity)
 		}
-		out = append(out, types.MachineClaim{
+		out = append(out, budget.Claim{
 			Project: p.Path, Target: target, DeclaredBy: step.MemoryDeclaredBy, Under: under,
 			MemoryMB: step.MemoryMB, Profile: step.MemoryProfile, Sizing: step.MemorySizing, Slots: slots,
 			SlotsFloor: min(step.SlotsFloor, slots),

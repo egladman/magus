@@ -13,9 +13,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/daemon"
 )
 
@@ -46,15 +46,15 @@ func TestStatusReportInlinesTheSnapshot(t *testing.T) {
 		Snapshot:     daemon.Snapshot{PoolError: "no pool"},
 		SilentLeases: []guard.SilentLease{{Lease: "job-a", Session: "s1", SilentSeconds: 2700}},
 	}
-	raw, err := json.Marshal(report)
+	raw, err := codec.Marshal(report)
 	require.NoError(t, err)
 	var got map[string]any
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	assert.Contains(t, got, "silent_leases")
 	assert.NotContains(t, got, "StatusSnapshot", "the snapshot's fields sit at the top level")
 	assert.Contains(t, string(raw), "no pool")
 
-	raw, err = json.Marshal(StatusReport{})
+	raw, err = codec.Marshal(StatusReport{})
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "silent_leases", "no silent lease and no error adds no key")
 }

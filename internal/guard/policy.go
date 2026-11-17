@@ -22,12 +22,14 @@ import (
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // The lineage actions a guard_policy trail event records.
@@ -103,8 +105,8 @@ type policyMarker struct {
 // policyMarkerLog is the marker's file: a line for each change of the rule set, the last one
 // being the marker. The file is the guard's own state, private to its owner.
 func policyMarkerLog(path string) file.JSONL[policyMarker] {
-	return file.JSONL[policyMarker]{Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
-		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}
+	return file.JSONL[policyMarker]{JSONL: codec.JSONL[policyMarker]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
+		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}}
 }
 
 // policyAPIVersion is the guard_policy blob's format.
@@ -156,14 +158,14 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, StopRule: now.StopRule,
 		StepRules: now.StepRules, Pending: pending, Files: now.Files}
 	if action != "" {
-		body, _ := json.Marshal(policyEvent{APIVersion: policyAPIVersion, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
+		body, _ := codec.Marshal(policyEvent{APIVersion: policyAPIVersion, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
-		trail.Append(ctx, cacheDir, trail.Event{
+		trail.Append(ctx, cacheDir, trailtypes.Event{
 			Ts:           time.Now().UnixMilli(),
-			Kind:         trail.KindGuardPolicy,
+			Kind:         trailtypes.KindGuardPolicy,
 			Workspace:    workspace,
 			Action:       action,
-			Outcome:      trail.OutcomeOK,
+			Outcome:      trailtypes.OutcomeOK,
 			RequestRef:   ref,
 			RequestBytes: size,
 			PolicyDigest: now.Digest,
@@ -237,7 +239,7 @@ func readPolicyMarker(path string) (policyMarker, bool) {
 // it, so the log is how a person learns it was not used.
 func reportGuardRecord(err error) {
 	message := "guard record"
-	if errors.Is(err, file.ErrLegacyStore) {
+	if errors.Is(err, codec.ErrLegacyStore) {
 		message = "legacy guard record: state belongs to an older magus"
 	}
 	slog.With(attr.Component("magus")).ErrorContext(context.Background(), message, attr.Error(err))
@@ -249,8 +251,8 @@ func reportGuardRecord(err error) {
 func writePolicyMarker(path string, m policyMarker) {
 	_ = policyMarkerLog(path).Update(context.Background(), func(held []policyMarker) []policyMarker {
 		// By encoding: a marker read back has nil where the one written had an empty list.
-		if old, err := json.Marshal(held); len(held) == 1 && err == nil {
-			if next, err := json.Marshal([]policyMarker{m}); err == nil && bytes.Equal(old, next) {
+		if old, err := codec.Marshal(held); len(held) == 1 && err == nil {
+			if next, err := codec.Marshal([]policyMarker{m}); err == nil && bytes.Equal(old, next) {
 				return nil
 			}
 		}
@@ -328,12 +330,12 @@ type snapshotSource struct {
 }
 
 type snapshotShellRule struct {
-	Name     string   `json:"name"`
-	Decision string   `json:"decision"`
-	Program  string   `json:"program"`
-	Args     []string `json:"args,omitempty"`
-	Reason   string   `json:"reason,omitempty"`
-	Dialect  string   `json:"dialect,omitempty"`
+	Name     string           `json:"name"`
+	Decision verdict.Decision `json:"decision"`
+	Program  string           `json:"program"`
+	Args     []string         `json:"args,omitempty"`
+	Reason   string           `json:"reason,omitempty"`
+	Dialect  string           `json:"dialect,omitempty"`
 }
 
 // snapshotBody is what one load of a workspace's policy decided, as data. The
@@ -368,12 +370,12 @@ type policySnapshotLine struct {
 }
 
 func (s policySnapshot) MarshalJSON() ([]byte, error) {
-	return json.Marshal(policySnapshotLine{Key: s.key, Snapshot: s.body, Seal: s.seal})
+	return codec.Marshal(policySnapshotLine{Key: s.key, Snapshot: s.body, Seal: s.seal})
 }
 
 func (s *policySnapshot) UnmarshalJSON(b []byte) error {
 	var line policySnapshotLine
-	if err := json.Unmarshal(b, &line); err != nil {
+	if err := codec.Unmarshal(b, &line); err != nil {
 		return err
 	}
 	*s = policySnapshot{key: line.Key, body: line.Snapshot, seal: line.Seal}
@@ -382,7 +384,7 @@ func (s *policySnapshot) UnmarshalJSON(b []byte) error {
 
 // sealed is the bytes the seal covers.
 func (s policySnapshot) sealed() ([]byte, error) {
-	body, err := json.Marshal(s.body)
+	body, err := codec.Marshal(s.body)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +401,7 @@ type snapshotSite struct {
 func (s snapshotSite) log() file.JSONL[policySnapshot] {
 	// One entry per store: a store is one workspace, and only its current
 	// state is worth keeping.
-	return file.JSONL[policySnapshot]{Path: s.store.Path, Perm: 0o600, Key: func(policySnapshot) string { return "" }}
+	return file.JSONL[policySnapshot]{JSONL: codec.JSONL[policySnapshot]{Log: slog.With(attr.Component("magus")), Path: s.store.Path, Perm: 0o600, Key: func(policySnapshot) string { return "" }}}
 }
 
 // openSnapshot resolves the snapshot site for w.Root. The error says why the
@@ -432,7 +434,7 @@ func (s snapshotSite) key(sources []string) (string, bool) {
 		return "", false
 	}
 	agents, err := config.LoadAgents(s.w.Root)
-	settings, merr := json.Marshal(agents)
+	settings, merr := codec.Marshal(agents)
 	if err := errors.Join(err, merr); err != nil {
 		settings = []byte("error: " + err.Error())
 	}
@@ -590,22 +592,22 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 		})
 	}
 	if has.Spawn {
-		deps.SpawnRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.SpawnRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.SpawnRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.SpawnRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.SpawnRule()
 		})
 	}
 	if has.Command {
-		deps.CommandRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.CommandRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.CommandRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.CommandRule()
 		})
 	}
 	if has.Write {
-		deps.WriteRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.WriteRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.WriteRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.WriteRule()
 		})
 	}
 	if has.Stop {
-		deps.StopRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.StopRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.StopRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.StopRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.StopRule()
 		})
 	}
@@ -614,7 +616,7 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 			if !slices.Contains(has.Steps, kind) {
 				return nil
 			}
-			return steps.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, typesagent.StepRequest, hint.Gate) (types.GuardVerdict, error) {
+			return steps.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, step.Request, hint.Gate) (verdict.Verdict, error) {
 				return r.StepRule(kind)
 			}))
 		}
@@ -652,15 +654,15 @@ func (s snapshotSite) lazyApprovedRules(deps *Dependencies, body snapshotBody) {
 // lazyRule is the working tree's rule that pick reads, loaded on its first
 // call. A tree whose bytes match the snapshot registers it again, so a load
 // that registers none answers nothing.
-func lazyRule[Req any](load func(context.Context) (*WorkspaceRules, error), pick func(*WorkspaceRules) func(context.Context, Req, hint.Gate) (types.GuardVerdict, error)) func(context.Context, Req, hint.Gate) (types.GuardVerdict, error) {
-	return func(ctx context.Context, req Req, facts hint.Gate) (types.GuardVerdict, error) {
+func lazyRule[Req any](load func(context.Context) (*WorkspaceRules, error), pick func(*WorkspaceRules) func(context.Context, Req, hint.Gate) (verdict.Verdict, error)) func(context.Context, Req, hint.Gate) (verdict.Verdict, error) {
+	return func(ctx context.Context, req Req, facts hint.Gate) (verdict.Verdict, error) {
 		rules, err := load(ctx)
 		if err != nil {
-			return types.GuardVerdict{}, err
+			return verdict.Verdict{}, err
 		}
 		rule := pick(rules)
 		if rule == nil {
-			return types.GuardVerdict{}, nil
+			return verdict.Verdict{}, nil
 		}
 		return rule(ctx, req, facts)
 	}

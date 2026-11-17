@@ -33,7 +33,10 @@ type Report struct {
 	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
 	// tell an unresearched change from a record kept in another checkout.
 	EvidenceGap trail.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
-	Review      *reviewSummary   `json:"review,omitempty"       yaml:"review,omitempty"`
+	// EvidenceNotes names each trail record Evidence skipped because it did not decode, so a
+	// short list reads as complete only when it is.
+	EvidenceNotes []string       `json:"evidence_notes,omitempty" yaml:"evidence_notes,omitempty"`
+	Review        *reviewSummary `json:"review,omitempty"       yaml:"review,omitempty"`
 }
 
 // Lines renders the report, one claim per line, in the same count-then-list shape
@@ -51,7 +54,7 @@ func Lines(p Report) []string {
 		advisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
 		anchorLines(p.Anchors),
 		leftBehindLines(p.LeftBehind),
-		evidenceLines(p.Evidence, p.EvidenceGap),
+		append(evidenceLines(p.Evidence, p.EvidenceGap), evidenceNoteLines(p.EvidenceNotes)...),
 		reviewLines(p.Review),
 	}
 	for _, s := range sections {

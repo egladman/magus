@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -124,7 +125,7 @@ func TestDiffWithSkipOrderDoesNotComputeTheOrder(t *testing.T) {
 	for name, body := range orderTree {
 		files[name] = body
 	}
-	m, err := Open(t.Context(), writeWorkspace(t, files), WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), writeWorkspace(t, files), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	paths := []string{"iface.go", "impl.go"}

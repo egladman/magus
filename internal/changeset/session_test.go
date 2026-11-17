@@ -1,17 +1,17 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
 )
 
 func TestAttachReturnsTheSameSessionForOneRoot(t *testing.T) {
@@ -163,7 +163,7 @@ func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 	assert.Equal(t, want, restored)
 }
 
-// Compaction is the one rewrite: once the file is file.CompactDue, it is rewritten to its last
+// Compaction is the one rewrite: once the file is codec.CompactDue, it is rewritten to its last
 // line per key, by rename, and an ended key leaves it.
 func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 	dir := t.TempDir()
@@ -177,7 +177,7 @@ func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 
 	b, err := os.ReadFile(filepath.Join(dir, "review", "viewed.jsonl"))
 	require.NoError(t, err)
-	assert.False(t, file.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
+	assert.False(t, codec.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
 	assert.Equal(t, []string{"d2"}, NewStore(dir).Attach("/w", "working", diff.Diff{}, "").Viewed)
 }
 
@@ -197,7 +197,7 @@ func TestOldJSONStateIsNamedNotRead(t *testing.T) {
 			require.NoError(t, mkdirAllWrite(old, `["x"]`))
 
 			err := load(NewStore(dir))
-			require.ErrorIs(t, err, file.ErrLegacyStore)
+			require.ErrorIs(t, err, codec.ErrLegacyStore)
 			require.ErrorContains(t, err, "preserve it")
 			got := NewStore(dir).Attach("/w", "working", diff.Diff{}, "")
 			assert.Empty(t, got.Viewed)
@@ -243,8 +243,8 @@ func TestADraftRoundTripsThroughItsFile(t *testing.T) {
 	want := diff.Comment{
 		ID: "c7", Path: "internal/a.go", Hunk: 2, Author: diff.AuthorUnattributed, AgentName: "claude",
 		Body: "why not `x`?\n\nand\ttabs", Resolved: true, Line: 41,
-		Origin: types.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
-			Credential: types.CredentialStdio},
+		Origin: job.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
+			Credential: auth.CredentialStdio().Recorded()},
 		Anchor: diff.CommentAnchor{Digest: "d", Quote: "return nil", Declaration: "func f()",
 			Before: []string{"", "x := 1"}, After: []string{"}", ""}},
 	}

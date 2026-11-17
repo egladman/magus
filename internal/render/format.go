@@ -9,14 +9,14 @@ import (
 
 	sprig "github.com/Masterminds/sprig/v3"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
 // so -o json and a template see the same wire form every other byte magus writes has.
 var outputWriter = output.Writer{
-	Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal},
+	Codec: output.Codec{Marshal: codec.Marshal, Unmarshal: codec.Unmarshal},
 	Funcs: TemplateFuncs(),
 }
 

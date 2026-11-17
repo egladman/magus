@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ import (
 func newJobService(handler func(ctx context.Context, args []string) error) *service {
 	return &service{
 		handler: handler,
-		lim:     cache.NewLimiter(4),
+		lim:     budget.NewLimiter(4),
 	}
 }
 
@@ -124,7 +125,7 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 func TestRunAdoptsClientLease(t *testing.T) {
 	got := make(chan string, 1)
 	s := newJobService(func(ctx context.Context, _ []string) error {
-		got <- types.JobLeaseFromContext(ctx)
+		got <- job.LeaseFromContext(ctx)
 		return nil
 	})
 
@@ -141,12 +142,12 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 	for name, id := range map[string]string{
 		"spaces":   "not a lease id",
 		"newlines": "fleet/f3\nsecret=hunter2",
-		"toolong":  strings.Repeat("a", types.MaxJobIDLen+1),
+		"toolong":  strings.Repeat("a", job.MaxIDLen+1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := make(chan string, 1)
 			s := newJobService(func(ctx context.Context, _ []string) error {
-				got <- types.JobLeaseFromContext(ctx)
+				got <- job.LeaseFromContext(ctx)
 				return nil
 			})
 
@@ -161,15 +162,15 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 // struct: a tag typo would leave every assertion above green while the server still saw
 // nothing. A body with no lease decodes to "" rather than failing.
 func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
-	raw, err := json.Marshal(runRequest{Args: []string{"run", "build"}, Cwd: "/w", Lease: "fleet/f3"})
+	raw, err := codec.Marshal(runRequest{Args: []string{"run", "build"}, Cwd: "/w", Lease: "fleet/f3"})
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), `"lease":"fleet/f3"`)
 	var got runRequest
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	assert.Equal(t, "fleet/f3", got.Lease)
 
 	var none runRequest
-	require.NoError(t, json.Unmarshal([]byte(`{"args":["run","build"],"cwd":"/w"}`), &none))
+	require.NoError(t, codec.Unmarshal([]byte(`{"args":["run","build"],"cwd":"/w"}`), &none))
 	assert.Empty(t, none.Lease)
 }
 
@@ -177,7 +178,7 @@ func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
 // the adopted handler sees it, so it can decline rather than run the work under less.
 // Each run also gets an env overlay of its own.
 func TestSandboxFloorCrossesTheWire(t *testing.T) {
-	srv, err := New(t.Context(), Options{Handler: func(ctx context.Context, args []string) error {
+	srv, err := New(t.Context(), Options{Limiter: budget.NewLimiter(4), Handler: func(ctx context.Context, args []string) error {
 		if environ.From(ctx) == nil {
 			return errors.New("no env overlay on the adopted run")
 		}
@@ -247,7 +248,7 @@ func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
 // and the socket going dead), because the shutdown handler cancels only the listener's own
 // context, and a caller cannot see that from the reply alone.
 func TestShutdownClosesServer(t *testing.T) {
-	srv, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := New(t.Context(), Options{Limiter: budget.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer srv.Close()
 	require.NoError(t, srv.Start(t.Context()))
@@ -309,6 +310,7 @@ func TestForwardVersionGate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var called atomic.Bool
 			srv, err := New(t.Context(), Options{
+				Limiter: budget.NewLimiter(4),
 				Version: tc.serverVersion,
 				Handler: func(context.Context, []string) error { called.Store(true); return nil },
 			})
@@ -340,6 +342,7 @@ func TestForwardVersionGate(t *testing.T) {
 func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	var called atomic.Bool
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Version: devVersionSentinel, // gateVersion = this binary's real dev fingerprint
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
@@ -359,7 +362,7 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	defer resp.Body.Close()
 
 	var refusal errorReply
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&refusal))
+	require.NoError(t, codec.NewDecoder(resp.Body).Decode(&refusal))
 	assert.Equal(t, http.StatusConflict, resp.StatusCode, "a not-adopted refusal is a 409")
 	assert.Equal(t, ErrVersionMismatch.Error(), refusal.Message, "a mismatched dev fingerprint is refused as a version mismatch")
 	assert.False(t, called.Load(), "the refused run must not execute")

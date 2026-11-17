@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/vcs"
 )
 
@@ -140,7 +140,7 @@ func TestReceiptsAreAppendedAsJSONLines(t *testing.T) {
 }
 
 // Re-acking one path over and over cannot grow the file without bound: once it is
-// file.CompactDue, it is rewritten to the last line for each path.
+// codec.CompactDue, it is rewritten to the last line for each path.
 func TestReceiptsCompactPastTheirBound(t *testing.T) {
 	dir := t.TempDir()
 	for i := range 100 {
@@ -149,7 +149,7 @@ func TestReceiptsCompactPastTheirBound(t *testing.T) {
 
 	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(receiptFile)))
 	require.NoError(t, err)
-	assert.False(t, file.CompactDue(bytes.Count(b, []byte("\n")), 1))
+	assert.False(t, codec.CompactDue(bytes.Count(b, []byte("\n")), 1))
 	s, err := Load(dir)
 	require.NoError(t, err)
 	assert.True(t, s.Covers("a.go", "99"))
@@ -164,7 +164,7 @@ func TestOldReceiptsJSONIsNamedNotRead(t *testing.T) {
 	require.NoError(t, os.WriteFile(old, []byte(`[{"path":"a.go","digest":"d"}]`), 0o600))
 
 	_, err := Load(dir)
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, old)
 	require.Error(t, Record(dir, []Receipt{{Path: "b.go", Digest: "d", At: time.Now()}}))

@@ -25,7 +25,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("Do not hit prod from an agent shell; use staging.");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 ```
 
@@ -131,9 +131,18 @@ and the stricter answer stands, as for
 [`magus\guard.spawn`](guard-spawn.md#tighten-live-loosen-on-approval). An agent's edit
 can tighten the policy that grades it and cannot loosen it.
 
+## The answer
+
+A rule returns one of four verdicts, and none of them says yes. `magus\guard.defer()`
+adds nothing, so the host's own permission flow decides the call.
+`magus\guard.advise(text)` lets it through with text for the agent.
+`magus\guard.ask(text)` blocks it until the person approves it through the host's own
+prompt; a wiring that cannot prompt refuses the call instead. `magus\guard.deny(text)`
+blocks it, with text saying why.
+
 ## Naming a rule
 
-`deny` and `advise` take an optional `{rule: str}` record naming the rule that answered:
+`deny`, `ask` and `advise` take an optional `{rule: str}` record naming the rule that answered:
 
 ```buzz
 return magus\guard.deny("Lead the description with its intent.", {"rule": "pull-request-text"});
@@ -155,7 +164,7 @@ answer the same decision, the merged verdict keeps the first named rule.
 ## When the magus judging the call cannot load the tree
 
 Failing open assumes the rule could have run. When the magus answering the hook cannot
-load the workspace at all, no rule in the magusfile was asked, so a pass from the
+load the workspace at all, no rule in the magusfile was asked, so a defer from the
 built-ins says little. If it is older than the tree (the magusfile calls a name that
 build predates) or the checkout holds no `./magus`, and the magusfile visibly registers
 a guard rule, the guard denies every call that changes state: file edits, subagent

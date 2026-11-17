@@ -1,6 +1,6 @@
 // Subcommand `jobschema` emits the published JSON Schema for each job record from
-// the Go struct that decodes it: internal/job/gen/job.schema.json from types.Declaration,
-// result.schema.json from types.JobResult.
+// the Go struct that decodes it: internal/job/gen/job.schema.json from job.Declaration,
+// result.schema.json from job.Result.
 //
 // The schema and the struct were two hand-written copies of one contract, and the test
 // between them could only report that they had already diverged. Deriving the schema
@@ -20,7 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
+	gotypes "go/types"
 	"maps"
 	"os"
 	"path/filepath"
@@ -31,7 +33,8 @@ import (
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/generate/godecl"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,8 +51,8 @@ type jobRecord struct {
 }
 
 var jobRecords = []jobRecord{
-	{Struct: "Declaration", Type: reflect.TypeFor[types.Declaration](), Title: "magus job", File: "job.schema.json", Version: "JobAPIVersion"},
-	{Struct: "JobResult", Type: reflect.TypeFor[types.JobResult](), Title: "magus job result", File: "result.schema.json", Version: "JobResultAPIVersion"},
+	{Struct: "Declaration", Type: reflect.TypeFor[job.Declaration](), Title: "magus job", File: "job.schema.json", Version: "APIVersion"},
+	{Struct: "Result", Type: reflect.TypeFor[job.Result](), Title: "magus job result", File: "result.schema.json", Version: "ResultAPIVersion"},
 }
 
 const (
@@ -58,7 +61,7 @@ const (
 	// versionProperty is the one property whose value is fixed rather than described.
 	versionProperty = "api_version"
 	// leaseIDMarker is the `schema:"leaseid"` tag: this field holds a lease id, so the
-	// pattern and length types.ValidJobID enforces are published with it.
+	// pattern and length job.ValidID enforces are published with it.
 	leaseIDMarker = "leaseid"
 	// The other markers a field may carry; each is a string constraint a struct tag cannot
 	// spell on its own. A marker on a []string constrains the items.
@@ -77,7 +80,7 @@ const (
 // keyed by the name a field is declared with.
 var narrowedSets = map[string]func() []string{
 	// Deviation.Code names a code a deviation may waive, as the decoder checks.
-	"DiagnosticCode": permissibleCodeNames,
+	"Code": permissibleCodeNames,
 }
 
 func runJobSchema(args []string) error {
@@ -273,7 +276,7 @@ func markerMembers(marker string) (node, error) {
 	case "":
 		return nil, nil
 	case leaseIDMarker:
-		return node{{"pattern", leaseIDPattern()}, {"maxLength", types.MaxJobIDLen}}, nil
+		return node{{"pattern", leaseIDPattern()}, {"maxLength", job.MaxIDLen}}, nil
 	case writePathMarker:
 		return node{{"pattern", writePathPattern()}}, nil
 	case durationMarker:
@@ -368,7 +371,32 @@ func jobDecls(records []jobRecord) (*goDecls, error) {
 		return nil, err
 	}
 	d.sets = sets
-	return d, nil
+	return d, versionConsts(records, d)
+}
+
+// versionConsts records each compiled record's version constant by its typed value. The
+// constant may name another (`APIVersion = apigroup.Job`), which no literal in the parsed
+// file spells.
+func versionConsts(records []jobRecord, d *goDecls) error {
+	prog := boundary().prog
+	var errs []error
+	for _, rec := range records {
+		if rec.Type == nil {
+			continue
+		}
+		pkg, err := prog.Package(rec.Type.PkgPath())
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		c, ok := pkg.Types.Scope().Lookup(rec.Version).(*gotypes.Const)
+		if !ok || c.Val().Kind() != constant.String {
+			errs = append(errs, fmt.Errorf("%s declares no string constant %s", rec.Type.PkgPath(), rec.Version))
+			continue
+		}
+		d.consts[rec.Version] = constant.StringVal(c.Val())
+	}
+	return errors.Join(errs...)
 }
 
 func jobSources(records []jobRecord) ([]string, map[string][]string, error) {
@@ -510,14 +538,14 @@ func permissibleCodeNames() []string {
 	return names
 }
 
-// leaseIDPattern derives the id charset by asking types.ValidJobID about every ASCII
+// leaseIDPattern derives the id charset by asking job.ValidID about every ASCII
 // rune, so the published pattern cannot say something other than what the store enforces.
 // Probing ASCII alone is enough because the validator accepts nothing above it. Each rune
 // is probed inside a segment, since '-', '.' and '/' are refused only at a segment's edge.
 func leaseIDPattern() string {
 	var accepted []rune
 	for r := rune(0); r < 0x80; r++ {
-		if types.ValidJobID(fmt.Sprintf("a%sa", string(r))) {
+		if job.ValidID(fmt.Sprintf("a%sa", string(r))) {
 			accepted = append(accepted, r)
 		}
 	}
@@ -528,7 +556,7 @@ func leaseIDPattern() string {
 // workspace-relative path, optionally followed by `#<declaration>`. It refuses a leading
 // `~` or `/`, a `..` segment, a trailing `/`, a bare `.` and a final `**` segment. Segments
 // are spelled out positively because the pattern must run under both ECMAScript and RE2,
-// and neither shares a lookahead. `\#` keeps a `#` inside the path, as types.SplitClaim
+// and neither shares a lookahead. `\#` keeps a `#` inside the path, as job.SplitClaim
 // reads it.
 func writePathPattern() string {
 	const ch = `(?:\\#|[^/#])`
@@ -683,7 +711,7 @@ func writeNode(b *strings.Builder, n node, indent string) error {
 }
 
 func writeScalar(b *strings.Builder, v any) error {
-	raw, err := json.Marshal(v)
+	raw, err := codec.Marshal(v)
 	if err != nil {
 		return err
 	}

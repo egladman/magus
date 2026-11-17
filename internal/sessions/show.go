@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // CountedName is one repeated thing and how often it appeared.
@@ -27,7 +29,7 @@ type CountedName struct {
 type commandGroup struct {
 	Program    string   `json:"program"`
 	Count      int      `json:"count"`
-	Pass       int      `json:"pass"`
+	Defer      int      `json:"defer"`
 	Advise     int      `json:"advise"`
 	WouldDeny  int      `json:"would_deny"`
 	HostDenied int      `json:"host_denied"`
@@ -43,7 +45,7 @@ type ShowSummary struct {
 	// Agent is the pair off the newest event that named one: what this session
 	// ended on, which is what today's guard rules would be checked against. Zero
 	// when no loaded event named either.
-	Agent        Agent          `json:"agent,omitzero"`
+	Agent        session.Agent  `json:"agent,omitzero"`
 	Events       int            `json:"events"`
 	FirstMs      int64          `json:"first_ms,omitempty"`
 	LastMs       int64          `json:"last_ms,omitempty"`
@@ -57,8 +59,8 @@ type ShowSummary struct {
 }
 
 // SummarizeSession folds one session's loaded events into the report.
-func SummarizeSession(session string, events []AgentEvent) ShowSummary {
-	out := ShowSummary{Session: session, Events: len(events), ByKind: map[string]int{}}
+func SummarizeSession(hostSession string, events []session.AgentEvent) ShowSummary {
+	out := ShowSummary{Session: hostSession, Events: len(events), ByKind: map[string]int{}}
 	byProgram := map[string]*commandGroup{}
 	skills, read, written := map[string]int{}, map[string]int{}, map[string]int{}
 
@@ -79,11 +81,11 @@ func SummarizeSession(session string, events []AgentEvent) ShowSummary {
 				out.LastMs = ev.AtMs
 			}
 		}
-		if ev.Agent != (Agent{}) && ev.AtMs >= pairAtMs {
+		if ev.Agent != (session.Agent{}) && ev.AtMs >= pairAtMs {
 			out.Agent, pairAtMs = ev.Agent, ev.AtMs
 		}
 		switch ev.Kind {
-		case EventShellCommand:
+		case session.EventShellCommand:
 			g := byProgram[ev.Program]
 			if g == nil {
 				g = &commandGroup{Program: ev.Program}
@@ -91,12 +93,12 @@ func SummarizeSession(session string, events []AgentEvent) ShowSummary {
 			}
 			g.Count++
 			switch ev.Verdict {
-			case VerdictDeny:
+			case verdict.Deny:
 				g.WouldDeny++
-			case VerdictAdvise:
+			case verdict.Advise:
 				g.Advise++
 			default:
-				g.Pass++
+				g.Defer++
 			}
 			if ev.Denied {
 				g.HostDenied++
@@ -104,13 +106,13 @@ func SummarizeSession(session string, events []AgentEvent) ShowSummary {
 			if ev.Rule != "" && !slices.Contains(g.Rules, ev.Rule) {
 				g.Rules = append(g.Rules, ev.Rule)
 			}
-		case EventSkillLoad:
+		case session.EventSkillLoad:
 			skills[ev.Text]++
-		case EventFileRead:
+		case session.EventFileRead:
 			read[ev.Text]++
-		case EventFileWrite:
+		case session.EventFileWrite:
 			written[ev.Text]++
-		case EventHookOutput:
+		case session.EventHookOutput:
 			out.HookOutputs++
 		}
 	}
@@ -152,7 +154,7 @@ const showListCap = 10
 // RenderShow prints the events half of `session show`, ending on the hook-output count.
 func RenderShow(w io.Writer, s ShowSummary) {
 	fmt.Fprintf(w, "%s  host %s  %d event(s)\n", s.Session, OrDash(s.Host), s.Events)
-	if s.Agent != (Agent{}) {
+	if s.Agent != (session.Agent{}) {
 		fmt.Fprintf(w, "model %s  host version %s\n", OrDash(s.Agent.Model), OrDash(s.Agent.HostVersion))
 	}
 	if s.FirstMs > 0 {
@@ -164,7 +166,7 @@ func RenderShow(w io.Writer, s ShowSummary) {
 		fmt.Fprintf(w, "transcript %s\n", s.Transcript)
 	}
 	fmt.Fprintln(w)
-	for _, kind := range EventKinds {
+	for _, kind := range session.EventKinds() {
 		if n := s.ByKind[kind]; n > 0 {
 			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
 		}
@@ -172,8 +174,8 @@ func RenderShow(w io.Writer, s ShowSummary) {
 	if len(s.Commands) > 0 {
 		fmt.Fprintln(w, "\nCommands by program, judged against today's rules:")
 		for _, g := range s.Commands {
-			fmt.Fprintf(w, "  %-12s %4d  pass %d  advise %d  deny %d  (host recorded %d denied)",
-				OrDash(g.Program), g.Count, g.Pass, g.Advise, g.WouldDeny, g.HostDenied)
+			fmt.Fprintf(w, "  %-12s %4d  defer %d  advise %d  deny %d  (host recorded %d denied)",
+				OrDash(g.Program), g.Count, g.Defer, g.Advise, g.WouldDeny, g.HostDenied)
 			if len(g.Rules) > 0 {
 				fmt.Fprintf(w, "  %s", strings.Join(g.Rules, ", "))
 			}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -113,12 +114,12 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 		step.Revision, step.Dirty, step.VCSName = k.revision, k.dirty, k.vcsName
 		step.SkipReplay = k.skipReplay
 		call := func() error {
-			_, err := m.cache.RunAside(cache.WithoutSlotHeld(ctx), step, run, k.opts...)
+			_, err := m.cache.RunAside(budget.WithoutSlotHeld(ctx), step, run, k.opts...)
 			return err
 		}
 		// The caller holds a slot while it waits here, and RunAside takes its own; at a
 		// budget of one, keeping both would deadlock.
-		if lim := cache.LimiterFromContext(ctx); lim != nil && cache.SlotHeld(ctx) {
+		if lim := cache.LimiterFromContext(ctx); lim != nil && budget.SlotHeld(ctx) {
 			return lim.Yield(ctx, call)
 		}
 		return call()

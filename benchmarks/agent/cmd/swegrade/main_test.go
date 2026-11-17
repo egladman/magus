@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type swegradeSuite struct {
@@ -31,7 +31,7 @@ cleanup
 
 func (s *swegradeSuite) row(raw string) instance {
 	var row instance
-	s.Require().NoError(json.Unmarshal([]byte(raw), &row))
+	s.Require().NoError(codec.Unmarshal([]byte(raw), &row))
 	return row
 }
 

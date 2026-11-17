@@ -18,10 +18,13 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // withDefaultCharms combines the workspace default charms (magus.yaml
@@ -58,12 +61,12 @@ func magusFromContext(ctx context.Context) (*magus.Magus, bool) {
 // bootstrapLimiterKey carries a limiter shared between the proc server and workspace.
 type bootstrapLimiterKey struct{}
 
-func withBootstrapLimiter(ctx context.Context, lim *cache.Limiter) context.Context {
+func withBootstrapLimiter(ctx context.Context, lim *budget.Limiter) context.Context {
 	return context.WithValue(ctx, bootstrapLimiterKey{}, lim)
 }
 
-func bootstrapLimiterFromContext(ctx context.Context) *cache.Limiter {
-	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*cache.Limiter)
+func bootstrapLimiterFromContext(ctx context.Context) *budget.Limiter {
+	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*budget.Limiter)
 	return lim
 }
 
@@ -233,11 +236,13 @@ func (s *stringList) Set(v string) error {
 
 // cliOptions are what every workspace the CLI opens is given: this process's environment,
 // stderr and command line, which a workspace the library opens reads none of unless
-// given, and the reference spawn rule, since a workspace has no default one.
+// given, the reference spawn rule, since a workspace has no default one, and the opener
+// for a spell-backed secret provider, which needs the Buzz VM the library does not link.
 func cliOptions() []magus.Option {
 	return []magus.Option{
 		magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
-		magus.WithSpawnRule(magus.TierCeiling),
+		magus.WithSpawnRule(tier.Ceiling),
+		magus.WithSecrets(secrets.WithOpener(bindings.SecretOpener())),
 	}
 }
 
@@ -249,7 +254,7 @@ type magusInternals interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error)
 	Telemetry() observability.Provider
-	CheckSpawn(parent, child agent.ModelTier) error
+	CheckSpawn(parent, child tier.Tier) error
 	SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 }
 

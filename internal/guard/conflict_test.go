@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -257,7 +258,7 @@ func TestConflictedPolicySaysSoOnEveryCall(t *testing.T) {
 	lead := conflictedPolicyLead(root, []string{"hack/policy/pull_requests.buzz"})
 
 	first := Judge(ctx, unloadedDependencies(errConflictedLoad), Request{Input: "ls", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", first.Decision)
+	assert.Equal(t, verdict.Advise, first.Decision)
 	assert.True(t, strings.HasPrefix(first.Context, lead+"\n\nThe working tree's magus\\guard.command rule judged nothing: "), first.Context)
 
 	repeat := Judge(ctx, unloadedDependencies(errConflictedLoad), Request{Input: "ls", Host: "claude-code", Session: "s1"})

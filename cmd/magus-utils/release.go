@@ -14,8 +14,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
@@ -467,7 +468,7 @@ func runReleaseIndex(args []string) error {
 	} else if _, err := time.Parse(time.RFC3339, expiresAt); err != nil {
 		return fmt.Errorf("-expires %q is not RFC3339: %w", expiresAt, err)
 	}
-	data, err := json.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys().RevokedIDs()))
+	data, err := codec.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys().RevokedIDs()))
 	if err != nil {
 		return fmt.Errorf("marshal index: %w", err)
 	}
@@ -489,7 +490,7 @@ func runReleaseIndex(args []string) error {
 	// An unset key is fatal rather than a warning. A release job that quietly skipped
 	// the signature is how index.json.sig came to 404 for every user of v0.3.0; a
 	// caller that genuinely wants the unsigned file asks for it with -no-sign.
-	signingKey := types.NewSecret(os.Getenv("MAGUS_SIGNING_KEY"))
+	signingKey := secrets.New(os.Getenv("MAGUS_SIGNING_KEY"))
 	if signingKey.IsZero() {
 		return fmt.Errorf("MAGUS_SIGNING_KEY is not set, pass -no-sign to write index.json without a signature")
 	}

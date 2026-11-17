@@ -1,27 +1,20 @@
 package sandbox
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
-	"strconv"
-	"strings"
-	"sync"
+	"os/exec"
 
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/internal/log/attr"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 
-// RequiredABI is the lowest landlock ABI a required sandbox accepts. Below v3 the
-// kernel cannot deny truncation, so a confined child could empty any file its user
-// owns, rules or not (https://docs.kernel.org/userspace-api/landlock.html#file-truncation-abi-3).
-const RequiredABI = 3
-
-// LauncherFiles is how many ExtraFiles a Cmd from Command carries ahead of any a
-// caller appends: the ruleset.
-const LauncherFiles = 1
-
-// launcherName is argv[0] of a process started by Command. argv[0] is never parsed
-// as a magus verb, so the launcher adds nothing a user can type.
+// launcherName is argv[0] of the launcher scissors.Command starts on Linux, so a process
+// listing names magus.
 const launcherName = "magus-sandbox-launch"
 
 // launchFailedExit is the launcher's exit status when it could not confine itself
@@ -33,97 +26,105 @@ const launchFailedExit = 126
 // writes the reason to stderr and exits 126 without running the command. Call it
 // first in main, before any configuration, logging or connection is set up.
 func MaybeLaunch() {
-	if len(os.Args) == 0 || os.Args[0] != launcherName {
+	handled, err := scissors.Relaunch(os.Args, scissors.WithLauncherName(launcherName))
+	if !handled {
 		return
 	}
-	err := launch(os.Args[1:])
 	fmt.Fprintf(os.Stderr, "magus: confined launch failed: %v\n", err)
 	os.Exit(launchFailedExit)
 }
 
-// procSelfRules splits rules into those on process pid's own procfs entries, rewritten
-// under /proc/self, and the rest. Rule paths are resolved when the policy is built, so
-// /proc/self and /dev/fd name the pid of the magus that built it. A ruleset built there
-// would grant a child magus's own entries and none of the child's, which do not exist
-// yet; the launcher grants those for itself.
-func procSelfRules(rules []filesystem.Rule, pid int) (self, rest []filesystem.Rule) {
-	own := "/proc/" + strconv.Itoa(pid)
-	for _, r := range rules {
-		if tail, ok := strings.CutPrefix(r.Path, own); ok && (tail == "" || tail[0] == '/') {
-			r.Path = "/proc/self" + tail
-			self = append(self, r)
-			continue
-		}
-		rest = append(rest, r)
-	}
-	return self, rest
-}
-
-// encodeRules renders rules for the launcher's argv as "rwx:/path" words joined by
-// commas, a dash for an access not granted.
+// Command returns a Cmd that runs name confined by the kernel to p's filesystem rules,
+// through scissors.Command. A nil p means the sandbox is off and returns a plain
+// exec.CommandContext.
 //
-// A path's backslashes and commas are backslash-escaped.
-// Otherwise a path holding ",rwx:/" would inject a rule.
-func encodeRules(rules []filesystem.Rule) string {
-	words := make([]string, 0, len(rules))
-	for _, r := range rules {
-		flag := func(on bool, c string) string {
-			if on {
-				return c
-			}
-			return "-"
-		}
-		words = append(words, fmt.Sprintf("%s%s%s:%s", flag(r.Read, "r"), flag(r.Write, "w"), flag(r.Exec, "x"), ruleEscaper.Replace(r.Path)))
+// magus confines with landlock alone: on a host without it, macOS included, Command
+// is the error ABI gave (a *scissors.UnsupportedError), and the caller runs the child
+// under the binding checks or refuses it (KernelConfines). A required p below
+// RequiredABI is the module's *scissors.UnconfinedError; KernelConfines refuses it
+// first, as MGS2012.
+func Command(ctx context.Context, p *Policy, name string, args ...string) (*exec.Cmd, error) {
+	if p == nil {
+		return exec.CommandContext(ctx, name, args...), nil
 	}
-	return strings.Join(words, ",")
-}
-
-var ruleEscaper = strings.NewReplacer(`\`, `\\`, `,`, `\,`)
-
-// splitRuleWords splits s at its unescaped commas and unescapes each word.
-func splitRuleWords(s string) ([]string, error) {
-	var words []string
-	var w strings.Builder
-	for i := 0; i < len(s); i++ {
-		switch c := s[i]; c {
-		case '\\':
-			if i+1 == len(s) || (s[i+1] != '\\' && s[i+1] != ',') {
-				return nil, fmt.Errorf("sandbox: launcher: malformed escape at byte %d of %q", i, s)
-			}
-			i++
-			w.WriteByte(s[i])
-		case ',':
-			words = append(words, w.String())
-			w.Reset()
-		default:
-			w.WriteByte(c)
-		}
+	if _, err := p.kernelABI(); err != nil {
+		return nil, err
 	}
-	return append(words, w.String()), nil
-}
-
-// decodeRules is encodeRules undone.
-func decodeRules(s string) ([]filesystem.Rule, error) {
-	if s == "" {
-		return nil, nil
-	}
-	words, err := splitRuleWords(s)
+	confined, err := p.confinement()
 	if err != nil {
 		return nil, err
 	}
-	var rules []filesystem.Rule
-	for _, w := range words {
-		flags, path, ok := strings.Cut(w, ":")
-		if !ok || len(flags) != 3 || !strings.HasPrefix(path, "/") {
-			return nil, fmt.Errorf("sandbox: launcher: malformed rule %q", w)
-		}
-		rules = append(rules, filesystem.Rule{Path: path, Read: flags[0] == 'r', Write: flags[1] == 'w', Exec: flags[2] == 'x'})
-	}
-	return rules, nil
+	return scissors.Command(ctx, confined, name, args...)
 }
 
-// kernelABI is ABI asked once: the running kernel's answer cannot change.
-var kernelABI = sync.OnceValues(ABI)
+// kernelABI is the running kernel's landlock ABI, or the probe a test gave p.
+func (p *Policy) kernelABI() (int, error) {
+	if p.probe != nil {
+		return p.probe()
+	}
+	return scissors.ABI()
+}
+
+// confinement is p's rules as the module policy Command starts children under: the
+// one built with p, or for a policy assembled by hand, one built now.
+func (p *Policy) confinement() (*scissors.Policy, error) {
+	if p.confined != nil || p.confinedErr != nil {
+		return p.confined, p.confinedErr
+	}
+	return newConfinement(p)
+}
+
+// withConfinement builds p's module policy from its rules once, where p is built,
+// so a link planted at a rule path after that is never followed by a later Command.
+func (p *Policy) withConfinement() *Policy {
+	p.confined, p.confinedErr = newConfinement(p)
+	return p
+}
+
+// newConfinement converts p's rules into module binds under p's mode and lease.
+func newConfinement(p *Policy) (*scissors.Policy, error) {
+	binds := make([]scissors.Bind, 0, len(p.FS.Rules))
+	for _, r := range p.FS.Rules {
+		mode, err := bindMode(r)
+		if err != nil {
+			return nil, err
+		}
+		binds = append(binds, scissors.Bind{Path: r.Path, Mode: mode, Create: r.Create})
+	}
+	opts := []scissors.Option{scissors.WithLease(p.Lease, p.LeaseFrom), scissors.WithLauncherName(launcherName)}
+	switch p.Mode.Resolved() {
+	case types.SandboxModeRequired:
+	case types.SandboxModeBestEffort, types.SandboxModeOff:
+		// Off reaches here only on a policy assembled by hand: a workspace whose mode is
+		// off attaches none.
+		opts = append(opts, scissors.WithMode(scissors.BestEffort), scissors.WithUnconfined(warnUnconfined))
+	}
+	if p.probe != nil {
+		opts = append(opts, scissors.WithKernelProbe(p.probe))
+	}
+	return scissors.New(binds, opts...)
+}
+
+// warnUnconfined says that a best-effort child runs without the kernel layer, and why.
+func warnUnconfined(ctx context.Context, err error) {
+	slog.With(attr.Component("magus")).WarnContext(ctx, "a best-effort sandbox started a child unconfined", "reason", err.Error())
+}
+
+// bindMode spells r's flags as a bind mode. Every rule magus builds reads; one that
+// grants write or exec without read has no mode to spell it.
+func bindMode(r filesystem.Rule) (string, error) {
+	switch {
+	case !r.Read && (r.Write || r.Exec):
+		return "", fmt.Errorf("sandbox: the rule on %s grants write or exec without read, which no bind mode spells", r.Path)
+	case r.Write && r.Exec:
+		return "rwx", nil
+	case r.Write:
+		return "rw", nil
+	case r.Exec:
+		return "rx", nil
+	}
+	return "ro", nil
+}
 
 // KernelConfines reports whether p's children run under the kernel layer, which they
 // do wherever the host has landlock. It is false with a nil error for a nil p and for
@@ -134,15 +135,15 @@ func (p *Policy) KernelConfines() (bool, error) {
 	if p == nil {
 		return false, nil
 	}
-	abi, err := kernelABI()
+	abi, err := p.kernelABI()
 	if p.Mode.Resolved() != types.SandboxModeRequired {
 		return err == nil && abi >= 1, nil
 	}
 	switch {
 	case err != nil:
 		return false, ErrorRequired(p.Workspace, "the kernel cannot confine its children: "+err.Error())
-	case abi < RequiredABI:
-		return false, ErrorRequired(p.Workspace, fmt.Sprintf("the kernel's landlock ABI is %d, below the %d it needs", abi, RequiredABI))
+	case abi < scissors.RequiredABI:
+		return false, ErrorRequired(p.Workspace, fmt.Sprintf("the kernel's landlock ABI is %d, below the %d it needs", abi, scissors.RequiredABI))
 	}
 	return true, nil
 }

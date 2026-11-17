@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -38,7 +39,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"broker off · no server\n")
 
 	assertCompact("a broker that measured the host shows its seated slots",
-		daemon.Snapshot{Broker: &daemon.Broker{Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 3}}},
+		daemon.Snapshot{Broker: &daemon.Broker{Capacity: budget.Snapshot{BudgetSlots: 8, HeldSlots: 3}}},
 		"broker 3/8 slots · no server\n")
 
 	assertCompact("server idle",

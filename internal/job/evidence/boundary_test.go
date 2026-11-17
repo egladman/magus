@@ -10,6 +10,8 @@ import (
 	"context"
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -25,7 +27,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 `)
-	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -45,7 +47,7 @@ func TestLeasedBoundarySuite(t *testing.T) { suite.Run(t, new(LeasedBoundarySuit
 
 // owners is the paths leasedBoundary lists for row, from a checkout at /repos/landing in a
 // workspace that declares gen/** a generated output.
-func (s *LeasedBoundarySuite) owners(row types.Job, rows []types.Job) []string {
+func (s *LeasedBoundarySuite) owners(row job.Job, rows []job.Job) []string {
 	projects := func() ([]*types.Project, string) {
 		return []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}, ""
 	}
@@ -57,49 +59,49 @@ func (s *LeasedBoundarySuite) owners(row types.Job, rows []types.Job) []string {
 }
 
 func (s *LeasedBoundarySuite) TestSkipsTheRowsAncestors() {
-	rows := []types.Job{
-		{ID: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal"}}},
-		{ID: "root/a", Parent: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job"}}},
-		{ID: "root/a/leaf", Parent: "root/a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go"}}},
-		{ID: "root/b", Parent: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard"}}},
+	rows := []job.Job{
+		{ID: "root", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal"}}},
+		{ID: "root/a", Parent: "root", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job"}}},
+		{ID: "root/a/leaf", Parent: "root/a", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job/plan.go"}}},
+		{ID: "root/b", Parent: "root", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/guard"}}},
 	}
 	s.Equal([]string{"internal/guard"}, s.owners(rows[2], rows), "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
 }
 
 // An exited holder returned, so a sibling's terms no longer put its paths out of reach.
 func (s *LeasedBoundarySuite) TestSkipsAnExitedRow() {
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job"}}},
-		{ID: "b", State: types.StateExited, Paths: types.JobPaths{Write: []string{"internal/guard"}}},
-		{ID: "c", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/hint"}}},
+	rows := []job.Job{
+		{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job"}}},
+		{ID: "b", State: job.StateExited, Paths: job.Paths{Write: []string{"internal/guard"}}},
+		{ID: "c", State: job.StateDeclared, Paths: job.Paths{Write: []string{"internal/hint"}}},
 	}
 	s.Equal([]string{"internal/hint"}, s.owners(rows[0], rows))
 }
 
 // A soft path is free until its holder writes it, so a sibling's terms leave it in reach.
 func (s *LeasedBoundarySuite) TestSkipsASoftPath() {
-	soft := types.Job{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
+	soft := job.Job{ID: "b", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
 	soft.Paths.Soft = []string{"internal/job/plan_test.go"}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan_test.go"}}}
-	s.Equal([]string{"internal/job/plan.go"}, s.owners(me, []types.Job{me, soft}))
+	me := job.Job{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job/plan_test.go"}}}
+	s.Equal([]string{"internal/job/plan.go"}, s.owners(me, []job.Job{me, soft}))
 }
 
 func (s *LeasedBoundarySuite) TestListsAHardenedPath() {
-	held := types.Job{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan_test.go"}}}
-	s.Equal([]string{"internal/job/plan.go", "internal/job/plan_test.go"}, s.owners(me, []types.Job{me, held}))
+	held := job.Job{ID: "b", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
+	me := job.Job{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/job/plan_test.go"}}}
+	s.Equal([]string{"internal/job/plan.go", "internal/job/plan_test.go"}, s.owners(me, []job.Job{me, held}))
 }
 
 func (s *LeasedBoundarySuite) TestSkipsAGeneratedOutputAnotherCheckoutHolds() {
-	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/mandate", Paths: types.JobPaths{Write: []string{"gen/decode.go", "run.go"}}}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
-	s.Equal([]string{"run.go"}, s.owners(me, []types.Job{me, other}), "each checkout regenerates its own gen/decode.go")
+	other := job.Job{ID: "b", State: job.StateRunning, CheckoutRoot: "/repos/mandate", Paths: job.Paths{Write: []string{"gen/decode.go", "run.go"}}}
+	me := job.Job{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"gen/decode.go"}}}
+	s.Equal([]string{"run.go"}, s.owners(me, []job.Job{me, other}), "each checkout regenerates its own gen/decode.go")
 }
 
 func (s *LeasedBoundarySuite) TestListsAGeneratedOutputHeldInTheSameCheckout() {
-	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/landing", Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
-	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
-	s.Equal([]string{"gen/decode.go"}, s.owners(me, []types.Job{me, other}))
+	other := job.Job{ID: "b", State: job.StateRunning, CheckoutRoot: "/repos/landing", Paths: job.Paths{Write: []string{"gen/decode.go"}}}
+	me := job.Job{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"gen/decode.go"}}}
+	s.Equal([]string{"gen/decode.go"}, s.owners(me, []job.Job{me, other}))
 }
 
 func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
@@ -109,6 +111,6 @@ func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
 		t.Fatal("a row that writes nothing loaded the graph")
 		return nil
 	}
-	assert.Nil(t, DeletionCandidates(t.Context(), load, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"a.go"}}}))
-	assert.Nil(t, DeletionCandidates(t.Context(), load, types.Job{}))
+	assert.Nil(t, DeletionCandidates(t.Context(), load, job.Job{ReadOnly: true, Paths: job.Paths{Write: []string{"a.go"}}}))
+	assert.Nil(t, DeletionCandidates(t.Context(), load, job.Job{}))
 }

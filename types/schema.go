@@ -1,11 +1,11 @@
 package types
 
 import (
-	"maps"
 	"reflect"
 	"slices"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Schema is the envelope a record magus rewrites in place embeds. A reader ignores the
@@ -25,7 +25,7 @@ type Schema struct {
 	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
 	// Unknown holds every member this build does not declare, re-emitted unchanged when
 	// the record is written back.
-	Unknown map[string]json.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
+	Unknown map[string]codec.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
 }
 
 // Unmet returns the entries of Requires that known does not name, in record order, or
@@ -38,12 +38,6 @@ func (s Schema) Unmet(known []string) []string {
 		}
 	}
 	return out
-}
-
-func (s Schema) clone() Schema {
-	s.Requires = slices.Clone(s.Requires)
-	s.Unknown = maps.Clone(s.Unknown)
-	return s
 }
 
 // FormatLedger is the evolution record of one versioned type, read by the conventions
@@ -86,26 +80,25 @@ func (l FormatLedger) Features() []string {
 // Its features are the ones a stored row requires; see [JobFeatures].
 var DeclarationSchema = FormatLedger{
 	Name:    "declaration",
-	Type:    reflect.TypeFor[Declaration](),
-	Version: JobAPIVersion,
+	Type:    reflect.TypeFor[job.Declaration](),
+	Version: APIVersion(job.APIVersion),
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
 	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
-		"write_paths", "deny_paths", "read_paths", "soft_paths"},
-	Added: map[string]APIVersion{"agent": JobAPIVersion, "paths": JobAPIVersion},
+		"write_paths", "deny_paths", "read_paths", "soft_paths", "focus", "forbidden_paths", "owned_paths", "validation"},
 	Requires: map[string]APIVersion{
-		"dead-job-end":       JobAPIVersion,
-		"claim-declarations": JobAPIVersion,
-		"signature-goals":    JobAPIVersion,
-		"job-generations":    JobAPIVersion,
+		"dead-job-end":       APIVersion(job.APIVersion),
+		"claim-declarations": APIVersion(job.APIVersion),
+		"signature-goals":    APIVersion(job.APIVersion),
+		"job-generations":    APIVersion(job.APIVersion),
 	},
 }
 
 // JobResultSchema is the ledger of the result a holder files.
 var JobResultSchema = FormatLedger{
 	Name:     "job-result",
-	Type:     reflect.TypeFor[JobResult](),
-	Version:  JobResultAPIVersion,
+	Type:     reflect.TypeFor[job.Result](),
+	Version:  job.ResultAPIVersion,
 	Reserved: []string{"gate_evidence", "schema_version"},
 }
 

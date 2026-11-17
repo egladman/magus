@@ -21,8 +21,9 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 func TestCallDirIsWhereTheCallLands(t *testing.T) {
@@ -108,11 +109,11 @@ func (s *DelegateToCheckoutSuite) pin(own string) string {
 	digest, err := job.BinaryDigest(own)
 	s.Require().NoError(err)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: s.cacheDir, Root: s.session})
-	_, err = store.Update(t.Context(), "pinned", func(cur *types.Job) {
-		*cur = types.Job{ID: "pinned", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}}
+	_, err = store.Update(t.Context(), "pinned", func(cur *jobtypes.Job) {
+		*cur = jobtypes.Job{ID: "pinned", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"a.go"}}}
 	})
 	s.Require().NoError(err)
-	_, err = store.RecordWorktree(t.Context(), "pinned", types.JobWorktree{Root: filepath.Dir(own), Binary: own, BinaryDigest: digest})
+	_, err = store.RecordWorktree(t.Context(), "pinned", jobtypes.Worktree{Root: filepath.Dir(own), Binary: own, BinaryDigest: digest})
 	s.Require().NoError(err)
 	return own
 }
@@ -170,10 +171,10 @@ func (s *DelegateToCheckoutSuite) TestADelegateKilledPastTheBudgetIsAnsweredWith
 }
 
 func (s *DelegateToCheckoutSuite) TestADelegateKilledAfterAnsweringGetsNoSecondVerdict() {
-	_, handled, out, err := s.delegateToSleeper(`{"decision":"pass"}`)
+	_, handled, out, err := s.delegateToSleeper(`{"decision":"defer"}`)
 	s.True(handled)
 	s.Equal(2, exit.Code(err))
-	s.Equal(`{"decision":"pass"}`, out)
+	s.Equal(`{"decision":"defer"}`, out)
 }
 
 func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
@@ -313,7 +314,7 @@ func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
 
 func (s *DelegateToCheckoutSuite) TestASessionDirectoryMovedIntoAnotherRepositoryIsJudgedHere() {
 	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
-	placeStub(s.T(), clone.Root(), clone.Head(), `{"decision":"pass"}`, 0)
+	placeStub(s.T(), clone.Root(), clone.Head(), `{"decision":"defer"}`, 0)
 	s.session = clone.Root()
 	handled, declined, out, err := s.delegate(s.write(clone.Root()))
 	s.Require().NoError(err)
@@ -324,7 +325,7 @@ func (s *DelegateToCheckoutSuite) TestASessionDirectoryMovedIntoAnotherRepositor
 
 func (s *DelegateToCheckoutSuite) TestAReadIntoAnotherRepositoryIsJudgedHere() {
 	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
-	placeStub(s.T(), clone.Root(), clone.Head(), `{"decision":"pass"}`, 0)
+	placeStub(s.T(), clone.Root(), clone.Head(), `{"decision":"defer"}`, 0)
 	handled, declined, out, err := s.delegate(s.write(clone.Root()))
 	s.Require().NoError(err)
 	s.False(handled)
@@ -336,7 +337,7 @@ func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedH
 	planted := filepath.Join(s.session, "planted")
 	s.Require().NoError(os.MkdirAll(planted, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(planted, "magus.yaml"), []byte("{}\n"), 0o644))
-	placeStub(s.T(), planted, s.repo.Head(), `{"decision":"pass"}`, 0)
+	placeStub(s.T(), planted, s.repo.Head(), `{"decision":"defer"}`, 0)
 	handled, declined, out, err := s.delegate(s.lineInto(planted))
 	s.Require().NoError(err)
 	s.False(handled)
@@ -345,7 +346,7 @@ func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedH
 }
 
 func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"defer"}`, 0)
 	s.runAs(filepath.Join(s.T().TempDir(), "magus"))
 	handled, declined, out, err := s.delegate(s.line())
 	s.Require().NoError(err)
@@ -355,7 +356,7 @@ func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
 }
 
 func (s *DelegateToCheckoutSuite) TestACheckoutBinaryNoRowPinsIsJudgedHere() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"defer"}`, 0)
 	handled, declined, out, err := s.delegate(s.line())
 	s.Require().NoError(err)
 	s.False(handled)
@@ -366,7 +367,7 @@ func (s *DelegateToCheckoutSuite) TestACheckoutBinaryNoRowPinsIsJudgedHere() {
 func (s *DelegateToCheckoutSuite) TestABinaryRewrittenSinceItsPinIsJudgedHere() {
 	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	// A worker's relink lands a different binary at the pinned path.
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"defer"}`, 0)
 	handled, declined, out, err := s.delegate(s.line())
 	s.Require().NoError(err)
 	s.False(handled)
@@ -377,7 +378,7 @@ func (s *DelegateToCheckoutSuite) TestABinaryRewrittenSinceItsPinIsJudgedHere() 
 func (s *DelegateToCheckoutSuite) TestAPinOnAnEndedRowHandsNothingOn() {
 	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: s.cacheDir, Root: s.session})
-	_, err := store.Update(s.T().Context(), "pinned", func(cur *types.Job) { cur.State = types.StatePass })
+	_, err := store.Update(s.T().Context(), "pinned", func(cur *jobtypes.Job) { cur.State = jobtypes.StatePass })
 	s.Require().NoError(err)
 	handled, declined, _, err := s.delegate(s.line())
 	s.Require().NoError(err)
@@ -399,16 +400,16 @@ func TestJudgedBySuite(t *testing.T) {
 }
 
 func (s *JudgedBySuite) TestADenyNamesItsJudge() {
-	got := judgedBy(types.GuardJudgment{Decision: "deny", Reason: "no"}, "Judged by /c/magus.")
+	got := judgedBy(verdict.Judgment{Decision: verdict.Deny, Reason: "no"}, "Judged by /c/magus.")
 	s.Equal("no\nJudged by /c/magus.", got.Reason)
 }
 
 func (s *JudgedBySuite) TestAnAdviseNamesItsJudge() {
-	got := judgedBy(types.GuardJudgment{Decision: "advise", Context: "see"}, "Judged by /c/magus.")
+	got := judgedBy(verdict.Judgment{Decision: verdict.Advise, Context: "see"}, "Judged by /c/magus.")
 	s.Equal("see\nJudged by /c/magus.", got.Context)
 }
 
 func (s *JudgedBySuite) TestAPassCarriesNoText() {
-	got := judgedBy(types.GuardJudgment{Decision: "pass"}, "Judged by /c/magus.")
-	s.Equal(types.GuardJudgment{Decision: "pass"}, got)
+	got := judgedBy(verdict.Judgment{Decision: verdict.Defer}, "Judged by /c/magus.")
+	s.Equal(verdict.Judgment{Decision: verdict.Defer}, got)
 }

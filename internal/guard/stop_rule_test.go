@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -14,12 +15,12 @@ import (
 // stopRuleProbe is a workspace stop rule that records what it was asked and answers as told.
 type stopRuleProbe struct {
 	asked  []types.StopRequest
-	answer types.GuardVerdict
+	answer verdict.Verdict
 	err    error
 }
 
 func (p *stopRuleProbe) rule() workspace.StopRule {
-	return func(_ context.Context, req types.StopRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	return func(_ context.Context, req types.StopRequest, _ hint.Gate) (verdict.Verdict, error) {
 		p.asked = append(p.asked, req)
 		return p.answer, p.err
 	}
@@ -49,7 +50,7 @@ func (s *StopRuleSuite) stop(event string, fields map[string]any) string {
 
 // judge is the stop's judgment with the fields the lease and the guard's version decide
 // cleared, so a case compares the rest whole.
-func (s *StopRuleSuite) judge(deps Dependencies, input string) types.GuardJudgment {
+func (s *StopRuleSuite) judge(deps Dependencies, input string) verdict.Judgment {
 	v := Judge(s.testContext(), deps, Request{Host: "claude-code", Input: input})
 	v.APIVersion, v.Lease, v.LeaseFrom, v.NextSteps = "", "", "", nil
 	return v
@@ -68,28 +69,28 @@ func (s *StopRuleSuite) asked(probe *stopRuleProbe) types.StopRequest {
 func (s *StopRuleSuite) TestARootStopAsksTheRule() {
 	probe := &stopRuleProbe{}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", map[string]any{"stop_hook_active": true}))
-	s.Equal(types.GuardJudgment{Decision: decisionPass}, v)
+	s.Equal(verdict.Judgment{Decision: verdict.Defer}, v)
 	s.Equal(types.StopRequest{Host: "claude-code", Session: "8f2c6a1e", Role: types.AgentRoleRoot, Event: "Stop", StopHookActive: true,
 		Transcript: "/nonexistent/root.jsonl", Workspace: s.root}, s.asked(probe))
 }
 
 func (s *StopRuleSuite) TestTheRulesDenyRefusesTheStop() {
-	probe := &stopRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "row naming-lint is forkable", Rule: "idle-stop"}}
+	probe := &stopRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "row naming-lint is forkable", Rule: "idle-stop"}}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", nil))
-	s.Equal(types.GuardJudgment{Decision: decisionDeny, Reason: "row naming-lint is forkable", Rule: workspaceShellPrefix + "idle-stop"}, v)
+	s.Equal(verdict.Judgment{Decision: verdict.Deny, Reason: "row naming-lint is forkable", Rule: workspaceShellPrefix + "idle-stop"}, v)
 }
 
 func (s *StopRuleSuite) TestTheRulesAdviceBecomesContext() {
-	probe := &stopRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "two rows wait"}}
+	probe := &stopRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "two rows wait"}}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", nil))
-	s.Equal(types.GuardJudgment{Decision: decisionAdvise, Context: "two rows wait", Rule: workspaceStopRule}, v)
+	s.Equal(verdict.Judgment{Decision: verdict.Advise, Context: "two rows wait", Rule: workspaceStopRule}, v)
 }
 
 func (s *StopRuleSuite) TestTheApprovedRuleIsAsked() {
-	probe := &stopRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed rule"}}
+	probe := &stopRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "committed rule"}}
 	deps := Dependencies{ApprovedStopRule: func(context.Context) (workspace.StopRule, error) { return probe.rule(), nil }}
 	v := s.judge(deps, s.stop("Stop", nil))
-	s.Equal(types.GuardJudgment{Decision: decisionDeny, Reason: "committed rule", Rule: workspaceStopRule}, v)
+	s.Equal(verdict.Judgment{Decision: verdict.Deny, Reason: "committed rule", Rule: workspaceStopRule}, v)
 }
 
 func (s *StopRuleSuite) TestABuiltinDenyIsNotAskedAbout() {
@@ -97,7 +98,7 @@ func (s *StopRuleSuite) TestABuiltinDenyIsNotAskedAbout() {
 	input := s.stop("SubagentStop", map[string]any{"agent_id": "a05d44b006f8f68af", "agent_transcript_path": writeTranscript(s.T(), bgSearchCall, bgSearchResult)})
 	v := s.judge(Dependencies{StopRule: probe.rule()}, input)
 	s.Equal(string(denyRuleBackgroundLeft), v.Rule, v.Reason)
-	s.Equal(types.GuardJudgment{Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleBackgroundLeft)}, v)
+	s.Equal(verdict.Judgment{Decision: verdict.Deny, Reason: v.Reason, Rule: string(denyRuleBackgroundLeft)}, v)
 	s.Empty(probe.asked)
 }
 
@@ -118,7 +119,7 @@ func (s *StopRuleSuite) TestAnotherEventIsNotAskedAbout() {
 func (s *StopRuleSuite) TestAFailingRuleLetsTheStopThroughAndSaysSo() {
 	probe := &stopRuleProbe{err: errors.New("index out of range")}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", nil))
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, `magus\guard.stop judged nothing`)
 	s.Contains(v.Context, "index out of range")
 }

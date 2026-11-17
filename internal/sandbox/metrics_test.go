@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 )
 
 func TestRecordLaunch(t *testing.T) {

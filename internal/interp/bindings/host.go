@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // emitMagusHint prints a script's msg through the shared hint channel. Advisory only,
@@ -27,7 +27,7 @@ func emitMagusLog(ctx context.Context, level slog.Level, msg string, fields map[
 	for _, k := range keys {
 		// The redacting handler leaves keys alone because Go's are constants.
 		// These come from a script, so one can hold a secret.
-		attrs = append(attrs, slog.String(secret.RedactString(ctx, k), fields[k]))
+		attrs = append(attrs, slog.String(secrets.RedactString(ctx, k), fields[k]))
 	}
 	r := slog.NewRecord(time.Now(), level, msg, 0)
 	r.AddAttrs(attrs...)

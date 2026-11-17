@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 func readIndex(t *testing.T, layout string) ocispec.Index {
@@ -19,13 +19,13 @@ func readIndex(t *testing.T, layout string) ocispec.Index {
 	data, err := os.ReadFile(filepath.Join(layout, "index.json"))
 	require.NoError(t, err)
 	var idx ocispec.Index
-	require.NoError(t, json.Unmarshal(data, &idx))
+	require.NoError(t, codec.Unmarshal(data, &idx))
 	return idx
 }
 
 func writeIndex(t *testing.T, layout string, idx ocispec.Index) {
 	t.Helper()
-	data, err := json.Marshal(idx)
+	data, err := codec.Marshal(idx)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(layout, "index.json"), data, 0o644))
 }

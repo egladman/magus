@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -194,7 +194,7 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 	require.NoError(t, err, "read %s - it is tracked, so a missing one means this checkout has no guard wired", dogfoodedHookConfig)
 
 	var cfg hookSettings
-	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)
+	require.NoError(t, codec.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)
 	require.NotEmpty(t, cfg.Hooks["PreToolUse"], "%s declares no PreToolUse hooks", dogfoodedHookConfig)
 
 	// Every event, not only the pre-tool ones. A checkpoint or a rehydration hook
@@ -903,8 +903,8 @@ var storeMechanicsSkipDirs = skipDirs("gen", "testdata")
 // TestStoreMechanicsLiveInInternalFile holds the file-persistence mechanics to one
 // implementation. A temp file renamed into place and an flock-guarded read-modify-write
 // each had several copies that differed in fsync, file mode, temp cleanup and whether the
-// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock, JSONL) is the one
-// copy. The scan is per function and textual, so a copy split across two functions slips
+// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock) and libs/codec
+// (JSONL) are the one copy. The scan is per function and textual, so a copy split across two functions slips
 // past it; what it catches is the shape every copy so far has had.
 func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
 	t.Parallel()
@@ -983,7 +983,7 @@ func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
 }
 
 // appendAllowed maps "<path>:<func>" to why that function opens a file for append itself
-// instead of calling file.AppendLines: none of them is a JSON Lines store. It only shrinks:
+// instead of calling codec.AppendLines: none of them is a JSON Lines store. It only shrinks:
 // TestStoresAreJSONLines fails on an entry whose site is gone.
 var appendAllowed = map[string]string{
 	"internal/proc/detach_other.go:RedirectStdio":           "a log: the process's stderr, held open as an fd",
@@ -999,9 +999,9 @@ var appendAllowed = map[string]string{
 	"vcs/hg.go:enableHgShareExtension":                      "an hgrc section Mercurial reads, not JSON Lines",
 }
 
-// TestStoresAreJSONLines holds every append to a file to internal/file.
+// TestStoresAreJSONLines holds every append to a file to libs/codec.
 //
-// Tier 1, mechanical: the fix is a call to file.AppendLines (with file.WithoutSync() to skip the sync), which
+// Tier 1, mechanical: the fix is a call to codec.AppendLines (with codec.WithoutSync() to skip the sync), which
 // every hand-rolled append so far could make with its behavior unchanged. A store is JSON
 // Lines (docs/design/principles/everything-is-a-file.md), and an append is how one grows, so the
 // one copy of the append decides the line framing, the single write per batch that keeps a
@@ -1019,8 +1019,8 @@ func TestStoresAreJSONLines(t *testing.T) {
 	violations, stale := allowlistVerdict(found, appendAllowed)
 
 	assert.Empty(t, violations,
-		"these functions open a file with O_APPEND themselves. Append through internal/file:\n"+
-			"file.AppendLines, with file.WithoutSync() where a sync per append costs more than\n"+
+		"these functions open a file with O_APPEND themselves. Append through libs/codec:\n"+
+			"codec.AppendLines, with codec.WithoutSync() where a sync per append costs more than\n"+
 			"a lost tail. A site that is not a store (a log, a user API) goes in appendAllowed\n"+
 			"with its reason.\n\nviolations:\n%s", strings.Join(violations, "\n"))
 	assert.Empty(t, stale,
@@ -1181,4 +1181,103 @@ func allowlistVerdict(found []allowlistSite, allowed map[string]string) (violati
 	}
 	sort.Strings(stale)
 	return violations, stale
+}
+
+// TestNoDirectEncodingJSONImport is the whole-tree rule: every Go file marshals through
+// libs/codec, so which codec magus uses is one decision in one place.
+//
+// libs/codec is a module of its own, which the scan skips like every nested module, so the
+// allowlist holds only the one test that must speak the stdlib codec. Test files are
+// deliberately in scope: a test that marshals through the stdlib asserts the behaviour of
+// a codec the binary does not use, which is how a GOEXPERIMENT the codec absorbs passes
+// its tests and breaks the CLI.
+func TestNoDirectEncodingJSONImport(t *testing.T) {
+	t.Parallel()
+
+	allowed := map[string]bool{
+		// mcp-go puts every frame on the wire through encoding/json, so this test re-encodes
+		// with the codec the binary actually ships to prove structured content survives it.
+		"internal/handler/mcp/mcp_test.go": true,
+	}
+	importers, err := encodingJSONImporters(".", allowed)
+	require.NoError(t, err)
+	assert.Empty(t, importers, "JSON must go through libs/codec")
+}
+
+func TestEncodingJSONImportersSkipsDependencyAndBuildTrees(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, path := range []string{
+		"cmd/magus/main.go",
+		"node_modules/example/index.go",
+		"vendor/example/json.go",
+		"third_party/example/json.go",
+		"build/generated.go",
+		"dist/generated.go",
+		"libs/nested/go.mod",
+		"libs/nested/json.go",
+	} {
+		fullPath := filepath.Join(root, path)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+		body := "package example\nimport _ \"encoding/json\"\n"
+		if filepath.Base(path) == "go.mod" {
+			body = "module example.com/nested\n"
+		}
+		require.NoError(t, os.WriteFile(fullPath, []byte(body), 0o644))
+	}
+
+	importers, err := encodingJSONImporters(root, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cmd/magus/main.go"}, importers)
+}
+
+// encodingJSONImporters returns every Go file under root that imports encoding/json,
+// workspace-relative and sorted, minus the allowed set.
+func encodingJSONImporters(root string, allowed map[string]bool) ([]string, error) {
+	var importers []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipJSONScanDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			// A nested module ships apart from magus and cannot import libs/codec
+			// without depending on it, so it keeps its own rule.
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && path != root {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil || allowed[filepath.ToSlash(rel)] {
+			return err
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		for _, imp := range f.Imports {
+			if strings.HasPrefix(strings.Trim(imp.Path.Value, "\""), "encoding/json") {
+				importers = append(importers, filepath.ToSlash(rel))
+			}
+		}
+		return nil
+	})
+	slices.Sort(importers)
+	return importers, err
+}
+
+func skipJSONScanDir(name string) bool {
+	switch name {
+	case ".git", ".hg", ".svn", ".cache", ".magus", ".quad", ".claude", "node_modules", "vendor", "third_party", "third-party", "build", "dist", "out":
+		return true
+	default:
+		return false
+	}
 }

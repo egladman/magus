@@ -8,22 +8,23 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
 // unusedWritePaths returns the hard write paths of holder its footprint has not touched, the
 // ones it could release to a job refused for wanting them. The footprint is holder's diff
 // since its checkpoint in the checkout that took it, read through the store's version
-// control. A path entry is used when a changed file falls under it ([types.PathWithin]); a
+// control. A path entry is used when a changed file falls under it ([job.PathWithin]); a
 // claim `F#d` is used when a changed line of F lands in a declaration d names.
 //
 // A footprint that cannot be read returns nil, and a holder that has used every path
 // returns an empty, non-nil slice, so a caller never reads "unknown" as "all used".
-func unusedWritePaths(ctx context.Context, store *Store, rows []types.Job, holder types.Job) []string {
+func unusedWritePaths(ctx context.Context, store *Store, rows []job.Job, holder job.Job) []string {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == holder.ID }) {
+	if !slices.ContainsFunc(rows, func(r job.Job) bool { return r.ID == holder.ID }) {
 		rows = append(slices.Clone(rows), holder)
 	}
 	driver, _ := resolveDriver(ctx, store.root)
@@ -43,15 +44,15 @@ func unusedWritePaths(ctx context.Context, store *Store, rows []types.Job, holde
 
 // usesEntry reports whether a change at loc falls under the write path entry. A change no
 // driver placed could be in any declaration of its file, so it uses every claim on it.
-func usesEntry(entry string, loc types.Location) bool {
-	file, decl := types.SplitClaim(entry)
+func usesEntry(entry string, loc job.Location) bool {
+	file, decl := job.SplitClaim(entry)
 	switch {
 	case decl == "":
-		return types.PathWithin(loc.Path, entry)
+		return job.PathWithin(loc.Path, entry)
 	case path.Clean(file) != path.Clean(loc.Path):
 		return false
 	}
-	return loc.Declaration == "" || types.NamesDeclaration(decl, loc.Declaration)
+	return loc.Declaration == "" || job.NamesDeclaration(decl, loc.Declaration)
 }
 
 // regionIndex is a footprint's changed regions sorted by path, so asking whether a
@@ -60,10 +61,10 @@ func usesEntry(entry string, loc types.Location) bool {
 type regionIndex struct {
 	paths []string            // cleaned literal paths, sorted, once each
 	decls map[string][]string // declarations changed in each path; "" when unplaced
-	odd   []types.Location    // regions with no path or a glob character in it
+	odd   []job.Location      // regions with no path or a glob character in it
 }
 
-func indexRegions(regions []types.RegionChange) regionIndex {
+func indexRegions(regions []job.RegionChange) regionIndex {
 	x := regionIndex{decls: map[string][]string{}}
 	for _, r := range regions {
 		loc := r.Location()
@@ -84,21 +85,21 @@ func indexRegions(regions []types.RegionChange) regionIndex {
 // uses reports what usesEntry would for any one region of the index. Only a path at or
 // under the entry's literal prefix can fall under the entry, so only those are asked.
 func (x regionIndex) uses(entry string) bool {
-	if slices.ContainsFunc(x.odd, func(loc types.Location) bool { return usesEntry(entry, loc) }) {
+	if slices.ContainsFunc(x.odd, func(loc job.Location) bool { return usesEntry(entry, loc) }) {
 		return true
 	}
-	file, decl := types.SplitClaim(entry)
+	file, decl := job.SplitClaim(entry)
 	if file == "" {
 		return false
 	}
 	file = path.Clean(file)
 	if decl != "" {
 		return slices.ContainsFunc(x.decls[file], func(d string) bool {
-			return usesEntry(entry, types.Location{Path: file, Declaration: d})
+			return usesEntry(entry, job.Location{Path: file, Declaration: d})
 		})
 	}
-	return slices.ContainsFunc(x.under(types.LiteralPrefix(file)), func(p string) bool {
-		return usesEntry(entry, types.Location{Path: p})
+	return slices.ContainsFunc(x.under(job.LiteralPrefix(file)), func(p string) bool {
+		return usesEntry(entry, job.Location{Path: p})
 	})
 }
 

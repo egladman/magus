@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,7 +137,7 @@ func TestHistorySchemaLock(t *testing.T) {
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
 						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2,
-							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Curve: types.MemoryCurve{19: 1024},
+							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Curve: budget.Curve{19: 1024},
 							Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
 					},
 				},
@@ -146,7 +147,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		Alpha:               []int64{4_800, 5_200},
 		WorkspaceFallbackMs: 9_000,
 		Runs:                []Run{{Commit: "39e02449", Ref: "main", Target: "ci", Status: RunPassed, At: time.Now()}},
-		Jobs:                []types.JobOutcome{{Job: "docs", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, Ended: 1}},
+		Jobs:                []types.JobOutcome{{Job: "docs", ModelTier: "economy", Kind: types.JobKindCheck, State: job.StatePass, Ended: 1}},
 	}
 
 	path := filepath.Join(t.TempDir(), "history.jsonl")
@@ -173,28 +174,28 @@ func TestHistorySchemaLock(t *testing.T) {
 		"alpha":                 true, // []int64 of fitted α observations
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
 	}
-	type entry = map[string]json.RawMessage
+	type entry = map[string]codec.RawMessage
 	var workspaces []entry
 	projects := map[string]map[string]entry{}
 	for line := range strings.Lines(string(raw)) {
 		var top entry
-		require.NoError(t, json.Unmarshal([]byte(line), &top), "unmarshal a line to a map")
+		require.NoError(t, codec.Unmarshal([]byte(line), &top), "unmarshal a line to a map")
 		for k := range top {
 			assert.Truef(t, allowed[k], "unexpected history line key %q: add to allowed map with a safety justification, or remove the field", k)
 		}
 		if w, ok := top["workspace"]; ok {
 			var keys entry
-			require.NoError(t, json.Unmarshal(w, &keys))
+			require.NoError(t, codec.Unmarshal(w, &keys))
 			workspaces = append(workspaces, keys)
 		}
 		if s, ok := top["stats"]; ok {
 			var keys entry
-			require.NoError(t, json.Unmarshal(s, &keys))
+			require.NoError(t, codec.Unmarshal(s, &keys))
 			var at struct {
 				Project string `json:"project"`
 				Target  string `json:"target"`
 			}
-			require.NoError(t, json.Unmarshal(s, &at))
+			require.NoError(t, codec.Unmarshal(s, &at))
 			delete(keys, "project")
 			delete(keys, "target")
 			if projects[at.Project] == nil {
@@ -264,7 +265,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		// from it; see ArgsHash.
 		"args_hash": true,
 	}
-	type outcomeMap map[string]json.RawMessage
+	type outcomeMap map[string]codec.RawMessage
 	for path, targets := range projects {
 		for target, statsRaw := range targets {
 			rawOutcomes, ok := statsRaw["recent_outcomes"]
@@ -272,7 +273,7 @@ func TestHistorySchemaLock(t *testing.T) {
 				continue
 			}
 			var outcomes []outcomeMap
-			require.NoErrorf(t, json.Unmarshal(rawOutcomes, &outcomes), "unmarshal recent_outcomes (project=%q target=%q)", path, target)
+			require.NoErrorf(t, codec.Unmarshal(rawOutcomes, &outcomes), "unmarshal recent_outcomes (project=%q target=%q)", path, target)
 			for _, o := range outcomes {
 				for k := range o {
 					assert.Truef(t, allowedOutcome[k], "unexpected Outcome JSON key %q (project=%q target=%q): add to allowedOutcome with a safety justification", k, path, target)
@@ -301,7 +302,7 @@ func TestHistoryV1LoadsIntoV2(t *testing.T) {
 	}`
 
 	var h History
-	require.NoError(t, json.Unmarshal([]byte(v1JSON), &h), "unmarshal v1 history")
+	require.NoError(t, codec.Unmarshal([]byte(v1JSON), &h), "unmarshal v1 history")
 
 	// Should fall through to project-wide p75 (no buckets, no hit data → cold start).
 	got := h.PredictDuration("services/api", "ci", []string{"direct", "direct.src"})
@@ -338,7 +339,7 @@ func TestHistoryV2LoadsIntoV3(t *testing.T) {
 	}`
 
 	var h History
-	require.NoError(t, json.Unmarshal([]byte(v2JSON), &h), "unmarshal v2 history")
+	require.NoError(t, codec.Unmarshal([]byte(v2JSON), &h), "unmarshal v2 history")
 
 	// hit_count and miss_count default to zero → cold start → raw p75 returned.
 	got := h.PredictDuration("apps/web", "ci", nil)
@@ -429,7 +430,7 @@ func TestHistoryV3LoadsIntoV4(t *testing.T) {
 	}`
 
 	var h History
-	require.NoError(t, json.Unmarshal([]byte(v3JSON), &h), "unmarshal v3 history")
+	require.NoError(t, codec.Unmarshal([]byte(v3JSON), &h), "unmarshal v3 history")
 
 	st := h.Projects["services/api"]["ci"]
 	assert.Zero(t, st.PassCount, "v3→v4: expected zero pass count")
@@ -951,10 +952,10 @@ func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 	require.Len(t, lines, 2, "the workspace line, then the one (project, target)")
 	var keys struct {
 		Stats struct {
-			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
+			RecentOutcomes []map[string]codec.RawMessage `json:"recent_outcomes"`
 		} `json:"stats"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &keys))
+	require.NoError(t, codec.Unmarshal([]byte(lines[1]), &keys))
 	written := keys.Stats.RecentOutcomes
 	require.Len(t, written, 2)
 	assert.Contains(t, written[0], "cpu_ms")
@@ -976,7 +977,7 @@ func TestLoad_versionTooNew(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "future.jsonl")
 	// Hand-crafted, since UpdateHistory stamps the build's own version.
-	future, err := json.Marshal(historyLine{Workspace: &workspaceEntry{Version: HistoryVersion + 1}})
+	future, err := codec.Marshal(historyLine{Workspace: &workspaceEntry{Version: HistoryVersion + 1}})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(future, '\n'), 0o644))
 
@@ -1107,7 +1108,7 @@ func TestUpdateHistoryCompactsToTheLiveEntries(t *testing.T) {
 
 	entries := RunWindow + 1 // the runs in the window and the workspace
 	lines := readLines(t, path)
-	assert.LessOrEqual(t, len(lines), 2*entries+file.CompactSlack, "compaction bounds the lines")
+	assert.LessOrEqual(t, len(lines), 2*entries+codec.CompactSlack, "compaction bounds the lines")
 
 	var got History
 	require.NoError(t, got.Load(t.Context(), path))
@@ -1164,7 +1165,7 @@ func TestHistoryRefusesTheOldDocument(t *testing.T) {
 
 	var h History
 	err := h.Load(t.Context(), path)
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, filepath.Join(dir, "v1.json"))
@@ -1247,13 +1248,13 @@ func TestJobOutcomesAreCappedAndMergeAsAUnion(t *testing.T) {
 	assert.Equal(t, int64(25), w.Jobs[0].Ended, "the oldest are the ones dropped")
 
 	var a, b History
-	a.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: types.StatePass})
-	b.RecordJob(types.JobOutcome{Job: "y", Ended: 1, State: types.StateFail})
-	b.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: types.StatePass})
+	a.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: job.StatePass})
+	b.RecordJob(types.JobOutcome{Job: "y", Ended: 1, State: job.StateFail})
+	b.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: job.StatePass})
 	a.Merge(&b)
 	want := []types.JobOutcome{
-		{Job: "y", Ended: 1, State: types.StateFail},
-		{Job: "x", Ended: 2, State: types.StatePass},
+		{Job: "y", Ended: 1, State: job.StateFail},
+		{Job: "x", Ended: 2, State: job.StatePass},
 	}
 	assert.Equal(t, want, a.Jobs, "a shared outcome is kept once, in time order")
 
@@ -1276,11 +1277,11 @@ func TestJobOutcomeWithWorkSurvivesARoundTripAndMergesOnce(t *testing.T) {
 
 	tokens := int64(41_000)
 	worked := types.JobOutcome{
-		Job: "w", Ended: 5, Attempt: 1, State: types.StatePass, Parent: "root", ParentAttempt: 2,
+		Job: "w", Ended: 5, Attempt: 1, State: job.StatePass, Parent: "root", ParentAttempt: 2,
 		Projects: []string{"internal/job", "types"}, Unattributed: 1,
 		Work: &types.JobWork{Calls: 9, Writes: 2, SetupCalls: 6, SetupTokens: &tokens, Denials: 1},
 	}
-	unknown := types.JobOutcome{Job: "u", Ended: 6, Attempt: 1, State: types.StateFail}
+	unknown := types.JobOutcome{Job: "u", Ended: 6, Attempt: 1, State: job.StateFail}
 
 	path := filepath.Join(t.TempDir(), "history.json")
 	require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {
@@ -1567,7 +1568,7 @@ func TestMeasuredRunsWidthSaturation(t *testing.T) {
 func TestCurveRoundTripsThroughJSONL(t *testing.T) {
 	t.Parallel()
 
-	var curve types.MemoryCurve
+	var curve budget.Curve
 	for i := range curve {
 		curve[i] = uint32(100 * (i + 1))
 	}
@@ -1583,10 +1584,10 @@ func TestCurveRoundTripsThroughJSONL(t *testing.T) {
 	require.Len(t, lines, 2)
 	var keys struct {
 		Stats struct {
-			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
+			RecentOutcomes []map[string]codec.RawMessage `json:"recent_outcomes"`
 		} `json:"stats"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &keys))
+	require.NoError(t, codec.Unmarshal([]byte(lines[1]), &keys))
 	written := keys.Stats.RecentOutcomes
 	require.Len(t, written, 2)
 	assert.JSONEq(t, `[100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000]`, string(written[0]["curve"]))
@@ -1607,7 +1608,7 @@ func TestProfileIsP90PerBucket(t *testing.T) {
 
 	full := NewShape(nil, nil)
 	run := func(ms int64, first, last uint32) Outcome {
-		var c types.MemoryCurve
+		var c budget.Curve
 		c[0], c[19] = first, last
 		return Outcome{Result: OutcomePass, DurationMs: ms, MaxRSSBytes: int64(max(first, last)) << 20, Curve: c,
 			Charms: full.Charms, ArgsHash: full.ArgsHash}
@@ -1621,7 +1622,7 @@ func TestProfileIsP90PerBucket(t *testing.T) {
 	}}}}}
 
 	got := h.MeasuredRuns().Profile(".", "test", full)
-	want := types.MemoryProfile{D10Ms: 14_000, D90Ms: 46_000, Runs: 5}
+	want := budget.Profile{D10Ms: 14_000, D90Ms: 46_000, Runs: 5}
 	want.Curve[0], want.Curve[19] = 3160, 4600
 	assert.Equal(t, want, got, "each bucket is its own p90: the first's and the last's come from different runs")
 	assert.Less(t, got.Curve.PeakMB(), 5000, "below every run's peak, which a summed peak would claim")
@@ -1634,16 +1635,16 @@ func TestProfileCountsOnlyRunsWithACurve(t *testing.T) {
 	t.Parallel()
 
 	full, extended := NewShape(nil, nil), NewShape([]string{"extended"}, nil)
-	curve := types.MemoryCurve{0: 700}
-	o := func(r OutcomeResult, c types.MemoryCurve, s Shape) Outcome {
+	curve := budget.Curve{0: 700}
+	o := func(r OutcomeResult, c budget.Curve, s Shape) Outcome {
 		return Outcome{Result: r, DurationMs: 1_000, MaxRSSBytes: 900 << 20, Curve: c, Charms: s.Charms, ArgsHash: s.ArgsHash}
 	}
 	h := History{Projects: map[string]map[string]Stats{".": {"magusfile/test": {RecentOutcomes: []Outcome{
 		o(OutcomePass, curve, full),
 		o(OutcomeVolatile, curve, full),
-		o(OutcomeFail, types.MemoryCurve{0: 9000}, full),
-		o(OutcomePass, types.MemoryCurve{}, full),
-		o(OutcomePass, types.MemoryCurve{0: 8000}, extended),
+		o(OutcomeFail, budget.Curve{0: 9000}, full),
+		o(OutcomePass, budget.Curve{}, full),
+		o(OutcomePass, budget.Curve{0: 8000}, extended),
 	}}}}}
 	x := h.MeasuredRuns()
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -124,16 +125,16 @@ type countingAdmitter struct {
 	claims int
 }
 
-func (c *countingAdmitter) Claim(context.Context, types.MachineClaim, func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (c *countingAdmitter) Claim(context.Context, budget.Claim, func(budget.Verdict)) (budget.Verdict, error) {
 	c.claims++
-	return types.MachineVerdict{}, nil
+	return budget.Verdict{}, nil
 }
 
 func (s *KickingAdmitterSuite) TestKicksOnceAcrossClaimsAndNeverHoldsOne() {
 	inner, kicks := &countingAdmitter{}, 0
 	admit := KickingAdmitter(inner, func() { kicks++ })
 	for range 3 {
-		_, err := admit.Claim(s.T().Context(), types.MachineClaim{}, nil)
+		_, err := admit.Claim(s.T().Context(), budget.Claim{}, nil)
 		s.Require().NoError(err)
 	}
 	s.Equal(1, kicks)

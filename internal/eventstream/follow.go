@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // runLogExt is the suffix of one invocation's union event log.
@@ -213,7 +213,7 @@ func (f *Follower) drain(name string, emit func(events.Event) error) error {
 		// A torn line is a normal transient, not corruption: the log is read while
 		// it is written. Skip it and pick the rest up on the next poll.
 		var je journal.Event
-		if err := json.Unmarshal(line, &je); err != nil {
+		if err := codec.Unmarshal(line, &je); err != nil {
 			continue
 		}
 		se, ok := fromJournal(f.workspace, je)

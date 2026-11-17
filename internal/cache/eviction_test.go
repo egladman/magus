@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,7 +51,7 @@ func listManifests(t *testing.T, cdir string) []Manifest {
 		data, rerr := os.ReadFile(p)
 		require.NoError(t, rerr, "read %s", p)
 		var m Manifest
-		require.NoError(t, json.Unmarshal(data, &m), "unmarshal %s", p)
+		require.NoError(t, codec.Unmarshal(data, &m), "unmarshal %s", p)
 		ms = append(ms, m)
 		return nil
 	})

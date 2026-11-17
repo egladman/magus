@@ -11,11 +11,11 @@ import "./proofread" as proofread;
 import "magus/spell/go";
 // Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.
 import "magus/spell/markdown";
+import "../../spells/golang/gomod" as gomod;
 
-// go.mod requires the published diagnostics with no replace directive, so
-// `go install .../cmd/proofread@<tag>` accepts the module. That is why generate does not
-// call gomod\replaceWorkspaceModules: a diagnostics change reaches this module only
-// through a release and a version bump.
+// go.mod requires tagged diagnostics and replaces it with its directory, as every module
+// here does. The release commit drops the replace, so `go install .../cmd/proofread@<tag>`
+// accepts the module.
 magus\project({
     "spells": [go],
     // MAGUS.md is declared on index_generate, not here.
@@ -30,6 +30,7 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-d
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    gomod\replaceWorkspaceModules(ctx, go, "libs/proofread");
     ctx.needs(index_generate);
 }
 

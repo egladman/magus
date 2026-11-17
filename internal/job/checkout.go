@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,7 +22,9 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,17 +85,17 @@ type LeaseQuery struct {
 // A record outranks the claim because the claim is the one answer a worker can rewrite
 // from its own shell: a worker bound to one job that could export another's id would be
 // graded against that job's write paths. When a lower source named a different lease than
-// the one that answered, the source is [types.LeaseSourceContested], so a client can say
+// the one that answered, the source is [job.LeaseSourceContested], so a client can say
 // something was overruled.
-func (q LeaseQuery) Resolve() (string, types.LeaseSource) {
+func (q LeaseQuery) Resolve() (string, job.LeaseSource) {
 	sources := []struct {
 		lease string
-		from  types.LeaseSource
+		from  job.LeaseSource
 	}{
-		{q.Flag, types.LeaseSourceFlag},
-		{q.CallerJob, types.LeaseSourceAgent},
-		{q.CheckoutJob, types.LeaseSourceMarker},
-		{q.Claim, types.LeaseSourceEnv},
+		{q.Flag, job.LeaseSourceFlag},
+		{q.CallerJob, job.LeaseSourceAgent},
+		{q.CheckoutJob, job.LeaseSourceMarker},
+		{q.Claim, job.LeaseSourceEnv},
 	}
 	for i, s := range sources {
 		if s.lease == "" {
@@ -100,7 +103,7 @@ func (q LeaseQuery) Resolve() (string, types.LeaseSource) {
 		}
 		for _, lower := range sources[i+1:] {
 			if lower.lease != "" && lower.lease != s.lease {
-				return s.lease, types.LeaseSourceContested
+				return s.lease, job.LeaseSourceContested
 			}
 		}
 		return s.lease, s.from
@@ -135,11 +138,11 @@ func readBinding(path string) Binding {
 		return Binding{}
 	}
 	line := strings.TrimSpace(string(raw))
-	if types.ValidJobID(line) {
+	if job.ValidID(line) {
 		return Binding{Job: line}
 	}
 	f := strings.Fields(line)
-	if len(f) != 3 || f[0] != tombstoneTag || !types.ValidJobID(f[1]) {
+	if len(f) != 3 || f[0] != tombstoneTag || !job.ValidID(f[1]) {
 		return Binding{}
 	}
 	swept, err := strconv.ParseInt(f[2], 10, 64)
@@ -201,7 +204,7 @@ func (s *Store) record(c Caller) string {
 //
 // Whether c may take id is the guard's judgment; this only records it.
 func (s *Store) Bind(c Caller, id string) error {
-	if !types.ValidJobID(id) {
+	if !job.ValidID(id) {
 		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only)", id)
 	}
 	path := s.record(c)
@@ -258,7 +261,7 @@ func (s *Store) Binding(c Caller) Binding {
 // this read ended a row, a row the last pass saw is gone, or recordSweepEvery has passed
 // since it (see [Store.recordsSwept]). A checkout removed under a row that is already
 // over, and a record naming a row that never existed, wait for that interval.
-func (s *Store) sweepRecords(w *sweeper, rows []types.Job, ended bool) {
+func (s *Store) sweepRecords(w *sweeper, rows []job.Job, ended bool) {
 	if s.err != nil || s.path == "" {
 		return
 	}
@@ -280,7 +283,7 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job, ended bool) {
 			}
 			continue
 		}
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == b.Job })
+		i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == b.Job })
 		if b.Job == "" || i >= 0 && !w.checkoutGone(rows[i].CheckoutRoot) {
 			continue
 		}
@@ -307,14 +310,14 @@ type recordsPass struct {
 
 // recordsSweptLog keys every pass alike, so the last one is the log's one entry.
 func (s *Store) recordsSweptLog() file.JSONL[recordsPass] {
-	return file.JSONL[recordsPass]{Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
-		Key: func(recordsPass) string { return "" }}
+	return file.JSONL[recordsPass]{JSONL: codec.JSONL[recordsPass]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
+		Key: func(recordsPass) string { return "" }}}
 }
 
 // recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
 // are still in rows. A history that cannot be read reads as no pass, which costs one early
 // pass.
-func (s *Store) recordsSwept(now int64, rows []types.Job) bool {
+func (s *Store) recordsSwept(now int64, rows []job.Job) bool {
 	passes, err := s.recordsSweptLog().Load()
 	if err != nil || len(passes) == 0 {
 		return false
@@ -330,7 +333,7 @@ func (s *Store) recordsSwept(now int64, rows []types.Job) bool {
 	return !slices.ContainsFunc(last.Rows, func(id string) bool { return !present[id] })
 }
 
-func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
+func (s *Store) writeRecordsSwept(now int64, rows []job.Job) {
 	pass := recordsPass{At: now, Rows: make([]string, len(rows))}
 	for i, r := range rows {
 		pass.Rows[i] = r.ID
@@ -359,13 +362,13 @@ func dropRecord(path string, b Binding) {
 // and no subagent: this checkout's record, else claim. claim is the lease the process says
 // it acts under: trail.LeaseFromEnv for a process reading its own environment, or the
 // lease an adopted run was forwarded with. See [LeaseQuery.Resolve].
-func ActingLease(loc Location, claim string) (string, types.LeaseSource) {
+func ActingLease(loc Location, claim string) (string, job.LeaseSource) {
 	return LeaseQuery{CheckoutJob: readRecord(loc.MarkerPath()), Claim: claim}.Resolve()
 }
 
 // HeldIn returns the rows with write paths whose holder recorded its base in the checkout
 // at root and is still [Editing]: the workers already working there, whoever they are.
-func HeldIn(rows []types.Job, root string) []types.Job {
+func HeldIn(rows []job.Job, root string) []job.Job {
 	if root == "" {
 		return nil
 	}
@@ -373,7 +376,7 @@ func HeldIn(rows []types.Job, root string) []types.Job {
 	if err != nil {
 		return nil
 	}
-	var out []types.Job
+	var out []job.Job
 	for _, row := range rows {
 		// A row that is over holds nothing, or a checkout would stay refused over every job
 		// that ever passed in it.
@@ -387,13 +390,13 @@ func HeldIn(rows []types.Job, root string) []types.Job {
 // Editing reports whether row's holder may still be writing its paths: declared or
 // running. An exited row stays live until it is graded, but its holder returned, so its
 // write paths no longer collide with another fork's.
-func Editing(row types.Job) bool {
-	return row.State == types.StateDeclared || row.State == types.StateRunning
+func Editing(row job.Job) bool {
+	return row.State == job.StateDeclared || row.State == job.StateRunning
 }
 
 // heldHere is [HeldIn] without the job being forked.
-func heldHere(rows []types.Job, root, forking string) []types.Job {
-	return slices.DeleteFunc(HeldIn(rows, root), func(row types.Job) bool { return row.ID == forking })
+func heldHere(rows []job.Job, root, forking string) []job.Job {
+	return slices.DeleteFunc(HeldIn(rows, root), func(row job.Job) bool { return row.ID == forking })
 }
 
 // sharedCheckoutProblems is every write path of row that covers a file the WORKSPACE has to
@@ -412,7 +415,7 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 // recorded, see WriteProof), nothing about a checkout holding no other live job, and
 // nothing about a job whose write paths cover no load file. Refusing more than magus can
 // prove is how a guard becomes something to route around.
-func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types.JobProblems {
+func sharedCheckoutProblems(store *Store, rows []job.Job, row job.Job) types.JobProblems {
 	if store == nil || len(row.Paths.Write) == 0 {
 		return nil
 	}
@@ -474,7 +477,7 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 // never passes.
 //
 // A nil store, or one with no workspace root, has no tree to read and finds nothing.
-func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
+func directoryWritePathProblems(store *Store, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
@@ -551,7 +554,7 @@ func nonOutputFile(store *Store, dir string) (stray string, generated bool) {
 // claimedDirs returns the existing directories, workspace-relative, that the write path
 // decl claims whole. See [directoryWritePathProblems] for how a glob is read.
 func claimedDirs(root, decl string) []string {
-	decl, _ = types.SplitClaim(decl)
+	decl, _ = job.SplitClaim(decl)
 	if decl == "" {
 		return nil
 	}
@@ -602,7 +605,7 @@ func enclosingProject(root, dir string) string {
 // guard gives a write: a declaration covers the subtree beneath what it names.
 func writePathCovering(paths []string, rel string) (string, bool) {
 	for _, decl := range paths {
-		if covers(decl, rel) {
+		if job.Covers(decl, rel) {
 			return decl, true
 		}
 	}
@@ -613,37 +616,37 @@ func writePathCovering(paths []string, rel string) (string, bool) {
 // write paths, that is working in this checkout or not yet taken by any. An untaken job
 // counts because only `job exec` binds one: two jobs forked back to back are both
 // untaken, and proving the second "alone" would be a claim about a plan nobody has
-// started. See [types.JobWriteProof] for why the three answers are distinct. A pattern
+// started. See [job.WriteProof] for why the three answers are distinct. A pattern
 // does not reach a file its row released (see [NarrowConfigHold]).
 //
 // A nil Store, or one with no root, answers alone: a caller with no checkout knows of no
 // other holder.
-func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof {
+func (s *Store) WriteProof(rows []job.Job, row job.Job) job.WriteProof {
 	if s == nil || s.root == "" {
-		return types.WriteProofAlone
+		return job.WriteProofAlone
 	}
 	here, err := filepath.Abs(WorkingCheckout(s.root, row))
 	if err != nil {
-		return types.WriteProofAlone
+		return job.WriteProofAlone
 	}
-	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
+	peers := slices.DeleteFunc(slices.Clone(rows), func(peer job.Job) bool {
 		there := WorkingCheckout(peer.CheckoutRoot, peer)
 		return peer.ID == row.ID || !Editing(peer) || len(peer.HardPaths()) == 0 ||
 			there != "" && !samePath(there, here)
 	})
 	if len(peers) == 0 {
-		return types.WriteProofAlone
+		return job.WriteProofAlone
 	}
 	for _, peer := range peers {
 		for _, mine := range row.HardPaths() {
 			for _, theirs := range peer.HardPaths() {
-				if types.PathsIntersect(mine, theirs) && !releasedReach(peer, theirs, mine) && !releasedReach(row, mine, theirs) {
-					return types.WriteProofOverlapping
+				if job.PathsIntersect(mine, theirs) && !job.ReleasedReach(peer, theirs, mine) && !job.ReleasedReach(row, mine, theirs) {
+					return job.WriteProofOverlapping
 				}
 			}
 		}
 	}
-	return types.WriteProofDisjoint
+	return job.WriteProofDisjoint
 }
 
 // HardenWritten is rows with each live holder's soft paths its diff has touched made hard,
@@ -651,7 +654,7 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 // returns a soft path its holder already wrote as soft. A footprint that cannot be read
 // hardens nothing; a record that fails leaves the row soft in the store for the next
 // reader to record again. A nil store, or one with no root, returns rows unchanged.
-func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.Job {
+func HardenWritten(ctx context.Context, store *Store, rows []job.Job) []job.Job {
 	if store == nil || store.root == "" {
 		return rows
 	}
@@ -686,7 +689,7 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 		if store.dryRun {
 			continue
 		}
-		_, _ = store.mutate(ctx, row.ID, asObservation, func(cur *types.Job, exists bool, _ int64) error {
+		_, _ = store.Mutate(ctx, row.ID, job.AsObservation, func(cur *job.Job, exists bool, _ int64) error {
 			if exists {
 				cur.Paths.Soft = harden(cur.Paths.Soft)
 			}
@@ -697,13 +700,13 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 }
 
 // claiming is row as the checks that read WritePaths for a collision see it: soft paths out.
-func claiming(row types.Job) types.Job {
+func claiming(row job.Job) job.Job {
 	row.Paths.Write = row.HardPaths()
 	return row
 }
 
-func claimingRows(rows []types.Job) []types.Job {
-	out := make([]types.Job, len(rows))
+func claimingRows(rows []job.Job) []job.Job {
+	out := make([]job.Job, len(rows))
 	for i, r := range rows {
 		out[i] = claiming(r)
 	}
@@ -735,7 +738,7 @@ func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branche
 			return nil, "", fmt.Errorf("branch %s: %w", branch, err)
 		}
 		for _, p := range changed {
-			if p = cleanPath(p); p != "." && !seen[p] {
+			if p = job.CleanPath(p); p != "." && !seen[p] {
 				seen[p] = true
 				paths = append(paths, p)
 			}
@@ -773,19 +776,19 @@ func IntegrationOutputs(ws Workspace, paths []string) (write, soft []string) {
 // work, and a merge settles their conflicts where the work integrates (ADR 0010), so a lease
 // elsewhere is something to tell its holder, not a reason to keep the work apart. The row's
 // ancestors are left out, since a parent holds its children's paths by design.
-func IntegrationOverlaps(rows []types.Job, row types.Job) []string {
+func IntegrationOverlaps(rows []job.Job, row job.Job) []string {
 	if !row.Integrating() {
 		return nil
 	}
-	ancestors := types.JobAncestors(rows, row.ID)
+	ancestors := job.Ancestors(rows, row.ID)
 	var notes []string
 	for _, holder := range rows {
 		if holder.ID == row.ID || !Editing(holder) ||
-			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == holder.ID }) {
+			slices.ContainsFunc(ancestors, func(a job.Job) bool { return a.ID == holder.ID }) {
 			continue
 		}
 		for _, mine := range row.Paths.Write {
-			i := slices.IndexFunc(holder.Paths.Write, func(theirs string) bool { return types.PathsIntersect(mine, theirs) })
+			i := slices.IndexFunc(holder.Paths.Write, func(theirs string) bool { return job.PathsIntersect(mine, theirs) })
 			if i < 0 {
 				continue
 			}
@@ -811,8 +814,8 @@ type Unintegrated struct {
 // tree's checkout is the source its topmost job's worktree records, else the nearest
 // descendant's that records one. A tree none of whose jobs made a checkout cannot be told
 // from anyone's, so it counts for every checkout rather than hiding a backlog.
-func ownTree(rows []types.Job, root string, row types.Job) bool {
-	chain := append([]types.Job{row}, types.JobAncestors(rows, row.ID)...)
+func ownTree(rows []job.Job, root string, row job.Job) bool {
+	chain := append([]job.Job{row}, job.Ancestors(rows, row.ID)...)
 	for i := len(chain) - 1; i >= 0; i-- {
 		if wt := chain[i].Worktree; wt != nil && wt.Source != "" {
 			return samePath(wt.Source, root)
@@ -836,23 +839,23 @@ func ownTree(rows []types.Job, root string, row types.Job) bool {
 //
 // An error means no range could be read at all: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return unintegratedBranches(ctx, s.root, rows)
 }
 
-func unintegratedBranches(ctx context.Context, root string, rows []types.Job) ([]Unintegrated, error) {
-	var finished []types.Job
+func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]Unintegrated, error) {
+	var finished []job.Job
 	integrating := map[string]bool{}
 	for _, row := range rows {
 		for _, b := range row.Integrates {
 			integrating[b] = true
 		}
 		switch {
-		case row.Integrating() && row.State == types.StatePass:
-		case row.State == types.StatePass || row.State == types.StateExited:
+		case row.Integrating() && row.State == job.StatePass:
+		case row.State == job.StatePass || row.State == job.StateExited:
 			if ownTree(rows, root, row) {
 				finished = append(finished, row)
 			}
@@ -894,8 +897,8 @@ type FullTest struct {
 
 // ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
 // nothing, and a side it cannot read says why rather than reading as zero.
-func ForkFacts(ctx context.Context, root string, rows []types.Job, last FullTest) types.JobForkFacts {
-	facts := types.JobForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
+func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) job.ForkFacts {
+	facts := job.ForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
 	waiting, err := unintegratedBranches(ctx, root, rows)
 	if err != nil {
 		facts.BranchesUnknown = err.Error()
@@ -906,8 +909,8 @@ func ForkFacts(ctx context.Context, root string, rows []types.Job, last FullTest
 		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
 	}
 	if len(waiting) > 0 {
-		record, _ := json.Marshal(map[string]any{
-			"api_version": types.JobAPIVersion,
+		record, _ := codec.Marshal(map[string]any{
+			"api_version": job.APIVersion,
 			"id":          fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
 			"agent":       map[string]any{"instructions": "merge each finished branch with --no-ff, resolve, regenerate, and pass the check", "worker": map[string]string{"type": "resumed"}},
 			"integrates":  branches,
@@ -939,7 +942,7 @@ func commitsSince(ctx context.Context, root string, last FullTest) (int, string)
 }
 
 // ForkFactsLine renders facts as the one line a fork prints.
-func ForkFactsLine(facts types.JobForkFacts) string {
+func ForkFactsLine(facts job.ForkFacts) string {
 	var branches string
 	switch {
 	case facts.BranchesUnknown != "":
@@ -962,7 +965,7 @@ func ForkFactsLine(facts types.JobForkFacts) string {
 
 // jobBranch is the branch row's work is on: the one its standing checkout has checked out,
 // else the branch named row.ID, which the range read then finds or not.
-func jobBranch(ctx context.Context, driver types.VCSDriver, row types.Job) string {
+func jobBranch(ctx context.Context, driver types.VCSDriver, row job.Job) string {
 	if row.Worktree.Standing() {
 		if ref, err := driver.Ref(ctx, row.Worktree.Root); err == nil && ref != "" {
 			return ref

@@ -1,6 +1,6 @@
 // deviations.buzz - a gate's ledger of the findings a person permitted.
 //
-// One file per gate, one types.Deviation per line, written by people. The gate
+// One file per gate, one job.Deviation per line, written by people. The gate
 // names its own file, so a line reaches no other gate. Only the tree and the
 // base decide: nothing here reads who wrote a line.
 namespace deviations;
@@ -117,7 +117,7 @@ fun readLedgerAt(rev: str, path: str) > BaseFile {
     return readAt(rev, path: path);
 }
 
-// Deviation is types.Deviation's three fields. magus\Deviation is declared for
+// Deviation is job.Deviation's three fields. magus\Deviation is declared for
 // type checking only, so a module cannot construct one.
 export object Deviation {
     code: str,

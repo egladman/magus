@@ -18,7 +18,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -109,7 +109,7 @@ func newIndexFixture(t *testing.T, tag string, shape func(served IndexRelease) R
 	// http.Client transport that redirects github.com -> artifactSrv.
 	_ = artifactBase // used via transport below
 
-	indexData, err := json.Marshal(idx)
+	indexData, err := codec.Marshal(idx)
 	require.NoError(t, err)
 	indexSig := ed25519.Sign(priv, indexData)
 

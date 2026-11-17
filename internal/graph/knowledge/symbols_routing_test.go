@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,7 +110,7 @@ func TestMergeSymbolShardsByIDFallsBackWhenStale(t *testing.T) {
 	r := store.readXref()
 	require.NotNil(t, r)
 	r.ShardsKey = "stale00000000000"
-	b, err := json.MarshalIndent(r, "", "  ")
+	b, err := codec.MarshalIndent(r, "", "  ")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(store.routingPath(), b, 0o644))
 

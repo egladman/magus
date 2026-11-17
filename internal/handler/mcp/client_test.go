@@ -16,11 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -47,10 +51,10 @@ func TestClientStandInProcess(t *testing.T) {
 		if err != nil {
 			return ctx, err
 		}
-		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling)); err != nil {
+		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling)); err != nil {
 			return ctx, err
 		}
-		return types.WithJobLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
+		return job.WithLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
 	})
 	if ws != nil {
 		_ = ws.Close()
@@ -111,7 +115,7 @@ func TestClientToolLargestRequestFitsTheWorker(t *testing.T) {
 	}
 	req, err := (&clientTool{root: t.TempDir()}).request(map[string]any{"script": strings.Repeat("\n", mcpclient.MaxSourceBytes), "args": args})
 	require.NoError(t, err)
-	wire, err := json.Marshal(req)
+	wire, err := codec.Marshal(req)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(wire), mcpclient.MaxRequestBytes)
 }
@@ -137,19 +141,19 @@ func firstLine(s string) string {
 
 // taskServer is the real server a host talks to, driven one JSON-RPC message at a
 // time the way the stdio and HTTP transports drive it.
-func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) json.RawMessage) {
+func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) codec.RawMessage) {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	srv := buildServer(Options{Magus: m, Logger: quietLogger(), Version: "test"}, quietLogger(), &mcpserver.Hooks{}, func(context.Context) origin.Client { return origin.Client{Name: "task-test"} })
-	ctx := trail.ContextWithCredential(context.Background(), types.CredentialStdio)
-	send := func(frame string) json.RawMessage {
+	ctx := trail.ContextWithCredential(context.Background(), auth.CredentialStdio())
+	send := func(frame string) codec.RawMessage {
 		t.Helper()
-		raw, err := json.Marshal(srv.HandleMessage(ctx, []byte(frame)))
+		raw, err := codec.Marshal(srv.HandleMessage(ctx, []byte(frame)))
 		require.NoError(t, err)
 		var got rpcFrame
-		require.NoError(t, json.Unmarshal(raw, &got))
+		require.NoError(t, codec.Unmarshal(raw, &got))
 		require.Empty(t, got.Error, "%s", got.Error)
 		return got.Result
 	}
@@ -157,15 +161,15 @@ func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) 
 	return srv, m, send
 }
 
-func startTask(t *testing.T, send func(string) json.RawMessage, script string) string {
+func startTask(t *testing.T, send func(string) codec.RawMessage, script string) string {
 	t.Helper()
-	call, err := json.Marshal(map[string]any{
+	call, err := codec.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 10, "method": "tools/call",
 		"params": map[string]any{"name": hint.ToolClient.String(), "arguments": map[string]any{"script": script}, "task": map[string]any{}},
 	})
 	require.NoError(t, err)
 	var created mcplib.CreateTaskResult
-	require.NoError(t, json.Unmarshal(send(string(call)), &created))
+	require.NoError(t, codec.Unmarshal(send(string(call)), &created))
 	require.NotEmpty(t, created.Task.TaskId)
 	return created.Task.TaskId
 }
@@ -177,11 +181,11 @@ func TestClientRunsAsATask(t *testing.T) {
 	id := startTask(t, send, `fun main(args: [str]) > int { return 7; }`)
 
 	var result toolResult
-	require.NoError(t, json.Unmarshal(send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"%s\"}}", id)), &result))
+	require.NoError(t, codec.Unmarshal(send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"%s\"}}", id)), &result))
 	require.Len(t, result.Content, 1)
 	require.False(t, result.IsError, result.Content[0].Text)
 	var got mcpclient.Result
-	require.NoError(t, json.Unmarshal([]byte(result.Content[0].Text), &got))
+	require.NoError(t, codec.Unmarshal([]byte(result.Content[0].Text), &got))
 	assert.JSONEq(t, `7`, string(got.JSON))
 }
 
@@ -193,10 +197,10 @@ func TestClientTaskIsCancellable(t *testing.T) {
 	send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"%s\"}}", id))
 
 	require.Eventually(t, func() bool {
-		events, err := trail.ReadRecent(m.CacheDir(), 10)
+		events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
 		return err == nil && len(events) == 1
 	}, 20*time.Second, 50*time.Millisecond, "the cancelled call never returned")
-	events, err := trail.ReadRecent(m.CacheDir(), 10)
+	events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
 	require.NoError(t, err)
 	assert.Contains(t, events[0].Preview, "client: script cancelled")
 }

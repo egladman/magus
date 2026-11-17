@@ -11,9 +11,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -27,8 +27,8 @@ func TestAppliedChangeLines(t *testing.T) { suite.Run(t, new(appliedChangeLinesS
 
 func (s *appliedChangeLinesSuite) TestAListNamesWhatItGainedAndLost() {
 	a := Applied{
-		Prev:    types.Job{Breaks: []string{"legacy_key", "api.Open"}},
-		Next:    types.Job{Breaks: []string{"api.Open", "ledger.json"}},
+		Prev:    job.Job{Breaks: []string{"legacy_key", "api.Open"}},
+		Next:    job.Job{Breaks: []string{"api.Open", "ledger.json"}},
 		Changed: []string{"breaks"},
 	}
 
@@ -41,8 +41,8 @@ func (s *appliedChangeLinesSuite) TestAValueNamesOnlyItsField() {
 
 func (s *appliedChangeLinesSuite) TestAReorderedListNamesOnlyItsField() {
 	a := Applied{
-		Prev:    types.Job{Paths: types.JobPaths{Write: []string{"a", "b"}}},
-		Next:    types.Job{Paths: types.JobPaths{Write: []string{"b", "a"}}},
+		Prev:    job.Job{Paths: job.Paths{Write: []string{"a", "b"}}},
+		Next:    job.Job{Paths: job.Paths{Write: []string{"b", "a"}}},
 		Changed: []string{"paths.write"},
 	}
 
@@ -56,10 +56,10 @@ type applyCheckoutSuite struct {
 
 func TestApplyCheckout(t *testing.T) { suite.Run(t, new(applyCheckoutSuite)) }
 
-func (s *applyCheckoutSuite) record(checkout string, write ...string) []types.Declaration {
+func (s *applyCheckoutSuite) record(checkout string, write ...string) []job.Declaration {
 	rec := spec(write...)
 	rec.Checkout = checkout
-	return []types.Declaration{rec}
+	return []job.Declaration{rec}
 }
 
 func (s *applyCheckoutSuite) TestOwnCheckoutIsANoOp() {
@@ -95,7 +95,7 @@ func (s *applyCheckoutSuite) TestAnotherCheckoutIsRefusedNamingBoth() {
 func (s *applyCheckoutSuite) TestABoundWorktreeIsTheRowsCheckout() {
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
 	own := s.T().TempDir()
-	plant(s.T(), store, types.Job{ID: "w", Agent: agent.Instructed("goal"), Paths: types.JobPaths{Write: []string{"a.go"}}, Check: forkCheck(), State: types.StateDeclared, Updated: time.Now().Unix(), Worktree: &types.JobWorktree{Root: own}})
+	plant(s.T(), store, job.Job{ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: job.StateDeclared, Updated: time.Now().Unix(), Worktree: &job.Worktree{Root: own}})
 
 	_, err := Apply(s.T().Context(), store, s.record(own, "a.go"), config.Jobs{}, nil, nil, false)
 
@@ -117,13 +117,13 @@ type resultShapeSuite struct {
 
 func TestResultShape(t *testing.T) { suite.Run(t, new(resultShapeSuite)) }
 
-func (s *resultShapeSuite) row() types.Job {
-	return types.Job{
+func (s *resultShapeSuite) row() job.Job {
+	return job.Job{
 		ID:    "w",
-		Paths: types.JobPaths{Write: []string{"a.go"}},
-		Check: &types.LeaseCheck{Target: "go-vet", Project: "."},
-		Goals: []types.Goal{
-			{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+		Paths: job.Paths{Write: []string{"a.go"}},
+		Check: &job.LeaseCheck{Target: "go-vet", Project: "."},
+		Goals: []job.Goal{
+			{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
 		},
 	}
 }
@@ -148,8 +148,8 @@ func (s *resultShapeSuite) TestEveryGoalPrintsItsCommand() {
 
 func (s *resultShapeSuite) TestFiledRunsNameTheirAttempt() {
 	row := s.row()
-	row.Attempt = &types.JobAttempt{Ref: "outa", AttemptID: "out1", Failed: true}
-	row.GateAttempts = []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Ref: "outb", AttemptID: "out2"}}}
+	row.Attempt = &job.CapturedRun{Ref: "outa", AttemptID: "out1", Failed: true}
+	row.GateAttempts = []job.GateAttempt{{GateID: "lint", Attempt: job.CapturedRun{Ref: "outb", AttemptID: "out2"}}}
 	var out strings.Builder
 	RenderFiled(&out, row)
 	s.Equal("  check: outa is attempt out1, which failed\n  lint: outb is attempt out2, which passed\n", out.String())
@@ -157,7 +157,7 @@ func (s *resultShapeSuite) TestFiledRunsNameTheirAttempt() {
 
 func (s *resultShapeSuite) TestRewroteOutsideNamesOnlyDeclaredOutputsPastTheLease() {
 	project := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "gen/*.json"}, {Glob: "gen/*.svg"}}}}
-	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/gen/*.svg"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"docs/gen/*.svg"}}}
 	got := rewroteOutside(row, []*types.Project{project}, "gen", []string{"docs/gen/a.json", "docs/gen/a.svg", "docs/page.md"})
 	s.Equal([]string{"docs/gen/a.json"}, got)
 }
@@ -177,8 +177,8 @@ type ancestorDeviationSuite struct {
 
 func TestAncestorDeviation(t *testing.T) { suite.Run(t, new(ancestorDeviationSuite)) }
 
-func (s *ancestorDeviationSuite) deviation() []types.Deviation {
-	return []types.Deviation{{Code: types.GateNotRun, Subject: "test .", Reason: "the root runs it"}}
+func (s *ancestorDeviationSuite) deviation() []job.Deviation {
+	return []job.Deviation{{Code: job.Code(types.GateNotRun), Subject: "test .", Reason: "the root runs it"}}
 }
 
 func (s *ancestorDeviationSuite) store() *Store {
@@ -192,24 +192,24 @@ func (s *ancestorDeviationSuite) store() *Store {
 		{Path: "libs/buzz", Sources: types.MustParseGlobs("**/*.go"), MagusfileTargets: []string{"test"}},
 	}
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T()))).InWorkspace(Workspace{Projects: projects})
-	plant(s.T(), store, types.Job{
-		ID: "w", Agent: agent.Instructed("goal"), Paths: types.JobPaths{Write: []string{"libs/buzz/a.go"}}, Check: forkCheck(), Deviations: s.deviation(),
-		State: types.StateRunning, Updated: time.Now().Unix(),
+	plant(s.T(), store, job.Job{
+		ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"libs/buzz/a.go"}}, Check: forkCheck(), Deviations: s.deviation(),
+		State: job.StateRunning, Updated: time.Now().Unix(),
 	})
 	return store
 }
 
-func (s *ancestorDeviationSuite) record(write ...string) []types.Declaration {
+func (s *ancestorDeviationSuite) record(write ...string) []job.Declaration {
 	rec := spec(write...)
 	rec.Deviations = s.deviation()
-	return []types.Declaration{rec}
+	return []job.Declaration{rec}
 }
 
 func (s *ancestorDeviationSuite) TestAReapplyAddingNoPathIsNotAsked() {
 	applied, err := Apply(s.T().Context(), s.store(), s.record("libs/buzz/a.go"), config.Jobs{}, nil, nil, false)
 
 	s.Require().NoError(err)
-	s.Equal(types.StateRunning, applied[0].Next.State)
+	s.Equal(job.StateRunning, applied[0].Next.State)
 }
 
 func (s *ancestorDeviationSuite) TestAWideningIsAskedForTheOwnersGate() {
@@ -228,16 +228,16 @@ func TestDeclareStampsTheDeadlineFromTheTimeout(t *testing.T) {
 		assert.InDelta(t, want, got, 5, "deadline %d, want about %d", got, want)
 	}
 
-	var timed types.Job
-	Declare(types.Declaration{ID: "a", Timeout: "30m"}, time.Hour)(&timed)
+	var timed job.Job
+	Declare(job.Declaration{ID: "a", Timeout: "30m"}, time.Hour)(&timed)
 	within(t, timed.Deadline, now+1800)
 
-	var defaulted types.Job
-	Declare(types.Declaration{ID: "a"}, time.Hour)(&defaulted)
+	var defaulted job.Job
+	Declare(job.Declaration{ID: "a"}, time.Hour)(&defaulted)
 	within(t, defaulted.Deadline, now+3600)
 
-	unbound := types.Job{Deadline: now + 60}
-	Declare(types.Declaration{ID: "a"}, 0)(&unbound)
+	unbound := job.Job{Deadline: now + 60}
+	Declare(job.Declaration{ID: "a"}, 0)(&unbound)
 	assert.Zero(t, unbound.Deadline, "a re-declaration with no timeout and no default carries no bound")
 }
 
@@ -245,13 +245,13 @@ func TestMergeTimeoutStampsAndClearsTheDeadline(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().Unix()
-	got := applyMerge(t, map[string]any{"timeout": "2h"}, types.Job{ID: "u1"})
+	got := applyMerge(t, map[string]any{"timeout": "2h"}, job.Job{ID: "u1"})
 	assert.InDelta(t, now+7200, got.Deadline, 5)
 
-	kept := applyMerge(t, map[string]any{"state": "running"}, types.Job{ID: "u1", Deadline: 42})
+	kept := applyMerge(t, map[string]any{"state": "running"}, job.Job{ID: "u1", Deadline: 42})
 	assert.Equal(t, int64(42), kept.Deadline, "a put naming no timeout keeps the bound")
 
-	cleared := applyMerge(t, map[string]any{"timeout": ""}, types.Job{ID: "u1", Deadline: 42})
+	cleared := applyMerge(t, map[string]any{"timeout": ""}, job.Job{ID: "u1", Deadline: 42})
 	assert.Zero(t, cleared.Deadline)
 
 	_, err := DecodePut(map[string]any{"timeout": "soon"})
@@ -266,32 +266,32 @@ func TestJobListFlagsOverdueOrphansAndStaleJobs(t *testing.T) {
 	t.Parallel()
 
 	const now = 10_000
-	rows := []types.Job{
-		{ID: "root", State: types.StatePass, Updated: now},
-		{ID: "root/orphan", Parent: "root", State: types.StateRunning, Updated: now},
-		{ID: "live", State: types.StateRunning, Updated: now},
-		{ID: "live/overdue", Parent: "live", State: types.StateRunning, Deadline: now - 1, Updated: now},
-		{ID: "live/stale", Parent: "live", State: types.StateDeclared, Updated: now - 3600},
-		{ID: "done", State: types.StateFail, Deadline: 1, Updated: 1},
+	rows := []job.Job{
+		{ID: "root", State: job.StatePass, Updated: now},
+		{ID: "root/orphan", Parent: "root", State: job.StateRunning, Updated: now},
+		{ID: "live", State: job.StateRunning, Updated: now},
+		{ID: "live/overdue", Parent: "live", State: job.StateRunning, Deadline: now - 1, Updated: now},
+		{ID: "live/stale", Parent: "live", State: job.StateDeclared, Updated: now - 3600},
+		{ID: "done", State: job.StateFail, Deadline: 1, Updated: 1},
 	}
 
-	got := types.NewJobList(rows).Flag(now, 30*time.Minute)
-	want := types.NewJobList(rows)
+	got := job.NewList(rows).Flag(now, 30*time.Minute)
+	want := job.NewList(rows)
 	want.Overdue, want.Orphans, want.Stale = []string{"live/overdue"}, []string{"root/orphan"}, []string{"live/stale"}
 	assert.Equal(t, want, got)
 
-	unset := types.NewJobList(rows).Flag(now, 0)
+	unset := job.NewList(rows).Flag(now, 0)
 	assert.Empty(t, unset.Stale, "an unset stale_after flags nothing")
 }
 
 func TestForkLimitProblemsNameTheKey(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{
-		{ID: "root", State: types.StateRunning},
-		{ID: "root/a", Parent: "root", State: types.StateRunning},
-		{ID: "root/b", Parent: "root", State: types.StatePass},
-		{ID: "other", State: types.StateRunning},
+	rows := []job.Job{
+		{ID: "root", State: job.StateRunning},
+		{ID: "root/a", Parent: "root", State: job.StateRunning},
+		{ID: "root/b", Parent: "root", State: job.StatePass},
+		{ID: "other", State: job.StateRunning},
 	}
 
 	err := forkLimitProblems(rows, "root/a/deep", "root/a", config.Jobs{MaxDepth: 1}).Error()
@@ -316,8 +316,8 @@ func TestForkLimitRefusesAClaimCapPastJobsMaxClaims(t *testing.T) {
 	t.Parallel()
 
 	limits := config.Jobs{MaxClaims: 4}
-	assert.Empty(t, claimCeilingProblems(types.Job{ID: "w", MaxClaims: 4}, limits))
-	err := claimCeilingProblems(types.Job{ID: "w", MaxClaims: 5}, limits).Error()
+	assert.Empty(t, claimCeilingProblems(job.Job{ID: "w", MaxClaims: 4}, limits))
+	err := claimCeilingProblems(job.Job{ID: "w", MaxClaims: 5}, limits).Error()
 	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "5 claims (max_claims on job w)")
 	assert.Contains(t, err.Error(), "ceiling of 4 (jobs.max_claims in magus.yaml)")
@@ -335,10 +335,10 @@ func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 		}
 		return SymbolFact{DefinedIn: []string{"internal/job/plan.go"}}, true
 	}
-	gate := func(names ...string) []types.Goal {
-		return []types.Goal{
-			{ID: "check", Check: types.LeaseCheck{Target: "test", Project: "."}},
-			{ID: "sym", Kind: types.GoalKindSymbol, Symbols: names},
+	gate := func(names ...string) []job.Goal {
+		return []job.Goal{
+			{ID: "check", Check: job.LeaseCheck{Target: "test", Project: "."}},
+			{ID: "sym", Kind: job.GoalKindSymbol, Symbols: names},
 		}
 	}
 
@@ -449,7 +449,7 @@ func TestRenderGatesShowsTheScopeOfARun(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.VerificationStatus{
+	RenderGates(&out, job.Status{Job: "unit", Gates: []job.VerificationStatus{
 		{ID: "check", Verified: true, OutputRef: "out1", Scope: "-- ./internal/job -run Wait"},
 		{ID: "lint", Verified: true, OutputRef: "out2"},
 	}})
@@ -460,9 +460,9 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	RenderGates(&out, types.JobStatus{
+	RenderGates(&out, job.Status{
 		Job:          "unit",
-		Gates:        []types.VerificationStatus{{ID: "sym", Verified: true}},
+		Gates:        []job.VerificationStatus{{ID: "sym", Verified: true}},
 		StaleIndexes: []string{".", "console"},
 	})
 	assert.Contains(t, out.String(), "1 of 1 goal(s) met")
@@ -477,9 +477,9 @@ func TestRenderGatesLabelsEvidenceOfAnEarlierSpec(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	RenderGates(&out, types.JobStatus{
+	RenderGates(&out, job.Status{
 		Job:                "unit",
-		Gates:              []types.VerificationStatus{{ID: "check"}},
+		Gates:              []job.VerificationStatus{{ID: "check"}},
 		ObservedGeneration: 3,
 		PriorGeneration:    2,
 	})
@@ -487,21 +487,21 @@ func TestRenderGatesLabelsEvidenceOfAnEarlierSpec(t *testing.T) {
 		"prior evidence: taken at generation 2, the spec is now generation 3; run it again\n", out.String())
 
 	out.Reset()
-	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.VerificationStatus{{ID: "check", Verified: true}}, ObservedGeneration: 3})
+	RenderGates(&out, job.Status{Job: "unit", Gates: []job.VerificationStatus{{ID: "check", Verified: true}}, ObservedGeneration: 3})
 	assert.NotContains(t, out.String(), "prior evidence")
 }
 
 func TestRenderGatesReportsTheDelta(t *testing.T) {
 	t.Parallel()
 
-	render := func(status types.JobStatus) string {
+	render := func(status job.Status) string {
 		var out strings.Builder
 		RenderGates(&out, status)
 		return out.String()
 	}
-	gates := []types.VerificationStatus{{ID: "check", Verified: true}}
+	gates := []job.VerificationStatus{{ID: "check", Verified: true}}
 
-	measured := types.JobStatus{Job: "unit", Gates: gates, FootprintKnown: true, LinesAdded: 4, LinesDeleted: 9,
+	measured := job.Status{Job: "unit", Gates: gates, FootprintKnown: true, LinesAdded: 4, LinesDeleted: 9,
 		SymbolDeltaKnown: true, UndeclaredExports: []string{"Alpha", "Goal#Extra"}}
 	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n"+
 		"net lines: +4 -9 (-5)\n"+
@@ -509,13 +509,13 @@ func TestRenderGatesReportsTheDelta(t *testing.T) {
 		"left defined with no use: none\n", render(measured))
 	assert.Equal(t, render(measured), render(measured), "two renders of one status are one text")
 
-	unread := types.JobStatus{Job: "unit", Gates: gates, FootprintReason: "the job was declared without a checkpoint"}
+	unread := job.Status{Job: "unit", Gates: gates, FootprintReason: "the job was declared without a checkpoint"}
 	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n"+
 		"net lines: not measured, the job was declared without a checkpoint\n"+
 		"exports no goal declares: not measured, the symbol graph or the diff could not be read\n"+
 		"left defined with no use: not measured, the symbol graph or the diff could not be read\n", render(unread))
 
-	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n", render(types.JobStatus{Job: "unit", Gates: gates}),
+	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n", render(job.Status{Job: "unit", Gates: gates}),
 		"a grade no diff was read for, such as an integration, measures nothing")
 }
 
@@ -536,11 +536,11 @@ func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
 		"Bare":  {DefinedIn: []string{"bare.go"}},
 		"Twice": {DefinedIn: []string{"a.go"}, Signature: "func Twice()", SameNameDefinitions: []string{"a.go", "b.go"}},
 	})
-	goal := func(name, signature string) types.Goal {
-		return types.Goal{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{name}, Signature: signature}
+	goal := func(name, signature string) job.Goal {
+		return job.Goal{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: signature}
 	}
-	row := func(g types.Goal) types.Job {
-		return types.Job{ID: "j", ReadOnly: true, Goals: []types.Goal{g}}
+	row := func(g job.Goal) job.Job {
+		return job.Job{ID: "j", ReadOnly: true, Goals: []job.Goal{g}}
 	}
 
 	frozen, claims, err := ResolveSymbolGoals(t.Context(), row(goal("Api", "")), read)
@@ -589,16 +589,16 @@ func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
 		"Whole":     {DefinedIn: []string{"whole.go"}, Signature: "func Whole()"},
 		"Unindexed": {DefinedIn: []string{"x.go"}},
 	})
-	symbol := func(id string, expect types.GoalExpect, names ...string) types.Goal {
-		return types.Goal{ID: id, Kind: types.GoalKindSymbol, Expect: expect, Symbols: names}
+	symbol := func(id string, expect job.GoalExpect, names ...string) job.Goal {
+		return job.Goal{ID: id, Kind: job.GoalKindSymbol, Expect: expect, Symbols: names}
 	}
-	row := types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"internal/job", "api.go#func Other", "whole.go"}}, Goals: []types.Goal{
-		symbol("moved", types.ExpectChanged, "Api", "Resolve", "Split", "Covered", "Whole", "Unindexed", "Field"),
-		symbol("gone", types.ExpectAbsent, "Update"),
-		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Goal"}, Signature: "type Goal struct"},
-		symbol("kept", types.ExpectPresent, "Api"),
-		symbol("unused", types.ExpectUnreferenced, "Update"),
-		{ID: "check", Check: types.LeaseCheck{Target: "test", Project: "."}},
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job", "api.go#func Other", "whole.go"}}, Goals: []job.Goal{
+		symbol("moved", job.ExpectChanged, "Api", "Resolve", "Split", "Covered", "Whole", "Unindexed", "Field"),
+		symbol("gone", job.ExpectAbsent, "Update"),
+		{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Goal"}, Signature: "type Goal struct"},
+		symbol("kept", job.ExpectPresent, "Api"),
+		symbol("unused", job.ExpectUnreferenced, "Update"),
+		{ID: "check", Check: job.LeaseCheck{Target: "test", Project: "."}},
 	}}
 
 	resolved, claims, err := ResolveSymbolGoals(t.Context(), row, read)
@@ -630,28 +630,28 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 		"A":     {DefinedIn: []string{"run.go"}, Signature: "func A(ctx int)"},
 		"Notes": {DefinedIn: []string{"notes.txt"}, Signature: "func Notes()"},
 	})
-	goals := []types.Goal{{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"A", "Notes"}}}
-	record := types.Declaration{ID: "wave/job", Paths: types.JobPaths{Write: []string{"other.go"}}, Check: forkCheck(), Goals: goals}
+	goals := []job.Goal{{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"A", "Notes"}}}
+	record := job.Declaration{ID: "wave/job", Paths: job.Paths{Write: []string{"other.go"}}, Check: forkCheck(), Goals: goals}
 
 	s := NewStore(tempLocation(t, root))
-	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, read, nil, true)
+	plan, err := Apply(t.Context(), s, []job.Declaration{record}, config.Jobs{}, read, nil, true)
 	require.NoError(t, err)
 	require.Len(t, plan, 1)
 	assert.Equal(t, []string{"other.go", "run.go#func A"}, plan[0].Next.Paths.Write)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a dry run writes nothing")
 
-	stored, err := ForkMerge(t.Context(), s, "wave/job", func(u *types.Job) {
-		u.Check, u.State, u.Paths.Write, u.Goals = forkCheck(), types.StateDeclared, []string{"other.go"}, goals
+	stored, err := ForkMerge(t.Context(), s, "wave/job", func(u *job.Job) {
+		u.Check, u.State, u.Paths.Write, u.Goals = forkCheck(), job.StateDeclared, []string{"other.go"}, goals
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"other.go", "run.go#func A"}, stored.Paths.Write)
 	assert.Equal(t, []string{"claim-declarations"}, stored.Requires, "an older magus reads a claim wrongly, so it may not write this row")
 
-	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *types.Job) {
+	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *job.Job) {
 		u.Paths.Write, u.Goals = []string{"other.go"}, nil
-		u.Deviations = []types.Deviation{{Code: types.JobRecordInvalid, Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.JobRecordInvalid), Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Nil(t, unclaimed.Requires, "a row that drops its last claim is writable by an older magus again")
@@ -663,15 +663,15 @@ func TestApplyKeepsAFrozenSignature(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	record := types.Declaration{ID: "wave/job", Paths: types.JobPaths{Write: []string{"*.go"}}, Check: forkCheck(), Goals: []types.Goal{
-		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}},
+	record := job.Declaration{ID: "wave/job", Paths: job.Paths{Write: []string{"*.go"}}, Check: forkCheck(), Goals: []job.Goal{
+		{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}},
 	}}
 	before := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api()"}})
 	after := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api(n int)"}})
 
-	_, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, before, nil, false)
+	_, err := Apply(t.Context(), s, []job.Declaration{record}, config.Jobs{}, before, nil, false)
 	require.NoError(t, err)
-	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, after, nil, false)
+	plan, err := Apply(t.Context(), s, []job.Declaration{record}, config.Jobs{}, after, nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, "func Api()", plan[0].Next.Goals[0].Signature)
 	assert.Equal(t, []string{"signature-goals"}, plan[0].Next.Requires)
@@ -681,13 +681,13 @@ func TestWaitRefusesPassWhileADescendantIsLive(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	child := types.Job{ID: row.ID + "/child", Parent: row.ID, State: types.StateRunning}
-	grandchild := types.Job{ID: child.ID + "/leaf", Parent: child.ID, State: types.StateDeclared}
-	finished := types.Job{ID: row.ID + "/done", Parent: row.ID, State: types.StatePass}
+	child := job.Job{ID: row.ID + "/child", Parent: row.ID, State: job.StateRunning}
+	grandchild := job.Job{ID: child.ID + "/leaf", Parent: child.ID, State: job.StateDeclared}
+	finished := job.Job{ID: row.ID + "/done", Parent: row.ID, State: job.StatePass}
 	rep := passingResult()
 	seen := Observed{Changed: rep.ChangedPaths, ChangedKnown: true}
 
-	status := VerifyGates(row, rep, passingRun, nil, []types.Job{row, child, grandchild, finished}, seen)
+	status := VerifyGates(row, rep, passingRun, nil, []job.Job{row, child, grandchild, finished}, seen)
 	assert.False(t, status.Verified)
 	joined := strings.Join(status.Violations, "\n")
 	assert.Contains(t, joined, child.ID)
@@ -698,16 +698,16 @@ func TestWaitRefusesPassWhileADescendantIsLive(t *testing.T) {
 func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 	t.Parallel()
 
-	parent := types.Job{
-		ID: "rename", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"."}},
-		Goals: []types.Goal{
-			{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"OldName"}},
-			{ID: "tests", Check: types.LeaseCheck{Target: "test", Project: "."}},
+	parent := job.Job{
+		ID: "rename", State: job.StateRunning, Paths: job.Paths{Write: []string{"."}},
+		Goals: []job.Goal{
+			{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OldName"}},
+			{ID: "tests", Check: job.LeaseCheck{Target: "test", Project: "."}},
 		},
 	}
-	child := types.Job{
-		ID: "rename/api", Parent: "rename", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api"}},
-		Goals: []types.Goal{{ID: "moved", Kind: types.GoalKindPaths, Expect: types.ExpectPresent, Paths: []string{"api"}}},
+	child := job.Job{
+		ID: "rename/api", Parent: "rename", State: job.StateRunning, Paths: job.Paths{Write: []string{"api"}},
+		Goals: []job.Goal{{ID: "moved", Kind: job.GoalKindPaths, Expect: job.ExpectPresent, Paths: []string{"api"}}},
 	}
 	loc := declared(t, parent, child)
 	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
@@ -780,11 +780,11 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(tempLocation(t, t.TempDir()))
 	limits := config.Jobs{MaxDepth: 1, DefaultTimeout: time.Hour}
-	merge := func(parent string) func(*types.Job) {
-		return func(u *types.Job) { u.Parent, u.State, u.ReadOnly = parent, types.StateDeclared, true }
+	merge := func(parent string) func(*job.Job) {
+		return func(u *job.Job) { u.Parent, u.State, u.ReadOnly = parent, job.StateDeclared, true }
 	}
 
-	_, err := ForkMerge(ctx, s, "unscoped", func(u *types.Job) { u.State = types.StateDeclared }, limits, nil)
+	_, err := ForkMerge(ctx, s, "unscoped", func(u *job.Job) { u.State = job.StateDeclared }, limits, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "names no write paths and is not read-only")
 
@@ -798,11 +798,11 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jobs.max_depth")
 
-	updated, err := ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{MaxLive: 1}, nil)
+	updated, err := ForkMerge(ctx, s, "root/a", func(u *job.Job) { u.Agent = modelRequest("opus") }, config.Jobs{MaxLive: 1}, nil)
 	require.NoError(t, err, "an update is not a fork")
-	assert.Equal(t, agent.Model{ID: "opus"}, updated.Agent.Model)
+	assert.Equal(t, job.Model{ID: "opus"}, updated.Agent.Model)
 
-	_, err = ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.State = types.StateFail }, limits, nil)
+	_, err = ForkMerge(ctx, s, "root/a", func(u *job.Job) { u.State = job.StateFail }, limits, nil)
 	require.NoError(t, err)
 	_, err = ForkMerge(ctx, s, "root/a", merge("root"), config.Jobs{MaxLive: 1}, nil)
 	require.Error(t, err, "a fork onto an ended row is a new fork")
@@ -816,9 +816,9 @@ func TestForkMergeRecomputesTheWriteProofOfMovedPaths(t *testing.T) {
 
 	ctx := context.Background()
 	s := NewStore(tempLocation(t, loadableRoot(t)))
-	writes := func(paths ...string) func(*types.Job) {
-		return func(u *types.Job) {
-			u.Check, u.State, u.Paths.Write = forkCheck(), types.StateDeclared, paths
+	writes := func(paths ...string) func(*job.Job) {
+		return func(u *job.Job) {
+			u.Check, u.State, u.Paths.Write = forkCheck(), job.StateDeclared, paths
 		}
 	}
 
@@ -826,15 +826,15 @@ func TestForkMergeRecomputesTheWriteProofOfMovedPaths(t *testing.T) {
 	require.NoError(t, err)
 	row, err := ForkMerge(ctx, s, "wave/mine", writes("docs/x.md"), config.Jobs{}, nil)
 	require.NoError(t, err)
-	require.Equal(t, types.WriteProofDisjoint, row.WriteProof)
+	require.Equal(t, job.WriteProofDisjoint, row.WriteProof)
 
-	row, err = ForkMerge(ctx, s, "wave/mine", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
+	row, err = ForkMerge(ctx, s, "wave/mine", func(u *job.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.WriteProofDisjoint, row.WriteProof, "paths that did not move keep their proof")
+	assert.Equal(t, job.WriteProofDisjoint, row.WriteProof, "paths that did not move keep their proof")
 
 	row, err = ForkMerge(ctx, s, "wave/mine", writes("docs/x.md", "internal/guard/guard.go"), config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.WriteProofOverlapping, row.WriteProof)
+	assert.Equal(t, job.WriteProofOverlapping, row.WriteProof)
 }
 
 // MGS3018 does not depend on which call wrote the path: a put that adds a directory to a
@@ -844,16 +844,16 @@ func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(tempLocation(t, loadableRoot(t)))
-	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
-		u.Check, u.State, u.Paths.Write = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
+	_, err := ForkMerge(ctx, s, "wave/job", func(u *job.Job) {
+		u.Check, u.State, u.Paths.Write = forkCheck(), job.StateDeclared, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 
-	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *job.Job) {
 		u.Paths.Write = append(u.Paths.Write, "internal/**")
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.WritePathIsDirectory)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"internal/job/store.go"}, rows[0].Paths.Write)
 }
@@ -865,21 +865,21 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 
 	ctx := t.Context()
 	s := NewStore(tempLocation(t, testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
-	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
-		u.Check, u.State, u.Paths.Write = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
+	_, err := ForkMerge(ctx, s, "wave/job", func(u *job.Job) {
+		u.Check, u.State, u.Paths.Write = forkCheck(), job.StateDeclared, []string{"run.go", "notes.txt"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 
-	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *job.Job) {
 		u.Paths.Deny = append(u.Paths.Deny, "notes.txt#X")
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.WritePathClaimUngradable)
 	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows[0].Paths.Deny)
 
-	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *job.Job) {
 		u.Paths.Deny = append(u.Paths.Deny, "run.go#Run")
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -889,17 +889,17 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()
 
-	check := types.LeaseCheck{Target: "test", Project: "."}
-	goal := types.Goal{ID: "done", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}
+	check := job.LeaseCheck{Target: "test", Project: "."}
+	goal := job.Goal{ID: "done", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}
 	for name, tc := range map[string]struct {
-		row     types.Job
+		row     job.Job
 		refused bool
 	}{
-		"a writing job with neither":    {row: types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}}, refused: true},
-		"a writing job with a check":    {row: types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &check}},
-		"a writing job with a goal":     {row: types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Goals: []types.Goal{goal}}},
-		"a read-only job":               {row: types.Job{ID: "r", ReadOnly: true}},
-		"a job declaring no write path": {row: types.Job{ID: "r"}},
+		"a writing job with neither":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}}, refused: true},
+		"a writing job with a check":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: &check}},
+		"a writing job with a goal":     {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Goals: []job.Goal{goal}}},
+		"a read-only job":               {row: job.Job{ID: "r", ReadOnly: true}},
+		"a job declaring no write path": {row: job.Job{ID: "r"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -916,7 +916,7 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 	}
 
 	_, err := ForkMerge(t.Context(), NewStore(tempLocation(t, t.TempDir())), "w",
-		func(u *types.Job) { u.Paths.Write = []string{"a.go"} }, config.Jobs{}, nil)
+		func(u *job.Job) { u.Paths.Write = []string{"a.go"} }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job.put hold a new row to it")
 }
 
@@ -925,17 +925,17 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 	t.Parallel()
 
-	check := types.LeaseCheck{Target: "test", Project: "."}
-	script := types.LeaseCheck{Script: "probes/callers.buzz"}
+	check := job.LeaseCheck{Target: "test", Project: "."}
+	script := job.LeaseCheck{Script: "probes/callers.buzz"}
 	for name, tc := range map[string]struct {
-		row     types.Job
+		row     job.Job
 		refused bool
 	}{
-		"no write paths and not read-only": {row: types.Job{ID: "s"}, refused: true},
-		"a check and no write paths":       {row: types.Job{ID: "s", Check: &check}, refused: true},
-		"a read-only job":                  {row: types.Job{ID: "s", ReadOnly: true}},
-		"a read-only job with a script":    {row: types.Job{ID: "s", ReadOnly: true, Check: &script}},
-		"a writing job":                    {row: types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &check}},
+		"no write paths and not read-only": {row: job.Job{ID: "s"}, refused: true},
+		"a check and no write paths":       {row: job.Job{ID: "s", Check: &check}, refused: true},
+		"a read-only job":                  {row: job.Job{ID: "s", ReadOnly: true}},
+		"a read-only job with a script":    {row: job.Job{ID: "s", ReadOnly: true, Check: &script}},
+		"a writing job":                    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: &check}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -969,13 +969,13 @@ func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 	require.NoError(t, err)
 	_, err = s.Exec(t.Context(), "w")
 	require.NoError(t, err)
-	_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
+	_, err = s.Update(t.Context(), "w", func(u *job.Job) { u.State = job.StateRunning })
 	require.NoError(t, err)
 	return s, loc
 }
 
-func spec(write ...string) types.Declaration {
-	return types.Declaration{ID: "w", Agent: agent.Instructed("goal"), Paths: types.JobPaths{Write: write}, Check: forkCheck()}
+func spec(write ...string) job.Declaration {
+	return job.Declaration{ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: write}, Check: forkCheck()}
 }
 
 func storeBytes(t *testing.T, s *Store) string {
@@ -993,10 +993,10 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	t.Parallel()
 
 	s, _ := appliedRow(t, "a.go")
-	before, err := s.List()
+	before, err := s.List(t.Context())
 	require.NoError(t, err)
 
-	got, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	got, err := Apply(t.Context(), s, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.False(t, got[0].Created)
@@ -1006,12 +1006,12 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	want.Paths.Write = []string{"a.go", "b.go"}
 	want.Updated = got[0].Next.Updated
 	want.Widenings = 1
-	want.WriteProof = types.WriteProofAlone // moved paths are proved again
+	want.WriteProof = job.WriteProofAlone // moved paths are proved again
 	want.Generation = before[0].Generation
 	assert.NotZero(t, got[0].Next.Validated, "a written record is stamped validated")
 	want.Validated = got[0].Next.Validated
 	assert.Equal(t, want, got[0].Next)
-	assert.Equal(t, types.StateRunning, got[0].Next.State)
+	assert.Equal(t, job.StateRunning, got[0].Next.State)
 }
 
 // The fork derives soft paths and integrator deviations, so a record projected without them
@@ -1020,24 +1020,24 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Parallel()
 
-	deviation := types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
+	deviation := job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "gen/a.go", Reason: job.ReasonIntegratorRegenerates}
 	derived := func(t *testing.T) *Store {
 		t.Helper()
 		root := loadableRepository(t)
 		rec := spec("a.go", "a_test.go", "b_test.go")
-		rec.Paths.Soft, rec.Deviations = []string{"a_test.go", "b_test.go"}, []types.Deviation{deviation}
+		rec.Paths.Soft, rec.Deviations = []string{"a_test.go", "b_test.go"}, []job.Deviation{deviation}
 		s := NewStore(tempLocation(t, root))
 		_, err := s.Update(t.Context(), "w", Declare(rec, 0))
 		require.NoError(t, err)
 		_, err = s.Exec(t.Context(), "w")
 		require.NoError(t, err)
-		_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
+		_, err = s.Update(t.Context(), "w", func(u *job.Job) { u.State = job.StateRunning })
 		require.NoError(t, err)
 		return s
 	}
-	apply := func(t *testing.T, s *Store, rec types.Declaration) types.Job {
+	apply := func(t *testing.T, s *Store, rec job.Declaration) job.Job {
 		t.Helper()
-		got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, nil, false)
+		got, err := Apply(t.Context(), s, []job.Declaration{rec}, config.Jobs{}, nil, nil, false)
 		require.NoError(t, err)
 		return got[0].Next
 	}
@@ -1045,7 +1045,7 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Run("widening", func(t *testing.T) {
 		t.Parallel()
 		s := derived(t)
-		before, err := s.List()
+		before, err := s.List(t.Context())
 		require.NoError(t, err)
 		got := apply(t, s, spec("a.go", "a_test.go", "b_test.go", "c.go"))
 
@@ -1053,7 +1053,7 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 		want.Paths.Write = []string{"a.go", "a_test.go", "b_test.go", "c.go"}
 		want.Updated = got.Updated
 		want.Widenings = 1
-		want.WriteProof = types.WriteProofAlone
+		want.WriteProof = job.WriteProofAlone
 		want.Validated = got.Validated
 		assert.Equal(t, want, got, "the soft paths and the deviation stay")
 	})
@@ -1087,24 +1087,24 @@ func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
 	s, loc := appliedRow(t, "a.go", "b.go")
 	worker := boundStore(loc, "w")
 
-	shrunk, err := Apply(t.Context(), worker, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
+	shrunk, err := Apply(t.Context(), worker, []job.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err, "a worker may shrink its own row")
 	assert.Equal(t, []string{"a.go"}, shrunk[0].Next.Paths.Write)
 	require.Len(t, shrunk[0].Next.Releases, 1)
 	assert.False(t, shrunk[0].Next.Releases[0].Revoked, "giving up its own path is a release, not a revocation")
 
-	var refused *RefusedError
-	_, err = Apply(t.Context(), worker, []types.Declaration{spec("a.go", "c.go")}, config.Jobs{}, nil, nil, false)
+	var refused *job.RefusedError
+	_, err = Apply(t.Context(), worker, []job.Declaration{spec("a.go", "c.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorAs(t, err, &refused, "widening")
 	criteria := spec("a.go")
-	criteria.Agent = agent.Instructed("another goal")
-	_, err = Apply(t.Context(), worker, []types.Declaration{criteria}, config.Jobs{}, nil, nil, true)
+	criteria.Agent = job.Instructed("another goal")
+	_, err = Apply(t.Context(), worker, []job.Declaration{criteria}, config.Jobs{}, nil, nil, true)
 	require.ErrorAs(t, err, &refused, "a dry run answers what the write would")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	want := shrunk[0].Next.Clone()
-	want.Paths.Write, want.Agent = []string{"a.go"}, agent.Instructed("goal")
+	want.Paths.Write, want.Agent = []string{"a.go"}, job.Instructed("goal")
 	assert.Equal(t, want, rows[0], "the refused writes left the shrunk row as it was")
 }
 
@@ -1114,7 +1114,7 @@ func TestApplyDryRunWritesNothing(t *testing.T) {
 	s, _ := appliedRow(t, "a.go", "b.go")
 	before := storeBytes(t, s)
 
-	got, err := Apply(t.Context(), s, []types.Declaration{spec("b.go")}, config.Jobs{}, nil, nil, true)
+	got, err := Apply(t.Context(), s, []job.Declaration{spec("b.go")}, config.Jobs{}, nil, nil, true)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"b.go"}, got[0].Next.Paths.Write, "the dry run returns the row the apply would write")
 	require.Len(t, got[0].Next.Releases, 1)
@@ -1130,13 +1130,13 @@ func TestApplyRefusalLeavesEveryRowUnchanged(t *testing.T) {
 
 	s, _ := appliedRow(t, "a.go")
 	before := storeBytes(t, s)
-	fresh := types.Declaration{ID: "x", Paths: types.JobPaths{Write: []string{"internal/**"}}, Check: forkCheck()}
+	fresh := job.Declaration{ID: "x", Paths: job.Paths{Write: []string{"internal/**"}}, Check: forkCheck()}
 
-	_, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go"), fresh}, config.Jobs{}, nil, nil, false)
+	_, err := Apply(t.Context(), s, []job.Declaration{spec("a.go", "b.go"), fresh}, config.Jobs{}, nil, nil, false)
 	require.ErrorIs(t, err, types.WritePathIsDirectory)
 	assert.Equal(t, before, storeBytes(t, s))
 
-	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go", "internal/**")}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{spec("a.go", "internal/**")}, config.Jobs{}, nil, nil, false)
 	require.ErrorIs(t, err, types.WritePathIsDirectory, "a path added to a row that exists is held to the fork's rule")
 	assert.Equal(t, before, storeBytes(t, s))
 }
@@ -1146,21 +1146,21 @@ func TestApplyRefusesStatusAnEndedJobAndAnUnboundedOne(t *testing.T) {
 
 	s, _ := appliedRow(t, "a.go")
 	withState := spec("a.go")
-	withState.State = types.StatePass
+	withState.State = job.StatePass
 	for name, tc := range map[string]struct {
-		rec  types.Declaration
+		rec  job.Declaration
 		want string
 	}{
 		"state":          {rec: withState, want: "which is status"},
 		"no write paths": {rec: spec(), want: "`magus job exit w`"},
 	} {
-		_, err := Apply(t.Context(), s, []types.Declaration{tc.rec}, config.Jobs{}, nil, nil, false)
+		_, err := Apply(t.Context(), s, []job.Declaration{tc.rec}, config.Jobs{}, nil, nil, false)
 		require.ErrorContains(t, err, tc.want, name)
 	}
 
-	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateFail })
+	_, err := s.Update(t.Context(), "w", func(u *job.Job) { u.State = job.StateFail })
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorContains(t, err, "w already ended fail")
 }
 
@@ -1169,25 +1169,25 @@ func TestApplyRefusesStatusAnEndedJobAndAnUnboundedOne(t *testing.T) {
 func TestApplyWideningAnExitedOrEndedRowDeclaresItAgain(t *testing.T) {
 	t.Parallel()
 
-	for _, state := range []types.JobState{types.StateExited, types.StateFail} {
+	for _, state := range []job.State{job.StateExited, job.StateFail} {
 		s, _ := appliedRow(t, "a.go")
-		_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = state })
+		_, err := s.Update(t.Context(), "w", func(u *job.Job) { u.State = state })
 		require.NoError(t, err)
 
-		got, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+		got, err := Apply(t.Context(), s, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 		require.NoError(t, err, state)
 		assert.Equal(t, []string{"a.go", "b.go"}, got[0].Next.Paths.Write, state)
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, types.StateDeclared, rows[0].State, "%s: the stored row is declared, not only the plan", state)
+		assert.Equal(t, job.StateDeclared, rows[0].State, "%s: the stored row is declared, not only the plan", state)
 	}
 
 	s, _ := appliedRow(t, "a.go")
-	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateExited })
+	_, err := s.Update(t.Context(), "w", func(u *job.Job) { u.State = job.StateExited })
 	require.NoError(t, err)
-	kept, err := Apply(t.Context(), s, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
+	kept, err := Apply(t.Context(), s, []job.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, kept[0].Next.State, "an exited row changed without widening stays its holder's")
+	assert.Equal(t, job.StateExited, kept[0].Next.State, "an exited row changed without widening stays its holder's")
 }
 
 // A new id is a fork: declared, with this checkout's checkpoint when the record names none.
@@ -1195,17 +1195,17 @@ func TestApplyCreatesANewJob(t *testing.T) {
 	t.Parallel()
 
 	s := NewStore(tempLocation(t, loadableRoot(t)))
-	rec := types.Declaration{ID: "fresh", Paths: types.JobPaths{Write: []string{"internal/job/store.go"}}, Check: forkCheck()}
-	got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, func() string { return "rev-1" }, false)
+	rec := job.Declaration{ID: "fresh", Paths: job.Paths{Write: []string{"internal/job/store.go"}}, Check: forkCheck()}
+	got, err := Apply(t.Context(), s, []job.Declaration{rec}, config.Jobs{}, nil, func() string { return "rev-1" }, false)
 	require.NoError(t, err)
 	require.True(t, got[0].Created)
-	assert.Equal(t, stamped(types.Job{
+	assert.Equal(t, stamped(job.Job{
 		ID:         "fresh",
 		Checkpoint: "rev-1",
-		Paths:      types.JobPaths{Write: []string{"internal/job/store.go"}},
+		Paths:      job.Paths{Write: []string{"internal/job/store.go"}},
 		Check:      forkCheck(),
-		Validation: forkCheck().String(),
-		State:      types.StateDeclared,
+		Validation: CheckCommand(*forkCheck()),
+		State:      job.StateDeclared,
 		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
 		Validated:  got[0].Next.Validated,
 	}, got[0].Next), got[0].Next)
@@ -1216,31 +1216,31 @@ func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
 	t.Parallel()
 
 	s, rec := humanOnlyGrader(t)
-	lint := types.LeaseCheck{Target: "lint", Project: "."}
-	bench := types.LeaseCheck{Target: "bench", Project: "."}
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, &lint }, config.Jobs{}, nil)
+	lint := job.LeaseCheck{Target: "lint", Project: "."}
+	bench := job.LeaseCheck{Target: "bench", Project: "."}
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, &lint }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	graded := len(rec.graded)
 	before := storeBytes(t, s)
 
-	paid := types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: &lint, Goals: []types.Goal{
-		{ID: "paid", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: bench},
+	paid := job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: &lint, Goals: []job.Goal{
+		{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: bench},
 	}}
 	for _, dryRun := range []bool{true, false} {
-		_, err = Apply(t.Context(), s, []types.Declaration{paid}, config.Jobs{}, nil, nil, dryRun)
+		_, err = Apply(t.Context(), s, []job.Declaration{paid}, config.Jobs{}, nil, nil, dryRun)
 		require.ErrorContains(t, err, "w's goal paid's check `magus run bench .` is a target a person runs", "dry run %v", dryRun)
 		assert.Equal(t, before, storeBytes(t, s), "a refused apply writes nothing, dry run %v", dryRun)
 	}
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) {
-		u.Goals = append(u.Goals, types.Goal{ID: "paid", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: bench})
+	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) {
+		u.Goals = append(u.Goals, job.Goal{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: bench})
 	}, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "w's goal paid's check", "a merge that adds a goal check is graded too")
 
 	rec.graded = rec.graded[:graded]
 	again := paid
-	again.Goals = []types.Goal{{ID: "again", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: lint}}
-	_, err = Apply(t.Context(), s, []types.Declaration{again}, config.Jobs{}, nil, nil, false)
+	again.Goals = []job.Goal{{ID: "again", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: lint, Accept: []job.Basis{job.BasisWitnessed}}}
+	_, err = Apply(t.Context(), s, []job.Declaration{again}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, graded, "a goal naming a check the row already holds is not graded again")
 }
@@ -1252,7 +1252,7 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 
 	var pinned [][]string
 	loc := tempLocation(t, testRoot(t).Root())
-	loc.Grader = func(ctx context.Context, _ string, row types.Job) CheckVerdict {
+	loc.Grader = func(ctx context.Context, _ string, row job.Job) CheckVerdict {
 		snap, ok := SnapshotFromContext(ctx)
 		if !assert.True(t, ok, "%s was graded with no rows pinned", row.ID) {
 			return CheckVerdict{}
@@ -1265,15 +1265,15 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 		return CheckVerdict{}
 	}
 	s := NewStore(loc)
-	lint := &types.LeaseCheck{Target: "lint", Project: "."}
+	lint := &job.LeaseCheck{Target: "lint", Project: "."}
 
-	_, err := ForkMerge(t.Context(), s, "a", func(u *types.Job) { u.Paths.Write, u.Check = []string{"pkg/a.go"}, forkCheck() }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/a.go"}, forkCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "b", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
-	_, err = ForkMerge(t.Context(), s, "a", func(u *types.Job) { u.Check = lint }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Check = lint }, config.Jobs{}, nil)
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "b", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: lint}}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: lint}}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, [][]string{{}, {"a"}, {"a", "b"}, {"a", "b"}}, pinned)
@@ -1289,7 +1289,7 @@ func TestLeaseRewrites(t *testing.T) { suite.Run(t, new(leaseRewritesSuite)) }
 func (s *leaseRewritesSuite) TestDisabledVersionControlIsAnErrorNotAPanic() {
 	_, loc := appliedRow(s.T(), "a.go")
 	s.T().Setenv("MAGUS_VCS_ENABLED", "false")
-	ctx := types.WithJobLease(s.T().Context(), "w")
+	ctx := job.WithLease(s.T().Context(), "w")
 
 	s.NotPanics(func() {
 		lease, paths, err := LeaseRewrites(ctx, loc, "gen", nil)
@@ -1309,12 +1309,12 @@ type reapplySuite struct {
 func TestReapply(t *testing.T) { suite.Run(t, new(reapplySuite)) }
 
 // exitApplied files a result for appliedRow's job, whose check is `test .`.
-func (s *reapplySuite) exitApplied(loc Location) types.Job {
+func (s *reapplySuite) exitApplied(loc Location) job.Job {
 	s.T().Helper()
 	result := passingResult()
 	result.Job, result.ChangedPaths = "w", []string{"a.go"}
-	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
-		return types.JobAttempt{Found: true, Ref: ref, Target: "test", Project: ".", TimestampMs: 9_999_999_999_999}, nil
+	resolve := func(_ context.Context, ref string) (job.CapturedRun, error) {
+		return job.CapturedRun{Found: true, Ref: ref, Target: "test", Project: ".", TimestampMs: 9_999_999_999_999}, nil
 	}
 	exited, err := Exit(s.T().Context(), boundStore(loc, "w"), "w", &result, resolve)
 	s.Require().NoError(err)
@@ -1323,7 +1323,7 @@ func (s *reapplySuite) exitApplied(loc Location) types.Job {
 
 func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
 	store, loc := appliedRow(s.T(), "a.go", "b.go")
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go", "c.go")}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), store, []job.Declaration{spec("a.go", "b.go", "c.go")}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 	s.Require().Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.Paths.Write)
 
@@ -1333,7 +1333,7 @@ func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
 	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
 	s.Require().NoError(err)
 	want := exited
-	want.State, want.GateAttempts = types.StateRunning, nil
+	want.State, want.GateAttempts = job.StateRunning, nil
 	want.Registered, want.Updated = retaken.Registered, retaken.Updated
 	s.Equal(want, retaken)
 }
@@ -1341,9 +1341,9 @@ func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
 func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 	store, loc := appliedRow(s.T(), "a.go")
 	want := s.exitApplied(loc)
-	want.Paths.Write, want.State, want.Widenings, want.GateAttempts = []string{"a.go", "b.go"}, types.StateDeclared, 1, nil
+	want.Paths.Write, want.State, want.Widenings, want.GateAttempts = []string{"a.go", "b.go"}, job.StateDeclared, 1, nil
 
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), store, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 
 	next := applied[0].Next
@@ -1353,35 +1353,35 @@ func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 }
 
 // narrowedAt plants w as an exit that cut b.go used to leave it.
-func (s *reapplySuite) narrowedAt(state types.JobState) *Store {
+func (s *reapplySuite) narrowedAt(state job.State) *Store {
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
-	plant(s.T(), store, types.Job{
-		ID: "w", Agent: agent.Instructed("goal"), Paths: types.JobPaths{Write: []string{"a.go"}}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
-		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
+	plant(s.T(), store, job.Job{
+		ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
+		Releases: []job.Release{{Path: "b.go", Digest: job.DigestAbsent, ReleasedAt: 1}},
 	})
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows[0].Releases, 1)
 	return store
 }
 
 func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromAnExitedRow() {
-	s.reappliedIs(types.StateExited, types.StateDeclared)
+	s.reappliedIs(job.StateExited, job.StateDeclared)
 }
 
 func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromARunningRow() {
-	s.reappliedIs(types.StateRunning, types.StateRunning)
+	s.reappliedIs(job.StateRunning, job.StateRunning)
 }
 
-func (s *reapplySuite) reappliedIs(from, to types.JobState) {
+func (s *reapplySuite) reappliedIs(from, to job.State) {
 	s.T().Helper()
 	store := s.narrowedAt(from)
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	want := rows[0]
 	want.Paths.Write, want.State, want.Widenings = []string{"a.go", "b.go"}, to, 1
 
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), store, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 
 	s.Require().NoError(err)
 	next := applied[0].Next
@@ -1394,19 +1394,19 @@ func (s *reapplySuite) reappliedIs(from, to types.JobState) {
 }
 
 func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
-	prev := types.Job{ID: "integration"}
+	prev := job.Job{ID: "integration"}
 	next := prev.Clone()
 	next.Integrates = []string{"worker"}
-	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
 	s.Equal([]string{"integrates"}, a.Changed)
 	s.Equal([]string{"integrates +worker"}, a.ChangeLines())
 }
 
 func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
-	prev := types.Job{ID: "integration", Paths: types.JobPaths{Soft: []string{"old.go"}}}
+	prev := job.Job{ID: "integration", Paths: job.Paths{Soft: []string{"old.go"}}}
 	next := prev.Clone()
 	next.Paths.Soft = []string{"new.go"}
-	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
 	s.Equal([]string{"paths.soft"}, a.Changed)
 	s.Equal([]string{"paths.soft +new.go -old.go"}, a.ChangeLines())
 }
@@ -1427,8 +1427,8 @@ func (s *resolveSymbolGoalsNarrowsSuite) SetupTest() {
 }
 
 func (s *resolveSymbolGoalsNarrowsSuite) resolve(paths ...string) []string {
-	row := types.Job{ID: "j", Paths: types.JobPaths{Write: paths}, Goals: []types.Goal{
-		{ID: "moved", Kind: types.GoalKindSymbol, Expect: types.ExpectChanged, Symbols: []string{"A"}},
+	row := job.Job{ID: "j", Paths: job.Paths{Write: paths}, Goals: []job.Goal{
+		{ID: "moved", Kind: job.GoalKindSymbol, Expect: job.ExpectChanged, Symbols: []string{"A"}},
 	}}
 	_, claims, err := ResolveSymbolGoals(s.T().Context(), row, s.read)
 	s.Require().NoError(err)
@@ -1463,10 +1463,10 @@ func (s *resolveSymbolGoalsNarrowsSuite) TestWithoutIndexEvidenceTheFileStaysWho
 func (s *resolveSymbolGoalsNarrowsSuite) TestAForkNarrowsTheWholeHoldToTheClaim() {
 	root := testkit.NewRepository(s.T(), map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo}).Root()
 	store := NewStore(tempLocation(s.T(), root))
-	goals := []types.Goal{{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"A"}}}
+	goals := []job.Goal{{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"A"}}}
 
-	stored, err := ForkMerge(s.T().Context(), store, "wave/job", func(u *types.Job) {
-		u.Check, u.State, u.Paths.Write, u.Goals = forkCheck(), types.StateDeclared, []string{"run.go"}, goals
+	stored, err := ForkMerge(s.T().Context(), store, "wave/job", func(u *job.Job) {
+		u.Check, u.State, u.Paths.Write, u.Goals = forkCheck(), job.StateDeclared, []string{"run.go"}, goals
 	}, config.Jobs{}, s.read)
 	s.Require().NoError(err)
 	s.Equal([]string{"run.go", "run.go#func A"}, stored.Paths.Write)
@@ -1474,7 +1474,7 @@ func (s *resolveSymbolGoalsNarrowsSuite) TestAForkNarrowsTheWholeHoldToTheClaim(
 	narrowed, added, err := NarrowHold(s.T().Context(), store, stored.ID, "run.go", []string{"func A"}, "")
 	s.Require().NoError(err)
 	s.Empty(added, "the claim is already held, so the hold only records that it was narrowed")
-	s.True(Narrowed(narrowed, "run.go"))
+	s.True(job.Narrowed(narrowed, "run.go"))
 }
 
 type applyDroppedGoalsSuite struct {
@@ -1486,21 +1486,21 @@ func TestApplyDroppedGoals(t *testing.T) { suite.Run(t, new(applyDroppedGoalsSui
 
 func (s *applyDroppedGoalsSuite) SetupTest() {
 	s.store, _ = validateWorkspace(s.T())
-	_, err := Apply(s.T().Context(), s.store, []types.Declaration{s.record(
+	_, err := Apply(s.T().Context(), s.store, []job.Declaration{s.record(
 		[]string{"notes/a.txt", "notes/b.txt"}, "keep-a", "keep-b")}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 }
 
-func (s *applyDroppedGoalsSuite) record(paths []string, goals ...string) types.Declaration {
-	rec := types.Declaration{ID: "w", Paths: types.JobPaths{Write: paths}, Check: forkCheck()}
+func (s *applyDroppedGoalsSuite) record(paths []string, goals ...string) job.Declaration {
+	rec := job.Declaration{ID: "w", Paths: job.Paths{Write: paths}, Check: forkCheck()}
 	for _, id := range goals {
-		rec.Goals = append(rec.Goals, types.Goal{ID: id, Kind: types.GoalKindPaths, Paths: []string{"notes/a.txt"}})
+		rec.Goals = append(rec.Goals, job.Goal{ID: id, Kind: job.GoalKindPaths, Paths: []string{"notes/a.txt"}})
 	}
 	return rec
 }
 
-func (s *applyDroppedGoalsSuite) apply(rec types.Declaration) error {
-	_, err := Apply(s.T().Context(), s.store, []types.Declaration{rec}, config.Jobs{}, nil, nil, true)
+func (s *applyDroppedGoalsSuite) apply(rec job.Declaration) error {
+	_, err := Apply(s.T().Context(), s.store, []job.Declaration{rec}, config.Jobs{}, nil, nil, true)
 	return err
 }
 

@@ -15,6 +15,7 @@ import (
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -50,7 +51,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 `)
 	require.NoError(t, os.MkdirAll(ws.Path("gen"), 0o755))
 
-	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "fixture workspace must open")
 	return m, root
 }
@@ -158,7 +159,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(["gen/**", "!gen/hand.txt"]);
 }
 `)
-	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	result := writeResultFile(t, t.TempDir(), "hand written\n")
 
@@ -185,7 +186,7 @@ magus\project({
 
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
-	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	result := writeResultFile(t, t.TempDir(), "generated: the current version\n")
@@ -208,7 +209,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["gen/**"]);
 }
 `)
-	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	return m
 }

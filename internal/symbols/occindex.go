@@ -15,7 +15,7 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -139,14 +139,14 @@ func WriteOccurrenceFile(path, stamp string, occ map[string]KeyOccurrences) erro
 			}
 			rec.Files = append(rec.Files, fr)
 		}
-		b, err := json.Marshal(rec)
+		b, err := codec.Marshal(rec)
 		if err != nil {
 			return err
 		}
 		dir[key] = [2]int64{int64(records.Len()), int64(len(b))}
 		records.Write(b)
 	}
-	dirBytes, err := json.Marshal(dir)
+	dirBytes, err := codec.Marshal(dir)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func ReadKeyOccurrences(path, stamp, key string) (KeyOccurrences, error) {
 		return KeyOccurrences{}, ErrOccurrenceFileStale
 	}
 	var dir map[string][2]int64
-	if err := json.Unmarshal(dirBytes, &dir); err != nil {
+	if err := codec.Unmarshal(dirBytes, &dir); err != nil {
 		return KeyOccurrences{}, ErrOccurrenceFileStale
 	}
 	at, ok := dir[key]
@@ -205,7 +205,7 @@ func ReadKeyOccurrences(path, stamp, key string) (KeyOccurrences, error) {
 		return KeyOccurrences{}, fmt.Errorf("symbols: read occurrences of %q: %w", key, err)
 	}
 	var rec occurrenceRecord
-	if err := json.Unmarshal(b, &rec); err != nil {
+	if err := codec.Unmarshal(b, &rec); err != nil {
 		return KeyOccurrences{}, fmt.Errorf("symbols: decode occurrences of %q: %w", key, err)
 	}
 	out := KeyOccurrences{Names: rec.Names, Files: make([]types.SymbolOccurrenceFile, 0, len(rec.Files))}

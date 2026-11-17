@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -79,7 +79,7 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	env := testEnv(&stdout, &stderr)
 	require.NoError(t, ReportRefsMiss(&stderr, env, output.Options{Format: output.JSON}, miss))
 	var record types.KnowledgeRefsOutput
-	require.NoError(t, json.Unmarshal(stdout.Bytes(), &record), "stdout: %q", stdout.String())
+	require.NoError(t, codec.Unmarshal(stdout.Bytes(), &record), "stdout: %q", stdout.String())
 	assert.Equal(t, types.KnowledgeRefsOutput{
 		Definition: record.Definition, // the noun's prose, which the describe catalog pins
 		APIVersion: record.APIVersion, // the wire version, pinned by its own test
@@ -131,7 +131,7 @@ func TestReportRefsMissPrintsTextSites(t *testing.T) {
 	stderr.Reset()
 	require.NoError(t, ReportRefsMiss(&stderr, env, output.Options{Format: output.JSON}, miss))
 	var record types.KnowledgeRefsOutput
-	require.NoError(t, json.Unmarshal(stdout.Bytes(), &record), "stdout: %q", stdout.String())
+	require.NoError(t, codec.Unmarshal(stdout.Bytes(), &record), "stdout: %q", stdout.String())
 	assert.Equal(t, ans.Text, record.Answer.Text)
 }
 

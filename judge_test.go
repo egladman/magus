@@ -12,11 +12,14 @@ import (
 
 	hostagent "github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -50,7 +53,7 @@ func openRefusing(t *testing.T) (*Magus, *atomic.Int32) {
 	w.Magusfile(refuseEverything)
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(t.Context(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m, runs
@@ -62,7 +65,7 @@ func TestJudgeCommandReturnsADenyAsAJudgment(t *testing.T) {
 
 	j, err := m.JudgeCommand(t.Context(), "s1", m.Root(), "ls")
 	require.NoError(t, err)
-	assert.Equal(t, string(types.GuardDeny), j.Decision)
+	assert.Equal(t, verdict.Deny, j.Decision)
 	assert.Contains(t, j.Reason, "Not in this workspace.")
 	assert.NotEmpty(t, j.Rule, "every verdict names its rule")
 }
@@ -72,7 +75,7 @@ func TestJudgeWriteJudgesThePathAsAWrite(t *testing.T) {
 
 	j, err := m.JudgeWrite(t.Context(), "s1", m.Root(), "notes.txt")
 	require.NoError(t, err)
-	assert.Equal(t, string(types.GuardDeny), j.Decision)
+	assert.Equal(t, verdict.Deny, j.Decision)
 	assert.Contains(t, j.Reason, "No writes here.")
 }
 
@@ -90,8 +93,8 @@ func (s *authorityJudgeSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refuseEverything})
 }
 
-func (s *authorityJudgeSuite) judge(ctx context.Context) types.GuardJudgment {
-	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(TierCeiling))
+func (s *authorityJudgeSuite) judge(ctx context.Context) verdict.Judgment {
+	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	j, err := m.JudgeCommand(ctx, "s1", m.Root(), "ls")
@@ -101,7 +104,7 @@ func (s *authorityJudgeSuite) judge(ctx context.Context) types.GuardJudgment {
 
 func (s *authorityJudgeSuite) TestRulesThatDoNotLoadAreJudgedByTheApprovedOnes() {
 	broken := []byte("import \"magus\";\n\nmagus\\guard.command(\n")
-	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), broken, 0o644))
@@ -109,7 +112,7 @@ func (s *authorityJudgeSuite) TestRulesThatDoNotLoadAreJudgedByTheApprovedOnes()
 	j, err := m.JudgeCommand(s.T().Context(), "s1", m.Root(), "ls")
 
 	s.Require().NoError(err)
-	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
@@ -125,7 +128,7 @@ func (s *authorityJudgeSuite) TestACommittedLooseningWaitsOnTheAuthorityTheCalle
 
 	j := s.judge(ContextWithAuthority(s.T().Context(), target))
 
-	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
@@ -134,7 +137,7 @@ func TestRunIsJudgedBeforeAnythingRuns(t *testing.T) {
 	m, runs := openRefusing(t)
 
 	err := m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithSession("s1"))
-	var denied *types.GuardDeniedError
+	var denied *verdict.DeniedError
 	require.ErrorAs(t, err, &denied)
 	assert.Contains(t, denied.Judgment.Reason, "Not in this workspace.")
 	assert.Zero(t, runs.Load(), "a denied run runs nothing")
@@ -167,7 +170,7 @@ func TestRunLinesAreTheCLIsCommandLines(t *testing.T) {
 
 func openRefusingExample() (*exampleTB, *Magus) {
 	tb, ws := newExample(map[string]string{"magusfile.buzz": refuseEverything})
-	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		tb.close()
 		panic(err)
@@ -223,9 +226,9 @@ func TestJobReader(t *testing.T) {
 }
 
 // taskReader answers an embedder's tasks as job rows.
-type taskReader []types.Job
+type taskReader []job.Job
 
-func (r taskReader) List() ([]types.Job, error) { return r, nil }
+func (r taskReader) List(context.Context) ([]job.Job, error) { return r, nil }
 
 func (s *jobReaderSuite) SetupTest() {
 	testkit.Isolate(s.T())
@@ -234,12 +237,12 @@ func (s *jobReaderSuite) SetupTest() {
 	s.root = w.Root()
 }
 
-func (s *jobReaderSuite) judge(authority string) types.GuardJudgment {
-	task := types.Job{ID: "task", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Authority: authority}
-	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
+func (s *jobReaderSuite) judge(authority string) verdict.Judgment {
+	task := job.Job{ID: "task", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}}, Authority: authority}
+	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
+	j, err := m.JudgeCommand(job.WithLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
 	s.Require().NoError(err)
 	return j
 }
@@ -247,8 +250,8 @@ func (s *jobReaderSuite) judge(authority string) types.GuardJudgment {
 func (s *jobReaderSuite) TestATaskWithNoAuthorityIsRefusedWork() {
 	j := s.judge("")
 	s.Contains(j.Reason, "lease task records no authority")
-	s.Equal(types.GuardJudgment{
-		APIVersion: j.APIVersion, Decision: string(types.GuardDeny), Reason: j.Reason, Context: j.Context,
+	s.Equal(verdict.Judgment{
+		APIVersion: j.APIVersion, Decision: verdict.Deny, Reason: j.Reason, Context: j.Context,
 		Rule: "lease-authority", Lease: "task", LeaseFrom: j.LeaseFrom, NextSteps: j.NextSteps,
 	}, j)
 }
@@ -260,19 +263,19 @@ func (s *jobReaderSuite) TestATaskWithAnAuthorityIsNotRefusedForIt() {
 // A task is judged by the policy of the checkout its job names.
 func (s *jobReaderSuite) TestATaskIsJudgedByItsJobsCheckout() {
 	other := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refuseEverything})
-	task := types.Job{ID: "task", State: types.StateRunning, Authority: other.Head(), CheckoutRoot: other.Root()}
-	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
+	task := job.Job{ID: "task", State: job.StateRunning, Authority: other.Head(), CheckoutRoot: other.Root()}
+	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 
-	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "ls")
+	j, err := m.JudgeCommand(job.WithLease(s.T().Context(), "task"), "s1", m.Root(), "ls")
 
 	s.Require().NoError(err)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
 func (s *jobReaderSuite) TestANilReaderFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithJobReader(nil), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithJobReader(nil), WithSpawnRule(tier.Ceiling))
 	s.ErrorContains(err, "WithJobReader was given a nil reader")
 }
 
@@ -293,31 +296,31 @@ func (s *judgeStepSuite) SetupTest() {
 }
 
 func (s *judgeStepSuite) open(opts ...Option) *Magus {
-	m, err := Open(s.T().Context(), s.root, append(opts, WithSpawnRule(TierCeiling))...)
+	m, err := Open(s.T().Context(), s.root, append(opts, WithSpawnRule(tier.Ceiling))...)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	return m
 }
 
-func (s *judgeStepSuite) step(kind, name string, input map[string]any) agent.Step {
-	return agent.Step{APIVersion: agent.StepAPIVersion, ID: "s-1", Kind: kind, Name: name, Input: input, Session: "s1", Dir: s.root}
+func (s *judgeStepSuite) step(kind, name string, input map[string]any) step.Step {
+	return step.Step{APIVersion: step.APIVersion, ID: "s-1", Kind: kind, Name: name, Input: input, Session: "s1", Dir: s.root}
 }
 
 // stepDenied is the whole judgment a step-level deny under rule returns.
-func stepDenied(rule, reason string) types.GuardJudgment {
-	return types.GuardJudgment{APIVersion: hostagent.GuardAPIVersion, Decision: string(types.GuardDeny), Reason: reason, Rule: rule}
+func stepDenied(rule, reason string) verdict.Judgment {
+	return verdict.Judgment{APIVersion: hostagent.GuardAPIVersion, Decision: verdict.Deny, Reason: reason, Rule: rule}
 }
 
-var shellSpec = agent.StepSpec{Kind: "shell", Capabilities: []string{string(types.ToolRuns)}, Command: "/command"}
+var shellSpec = step.Spec{Kind: "shell", Capabilities: []string{string(types.ToolRuns)}, Command: "/command"}
 
-var refundSpec = agent.StepSpec{Kind: "refund", Capabilities: []string{string(types.ToolNetwork)}}
+var refundSpec = step.Spec{Kind: "refund", Capabilities: []string{string(types.ToolNetwork)}}
 
 // refundLimit denies a refund over 100, a rule for a kind magus never ships.
-func refundLimit(_ context.Context, req agent.StepRequest) (types.GuardVerdict, error) {
+func refundLimit(_ context.Context, req step.Request) (verdict.Verdict, error) {
 	if amount, _ := req.Step.Input["amount"].(float64); req.Step.Kind == "refund" && amount > 100 {
-		return types.GuardVerdict{Decision: types.GuardDeny, Reason: "Refunds over 100 need a person.", Rule: "refund-limit"}, nil
+		return verdict.Verdict{Decision: verdict.Deny, Reason: "Refunds over 100 need a person.", Rule: "refund-limit"}, nil
 	}
-	return types.GuardVerdict{}, nil
+	return verdict.Verdict{}, nil
 }
 
 func (s *judgeStepSuite) TestAnUndeclaredKindIsDenied() {
@@ -333,17 +336,17 @@ func (s *judgeStepSuite) TestARunsSpecJudgesItsCommand() {
 	j, err := s.open(WithStepSpecs(shellSpec)).Judge(s.T().Context(), s.step("shell", "bash", map[string]any{"command": "ls"}))
 
 	s.Require().NoError(err)
-	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "Not in this workspace.")
 }
 
 func (s *judgeStepSuite) TestAWritesSpecJudgesEachPath() {
-	spec := agent.StepSpec{Kind: "memory", Capabilities: []string{string(types.ToolWrites)}, Paths: []string{"/files"}}
+	spec := step.Spec{Kind: "memory", Capabilities: []string{string(types.ToolWrites)}, Paths: []string{"/files"}}
 
 	j, err := s.open(WithStepSpecs(spec)).Judge(s.T().Context(), s.step("memory", "notes", map[string]any{"files": []any{"notes.txt"}}))
 
 	s.Require().NoError(err)
-	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "No writes here.")
 }
 
@@ -359,9 +362,9 @@ func (s *judgeStepSuite) TestAnInputOffItsSchemaIsDeniedBeforeAnyRuleRuns() {
 	row := refundSpec
 	row.InputSchema = []byte(`{"type":"object","properties":{"amount":{"type":"number"}},"required":["amount"]}`)
 	calls := 0
-	counting := func(context.Context, agent.StepRequest) (types.GuardVerdict, error) {
+	counting := func(context.Context, step.Request) (verdict.Verdict, error) {
 		calls++
-		return types.GuardVerdict{}, nil
+		return verdict.Verdict{}, nil
 	}
 
 	j, err := s.open(WithStepSpecs(row), WithStepRule(counting)).Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": "ten"}))
@@ -387,12 +390,12 @@ func (s *judgeStepSuite) TestAGoRulesPassLeavesTheStepPassing() {
 	j, err := m.Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": 20.0}))
 
 	s.Require().NoError(err)
-	s.Equal("pass", j.Decision)
+	s.Equal(verdict.Defer, j.Decision)
 }
 
 func (s *judgeStepSuite) TestAGoRuleErrorIsAJudgmentNotMade() {
-	failing := func(context.Context, agent.StepRequest) (types.GuardVerdict, error) {
-		return types.GuardVerdict{}, errors.New("ledger unreachable")
+	failing := func(context.Context, step.Request) (verdict.Verdict, error) {
+		return verdict.Verdict{}, errors.New("ledger unreachable")
 	}
 
 	_, err := s.open(WithStepSpecs(refundSpec), WithStepRule(failing)).Judge(s.T().Context(), s.step("refund", "card", nil))
@@ -401,21 +404,31 @@ func (s *judgeStepSuite) TestAGoRuleErrorIsAJudgmentNotMade() {
 }
 
 func (s *judgeStepSuite) TestAnInertSpecPasses() {
-	spec := agent.StepSpec{Kind: "plan", Capabilities: []string{string(types.ToolInert)}}
+	spec := step.Spec{Kind: "plan", Capabilities: []string{string(types.ToolInert)}}
 
 	j, err := s.open(WithStepSpecs(spec)).Judge(s.T().Context(), s.step("plan", "todo", map[string]any{"items": []any{"ls"}}))
 
 	s.Require().NoError(err)
-	s.Equal("pass", j.Decision)
+	s.Equal(verdict.Defer, j.Decision)
 }
 
 func (s *judgeStepSuite) TestAWrongAPIVersionIsAnError() {
 	step := s.step("plan", "todo", nil)
-	step.APIVersion = "magus.step/v9"
+	step.APIVersion = "safetyscissors.step/v9"
 
 	_, err := s.open().Judge(s.T().Context(), step)
 
-	s.ErrorContains(err, "api_version")
+	s.ErrorContains(err, "safetyscissors.step/v9")
+}
+
+func (s *judgeStepSuite) TestTheRetiredStepGroupIsRefusedWithItsFix() {
+	step := s.step("plan", "todo", nil)
+	step.APIVersion = "magus.step/v1alpha1"
+
+	_, err := s.open().Judge(s.T().Context(), step)
+
+	s.ErrorContains(err, "record is magus.step/v1alpha1")
+	s.ErrorContains(err, "send api_version safetyscissors.step/v1alpha1")
 }
 
 func (s *judgeStepSuite) TestAnEmptyDirIsAnErrorWhenTheSpecReadsACommand() {
@@ -428,13 +441,13 @@ func (s *judgeStepSuite) TestAnEmptyDirIsAnErrorWhenTheSpecReadsACommand() {
 }
 
 func (s *judgeStepSuite) TestASpecNothingJudgesFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "magus.WithStepRule")
 }
 
 func (s *judgeStepSuite) TestARepeatedSpecFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(shellSpec, shellSpec), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(shellSpec, shellSpec), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, `repeats kind "shell"`)
 }
@@ -443,7 +456,7 @@ func (s *judgeStepSuite) TestAPointerThatDoesNotParseFailsTheOpen() {
 	row := shellSpec
 	row.Command = "command"
 
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "not a JSON Pointer")
 }
@@ -452,7 +465,7 @@ func (s *judgeStepSuite) TestASchemaThatDoesNotParseFailsTheOpen() {
 	row := shellSpec
 	row.InputSchema = []byte(`{"type":`)
 
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "input_schema")
 }
@@ -461,12 +474,12 @@ func (s *judgeStepSuite) TestAKindNamedForASeamFailsTheOpen() {
 	row := shellSpec
 	row.Kind = "command"
 
-	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(tier.Ceiling))
 
 	s.ErrorContains(err, "reserved")
 }
 
-var delegateSpec = agent.StepSpec{Kind: "delegate", Capabilities: []string{string(types.ToolSpawns)}, SpawnDescriptionField: "/title"}
+var delegateSpec = step.Spec{Kind: "delegate", Capabilities: []string{string(types.ToolSpawns)}, SpawnDescriptionField: "/title"}
 
 // A spawns spec's step reaches the workspace's magus\guard.spawn rule, as a
 // host's spawn does.
@@ -478,16 +491,16 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("No spawns here: {req.description}.");
 });
 `)
-	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(delegateSpec), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(delegateSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	step := agent.Step{APIVersion: agent.StepAPIVersion, Kind: "delegate", Name: "researcher", Session: "s1", Dir: w.Root(),
+	st := step.Step{APIVersion: step.APIVersion, Kind: "delegate", Name: "researcher", Session: "s1", Dir: w.Root(),
 		Input: map[string]any{"prompt": "Summarize the open tickets.", "title": "ticket summary"}}
 
-	j, err := m.Judge(s.T().Context(), step)
+	j, err := m.Judge(s.T().Context(), st)
 
 	s.Require().NoError(err)
-	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.Contains(j.Reason, "No spawns here: ticket summary.")
 }
 
@@ -513,15 +526,15 @@ func (s *buzzStepRuleSuite) SetupTest() { testkit.Isolate(s.T()) }
 func (s *buzzStepRuleSuite) open(src string, opts ...Option) (*Magus, error) {
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile(src)
-	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling))...)
+	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))...)
 	if m != nil {
 		s.T().Cleanup(func() { _ = m.Close() })
 	}
 	return m, err
 }
 
-func (s *buzzStepRuleSuite) refund(m *Magus, amount float64) agent.Step {
-	return agent.Step{APIVersion: agent.StepAPIVersion, Kind: "refund", Name: "card", Session: "s1", Dir: m.Root(),
+func (s *buzzStepRuleSuite) refund(m *Magus, amount float64) step.Step {
+	return step.Step{APIVersion: step.APIVersion, Kind: "refund", Name: "card", Session: "s1", Dir: m.Root(),
 		Input: map[string]any{"amount": amount}}
 }
 
@@ -532,7 +545,7 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     if (req.step.name == "card") {
         return magus\guard.deny("Card refunds need a person.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -576,10 +589,10 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => 
 
 func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
 	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refundRule})
-	m, err := Open(s.T().Context(), repo.Root(), WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), repo.Root(), WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.allow());\n"
+	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.defer());\n"
 	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), []byte(loosened), 0o644))
 
 	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
@@ -592,7 +605,7 @@ func (s *buzzStepRuleSuite) TestARuleForAnotherKindLeavesTheSpecUnjudgedAtOpen()
 	_, err := s.open(`import "magus";
 import "magus/agent";
 
-magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.defer());
 `)
 
 	s.ErrorContains(err, `magus\guard.step`)
@@ -605,7 +618,7 @@ import "magus/agent";
 
 magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     if (req.step.name == "card") { throw "ledger unreachable"; }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `)
 	s.Require().NoError(err)
@@ -629,15 +642,15 @@ func (s *stepRemedySuite) TestADenyServesItsRemedyCommand() {
 	testkit.Isolate(s.T())
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile(`import "magus";` + "\n")
-	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(shellSpec), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(shellSpec), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	step := agent.Step{APIVersion: agent.StepAPIVersion, Kind: "shell", Name: "bash", Session: "s1", Dir: w.Root(),
+	st := step.Step{APIVersion: step.APIVersion, Kind: "shell", Name: "bash", Session: "s1", Dir: w.Root(),
 		Input: map[string]any{"command": "magus ls | head"}}
 
-	j, err := m.Judge(s.T().Context(), step)
+	j, err := m.Judge(s.T().Context(), st)
 
 	s.Require().NoError(err)
-	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Equal(verdict.Deny, j.Decision)
 	s.NotEmpty(j.NextSteps, "the deny serves a remedy command")
 }

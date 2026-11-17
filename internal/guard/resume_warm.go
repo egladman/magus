@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 const denyRuleSpawnWarmWorker denyRuleName = "spawn-warm-worker"
@@ -66,12 +66,12 @@ type warmWorker struct {
 
 // denyWarmSpawn refuses row's fresh spawn while a worker that wrote its code is warm.
 // False when the lease rows cannot be read or no such worker is warm.
-func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.Job, title string) (denial, bool) {
+func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row jobtypes.Job, title string) (denial, bool) {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return denial{}, false
 	}
-	var models []types.ModelPricing
+	var models []model.Row
 	if at.models != nil {
 		models = at.models()
 	}
@@ -86,8 +86,8 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.
 // findWarmWorker is the worker row continues: one that stopped or ended
 // within ttl, which row follows or shares a path with. A new worker type,
 // another role, another checkout or a near price step answers false.
-func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title string, models []types.ModelPricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
-	if (row.Agent != nil && row.Agent.Worker.Type == typesagent.WorkerTypeNew) || ttl <= 0 {
+func findWarmWorker(facts hint.Gate, rows []jobtypes.Job, row jobtypes.Job, title string, models []model.Row, ttl time.Duration, now time.Time) (warmWorker, bool) {
+	if (row.Agent != nil && row.Agent.Worker.Type == jobtypes.WorkerTypeNew) || ttl <= 0 {
 		return warmWorker{}, false
 	}
 	session := readCostState(facts).Model
@@ -123,7 +123,7 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title stri
 
 // sameCheckout reports whether ended's worker may take row where it worked: a resumed worker
 // stays bound to its checkout, and a row a fork made a checkout for is taken only there.
-func sameCheckout(row, ended types.Job) bool {
+func sameCheckout(row, ended jobtypes.Job) bool {
 	there := ended.CheckoutRoot
 	if there == "" && ended.Worktree.Standing() {
 		there = ended.Worktree.Root
@@ -141,12 +141,12 @@ func spawnTitleRole(title string) string {
 }
 
 // continuationLink says how row continues ended, "" when it does not.
-func continuationLink(row, ended types.Job) string {
+func continuationLink(row, ended jobtypes.Job) string {
 	if row.Follows == ended.ID {
 		return "follows " + ended.ID
 	}
 	for _, p := range row.Paths.Write {
-		if slices.ContainsFunc(ended.Paths.Write, func(q string) bool { return types.PathsIntersect(p, q) }) {
+		if slices.ContainsFunc(ended.Paths.Write, func(q string) bool { return jobtypes.PathsIntersect(p, q) }) {
 			return fmt.Sprintf("shares %s with %s", p, ended.ID)
 		}
 	}
@@ -156,11 +156,11 @@ func continuationLink(row, ended types.Job) string {
 // nearPriceStep reports whether the worker's last observed context is within
 // priceStepMargin of its model's long-context price step, or past it. False when either
 // is unknown: an unpriced model is not a reason to pay orientation again.
-func nearPriceStep(rec spawnedAgent, model string, models []types.ModelPricing) bool {
-	if rec.ContextTokens == nil || model == "" {
+func nearPriceStep(rec spawnedAgent, id string, models []model.Row) bool {
+	if rec.ContextTokens == nil || id == "" {
 		return false
 	}
-	i := slices.IndexFunc(models, func(m types.ModelPricing) bool { return m.ID == model || m.Alias != "" && m.Alias == model })
+	i := slices.IndexFunc(models, func(m model.Row) bool { return m.ID == id || m.Alias != "" && m.Alias == id })
 	if i < 0 || models[i].LongContext == nil || models[i].LongContext.Above <= 0 {
 		return false
 	}
@@ -168,7 +168,7 @@ func nearPriceStep(rec spawnedAgent, model string, models []types.ModelPricing) 
 	return float64(*rec.ContextTokens) >= float64(step)*(1-priceStepMargin)
 }
 
-func denySpawnWarmWorker(row types.Job, w warmWorker, ttl promptCacheTTL) denial {
+func denySpawnWarmWorker(row jobtypes.Job, w warmWorker, ttl promptCacheTTL) denial {
 	message := "with a message"
 	if w.inFlight {
 		message = fmt.Sprintf("with a message to end %s with `%s` and then take %s", w.job, hint.JobExit.With(w.job, "--stdin"), row.ID)

@@ -184,16 +184,16 @@ async function hooks(sessions: Sessions = {}) {
 }
 
 const deny: Canned = {
-  api_version: "magus.guard/v1alpha1",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "deny",
   reason: "whole-tree git stash",
 };
 const advise: Canned = {
-  api_version: "magus.guard/v1alpha1",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "advise",
   context: "that file is generated",
 };
-const pass: Canned = { api_version: "magus.guard/v1alpha1", decision: "pass" };
+const deferred: Canned = { api_version: "safetyscissors.verdict/v1alpha1", decision: "defer" };
 
 test("a shell command is judged over stdin by the top-level shell subcommand", async () => {
   const calls = stubBun(() => deny);
@@ -226,7 +226,7 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
 });
 
 test("a call carries OpenCode's session, so push authority can tell the root from a subagent", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
 
   await h["tool.execute.before"](
@@ -315,8 +315,8 @@ test("nothing is written into the compaction prompt", async () => {
   );
 });
 
-test("a pass is silent and blocks nothing", async () => {
-  stubBun(() => pass);
+test("a defer is silent and blocks nothing", async () => {
+  stubBun(() => deferred);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
     await h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls -la" } });
@@ -340,16 +340,16 @@ test("an unrunnable magus refuses every call and says how to get one", async () 
 });
 
 test("a verdict from an unknown schema is refused rather than obeyed", async () => {
-  stubBun(() => ({ ...deny, api_version: "magus.guard/v1alpha99" }));
+  stubBun(() => ({ ...deny, api_version: "safetyscissors.verdict/v1alpha99" }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
-    /verdict magus\.guard\/v1alpha99, not magus\.guard\/v1alpha1/,
+    /verdict safetyscissors\.verdict\/v1alpha99, not safetyscissors\.verdict\/v1alpha1/,
   );
 });
 
 const ask: Canned = {
-  api_version: "magus.guard/v1alpha1",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "ask",
   reason: "pushing abc1234, which no passing gate covers",
 };
@@ -357,7 +357,11 @@ const pushPrompt = { permission: { bash: { "git push": "ask", "git push *": "ask
 type Status = "ask" | "deny" | "allow";
 
 test("an unknown decision refuses the call, never allows it", async () => {
-  stubBun(() => ({ api_version: "magus.guard/v1alpha1", decision: "maybe", reason: "?" }));
+  stubBun(() => ({
+    api_version: "safetyscissors.verdict/v1alpha1",
+    decision: "maybe",
+    reason: "?",
+  }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -408,11 +412,15 @@ test("an ask no push prompt can match refuses", async () => {
 
 test("permission.ask answers a push prompt from the verdict", async () => {
   const cases: Array<[Canned, Status]> = [
-    [pass, "allow"],
-    [{ api_version: "magus.guard/v1alpha1", decision: "advise", context: "gate ran" }, "allow"],
+    [deferred, "ask"],
+    [
+      { api_version: "safetyscissors.verdict/v1alpha1", decision: "advise", context: "gate ran" },
+      "ask",
+    ],
+    [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "pass" }, "deny"],
     [ask, "ask"],
     [deny, "deny"],
-    [{ api_version: "magus.guard/v1alpha1", decision: "maybe" }, "deny"],
+    [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "maybe" }, "deny"],
   ];
   for (const [verdict, want] of cases) {
     const calls = stubBun(() => verdict);
@@ -467,18 +475,18 @@ test("a push whose own backend is not asked about is refused", async () => {
   );
 });
 
-test("permission.ask approves each backend's covered push, and nothing else", async () => {
+test("permission.ask leaves each backend's covered push to OpenCode's prompt", async () => {
   for (const command of ["hg push", "sl push --to main", "jj git push -b main"]) {
-    const calls = stubBun(() => pass);
+    const calls = stubBun(() => deferred);
     const h = await hooks();
     await h.config(everyPushPrompt);
     const output: { status: Status } = { status: "ask" };
     await h["permission.ask"]({ type: "bash", title: command, metadata: { command } }, output);
-    assert.equal(output.status, "allow", command);
+    assert.equal(output.status, "ask", command);
     assert.equal(calls[0].stdin, command);
   }
   for (const command of ["hg pull", "jj git fetch", "sl push && rm -rf x"]) {
-    const calls = stubBun(() => pass);
+    const calls = stubBun(() => deferred);
     const h = await hooks();
     await h.config(everyPushPrompt);
     const output: { status: Status } = { status: "ask" };
@@ -489,7 +497,7 @@ test("permission.ask approves each backend's covered push, and nothing else", as
 });
 
 test("permission.ask leaves every other prompt to the person", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   const output: { status: Status } = { status: "ask" };
   await h["permission.ask"](
@@ -527,7 +535,7 @@ const humanOnlyPrompt = {
 };
 
 const humanOnlyAsk: Canned = {
-  api_version: "magus.guard/v1alpha1",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "ask",
   reason: "`magus run agent-bench-run .` is run by a person: launches paid sessions",
 };
@@ -584,7 +592,7 @@ function sent(call: SpawnCall): Record<string, unknown> {
 const magusServer = { mcp: { magus: { type: "local", command: ["./magus", "mcp"] } } };
 
 test("a call to magus's MCP server is judged as the tool it names, in the Claude Code envelope", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   await h.config(magusServer);
 
@@ -612,7 +620,7 @@ test("a call to magus's MCP server is judged as the tool it names, in the Claude
 });
 
 test("the magus server is found by its command, and its tool ids are OpenCode's sanitized ones", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   await h.config({
     mcp: {
@@ -635,7 +643,7 @@ test("the magus server is found by its command, and its tool ids are OpenCode's 
 });
 
 test("an MCP call with no config for magus is judged under its own name", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   await h["tool.execute.before"]({ tool: "magus_client", callID: "m1" }, { args: {} });
   assert.equal(calls.length, 1);
@@ -643,7 +651,7 @@ test("an MCP call with no config for magus is judged under its own name", async 
 });
 
 test("every other tool reaches magus whole, its file path spelled the way magus reads it", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   await h["tool.execute.before"]({ tool: "todowrite", callID: "o1" }, { args: { todos: [] } });
   await h["tool.execute.before"](
@@ -671,7 +679,7 @@ const glue = (script: string): string[] => [
 ];
 
 test("a read is recorded through magus-observe.buzz before it is judged", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   await h["tool.execute.before"](
     { tool: "read", callID: "r1", sessionID: "s1" },
@@ -800,7 +808,7 @@ test("a patch goes to magus whole, as the envelope's patchText", async () => {
 const spawnArgs = { subagent_type: "general", prompt: "Review shell.go.", description: "Review" };
 
 test("a spawn is judged by its prompt, and the finished one names the child", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
 
   await h["tool.execute.before"](
@@ -833,7 +841,7 @@ test("a spawn with no prompt is not judged, and a denied spawn throws", async ()
 });
 
 test("a subagent's calls carry the root session and the child as the agent", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks({ parents: { child: "root" } });
 
   await h["tool.execute.before"](
@@ -857,7 +865,7 @@ test("a subagent's calls carry the root session and the child as the agent", asy
 });
 
 test("a session.created event gives a session's parent without asking the SDK", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks();
   await h.event({
     event: { type: "session.created", properties: { info: { id: "kid", parentID: "root" } } },
@@ -870,7 +878,7 @@ test("a session.created event gives a session's parent without asking the SDK", 
 });
 
 test("a message the person types goes to magus shell --message", async () => {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   const h = await hooks({ parents: { child: "root" } });
 
   await h["chat.message"](
@@ -942,7 +950,7 @@ async function withoutReplyScript(body: () => Promise<void>): Promise<void> {
 
 test("a root session going idle records a checkpoint; a subagent's idle records none", async () => {
   await withoutReplyScript(async () => {
-    const calls = stubBun(() => pass);
+    const calls = stubBun(() => deferred);
     const h = await hooks({ parents: { child: "root" } });
 
     await h.event(idle("child"));
@@ -1030,7 +1038,7 @@ const isReplyCheck = (call: SpawnCall): boolean => call.argv[0] === "buzz" && ca
 
 test("findings on a root session's reply go back as one follow-up prompt per turn", async () => {
   await withReplyScript(async (script) => {
-    const calls = stubBun((call) => (isReplyCheck(call) ? findings : pass));
+    const calls = stubBun((call) => (isReplyCheck(call) ? findings : deferred));
     const prompts: Array<{ id: string; text: string }> = [];
     const h = await hooks({ messages: { root: turn("Done. Want me to go on?") }, prompts });
     const judged = () => calls.filter((call) => isReplyCheck(call));
@@ -1062,7 +1070,7 @@ test("no findings, no reply, or a subagent means no follow-up", async () => {
   await withReplyScript(async () => {
     const prompts: Array<{ id: string; text: string }> = [];
 
-    stubBun(() => pass);
+    stubBun(() => deferred);
     let h = await hooks({ messages: { root: turn("Done.") }, prompts });
     await h.event(idle("root"));
 
@@ -1155,7 +1163,7 @@ async function inDirectory(cwd: string, body: () => Promise<void>): Promise<void
 
 /** The binary the plugin spawns for a shell command judged from `cwd`. */
 async function resolvedBinary(cwd: string): Promise<string> {
-  const calls = stubBun(() => pass);
+  const calls = stubBun(() => deferred);
   await inDirectory(cwd, async () => {
     const h = await hooks();
     await h["tool.execute.before"]({ tool: "bash", callID: "r1" }, { args: { command: "ls" } });
@@ -1213,12 +1221,12 @@ test("a tree with no magus.yaml falls back to the nearest magusfile", async () =
 test("a deny on a root session's stop goes back as one follow-up prompt", async () => {
   await withoutReplyScript(async () => {
     const stop = {
-      api_version: "magus.guard/v1alpha1",
+      api_version: "safetyscissors.verdict/v1alpha1",
       decision: "deny",
       reason: "a background task still runs",
     };
     const isStop = (call: SpawnCall): boolean => call.stdin.includes('"hook_event_name":"Stop"');
-    const calls = stubBun((call) => (isStop(call) ? stop : pass));
+    const calls = stubBun((call) => (isStop(call) ? stop : deferred));
     const prompts: Array<{ id: string; text: string }> = [];
     const h = await hooks({ prompts });
 
@@ -1251,7 +1259,7 @@ test("a deny on a root session's stop goes back as one follow-up prompt", async 
 
 test("an advise on a stop is the person's notice and sends nothing back", async () => {
   await withoutReplyScript(async () => {
-    stubBun((call) => (call.stdin.includes('"Stop"') ? advise : pass));
+    stubBun((call) => (call.stdin.includes('"Stop"') ? advise : deferred));
     const prompts: Array<{ id: string; text: string }> = [];
     const h = await hooks({ prompts });
     const warnings = await withWarnings(async () => {
@@ -1267,11 +1275,11 @@ const isSubagentStop = (call: SpawnCall): boolean =>
 
 test("a foreground task's end is its child's stop, and a deny rides the parent's result", async () => {
   const stop = {
-    api_version: "magus.guard/v1alpha1",
+    api_version: "safetyscissors.verdict/v1alpha1",
     decision: "deny",
     reason: "the child left its job open",
   };
-  const calls = stubBun((call) => (isSubagentStop(call) ? stop : pass));
+  const calls = stubBun((call) => (isSubagentStop(call) ? stop : deferred));
   const h = await hooks();
   const result = { output: "done", metadata: { sessionId: "child", parentSessionId: "root" } };
   await h["tool.execute.after"](
@@ -1293,7 +1301,7 @@ test("a foreground task's end is its child's stop, and a deny rides the parent's
 });
 
 test("a passed child's stop leaves the parent's result alone", async () => {
-  stubBun(() => pass);
+  stubBun(() => deferred);
   const h = await hooks();
   const result = { output: "done", metadata: { sessionId: "child" } };
   await h["tool.execute.after"](
@@ -1306,13 +1314,13 @@ test("a passed child's stop leaves the parent's result alone", async () => {
 test("a backgrounded child's stop is its idle, and a deny is prompted back to the child", async () => {
   await withoutReplyScript(async () => {
     const stop = {
-      api_version: "magus.guard/v1alpha1",
+      api_version: "safetyscissors.verdict/v1alpha1",
       decision: "deny",
       reason: "the child left its job open",
     };
     const calls = stubBun((call) => {
-      if (!isSubagentStop(call)) return pass;
-      return JSON.parse(call.stdin).stop_hook_active ? pass : stop;
+      if (!isSubagentStop(call)) return deferred;
+      return JSON.parse(call.stdin).stop_hook_active ? deferred : stop;
     });
     const prompts: Array<{ id: string; text: string }> = [];
     const h = await hooks({ prompts });
@@ -1338,7 +1346,7 @@ test("a backgrounded child's stop is its idle, and a deny is prompted back to th
       true,
       "the guard sees its own follow-up",
     );
-    assert.equal(prompts.length, 1, "a pass sends nothing back");
+    assert.equal(prompts.length, 1, "a defer sends nothing back");
 
     await h.event(idle("child"));
     assert.equal(calls.filter(isSubagentStop).length, 2, "a child the guard let go is done");

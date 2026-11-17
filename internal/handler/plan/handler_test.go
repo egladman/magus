@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -72,7 +72,7 @@ func getPlan(t *testing.T, h *Handler, url string) (*httptest.ResponseRecorder, 
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, url, nil))
 	var out planResponse
 	if w.Code == http.StatusOK {
-		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		if err := codec.Unmarshal(w.Body.Bytes(), &out); err != nil {
 			t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 		}
 	}

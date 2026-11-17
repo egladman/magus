@@ -21,9 +21,10 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -110,20 +111,20 @@ func TestStartRefusesWhatTheMintingRuleRefuses(t *testing.T) {
 	routes := statusRoutes(okHandler)
 
 	for _, ttl := range []time.Duration{10 * time.Second, 25 * time.Hour, 30 * 24 * time.Hour} {
-		_, err := m.Start(t.Context(), types.GrantConsole, consoleDir, routes, ttl)
+		_, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, routes, ttl)
 		assert.ErrorIs(t, err, auth.ErrShareLifetime, ttl.String())
 	}
-	for _, minter := range []types.Grant{{}, types.GrantConnector} {
+	for _, minter := range []auth.Access{{}, auth.AccessConnector()} {
 		_, err := m.Start(t.Context(), minter, consoleDir, routes, 0)
 		assert.ErrorIs(t, err, auth.ErrExceedsGrant, minter.String())
 	}
 	_, active := m.Active()
 	assert.False(t, active, "a refused share opens nothing")
 
-	link, err := m.Start(t.Context(), types.GrantViewer, consoleDir, routes, 0)
+	link, err := m.Start(t.Context(), auth.AccessViewer(), consoleDir, routes, 0)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(15*time.Minute), link.ExpiresAt, 5*time.Second, "no preference takes the default")
-	link, err = m.Start(t.Context(), types.GrantConsole, consoleDir, routes, 24*time.Hour)
+	link, err = m.Start(t.Context(), auth.AccessConsole(), consoleDir, routes, 24*time.Hour)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(24*time.Hour), link.ExpiresAt, 5*time.Second, "the lifetime asked for is the lifetime given")
 }
@@ -137,7 +138,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	defer cancel()
 	trailDir := t.TempDir()
 	m := newTestManager(t, ctx, WithTrailDir(trailDir))
-	link, err := m.Start(t.Context(), types.GrantOperator, consoleDirFixture(t), statusRoutes(okHandler), 0)
+	link, err := m.Start(t.Context(), auth.AccessOperator(), consoleDirFixture(t), statusRoutes(okHandler), 0)
 	require.NoError(t, err)
 	base := "http://" + hostOfURL(t, link.URL)
 
@@ -147,7 +148,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	console, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "c", Grant: types.GrantConsole, TTL: time.Hour})
+	console, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "c", Grant: auth.AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 	for name, tok := range map[string]string{"operator": op.Reveal(), "console token": console.Reveal()} {
 		assert.Equal(t, http.StatusUnauthorized, get(t, base+"/api/v1/status", tok), name)
@@ -158,7 +159,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	// The first use is recorded, and the record holds no secret.
 	var events []trail.Event
 	require.Eventually(t, func() bool {
-		events, _ = trail.ReadRecent(trailDir, 10)
+		events, _ = trail.ReadRecent(t.Context(), trailDir, 10)
 		return len(events) > 0
 	}, 5*time.Second, 20*time.Millisecond)
 	require.NoError(t, filepath.WalkDir(trailDir, func(path string, d os.DirEntry, err error) error {
@@ -189,7 +190,7 @@ func statusRoutes(h http.Handler) map[string]Route {
 	return map[string]Route{"/api/v1/status": {
 		Handler: h,
 		Format:  rpcerr.FormatJSON,
-		Needs:   map[string]types.Need{"/api/v1/status": {Scope: types.ScopeConsole, Level: types.LevelRead}},
+		Needs:   map[string]auth.Need{"/api/v1/status": {Scope: auth.ScopeConsole, Level: auth.LevelRead}},
 	}}
 }
 
@@ -208,7 +209,7 @@ func (s *PlaintextWarningSuite) TestOpeningALinkWarnsItIsPlaintext() {
 	s.T().Cleanup(m.Close)
 	dir := s.T().TempDir()
 
-	_, err := m.Start(s.T().Context(), types.GrantConsole, dir, statusRoutes(http.NotFoundHandler()), 0)
+	_, err := m.Start(s.T().Context(), auth.AccessConsole(), dir, statusRoutes(http.NotFoundHandler()), 0)
 
 	s.Require().NoError(err)
 	s.Contains(logged.String(), "plaintext HTTP")
@@ -222,10 +223,10 @@ func TestStartRefusesARouteWithoutNeeds(t *testing.T) {
 	m := newTestManager(t, ctx)
 	for name, r := range map[string]Route{
 		"no needs":  {Handler: okHandler, Format: rpcerr.FormatJSON},
-		"zero need": {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]types.Need{"/api/v1/status": {}}},
-		"mcp=read":  {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]types.Need{"/api/v1/status": {Scope: types.ScopeMCP, Level: types.LevelRead}}},
+		"zero need": {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]auth.Need{"/api/v1/status": {}}},
+		"mcp=read":  {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]auth.Need{"/api/v1/status": {Scope: auth.ScopeMCP, Level: auth.LevelRead}}},
 	} {
-		_, err := m.Start(t.Context(), types.GrantConsole, consoleDirFixture(t), map[string]Route{"/api/v1/status": r}, 0)
+		_, err := m.Start(t.Context(), auth.AccessConsole(), consoleDirFixture(t), map[string]Route{"/api/v1/status": r}, 0)
 		assert.Error(t, err, name)
 	}
 	_, active := m.Active()
@@ -255,7 +256,7 @@ func TestClosingALinkEndsItsOpenStreams(t *testing.T) {
 		}
 		<-release // a handler that never looks at its context
 	}))
-	link, err := m.Start(t.Context(), types.GrantConsole, consoleDirFixture(t), routes, 0)
+	link, err := m.Start(t.Context(), auth.AccessConsole(), consoleDirFixture(t), routes, 0)
 	require.NoError(t, err)
 	base := fmt.Sprintf("http://%s/api/v1/status", hostOfURL(t, link.URL))
 	token := tokenFromURL(t, link.URL)
@@ -345,7 +346,7 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -390,13 +391,13 @@ func TestManagerSupersedeRevokesOldToken(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	first, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	first, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	oldToken := tokenFromURL(t, first.URL)
 
-	second, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	second, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -429,7 +430,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	if _, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0); err != nil {
+	if _, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0); err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	first, ok := m.Active()
@@ -438,7 +439,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	}
 
 	// Supersede: the second Start replaces the first under the lock.
-	second, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	second, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -473,7 +474,7 @@ func TestManagerCloseKillsListener(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -488,14 +489,14 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	// A token that dies in 150ms exercises the timeout teardown path; the listener's lifetime is
 	// the token's, not a second clock.
 	m := newTestManager(t, ctx)
-	m.mint = func(minter types.Grant, ttl time.Duration) (types.Secret, auth.ShareToken, error) {
+	m.mint = func(minter auth.Access, ttl time.Duration) (secrets.Secret, auth.ShareToken, error) {
 		secret, tok, err := auth.MintShare(minter, ttl)
 		tok.Expires = time.Now().Add(150 * time.Millisecond)
 		return secret, tok, err
 	}
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -537,7 +538,7 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	m := newTestManager(t, ctx, WithTrailDir(trailDir))
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), types.GrantConsole, consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -585,7 +586,7 @@ func waitTrailCount(t *testing.T, dir string, want int) []trail.Event {
 	var events []trail.Event
 	for time.Now().Before(deadline) {
 		var err error
-		events, err = trail.ReadRecent(dir, 10)
+		events, err = trail.ReadRecent(t.Context(), dir, 10)
 		if err != nil {
 			t.Fatalf("ReadRecent: %v", err)
 		}
@@ -676,7 +677,7 @@ func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 			} `json:"details"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(body), &refused); err != nil {
+	if err := codec.Unmarshal([]byte(body), &refused); err != nil {
 		t.Fatalf("403 body %q is not JSON: %v", body, err)
 	}
 	if got := refused.Error; got.Status != "PERMISSION_DENIED" ||

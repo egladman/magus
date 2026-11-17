@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +24,7 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	if mutate != nil {
 		mutate(rec)
 	}
-	b, err := json.Marshal(rec)
+	b, err := codec.Marshal(rec)
 	require.NoError(t, err)
 	return string(b) + "\n"
 }
@@ -179,6 +179,6 @@ func TestOutputImportNeutralizesWhatItPrints(t *testing.T) {
 }
 
 func jsonMarshalLine(v any) ([]byte, error) {
-	b, err := json.Marshal(v)
+	b, err := codec.Marshal(v)
 	return append(b, '\n'), err
 }

@@ -15,9 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 func TestBriefForAnIsolatedWorkerRefusesACompoundCommand(t *testing.T) {
@@ -81,14 +82,14 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief})
+		v := judgeBriefCommand(t.Context(), strict(testDependencies()), briefInput{text: tt.brief})
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(tt.arg)}, v.Rule, tt.name)
 		assert.Contains(t, v.Deny, string(tt.arg), "the deny names the rule the brief would trip: %s", tt.name)
-		bound := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief, bound: true})
+		bound := judgeBriefCommand(t.Context(), strict(testDependencies()), briefInput{text: tt.brief, bound: true})
 		assert.Equal(t, v.Rule, bound.Rule, "%s: a message to a bound worker is still graded for denied commands", tt.name)
 	}
 }
@@ -96,9 +97,9 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 // TestContinuationToABoundWorkerIsNotGradedAgainstItsRow: worker-check-only grades a bound
 // worker's own runs, so a follow-up message to it is not graded as a fresh brief.
 func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
-	row := types.Job{
-		ID: "guard/slice", Agent: agent.Instructed("fix the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	row := job.Job{
+		ID: "guard/slice", Agent: job.Instructed("fix the guard"), Paths: job.Paths{Write: []string{"internal/guard/**"}},
+		Check: &job.LeaseCheck{Target: "test", Project: "."}, State: job.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
@@ -118,7 +119,7 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 	})
 	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
 	message := func(to string) string {
-		raw, err := json.Marshal(map[string]any{
+		raw, err := codec.Marshal(map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
 			"tool_input": map[string]any{"to": to, "message": "JOB ID: guard/slice\nNow run `./magus run lint .`."},
 		})
@@ -126,12 +127,12 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 		return string(raw)
 	}
 	unbound := Judge(ctx, deps, Request{Input: message("ghost"), Host: "claude-code"})
-	assert.Equal(t, "deny", unbound.Decision, "a message to an agent magus never saw is graded as a brief")
+	assert.Equal(t, verdict.Deny, unbound.Decision, "a message to an agent magus never saw is graded as a brief")
 	assert.Contains(t, unbound.Reason, string(denyRuleWorkerCheckOnly))
 
 	Judge(ctx, deps, Request{Input: finishedSpawn(t, "orchestrator/feat guard/slice", "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 	bound := Judge(ctx, deps, Request{Input: message("brisk-heron"), Host: "claude-code"})
-	assert.NotEqual(t, "deny", bound.Decision, bound.Reason)
+	assert.NotEqual(t, verdict.Deny, bound.Decision, bound.Reason)
 }
 
 // Both a spawn and a continuation carry a brief, so both reach the rule through Judge.
@@ -141,7 +142,7 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 		if key == "message" {
 			input["to"] = "brisk-heron"
 		}
-		raw, err := json.Marshal(map[string]any{
+		raw, err := codec.Marshal(map[string]any{
 			"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": input,
 		})
 		require.NoError(t, err)
@@ -159,7 +160,7 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, strict(Dependencies{}), Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
-	assert.NotEqual(t, "deny", v.Decision)
+	assert.NotEqual(t, verdict.Deny, v.Decision)
 
 	ctx, _ = spawnFixture(t)
 	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
@@ -191,7 +192,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		}
 	}
 	deps := figuresWorkspace(t)
-	judgeWith := func(row types.Job, defaults []string) rowJudge {
+	judgeWith := func(row job.Job, defaults []string) rowJudge {
 		d := deps
 		d.DefaultCharms = defaults
 		d.Spells = spellCatalog
@@ -252,7 +253,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 	assert.False(t, found, "--no-default-charms keeps the defaults off")
 
 	vet := figuresLease()
-	vet.Check = &types.LeaseCheck{Target: "go-vet", Project: "docs"}
+	vet.Check = &job.LeaseCheck{Target: "go-vet", Project: "docs"}
 	_, _, found = briefOffCheck(briefRuns("Check with `./magus run go::go-vet docs`."), judgeWith(vet, []string{"rw"}))
 	assert.False(t, found, "a check declaring no write passes under default rw")
 }
@@ -262,9 +263,9 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 // check is refused by both.
 func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 	deps := composingWorkspace(t)
-	row := types.Job{
-		ID: "guard/slice", Agent: agent.Instructed("fix the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	row := job.Job{
+		ID: "guard/slice", Agent: job.Instructed("fix the guard"), Paths: job.Paths{Write: []string{"internal/guard/**"}},
+		Check: &job.LeaseCheck{Target: "test", Project: "."}, State: job.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
@@ -287,7 +288,7 @@ func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 // agentEnvelope is a spawn in a session of its own, since a repeated deny is shortened.
 func agentEnvelope(t *testing.T, description, prompt string) string {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{
+	raw, err := codec.Marshal(map[string]any{
 		"session_id": strings.ReplaceAll(t.Name(), "/", "-"), "hook_event_name": "PreToolUse", "tool_name": "Agent",
 		"tool_input": map[string]any{"description": description, "prompt": prompt, "name": "brisk-heron"},
 	})
@@ -322,26 +323,26 @@ func TestBriefGradingExplainsAPass(t *testing.T) {
 	})
 	t.Run("the same brief is refused once the row is named", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", "JOB ID: figures/flow\n"+offCheck), Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.Contains(t, v.Reason, "job figures/flow's worker to run `lint`")
 	})
 	t.Run("the spawn title names the row the brief does not", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", offCheck), Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, verdict.Deny, v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, "job figures/flow's worker to run `lint`")
 	})
 	t.Run("a forbidding line is passed, and says so", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Never run `./magus run lint docs`; the orchestrator does.\nFinish with `./magus run diagrams_generate docs`."), Host: "claude-code"})
-		assert.Equal(t, "advise", v.Decision)
+		assert.Equal(t, verdict.Advise, v.Decision)
 		assert.Contains(t, v.Context, "is not graded: the line forbids the run")
 	})
 	t.Run("the row's own check needs no words", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Run `./magus run diagrams_generate docs` once."), Host: "claude-code"})
-		assert.Equal(t, "pass", v.Decision, v.Context)
+		assert.Equal(t, verdict.Defer, v.Decision, v.Context)
 	})
 	t.Run("an integrate spawn is not held to its row's check", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/integrate figures/flow", "JOB ID: figures/flow\nRun `./magus run go-build .`, then "+offCheck), Host: "claude-code"})
-		assert.NotEqual(t, "deny", v.Decision, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
 		assert.Contains(t, v.Context, "the spawn's role is integrate")
 	})
 }
@@ -354,17 +355,17 @@ func TestBriefNamesItsRow(t *testing.T) {
 	assert.Empty(t, briefJobIDs("Run `magus job exec <its id>` once."))
 
 	row := figuresLease()
-	got, ok := briefRow([]string{"figures/flow"}, []types.Job{row})
+	got, ok := briefRow([]string{"figures/flow"}, []job.Job{row})
 	require.True(t, ok)
 	assert.Equal(t, row.ID, got.ID)
 
-	for name, change := range map[string]func(*types.Job){
-		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
-		"a row declaring no check": func(j *types.Job) { j.Check = nil },
+	for name, change := range map[string]func(*job.Job){
+		"a terminal row":           func(j *job.Job) { j.State = job.StatePass },
+		"a row declaring no check": func(j *job.Job) { j.Check = nil },
 	} {
 		r := figuresLease()
 		change(&r)
-		_, ok := briefRow([]string{r.ID}, []types.Job{r})
+		_, ok := briefRow([]string{r.ID}, []job.Job{r})
 		assert.False(t, ok, name)
 	}
 }

@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -83,7 +83,7 @@ func TestAcquireGraphBuildReclaimsAStaleLock(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "knowledge")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	dead := deadPID(t)
-	data, err := json.Marshal(GraphBuildHolder{PID: dead, Started: time.Now().Add(-time.Hour), By: "`magus graph build`"})
+	data, err := codec.Marshal(GraphBuildHolder{PID: dead, Started: time.Now().Add(-time.Hour), By: "`magus graph build`"})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, graphBuildHolderFile), data, 0o600))
 

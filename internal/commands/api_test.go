@@ -34,7 +34,7 @@ func TestAPIUpToDate(t *testing.T) {
 func TestAPINamesTheContractBeyondTheCommandTree(t *testing.T) {
 	got, err := API(nil)
 	require.NoError(t, err)
-	assert.Contains(t, got, "store magus.job/v1alpha1")
+	assert.Contains(t, got, "store safetyscissors.job/v1alpha1")
 	assert.Contains(t, got, "guard-rule stale-binary")
 	assert.Contains(t, got, "spell golang")
 }

@@ -10,14 +10,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	base := t.TempDir()
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 
-	feedback, err := RecentGuardFeedback(base, "", 100)
+	feedback, err := RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	assert.Equal(t, GuardFeedback{
@@ -33,10 +35,10 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 	AppendAgentCommand(context.Background(), base, AgentCommand{
-		Host: "claude-code", Session: "one", Tool: "shell.command", Command: "magus run test .", Decision: "pass",
+		Host: "claude-code", Session: "one", Tool: "shell.command", Command: "magus run test .", Decision: verdict.Defer,
 	})
 
-	feedback, err = RecentGuardFeedback(base, "one", 100)
+	feedback, err = RecentGuardFeedback(t.Context(), base, "one", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	assert.Equal(t, GuardFeedback{
@@ -56,7 +58,7 @@ func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t
 	recordFeedbackCommand(t, base, "codex", "first", "go test ./...")
 	recordFeedbackCommand(t, base, "codex", "second", "go test ./...")
 
-	feedback, err := RecentGuardFeedback(base, "", 100)
+	feedback, err := RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	// FollowedSessions stays zero: the hook observes requests, never target completion.
@@ -77,13 +79,13 @@ func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
 	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
 	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
 
-	feedback, err := RecentGuardFeedback(base, "", 100)
+	feedback, err := RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	assert.Empty(t, feedback, "a probe nobody wired is not evidence that a host integration should change")
 
 	recordFeedbackCommand(t, base, "cursor", "real", "go test ./...")
 
-	feedback, err = RecentGuardFeedback(base, "", 100)
+	feedback, err = RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	// The host-less denials must not inflate the count.
@@ -102,18 +104,18 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
-	deny := func(lease, rule, decision string) {
+	deny := func(lease, rule string, decision verdict.Decision) {
 		AppendAgentCommand(t.Context(), base, AgentCommand{
 			Host: "claude-code", Session: "one", Tool: "shell.command", Command: "edit " + rule,
 			Decision: decision, Reason: rule + " says no", Rule: rule, Lease: lease,
 		})
 	}
-	deny("wave/a", "lease-write", "deny")
-	deny("wave/a", "", "pass")
-	deny("wave/b", "focus-read", "deny")
-	deny("wave/a", "raw-tool", "deny")
+	deny("wave/a", "lease-write", verdict.Deny)
+	deny("wave/a", "", verdict.Defer)
+	deny("wave/b", "focus-read", verdict.Deny)
+	deny("wave/a", "raw-tool", verdict.Deny)
 
-	got, known, err := LeaseDenials(base, "wave/a", 0, 64)
+	got, known, err := LeaseDenials(t.Context(), base, "wave/a", 0, 64)
 	require.NoError(t, err)
 	assert.True(t, known, "a trail inside the retained window is read whole")
 	require.Len(t, got, 2)
@@ -123,12 +125,12 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 	assert.Equal(t, wantFirst, got[0])
 	assert.Positive(t, got[0].Ts)
 
-	newest, _, err := LeaseDenials(base, "wave/a", 0, 1)
+	newest, _, err := LeaseDenials(t.Context(), base, "wave/a", 0, 1)
 	require.NoError(t, err)
 	require.Len(t, newest, 1)
 	assert.Equal(t, "raw-tool", newest[0].Rule, "the cap keeps the newest")
 
-	later, known, err := LeaseDenials(base, "wave/a", got[1].Ts+3600, 64)
+	later, known, err := LeaseDenials(t.Context(), base, "wave/a", got[1].Ts+3600, 64)
 	require.NoError(t, err)
 	assert.Empty(t, later)
 	assert.True(t, known, "nothing since then is none, not unknown, while the trail is whole")
@@ -141,12 +143,12 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
-	line, err := json.Marshal(Event{Ts: 5_000_000, Kind: KindJob, Action: "graph build", Outcome: OutcomeOK})
+	line, err := codec.Marshal(trailtypes.Event{Ts: 5_000_000, Kind: trailtypes.KindJob, Action: "graph build", Outcome: trailtypes.OutcomeOK})
 	require.NoError(t, err)
 	body := strings.Repeat(string(line)+"\n", maxEvents)
 	require.NoError(t, os.WriteFile(eventsPath(base), []byte(body), 0o644))
 
-	got, known, err := LeaseDenials(base, "wave/a", 1, 64)
+	got, known, err := LeaseDenials(t.Context(), base, "wave/a", 1, 64)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	assert.False(t, known)
@@ -156,6 +158,6 @@ func recordFeedbackCommand(t *testing.T, base, host, session, command string) {
 	t.Helper()
 	AppendAgentCommand(context.Background(), base, AgentCommand{
 		Host: host, Session: session, Tool: "shell.command", Command: command,
-		Decision: "deny", Reason: "run through magus", Rule: "raw-tool",
+		Decision: verdict.Deny, Reason: "run through magus", Rule: "raw-tool",
 	})
 }

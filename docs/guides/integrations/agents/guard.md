@@ -12,7 +12,7 @@ The name follows established access-control terms (NIST SP 800-162,
 <https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf>).
 Each agent host's hook is the policy enforcement point: it intercepts the tool
 call and applies the verdict it gets back. magus's guard, `magus session
-hook`, is the policy decision point: it decides allow, advise, or deny from
+hook`, is the policy decision point: it decides defer, advise, ask or deny from
 facts the repository already carries, such as declared outputs, the cache,
 the graph, VCS state, and job leases. The workspace's rules, built in plus
 anything declared in the root magusfile, are its policy. One sentence may
@@ -466,7 +466,7 @@ Rules a workspace adds are additive to the built-ins above.
 - **Workspace-declared shell rules** (`magus\guard.shell({...})` in the root
   magusfile): additive deny or advise entries matched against the same parsed
   invocations the built-ins see (`program` plus optional arg subset). They
-  strengthen only: a workspace deny may escalate a built-in advise or a pass, and a
+  strengthen only: a workspace deny may escalate a built-in advise or a defer, and a
   workspace advise fills silence only. A rule of this kind never changes a compiled
   rule; setting one of those is [`magus\guard.builtins`](#setting-a-built-in-rule).
   Rule ids are recorded as `workspace:<name>` on the
@@ -477,11 +477,11 @@ Rules a workspace adds are additive to the built-ins above.
   for outer parse when judging rules; the last declared non-empty dialect wins.
 - **A workspace spawn rule** (`magus\guard.spawn(fun)` in the root magusfile): one
   Buzz function called on every subagent spawn and continuation with a normalized
-  request, answering allow, advise or deny. Strengthen only, like the shell rules.
+  request, answering defer, advise, ask or deny. Strengthen only, like the shell rules.
   magus ships none; see [magus\guard.spawn](../../../reference/guard-spawn.md).
 - **A workspace command rule** (`magus\guard.command(fun)` in the root magusfile): one
   Buzz function called on every shell command the rules above let through, with the
-  parsed programs it runs, answering allow, advise or deny. The function form of
+  parsed programs it runs, answering defer, advise, ask or deny. The function form of
   `magus\guard.shell`, for a rule a program-and-args match cannot express. magus ships
   none; [magus\guard.command](../../../reference/guard-command.md) walks through writing
   a repository policy. `magus\guard.write(fun)` is the same seam for the files an agent
@@ -831,9 +831,15 @@ printf '%s' 'go test ./...' | magus session hook -o name
 printf '%s' 'MAGUS.md' | magus session hook --path -o name
 ```
 
-A deny exits 2 with the verdict on stdout; a pass and an advise exit 0. An
-empty event passes, but one the hook cannot read fails closed as a deny:
+A deny exits 2 with the verdict on stdout; a defer and an advise exit 0. An
+empty event defers, but one the hook cannot read fails closed as a deny:
 nothing was judged, so the call is blocked rather than cleared.
+
+The guard never answers yes. A defer is no objection: the shipped glue writes no
+permission decision for it, so the host's own permission flow decides the call.
+Cursor, which must answer every gating event, gets its own `ask`. The envelope is
+`safetyscissors.verdict/v1alpha1`; `pass` and `allow` are retired, and a template that meets
+`defer` before it is re-installed refuses the call as an unknown decision.
 
 A fourth decision, `ask`, is the [human in the loop](../../../design/principles/human-in-the-loop.md)
 made a verdict: only the person can clear the call. It also exits 2,
@@ -841,7 +847,7 @@ so a glue that reads nothing but the exit status still stops. magus returns it o
 caller that passes `--renders-ask`, the claim that its reply puts the call in front of
 the person or refuses it. Every other caller gets `deny` with a reason saying the hook
 predates approval prompts, because a glue older than the decision renders an ask as
-nothing and its host reads nothing as allow. The shipped templates and the OpenCode
+nothing and its host reads nothing as no objection. The shipped templates and the OpenCode
 plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. It has two sources.
 A run of a `human_only` target, from a session no job lease binds, gets `ask`. So does a
 push at a commit no passing gate covers, from such a session, and the reason names the
@@ -855,8 +861,8 @@ host's own approval prompt shows it, and approving publishes the commit. Every
 harness exports `mgs_renderPrompts`. Claude Code and Cursor prompt from the
 hook and return no files. Codex and OpenCode hooks cannot, so their harnesses
 write a native prompt rule (`.codex/rules/magus.rules`, and `permission.bash`
-in `opencode.json`) and the hook answers that prompt: allow for a
-push a gate covers, ask for an ungated one. Where no prompt can happen, those two
+in `opencode.json`) and the hook answers that prompt: no decision for a
+push a gate covers, so the person answers the host's prompt, ask for an ungated one. Where no prompt can happen, those two
 refuse the push and name the person's own terminal. A session bound to a job lease
 always gets `deny`, because workers do not publish. Nothing the agent types clears
 an `ask`, and every shipped template refuses a decision it does not know rather
@@ -1073,7 +1079,7 @@ adds a rule of your own.
 
 One payload shape is recorded and never judged. A hook event carrying a `prompt`
 rather than a command or a file path is a lease handoff: it appends an
-`agent_spawn` event and returns `pass` without evaluating a rule, because there
+`agent_spawn` event and returns `defer` without evaluating a rule, because there
 is no command and no path to judge, and a prompt that merely mentions a denied
 command would otherwise block the lease that describes it. See
 [Leases](leases.md). The spawn rules that do run read session state, and a

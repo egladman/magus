@@ -15,10 +15,11 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -393,7 +394,7 @@ func ImageReferrers(ctx context.Context, path, name string) ([]imagetypes.Docume
 			return nil, fmt.Errorf("image.referrers: referrer %s: %w", r.Digest, err)
 		}
 		var m ocispec.Manifest
-		if err := json.Unmarshal(data, &m); err != nil {
+		if err := codec.Unmarshal(data, &m); err != nil {
 			return nil, fmt.Errorf("image.referrers: referrer %s: %w", r.Digest, err)
 		}
 		if len(m.Layers) == 0 {
@@ -476,7 +477,7 @@ func imageClient(auth *imagetypes.RegistryAuth) *oci.Client {
 	if auth == nil {
 		return &oci.Client{}
 	}
-	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: types.NewSecret(auth.Password.Value)}}
+	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: secrets.New(auth.Password.Value)}}
 }
 
 func imageSpec(ctx context.Context, in imagetypes.Spec) (image.Spec, error) {

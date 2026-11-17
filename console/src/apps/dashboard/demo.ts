@@ -349,7 +349,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         atMs: now - 95_000,
         host: "harness-beta",
         tool: "shell.command",
-        decision: "pass",
+        decision: "defer",
         mcp: false,
       },
     ];

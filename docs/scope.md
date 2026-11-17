@@ -352,17 +352,17 @@ headers through pkg-config before dying without naming magus or the fix. No
 maintainer ever hit it, because maintainers have the headers. The native codec is
 opt-in now.
 
-The other is not a bug and is not fixed: `go install` does not work at all. The
-root `go.mod` requires the nested `libs/gopherbuzz` and `libs/diagnostics`
-modules, each with its own `go.mod`, at `v0.0.0`, and resolves them only
-through this repo's own local `replace` directives. `go install pkg@version`
-refuses outright to build any module whose `go.mod` carries a replace directive
-unless it is the main module of the build, so the install dies on the replace
-lines before dependency resolution starts. Both nested modules now carry
-`v0.1.0` tags, so the tags are not what is missing: the root would have to
-require those versions and drop the replaces. The route the rule above says not to recommend is
-therefore a route that currently does not run, which makes documenting it and
-warning you off it less of a compromise than it reads as.
+The other was structural and is now handled at release. The root `go.mod`
+requires every nested module at a real tag and, on main, replaces each with its
+directory, so every in-repo build compiles the code beside it. `go install
+pkg@version` refuses any module whose `go.mod` carries a replace directive unless
+it is the main module of the build. `magus run release` therefore tags a commit
+whose `go.mod`s drop the in-repo replaces, after installing from that commit
+outside the repo, and restores them in the next commit. `go install
+github.com/egladman/magus/cmd/magus@vX.Y.Z` works from a tag cut that way; an
+install from `@main` or a pseudo-version still meets the replaces and is refused.
+The route the rule above says not to recommend therefore runs, and the warning
+on that page is the whole of the compromise.
 
 **magus's own console needs a Node toolchain to build.** The tool that ships as
 one statically linked binary contains a project requiring pnpm and esbuild. That

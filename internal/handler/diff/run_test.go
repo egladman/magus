@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,7 @@ func postRun(t *testing.T, h *RunHandler, body string) diffRunResponse {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/diff/run", strings.NewReader(body)))
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out diffRunResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &out))
 	return out
 }
 
@@ -123,11 +124,11 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	var submitted [][]string
 	h := newTestRunHandler(t, dir, &submitted)
-	trail.Append(context.Background(), dir, trail.Event{
+	trail.Append(context.Background(), dir, trailtypes.Event{
 		Ts:         1000,
-		Kind:       trail.KindJob,
+		Kind:       trailtypes.KindJob,
 		Action:     "run test libs/authkit",
-		Outcome:    trail.OutcomeError,
+		Outcome:    trailtypes.OutcomeError,
 		Error:      "2 tests failed",
 		DurationMs: 4200,
 	})
@@ -136,7 +137,7 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/run?target=test&project=libs/authkit", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out diffRunResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &out))
 
 	assert.Empty(t, submitted, "a GET reports, it never starts work")
 	assert.Equal(t, diffRunResponse{
@@ -159,7 +160,7 @@ func TestDiffRunReportsNoVerdictAsUnknown(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/run?target=lint&project=libs/authkit", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out diffRunResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &out))
 
 	assert.Equal(t, "unknown", out.State)
 	assert.Empty(t, out.Error)

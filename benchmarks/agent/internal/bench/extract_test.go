@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // fixture is the extracted fixture runs by id, with the two first-rep task-a runs most
@@ -138,7 +138,7 @@ func newDefectRun(t *testing.T) defectRun {
 
 func (d defectRun) writeMeta(meta map[string]any) {
 	d.t.Helper()
-	raw, err := json.Marshal(meta)
+	raw, err := codec.Marshal(meta)
 	if err != nil {
 		d.t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func (d defectRun) readMeta() map[string]any {
 		d.t.Fatal(err)
 	}
 	var meta map[string]any
-	if err := json.Unmarshal(raw, &meta); err != nil {
+	if err := codec.Unmarshal(raw, &meta); err != nil {
 		d.t.Fatal(err)
 	}
 	return meta
@@ -164,7 +164,7 @@ func (d defectRun) writeTranscript(records ...any) {
 	d.t.Helper()
 	var out []byte
 	for _, rec := range records {
-		raw, err := json.Marshal(rec)
+		raw, err := codec.Marshal(rec)
 		if err != nil {
 			d.t.Fatal(err)
 		}

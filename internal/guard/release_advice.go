@@ -6,7 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 // adviseLeaseNarrowed tells row's holder which of its whole-file holds a fork
 // was granted part of, and what the row holds there now. Like
 // adviseReleaseRequested it reads only the row.
-func adviseLeaseNarrowed(row types.Job) advice {
+func adviseLeaseNarrowed(row jobtypes.Job) advice {
 	if !job.Editing(row) {
 		return advice{}
 	}
@@ -28,7 +28,7 @@ func adviseLeaseNarrowed(row types.Job) advice {
 		}
 		var held []string
 		for _, entry := range row.Paths.Write {
-			if p, decl := types.SplitClaim(entry); decl != "" && p == rel.Path {
+			if p, decl := jobtypes.SplitClaim(entry); decl != "" && p == rel.Path {
 				held = append(held, entry)
 			}
 		}
@@ -52,7 +52,7 @@ func adviseLeaseNarrowed(row types.Job) advice {
 // adviseReleaseRequested tells row's holder about the refused forks asking it
 // to release write paths, or nothing when there are none. It reads only the
 // row: this runs on every leased call, and a store fold costs seconds.
-func adviseReleaseRequested(row types.Job) advice {
+func adviseReleaseRequested(row jobtypes.Job) advice {
 	if !job.Editing(row) || len(row.ReleaseRequests) == 0 {
 		return advice{}
 	}

@@ -1,13 +1,15 @@
 package sessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,6 +23,12 @@ import (
 // per-repository, shared by every worktree, and survives both worktree deletion
 // and server restarts.
 const KindGateResult = "gate_result"
+
+// ReadGateResults is [session.ReadAll] narrowed to the [KindGateResult] records; see
+// [session.FoldKind].
+func ReadGateResults(ctx context.Context, dir string) (session.Fold, error) {
+	return session.FoldKind(ctx, dir, KindGateResult)
+}
 
 // OutcomeDeferred marks a gate invocation that was REFUSED as redundant under
 // load (MGS3010, exit 75) rather than run. It is a record of the deferral
@@ -65,7 +73,7 @@ func (s GateScope) Unscoped() bool { return s == "" }
 func (s GateScope) MarshalJSON() ([]byte, error) {
 	switch s {
 	case GateScopeAffected, GateScopeProject:
-		return json.Marshal(string(s))
+		return codec.Marshal(string(s))
 	default:
 		return nil, fmt.Errorf("gate result scope %q: want %q or %q", string(s), GateScopeAffected, GateScopeProject)
 	}
@@ -75,7 +83,7 @@ func (s GateScope) MarshalJSON() ([]byte, error) {
 // it and keeps the zero value.
 func (s *GateScope) UnmarshalJSON(data []byte) error {
 	var v string
-	if err := json.Unmarshal(data, &v); err != nil {
+	if err := codec.Unmarshal(data, &v); err != nil {
 		return err
 	}
 	switch GateScope(v) {
@@ -139,9 +147,9 @@ type GateResult struct {
 // project wherever it ran; a project's pass proves nothing about the projects it left out.
 func (g GateResult) BranchVerdict() bool {
 	switch g.Outcome {
-	case OutcomeFail:
+	case session.OutcomeFail:
 		return true
-	case OutcomePass:
+	case session.OutcomePass:
 		return g.Scope.CoversBranch()
 	default:
 		return false
@@ -161,14 +169,14 @@ type GateRecord struct {
 // reads as the branch gate. Deferral records are skipped: a deferral is not a verdict on
 // the inputs, and letting one shadow the green gate it points at would make the check
 // inert after its own first refusal.
-func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
+func LatestGate(fold session.Fold, ref, target string) (GateRecord, bool) {
 	for i := len(fold.Records) - 1; i >= 0; i-- {
 		rec := fold.Records[i]
 		if rec.Kind != KindGateResult {
 			continue
 		}
 		var g GateResult
-		if json.Unmarshal(rec.Payload, &g) != nil {
+		if codec.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
 		if g.Ref != ref || g.Target != target || !g.BranchVerdict() {
@@ -183,14 +191,14 @@ func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 // RepairedFiles, on any ref and at any commit. Neither a commit that leaves
 // the repairs out nor a branch switch moves past it. The caller tests each
 // file's digest, which is what makes an old record harmless.
-func LatestRepair(fold Fold, target string) (GateRecord, bool) {
+func LatestRepair(fold session.Fold, target string) (GateRecord, bool) {
 	for i := len(fold.Records) - 1; i >= 0; i-- {
 		rec := fold.Records[i]
 		if rec.Kind != KindGateResult {
 			continue
 		}
 		var g GateResult
-		if json.Unmarshal(rec.Payload, &g) != nil || g.Target != target || len(g.RepairedFiles) == 0 {
+		if codec.Unmarshal(rec.Payload, &g) != nil || g.Target != target || len(g.RepairedFiles) == 0 {
 			continue
 		}
 		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
@@ -205,7 +213,7 @@ func LatestRepair(fold Fold, target string) (GateRecord, bool) {
 // An [OutcomeUnrun] record outranks a project's pass there. Commits compare by
 // prefix in both directions, because callers hold abbreviations of different lengths.
 // Deferrals are skipped for the reason LatestGate gives.
-func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
+func GateAt(fold session.Fold, commit, target string) (GateRecord, bool) {
 	if commit == "" {
 		return GateRecord{}, false
 	}
@@ -217,7 +225,7 @@ func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 			continue
 		}
 		var g GateResult
-		if json.Unmarshal(rec.Payload, &g) != nil {
+		if codec.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
 		if g.Target != target || g.Outcome == OutcomeDeferred || g.Commit == "" {
@@ -240,29 +248,29 @@ func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 }
 
 // FailuresOwed returns the targets the failed gate's run failed that no later run has
-// passed, in the order that run recorded them. results is a fold of [KindTargetResult]
+// passed, in the order that run recorded them. results is a fold of [session.KindTargetResult]
 // records. The gate's own target is left out: every failure fails it, and only the next
 // gate passes it. A gate that did not fail, or names no run, owes nothing.
-func FailuresOwed(gate GateRecord, results Fold) []types.TargetRef {
-	if gate.Outcome != OutcomeFail || gate.Inv == "" {
+func FailuresOwed(gate GateRecord, results session.Fold) []types.TargetRef {
+	if gate.Outcome != session.OutcomeFail || gate.Inv == "" {
 		return nil
 	}
 	var owed []types.TargetRef
 	after := gate.At.UnixMilli()
 	for _, rec := range results.Records {
-		if rec.Kind != KindTargetResult {
+		if rec.Kind != session.KindTargetResult {
 			continue
 		}
-		var r TargetResult
-		if json.Unmarshal(rec.Payload, &r) != nil || baseTarget(r.Target) == baseTarget(gate.Target) {
+		var r session.TargetResult
+		if codec.Unmarshal(rec.Payload, &r) != nil || baseTarget(r.Target) == baseTarget(gate.Target) {
 			continue
 		}
 		// A standalone run files its target with the charm, `lint:rw`.
 		f := types.TargetRef{Project: r.Project, Target: baseTarget(r.Target)}
 		switch {
-		case rec.Invocation == gate.Inv && r.Outcome == OutcomeFail && !slices.Contains(owed, f):
+		case rec.Invocation == gate.Inv && r.Outcome == session.OutcomeFail && !slices.Contains(owed, f):
 			owed = append(owed, f)
-		case rec.Invocation != gate.Inv && rec.Ts > after && r.Outcome == OutcomePass:
+		case rec.Invocation != gate.Inv && rec.Ts > after && r.Outcome == session.OutcomePass:
 			owed = slices.DeleteFunc(owed, func(o types.TargetRef) bool { return o == f })
 		}
 	}
@@ -275,16 +283,16 @@ func FailuresOwed(gate GateRecord, results Fold) []types.TargetRef {
 // short-lived fact, and joining it to the run's execution journal is not what
 // it is read for. Callers on the run path must not fail the build over an
 // error here.
-func RecordGate(dir string, g GateResult, start InvocationStart) error {
+func RecordGate(ctx context.Context, dir string, g GateResult, start session.InvocationStart) error {
 	// Checked before Open: a payload that fails to marshal would leave the start record.
 	if _, err := g.Scope.MarshalJSON(); err != nil {
 		return err
 	}
-	w, err := Open(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return err
 	}
-	return w.Append(KindGateResult, g)
+	return w.Append(ctx, KindGateResult, g)
 }
 
 // KindHarnessWrite records files that `magus agent harness install` or
@@ -308,13 +316,13 @@ func (w HarnessWrite) MarshalJSON() ([]byte, error) {
 	}
 	paths := slices.Clone(w.Paths)
 	slices.Sort(paths)
-	return json.Marshal(harnessWriteWire{Paths: slices.Compact(paths)})
+	return codec.Marshal(harnessWriteWire{Paths: slices.Compact(paths)})
 }
 
 // UnmarshalJSON rejects the empty record MarshalJSON refuses.
 func (w *HarnessWrite) UnmarshalJSON(data []byte) error {
 	var wire harnessWriteWire
-	if err := json.Unmarshal(data, &wire); err != nil {
+	if err := codec.Unmarshal(data, &wire); err != nil {
 		return err
 	}
 	if len(wire.Paths) == 0 {
@@ -332,20 +340,20 @@ type HarnessWriteRecord struct {
 
 // RecordHarnessWrite appends one harness write under dir. A repeat
 // appends a newer record.
-func RecordHarnessWrite(dir string, hw HarnessWrite, start InvocationStart) error {
+func RecordHarnessWrite(ctx context.Context, dir string, hw HarnessWrite, start session.InvocationStart) error {
 	if _, err := hw.MarshalJSON(); err != nil {
 		return err
 	}
-	w, err := Open(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return err
 	}
-	return w.Append(KindHarnessWrite, hw)
+	return w.Append(ctx, KindHarnessWrite, hw)
 }
 
 // LatestHarnessWrite returns the newest write in a fold of
 // [KindHarnessWrite] records.
-func LatestHarnessWrite(fold Fold) (HarnessWriteRecord, bool) {
+func LatestHarnessWrite(fold session.Fold) (HarnessWriteRecord, bool) {
 	for i := len(fold.Records) - 1; i >= 0; i-- {
 		rec := fold.Records[i]
 		if rec.Kind != KindHarnessWrite {

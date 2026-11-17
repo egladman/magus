@@ -12,12 +12,12 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/secret"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -399,13 +399,13 @@ type shippedSpellsResult struct {
 func registryClient(ctx context.Context, root, host, username string) (*oci.Client, error) {
 	return remotespell.NewClient(ctx, registryHTTP(), globalCfg.Spells, host, username, remotespell.Login{
 		ReadToken: knowledge.ReadToken,
-		Secrets: func(ctx context.Context) (context.Context, *secret.Resolver, error) {
+		Secrets: func(ctx context.Context) (context.Context, *secrets.Resolver, error) {
 			m, err := loadMagus(ctx, root)
 			if err != nil {
 				return ctx, nil, err
 			}
 			ctx = m.ContextWithSecrets(ctx)
-			return ctx, secret.ResolverFromContext(ctx), nil
+			return ctx, secrets.ResolverFromContext(ctx), nil
 		},
 	})
 }

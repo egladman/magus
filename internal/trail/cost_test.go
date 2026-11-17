@@ -7,6 +7,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,13 +19,12 @@ var costEpoch = time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)
 // fixtureModels stand in for the rows a harness spell publishes; no table is built into
 // magus.
 func fixtureModels() model.Table {
-	return model.InEffect([]types.ModelPricing{
-		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
-		{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10},
-		{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50,
-			LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
-		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5},
+	return model.InEffect([]model.Row{
+		{ID: "claude-fable-5-1", Window: 1_000_000, Price: budget.Price{Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50}},
+		{ID: "claude-opus-5-5", Window: 1_000_000, Price: budget.Price{Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20}},
+		{ID: "claude-sonnet-5-5", Window: 1_000_000, Price: budget.Price{Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10}},
+		{ID: "claude-haiku-5-5", Window: 1_000_000, Price: budget.Price{Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50, LongContext: &budget.PriceStep{Above: 100_000, Multiplier: 5}}},
+		{ID: "claude-haiku-4-5", Window: 200_000, Price: budget.Price{Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5}},
 	}, nil)
 }
 
@@ -43,19 +44,19 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		c := mainCall(sec, 300_000, "claude-opus-5-5")
 		c.Billing = types.AgentBillingMetered
 		c.ResultChars = new(1000)
-		c.Shadow = map[types.GuardProfile]types.GuardDecision{
-			types.GuardProfileStrict: types.GuardDeny,
-			types.GuardProfileLight:  types.GuardAllow,
+		c.Shadow = map[types.GuardProfile]verdict.Decision{
+			types.GuardProfileStrict: verdict.Deny,
+			types.GuardProfileLight:  verdict.Defer,
 		}
 		switch sec {
 		case 1:
 			c.ContextTokens = 100_000
 			c.ToolMs, c.ResultDigest = 40, "r1"
-			c.Decision, c.Rule, c.DelegableClass = "advise", "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
+			c.Decision, c.Rule, c.DelegableClass = verdict.Advise, "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
 		case 15:
-			c.Decision, c.Rule, c.DelegableClass = "advise", "root-repeat", types.DelegableDiff // the next spawn is past the window
+			c.Decision, c.Rule, c.DelegableClass = verdict.Advise, "root-repeat", types.DelegableDiff // the next spawn is past the window
 		case 16:
-			c.Decision, c.Rule = "advise", "spawn-names-model" // not a cost advisory
+			c.Decision, c.Rule = verdict.Advise, "spawn-names-model" // not a cost advisory
 		case 30:
 			c.ContextTokens = 600_000
 		}
@@ -80,8 +81,8 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		Spawns:     &spawnTally{Total: 2, ByModel: []sessions.CountedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
 		Advisories: &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin},
 		Shadow: []shadowTally{
-			{Profile: types.GuardProfileLight, Decisions: map[types.GuardDecision]int{types.GuardAllow: 30}},
-			{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 30}},
+			{Profile: types.GuardProfileLight, Decisions: map[verdict.Decision]int{verdict.Defer: 30}},
+			{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 30}},
 		},
 		Dollars: got.Dollars, // pinned below
 	}, *got, "every section was measured")
@@ -116,22 +117,23 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	base := t.TempDir()
 	for range 2 {
 		AppendAgentCommand(t.Context(), base, AgentCommand{
-			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: "pass",
+			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: verdict.Defer,
 			AgentFacts: types.AgentFacts{
 				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
 				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: new(4000),
-				Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny},
+				Shadow: map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny},
 			},
 		})
 	}
-	tr := ForSession(base, "s1", 100)
+	tr, err := ForSession(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
 
 	got := SummarizeCost(&tr, fixtureModels())
 
 	// The other sections have their own tests.
 	want := *got
 	want.RootContext = &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}
-	want.Shadow = []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 2}}}
+	want.Shadow = []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 2}}}
 	assert.Equal(t, want, *got)
 	assert.Equal(t, chars(8000), got.Delegable.Chars)
 	require.NotNil(t, got.Dollars)
@@ -222,7 +224,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 
 func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	adv := mainCall(0, 1, "m")
-	adv.Decision, adv.Rule = "advise", "root-heavy-command"
+	adv.Decision, adv.Rule = verdict.Advise, "root-heavy-command"
 	main := []SessionCall{adv}
 	for i := 1; i <= followWithin+2; i++ {
 		main = append(main, mainCall(i, 1, "m"))
@@ -236,12 +238,11 @@ func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	assert.Equal(t, 1, outside.Ignored())
 }
 
-// A decision outside allow, advise and deny is counted under its own name, never folded
-// into another.
+// Every declared decision is printed, a zero included, in the declared order.
 func TestShadowTallyPrintsEveryDecision(t *testing.T) {
-	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[types.GuardDecision]int{types.GuardAdvise: 2, "ask": 1}}
+	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[verdict.Decision]int{verdict.Advise: 2, verdict.Ask: 1}}
 
-	assert.Equal(t, "standard 0 allow/2 advise/0 deny/1 ask", tally.String())
+	assert.Equal(t, "standard 0 defer/2 advise/1 ask/0 deny", tally.String())
 }
 
 func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {

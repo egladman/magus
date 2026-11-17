@@ -10,7 +10,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -81,12 +81,12 @@ func isHardReset(c hint.Invocation) bool {
 
 // cleanUnboundCheckout reports dir inside a git checkout with nothing modified, staged or
 // untracked, that no live job in rows was taken in.
-func cleanUnboundCheckout(ctx context.Context, deps Dependencies, rows []types.Job, dir string) bool {
+func cleanUnboundCheckout(ctx context.Context, deps Dependencies, rows []job.Job, dir string) bool {
 	root, _, ok := gitCheckout(dir)
 	if !ok {
 		return false
 	}
-	if slices.ContainsFunc(rows, func(row types.Job) bool { return row.State.Live() && samePath(row.CheckoutRoot, root) }) {
+	if slices.ContainsFunc(rows, func(row job.Job) bool { return row.State.Live() && samePath(row.CheckoutRoot, root) }) {
 		return false
 	}
 	opts := deps.VCS

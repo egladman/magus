@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -78,7 +79,7 @@ func Scan(ctx context.Context, w *types.Workspace, dir string, commits int, sinc
 		// whose old name sat outside the scanned subtree is dropped rather than
 		// pointing lineage at a path no lens can resolve.
 		for _, ch := range c.Files {
-			if ch.Status == types.ChangeDeleted {
+			if ch.Status == job.ChangeDeleted {
 				if p, ok := scanRelative(prefix, ch.Path); ok {
 					sc.Deleted = append(sc.Deleted, p)
 				}

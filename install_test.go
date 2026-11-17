@@ -14,6 +14,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -39,7 +41,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any { typescript["pnp
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("web", WithDependsOn("../lib"))
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	web := m.Get("web")
@@ -151,7 +153,7 @@ func TestInstallReachedThroughNeedsRunsAtWidthOne(t *testing.T) {
 	defer cancel()
 	require.NoError(t, pool.Dispatch(ctx, []string{"install"}, nil))
 	assert.True(t, installed.Load())
-	assert.Equal(t, cache.LimiterStats{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
+	assert.Equal(t, budget.LimiterSnapshot{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
 }
 
 // TestAnInstallGapNamesTheCommandUntilItsTreeAndStampsExist pins the refusal a symbol

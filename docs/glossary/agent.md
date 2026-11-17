@@ -45,7 +45,8 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `agent.Agent` (Go)
-- `sessions.Agent` (Go)
+- `job.Agent` (Go)
+- `session.Agent` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

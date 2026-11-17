@@ -21,13 +21,13 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -650,7 +650,7 @@ func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts 
 // reference) through the run's secret resolver and returns base plus the resolved
 // values, as a fresh map. The caller's base is never mutated, so a mid-loop provider failure
 // cannot leave already-resolved values behind in a map the caller retains.
-// secret.Resolver.Read is what registers each value for redaction (internal/secret),
+// secrets.Resolver.Read is what registers each value for redaction (libs/secrets),
 // so a secret reaching a child through this path is masked out of captured output
 // the same as one a magusfile body read directly.
 //
@@ -663,7 +663,7 @@ func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts 
 // same name is an authoring bug in a security-sensitive path, not something to
 // resolve quietly by picking a winner.
 func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]string) (map[string]string, error) {
-	resolver := secret.ResolverFromContext(ctx)
+	resolver := secrets.ResolverFromContext(ctx)
 	if resolver == nil {
 		return nil, fmt.Errorf("op %q declares secrets but no secret resolver is on this run", opName)
 	}

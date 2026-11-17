@@ -21,10 +21,11 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // lapsedWork holds a wait for each piece of work a deadline stopped waiting for that no
@@ -201,9 +202,9 @@ func (s *InheritedHookDeadlineSuite) TestTheJudgmentLapsesWithTheInheritedDeadli
 	defer close(release)
 	req := Request{Input: "cat >> $TARGET <<'EOF'\nline\nEOF", Host: "claude-code", Session: "inherited"}
 	start := time.Now()
-	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
+	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) verdict.Judgment {
 		<-release
-		return types.GuardJudgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: verdict.Defer}
 	})
 	s.Equal(string(advisoryUnfinished), v.Rule)
 	s.Less(time.Since(start), hookBudget/2)
@@ -396,13 +397,13 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 	read := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Read","tool_input":{"command":"sed -n 1,40p notes.txt"}}`
 	cases := map[string]struct {
 		req      Request
-		decision string
+		decision verdict.Decision
 		tool     string
 	}{
-		"a command that changes state": {req: Request{Input: "touch notes.txt"}, decision: decisionDeny, tool: hookToolCommand},
-		"a file write":                 {req: Request{Input: "notes.txt", IsPath: true}, decision: decisionDeny, tool: hookToolWrite},
-		"a command that reads":         {req: Request{Input: "ls -la"}, decision: decisionAdvise, tool: hookToolCommand},
-		"a host's read":                {req: Request{Input: read}, decision: decisionAdvise, tool: hookToolCommand},
+		"a command that changes state": {req: Request{Input: "touch notes.txt"}, decision: verdict.Deny, tool: hookToolCommand},
+		"a file write":                 {req: Request{Input: "notes.txt", IsPath: true}, decision: verdict.Deny, tool: hookToolWrite},
+		"a command that reads":         {req: Request{Input: "ls -la"}, decision: verdict.Advise, tool: hookToolCommand},
+		"a host's read":                {req: Request{Input: read}, decision: verdict.Advise, tool: hookToolCommand},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -416,13 +417,13 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 			req.Host, req.Session = "claude-code", "s1"
 
 			start := time.Now()
-			v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
+			v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) verdict.Judgment {
 				<-release
-				return types.GuardJudgment{Decision: decisionPass}
+				return verdict.Judgment{Decision: verdict.Defer}
 			})
 			assert.Less(t, time.Since(start), 2*time.Second)
 			assert.Equal(t, verdictWithRule(c.decision, string(advisoryUnfinished)), unworded(v))
-			if c.decision == decisionDeny {
+			if c.decision == verdict.Deny {
 				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged. A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it.")
 			} else {
 				assert.Equal(t, unjudgedNote(), v.Context)
@@ -451,13 +452,13 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 // A judgment that answers in time is the verdict, and a dry run is judged to the end.
 func TestJudgeWithinKeepsAJudgmentThatAnswersBeforeTheDeadline(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	want := types.GuardJudgment{Decision: decisionAdvise, Context: "judged"}
-	judge := func(context.Context) types.GuardJudgment { return want }
+	want := verdict.Judgment{Decision: verdict.Advise, Context: "judged"}
+	judge := func(context.Context) verdict.Judgment { return want }
 	assert.Equal(t, want, JudgeWithin(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"}, judge))
 
 	short, cancel := context.WithTimeout(ctx, time.Millisecond)
 	defer cancel()
-	slow := func(context.Context) types.GuardJudgment {
+	slow := func(context.Context) verdict.Judgment {
 		time.Sleep(700 * time.Millisecond)
 		return want
 	}
@@ -483,11 +484,11 @@ func TestLapsedRuleLoadDeniesAWriteAndAdvisesARead(t *testing.T) {
 
 	ctx, _ := spawnFixture(t)
 	write := Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "notes.txt", IsPath: true})
-	assert.Equal(t, decisionDeny, write.Decision)
+	assert.Equal(t, verdict.Deny, write.Decision)
 	assert.Contains(t, write.Reason, "magus ran out of time judging this file write: loading this workspace's guard rules did not finish within 6.5s.")
 
 	read := Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
-	assert.Equal(t, decisionAdvise, read.Decision)
+	assert.Equal(t, verdict.Advise, read.Decision)
 	assert.Contains(t, read.Context, "The working tree's magus\\guard.command rule judged nothing: the magusfile did not load within 6.5s")
 }
 
@@ -497,11 +498,11 @@ func TestLapsedRuleLoadDeniesAWriteAndAdvisesARead(t *testing.T) {
 func TestDryRunJudgesWithoutTheHookBudget(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	var left []time.Duration
-	rule := func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	rule := func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		left = append(left, time.Until(deadline))
-		return types.GuardVerdict{}, nil
+		return verdict.Verdict{}, nil
 	}
 	Judge(ctx, Dependencies{CommandRule: rule}, Request{Input: "ls", DryRun: true})
 	Judge(ctx, Dependencies{CommandRule: rule}, Request{Input: "ls"})
@@ -517,12 +518,12 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 	waitForLapsedWork(t)
 	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
-	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		<-ctx.Done()
-		return types.GuardVerdict{}, ctx.Err()
+		return verdict.Verdict{}, ctx.Err()
 	}
 	v := Judge(ctx, Dependencies{WriteRule: loops}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
-	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Contains(t, v.Reason, "magus did not finish grading this file write: ")
 	assert.Contains(t, v.Reason, "so it is not graded. A dry run is bounded at 2m0s")
 }
@@ -537,24 +538,24 @@ func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	waitForLapsedWork(t)
 	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
-	slowLoad := func(ctx context.Context) types.GuardJudgment {
+	slowLoad := func(ctx context.Context) verdict.Judgment {
 		_, _, _ = TimeRuleLoad(ctx, func() (int, error) {
 			time.Sleep(time.Second)
 			return 0, nil
 		})
-		return types.GuardJudgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: verdict.Defer}
 	}
-	lapse := func() types.GuardJudgment {
+	lapse := func() verdict.Judgment {
 		short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
 		return JudgeWithin(short, Dependencies{}, req, slowLoad)
 	}
 
 	for range lapsesBeforeDegrade {
-		assert.Equal(t, decisionDeny, lapse().Decision)
+		assert.Equal(t, verdict.Deny, lapse().Decision)
 	}
 	degraded := lapse()
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(degraded))
+	assert.Equal(t, verdictWithRule(verdict.Advise, string(advisoryUnfinished)), unworded(degraded))
 	assert.Contains(t, degraded.Context, "on 3 judgments in a row in this session, so this command ran with no rule judging it")
 	assert.Contains(t, degraded.Context, "This one stalled in its load_rules phase")
 	assert.Contains(t, degraded.Context, "Nothing measured why")
@@ -562,13 +563,13 @@ func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	assert.NotContains(t, degraded.Context, "magus server status")
 	again := lapse()
 	wantAgain := again
-	wantAgain.Decision = decisionAdvise
+	wantAgain.Decision = verdict.Advise
 	wantAgain.Context = "The guard is still not finishing in time (4 judgments in a row), so this command ran unjudged, as the notice before said."
 	assert.Equal(t, wantAgain, again)
 
-	onTime := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment { return types.GuardJudgment{Decision: decisionPass} })
-	assert.Equal(t, decisionPass, onTime.Decision)
-	assert.Equal(t, decisionDeny, lapse().Decision, "an answer in time starts the count over")
+	onTime := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) verdict.Judgment { return verdict.Judgment{Decision: verdict.Defer} })
+	assert.Equal(t, verdict.Defer, onTime.Decision)
+	assert.Equal(t, verdict.Deny, lapse().Decision, "an answer in time starts the count over")
 
 	rows := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.NotEmpty(t, rows)
@@ -606,11 +607,11 @@ func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	req := Request{Input: `sed -n 340,360p f; sed -n 955,990p g; grep -n x g | awk -F: '{print $1}'`, Host: "claude-code", Session: "s1"}
-	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
+	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) verdict.Judgment {
 		<-release
-		return types.GuardJudgment{}
+		return verdict.Judgment{}
 	})
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v))
+	assert.Equal(t, verdictWithRule(verdict.Advise, string(advisoryUnfinished)), unworded(v))
 	assert.Equal(t, unjudgedNote(), v.Context)
 }
 
@@ -634,7 +635,7 @@ func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
 		fmt.Sprintf("echo done > %s", outside),
 	} {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "s1"}, nothing)
-		assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
+		assert.Equal(t, verdictWithRule(verdict.Advise, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
 		assert.Equal(t, unjudgedOutsideNote(), v.Context, line)
 	}
 
@@ -645,7 +646,7 @@ func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
 		"cat >> $TARGET <<'EOF'\nline\nEOF",
 	} {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "deny-" + strconv.Itoa(i)}, nothing)
-		assert.Equal(t, verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
+		assert.Equal(t, verdictWithRule(verdict.Deny, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
 	}
 }
 
@@ -665,7 +666,7 @@ func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	}}
 	req := Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"}
 	start := time.Now()
-	v := JudgeWithin(ctx, deps, req, func(ctx context.Context) types.GuardJudgment { return Judge(ctx, deps, req) })
+	v := JudgeWithin(ctx, deps, req, func(ctx context.Context) verdict.Judgment { return Judge(ctx, deps, req) })
 	assert.Less(t, time.Since(start), hookBudget)
 	assert.NotEqual(t, string(advisoryUnfinished), v.Rule, "judged, not lapsed")
 	assert.Equal(t, int32(1), opens.Load(), "one stalled open per judgment")
@@ -688,7 +689,7 @@ func TestJudgeOpensAWorkspaceOnceForALargePick(t *testing.T) {
 	wt, sibling := r.add("lease-job"), r.add("sibling")
 	worker := narrowLease()
 	worker.Parent, worker.CheckoutRoot, worker.Paths.Write = "orchestrator", wt, []string{"pkg/**"}
-	holder := types.Job{ID: "sibling", Agent: typesagent.Instructed("hold the package"), Paths: types.JobPaths{Write: []string{"pkg/**"}}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
+	holder := job.Job{ID: "sibling", Agent: job.Instructed("hold the package"), Paths: job.Paths{Write: []string{"pkg/**"}}, State: job.StateRunning, Registered: 1, CheckoutRoot: sibling}
 	ctx, _ := fleetFixture(t, worker, holder)
 
 	opens := map[string]int{}
@@ -707,7 +708,7 @@ const inertBenchRules = `import "magus";
 magus\guard.shell({"name": "no-frobnicate", "decision": "deny", "program": "frobnicate", "reason": "Not here."});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -744,8 +745,8 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			req.Tools = agent.FindToolRows(root, testToolHost)
-			judge := func(ctx context.Context) types.GuardJudgment { return Judge(ctx, load(ctx), req) }
-			if v := JudgeWithin(ctx, Dependencies{}, req, judge); v.Decision != decisionPass {
+			judge := func(ctx context.Context) verdict.Judgment { return Judge(ctx, load(ctx), req) }
+			if v := JudgeWithin(ctx, Dependencies{}, req, judge); v.Decision != verdict.Defer {
 				b.Fatalf("a todo list was not passed: %+v", v)
 			}
 		}
@@ -754,7 +755,7 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			req.Tools = agent.FindToolRows(root, testToolHost)
-			if v := Judge(ctx, load(ctx), req); v.Decision != decisionPass {
+			if v := Judge(ctx, load(ctx), req); v.Decision != verdict.Defer {
 				b.Fatalf("a todo list was not passed: %+v", v)
 			}
 		}
@@ -768,7 +769,7 @@ func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
 	testkit.Isolate(b)
 	b.Setenv("XDG_CACHE_HOME", b.TempDir())
 	b.Setenv("XDG_STATE_HOME", b.TempDir())
-	const policy = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	const policy = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.defer();\n});\n"
 	repo := testkit.NewRepository(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": policy})
 	root := repo.Root()
 	repo.Magusfile(policy + "\nfun unused() > void {}\n")
@@ -785,7 +786,7 @@ func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
 		if rules == nil || deps.LoadFailure != nil {
 			b.Fatalf("the rules did not load: %v", deps.LoadFailure)
 		}
-		if v := Judge(ctx, deps, req); v.Decision == decisionDeny {
+		if v := Judge(ctx, deps, req); v.Decision == verdict.Deny {
 			b.Fatalf("a plain write was denied: %+v", v)
 		}
 	}
@@ -838,19 +839,19 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedReportsARuleThatRanOut() {
 	waitForLapsedWork(s.T())
 	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
-	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		<-ctx.Done()
-		return types.GuardVerdict{}, ctx.Err()
+		return verdict.Verdict{}, ctx.Err()
 	}
 	v, lapsed := JudgeLapsed(ctx, Dependencies{WriteRule: loops}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.True(lapsed)
 }
 
 func (s *JudgeBudgetSuite) TestJudgeLapsedLeavesARealDenyAlone() {
 	ctx, _, _ := writeFixture(s.T())
 	v, lapsed := JudgeLapsed(ctx, Dependencies{}, Request{Input: "git reset --hard origin/main", DryRun: true})
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.False(lapsed)
 }
 
@@ -868,7 +869,7 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedKeepsARuleDenyPastALapsedPhase() {
 	// The policy read lapses first; the verdict is still reset's own rule.
 	line := "./magus run test . && git reset --hard origin/main"
 	v, lapsed := JudgeLapsed(ctx, Dependencies{TargetPolicies: stalls}, Request{Input: line, DryRun: true})
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.NotEqual(string(advisoryUnfinished), v.Rule)
 	s.NotContains(v.Reason, "did not finish grading")
 	s.False(lapsed)
@@ -877,18 +878,18 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedKeepsARuleDenyPastALapsedPhase() {
 // A rule free to word its deny like a lapse must not read as one.
 func (s *JudgeBudgetSuite) TestJudgeLapsedIgnoresARuleQuotingTheLapseWords() {
 	ctx, root, _ := writeFixture(s.T())
-	quotes := func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
-		return types.GuardVerdict{Decision: types.GuardDeny, Reason: "magus did not finish grading this"}, nil
+	quotes := func(context.Context, types.WriteRequest, hint.Gate) (verdict.Verdict, error) {
+		return verdict.Verdict{Decision: verdict.Deny, Reason: "magus did not finish grading this"}, nil
 	}
 	v, lapsed := JudgeLapsed(ctx, Dependencies{WriteRule: quotes}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.False(lapsed)
 }
 
 func (s *JudgeBudgetSuite) TestJudgeLapsedReportsNoLapseOnAPass() {
 	ctx, _, _ := writeFixture(s.T())
 	v, lapsed := JudgeLapsed(ctx, Dependencies{}, Request{Input: "ls", DryRun: true})
-	s.NotEqual(decisionDeny, v.Decision)
+	s.NotEqual(verdict.Deny, v.Decision)
 	s.False(lapsed)
 }
 
@@ -916,7 +917,7 @@ func (s *JudgeBudgetSuite) TestStallBetweenPhasesNamesTheSpan() {
 }
 
 func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
-	row := types.Job{ID: "bound-job", Agent: typesagent.Instructed("hold a lease"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/held/**"}}}
+	row := job.Job{ID: "bound-job", Agent: job.Instructed("hold a lease"), State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/held/**"}}}
 	ctx, _ := fleetFixture(s.T(), row)
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(s.T(), ctx, who, row.ID)

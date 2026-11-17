@@ -12,13 +12,13 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 )
 
-func (r *runner) checkJobTree() check.Check {
-	return checkJobTree(r.jobPlace(), r.opts.cfg.Jobs, time.Now().Unix())
+func (r *runner) checkJobTree(ctx context.Context) check.Check {
+	return checkJobTree(ctx, r.jobPlace(), r.opts.cfg.Jobs, time.Now().Unix())
 }
 
 // jobPlace places the workspace's job store and checkout record. A user state dir that
@@ -32,15 +32,15 @@ func (r *runner) jobPlace() job.Location {
 // dependency that ended without passing. Reading the store has already ended every row
 // magus could prove dead (see job.Store.List), so what is left is work somebody took and
 // went quiet on, and the finding names the exit command a person runs for it.
-func checkJobTree(loc job.Location, limits config.Jobs, now int64) check.Check {
+func checkJobTree(ctx context.Context, loc job.Location, limits config.Jobs, now int64) check.Check {
 	const name = "job-tree"
 
-	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List()
+	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List(ctx)
 	if err != nil {
 		return check.Check{Name: name, Status: check.Fail, Evidence: check.EvidenceUnknown,
 			Message: fmt.Sprintf("could not read the job store: %v", err)}
 	}
-	flagged := types.NewJobList(rows).Flag(now, limits.StaleAfter)
+	flagged := jobtypes.NewList(rows).Flag(now, limits.StaleAfter)
 	var parts, details []string
 	if len(flagged.Stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d live job(s) not updated within jobs.stale_after (%s): %s",
@@ -96,7 +96,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) che
 	if id == "" {
 		return check.Check{Name: name, Status: check.OK, Message: "no lease bound; the guard advises only"}
 	}
-	if from == types.LeaseSourceContested {
+	if from == jobtypes.LeaseSourceContested {
 		return check.Check{
 			Name:    name,
 			Status:  check.Fail,
@@ -108,7 +108,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) che
 		}
 	}
 
-	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List()
+	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List(ctx)
 	if err != nil {
 		return check.Check{
 			Name:     name,
@@ -117,7 +117,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) che
 			Message:  fmt.Sprintf("could not read the job store: %v", err),
 		}
 	}
-	i := slices.IndexFunc(rows, func(lease types.Job) bool { return lease.ID == id })
+	i := slices.IndexFunc(rows, func(lease jobtypes.Job) bool { return lease.ID == id })
 	if i < 0 {
 		return check.Check{
 			Name:    name,

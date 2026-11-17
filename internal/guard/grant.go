@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"path"
 	"path/filepath"
@@ -14,7 +15,10 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,28 +32,28 @@ func GrantableRules() []string {
 // grantedRules lowers to advise, for this call alone, each grantable rule a live grant names
 // for the acting lease, and returns the grants that did. A grants file that cannot be read
 // lowers nothing, so every rule keeps refusing.
-func grantedRules(deps Dependencies, at location, standing leaseStanding) (Dependencies, map[string]types.JobGrant) {
+func grantedRules(ctx context.Context, deps Dependencies, at location, standing leaseStanding) (Dependencies, map[string]jobtypes.Grant) {
 	if !standing.declared || !standing.state.Live() {
 		return deps, nil
 	}
 	store := job.NewStore(at.jobs())
-	grants, err := store.Grants()
+	grants, err := store.Grants(ctx)
 	if err != nil {
 		return deps, nil
 	}
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return deps, nil
 	}
-	attempt := types.NewJobAttempts(tries).LiveN(standing.row.ID)
+	attempt := jobtypes.NewAttempts(tries).LiveN(standing.row.ID)
 	now := time.Now().Unix()
-	var granted map[string]types.JobGrant
+	var granted map[string]jobtypes.Grant
 	for _, g := range grants {
 		if !slices.Contains(GrantableRules(), g.Rule) || !g.Lowers(standing.row, attempt, now) {
 			continue
 		}
 		if granted == nil {
-			granted = map[string]types.JobGrant{}
+			granted = map[string]jobtypes.Grant{}
 			deps.Builtins = maps.Clone(deps.Builtins)
 			if deps.Builtins == nil {
 				deps.Builtins = map[string]builtin.Setting{}
@@ -63,7 +67,7 @@ func grantedRules(deps Dependencies, at location, standing leaseStanding) (Depen
 
 // grantNote names the grant that turned a refusal into advice: who typed it, when, and
 // when it ends.
-func grantNote(g types.JobGrant) string {
+func grantNote(g jobtypes.Grant) string {
 	until := "until the job ends"
 	if g.Until != 0 {
 		until = fmt.Sprintf("until %s or the job ends", time.Unix(g.Until, 0).UTC().Format(time.RFC3339))
@@ -110,10 +114,11 @@ func gateWaivers(store *job.Store) (file.JSONL[types.GateWaiver], error) {
 	if err != nil {
 		return file.JSONL[types.GateWaiver]{}, err
 	}
-	return file.JSONL[types.GateWaiver]{
+	return file.JSONL[types.GateWaiver]{JSONL: codec.JSONL[types.GateWaiver]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(jobs), gateWaiversFileName),
 		Key:  types.GateWaiver.Key,
-	}, nil
+	}}, nil
 }
 
 // WaiveGate records a person's waiver of the push gate for commit, a full
@@ -142,7 +147,7 @@ func appendGateWaiver(ctx context.Context, store *job.Store, w types.GateWaiver)
 	if err != nil {
 		return types.GateWaiver{}, err
 	}
-	w.By, w.At = trail.StampOrigin(ctx, types.Origin{}), time.Now().Unix()
+	w.By, w.At = trail.StampOrigin(ctx, jobtypes.Origin{}), time.Now().Unix()
 	return w, log.Update(ctx, func([]types.GateWaiver) []types.GateWaiver { return []types.GateWaiver{w} })
 }
 

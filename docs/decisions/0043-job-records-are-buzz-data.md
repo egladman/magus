@@ -144,7 +144,7 @@ instructions (reads as prose to follow rather than conditions graded).
 | job row as the parent's record (ADR 0036 s1)                                       | kept; gains `Decisions`, `Evidence`                                                         | planned (needs the boundary registry, `cmd/magus-utils/boundary_types.go`) |
 | `JobResult` as the child's record (ADR 0036 s2)                                    | kept unchanged                                                                              | done                                                                       |
 | `Job.result` readable from a stop rule's `req.lease`                               | kept                                                                                        | done                                                                       |
-| `types/brief.go`, `magus\Brief` and its two helpers                                | deleted; fields move to `types/job.go`                                                      | planned (needs the boundary registry)                                      |
+| `types/brief.go`, `magus\Brief` and its two helpers                                | deleted; fields move to `libs/safetyscissors/job/job.go`                                    | planned (needs the boundary registry)                                      |
 | `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                                                     | in progress (`Job.BriefFormat` waits on the regenerated bindings)          |
 | `judgeBriefBuzz` and the Buzz type check of a prompt                               | deleted                                                                                     | done                                                                       |
 | render-brief.buzz                                                                  | replaced by `show-job.buzz` in the same directory, typed, two entry points                  | done                                                                       |
@@ -214,7 +214,7 @@ Eli, 2026-11-10, asked whether it ships as written: "yes".
 magus is pre-1.0 and this is one change, one pull request, no shim and no alias kept for an old caller
 ([A deliberate break never merges red](../design/principles/a-deliberate-break-never-merges-red.md)).
 
-1. `types/job.go` gains `Decisions`, `Evidence`, `JobDecision`, `JobEvidence`,
+1. `libs/safetyscissors/job/job.go` gains `Decisions`, `Evidence`, `JobDecision`, `JobEvidence`,
    `JobEvidenceKind`; `types/brief.go` is deleted; `Job.BriefFormat` and
    `types.BriefFormat` go with it. `magus job exit --schema` and the job apply schema
    regenerate from the types.

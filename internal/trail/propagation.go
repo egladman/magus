@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // The environment channels a spawning tool uses to say what it is and where this process sits
@@ -67,7 +67,7 @@ type Spawn struct {
 	ParentSpanID string
 	Flags        string
 	// Lease is the job lease the process acts as, from the magus.lease
-	// baggage member, percent-decoded and validated by [types.ValidJobID], the same
+	// baggage member, percent-decoded and validated by [job.ValidID], the same
 	// rule every lease channel shares, and what keeps the trail's redaction exemption
 	// honest.
 	Lease string
@@ -224,12 +224,12 @@ func validLease(id string) string {
 	if id == "" {
 		return ""
 	}
-	if !types.ValidJobID(id) {
+	if !job.ValidID(id) {
 		baggageNoteOnce.Do(func() {
 			slog.With(attr.Component("magus")).WarnContext(context.Background(),
 				"ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxJobIDLen))
+				slog.Int("max_length", job.MaxIDLen))
 		})
 		return ""
 	}

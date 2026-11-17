@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/daemon"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -101,7 +101,7 @@ func TestEvaluateHealth(t *testing.T) {
 // a reply that carries the server's own report is the server, so a per-process pool
 // answering the probed socket reads as no server rather than as one with nothing loaded.
 func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
-	srv, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := proc.New(t.Context(), proc.Options{Limiter: cache.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer srv.Close()
 	require.NoError(t, srv.Start(t.Context()))
@@ -110,6 +110,7 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 	require.ErrorIs(t, err, errNotServer)
 
 	server, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *daemon.Server { return &daemon.Server{PID: 1} },
 	})
@@ -127,12 +128,13 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 // reached the pool and reported the server down while it was up. The probe asks
 // server.address, whatever the environment says.
 func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
-	pool, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	pool, err := proc.New(t.Context(), proc.Options{Limiter: cache.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer pool.Close()
 	require.NoError(t, pool.Start(t.Context()))
 
 	server, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *daemon.Server { return &daemon.Server{PID: 7} },
 	})
@@ -367,7 +369,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 		var report daemon.ReadinessReport
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &report))
 		require.Equal(t, daemon.ReadinessReport{
 			Ready: true,
 			Components: []daemon.ReadinessComponent{
@@ -387,7 +389,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
 		var report daemon.ReadinessReport
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &report))
 		require.False(t, report.Ready)
 	})
 
@@ -396,7 +398,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var report daemon.ReadinessReport
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &report))
 		require.Equal(t, daemon.ReadinessReport{
 			Ready: true,
 			Components: []daemon.ReadinessComponent{

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/bench"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type swebenchSuite struct {
@@ -60,7 +60,7 @@ func rowsTable(extraRepo string) fakeGetter {
 		}
 	}
 	rows = append(rows, map[string]any{"row": row("apache__druid-1", "apache/druid"), "truncated_cells": []string{}})
-	page, err := json.Marshal(map[string]any{"num_rows_total": len(rows), "rows": rows})
+	page, err := codec.Marshal(map[string]any{"num_rows_total": len(rows), "rows": rows})
 	if err != nil {
 		panic(err)
 	}
@@ -82,7 +82,7 @@ func (s *swebenchSuite) TestFetchGoRowsKeepsTheGoRowsInInstanceOrder() {
 		var head struct {
 			InstanceID string `json:"instance_id"`
 		}
-		s.Require().NoError(json.Unmarshal(r, &head))
+		s.Require().NoError(codec.Unmarshal(r, &head))
 		ids = append(ids, head.InstanceID)
 	}
 	s.True(slices.IsSorted(ids))
@@ -107,7 +107,7 @@ func (s *swebenchSuite) TestCheckCardLicenseRefusesAnythingButMIT() {
 }
 
 func (s *swebenchSuite) TestMultilingualTaskCarriesTheDatasetsGrading() {
-	raw, err := json.Marshal(row("gin-gonic__gin-1", "gin-gonic/gin"))
+	raw, err := codec.Marshal(row("gin-gonic__gin-1", "gin-gonic/gin"))
 	s.Require().NoError(err)
 	t, err := multilingualTask(raw)
 	s.Require().NoError(err)

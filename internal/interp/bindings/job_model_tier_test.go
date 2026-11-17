@@ -8,14 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,19 +24,19 @@ import (
 // loadModelTiers runs src as the root magusfile of a workspace that has wired harnesses,
 // and returns the registry with the session already CLOSED: a fork asks long after the
 // load that declared the tiers.
-func loadModelTiers(t *testing.T, src string, harnesses ...string) (*workspace.WorkspaceRegistry, *agent.ModelTierState, error) {
+func loadModelTiers(t *testing.T, src string, harnesses ...string) (*workspace.WorkspaceRegistry, *model.TierState, error) {
 	t.Helper()
 	reg := workspace.NewWorkspaceRegistry()
 	t.Cleanup(func() { _ = reg.Close() })
 	for _, h := range harnesses {
 		reg.AddHarness(h)
 	}
-	tiers := &agent.ModelTierState{}
-	ctx := agent.WithModelTierState(workspace.ContextWithRegistry(t.Context(), reg), tiers)
+	tiers := &model.TierState{}
+	ctx := model.WithTierState(workspace.ContextWithRegistry(t.Context(), reg), tiers)
 	return reg, tiers, execModelTiers(t, ctx, src)
 }
 
-func requireTiers(t *testing.T, tiers *agent.ModelTierState) *agent.ModelTierSet {
+func requireTiers(t *testing.T, tiers *model.TierState) *tier.Set {
 	t.Helper()
 	set, err := tiers.Tiers()
 	require.NoError(t, err)
@@ -87,8 +88,8 @@ magus\modelTiers(Level, default: Level.high,
 	set := requireTiers(t, tiers)
 	require.NotNil(t, set)
 	var names []string
-	for _, tier := range set.All() {
-		names = append(names, tier.Name())
+	for _, c := range set.All() {
+		names = append(names, c.Name())
 	}
 	assert.Equal(t, []string{"low", "high"}, names, "declaration order is rank")
 	assert.Equal(t, "high", set.Default().Name())
@@ -97,10 +98,10 @@ magus\modelTiers(Level, default: Level.high,
 	require.NoError(t, err)
 	high, err := set.Parse("high")
 	require.NoError(t, err)
-	assert.Equal(t, agent.ModelTierBounds{MaxLive: 3, MaxContext: 5000}, set.Bounds(low))
-	assert.Equal(t, agent.ModelTierBounds{MaxLive: 1}, set.Bounds(high), "a field the function leaves out is no cap")
-	assert.Equal(t, agent.SkillVariantFull, set.Skills(low))
-	assert.Equal(t, agent.SkillVariantShort, set.Skills(high))
+	assert.Equal(t, tier.Bounds{MaxLive: 3, MaxContext: 5000}, tierBounds(t, set, low))
+	assert.Equal(t, tier.Bounds{MaxLive: 1}, tierBounds(t, set, high), "a field the function leaves out is no cap")
+	assert.Equal(t, tier.SkillVariantFull, tierSkills(t, set, low))
+	assert.Equal(t, tier.SkillVariantShort, tierSkills(t, set, high))
 
 	alias, err := set.Alias("claude-code", high)
 	require.NoError(t, err)
@@ -145,18 +146,18 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	set := requireTiers(t, tiers)
 	require.NotNil(t, set, "a workspace that declares nothing gets magus/modeltiers")
 	var names []string
-	for _, tier := range set.All() {
-		names = append(names, tier.Name())
+	for _, c := range set.All() {
+		names = append(names, c.Name())
 	}
 	assert.Equal(t, []string{"routine", "bounded", "design", "frontier"}, names)
 	assert.Equal(t, "bounded", set.Default().Name())
 	routine, err := set.Parse("routine")
 	require.NoError(t, err)
-	assert.Equal(t, agent.ModelTierBounds{MaxContext: 100000}, set.Bounds(routine))
+	assert.Equal(t, tier.Bounds{MaxContext: 100000}, tierBounds(t, set, routine))
 	bounded, err := set.Parse("bounded")
 	require.NoError(t, err)
-	assert.Zero(t, set.Bounds(bounded).MaxLive, "the default caps no tier's live jobs")
-	assert.Equal(t, agent.SkillVariantFull, set.Skills(routine), "routine workers load the full skill bodies")
+	assert.Zero(t, tierBounds(t, set, bounded).MaxLive, "the default caps no tier's live jobs")
+	assert.Equal(t, tier.SkillVariantFull, tierSkills(t, set, routine), "routine workers load the full skill bodies")
 	assert.Same(t, set, requireTiers(t, tiers), "the default is built once")
 }
 
@@ -166,7 +167,11 @@ import "magus";
 magus\modelTiers(null);
 `)
 	require.NoError(t, err)
-	assert.Nil(t, requireTiers(t, tiers), "off is not the shipped default")
+	set, err := tiers.Tiers()
+	var off *model.TiersOffError
+	require.ErrorAs(t, err, &off, "off is not the shipped default")
+	assert.True(t, off.TurnedOff)
+	assert.Nil(t, set)
 }
 
 func TestModelTiersNullTakesNothingElse(t *testing.T) {
@@ -279,9 +284,9 @@ magus\modelTier(fun (req: ModelTierRequest) > Choice? {
 
 	got, err := matrix(t.Context(), types.ModelTierRequest{ID: "wide", Kind: types.JobKindCheck})
 	require.NoError(t, err)
-	assert.Equal(t, &agent.JobModelTier{
-		Name: "high", Rank: 1, Skills: agent.SkillVariantFull,
-		Source: agent.ModelTierSourceMatrix, Reason: "wide: check", Site: "magusfile",
+	assert.Equal(t, &tier.Assignment{
+		Name: "high", Rank: 1, Skills: tier.SkillVariantFull,
+		Source: tier.SourceMatrix, Reason: "wide: check", Site: "magusfile",
 	}, got)
 
 	got, err = matrix(t.Context(), types.ModelTierRequest{ID: "default-me"})
@@ -313,12 +318,12 @@ magus\modelTier(fun (req: ModelTierRequest) > any !> any {
 	}
 }
 
-func levelSet(t *testing.T) *agent.ModelTierSet {
+func levelSet(t *testing.T) *tier.Set {
 	t.Helper()
-	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum: "Level", Site: "magusfile", Cases: []string{"low", "high"},
-		Bounds: make([]agent.ModelTierBounds, 2),
-		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
+		Bounds: make([]tier.Bounds, 2),
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	return set
@@ -339,9 +344,9 @@ export fun choose(req: ModelTierRequest) > any {
 
 func TestUserModelTierMatrix(t *testing.T) {
 	set := levelSet(t)
-	tiers := func(context.Context) *agent.ModelTierSet { return set }
+	tiers := func(context.Context) *tier.Set { return set }
 
-	ask := func(t *testing.T, path string, tiers func(context.Context) *agent.ModelTierSet) (*agent.JobModelTier, error) {
+	ask := func(t *testing.T, path string, tiers func(context.Context) *tier.Set) (*tier.Assignment, error) {
 		t.Helper()
 		return userModelTierMatrix(path, tiers)(t.Context(), types.ModelTierRequest{ID: "j"})
 	}
@@ -350,9 +355,9 @@ func TestUserModelTierMatrix(t *testing.T) {
 		path := userMatrixModule(t, `return .{ tier = Level.high, skills = magus\agent\SkillVariant.short, reason = "mine" };`)
 		got, err := ask(t, path, tiers)
 		require.NoError(t, err)
-		assert.Equal(t, &agent.JobModelTier{
-			Name: "high", Rank: 1, Skills: agent.SkillVariantShort,
-			Source: agent.ModelTierSourceUserMatrix, Reason: "mine", Site: path,
+		assert.Equal(t, &tier.Assignment{
+			Name: "high", Rank: 1, Skills: tier.SkillVariantShort,
+			Source: tier.SourceUserMatrix, Reason: "mine", Site: path,
 		}, got)
 	})
 	t.Run("null declines", func(t *testing.T) {
@@ -366,7 +371,7 @@ func TestUserModelTierMatrix(t *testing.T) {
 		require.ErrorContains(t, err, "middle")
 	})
 	t.Run("tiers off fails", func(t *testing.T) {
-		_, err := ask(t, userMatrixModule(t, `return null;`), func(context.Context) *agent.ModelTierSet { return nil })
+		_, err := ask(t, userMatrixModule(t, `return null;`), func(context.Context) *tier.Set { return nil })
 		require.ErrorContains(t, err, "turned them off")
 	})
 	t.Run("a module that does not load fails", func(t *testing.T) {
@@ -429,8 +434,8 @@ func TestModelTierMatrixMisdeclarationIsCoded(t *testing.T) {
 func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 	rows := func(tiers ...string) spells.Option {
 		list := make([]string, len(tiers))
-		for i, tier := range tiers {
-			list[i] = fmt.Sprintf("HarnessModel{id = %q, tier = %q}", "m-"+tier, tier)
+		for i, name := range tiers {
+			list[i] = fmt.Sprintf("HarnessModel{id = %q, tier = %q}", "m-"+name, name)
 		}
 		return spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\nexport fun mgs_listModels() > [HarnessModel] { return [%s]; }\n", strings.Join(list, ", ")))
 	}
@@ -468,8 +473,8 @@ export fun mgs_listModels() > [HarnessModel] {
 	set, err := defaultModelTierSet(t.Context(), []string{old})
 	require.NoError(t, err)
 	var aliases []string
-	for _, tier := range set.All() {
-		alias, err := set.Alias(old, tier)
+	for _, c := range set.All() {
+		alias, err := set.Alias(old, c)
 		require.NoError(t, err)
 		aliases = append(aliases, alias)
 	}
@@ -487,4 +492,18 @@ magus\modelTiers(Level, default: Level.low,
 	high, err := set.Parse("high")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"claude-code runs low and high on one id, one"}, set.SharedAliases(high))
+}
+
+func tierBounds(t *testing.T, set *tier.Set, of tier.Tier) tier.Bounds {
+	t.Helper()
+	b, err := set.Bounds(of)
+	require.NoError(t, err)
+	return b
+}
+
+func tierSkills(t *testing.T, set *tier.Set, of tier.Tier) tier.SkillVariant {
+	t.Helper()
+	v, err := set.Skills(of)
+	require.NoError(t, err)
+	return v
 }

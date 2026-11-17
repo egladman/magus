@@ -29,11 +29,12 @@ fatal
 graph
 guard
 guard.advise
-guard.allow
+guard.ask
 guard.binary
 guard.builtins
 guard.command
 guard.count
+guard.defer
 guard.deny
 guard.once
 guard.profile

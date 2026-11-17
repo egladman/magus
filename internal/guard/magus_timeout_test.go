@@ -42,7 +42,7 @@ func TestMagusTimeoutDeniesTowardTheRunsOwnTimeout(t *testing.T) {
 		"timeout 600 magus --root . run x":                          "magus --root . run --timeout 10m x",
 		"timeout 600 magus run --timeout 5m x":                      "magus run --timeout 5m x",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		require.NotEmpty(t, v.Deny, command)
 		assert.Equal(t, denyRuleMagusTimeout, v.Rule.Name, command)
 		require.Len(t, v.Next, 1, command)
@@ -64,7 +64,7 @@ func TestMagusTimeoutServesAReadBare(t *testing.T) {
 		"timeout 30 ./magus query output x": "./magus query output x",
 		"gtimeout 5m magus graph build":     "magus graph build",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		require.NotEmpty(t, v.Deny, command)
 		assert.Equal(t, denyRuleMagusTimeout, v.Rule.Name, command)
 		require.Len(t, v.Next, 1, command)
@@ -106,7 +106,7 @@ func TestMagusTimeoutLeavesTheRestAlone(t *testing.T) {
 	} {
 		_, fires := magusTimeoutFires(command, DialectBash)
 		assert.False(t, fires, command)
-		assert.NotEqual(t, denyRuleMagusTimeout, Evaluate(strict(testDependencies()), command).Rule.Name, command)
+		assert.NotEqual(t, denyRuleMagusTimeout, Evaluate(t.Context(), strict(testDependencies()), command).Rule.Name, command)
 	}
 }
 
@@ -130,5 +130,5 @@ func TestParseTimeoutDuration(t *testing.T) {
 }
 
 func TestMagusTimeoutAdvisesWhenSetToAdvise(t *testing.T) {
-	requireAdvisedOnce(t, Evaluate(advising(testDependencies()), "timeout 600 magus run test ."), denyRuleMagusTimeout)
+	requireAdvisedOnce(t, Evaluate(t.Context(), advising(testDependencies()), "timeout 600 magus run test ."), denyRuleMagusTimeout)
 }

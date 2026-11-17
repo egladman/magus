@@ -16,9 +16,9 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -421,7 +421,7 @@ func PipeValue(_ context.Context, record map[string]any) (any, error) {
 		return nil, fmt.Errorf("pipe.value: a %s record carries no value, pass a %s record", typ, report.TypeTargetValue)
 	}
 	var v report.TargetValue
-	if err := json.Unmarshal([]byte(body), &v); err != nil {
+	if err := codec.Unmarshal([]byte(body), &v); err != nil {
 		return nil, fmt.Errorf("pipe.value: %w", err)
 	}
 	return v.Value, nil
@@ -470,7 +470,7 @@ func encodePipeLine(record map[string]any) (report.Line, error) {
 	if projects := pipeStrings(record["projects"]); len(projects) > 0 {
 		fields["projects"] = projects
 	}
-	body, err := json.Marshal(fields)
+	body, err := codec.Marshal(fields)
 	if err != nil {
 		return report.Line{}, err
 	}

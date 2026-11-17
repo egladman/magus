@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Every magus token, whatever its kind, has one layout (GitHub's newer token format):
@@ -35,17 +35,17 @@ const (
 	base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 )
 
-var kindPrefixes = map[types.CredentialKind]string{
-	types.KindOperator: prefixOperator,
-	types.KindStored:   prefixStored,
-	types.KindShare:    prefixShare,
-	types.KindExchange: prefixExchange,
+var kindPrefixes = map[job.CredentialKind]string{
+	KindOperator: prefixOperator,
+	KindStored:   prefixStored,
+	KindShare:    prefixShare,
+	KindExchange: prefixExchange,
 }
 
 // credentialKind reads a token's kind from its prefix and checks its length, alphabet and
 // checksum. It touches no store: a string that fails here is refused before any work is done
 // on it, and one that passes is only well-formed, not valid.
-func credentialKind(token string) (types.CredentialKind, bool) {
+func credentialKind(token string) (job.CredentialKind, bool) {
 	for kind, prefix := range kindPrefixes {
 		if rest, ok := strings.CutPrefix(token, prefix); ok {
 			return kind, validBody(rest)
@@ -67,7 +67,7 @@ func validBody(rest string) bool {
 }
 
 // mintSecret returns a fresh token of kind.
-func mintSecret(kind types.CredentialKind) (string, error) {
+func mintSecret(kind job.CredentialKind) (string, error) {
 	prefix, ok := kindPrefixes[kind]
 	if !ok {
 		return "", fmt.Errorf("auth: no token format for kind %q", kind)

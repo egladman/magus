@@ -40,6 +40,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -89,7 +91,7 @@ func decideGate(f gateFacts) gateDecision {
 // poolSaturated reports whether a new run would be refused by the machine
 // budget: an axis with a limit is fully held. A nil snapshot is an absent
 // arbiter and reads as idle (fail open).
-func poolSaturated(m *types.MachineSnapshot) bool {
+func poolSaturated(m *budget.Snapshot) bool {
 	if m == nil {
 		return false
 	}
@@ -505,7 +507,7 @@ func (g *GateRedundancy) heldRepairs(ctx context.Context) (sessions.GateRecord, 
 	if err != nil {
 		return sessions.GateRecord{}, nil, err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return sessions.GateRecord{}, nil, err
 	}
@@ -531,12 +533,12 @@ func (g *GateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 	if err != nil {
 		return gateFinding{}, false
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return gateFinding{}, false
 	}
 	rec, ok := sessions.LatestGate(fold, g.ref, g.target)
-	if !ok || rec.Outcome != sessions.OutcomePass || rec.Commit == "" {
+	if !ok || rec.Outcome != session.OutcomePass || rec.Commit == "" {
 		return gateFinding{}, false
 	}
 	if rec.Fingerprint != "" && rec.Fingerprint == g.fp {
@@ -712,7 +714,10 @@ func (g *GateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	if err != nil {
 		return
 	}
-	err = sessions.RecordGate(dir, rec, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
+	// A verdict decided before the signal is still filed: the store write outlives the
+	// invocation's cancellation and keeps its values for the invocation id.
+	ctx = context.WithoutCancel(ctx)
+	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
 	if err != nil {
 		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",
 			slog.String("store", dir), attr.Error(err))
@@ -771,7 +776,7 @@ func PlanInheritance(ctx context.Context, ws GateWorkspace) *InheritFinding {
 
 // DescribePool is whether the pool is saturated, with the capacity behind either answer, so
 // the finding can print what the probe saw.
-func DescribePool(m *types.MachineSnapshot) (saturated bool, state string) {
+func DescribePool(m *budget.Snapshot) (saturated bool, state string) {
 	desc := fmt.Sprintf("%d of %d slots held", m.HeldSlots, m.BudgetSlots)
 	if !poolSaturated(m) {
 		return false, "idle: " + desc

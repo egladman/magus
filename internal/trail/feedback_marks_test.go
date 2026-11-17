@@ -15,8 +15,8 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	at := time.UnixMilli(1790000000000)
 	first := trailtypes.Mark{
-		ID: "fb0123456789ab", Section: trailtypes.Unguarded, Key: "grep -nr <arg>",
-		Verdict: trailtypes.ShouldDeny, Note: "guard it next time", Session: "s1",
+		ID: "fb0123456789ab", Section: trailtypes.SectionUnguarded, Key: "grep -nr <arg>",
+		Verdict: trailtypes.VerdictShouldDeny, Note: "guard it next time", Session: "s1",
 		Examples: []string{"grep -rn a b", "grep -rn c d", "grep -rn e f", "grep -rn g h"},
 	}
 	stored, err := AppendFeedbackMark(dir, first, at)
@@ -25,7 +25,7 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	assert.Len(t, stored.Examples, 3, "a mark keeps a few examples, not the trail")
 
 	second := first
-	second.Verdict, second.Session, second.Examples = trailtypes.Fine, "s2", nil
+	second.Verdict, second.Session, second.Examples = trailtypes.VerdictFine, "s2", nil
 	_, err = AppendFeedbackMark(dir, second, at.Add(time.Minute))
 	require.NoError(t, err)
 
@@ -33,12 +33,12 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, marks, 2)
 	assert.Equal(t, stored, marks[0])
-	assert.Equal(t, trailtypes.Fine, marks[1].Verdict, "a later mark is kept beside the earlier one, never over it")
+	assert.Equal(t, trailtypes.VerdictFine, marks[1].Verdict, "a later mark is kept beside the earlier one, never over it")
 }
 
 func TestAppendFeedbackMarkRefusesAMalformedMark(t *testing.T) {
 	dir := t.TempDir()
-	valid := trailtypes.Mark{ID: "fb0123456789ab", Section: trailtypes.Refused, Key: "raw-tool", Verdict: trailtypes.WrongDeny}
+	valid := trailtypes.Mark{ID: "fb0123456789ab", Section: trailtypes.SectionRefused, Key: "raw-tool", Verdict: trailtypes.VerdictWrongDeny}
 	for name, mutate := range map[string]func(*trailtypes.Mark){
 		"page label as id": func(m *trailtypes.Mark) { m.ID = "C3" },
 		"unknown section":  func(m *trailtypes.Mark) { m.Section = "passed" },

@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	difftypes "github.com/egladman/magus/types/diff"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -16,21 +15,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	difftypes "github.com/egladman/magus/types/diff"
 )
 
 // Magus declares the host-declarable subset of the magus module. The remaining
@@ -467,7 +470,7 @@ var Magus = Module{
 						"working-tree rule both run and the stricter answer stands. Registering twice, from " +
 						"another project, or with a non-function is MGS1045. magus ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.SpawnRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.SpawnRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "command",
@@ -479,7 +482,7 @@ var Magus = Module{
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.CommandRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.CommandRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "write",
@@ -490,7 +493,7 @@ var Magus = Module{
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.WriteRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.WriteRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "stop",
@@ -504,7 +507,7 @@ var Magus = Module{
 						"would hold the session open. Registering twice, from another project, or with a " +
 						"non-function is MGS1045. magus ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "step",
@@ -518,17 +521,27 @@ var Magus = Module{
 						"says so; a row nothing else judges is then denied. Registering a kind twice, from another " +
 						"project, or with a non-function is MGS1045. magus ships no rule.",
 					Args:   []Arg{{Name: "kind"}, {Name: "rule"}},
-					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req step.Request) (verdict.Verdict, error)) error)(nil),
 				},
 				{
-					Name:    "allow",
-					Doc:     "The verdict a spawn, command, write, stop or step rule returns to add nothing.",
+					Name: "defer",
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to add nothing: no objection, " +
+						"so the host's own permission flow decides the call. The guard never answers yes.",
 					Returns: []Ret{{Object: "GuardVerdict"}},
 					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name: "advise",
 					Doc: "The verdict a spawn, command, write, stop or step rule returns to let the call through with text for the agent. " +
+						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
+					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
+					Returns: []Ret{{Object: "GuardVerdict"}},
+					Extern:  (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
+				},
+				{
+					Name: "ask",
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to block the call until the person " +
+						"approves it through the host's own prompt, with text saying why. A wiring that cannot prompt refuses the call instead. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
 					Returns: []Ret{{Object: "GuardVerdict"}},
@@ -1569,8 +1582,6 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	// No Grader: the store grades with the one the composition root installed through
-	// job.SetCheckGrader.
 	stateBase, err := xdg.StateDir()
 	if err != nil {
 		return nil, fmt.Errorf("%s: resolve the user state dir that holds the job store: %w", member, err)
@@ -1579,19 +1590,24 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
-		ModelTiers(ctx context.Context) *agent.ModelTierSet
+		ModelTiers(ctx context.Context) *tier.Set
 		ModelTierMatrix() types.ModelTierMatrix
-		CheckSpawn(parent, child agent.ModelTier) error
+		CheckSpawn(parent, child tier.Tier) error
 		SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 	}
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
 		loc.SpawnRule, loc.SpawnCeiling = tiers.CheckSpawn, tiers.SpawnCeiling
 	}
+	// The guard lives above this package, so the workspace supplies the grader a fork
+	// through this door grades its declared check with.
+	if graded, ok := ws.(interface{ CheckGrader() job.CheckGrader }); ok {
+		loc.Grader = graded.CheckGrader()
+	}
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.
 	if models, ok := ws.(interface {
-		Models(ctx context.Context) func() []types.ModelPricing
+		Models(ctx context.Context) func() []model.Row
 	}); ok {
 		loc.ModelRows = models.Models(ctx)
 	}
@@ -1611,69 +1627,68 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
 	// the claim, so the checkout's record still outranks it.
-	if claim := types.JobLeaseFromContext(ctx); claim != "" {
+	if claim := jobtypes.LeaseFromContext(ctx); claim != "" {
 		lease, _ := job.ActingLease(loc, claim)
-		loc.Actor = &job.Actor{Lease: lease}
+		loc.Actor = &jobtypes.Actor{Lease: lease}
 	}
 	return job.NewStore(loc), nil
 }
 
 // MagusListJob backs magus\workspace().jobs() with one typed report.
-// types.NewJobList is the constructor JobService.ListJobs calls too.
+// jobtypes.NewList is the constructor JobService.ListJobs calls too.
 // So the doors cannot disagree about the rows or their overlaps.
 //
 // Inside a guard rule it answers from the rows the guard pinned, so the rule and the
 // verdict it adds to read one store. That path leaves footprints unmeasured: it is the
 // guard's hot path, and measuring reads the version control.
-func MagusListJob(ctx context.Context) (types.JobList, error) {
+func MagusListJob(ctx context.Context) (jobtypes.List, error) {
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
-			return types.JobList{}, snap.Err
+			return jobtypes.List{}, snap.Err
 		}
 		snap = snap.Clone()
-		list := types.NewJobList(snap.Rows)
+		list := jobtypes.NewList(snap.Rows)
 		list.Attempts = job.BoundAttempts(snap.Rows, snap.Attempts, time.Now().Unix())
 		return list, nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
-		return types.JobList{}, err
+		return jobtypes.List{}, err
 	}
 	staleAfter, err := store.StaleAfter()
 	if err != nil {
-		return types.JobList{}, err
+		return jobtypes.List{}, err
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	list, err := store.InWorkspace(contextJobWorkspace(ctx, ws)).Report(ctx, time.Now().Unix(), staleAfter)
 	if err != nil {
-		return types.JobList{}, err
+		return jobtypes.List{}, err
 	}
-	// The same join `magus ls jobs` makes, from the snapshot `magus queue ls` keeps; it
-	// never fetches.
-	root := ws.Root()
-	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
+	// The in-flight changes `magus ls jobs` joins are magus's merge queue, not the job
+	// list's, so a script reads them from the queue.
+	return list, nil
 }
 
 // MagusUnmergedJob backs magus\workspace().unmerged().
 // A rule reads the rows the guard
 // pinned, and the version control only for this call.
-func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedReport, error) {
+func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedReport, error) {
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
-			return types.JobUnmergedReport{}, snap.Err
+			return jobtypes.UnmergedReport{}, snap.Err
 		}
 		snap = snap.Clone()
-		return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
+		return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.unmerged")
 	if err != nil {
-		return types.JobUnmergedReport{}, err
+		return jobtypes.UnmergedReport{}, err
 	}
-	snap := job.ReadSnapshot(store)
+	snap := job.ReadSnapshot(ctx, store)
 	if snap.Err != nil {
-		return types.JobUnmergedReport{}, snap.Err
+		return jobtypes.UnmergedReport{}, snap.Err
 	}
-	return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
+	return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
 }
 
 // checkoutCacheDir is the cache directory of the workspace on ctx, or the one
@@ -1696,28 +1711,28 @@ func checkoutCacheDir(ctx context.Context, member string) (string, error) {
 // MagusForkFactsJob backs magus\workspace().forkFacts().
 // A rule reads the rows and the
 // output store the guard pinned.
-func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFacts, error) {
+func MagusForkFactsJob(ctx context.Context, workspace string) (jobtypes.ForkFacts, error) {
 	cacheDir, err := checkoutCacheDir(ctx, "job.forkFacts")
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	last, err := cache.NewOutputStore(cacheDir).LastFullTest()
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
-			return types.JobForkFacts{}, snap.Err
+			return jobtypes.ForkFacts{}, snap.Err
 		}
 		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, last), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.forkFacts")
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	return job.ForkFacts(ctx, workspace, rows, last), nil
 }
@@ -1726,14 +1741,14 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFact
 // It merges the fields put sets into row id through internal/job.PutMerge.
 // It refuses what that refuses. The Buzz opts map is decoded into
 // put by internal/job.DecodePut at the binding.
-func MagusPutJob(ctx context.Context, id string, put types.JobPut) (types.Job, error) {
+func MagusPutJob(ctx context.Context, id string, put jobtypes.Put) (jobtypes.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.put")
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	merge, err := job.PutMerge(put)
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	var limits config.Jobs
@@ -1766,15 +1781,15 @@ func contextJobWorkspace(ctx context.Context, ws types.WorkspaceRepository) (val
 // It returns the row and job.BaseAdvice's reading, as `magus job exec` does.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
-// reported like any other. See types.Job.
-func MagusRegisterJob(ctx context.Context, id string) (types.Job, string, error) {
+// reported like any other. See jobtypes.Job.
+func MagusRegisterJob(ctx context.Context, id string) (jobtypes.Job, string, error) {
 	store, err := jobStoreFromContext(ctx, "job.register")
 	if err != nil {
-		return types.Job{}, "", err
+		return jobtypes.Job{}, "", err
 	}
 	row, err := store.Exec(ctx, strings.TrimSpace(id))
 	if err != nil {
-		return types.Job{}, "", err
+		return jobtypes.Job{}, "", err
 	}
 	return row, job.BaseAdvice(row), nil
 }
@@ -1794,7 +1809,7 @@ func MagusClearJob(ctx context.Context) (int, error) {
 // needs no workspace.
 func MagusJobSchema(_ context.Context) (map[string]any, error) {
 	var schema map[string]any
-	if err := json.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
+	if err := codec.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
 		return nil, fmt.Errorf("decode the job record schema: %w", err)
 	}
 	return schema, nil
@@ -1803,45 +1818,45 @@ func MagusJobSchema(_ context.Context) (map[string]any, error) {
 // jobAttemptFromContext reads the output descriptor from the workspace already on ctx.
 // A job plan is repository-wide but output records are checkout-local, so Exit resolves
 // the worker's record once and files its portable summary on the job for a later Wait.
-func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, error) {
+func jobAttemptFromContext(ctx context.Context, ref string) (jobtypes.CapturedRun, error) {
 	if strings.TrimSpace(ref) == "" {
-		return types.JobAttempt{}, nil
+		return jobtypes.CapturedRun{}, nil
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.JobAttempt{}, types.DiagnosticErrorf(types.MagusfileOnlyMember,
+		return jobtypes.CapturedRun{}, types.DiagnosticErrorf(types.MagusfileOnlyMember,
 			"magus\\job: no workspace on the context: output evidence is read from the workspace magus already has open")
 	}
 	cd, ok := ws.(workspaceCacheDir)
 	if !ok {
-		return types.JobAttempt{}, fmt.Errorf("magus\\job: this workspace has no cache directory")
+		return jobtypes.CapturedRun{}, fmt.Errorf("magus\\job: this workspace has no cache directory")
 	}
 	desc, err := cache.NewOutputStore(cd.CacheDir()).DescriptorByRef(ref)
 	switch {
 	case err == nil:
 		return desc.JobAttempt(ref), nil
 	case errors.Is(err, fs.ErrNotExist):
-		return types.JobAttempt{}, nil
+		return jobtypes.CapturedRun{}, nil
 	default:
-		return types.JobAttempt{}, err
+		return jobtypes.CapturedRun{}, err
 	}
 }
 
 // MagusExitJob backs magus\job(id).exit with a result.
 // It files result as the holder's report on row id.
-func MagusExitJob(ctx context.Context, id string, result types.JobResult) (types.Job, error) {
+func MagusExitJob(ctx context.Context, id string, result jobtypes.Result) (jobtypes.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.exit")
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	return job.Exit(ctx, store, strings.TrimSpace(id), &result, jobAttemptFromContext)
 }
 
 // MagusAbandonJob backs magus\job(id).exit without a result.
-func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
+func MagusAbandonJob(ctx context.Context, id string) (jobtypes.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.exit")
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	return job.Exit(ctx, store, strings.TrimSpace(id), nil, nil)
 }
@@ -1849,10 +1864,10 @@ func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
 // MagusWaitJob backs magus\job(id).wait.
 // A nil result selects the evidence Exit filed;
 // otherwise result is resolved locally.
-func MagusWaitJob(ctx context.Context, id string, result *types.JobResult) (types.JobStatus, error) {
+func MagusWaitJob(ctx context.Context, id string, result *jobtypes.Result) (jobtypes.Status, error) {
 	store, err := jobStoreFromContext(ctx, "job.wait")
 	if err != nil {
-		return types.JobStatus{}, err
+		return jobtypes.Status{}, err
 	}
 	// No symbol reader on this path: the workspace on the context carries the PROJECT
 	// graph, and a symbol gate needs the knowledge graph, which a magusfile has no
@@ -1896,7 +1911,7 @@ func MagusDiff(ctx context.Context, opts types.MagusDiffOptions) (difftypes.Diff
 		if err != nil {
 			return difftypes.Diff{}, fmt.Errorf(`magus\change().diff: read opts.from: %w`, err)
 		}
-		if err := json.Unmarshal(raw, &saved); err != nil {
+		if err := codec.Unmarshal(raw, &saved); err != nil {
 			return difftypes.Diff{}, fmt.Errorf("magus\\change().diff: decode opts.from %s (expected `magus diff -o json` output): %w", opts.From, err)
 		}
 		return saved, nil
@@ -1941,7 +1956,7 @@ func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts ty
 	// there would throw away the very payload the caller asked for. A report that parsed
 	// IS the answer; the caller branches on it (summary.fail), which is strictly more
 	// than an exit code carries. Only an unparsable answer is a failure to answer.
-	if derr := json.Unmarshal([]byte(res.Stdout), &out); derr == nil {
+	if derr := codec.Unmarshal([]byte(res.Stdout), &out); derr == nil {
 		return out, nil
 	}
 	if runErr != nil {
@@ -2111,7 +2126,7 @@ func recursiveMagusEnv(ctx context.Context) []string {
 
 // leaseEnv is the BAGGAGE through which a nested magus keeps its caller's lease.
 func leaseEnv(ctx context.Context) []string {
-	if lease := types.JobLeaseFromContext(ctx); lease != "" {
+	if lease := jobtypes.LeaseFromContext(ctx); lease != "" {
 		return []string{fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease)}
 	}
 	return nil

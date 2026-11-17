@@ -13,7 +13,7 @@ tells you the legal versions, and you choose one.
 
 | Step                | Where                             | What it does                                 |
 | ------------------- | --------------------------------- | -------------------------------------------- |
-| Cut the tag         | your machine, `magus run release` | tags each module, rewrites the root `go.mod` |
+| Cut the tag         | your machine, `magus run release` | pins each `go.mod` in a commit, tags modules |
 | Push the tag        | your machine, `git push`          | deliberate, separate, yours                  |
 | Build the artifacts | `release.yaml` on GitHub          | archives, images, signatures                 |
 
@@ -56,7 +56,7 @@ magus run release -- libs/testpairing@0.1.0
 ```text
 release: DRY RUN - add the cd charm to execute
 release: tag libs/testpairing/v0.1.0
-release: dry run only - nothing was tagged or written
+release: dry run only - nothing was committed or tagged here
 ```
 
 ## Release several at once
@@ -74,27 +74,32 @@ to the root's release schedule.
 
 ## The order it enforces
 
-Releasing the root alongside a nested module has an order that is easy to get
-wrong by hand, so the target handles it:
+Every in-repo module requires its siblings at real tags, and every `go.mod` on main
+also replaces each sibling with its directory. `replace` is never transitive, so a
+consumer downstream resolves the tags, while every build in this repo compiles the
+code beside it. A release keeps both true:
 
-1. **Nested modules first** (`libs/<name>/vX.Y.Z`). Each has to be `go get`-able
-   before anything can require it at a real version.
-2. **Rewrite the root `go.mod`**, pointing each `require .../libs/<name>` from
-   `v0.0.0` at the version just tagged.
-3. **Tag the root last** (`vX.Y.Z`), so its tag captures that rewrite.
+1. **Name every tag the requires need.** A `require .../libs/<name> vX.Y.Z` whose tag
+   does not exist yet refuses the release, naming each such module in dependency order
+   and the run that adds them. Run it as printed to cut them in this release.
+2. **Commit the pins.** Every `go.mod` that requires a released module points at its
+   new version, not only the root's. Each released module's `go.mod` drops its
+   in-repo replaces and gains the `go.sum` lines they stood in for, so
+   `go install github.com/egladman/magus/cmd/magus@vX.Y.Z` accepts the module.
+3. **Prove it from outside.** In a scratch clone, with the tags cut there, a scratch
+   module runs `GOWORK=off go get <module>@<version>` and `go build <module>/...` for
+   each released Go module, and `go install` for the commands the root and each
+   released library ship.
+4. **Restore the replaces.** A second commit puts each dropped replace and its
+   `go.sum` back, so main keeps building against the working tree.
+5. **Tag the release commit.** Nested modules go first, each after the modules it
+   requires, and the root last.
 
-Reverse it and the root tag ships a `go.mod` requiring versions that do not
-exist, which breaks `go get github.com/egladman/magus` for everyone outside the
-repo.
+Nothing reaches this checkout until step 3 passes. Under `cd` the branch then
+fast-forwards to the two commits and the tags are cut on the first of them.
 
-The `replace` directives stay untouched. `replace` is never transitive, so no
-consumer downstream sees them, and they are the standard pattern for local
-development inside one repo.
-
-A module the root's `go.mod` does not require is tag-only, so step 2 skips it.
-That covers a module in another language, and equally a Go module nothing imports:
-`libs/testpairing` gets compiled into a golangci-lint binary, so the root has no
-require line to point anywhere.
+A non-Go module is tag-only, and a release whose `go.mod`s need no change tags HEAD
+without a commit.
 
 ## What it refuses
 
@@ -109,6 +114,26 @@ half the modules tagged:
   in `/vN`, and `go get` resolves the path rather than the tag. A `v2.0.0` tag
   beside a `go.mod` still declaring the v1 path is uninstallable. Renaming a
   module means rewriting every import, so the release stops rather than guesses.
+- **A pseudo-version in any in-repo require.** It names a commit rather than a
+  tag, so nobody outside the repo can resolve the release it ships in.
+- **A tag a require names and nobody cut.** The refusal names the run that releases
+  it too:
+
+  ```text
+  release: FAIL requires - requires name tags that do not exist: libs/apiversion@0.1.0,
+  libs/codec@0.1.0. Release them in this run: `magus run release -- libs/xdg@0.1.1
+  libs/apiversion@0.1.0 libs/codec@0.1.0`
+  ```
+
+  A version that is not a legal next one, or two `go.mod`s requiring different untagged
+  versions of one module, has no such run and refuses on its own line.
+- **A dependency that moved since its tag.** Each in-repo module a released module
+  requires must either be released in the same run or have a tag whose tree for its
+  directory equals HEAD's. Otherwise a consumer would build other code than this
+  repo tested: `release: FAIL requires - v0.5.0 requires libs/diagnostics/v0.2.0, and
+  HEAD's libs/diagnostics has changed since that tag: release libs/diagnostics in this run`.
+- **A release commit that does not install.** Any failing step of the scratch
+  clone's tidy, `go get`, `go build` or `go install` is a `FAIL release commit` line.
 - **A dirty tree**, under `cd`: `release: tree is dirty; commit before releasing`.
   The dry run warns instead of failing, so you can rehearse.
 
@@ -174,7 +199,7 @@ where the number gets chosen.
 ### The post-tag state, simulated
 
 The release checks compute the version `release-build` would stamp once these tags
-sit on HEAD, then computes every asset name that version produces, for magus and for
+sit on the commit they go on, the release commit or HEAD when no `go.mod` changes, then computes every asset name that version produces, for magus and for
 `proofread`, and checks each one against the glob `release.yaml` uploads that tool's
 archives with.
 
@@ -211,9 +236,11 @@ archive beside it.
 
 ## Pushing
 
-Nothing above pushes. Review the tags, then push when you mean it:
+Nothing above pushes. Review the two commits and the tags, then push the branch and
+the module tags before the root's, when you mean it:
 
 ```bash
+git push origin HEAD libs/codec/v0.1.0
 git push origin v0.4.0
 ```
 

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -279,10 +279,10 @@ func TestPrecedentsMarshalByteStable(t *testing.T) {
 		Family: types.PrecedentTestPackageName, Scope: goScope,
 		Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{fileCase("internal/a/a_test.go")},
 	}}, rows)
-	first, err := json.Marshal(rows)
+	first, err := codec.Marshal(rows)
 	require.NoError(t, err)
 	for range 20 {
-		again, err := json.Marshal(f.g.Precedents(PrecedentOptions{Conformance: testConformance()}))
+		again, err := codec.Marshal(f.g.Precedents(PrecedentOptions{Conformance: testConformance()}))
 		require.NoError(t, err)
 		require.Equal(t, string(first), string(again))
 	}

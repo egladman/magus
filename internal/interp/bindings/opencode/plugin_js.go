@@ -8,7 +8,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 func property(value js.Value, key string) js.Value {
@@ -84,7 +84,7 @@ func (c jsClient) sessionMessages(ctx context.Context, id string) ([]sessionMess
 		return nil, err
 	}
 	var messages []sessionMessage
-	if err := json.Unmarshal([]byte(encoded), &messages); err != nil {
+	if err := codec.Unmarshal([]byte(encoded), &messages); err != nil {
 		return nil, err
 	}
 	return messages, nil
@@ -169,7 +169,7 @@ func decodeMessageParts(parts js.Value) []messagePart {
 		return nil
 	}
 	var decoded []messagePart
-	if json.Unmarshal([]byte(encoded), &decoded) != nil {
+	if codec.Unmarshal([]byte(encoded), &decoded) != nil {
 		return nil
 	}
 	return decoded

@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // publicGoPackages is the one list of packages whose exported Go API is locked.
@@ -84,7 +84,7 @@ func loadGoPackages(dir string) ([]*gotypes.Package, error) {
 
 	exports := map[string]string{}
 	listed := map[string]listedPackage{}
-	dec := json.NewDecoder(bytes.NewReader(stdout))
+	dec := codec.NewDecoder(bytes.NewReader(stdout))
 	for {
 		var p listedPackage
 		if err := dec.Decode(&p); err != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -35,20 +36,20 @@ func (s *ForkJudgedPathSuite) SetupTest() {
 	s.store = NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: root})
 }
 
-func (s *ForkJudgedPathSuite) seed(state types.JobState) {
-	_, err := s.store.Update(s.T().Context(), "w", func(u *types.Job) {
-		*u = types.Job{ID: "w", State: state, ReadOnly: true}
+func (s *ForkJudgedPathSuite) seed(state job.State) {
+	_, err := s.store.Update(s.T().Context(), "w", func(u *job.Job) {
+		*u = job.Job{ID: "w", State: state, ReadOnly: true}
 	})
 	s.Require().NoError(err)
 }
 
 func (s *ForkJudgedPathSuite) TestALiveRowIsJudgedAsAnUpdate() {
-	s.seed(types.StateDeclared)
+	s.seed(job.StateDeclared)
 	s.True(NoteForkJudgedAsUpdate(s.T().Context(), s.store, "w"))
 }
 
 func (s *ForkJudgedPathSuite) TestAnEndedRowIsJudgedWhole() {
-	s.seed(types.StateNoReturn)
+	s.seed(job.StateNoReturn)
 	s.False(NoteForkJudgedAsUpdate(s.T().Context(), s.store, "w"))
 }
 

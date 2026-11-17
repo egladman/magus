@@ -20,6 +20,7 @@ import (
 	_ "github.com/egladman/magus/internal/interp"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 // Workspace is [types.BuildFacts] from a magus workspace, loaded once, in place of
@@ -67,7 +68,7 @@ func OpenWorkspace(ctx context.Context, root, target string, opts ...WorkspaceOp
 		return nil, errors.New("workspace needs the target the queue's regeneration runs")
 	}
 	m, err := magus.Open(ctx, root, magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
-		magus.WithSpawnRule(magus.TierCeiling))
+		magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		return nil, err
 	}

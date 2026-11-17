@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ func stampLines(t *testing.T, root string) int {
 	t.Helper()
 	store, err := heartbeatStore(root)
 	require.NoError(t, err)
-	read, err := file.ReadLines(store.Path)
+	read, err := codec.ReadLines(store.Path)
 	require.NoError(t, err)
 	return len(read.Lines)
 }
@@ -103,14 +103,14 @@ func TestSilentLeases(t *testing.T) {
 	} {
 		stampHeartbeat(ctx, root, h)
 	}
-	rows := []types.Job{
-		{ID: "silent", State: types.StateRunning},
-		{ID: "background", State: types.StateRunning},
-		{ID: "finished-background", State: types.StateDeclared},
-		{ID: "recent", State: types.StateRunning},
-		{ID: "exited", State: types.StateNoReturn},
-		{ID: "unstamped", State: types.StateRunning},
-		{ID: "server", State: types.StateRunning, RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}},
+	rows := []jobtypes.Job{
+		{ID: "silent", State: jobtypes.StateRunning},
+		{ID: "background", State: jobtypes.StateRunning},
+		{ID: "finished-background", State: jobtypes.StateDeclared},
+		{ID: "recent", State: jobtypes.StateRunning},
+		{ID: "exited", State: jobtypes.StateNoReturn},
+		{ID: "unstamped", State: jobtypes.StateRunning},
+		{ID: "server", State: jobtypes.StateRunning, RegisteredBy: jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer}},
 	}
 
 	got, err := SilentLeases(root, t.TempDir(), rows, now, SilentLeaseAfter)
@@ -157,8 +157,8 @@ func TestDeadHolderNeedsSilenceAndNoBackgroundCommand(t *testing.T) {
 	} {
 		stampHeartbeat(ctx, checkout, h)
 	}
-	row := func(id string, registered int64) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, Registered: registered, CheckoutRoot: checkout}
+	row := func(id string, registered int64) jobtypes.Job {
+		return jobtypes.Job{ID: id, State: jobtypes.StateRunning, Registered: registered, CheckoutRoot: checkout}
 	}
 
 	got, ok := deadHolder(store, at, row("dead", 1), now)
@@ -181,8 +181,8 @@ func TestDeadHolderReadsAStaleStop(t *testing.T) {
 	at := location{workspace: t.TempDir(), cacheDir: t.TempDir()}
 	store := job.NewStore(at.jobs())
 	now := time.Unix(1_800_000_000, 0)
-	stopped := func(ago time.Duration) types.Job {
-		return types.Job{ID: "w", State: types.StateRunning, Registered: 1, HolderStopped: now.Add(-ago).Unix()}
+	stopped := func(ago time.Duration) jobtypes.Job {
+		return jobtypes.Job{ID: "w", State: jobtypes.StateRunning, Registered: 1, HolderStopped: now.Add(-ago).Unix()}
 	}
 
 	got, ok := deadHolder(store, at, stopped(45*time.Minute), now)
@@ -213,7 +213,7 @@ func TestStampHeartbeatCompactsPastItsBound(t *testing.T) {
 		require.NoError(t, err)
 		lines = append(lines, line)
 	}
-	require.NoError(t, file.RewriteLines(store.Path, lines, store.Perm))
+	require.NoError(t, codec.RewriteLines(store.Path, lines, store.Perm))
 
 	stampHeartbeat(ctx, root, heartbeat{Session: "s", Lease: "newest", At: now})
 	assert.Equal(t, heartbeatMaxEntries, stampLines(t, root), "the store holds its bound, one line per pair")

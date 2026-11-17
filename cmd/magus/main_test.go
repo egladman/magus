@@ -16,9 +16,10 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/server"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -164,7 +165,7 @@ func jsonlRecords(ts *testscript.TestScript, neg bool, args []string) {
 				Schema *int   `json:"schema"`
 				Type   string `json:"type"`
 			}
-			if err := json.Unmarshal([]byte(line), &head); err != nil || head.Schema == nil || head.Type == "" {
+			if err := codec.Unmarshal([]byte(line), &head); err != nil || head.Schema == nil || head.Type == "" {
 				ts.Fatalf("%s line %d is not a record: %q", stream, i+1, line)
 			}
 			seen[head.Type] = true
@@ -226,7 +227,7 @@ func BenchmarkMagusOpenCold(b *testing.B) {
 		root := openBenchWorkspace(b, 10)
 		b.StartTimer()
 
-		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -257,7 +258,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	root := openBenchJSWorkspace(b, 50)
 
 	// Warm the on-disk workspace cache with one full Open.
-	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -266,7 +267,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -282,7 +283,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	ctx := context.Background()
 	root := openBenchWorkspace(b, 10)
 
-	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -291,7 +292,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			b.Fatal(err)
 		}

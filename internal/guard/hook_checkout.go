@@ -13,12 +13,12 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // takeDelegation marks ctx with the binary that handed this call on, if one
@@ -68,7 +68,7 @@ func hookCallDir(input string) string {
 		return ""
 	}
 	var ev hookEvent
-	if json.Unmarshal([]byte(input), &ev) != nil {
+	if codec.Unmarshal([]byte(input), &ev) != nil {
 		return ""
 	}
 	at := func(p string) string {
@@ -112,7 +112,7 @@ func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string
 	if err != nil {
 		return fmt.Sprintf("the job store of %s, which pins every binary this hands a call to, did not open: %v", session, err)
 	}
-	why, err := store.PinRefusal(own)
+	why, err := store.PinRefusal(ctx, own)
 	if err != nil {
 		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}
@@ -204,9 +204,9 @@ func (e HookEnv) delegateToCheckout(ctx context.Context, argv []string, input st
 	switch end {
 	case DelegateExited:
 	case DelegateKilledUnanswered:
-		verdict := types.GuardJudgment{
+		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:   "deny",
+			Decision:   verdict.Deny,
 			Reason:     fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
 		}
 		if werr := e.writeVerdict(out, opts, verdict); werr != nil {
@@ -245,7 +245,7 @@ func (e HookEnv) unloadableCheckout(ctx context.Context, root string) string {
 
 // judgedBy appends note, which says which binary judged, to the verdict's text. A pass
 // carries no text to append to.
-func judgedBy(verdict types.GuardJudgment, note string) types.GuardJudgment {
+func judgedBy(verdict verdict.Judgment, note string) verdict.Judgment {
 	if note == "" {
 		return verdict
 	}

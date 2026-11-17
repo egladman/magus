@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 )
 
@@ -92,7 +92,7 @@ func (s *staging) put(mediaType string, data []byte) (ocispec.Descriptor, error)
 
 // putJSON marshals v and puts it.
 func (s *staging) putJSON(mediaType string, v any) (ocispec.Descriptor, error) {
-	data, err := json.Marshal(v)
+	data, err := codec.Marshal(v)
 	if err != nil {
 		return ocispec.Descriptor{}, err
 	}
@@ -208,7 +208,7 @@ func (s *staging) commit(manifests ...ocispec.Descriptor) error {
 			return fmt.Errorf("index.json names %s, which no blob holds", m.Digest)
 		}
 	}
-	index, err := json.Marshal(ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex, Manifests: manifests})
+	index, err := codec.Marshal(ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex, Manifests: manifests})
 	if err != nil {
 		return err
 	}

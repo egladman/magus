@@ -19,7 +19,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
@@ -27,6 +27,8 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
@@ -293,7 +295,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	fetch := magustypes.InflightFetch{
+	fetch := jobstore.InflightFetch{
 		Provider: f.Provider, Host: queue.RemoteHost(remote), Base: f.Base,
 		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
 	}
@@ -440,7 +442,7 @@ func (e *queueEnv) writeDocument(opts output.Options, doc []byte, shape any, nam
 		}
 	}
 	var record map[string]any
-	if err := json.Unmarshal(doc, &record); err != nil {
+	if err := codec.Unmarshal(doc, &record); err != nil {
 		return err
 	}
 	return writeFormatted(e.stdout, opts, record)
@@ -557,7 +559,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 // base's, pinned for the hooks: a candidate's own magus.yaml cannot widen it or turn
 // verification off.
 func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.CacheReadProxy, []string, error) {
-	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), magustypes.NewSecret(os.Getenv("ACTIONS_RUNTIME_TOKEN"))
+	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), secrets.New(os.Getenv("ACTIONS_RUNTIME_TOKEN"))
 	switch {
 	case upstream == "" || token.IsZero():
 		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read reads through the runner's cache service, and ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set; GitHub Actions gives them to an action, not a run: step, so export them to this step")

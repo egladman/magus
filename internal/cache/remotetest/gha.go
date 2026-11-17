@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // GHA emulates the GitHub Actions Cache service v2 that spells/github/actions calls:
@@ -130,7 +130,7 @@ func (e *GHA) createEntry(w http.ResponseWriter, r *http.Request) {
 		Key     string `json:"key"`
 		Version string `json:"version"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	_ = codec.NewDecoder(r.Body).Decode(&body)
 	if body.Key == "" {
 		http.Error(w, "missing key", http.StatusBadRequest)
 		return
@@ -149,10 +149,10 @@ func (e *GHA) createEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if e.RefuseCreate {
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "message": "reservation refused"})
+		_ = codec.NewEncoder(w).Encode(map[string]any{"ok": false, "message": "reservation refused"})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	_ = codec.NewEncoder(w).Encode(map[string]any{
 		"ok": true,
 		e.urlField("signed_upload_url", "signedUploadUrl"): fmt.Sprintf("http://%s/upload/%s", r.Host, body.Key),
 	})
@@ -177,7 +177,7 @@ func (e *GHA) finalize(w http.ResponseWriter, r *http.Request) {
 		SizeBytes string `json:"size_bytes"` // int64 is a JSON string in proto3
 		Version   string `json:"version"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	_ = codec.NewDecoder(r.Body).Decode(&body)
 	if rejectVersion(w, body.Version) {
 		return
 	}
@@ -194,7 +194,7 @@ func (e *GHA) finalize(w http.ResponseWriter, r *http.Request) {
 	}
 	e.committed[body.Key] = data
 	delete(e.pending, body.Key)
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "entryId": "1"})
+	_ = codec.NewEncoder(w).Encode(map[string]any{"ok": true, "entryId": "1"})
 }
 
 func (e *GHA) downloadURL(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +203,7 @@ func (e *GHA) downloadURL(w http.ResponseWriter, r *http.Request) {
 		RestoreKeys []string `json:"restore_keys"`
 		Version     string   `json:"version"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	_ = codec.NewDecoder(r.Body).Decode(&body)
 	if rejectVersion(w, body.Version) {
 		return
 	}
@@ -211,10 +211,10 @@ func (e *GHA) downloadURL(w http.ResponseWriter, r *http.Request) {
 	_, ok := e.committed[body.Key]
 	e.mu.Unlock()
 	if !ok {
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false})
+		_ = codec.NewEncoder(w).Encode(map[string]any{"ok": false})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	_ = codec.NewEncoder(w).Encode(map[string]any{
 		"ok": true,
 		e.urlField("signed_download_url", "signedDownloadUrl"): fmt.Sprintf("http://%s/blob/%s", r.Host, body.Key),
 		e.urlField("matched_key", "matchedKey"):                body.Key,

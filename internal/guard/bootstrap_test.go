@@ -11,6 +11,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -41,13 +43,13 @@ go 1.26
 	return w.Root()
 }
 
-func judgeOwnBuild(cwd, command string) ShellVerdict {
-	return judgeOwnBuildWith(strict(testDependencies()), cwd, command)
+func judgeOwnBuild(ctx context.Context, cwd, command string) ShellVerdict {
+	return judgeOwnBuildWith(ctx, strict(testDependencies()), cwd, command)
 }
 
-func judgeOwnBuildWith(deps Dependencies, cwd, command string) ShellVerdict {
+func judgeOwnBuildWith(ctx context.Context, deps Dependencies, cwd, command string) ShellVerdict {
 	d := effectiveDialect("")
-	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(context.Background(), deps, cwd, command, d))
+	return rankOwnBuild(Evaluate(ctx, deps, command), ownBuildVerdict(ctx, deps, cwd, command, d))
 }
 
 // loadingAs is testDependencies with the workspace load answering err, counting each load.
@@ -110,7 +112,7 @@ func TestRankOwnBuild(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := judgeOwnBuild(tt.cwd, tt.command)
+			v := judgeOwnBuild(t.Context(), tt.cwd, tt.command)
 			switch {
 			case tt.advise:
 				assert.Empty(t, v.Deny)
@@ -140,7 +142,7 @@ func TestRankOwnBuildNamesWhatToDropBesideTheBootstrap(t *testing.T) {
 		ward.BootstrapCommand + " | tail -5; ls -la magus": "drop `| tail -5` and `; ls -la magus`.",
 		"cd x && " + ward.BootstrapCommand:                 "drop `cd x &&`.",
 	} {
-		v := judgeOwnBuild(fresh, command)
+		v := judgeOwnBuild(t.Context(), fresh, command)
 		assert.Equal(t, "magus workspace: the bootstrap runs only alone on its line; "+drop, v.Deny, command)
 		require.Len(t, v.Next, 1, command)
 		assert.Equal(t, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", fresh), v.Next[0].Run, command)
@@ -153,7 +155,7 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 	fresh := checkoutFixture(t, ownModule, false)
 	built := checkoutFixture(t, ownModule, true)
 	for _, command := range []string{"go run ./cmd/magus", "go vet ./...", "go test ./..."} {
-		v := judgeOwnBuild(fresh, command)
+		v := judgeOwnBuild(t.Context(), fresh, command)
 		require.Len(t, v.Next, 1, command)
 		assert.Equal(t, types.NextStep{
 			ID:   hint.DenyRemedyPrefix + string(denyRuleRawTool),
@@ -161,7 +163,7 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 			Argv: []string{"GOEXPERIMENT=jsonv2", "go", "-C", fresh, "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."},
 			Why:  bootstrapWhy,
 		}, v.Next[0], command)
-		assert.Equal(t, Evaluate(strict(testDependencies()), command), judgeOwnBuild(built, command), command)
+		assert.Equal(t, Evaluate(t.Context(), strict(testDependencies()), command), judgeOwnBuild(t.Context(), built, command), command)
 	}
 }
 
@@ -198,7 +200,7 @@ func TestRankOwnBuildAllowsTheFixedRecovery(t *testing.T) {
 		root := checkoutFixture(t, ownModule, withBinary)
 		for _, command := range recoveryForms {
 			loads := 0
-			v := judgeOwnBuildWith(loadingAs(nil, &loads), root, command)
+			v := judgeOwnBuildWith(t.Context(), loadingAs(nil, &loads), root, command)
 			assert.Empty(t, v.Deny, command)
 			assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
 			assert.Contains(t, v.Context, "the relink and the regenerate run", command)
@@ -236,7 +238,7 @@ func TestRankOwnBuildDeniesEverythingButTheFixedRecovery(t *testing.T) {
 		"go generate ./cmd/magus-utils && go vet ./...",
 		"go generate ./cmd/magus-utils > generate.log",
 	} {
-		v := judgeOwnBuild(root, command)
+		v := judgeOwnBuild(t.Context(), root, command)
 		assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
 		assert.NotEmpty(t, v.Deny, command)
 	}
@@ -261,7 +263,7 @@ func (s *RelinkSuite) SetupTest() {
 	s.layers = ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
 }
 
-func (s *RelinkSuite) judge(lease, command string) types.GuardJudgment {
+func (s *RelinkSuite) judge(lease, command string) verdict.Judgment {
 	deps := strict(testDependencies())
 	deps.lease = lease
 	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", s.built, command)
@@ -281,11 +283,11 @@ func (s *RelinkSuite) worker() Dependencies {
 }
 
 func (s *RelinkSuite) TestAWorkerDoesNotRelink() {
-	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.worker(), s.built, ward.RelinkAt("")).Deny)
+	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.T().Context(), s.worker(), s.built, ward.RelinkAt("")).Deny)
 }
 
 func (s *RelinkSuite) TestAWorkerDoesNotRegenerate() {
-	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.worker(), s.built, "go generate ./internal/spell").Deny)
+	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.T().Context(), s.worker(), s.built, "go generate ./internal/spell").Deny)
 }
 
 // A binary that exists keeps "not a bootstrap" whatever its load says:
@@ -298,7 +300,7 @@ func TestRankOwnBuildDeniesTheBootstrapOverABinary(t *testing.T) {
 		"stale":        types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"),
 	} {
 		loads := 0
-		v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, ward.BootstrapCommand)
+		v := judgeOwnBuildWith(t.Context(), loadingAs(loadErr, &loads), built, ward.BootstrapCommand)
 		assert.Contains(t, v.Deny, "already has a magus binary", name)
 		assert.Contains(t, v.Deny, ward.RelinkAt(built), name)
 	}
@@ -307,7 +309,7 @@ func TestRankOwnBuildDeniesTheBootstrapOverABinary(t *testing.T) {
 func TestBootstrapRemedyNamesTheCheckout(t *testing.T) {
 	fresh := filepath.Join(t.TempDir(), "landing $cache 'quoted'")
 	require.NoError(t, os.Rename(checkoutFixture(t, ownModule, false), fresh))
-	v := judgeOwnBuild(fresh, "go run ./cmd/magus")
+	v := judgeOwnBuild(t.Context(), fresh, "go run ./cmd/magus")
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, []string{"GOEXPERIMENT=jsonv2", "go", "-C", fresh, "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."}, v.Next[0].Argv)
 	commands, parsed := ParseCommandsDialect(v.Next[0].Run, effectiveDialect(""))
@@ -317,7 +319,7 @@ func TestBootstrapRemedyNamesTheCheckout(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, fresh, call.buildRoot(t.TempDir()))
 	// A remedy copied into a different session still builds the named checkout.
-	assert.Empty(t, judgeOwnBuild(t.TempDir(), v.Next[0].Run).Deny)
+	assert.Empty(t, judgeOwnBuild(t.Context(), t.TempDir(), v.Next[0].Run).Deny)
 }
 
 func TestRankOwnBuildKeepsAWorkersBootstrapDenied(t *testing.T) {
@@ -325,7 +327,7 @@ func TestRankOwnBuildKeepsAWorkersBootstrapDenied(t *testing.T) {
 	servesPlacement(t, checkout)
 	deps := strict(testDependencies())
 	deps.lease = "worker"
-	v := judgeOwnBuildWith(deps, checkout, ward.BootstrapCommand)
+	v := judgeOwnBuildWith(t.Context(), deps, checkout, ward.BootstrapCommand)
 	assert.Equal(t, workerBuildVerdict, v.Deny)
 }
 
@@ -382,7 +384,7 @@ type CheckoutBootstrapSuite struct {
 	suite.Suite
 	layers         ctxLayers
 	root, checkout string
-	holder, other  types.Job
+	holder, other  jobtypes.Job
 }
 
 func TestCheckoutBootstrapSuite(t *testing.T) {
@@ -392,9 +394,9 @@ func TestCheckoutBootstrapSuite(t *testing.T) {
 func (s *CheckoutBootstrapSuite) SetupTest() {
 	s.checkout = s.T().TempDir()
 	s.layers, s.root = fleetLayers(s.T())
-	s.holder = types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: s.checkout, Worktree: &types.JobWorktree{Root: s.checkout, Source: s.root}}
-	s.other = types.Job{ID: "other", State: types.StateRunning, Registered: 1}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.holder, s.other}}))
+	s.holder = jobtypes.Job{ID: "pages-fix", State: jobtypes.StateRunning, Registered: 1, CheckoutRoot: s.checkout, Worktree: &jobtypes.Worktree{Root: s.checkout, Source: s.root}}
+	s.other = jobtypes.Job{ID: "other", State: jobtypes.StateRunning, Registered: 1}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{s.holder, s.other}}))
 	declareCheckoutHook(s.T(), s.root)
 }
 
@@ -405,7 +407,7 @@ func (s *CheckoutBootstrapSuite) verdict(lease, cwd, command string) ShellVerdic
 	if lease != "" {
 		deps.caller.Agent = "agent-a1b2c3"
 	}
-	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(s.layers.of(s.T()), deps, cwd, command, effectiveDialect("")))
+	return rankOwnBuild(Evaluate(s.T().Context(), deps, command), ownBuildVerdict(s.layers.of(s.T()), deps, cwd, command, effectiveDialect("")))
 }
 
 func (s *CheckoutBootstrapSuite) refused(v ShellVerdict, lease string) {

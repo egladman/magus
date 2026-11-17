@@ -11,8 +11,8 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -114,7 +114,7 @@ func (h *GraphHandler) body(ctx context.Context, flavor, level, sel string) ([]b
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(tg)
+		return codec.Marshal(tg)
 	}
 
 	var kgFlavor string

@@ -7,9 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/agent"
-	"github.com/egladman/magus/types/daemon"
-	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -26,6 +23,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
@@ -37,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
@@ -44,7 +43,6 @@ import (
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/risk"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/symbols"
@@ -52,10 +50,16 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/release"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
@@ -121,8 +125,12 @@ type Magus struct {
 	historySaid sync.Once
 
 	limOnce   sync.Once
-	lim       *cache.Limiter
+	lim       *budget.Limiter
 	slotWaits cache.SlotWaitMeter
+	// poolEvents is what the limiter reports its slot changes to, set by Open, and
+	// poolTelemetry is whether Open has finished wiring what they record into.
+	poolEvents    func(budget.PoolEvent)
+	poolTelemetry atomic.Bool
 
 	buzzPoolOnce sync.Once
 	buzzPoolReg  *buzz.PoolRegistry
@@ -173,8 +181,12 @@ type Magus struct {
 	foldedEdges map[string][]string
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
-	// magus\secret.read costs one provider invocation rather than two.
-	resolver *secret.Resolver
+	// magus\secret.read costs one provider invocation rather than two. load derives it
+	// once through the provider the magusfiles chose.
+	resolver *secrets.Resolver
+	// choices are the secret provider and remote cache backend the magusfiles chose,
+	// merged across projects. Written once by load.
+	choices interp.Choices
 
 	// spellImports is resolved once in load, before any magusfile, and read by every
 	// import resolver after; see SpellImports.
@@ -209,11 +221,11 @@ type Magus struct {
 	// one instead.
 	cacheBackend types.CacheBackend
 	// jobReader is WithJobReader's; nil reads the job store.
-	jobReader types.JobReader
+	jobReader job.Reader
 	// steps is WithStepRows' and WithStepRule's, checked at Open.
 	steps guard.StepTable
 	// modelTiers is what the root magusfile's magus\modelTiers declared.
-	modelTiers agent.ModelTierState
+	modelTiers model.TierState
 	// stepRules is what the root magusfile's magus\guard.step registered.
 	// Load checks the step specs against its kinds.
 	stepRules steps.Group
@@ -298,7 +310,7 @@ func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
 
 // CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
 // spawn rule.
-func (w internals) CheckSpawn(parent, child agent.ModelTier) error {
+func (w internals) CheckSpawn(parent, child tier.Tier) error {
 	return w.spawnRule(parent, child)
 }
 
@@ -416,13 +428,15 @@ func (m *Magus) load(ctx context.Context) error {
 	// Read before any magusfile adds to the registry, so a magusfile's policy table is
 	// still held to targets that exist.
 	goDeclared := goDeclaredTargets(m)
-	customTargets, err := preloadMagusfiles(ctx, m)
+	customTargets, choices, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		// Apply and the policy check would judge a registry the failed magusfiles
 		// never populated. The shadow ward reads only the tree, so it still reports.
 		return errors.Join(err, m.spellShadows())
 	}
 	m.magusfileExports = customTargets
+	m.choices = choices
+	m.resolver = m.resolver.WithProvider(choices.SecretProvider)
 	if err := m.steps.CheckJudged(m.stepRules.Kinds()); err != nil {
 		return fmt.Errorf("magus: WithStepSpecs: %w", err)
 	}
@@ -614,7 +628,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, err
 	}
 	if vo.spawnRule == nil {
-		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
+		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(tier.Ceiling), the reference rule, or a rule of your own")
 	}
 	if vo.CacheBackendGiven && vo.CacheBackend == nil {
 		return nil, errors.New("magus: WithCacheBackend was given a nil backend, so pass a backend, or leave the option out to use the one the magusfile wires")
@@ -636,10 +650,13 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.stderr = vo.Stderr
 	}
 	if isJSONLLog(cfg.Log) {
-		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
+		m.records = secrets.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
+	m.poolEvents = func(ev budget.PoolEvent) { m.recordPoolEvent(ctx, ev) }
 	if vo.Limiter != nil {
-		m.limOnce.Do(func() { m.lim = vo.Limiter })
+		// The caller built its limiter before this Magus had telemetry, so this Magus
+		// takes its own view of that pool, reporting what it takes.
+		m.limOnce.Do(func() { m.lim = vo.Limiter.WithPoolEvents(m.poolEvents) })
 	}
 	m.broker, m.brokerGiven, m.brokerPolicy = vo.Broker, vo.BrokerGiven, vo.BrokerPolicy
 	m.metricsCollect = vo.MetricsCollect
@@ -651,10 +668,10 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
 	workspace.BindRegistry(m, m.wsReg)
-	m.resolver = secret.New(secret.WithTimeouts(secret.Timeouts{
+	m.resolver = journal.NewSecretResolver(append([]secrets.Option{secrets.WithTimeouts(secrets.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
 		Unattended:  m.cfg.Secret.Unattended,
-	}))
+	})}, vo.secretsOpts...)...)
 	return m, nil
 }
 
@@ -689,15 +706,26 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	return cfg, nil
 }
 
+// ChoiceConflictError is two magusfiles naming different spells for one workspace-wide
+// choice, such as the secret provider or the remote cache backend. Open returns it.
+type ChoiceConflictError = interp.ChoiceConflictError
+
 // preloadMagusfiles parses magusfiles in each project so magus.project() calls
 // populate m.wsReg, and returns each project's custom (export fun) target names,
 // keyed by project path — used afterward by validateTargetPolicies to confirm a
-// project's per-target policy table names only targets that actually exist.
+// project's per-target policy table names only targets that actually exist — and the
+// choices every magusfile made, merged. Two magusfiles naming different spells for one
+// choice are a [*ChoiceConflictError].
+//
+// Every evaluation here reads through the base resolver: a provider one magusfile
+// chooses applies to its own reads and, after preload, to every run, but never to
+// another magusfile's top level.
 //
 // A failing magusfile does not stop the rest: the error joins every failure, so one
 // load names all of them instead of one per fix.
-func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
+func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, interp.Choices, error) {
 	customTargets := make(map[string][]string)
+	var merged interp.ChoiceMerge
 	ctx = m.installWorkspaceRegistry(ctx)
 	ctx = interp.WithBytecodeWarnings(ctx)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
@@ -716,24 +744,28 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			continue
 		}
 		if !interp.Available() && len(srcs) > 0 && len(srcs[0].Files) > 0 {
-			return nil, &types.EngineNotLinkedError{Op: "evaluate " + srcs[0].Files[0]}
+			return nil, interp.Choices{}, &types.EngineNotLinkedError{Op: "evaluate " + srcs[0].Files[0]}
 		}
+		label := types.ProjectLabel(p.Path, p.Dir)
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
-			targets, err := interp.Parse(pctx, src)
+			parsed, err := interp.Parse(pctx, src)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err))
+				errs = append(errs, fmt.Errorf("magus: %s: %w", label, err))
 				continue
 			}
-			for _, t := range targets {
+			if err := merged.Add(label, parsed.Choices); err != nil {
+				errs = append(errs, fmt.Errorf("magus: %w", err))
+			}
+			for _, t := range parsed.Targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
 			}
 		}
 	}
 	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+		return nil, interp.Choices{}, errors.Join(errs...)
 	}
-	return customTargets, nil
+	return customTargets, merged.Choices(), nil
 }
 
 // validateTargetPolicies errors when a project's per-target policy table
@@ -974,7 +1006,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
 	// every machine so the misconfiguration can't silently go live. A backend the caller
 	// gave with WithCacheBackend is held to the same trust set.
-	name := m.wsReg.RemoteBackend()
+	name := m.choices.RemoteBackend
 	if name != "" && m.cacheBackend != nil {
 		shutdownTel()
 		return nil, fmt.Errorf("magus: WithCacheBackend gives the %q backend and the magusfile wires magus.cache.remote(%q), and a workspace has one remote cache, so drop one",
@@ -1009,18 +1041,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, errors.Join(err, m.closeBroker())
 	}
 	m.cache = c
-	m.limiter().SetHooks(func(ev cache.PoolEvent) {
-		if ev.Queued != 0 {
-			m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
-			m.slotWaits.Add(ev.Queued)
-		}
-		if ev.Running > 0 {
-			m.tel.RecordPoolWait(ctx, ev.Wait.Seconds())
-		}
-		if ev.Running != 0 {
-			m.tel.RecordPoolSlots(ctx, observability.PoolRunning, int64(ev.Running))
-		}
-	})
+	m.poolTelemetry.Store(true)
 	return m, nil
 }
 
@@ -1275,7 +1296,7 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string
 //
 // Refused, never answered empty, for the reason RangeDiff gives: an empty footprint reads as
 // "this change touched nothing".
-func (m *Magus) Regions(ctx context.Context, base string, files []types.FileChange) ([]types.RegionChange, error) {
+func (m *Magus) Regions(ctx context.Context, base string, files []job.FileChange) ([]job.RegionChange, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		return nil, fmt.Errorf("resolving the version control backend: %w", err)
@@ -2127,7 +2148,7 @@ func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.A
 	return project.AffectedFromPaths(ctx, m.ws, paths)
 }
 
-func (m *Magus) limiter() *cache.Limiter {
+func (m *Magus) limiter() *budget.Limiter {
 	m.limOnce.Do(func() {
 		n := m.cfg.Concurrency
 		if n <= 0 {
@@ -2141,9 +2162,28 @@ func (m *Magus) limiter() *cache.Limiter {
 				slog.Int("cpus", cache.MachineCeiling()))
 			n = clamped
 		}
-		m.lim = cache.NewLimiter(n)
+		m.lim = cache.NewLimiter(n, budget.WithPoolEvents(m.poolEvents))
 	})
 	return m.lim
+}
+
+// recordPoolEvent records one change to the limiter's slots into telemetry and the
+// slot-wait meter, once Open has finished: the limiter exists before m.tel does, and a
+// slot taken while the magusfile loads is not a run's.
+func (m *Magus) recordPoolEvent(ctx context.Context, ev budget.PoolEvent) {
+	if !m.poolTelemetry.Load() {
+		return
+	}
+	if ev.Queued != 0 {
+		m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
+		m.slotWaits.Add(ev.Queued)
+	}
+	if ev.Running > 0 {
+		m.tel.RecordPoolWait(ctx, ev.Wait.Seconds())
+	}
+	if ev.Running != 0 {
+		m.tel.RecordPoolSlots(ctx, observability.PoolRunning, int64(ev.Running))
+	}
 }
 
 // buzzPoolRegistry returns the shared Buzz session pool registry.
@@ -2168,17 +2208,17 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 // poolSlots is the Buzz pool's view of the workspace limiter. A pooled target's body runs
 // under the same slot mark a cache step's does, so an install or a child magus it starts
 // sees the slot the body holds and yields it rather than queueing behind it.
-type poolSlots struct{ lim *cache.Limiter }
+type poolSlots struct{ lim *budget.Limiter }
 
 func (s poolSlots) Acquire(ctx context.Context, name string) (context.Context, func(), error) {
 	return s.lim.Admit(ctx, name)
 }
 
 func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) error {
-	if !cache.SlotHeld(ctx) {
+	if !budget.SlotHeld(ctx) {
 		return fn(ctx)
 	}
-	return s.lim.Yield(ctx, func() error { return fn(cache.WithoutSlotHeld(ctx)) })
+	return s.lim.Yield(ctx, func() error { return fn(budget.WithoutSlotHeld(ctx)) })
 }
 
 // Close releases workspace resources (VM pools, the sessions the guard's function
@@ -2408,7 +2448,7 @@ func magusfileOverride(p *types.Project, resolved []*spells.Spell, target string
 
 // forEachSpell runs fn against every spell on p. Spells run in parallel, and all run to
 // completion so one failure does not mask others. When the context carries a
-// [cache.Limiter] and the caller holds a slot, the fan-out yields the slot and each spell
+// [budget.Limiter] and the caller holds a slot, the fan-out yields the slot and each spell
 // acquires its own, keeping total concurrent spells bounded by the workspace cap.
 func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(context.Context, *spells.Spell) error) error {
 	resolved := p.ResolvedSpells
@@ -2434,7 +2474,7 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 		return nil
 	}
 	lim := cache.LimiterFromContext(ctx)
-	slotHeld := lim != nil && cache.SlotHeld(ctx)
+	slotHeld := lim != nil && budget.SlotHeld(ctx)
 	bounded := lim != nil
 
 	type result struct {
@@ -2525,9 +2565,12 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 // The resolver is per workspace Open, so this is only meaningful for a caller already
 // bound to one workspace. A server-wide action has no workspace and therefore nothing to
 // redact against, which is the honest answer rather than a gap.
+//
+// After load it reads through the provider the magusfiles chose; during load, through
+// the built-in environment provider.
 func (m *Magus) ContextWithSecrets(ctx context.Context) context.Context {
 	if m == nil || m.resolver == nil {
 		return ctx
 	}
-	return secret.ContextWithResolver(ctx, m.resolver)
+	return secrets.WithResolver(ctx, m.resolver)
 }

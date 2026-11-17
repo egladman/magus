@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/codec"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -392,7 +392,7 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 // jsonString is s as a JSON string literal, the way an event line carries it.
 func jsonString(t *testing.T, s string) string {
 	t.Helper()
-	b, err := json.Marshal(s)
+	b, err := codec.Marshal(s)
 	require.NoError(t, err)
 	return string(b)
 }

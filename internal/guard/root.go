@@ -15,8 +15,10 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // The cost rules judge the main thread of a session: the context every one of its calls
@@ -254,14 +256,14 @@ func kTokens(n int64) string { return fmt.Sprintf("%dk", n/1000) }
 // applyFindings puts findings on verdict: the first refusal replaces it when the host
 // reported the thread, and every other finding advises once per session, appended to
 // advice already there. An inferred thread is told a refusal as advice.
-func applyFindings(markers hint.Gate, verdict types.GuardJudgment, findings []costFinding, from types.ThreadSource) types.GuardJudgment {
+func applyFindings(markers hint.Gate, judged verdict.Judgment, findings []costFinding, from types.ThreadSource) verdict.Judgment {
 	for _, f := range findings {
 		if f.deny && from == types.ThreadReported {
-			return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: verdict.Lease, LeaseFrom: verdict.LeaseFrom}
+			return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Deny, Reason: f.say, Rule: string(f.rule), Lease: judged.Lease, LeaseFrom: judged.LeaseFrom}
 		}
 	}
-	if verdict.Decision != decisionPass && verdict.Decision != decisionAdvise {
-		return verdict
+	if judged.Decision != verdict.Defer && judged.Decision != verdict.Advise {
+		return judged
 	}
 	for _, f := range findings {
 		say, _, _ := strings.Cut(f.say, "\n")
@@ -269,13 +271,13 @@ func applyFindings(markers hint.Gate, verdict types.GuardJudgment, findings []co
 		if held == "" {
 			continue
 		}
-		if verdict.Decision == decisionAdvise {
-			verdict.Context += "\n\n" + held
+		if judged.Decision == verdict.Advise {
+			judged.Context += "\n\n" + held
 			continue
 		}
-		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(f.rule)
+		judged.Decision, judged.Context, judged.Rule = verdict.Advise, held, string(f.rule)
 	}
-	return verdict
+	return judged
 }
 
 // settingLookup adapts deps.setting to the lookup mainFindings takes.
@@ -286,17 +288,17 @@ func (d Dependencies) settingLookup(rule string) builtin.Setting {
 
 // gradeMainCommand judges a shell command of a session's unleased main thread by the cost
 // rules. A served next is magus's own suggestion and is left alone.
-func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) types.GuardJudgment {
-	if verdict.Decision == decisionDeny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
-		return verdict
+func gradeMainCommand(ctx context.Context, deps Dependencies, judged verdict.Judgment, in commandRuleInput, who hookAttribution, at location) verdict.Judgment {
+	if judged.Decision == verdict.Deny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
+		return judged
 	}
 	thread, from := callerThread(at.cacheDir, who, in.lease)
 	if thread != types.AgentThreadMain {
-		return verdict
+		return judged
 	}
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if f, misdeclared := budgetPastEveryWindow(deps.settingLookup(string(denyRuleRootContextBudget)), at.modelTable); misdeclared {
-		return applyFindings(gate, verdict, []costFinding{f}, from)
+		return applyFindings(gate, judged, []costFinding{f}, from)
 	}
 	st := sessionCostState(at, who, liveRowLookup(ctx, at), time.Now())
 	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command, at), free: costFree(in.command, at), line: in.command,
@@ -313,7 +315,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 		call.spawnBroken = spawnBroken(deps, who.Host)
 		call.policyNote = runPolicyNote(in.command, at)
 	}
-	return applyFindings(gate, verdict, mainFindings(deps.settingLookup, st, call), from)
+	return applyFindings(gate, judged, mainFindings(deps.settingLookup, st, call), from)
 }
 
 // readsOutputRef reports a line that is one `magus query output <ref>` and nothing else: no
@@ -354,13 +356,13 @@ func readsOutputRef(line string) bool {
 // the workspace's repository by orchestrator-groundwork. A write while the checkout is
 // midway through a merge or a cherry-pick may resolve a conflict, which is integration, so
 // it is advised and never refused there. A notes path is never judged.
-func gradeMainWrite(deps Dependencies, verdict types.GuardJudgment, path string, lease string, who hookAttribution, at location) types.GuardJudgment {
-	if verdict.Decision == decisionDeny || lease != "" || at.cacheDir == "" || notesPath(path, at) {
-		return verdict
+func gradeMainWrite(deps Dependencies, judged verdict.Judgment, path string, lease string, who hookAttribution, at location) verdict.Judgment {
+	if judged.Decision == verdict.Deny || lease != "" || at.cacheDir == "" || notesPath(path, at) {
+		return judged
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
 	if thread != types.AgentThreadMain {
-		return verdict
+		return judged
 	}
 	st := sessionCostState(at, who, liveRowLookup(context.Background(), at), time.Now())
 	call := mainCall{from: from, line: path, orchestration: orchestration(st, from), work: types.DelegableEdit}
@@ -369,12 +371,12 @@ func gradeMainWrite(deps Dependencies, verdict types.GuardJudgment, path string,
 	}
 	f, ok := groundworkFinding(deps.settingLookup(string(denyRuleOrchestratorGroundwork)), call)
 	if !ok {
-		return verdict
+		return judged
 	}
 	if f.deny && integrating(path, at) {
 		f.deny = false
 	}
-	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, []costFinding{f}, from)
+	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), judged, []costFinding{f}, from)
 }
 
 // budgetPastEveryWindow is the refusal of a root-context-budget tokens figure above the
@@ -418,16 +420,16 @@ var levelSettings = sync.OnceValue(func() map[types.GuardProfile]map[string]buil
 // shadowVerdicts is what each level would decide for c by the main-thread cost rules,
 // whichever is in force. It counts a match before the once-per-session hold, so an
 // advice a session was already given still counts as one.
-func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.GuardDecision {
-	out := map[types.GuardProfile]types.GuardDecision{}
+func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]verdict.Decision {
+	out := map[types.GuardProfile]verdict.Decision{}
 	for level, settings := range levelSettings() {
-		decision := types.GuardAllow
+		decision := verdict.Defer
 		for _, f := range mainFindings(func(rule string) builtin.Setting { return settings[rule] }, st, c) {
 			if f.deny && c.from == types.ThreadReported {
-				decision = types.GuardDeny
+				decision = verdict.Deny
 				break
 			}
-			decision = types.GuardAdvise
+			decision = verdict.Advise
 		}
 		out[level] = decision
 	}
@@ -438,17 +440,17 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 // spawn stays at the model tier its row was forked at. Tiers compare by rank in the
 // workspace's declaration, never by name or price; a spawn bound to no row, or to a row
 // forked with no declaration, has nothing to compare.
-func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) types.GuardJudgment {
-	if verdict.Decision == decisionDeny || !env.IsSpawn || at.cacheDir == "" {
-		return verdict
+func gradeSpawnModel(deps Dependencies, judged verdict.Judgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) verdict.Judgment {
+	if judged.Decision == verdict.Deny || !env.IsSpawn || at.cacheDir == "" {
+		return judged
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
 	var forked forkedTier
 	bound := false
 	if row, ok := titled(); ok {
 		if d := unknownRowSpawnDenial(deps, row); d.refused() {
-			verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, d.Say, string(denyRuleLeaseRowUnknown)
-			return verdict
+			judged.Decision, judged.Reason, judged.Rule = verdict.Deny, d.Say, string(denyRuleLeaseRowUnknown)
+			return judged
 		}
 		forked, bound = boundModelTier(deps, row)
 	}
@@ -472,25 +474,25 @@ func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookReq
 			findings = append(findings, costFinding{rule: denyRuleSpawnAboveModelTier, key: hint.MarkerKind(denyRuleSpawnAboveModelTier), say: say})
 		}
 	}
-	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, findings, from)
+	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), judged, findings, from)
 }
 
 // forkedTier is the model tier a job row was forked at, resolved against the workspace's
 // declaration as it stands.
 type forkedTier struct {
 	job    string
-	record agent.JobModelTier
-	tier   agent.ModelTier
-	set    *agent.ModelTierSet
+	record tier.Assignment
+	tier   tier.Tier
+	set    *tier.Set
 	// rows are the mgs_listModels rows: their aliases name the short model a host's spawn
 	// tool takes where the declaration maps only full ids.
-	rows []types.ModelPricing
+	rows []model.Row
 }
 
 // boundModelTier is the tier row was forked at, as tierIn finds it in the workspace's
 // declaration. The declaration is asked for only once a row carries a tier, since reading
 // it opens the workspace.
-func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
+func boundModelTier(deps Dependencies, row jobtypes.Job) (forkedTier, bool) {
 	if row.ModelTier == nil || deps.ModelTiers == nil {
 		return forkedTier{}, false
 	}
@@ -500,7 +502,7 @@ func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
 // tierIn is the tier row was forked at in set. It is false when the row records none, set
 // is nil, or set no longer has a case of that name at that rank: a row forked before its
 // enum changed is graded by nothing rather than by a guess.
-func tierIn(set *agent.ModelTierSet, row types.Job) (forkedTier, bool) {
+func tierIn(set *tier.Set, row jobtypes.Job) (forkedTier, bool) {
 	if set == nil || row.ModelTier == nil {
 		return forkedTier{}, false
 	}
@@ -555,12 +557,12 @@ func (f forkedTier) refusal(host, model string) string {
 
 // sameListedModel reports whether a and b name one mgs_listModels row by exact
 // id or alias. A tierless row still names a model, so another spelling matches.
-func sameListedModel(rows []types.ModelPricing, a, b string) bool {
+func sameListedModel(rows []model.Row, a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
 	idx := func(m string) int {
-		return slices.IndexFunc(rows, func(r types.ModelPricing) bool {
+		return slices.IndexFunc(rows, func(r model.Row) bool {
 			return r.ID == m || r.Alias != "" && r.Alias == m
 		})
 	}
@@ -587,7 +589,7 @@ func (f forkedTier) rankedAbove(host, model string) string {
 // recoversOwnCheckout reports a line that runs root's checkout.bootstrap with
 // --here --recover and nothing else. Only that entry is root work; ordinary
 // builds remain delegated. A workspace declaring no hook has no such line.
-func readsCitedResult(tries types.JobAttempts, line string, at location) bool {
+func readsCitedResult(tries jobtypes.Attempts, line string, at location) bool {
 	paths := focusReadPaths(line, cmp.Or(at.dir, at.workspace), userHome())
 	if len(paths) == 0 {
 		return false

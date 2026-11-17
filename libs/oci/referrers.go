@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -82,7 +82,7 @@ func (c *Client) referrersAPI(ctx context.Context, repo Reference, subject diges
 	if err != nil {
 		return idx, false, err
 	}
-	if err := json.Unmarshal(raw, &idx); err != nil {
+	if err := codec.Unmarshal(raw, &idx); err != nil {
 		return idx, false, fmt.Errorf("decode the referrers index: %w", err)
 	}
 	return idx, strings.Contains(resp.Header.Get("OCI-Filters-Applied"), "artifactType"), nil
@@ -102,7 +102,7 @@ func (c *Client) referrersIndex(ctx context.Context, repo Reference, subject dig
 	if raw.MediaType != ocispec.MediaTypeImageIndex {
 		return idx, fmt.Errorf("the referrers tag %s holds %q, want an image index", tag, raw.MediaType)
 	}
-	if err := json.Unmarshal(raw.Body, &idx); err != nil {
+	if err := codec.Unmarshal(raw.Body, &idx); err != nil {
 		return idx, fmt.Errorf("decode the referrers tag %s: %w", tag, err)
 	}
 	return idx, nil
@@ -118,7 +118,7 @@ func (c *Client) addToReferrersTag(ctx context.Context, repo Reference, m RawMan
 		Subject      *ocispec.Descriptor `json:"subject"`
 		Annotations  map[string]string   `json:"annotations"`
 	}
-	if err := json.Unmarshal(m.Body, &man); err != nil {
+	if err := codec.Unmarshal(m.Body, &man); err != nil {
 		return fmt.Errorf("decode manifest %s: %w", d, err)
 	}
 	if man.Subject == nil {
@@ -145,7 +145,7 @@ func (c *Client) addToReferrersTag(ctx context.Context, repo Reference, m RawMan
 		ArtifactType: artifactType,
 		Annotations:  man.Annotations,
 	})
-	body, err := json.Marshal(idx)
+	body, err := codec.Marshal(idx)
 	if err != nil {
 		return err
 	}

@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -98,7 +98,7 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 	}
 	lines, _ := c.outputs.KeyInputsByRef(ref) // absent is fine: the bytes are the point
 	bundle := OutputBundle{Schema: bundleSchema, Descriptor: desc, KeyInputs: lines}
-	meta, err := json.Marshal(bundle)
+	meta, err := codec.Marshal(bundle)
 	if err != nil {
 		return "", err
 	}
@@ -106,7 +106,7 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 	pr, pw := io.Pipe()
 	errCh := make(chan error, 1)
 	go func() {
-		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, secret.Redact(ctx, meta), bundleOutputName, secret.Redact(ctx, data))
+		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, secrets.Redact(ctx, meta), bundleOutputName, secrets.Redact(ctx, data))
 		_ = pw.CloseWithError(err)
 		errCh <- err
 	}()
@@ -262,7 +262,7 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 		return nil, OutputBundle{}, fmt.Errorf("output bundle: %w", err)
 	}
 	var b OutputBundle
-	if err := json.Unmarshal(meta, &b); err != nil {
+	if err := codec.Unmarshal(meta, &b); err != nil {
 		return nil, OutputBundle{}, fmt.Errorf("output bundle: parse: %w", err)
 	}
 	if b.Schema != bundleSchema {
@@ -329,8 +329,8 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 	if file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+outExt), data, 0o644) != nil {
 		return
 	}
-	if meta, err := json.Marshal(b.Descriptor); err == nil {
-		_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secret.Redact(ctx, meta), 0o644)
+	if meta, err := codec.Marshal(b.Descriptor); err == nil {
+		_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secrets.Redact(ctx, meta), 0o644)
 	}
 	if len(b.KeyInputs) > 0 {
 		// Already masked and redacted by the publisher; PersistKeyInputs is idempotent

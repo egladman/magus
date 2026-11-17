@@ -1,0 +1,137 @@
+package sandbox
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
+
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
+)
+
+type LandlockSuite struct{ suite.Suite }
+
+func TestLandlock(t *testing.T) { suite.Run(t, new(LandlockSuite)) }
+
+// requireLandlock skips a test that needs the kernel sandbox where there is none,
+// and fails it instead under SAFETYSCISSORS_TEST_REQUIRE_LANDLOCK=1, so a host that must
+// have landlock cannot pass by skipping.
+func requireLandlock(t *testing.T) {
+	t.Helper()
+	if _, err := ABI(); err != nil {
+		if os.Getenv("SAFETYSCISSORS_TEST_REQUIRE_LANDLOCK") == "1" {
+			t.Fatalf("landlock is required here and unavailable: %v", err)
+		}
+		t.Skipf("landlock unavailable: %v", err)
+	}
+}
+
+// TestAccessForPathTypeDropsDirRightsOnFiles pins the masking rule that keeps
+// landlock_add_rule from returning EINVAL. Directory-only rights on a regular file are
+// invalid, and an allowlist entry naming a file (a resolv.conf, a socket, a config) is
+// ordinary; it took down every sandboxed run on a systemd host before this masked.
+func (s *LandlockSuite) TestAccessForPathTypeDropsDirRightsOnFiles() {
+	t := s.T()
+	both := fsAccessReadOnly | unix.LANDLOCK_ACCESS_FS_WRITE_FILE
+
+	kept := accessForPathType(both, true)
+	assert.Equal(t, both, kept, "a directory holds every requested right")
+
+	masked := accessForPathType(both, false)
+	assert.Equal(t, uint64(0), masked&^fsAccessFile, "no directory-only right survives on a file")
+	assert.NotZero(t, masked&unix.LANDLOCK_ACCESS_FS_READ_FILE, "reading the file is still allowed")
+	assert.NotZero(t, masked&unix.LANDLOCK_ACCESS_FS_WRITE_FILE, "writing it is still allowed")
+}
+
+// TestAccessForPathTypeDropsReferFromAWriteGrant pins the rw("/dev/null") case: a write
+// grant carries REFER, which a device cannot hold.
+func (s *LandlockSuite) TestAccessForPathTypeDropsReferFromAWriteGrant() {
+	t := s.T()
+	assert.Equal(t,
+		uint64(unix.LANDLOCK_ACCESS_FS_WRITE_FILE|unix.LANDLOCK_ACCESS_FS_TRUNCATE|unix.LANDLOCK_ACCESS_FS_IOCTL_DEV),
+		accessForPathType(fsAccessWrite, false))
+}
+
+// TestRulesetAcceptsAWritableDevice asks the running kernel for the grant every
+// sandboxed run makes, read and write on /dev/null, at the highest ABI it offers.
+func (s *LandlockSuite) TestRulesetAcceptsAWritableDevice() {
+	t := s.T()
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	fd, err := buildRuleset([]filesystem.Rule{{Path: "/dev/null", Read: true, Write: true}}, abi, 0)
+	require.NoError(t, err)
+	require.NoError(t, unix.Close(fd))
+}
+
+// TestRulesetCreatesAMissingWritableDir pins the cache a tool has not made yet: a
+// declared writable rule creates the directory so the rule can attach, while a missing
+// core writable path (a workspace that is gone) and a read-only one are left alone.
+func (s *LandlockSuite) TestRulesetCreatesAMissingWritableDir() {
+	t := s.T()
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	root := t.TempDir()
+	cache, workspace, absent := filepath.Join(root, "cache", "buf"), filepath.Join(root, "gone"), filepath.Join(root, "absent")
+	fd, err := buildRuleset([]filesystem.Rule{
+		{Path: cache, Read: true, Write: true, Create: true},
+		{Path: workspace, Read: true, Write: true, Exec: true},
+		{Path: absent, Read: true},
+	}, abi, 0)
+	require.NoError(t, err)
+	require.NoError(t, unix.Close(fd))
+	assert.DirExists(t, cache)
+	assert.NoDirExists(t, workspace)
+	assert.NoDirExists(t, absent)
+}
+
+// TestAccessForPathTypeCanEmptyTheMask covers the case addPathRule then skips: a rule
+// asking ONLY for directory rights leaves nothing to request on a file.
+func (s *LandlockSuite) TestAccessForPathTypeCanEmptyTheMask() {
+	t := s.T()
+	assert.Equal(t, uint64(0), accessForPathType(unix.LANDLOCK_ACCESS_FS_READ_DIR, false))
+}
+
+// requireHandled pins which rights and scopes abi handles, since asking a kernel for one
+// it predates fails the whole ruleset with EINVAL.
+func (s *LandlockSuite) requireHandled(abi int, fs, scopes uint64) {
+	s.Equal(fs, handledAccessFS(abi), "filesystem rights at ABI %d", abi)
+	s.Equal(scopes, handledScopes(abi), "scopes at ABI %d", abi)
+}
+
+func (s *LandlockSuite) TestABI1HandlesTheFirstRights() { s.requireHandled(1, fsAccessV1, 0) }
+
+func (s *LandlockSuite) TestABI2AddsRefer() {
+	s.requireHandled(2, fsAccessV1|unix.LANDLOCK_ACCESS_FS_REFER, 0)
+}
+
+func (s *LandlockSuite) TestABI3AddsTruncate() {
+	s.requireHandled(3, fsAccessV1|unix.LANDLOCK_ACCESS_FS_REFER|unix.LANDLOCK_ACCESS_FS_TRUNCATE, 0)
+}
+
+func (s *LandlockSuite) TestABI4AddsNoFilesystemRight() {
+	s.requireHandled(4, fsAccessV1|unix.LANDLOCK_ACCESS_FS_REFER|unix.LANDLOCK_ACCESS_FS_TRUNCATE, 0)
+}
+
+func (s *LandlockSuite) TestABI5AddsDeviceIoctl() {
+	s.requireHandled(5, fsAccessV1|unix.LANDLOCK_ACCESS_FS_REFER|unix.LANDLOCK_ACCESS_FS_TRUNCATE|unix.LANDLOCK_ACCESS_FS_IOCTL_DEV, 0)
+}
+
+func (s *LandlockSuite) TestABI6AddsTheScopes() {
+	s.requireHandled(6, fsAccessV1|unix.LANDLOCK_ACCESS_FS_REFER|unix.LANDLOCK_ACCESS_FS_TRUNCATE|unix.LANDLOCK_ACCESS_FS_IOCTL_DEV,
+		unix.LANDLOCK_SCOPE_SIGNAL|unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET)
+}
+
+func (s *LandlockSuite) TestABIReportsAVersion() {
+	t := s.T()
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, abi, 1)
+	t.Logf("landlock ABI %d", abi)
+}

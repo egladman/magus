@@ -23,6 +23,9 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,19 +58,19 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	case "load":
 		return sessionLoad(ctx, root, rest)
 	case "show":
-		return sessionShow(root, rest)
+		return sessionShow(ctx, root, rest)
 	case "hints":
-		return sessionHints(root, rest)
+		return sessionHints(ctx, root, rest)
 	case "attention":
-		return attentionList(root, rest)
+		return attentionList(ctx, root, rest)
 	case "dispose":
-		return attentionDispose(root, rest)
+		return attentionDispose(ctx, root, rest)
 	case "advise":
-		return adviseCommand(root, rest)
+		return adviseCommand(ctx, root, rest)
 	case "advisories":
 		return advisoriesCommand(root, rest)
 	case "retract":
-		return retractCommand(root, rest)
+		return retractCommand(ctx, root, rest)
 	case "checkpoint":
 		return checkpointCommand(ctx, root, os.Stdin, os.Stdout, rest)
 	case "notify":
@@ -121,11 +124,11 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return err
 	}
-	summaries := sessions.Summarize(fold)
+	summaries := session.Summarize(fold)
 	if !all {
 		summaries = sessions.InvocationsInCheckout(summaries, root)
 	}
@@ -164,10 +167,9 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	return emitFormatted(opts, out)
 }
 
-// localOrigin is this process's OS account, entering through e, for a verb with no ctx to
-// read the entry point from.
-func localOrigin(e types.EntryPoint) types.Origin {
-	return trail.StampOrigin(context.Background(), types.Origin{EntryPoint: e})
+// localOrigin is this process's OS account, entering through e.
+func localOrigin(ctx context.Context, e jobtypes.EntryPoint) jobtypes.Origin {
+	return trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: e})
 }
 
 // sessionLoad implements `magus session load`.
@@ -176,7 +178,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session load", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "file", "", "Read the event stream from this file instead of stdin")
 		fs.Usage = func() {
-			commands.WriteSessionLoadUsage(os.Stderr, sessions.EventKinds, func() { printOwnDefaults(fs) })
+			commands.WriteSessionLoadUsage(os.Stderr, session.EventKinds(), func() { printOwnDefaults(fs) })
 		}
 	})
 	if err != nil {
@@ -210,12 +212,12 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	}
 	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	guard.JoinServedNext(summary.Events, summary.Commands, hint.ReadServedNext(cacheDir))
-	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
-		Origin:    localOrigin(types.EntryPointCLI),
+	result, err := session.LoadEvents(ctx, dir, summary.Events, session.InvocationStart{
+		Origin:    localOrigin(ctx, jobtypes.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,
-	})
+	}, session.WithTie(sessions.AttentionTie()))
 	if err != nil {
 		return err
 	}
@@ -239,7 +241,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 }
 
 // sessionShow implements `magus session show <id>`.
-func sessionShow(root string, args []string) error {
+func sessionShow(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session show", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus session show <session-id>")
@@ -270,18 +272,24 @@ func sessionShow(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return err
 	}
-	events := sessions.AgentEvents(fold, rest[0])
+	events := session.AgentEvents(fold, rest[0])
 	if len(events) == 0 {
 		return fmt.Errorf("magus session show: no loaded events for session %q in %s, load a host transcript with `%s`",
 			rest[0], dir, hint.SessionLoad.String())
 	}
 
 	out := sessionShowOutput{ShowSummary: sessions.SummarizeSession(rest[0], events)}
-	out.Trail = sessionTrailHere(root, rest[0])
+	tr, ok, err := sessionTrailHere(ctx, root, rest[0])
+	if err != nil {
+		return err
+	}
+	if ok {
+		out.Trail = &tr
+	}
 	out.Cost = trail.SummarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -315,7 +323,7 @@ func directiveStore(root string) (sessions.DirectiveStore, error) {
 	return sessions.OpenDirectiveStore(root)
 }
 
-func adviseCommand(root string, args []string) error {
+func adviseCommand(ctx context.Context, root string, args []string) error {
 	var flags *flaggen.SessionAdviseFlags
 	rest, err := commandParse("session advise", args, func(fs *flag.FlagSet) {
 		flags = flaggen.BindSessionAdvise(fs)
@@ -328,21 +336,21 @@ func adviseCommand(root string, args []string) error {
 	if text == "" {
 		return exit.Usagef(`magus session advise: needs the text to show every session, as in magus session advise "push what you have"`)
 	}
-	if err := requirePerson(context.Background(), "session advise records a person's words"); err != nil {
+	if err := requirePerson(ctx, "session advise records a person's words"); err != nil {
 		return err
 	}
 	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
-	a, err := store.Post(context.Background(), text, expect, localOrigin(types.EntryPointCLI).User, time.Now())
+	a, err := store.Post(ctx, text, expect, localOrigin(ctx, jobtypes.EntryPointCLI).User, time.Now())
 	if err != nil {
 		return err
 	}
 	return emitDirective(a, "posted")
 }
 
-func retractCommand(root string, args []string) error {
+func retractCommand(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session retract", args, func(*flag.FlagSet) {})
 	if err != nil {
 		return err
@@ -350,14 +358,14 @@ func retractCommand(root string, args []string) error {
 	if len(rest) != 1 {
 		return exit.Usagef("magus session retract: needs exactly one advisory id (got %d); `magus session advisories` lists them", len(rest))
 	}
-	if err := requirePerson(context.Background(), "session retract records that a person withdrew their words"); err != nil {
+	if err := requirePerson(ctx, "session retract records that a person withdrew their words"); err != nil {
 		return err
 	}
 	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
-	a, err := store.Retract(context.Background(), rest[0], localOrigin(types.EntryPointCLI).User, time.Now())
+	a, err := store.Retract(ctx, rest[0], localOrigin(ctx, jobtypes.EntryPointCLI).User, time.Now())
 	if errors.Is(err, sessions.ErrNoDirective) {
 		return fmt.Errorf("magus session retract: run `magus session advisories --all` to list every id: %w", err)
 	}
@@ -457,12 +465,14 @@ func checkoutCacheDir(root string) string {
 	return cacheDir
 }
 
-func sessionTrailHere(root, session string) *trail.SessionTrail {
+// sessionTrailHere is [trail.SessionTrailHere] for the checkout at root, reporting false
+// when root has no cache dir to hold a trail.
+func sessionTrailHere(ctx context.Context, root, session string) (trail.SessionTrail, bool, error) {
 	cacheDir := checkoutCacheDir(root)
 	if cacheDir == "" {
-		return nil
+		return trail.SessionTrail{}, false, nil
 	}
-	return trail.SessionTrailHere(cacheDir, session)
+	return trail.SessionTrailHere(ctx, cacheDir, session)
 }
 
 func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
@@ -478,7 +488,7 @@ func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheCloc
 func orDash(s string) string { return sessions.OrDash(s) }
 
 // sessionHints implements `magus session hints`.
-func sessionHints(root string, args []string) error {
+func sessionHints(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session hints", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			commands.WriteSessionHintsUsage(os.Stderr, sessions.NextLookahead, func() { printOwnDefaults(fs) })
@@ -499,7 +509,7 @@ func sessionHints(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return err
 	}
@@ -583,7 +593,7 @@ func admitSessionBrief(ctx context.Context, admit cache.MachineAdmitter, root st
 		return func() {}, nil
 	}
 	required := globalCfg.Broker.Resolved() == types.BrokerRequired
-	return cache.AdmitMachine(ctx, admit, types.MachineClaim{
+	return cache.AdmitMachine(ctx, admit, budget.Claim{
 		Project:  ".",
 		Target:   "session-brief",
 		MemoryMB: briefMemoryMB,
@@ -610,10 +620,10 @@ func briefReaders() brief.Readers {
 }
 
 // readJobRows lists the repository's job store once for both the leases and the tree.
-func readJobRows(ctx context.Context, root string) ([]types.Job, error) {
+func readJobRows(ctx context.Context, root string) ([]jobtypes.Job, error) {
 	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return nil, err
 	}
-	return store.List()
+	return store.List(ctx)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -121,11 +122,11 @@ func (declines[N]) RangeCommits(context.Context, string, string, string, []strin
 	return nil, decline[N](types.CapRangeReporter)
 }
 
-func (declines[N]) Regions(context.Context, string, string, []types.FileChange) ([]types.RegionChange, error) {
+func (declines[N]) Regions(context.Context, string, string, []job.FileChange) ([]job.RegionChange, error) {
 	return nil, decline[N](types.CapRegionReporter)
 }
 
-func (declines[N]) RegionsBetween(context.Context, string, string, []byte, []byte) ([]types.RegionChange, error) {
+func (declines[N]) RegionsBetween(context.Context, string, string, []byte, []byte) ([]job.RegionChange, error) {
 	return nil, decline[N](types.CapRegionReporter)
 }
 

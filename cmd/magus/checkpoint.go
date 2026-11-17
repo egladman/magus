@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -97,7 +98,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 	}
 	origin := trail.LocalOrigin(ctx)
 	origin.Host, origin.Session = c.Host, c.HostSession
-	stored, recorded, err := sessions.RecordCheckpoint(dir, c, sessions.InvocationStart{
+	stored, recorded, err := sessions.RecordCheckpoint(ctx, dir, c, session.InvocationStart{
 		Origin:    origin,
 		Workspace: wsRoot,
 		Version:   version,

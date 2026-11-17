@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -20,10 +20,10 @@ func (s *HarnessAssetsSuite) TestBinaryPlanSurvivesJSON() {
 	root := s.T().TempDir()
 	want := []byte{0, 97, 115, 109, 1, 0, 0, 0, 255, 254, 128}
 	plan := types.HarnessInstallation{ID: "opencode", Files: map[string]types.HarnessFile{".opencode/magus/plugin.wasm": {Bytes: want}}}
-	encoded, err := json.Marshal(plan)
+	encoded, err := codec.Marshal(plan)
 	s.Require().NoError(err)
 	var decoded types.HarnessInstallation
-	s.Require().NoError(json.Unmarshal(encoded, &decoded))
+	s.Require().NoError(codec.Unmarshal(encoded, &decoded))
 	paths, err := ApplyHarnessInstallation(context.Background(), root, decoded, false)
 	s.Require().NoError(err)
 	s.Equal([]string{".opencode/magus/plugin.wasm"}, paths)
@@ -45,9 +45,9 @@ func (s *HarnessAssetsSuite) TestDryRunWritesNothing() {
 func (s *HarnessAssetsSuite) TestEmptyBinaryFileIsNotJSON() {
 	root := s.T().TempDir()
 	plan := types.HarnessInstallation{Files: map[string]types.HarnessFile{"empty": {Bytes: []byte{}}}}
-	encoded, err := json.Marshal(plan)
+	encoded, err := codec.Marshal(plan)
 	s.Require().NoError(err)
-	s.Require().NoError(json.Unmarshal(encoded, &plan))
+	s.Require().NoError(codec.Unmarshal(encoded, &plan))
 	_, err = ApplyHarnessInstallation(context.Background(), root, plan, false)
 	s.Require().NoError(err)
 	body, err := os.ReadFile(filepath.Join(root, "empty"))

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/diff"
 )
 
@@ -177,7 +177,7 @@ func shareReview(rev diff.Diff) (func(), error) {
 	if err != nil {
 		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", err)
 	}
-	werr := json.NewEncoder(f).Encode(rev)
+	werr := codec.NewEncoder(f).Encode(rev)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}
@@ -212,7 +212,7 @@ func parseAdviceSections(out string) []AdviceSection {
 			continue
 		}
 		var s AdviceSection
-		if err := json.Unmarshal([]byte(line), &s); err != nil || s.Name == "" {
+		if err := codec.Unmarshal([]byte(line), &s); err != nil || s.Name == "" {
 			continue
 		}
 		got = append(got, s)

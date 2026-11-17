@@ -17,6 +17,9 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestDryCheckParityWithEngine holds this host to the engine's checker: every tour and
@@ -701,4 +704,22 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
 				"the body aborted partway through %s; the lens stub is probably null", lens)
 		})
 	}
+}
+
+// SecretGrantStubSuite keeps the dry run's grant refusal coded like the real namespace's:
+// the dry run is the pass most likely to surface it.
+type SecretGrantStubSuite struct{ suite.Suite }
+
+func TestSecretGrantStubSuite(t *testing.T) { suite.Run(t, new(SecretGrantStubSuite)) }
+
+func (s *SecretGrantStubSuite) TestARefusedGrantCarriesMGS1027() {
+	grant := vm.NewMap()
+	grant.MapSet("ref", vm.StringValue("TOKEN"))
+	grant.MapSet("header", vm.StringValue("Authorization"))
+
+	err := secretGrantStubArg("endpoint", []vm.Value{grant})
+	var d *types.DiagnosticError
+	s.Require().ErrorAs(err, &d)
+	s.Equal(types.SecretGrantInvalid, d.Code)
+	s.Contains(err.Error(), "host is required")
 }

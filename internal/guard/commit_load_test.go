@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // UnloadableCommitSuite judges commits while the working tree's
@@ -27,14 +27,14 @@ func TestUnloadableCommitSuite(t *testing.T) {
 
 func (s *UnloadableCommitSuite) SetupTest() {
 	s.layers, s.cacheDir = spawnLayers(s.T())
-	approved := (&commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}).rule()
+	approved := (&commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Defer}}).rule()
 	s.deps = Dependencies{
 		LoadFailure:         errMissingMember,
 		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return approved, nil },
 	}
 }
 
-func (s *UnloadableCommitSuite) judge(line string) types.GuardJudgment {
+func (s *UnloadableCommitSuite) judge(line string) verdict.Judgment {
 	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
@@ -75,23 +75,23 @@ func (s *UnloadableCommitSuite) TestARevertContinueWaitsForTheLoad() {
 
 func (s *UnloadableCommitSuite) TestAnAbortPasses() {
 	v := s.judge("git cherry-pick --abort")
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *UnloadableCommitSuite) TestAnEditStandsOnTheApprovedRule() {
 	v := s.judge("touch notes.txt")
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *UnloadableCommitSuite) TestACommitPassesOnceTheTreeLoads() {
 	s.deps.LoadFailure = nil
 	v := s.judge("git commit -m x")
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *UnloadableCommitSuite) TestACommitInAnotherCheckoutPasses() {
 	v := s.judge(fmt.Sprintf("git -C %s commit -m x", shellQuoted(s.T().TempDir())))
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 func (s *UnloadableCommitSuite) testContext() context.Context { return s.layers.of(s.T()) }

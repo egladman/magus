@@ -19,20 +19,23 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/contract"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	guardverdict "github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
@@ -40,15 +43,15 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func leaseRow(id, parent string) types.Job {
-	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+func leaseRow(id, parent string) jobtypes.Job {
+	return jobtypes.Job{ID: id, Parent: parent, State: jobtypes.StateRunning, Agent: &jobtypes.Agent{Model: jobtypes.Model{Tier: "bounded"}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}}
 }
 
 // execFixture pins XDG_STATE_HOME to a scratch dir (the job store lives there, not under
 // t.TempDir() alone: see the tests-need-xdg-state-home-pinned lesson) and resolves the
 // same cache dir jobExec itself will compute from root, so a marker or row seeded here is
 // the one jobExec sees. Mirrors TestHookEnvelopeCwdLocatesTheWorkersCheckout's setup.
-func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
+func execFixture(t *testing.T, rows ...jobtypes.Job) (root, cacheDir string) {
 	t.Helper()
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -59,7 +62,7 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 }
 
 // execRepositoryFixture is execFixture over a git repository holding the same magus.yaml.
-func execRepositoryFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo, cacheDir string) {
+func execRepositoryFixture(t *testing.T, rows ...jobtypes.Job) (repo *testkit.Repo, cacheDir string) {
 	t.Helper()
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -69,13 +72,13 @@ func execRepositoryFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo,
 	return repo, cacheDir
 }
 
-func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string) {
+func seedJobStore(t *testing.T, root string, rows ...jobtypes.Job) (string, string) {
 	t.Helper()
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	for _, row := range rows {
-		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	return root, cacheDir
@@ -84,20 +87,22 @@ func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string)
 // seedFiled appends job id's first try, having filed result, to the
 // attempts file beside store's rows. The job package files a result only
 // through an exit; internal/guard keeps the same copy.
-func seedFiled(t *testing.T, store *job.Store, id string, result *types.JobResult) {
+func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Result) {
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)
-	raw, err := json.Marshal(result)
+	raw, err := codec.Marshal(result)
 	require.NoError(t, err)
 	var filed map[string]any
-	require.NoError(t, json.Unmarshal(raw, &filed))
-	line, err := json.Marshal(map[string]any{
-		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+	require.NoError(t, codec.Unmarshal(raw, &filed))
+	// An attempt stores its result without the result's own api_version, as the store writes it.
+	delete(filed, "api_version")
+	line, err := codec.Marshal(map[string]any{
+		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)
-	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
 }
 
 // fixtureCamelKeys is v with every object key camelCased, as the
@@ -140,7 +145,7 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
 
 	require.NoError(t, fork("accepted", "run.go#A"))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].Paths.Deny})
@@ -158,21 +163,21 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	_, err := job.Exit(t.Context(), store, "w", nil, nil)
 	require.NoError(t, err)
 
-	spec := func(r types.Job) types.Declaration {
+	spec := func(r jobtypes.Job) jobtypes.Declaration {
 		d := job.RetryDeclaration(r)
-		d.Schema = types.Schema{}
+		d.Schema = jobtypes.Schema{}
 		return d
 	}
-	first, err := store.List()
+	first, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w"}))
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
-	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
+	assert.Equal(t, jobtypes.StateDeclared, rows[0].State, "the retry is a new attempt")
 
 	err = jobFork(t.Context(), root, []string{"w", "--read-only", "--instructions", "anew"})
 	require.Error(t, err)
@@ -181,10 +186,10 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--instructions", "anew"}))
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.Declaration{ID: "w", Agent: typesagent.Instructed("anew"), ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
+	assert.Equal(t, jobtypes.Declaration{ID: "w", Agent: jobtypes.Instructed("anew"), ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
 }
 
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
@@ -203,7 +208,7 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 
 	require.NoError(t, fork("reader", "--read-only", "--instructions", "find the callers"))
 	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	got := make(map[string]bool, len(rows))
 	for _, r := range rows {
@@ -252,7 +257,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 
 	captureStdout(t, func() { require.NoError(t, fork("real", head[:9])) })
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []string{"real", head}, []string{rows[0].ID, rows[0].Checkpoint})
@@ -264,9 +269,9 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 // is refused rather than one of the two being dropped.
 func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	resetOpenedWorkspaces(t)
-	repo, cacheDir := execRepositoryFixture(t, types.Job{
-		ID: "live", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."},
+	repo, cacheDir := execRepositoryFixture(t, jobtypes.Job{
+		ID: "live", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"a.go"}},
+		Check: &jobtypes.LeaseCheck{Target: "test", Project: "."},
 	})
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
@@ -274,7 +279,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	require.NoError(t, err)
 	record := func(id, checkout string) string {
 		return fmt.Sprintf(`{"api_version": %q, "id": %q, "checkout": %q, "paths": {"write": ["magus.yaml"]},`+
-			` "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, id, checkout)
+			` "check": {"target": "test", "project": "."}}`, jobtypes.APIVersion, id, checkout)
 	}
 	fork := func(stdin string, args ...string) error {
 		writeStdin(t, stdin)
@@ -291,9 +296,9 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	assert.Contains(t, err.Error(), own)
 
 	captureStdout(t, func() { require.NoError(t, fork(record("own", ""), "--checkout", own)) })
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "own" })
+	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "own" })
 	require.GreaterOrEqual(t, i, 0, "the fork wrote its row")
 	require.NotNil(t, rows[i].Worktree)
 	assert.Equal(t, own, rows[i].Worktree.Root)
@@ -315,17 +320,17 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	}
 	record := func(id, path string) string {
 		return fmt.Sprintf(`{"api_version": %q, "id": %q, "paths": {"write": [%q]}, "check": {"target": "test", "project": "."}}`,
-			types.JobAPIVersion, id, path)
+			jobtypes.APIVersion, id, path)
 	}
 
 	own := filepath.Join(t.TempDir(), "own")
 	captureStdout(t, func() { require.NoError(t, fork(root, record("integrate", "magus.yaml"), "--checkout", own)) })
-	_, err := store.Update(t.Context(), "integrate", func(u *types.Job) { u.State = types.StateExited })
+	_, err := store.Update(t.Context(), "integrate", func(u *jobtypes.Job) { u.State = jobtypes.StateExited })
 	require.NoError(t, err)
 	captureStdout(t, func() { require.NoError(t, fork(own, record("finish", "notes.txt"))) })
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "finish" })
+	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "finish" })
 	require.GreaterOrEqual(t, i, 0)
 	require.NotNil(t, rows[i].Worktree, "a fork run inside a job's checkout records it")
 	assert.True(t, rows[i].Worktree.Standing())
@@ -335,7 +340,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
 	session := repo.AddWorktree("session").Root()
-	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
+	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, jobtypes.APIVersion)
 	err = fork(session, integration)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the forker's own linked checkout")
@@ -359,13 +364,13 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 	repo.Commit("forker moves on", map[string]string{"forker.txt": "ahead\n"})
 	require.NotEqual(t, checkoutHead, repo.Head())
 
-	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion))
+	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, jobtypes.APIVersion))
 	captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin", "--checkout", standing}))
 	})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "merge" })
+	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "merge" })
 	require.GreaterOrEqual(t, i, 0)
 	assert.Equal(t, []string{checkoutHead, "pricing.txt"}, []string{rows[i].Checkpoint, strings.Join(rows[i].Paths.Write, ",")})
 }
@@ -396,16 +401,16 @@ func (s *IntegrationStandingCheckoutSuite) SetupTest() {
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
-	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, old))
+	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, jobtypes.APIVersion, old))
 	captureStdout(t, func() {
 		s.Require().NoError(jobFork(t.Context(), s.root, []string{"--stdin", "--checkout", s.standing}))
 	})
 }
 
-func (s *IntegrationStandingCheckoutSuite) row() types.Job {
-	rows, err := s.store.List()
+func (s *IntegrationStandingCheckoutSuite) row() jobtypes.Job {
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "merge" })
+	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "merge" })
 	s.Require().GreaterOrEqual(i, 0)
 	return rows[i]
 }
@@ -428,7 +433,7 @@ func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
-	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
+	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, jobtypes.APIVersion)
 	fork := func() error {
 		resetStartupSingletons()
 		writeStdin(t, integration)
@@ -436,12 +441,12 @@ func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	}
 
 	captureStdout(t, func() { require.NoError(t, fork()) })
-	_, err := store.Update(t.Context(), "merge", func(u *types.Job) { u.State = types.StateExited })
+	_, err := store.Update(t.Context(), "merge", func(u *jobtypes.Job) { u.State = jobtypes.StateExited })
 	require.NoError(t, err)
 	repo.Git("merge", "-q", "--ff-only", "done")
 
 	captureStdout(t, func() { require.NoError(t, fork(), "its check never passed, so the row takes the follow-up") })
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []string{"pricing.txt"}, rows[0].Paths.Write, "the re-fork keeps the paths the row held")
@@ -505,10 +510,10 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			w, err := sessions.Open(dir, "invmv00001", sessions.InvocationStart{Command: "run"})
+			w, err := session.Open(t.Context(), dir, "invmv00001", session.InvocationStart{Command: "run"})
 			require.NoError(t, err)
-			require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{
-				Target: "test", Project: ".", Outcome: sessions.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
+			require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{
+				Target: "test", Project: ".", Outcome: session.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
 			}))
 
 			out := captureStdout(t, func() {
@@ -532,14 +537,14 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 		Display:    agent.HarnessDisplay{Name: "Limit host"},
 		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
 		Config:     types.HarnessConfig{Path: "hooks.json"},
-		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "routine"}},
+		Models:     []model.Row{{ID: "claude-opus-test", Alias: "opus", Tier: "routine"}},
 	})
 	resetOpenedWorkspaces(t)
 	root, _ := execFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
+	writeStdin(t, `{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -584,8 +589,8 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 			wt, made, err := store.ForkWorktree(t.Context(), "w", filepath.Join(t.TempDir(), "w"), "", "")
 			require.NoError(t, err)
 			require.True(t, made)
-			_, err = store.Update(t.Context(), "w", func(cur *types.Job) {
-				*cur = types.Job{ID: "w", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}}
+			_, err = store.Update(t.Context(), "w", func(cur *jobtypes.Job) {
+				*cur = jobtypes.Job{ID: "w", State: jobtypes.StatePass, Paths: jobtypes.Paths{Write: []string{"a.go"}}}
 			})
 			require.NoError(t, err)
 			_, err = store.RecordWorktree(t.Context(), "w", wt)
@@ -613,12 +618,12 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	root, _ := execFixture(t, row)
 	store, err := openJobs(t.Context(), root, jobOpen{})
 	require.NoError(t, err)
-	here := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
-	result := types.JobResult{Job: row.ID, Validation: types.JobResultValidation{OutputRef: recorded.Ref}}
+	here := func(context.Context, string) (jobtypes.CapturedRun, error) { return jobtypes.CapturedRun{}, nil }
+	result := jobtypes.Result{Job: row.ID, Validation: jobtypes.ResultValidation{OutputRef: recorded.Ref}}
 
 	stored, err := job.Exit(t.Context(), store, row.ID, &result, here)
 	require.NoError(t, err)
-	assert.Equal(t, &types.JobAttempt{
+	assert.Equal(t, &jobtypes.CapturedRun{
 		Found: true, Ref: recorded.Ref, Project: ".", Target: "test",
 		AttemptID: recorded.Attempt, DurationMs: 1500, Revision: "abc123", Dirty: true, ObservedGeneration: 1,
 	}, stored.Attempt, "the attempt carries what freshness is judged by: the execution, its start and the tree it read")
@@ -646,26 +651,26 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, missed.Found, "the waiter's resolver reads its own store alone")
 
-	row := types.Job{
-		ID: "w", Created: 1, State: types.StateExited, Paths: types.JobPaths{Write: []string{"a.go"}}, CheckoutRoot: holder.Root(),
-		Check:   &types.LeaseCheck{Target: "go-test", Project: "."},
-		Attempt: &types.JobAttempt{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
+	row := jobtypes.Job{
+		ID: "w", Created: 1, State: jobtypes.StateExited, Paths: jobtypes.Paths{Write: []string{"a.go"}}, CheckoutRoot: holder.Root(),
+		Check:   &jobtypes.LeaseCheck{Target: "go-test", Project: "."},
+		Attempt: &jobtypes.CapturedRun{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
 	}
 	seedJobStore(t, waiter.Root(), row)
 	store, err := openJobs(t.Context(), waiter.Root(), jobOpen{})
 	require.NoError(t, err)
 	seedFiled(t, store, "w",
-		&types.JobResult{Job: "w", ChangedPaths: []string{"a.go"}, Validation: types.JobResultValidation{OutputRef: "failed"}})
-	observe := func(context.Context, types.Job) (job.Observed, error) {
+		&jobtypes.Result{Job: "w", ChangedPaths: []string{"a.go"}, Validation: jobtypes.ResultValidation{OutputRef: "failed"}})
+	observe := func(context.Context, jobtypes.Job) (job.Observed, error) {
 		return job.Observed{Changed: []string{"a.go"}, ChangedKnown: true}, nil
 	}
 
-	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{types.PrimaryGoalID: passed.Ref})
+	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{jobtypes.PrimaryGoalID: passed.Ref})
 
 	require.ErrorContains(t, err, "names no run this checkout recorded")
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, rows[0].State)
+	assert.Equal(t, jobtypes.StateExited, rows[0].State)
 }
 
 // jobApplyStateSuite pins what `job apply` says of a state it moved.
@@ -677,8 +682,8 @@ func TestJobApplyState(t *testing.T) { suite.Run(t, new(jobApplyStateSuite)) }
 
 func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 	row := leaseRow("w", "")
-	row.State, row.Paths.Write = types.StateRunning, []string{"src/*.go"}
-	row.Releases = []types.JobRelease{{Path: "src/a.go", Digest: types.DigestAbsent, ReleasedAt: 1}}
+	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"src/*.go"}
+	row.Releases = []jobtypes.Release{{Path: "src/a.go", Digest: jobtypes.DigestAbsent, ReleasedAt: 1}}
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 
@@ -708,7 +713,7 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed-json", "--check", "test .", "--write-paths", "a.go"}))
 	})
 	var got map[string]any
-	require.NoError(t, json.Unmarshal([]byte(raw), &got))
+	require.NoError(t, codec.Unmarshal([]byte(raw), &got))
 	assert.Equal(t, job.NoSymbolIndex(), got["referenced_outside_gap"], "-o json carries the gap beside the empty list")
 }
 
@@ -723,7 +728,7 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 // holds, and a job that already ended has nothing left to take.
 func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/paused", "")
-	row.State = types.StateDeclared
+	row.State = jobtypes.StateDeclared
 	repo, cacheDir := execRepositoryFixture(t, row)
 	root := repo.Root()
 
@@ -742,7 +747,7 @@ func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 
 	assert.Error(t, jobPause(t.Context(), root, "resume", []string{row.ID}), "the holder does not lift its own pause")
 
-	orchestrator := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &job.Actor{}})
+	orchestrator := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &jobtypes.Actor{}})
 	_, err = orchestrator.Resume(t.Context(), row.ID)
 	require.NoError(t, err)
 	captureStdout(t, func() {
@@ -752,7 +757,7 @@ func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 
 func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	done := leaseRow("lease-enforcement/wave4/done", "")
-	done.State = types.StatePass
+	done.State = jobtypes.StatePass
 	repo, _ := execRepositoryFixture(t, done)
 	root := repo.Root()
 
@@ -808,7 +813,7 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 	stranger, err := broker.Dial(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	defer func() { _ = stranger.Close() }()
-	v, err := stranger.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
+	v, err := stranger.Request(t.Context(), budget.Claim{Project: "other", Target: "test", Slots: 1, PID: 1})
 	require.NoError(t, err)
 	out, err := run("run", "--no-cache", "test", ".")
 	require.Error(t, err, out)
@@ -827,17 +832,17 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 // flag, refused before the row is touched.
 func TestJobExecRefusesATypedBase(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/docs", "")
-	row.State = types.StateDeclared
+	row.State = jobtypes.StateDeclared
 	repo, cacheDir := execRepositoryFixture(t, row)
 
 	err := jobExec(t.Context(), repo.Root(), []string{row.ID, "--base", repo.Head()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "-base")
 
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: repo.Root()}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: repo.Root()}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, []any{types.StateDeclared, ""}, []any{rows[0].State, rows[0].ReportedBase}, "a refused exec takes nothing")
+	assert.Equal(t, []any{jobtypes.StateDeclared, ""}, []any{rows[0].State, rows[0].ReportedBase}, "a refused exec takes nothing")
 }
 
 func TestLsJobsSaysWhenTheQueueWasNeverFetched(t *testing.T) {
@@ -967,7 +972,7 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 	assert.Contains(t, err.Error(), "`Alpha|^(TestBeta)$`")
 
 	require.NoError(t, fork("go-test . -- -run Alpha|^(TestBeta)$"))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the refused fork wrote no row")
 }
@@ -988,7 +993,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("a worker does not build magus");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1002,7 +1007,6 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	installCheckGrader(t, gradingWith(nil))
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
 	}
@@ -1016,12 +1020,12 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "grading dry-runs the guard and the refused fork wrote no row")
 
 	require.NoError(t, fork("go::go-vet ."))
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 }
@@ -1037,7 +1041,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("judged from the wrong directory");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1051,7 +1055,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
 	require.NoError(t, os.MkdirAll(elsewhere, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(elsewhere, "magus.yaml"), []byte("{}\n"), 0o644))
@@ -1066,7 +1070,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 			Lease:      row.ID,
 			PendingRow: &row,
 		})
-		assert.Equal(t, string(types.GuardDeny), unplaced.Decision)
+		assert.Equal(t, guardverdict.Deny, unplaced.Decision)
 		assert.Contains(t, unplaced.Reason, "judged from the wrong directory")
 	})
 
@@ -1090,7 +1094,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("builds are refused here");
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1104,7 +1108,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 	grade := gradingWith(nil)
 
 	before := grade(t.Context(), root, row)
@@ -1132,8 +1136,8 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	repo.Git("worktree", "add", "-q", "--detach", own)
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	ci := &types.LeaseCheck{Target: types.TargetCI, Project: "."}
-	held := types.Job{ID: "w", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"run.go"}}, Check: ci, Worktree: &types.JobWorktree{Root: own}}
+	ci := &jobtypes.LeaseCheck{Target: types.TargetCI, Project: "."}
+	held := jobtypes.Job{ID: "w", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: ci, Worktree: &jobtypes.Worktree{Root: own}}
 	shared := held
 	shared.Worktree = nil
 	deps := guardDependencies(t.Context(), root)
@@ -1145,9 +1149,9 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 		require.NoError(t, jobRefusesTheGate(t.Context(), root, held), "describe briefs what the fork accepted")
 
 		taken := held
-		taken.State, taken.CheckoutRoot = types.StateRunning, own
+		taken.State, taken.CheckoutRoot = jobtypes.StateRunning, own
 		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
-		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
+		assert.NotEqual(t, guardverdict.Deny, ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
 	t.Run("the forker's checkout", func(t *testing.T) {
@@ -1168,7 +1172,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.role == magus\AgentRole.worker) {
         return magus\guard.deny("the hook binary is older than the tree\nrebuild it");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -1182,7 +1186,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 
 	verdict := gradingWith(nil)(t.Context(), root, row)
 
@@ -1191,14 +1195,13 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.Contains(t, verdict.NotGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
-	installCheckGrader(t, gradingWith(nil))
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
 	require.ErrorIs(t, err, types.JobUngraded)
 	assert.NotErrorIs(t, err, types.JobCheckUnrunnable)
 	assert.Equal(t, 1, strings.Count(err.Error(), string(types.JobUngraded)), "reported once: %s", err)
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a fork nobody graded writes nothing")
 }
@@ -1215,17 +1218,9 @@ func gradingWith(mutate func(*guard.Dependencies)) job.CheckGrader {
 	})
 }
 
-// installCheckGrader installs g as runCLI installs guard.NewCheckGrader, and puts back what was
-// installed. The grader is process-wide, so a test that uses it does not run in parallel.
-func installCheckGrader(t *testing.T, g job.CheckGrader) {
-	t.Helper()
-	previous := job.SetCheckGrader(g)
-	t.Cleanup(func() { job.SetCheckGrader(previous) })
-}
-
-// `magus job fork` grades with a forkGrader of its own, not the installed grader, so its
-// kept verdicts live no longer than the fork. The installed one still serves the doors that open
-// a Store naming none: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
+// `magus job fork` grades with a forkGrader of its own, not the store's grader, so its
+// kept verdicts live no longer than the fork. The store's grader serves the doors that put a row
+// without forking: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
 func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -1233,16 +1228,10 @@ func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	var graded []string
-	installCheckGrader(t, func(_ context.Context, at string, _ types.Job) job.CheckVerdict {
-		graded = append(graded, at)
-		return job.CheckVerdict{}
-	})
 
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a worker does not build magus", "the fork's own grader judged the check")
-	assert.Empty(t, graded)
 }
 
 // GradeCheckLapseSuite pins that a guard which ran out of time reached no verdict on
@@ -1261,7 +1250,7 @@ func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
 	global = globalFlags{}
 	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(s.T())
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 	ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
 	defer cancel()
 	release := make(chan struct{})
@@ -1289,9 +1278,9 @@ func TestJobApplyAddWritePath(t *testing.T) { suite.Run(t, new(jobApplyAddWriteP
 
 func (s *jobApplyAddWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
-	row.State, row.Paths.Write = types.StateRunning, []string{"a.go"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go"}
+	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = job.CheckCommand(*row.Check)
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
@@ -1346,9 +1335,9 @@ type jobApplyContractSuite struct{ suite.Suite }
 
 func TestJobApplyContract(t *testing.T) { suite.Run(t, new(jobApplyContractSuite)) }
 
-func (s *jobApplyContractSuite) apply(root string, record types.Declaration) (string, error) {
+func (s *jobApplyContractSuite) apply(root string, record jobtypes.Declaration) (string, error) {
 	s.T().Helper()
-	data, err := json.Marshal(record)
+	data, err := codec.Marshal(record)
 	s.Require().NoError(err)
 	path := filepath.Join(s.T().TempDir(), "job.jsonl")
 	s.Require().NoError(os.WriteFile(path, append(data, '\n'), 0o600))
@@ -1359,30 +1348,30 @@ func (s *jobApplyContractSuite) apply(root string, record types.Declaration) (st
 	return out, applyErr
 }
 
-func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.Store, types.Declaration) {
+func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.Store, jobtypes.Declaration) {
 	s.T().Helper()
 	resetOpenedWorkspaces(s.T())
 	row := leaseRow("integration", "")
 	row.Paths.Write = []string{"magus.yaml"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = job.CheckCommand(*row.Check)
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
-	return root, store, types.Declaration{
-		Schema: types.Schema{Version: types.JobAPIVersion}, ID: row.ID,
-		Agent: row.Agent.Clone(), Paths: types.JobPaths{Write: row.Paths.Write}, Check: row.Check, Integrates: integrates,
+	return root, store, jobtypes.Declaration{
+		Schema: jobtypes.Schema{Version: jobtypes.APIVersion}, ID: row.ID,
+		Agent: row.Agent.Clone(), Paths: jobtypes.Paths{Write: row.Paths.Write}, Check: row.Check, Integrates: integrates,
 	}
 }
 
-func (s *jobApplyContractSuite) stored(store *job.Store) types.Job {
+func (s *jobApplyContractSuite) stored(store *job.Store) jobtypes.Job {
 	s.T().Helper()
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 	return rows[0]
 }
 
-func (s *jobApplyContractSuite) assertStored(store *job.Store, want types.Job) {
+func (s *jobApplyContractSuite) assertStored(store *job.Store, want jobtypes.Job) {
 	s.T().Helper()
 	got := s.stored(store)
 	// Each accepted apply stamps validation and appends a new store generation.
@@ -1432,26 +1421,26 @@ func (s *jobApplyContractSuite) TestOmittingIntegratesClearsTheStoredSpec() {
 func (s *jobApplyContractSuite) TestAnUnknownSettlementExitsFailureAndWritesNothing() {
 	resetOpenedWorkspaces(s.T())
 	root, cacheDir := execFixture(s.T())
-	_, err := s.apply(root, types.Declaration{
-		Schema: types.Schema{Version: types.JobAPIVersion}, ID: "absent",
+	_, err := s.apply(root, jobtypes.Declaration{
+		Schema: jobtypes.Schema{Version: jobtypes.APIVersion}, ID: "absent",
 		LeftUnmerged: "superseded by another change",
 	})
 	s.Require().ErrorContains(err, "nothing declares job absent, so nothing settles")
 	s.Equal(exit.Failure, exit.Code(err))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root}).List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
 }
 
 func (s *jobApplyContractSuite) TestAnInvalidFiledResultExitsUsageAndKeepsTheJob() {
 	root, store, _ := s.integration()
-	before, err := store.List()
+	before, err := store.List(s.T().Context())
 	s.Require().NoError(err)
-	writeStdin(s.T(), `{"api_version":"magus.job-result/v1alpha1","unexpected":"field"}`)
+	writeStdin(s.T(), `{"api_version":"safetyscissors.job-result/v1alpha1","unexpected":"field"}`)
 	err = jobExit(s.T().Context(), root, []string{"integration", "--stdin"})
 	s.Require().ErrorContains(err, "File this shape:")
 	s.Equal(exit.Usage, exit.Code(err))
-	after, err := store.List()
+	after, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(before, after)
 }
@@ -1524,7 +1513,7 @@ func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
 	s.ErrorIs(err, fs.ErrNotExist)
 	s.ErrorContains(err, "magus job fork:")
 	s.Equal(exit.Usage, exit.Code(err))
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
 }
@@ -1570,10 +1559,10 @@ func TestJobApplyReleaseWritePath(t *testing.T) { suite.Run(t, new(jobApplyRelea
 
 func (s *jobApplyReleaseWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
-	row.State, row.Paths.Write = types.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
-	row.Goals = []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}}
+	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
+	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = job.CheckCommand(*row.Check)
+	row.Goals = []jobtypes.Goal{{ID: "g", Kind: jobtypes.GoalKindPaths, Paths: []string{"a.go"}}}
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
@@ -1619,7 +1608,7 @@ func (s *ForkProvisionContractSuite) binary(contract string) string {
 }
 
 func (s *ForkProvisionContractSuite) TestATreeThatReadsTheRowPasses() {
-	s.lock(fmt.Sprintf("store %s\n", types.JobAPIVersion))
+	s.lock(fmt.Sprintf("store %s\n", jobtypes.APIVersion))
 	s.NoError(checkoutReadsRow(s.root))
 }
 
@@ -1627,7 +1616,7 @@ func (s *ForkProvisionContractSuite) TestATreeOlderThanTheStoreIsRefused() {
 	s.lock("config a\n")
 	err := checkoutReadsRow(s.root)
 	s.Require().Error(err)
-	s.Contains(err.Error(), fmt.Sprintf("reads no %s rows", types.JobAPIVersion))
+	s.Contains(err.Error(), fmt.Sprintf("reads no %s rows", jobtypes.APIVersion))
 }
 
 func (s *ForkProvisionContractSuite) TestATreeCarryingNoContractPasses() {
@@ -1668,9 +1657,9 @@ func pinCheckoutBinary(t *testing.T, session, bin string) {
 	t.Helper()
 	digest, err := job.BinaryDigest(bin)
 	require.NoError(t, err)
-	_, cacheDir := seedJobStore(t, session, types.Job{ID: "pinned", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}})
+	_, cacheDir := seedJobStore(t, session, jobtypes.Job{ID: "pinned", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"a.go"}}})
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: session})
-	_, err = store.RecordWorktree(t.Context(), "pinned", types.JobWorktree{Root: filepath.Dir(bin), Binary: bin, BinaryDigest: digest})
+	_, err = store.RecordWorktree(t.Context(), "pinned", jobtypes.Worktree{Root: filepath.Dir(bin), Binary: bin, BinaryDigest: digest})
 	require.NoError(t, err)
 }
 

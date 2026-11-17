@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
 )
 
@@ -65,11 +68,12 @@ func OpenStore(path string) Store {
 	return Store{
 		path: path,
 		now:  time.Now,
-		lines: file.JSONL[authorEntry]{
+		lines: file.JSONL[authorEntry]{JSONL: codec.JSONL[authorEntry]{
+			Log:  slog.With(attr.Component("magus")),
 			Path: path,
 			Key:  func(e authorEntry) string { return e.Login },
 			Live: func(e authorEntry) bool { return e.Tracked },
-		},
+		}},
 	}
 }
 

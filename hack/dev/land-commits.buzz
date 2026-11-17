@@ -353,7 +353,7 @@ test "a push-unverified refusal stops the landing with the rule's own reply; adv
     assert\equal(pushRefusal(denied, branch: "topic"), want: "land-commits: push-unverified refuses pushing topic; nothing was pushed\npushing abc changes 1 file", message: "refused");
     final advised = GuardVerdict{ decision = magus\GuardDecision.advise, reason = "1 file no target declares", rule = "push-unverified" };
     assert\equal(pushRefusal(advised, branch: "topic"), want: "", message: "advice");
-    assert\equal(pushRefusal(magus\guard.allow(), branch: "topic"), want: "", message: "allowed");
+    assert\equal(pushRefusal(magus\guard.defer(), branch: "topic"), want: "", message: "allowed");
 }
 
 test "the rule's reply on an unread file is printed and the landing goes on" {

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 )
@@ -249,7 +249,7 @@ func TestLayoutMeasure(t *testing.T) {
 	raw, err := os.ReadFile(file)
 	require.NoError(t, err)
 	var export types.KnowledgeGraphOutput
-	require.NoError(t, json.Unmarshal(raw, &export), file)
+	require.NoError(t, codec.Unmarshal(raw, &export), file)
 	g := NewGraph()
 	g.Merge(export.Nodes, export.Links)
 

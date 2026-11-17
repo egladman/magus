@@ -10,7 +10,8 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -76,10 +77,10 @@ var focusReaders = map[string]focusReader{
 const fdValueFlags = "tedExXS"
 
 // focusGrade is what the focus rule has to say about one command. Empty Decision
-// means it had nothing to say, which the wire's "pass" does not: a rule that stayed
+// means it had nothing to say, which the wire's defer does not: a rule that stayed
 // silent may be overridden by a later one, a rule that cleared the read may not.
 type focusGrade struct {
-	Decision string // "", "advise", or "deny"
+	Decision verdict.Decision // "", advise or deny
 	Reason   string
 	Context  string
 	// Why is the advisory's rationale, stored behind the ref shapeAdvice cites.
@@ -127,9 +128,9 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 		if focus, ok = project.FocusAt(ws, focusDir(location)); !ok {
 			return focusGrade{}
 		}
-		lease = types.Job{}
+		lease = jobtypes.Job{}
 	}
-	return focusVerdict(focus, job.ReadBoundary(lease), lease.ID, location.workspace, focusDir(location), operands)
+	return focusVerdict(focus, jobtypes.ReadBoundary(lease), lease.ID, location.workspace, focusDir(location), operands)
 }
 
 // focusVerdict judges resolved operands against a resolved focus, and is where the
@@ -157,7 +158,7 @@ func focusVerdict(focus project.Focus, declared []string, leaseID, root, dir str
 		}
 		owner := focus.Owner(rel)
 		if leaseID != "" {
-			return focusGrade{Decision: decisionDeny, Rel: rel, Reason: denial{
+			return focusGrade{Decision: verdict.Deny, Rel: rel, Reason: denial{
 				Say: fmt.Sprintf("magus workspace: %s belongs to project %s, outside the focus lease %s was given (%s); "+leaseActorClause("widen this focus"),
 					rel, owner, leaseID, strings.Join(focus.Seeds, ", ")),
 				Why: fmt.Sprintf("That focus is %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
@@ -166,7 +167,7 @@ func focusVerdict(focus project.Focus, declared []string, leaseID, root, dir str
 			}.full()}
 		}
 		return focusGrade{
-			Decision: decisionAdvise,
+			Decision: verdict.Advise,
 			Rel:      rel,
 			Context: fmt.Sprintf("magus workspace: %s belongs to project %s, outside this session's focus (%s); `%s` shows what owns it.",
 				rel, owner, strings.Join(focus.Seeds, ", "), hint.DescribeFile.With(rel)),
@@ -187,17 +188,17 @@ func focusVerdict(focus project.Focus, declared []string, leaseID, root, dir str
 // yields none, and the caller falls back to the working directory, which advises.
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
-func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, types.Job, bool) {
-	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
-		return project.Focus{}, types.Job{}, false
+func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, jobtypes.Job, bool) {
+	if actingLease == "" || !jobtypes.ValidID(actingLease) || location.cacheDir == "" {
+		return project.Focus{}, jobtypes.Job{}, false
 	}
 	me, enrolled := leaseRow(ctx, location, actingLease)
 	if !enrolled || !me.State.Live() {
-		return project.Focus{}, types.Job{}, false
+		return project.Focus{}, jobtypes.Job{}, false
 	}
 	focus, ok := leaseFocus(ws, me)
 	if !ok {
-		return project.Focus{}, types.Job{}, false
+		return project.Focus{}, jobtypes.Job{}, false
 	}
 	return focus, me, true
 }
@@ -205,8 +206,8 @@ func focusForLease(ctx context.Context, ws types.WorkspaceReader, location locat
 // leaseFocus is the focus a lease row declares: the projects of its write paths and its
 // read paths, which only widen. It is the job store's own read boundary, so the store's
 // subset check and this deny agree on what a lease may read.
-func leaseFocus(ws types.WorkspaceReader, me types.Job) (project.Focus, bool) {
-	return project.FocusForPaths(ws, job.ReadBoundary(me))
+func leaseFocus(ws types.WorkspaceReader, me jobtypes.Job) (project.Focus, bool) {
+	return project.FocusForPaths(ws, jobtypes.ReadBoundary(me))
 }
 
 // focusReadOperands is every path a read-shaped command in the line was pointed at.

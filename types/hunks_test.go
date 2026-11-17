@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -113,7 +114,7 @@ func TestHunksChargeALeadingBlankLineToTheNewDeclaration(t *testing.T) {
 	golang, _ := MatchDiffDriver("a.go")
 	appended, ok := Hunks("a.go", []byte("func C() {\n}\n"), []byte("func C() {\n}\n\nfunc D() {\n}\n"), golang)
 	require.True(t, ok)
-	assert.Equal(t, []RegionChange{{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{3, 5}, Declaration: "func D() {", Driver: "golang"}},
+	assert.Equal(t, []job.RegionChange{{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{3, 5}, Declaration: "func D() {", Driver: "golang"}},
 		appended, "a function appended after another")
 	for name, tc := range map[string]struct {
 		insert string
@@ -131,7 +132,7 @@ func TestHunksChargeALeadingBlankLineToTheNewDeclaration(t *testing.T) {
 			got, ok := Hunks("a.go", []byte(old), []byte(cur), golang)
 			require.True(t, ok)
 			require.Len(t, got, 1)
-			assert.Equal(t, RegionChange{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{2, 1 + strings.Count(tc.insert, "\n")},
+			assert.Equal(t, job.RegionChange{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{2, 1 + strings.Count(tc.insert, "\n")},
 				Declaration: tc.decl, Driver: "golang"}, got[0])
 		})
 	}
@@ -143,18 +144,18 @@ func TestHunks(t *testing.T) {
 	cur := "package a\n\nfunc A() {\n\tx()\n\treturn\n}\n\nfunc B() {\n}\n"
 	got, ok := Hunks("a.go", []byte(old), []byte(cur), golang)
 	require.True(t, ok)
-	assert.Equal(t, []RegionChange{
-		{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{4, 4}, Declaration: "func A() {", Driver: "golang"},
-		{File: FileChange{Path: "a.go"}, Side: RegionOld, Lines: [2]int{8, 8}, Declaration: "func B() {", Driver: "golang"},
+	assert.Equal(t, []job.RegionChange{
+		{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{4, 4}, Declaration: "func A() {", Driver: "golang"},
+		{File: job.FileChange{Path: "a.go"}, Side: job.RegionOld, Lines: [2]int{8, 8}, Declaration: "func B() {", Driver: "golang"},
 	}, got)
 
 	got, ok = Hunks("notes.txt", []byte("a\nb\n"), []byte("a\nc\n"), DiffDriver{})
 	require.True(t, ok)
-	assert.Equal(t, []RegionChange{
-		{File: FileChange{Path: "notes.txt"}, Side: RegionOld, Lines: [2]int{2, 2}},
-		{File: FileChange{Path: "notes.txt"}, Side: RegionNew, Lines: [2]int{2, 2}},
+	assert.Equal(t, []job.RegionChange{
+		{File: job.FileChange{Path: "notes.txt"}, Side: job.RegionOld, Lines: [2]int{2, 2}},
+		{File: job.FileChange{Path: "notes.txt"}, Side: job.RegionNew, Lines: [2]int{2, 2}},
 	}, got, "no driver: line ranges only, each the whole file as a Location")
-	assert.Equal(t, Location{Path: "notes.txt"}, got[0].Location())
+	assert.Equal(t, job.Location{Path: "notes.txt"}, got[0].Location())
 
 	_, ok = Hunks("b", []byte("a\x00"), []byte("b"), DiffDriver{})
 	assert.False(t, ok, "binary")

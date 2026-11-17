@@ -3,6 +3,7 @@ package guard
 import (
 	"bytes"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"log/slog"
 	"os"
@@ -16,14 +17,13 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/types"
 )
 
 // verdictDecisionRe finds every decision the guard assigns, in either spelling
-// the code uses: the struct-literal `Decision: decisionPass` and the assignment
-// `verdict.Decision = decisionDeny`. Each decisionX constant spells its value,
-// so the lowercased suffix is the decision.
-var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*decision(\w+)`)
+// the code uses: the struct-literal `Decision: verdict.Defer` and the assignment
+// `judgment.Decision = verdict.Deny`. Each verdict constant spells its value,
+// so the lowercased name is the decision.
+var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*verdict\.(\w+)`)
 
 // TestGuardDecisionsCoverEveryVerdictTheHookEmits keeps agent.GuardDecisions
 // honest, which is what makes it usable as the contract the host-parity gate
@@ -38,8 +38,8 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*decision(\w+)`)
 //     produces every verdict, and that enumeration is the thing that goes
 //     stale.
 //   - Every listed decision must RENDER distinctly. writeGuardVerdict's text
-//     arm falls through to "pass" for anything it does not know, so a decision
-//     added to the list but not to the renderer would report itself as a pass:
+//     arm falls through to "defer" for anything it does not know, so a decision
+//     added to the list but not to the renderer would report itself as a defer:
 //     the quietest possible wrong answer.
 //
 // A decision that fails either direction is not a contract a host glue can be
@@ -73,15 +73,15 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 
 	for _, d := range agent.GuardDecisions() {
 		var out strings.Builder
-		require.NoError(t, testHookEnv().writeVerdict(&out, output.Options{Format: output.Text}, types.GuardJudgment{
+		require.NoError(t, testHookEnv().writeVerdict(&out, output.Options{Format: output.Text}, verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:   d,
+			Decision:   verdict.Decision(d),
 			Reason:     "why",
 			Context:    "why",
 		}))
 		assert.True(t, strings.HasPrefix(out.String(), d),
 			"writeGuardVerdict renders the listed decision %q as %q: its text arm has no case for it and\n"+
-				"fell through to the default, so the verdict reads as a pass.", d, strings.TrimSpace(out.String()))
+				"fell through to the default, so the verdict reads as a defer.", d, strings.TrimSpace(out.String()))
 	}
 }
 
@@ -90,33 +90,33 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 // command anyway: the guard looked installed and enforced nothing.
 func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 	text := output.Options{Format: output.Text}
-	err := verdictExit(os.Stderr, text, types.GuardJudgment{Decision: "deny", Reason: "no"})
+	err := verdictExit(os.Stderr, text, verdict.Judgment{Decision: "deny", Reason: "no"})
 	require.Error(t, err, "a deny must exit non-zero or it blocks nothing")
 	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 
-	require.NoError(t, verdictExit(os.Stderr, text, types.GuardJudgment{Decision: "advise", Context: "fyi"}),
+	require.NoError(t, verdictExit(os.Stderr, text, verdict.Judgment{Decision: "advise", Context: "fyi"}),
 		"advice teaches and must never block")
-	require.NoError(t, verdictExit(os.Stderr, text, types.GuardJudgment{Decision: "pass"}))
+	require.NoError(t, verdictExit(os.Stderr, text, verdict.Judgment{Decision: verdict.Defer}))
 
 	// The exit code is the enforcement and does not depend on the rendering: a structured
 	// consumer that got a zero status would be told the same lie in a different shape.
-	require.Error(t, verdictExit(os.Stderr, output.Options{Format: output.JSON}, types.GuardJudgment{Decision: "deny", Reason: "no"}))
+	require.Error(t, verdictExit(os.Stderr, output.Options{Format: output.JSON}, verdict.Judgment{Decision: "deny", Reason: "no"}))
 }
 
 // TestEnforceVerdictBlocksAnAsk pins that an ask stops the call wherever nothing renders the
 // host's prompt. A glue that reads only the exit status would otherwise take the person's
 // approval as already given. The shipped templates read stdout and exit 0 themselves.
 func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
-	err := verdictExit(os.Stderr, output.Options{Format: output.Text}, types.GuardJudgment{Decision: "ask", Reason: "publish?"})
+	err := verdictExit(os.Stderr, output.Options{Format: output.Text}, verdict.Judgment{Decision: "ask", Reason: "publish?"})
 	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 
 	var stdout bytes.Buffer
 	require.NoError(t, testHookEnv().writeVerdict(&stdout, output.Options{Format: output.Text},
-		types.GuardJudgment{Decision: "ask", Rule: "push-unverified", Reason: "publish?"}))
+		verdict.Judgment{Decision: verdict.Ask, Rule: "push-unverified", Reason: "publish?"}))
 	assert.Equal(t, "ask [push-unverified]: publish?\n", stdout.String())
 }
 
@@ -126,7 +126,7 @@ func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
 // simply printed a kilobyte-plus reason twice to a terminal. A structured format renders no
 // prose, so there stderr is the only readable channel and keeps it.
 func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
-	deny := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: "because"}
+	deny := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: "because"}
 
 	var stdout bytes.Buffer
 	require.NoError(t, testHookEnv().writeVerdict(&stdout, output.Options{Format: output.Text}, deny))
@@ -143,7 +143,7 @@ func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
 // TestGuardDenyStderrIsOneLine pins the person's view of a blocking hook: the verdict line
 // alone, with the next step and the details ref left to stdout.
 func TestGuardDenyStderrIsOneLine(t *testing.T) {
-	deny := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny",
+	deny := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny,
 		Reason: "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"}
 	assert.Equal(t, "a text search the graph answers\n", captureStderr(t, func() {
 		_ = verdictExit(os.Stderr, output.Options{Format: output.JSON}, deny)

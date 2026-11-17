@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -25,7 +26,7 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	m, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
@@ -40,7 +41,7 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 
 	body, err := os.ReadFile(filepath.Join(workspace.CacheDir(), "runs", id+".jsonl"))
 	require.NoError(t, err)
-	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder := codec.NewDecoder(bytes.NewReader(body))
 	var events []journal.Event
 	for {
 		var event journal.Event
@@ -118,7 +119,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -137,7 +138,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 func covInspect(t *testing.T) *Magus {
 	t.Helper()
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	return ws.(*Magus)
 }
@@ -255,18 +256,18 @@ func TestEventJSONKeepsTheWireForm(t *testing.T) {
 	const line = `{"ts":1700000000000,"inv":"inv1","project":"api","target":"build:rw","kind":"result","status":"cached","ref":"outdeadbe","text":"done","duration_ms":42}`
 
 	var got Event
-	require.NoError(t, json.Unmarshal([]byte(line), &got))
+	require.NoError(t, codec.Unmarshal([]byte(line), &got))
 	assert.Equal(t, Event{
 		Timestamp: 1700000000000, Invocation: "inv1", Project: "api", Target: "build:rw",
 		Kind: journal.KindResult, Status: journal.StatusCached, Ref: "outdeadbe",
 		Duration: 42 * time.Millisecond, Text: "done",
 	}, got)
 
-	out, err := json.Marshal(got)
+	out, err := codec.Marshal(got)
 	require.NoError(t, err)
 	assert.Equal(t, line, string(out))
 
-	out, err = json.Marshal(Event{Kind: journal.KindOutput})
+	out, err = codec.Marshal(Event{Kind: journal.KindOutput})
 	require.NoError(t, err)
 	assert.Equal(t, `{"ts":0,"kind":"output","duration_ms":0}`, string(out), "json/v2 omitempty keeps a zero duration_ms, as journal.Event writes it")
 }

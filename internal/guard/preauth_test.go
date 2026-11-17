@@ -20,8 +20,10 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -209,9 +211,9 @@ func servedNextTemplates(t *testing.T) map[string]string {
 }
 
 // seedRemedyJob files row in the job store the fixtures are judged against.
-func seedRemedyJob(t *testing.T, at location, row types.Job) {
+func seedRemedyJob(t *testing.T, at location, row jobtypes.Job) {
 	t.Helper()
-	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 }
 
@@ -232,13 +234,13 @@ func servedRoles(t *testing.T) (context.Context, []servedRole) {
 	worker := narrowLease()
 	worker.ID, worker.Parent = "harness/worker", "harness/root"
 	exited := narrowLease()
-	exited.ID, exited.Parent, exited.State = "harness/exited", "harness/root", types.StateExited
-	reviewer := types.Job{
-		ID: "harness/reviewer", Agent: agent.Instructed("read the guard"),
-		ReadOnly: true, Paths: types.JobPaths{Read: []string{"cmd/magus/**"}},
-		State: types.StateRunning, Registered: 1,
+	exited.ID, exited.Parent, exited.State = "harness/exited", "harness/root", jobtypes.StateExited
+	reviewer := jobtypes.Job{
+		ID: "harness/reviewer", Agent: jobtypes.Instructed("read the guard"),
+		ReadOnly: true, Paths: jobtypes.Paths{Read: []string{"cmd/magus/**"}},
+		State: jobtypes.StateRunning, Registered: 1,
 	}
-	handed := types.Job{ID: "harness/handed", Agent: agent.Instructed("a row the root handed out"), Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StateDeclared}
+	handed := jobtypes.Job{ID: "harness/handed", Agent: jobtypes.Instructed("a row the root handed out"), Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateDeclared}
 	ctx, _ := fleetFixture(t, worker, exited, reviewer, handed)
 	at := hookLocation(ctx, Dependencies{})
 	const host, session = "claude-code", "served"
@@ -278,7 +280,7 @@ func servedAs(call Request, role servedRole) Request {
 func gradeServed(t *testing.T, ctx context.Context, deps Dependencies, call Request, role, id, run string) {
 	t.Helper()
 	call.Input, call.DryRun = run, true
-	if v := Judge(ctx, deps, call); v.Decision == decisionDeny {
+	if v := Judge(ctx, deps, call); v.Decision == verdict.Deny {
 		t.Errorf("the %q next serves %q, which the guard refuses for a %s:\n%s", id, run, role, v.Reason)
 	}
 }
@@ -313,11 +315,11 @@ func rootMergeServesBaseScript(t *testing.T, ctx context.Context, deps Dependenc
 	return Request{}, next
 }
 
-func servedFixtures() []servedFixture {
+func servedFixtures(ctx context.Context) []servedFixture {
 	return []servedFixture{
 		{"a root's merge names the script that brings the base in", rootMergeServesBaseScript},
 		{"a stale index's rebuild", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
-			standBudget(t, types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1})
+			standBudget(t, budget.Snapshot{BudgetSlots: 1, HeldSlots: 1})
 			root := recordedSearchTree(t)
 			cacheDir := t.TempDir()
 			require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{}))
@@ -330,7 +332,7 @@ func servedFixtures() []servedFixture {
 				lease:         role.call.Lease,
 				worker:        role.worker,
 			})
-			v := Evaluate(stale, "grep -rn CheckStatus internal")
+			v := Evaluate(ctx, stale, "grep -rn CheckStatus internal")
 			require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "CheckStatus"}, v.Rule)
 			var next []string
 			for _, n := range v.Next {
@@ -346,7 +348,7 @@ func servedFixtures() []servedFixture {
 			call := servedAs(Request{Input: "gh pr checks 183"}, role)
 			call.DryRun = true
 			v := Judge(ctx, deps, call)
-			require.Equal(t, decisionAdvise, v.Decision, "a one-shot gh pr checks is advised to every role")
+			require.Equal(t, verdict.Advise, v.Decision, "a one-shot gh pr checks is advised to every role")
 			_, said := spoken(v)
 			// It names more than one read; the caller needs one it can run.
 			var runnable []string
@@ -356,7 +358,7 @@ func servedFixtures() []servedFixture {
 					continue
 				}
 				call.Input = read
-				if Judge(ctx, deps, call).Decision != decisionDeny {
+				if Judge(ctx, deps, call).Decision != verdict.Deny {
 					runnable = append(runnable, read)
 				}
 			}
@@ -370,7 +372,7 @@ func servedFixtures() []servedFixture {
 			started := bgTime(t, "2026-10-13T11:37:41.120Z")
 			v, ok := judgeStop(strict(Dependencies{}), hint.Gate{}, subagentStop(t, role.call.Agent, writeTranscript(t, bgSearchCall, bgSearchResult)), "", started.Add(time.Hour))
 			require.True(t, ok)
-			require.Equal(t, decisionDeny, v.Decision)
+			require.Equal(t, verdict.Deny, v.Decision)
 			assert.NotContains(t, v.Reason, "completion notice", "a subagent refused its stop cannot wait for a notice that comes after it")
 			var next []string
 			for _, m := range taskStopRe.FindAllStringSubmatch(v.Reason, -1) {
@@ -441,14 +443,14 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, n.ID, n.Run)
 			}
 		})
-		for _, f := range servedFixtures() {
+		for _, f := range servedFixtures(t.Context()) {
 			t.Run(fmt.Sprintf("%s/%s", role.name, f.name), func(t *testing.T) {
 				call, next := f.setup(t, ctx, deps, role)
 				call = servedAs(call, role)
 				if call.Input != "" {
 					probe := call
 					probe.DryRun = true
-					if Judge(ctx, deps, probe).Decision == decisionDeny {
+					if Judge(ctx, deps, probe).Decision == verdict.Deny {
 						return
 					}
 				}
@@ -461,7 +463,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 }
 
 // fixtureRows reads the job store the fixture's context pins.
-func fixtureRows(t *testing.T, ctx context.Context) []types.Job {
+func fixtureRows(t *testing.T, ctx context.Context) []jobtypes.Job {
 	t.Helper()
 	rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
 	require.NoError(t, err)

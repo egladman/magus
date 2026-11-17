@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,11 +20,11 @@ func shownSession(t *testing.T, lines ...string) string {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	var out strings.Builder
-	RenderShow(&out, SummarizeSession("s1", AgentEvents(fold, "s1")))
+	RenderShow(&out, SummarizeSession("s1", session.AgentEvents(fold, "s1")))
 	return out.String()
 }
 
@@ -37,7 +38,7 @@ func TestShowGroupsCommandsByProgram(t *testing.T) {
 
 	assert.Contains(t, out, "host h1")
 	assert.Contains(t, out, "go ")
-	assert.Contains(t, out, "pass 2", "the stand-in rules pass both commands")
+	assert.Contains(t, out, "defer 2", "the stand-in rules defer both commands")
 	assert.Contains(t, out, "host recorded 1 denied")
 	assert.Contains(t, out, "magus-run")
 	assert.Contains(t, out, "internal/foo.go")

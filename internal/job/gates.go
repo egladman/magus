@@ -9,7 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,23 +24,22 @@ type UnrunGate struct {
 	Source string `json:"source"  yaml:"source"`
 	// Goal is the goal that would add the target to the job, ready to put in its goals: a
 	// form the guard lets the job's worker run. Zero when IntegratorGates.
-	Goal types.Goal `json:"goal"    yaml:"goal"`
+	Goal job.Goal `json:"goal"    yaml:"goal"`
 	// IntegratorGates marks a target no form of which the guard lets a worker run, such as
 	// the build of magus itself. The integrator runs it, so no goal or deviation is asked for.
 	IntegratorGates bool `json:"integrator_gates,omitempty" yaml:"integrator_gates,omitempty"`
 }
 
 // gradeFunc is the guard's verdict on a check run by the holder of the row being gated.
-// Nil grades nothing, which offers every goal as it is.
-type gradeFunc func(types.LeaseCheck) CheckVerdict
+type gradeFunc func(job.LeaseCheck) CheckVerdict
 
 // gradeWith grades a check as the row with that check, the way [deniedCheckProblems]
-// does. A nil grader grades nothing.
-func gradeWith(grader CheckGrader, root string, row types.Job) gradeFunc {
+// does. A nil grader grades as [noGrader]: no verdict, never a pass.
+func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 	if grader == nil {
-		return nil
+		grader = noGrader
 	}
-	return func(c types.LeaseCheck) CheckVerdict {
+	return func(c job.LeaseCheck) CheckVerdict {
 		pending := row
 		pending.Check = &c
 		return grader(context.Background(), root, pending)
@@ -50,18 +50,15 @@ func gradeWith(grader CheckGrader, root string, row types.Job) gradeFunc {
 // default charms. It reports true, with no goal, when neither form may run. A verdict that
 // reached no conclusion (NotGraded) offers the goal as given; [deniedCheckProblems] reports
 // the missing grade once for the whole row.
-func gradedGoal(goal types.Goal, grade gradeFunc) (types.Goal, bool) {
-	if grade == nil {
-		return goal, false
-	}
+func gradedGoal(goal job.Goal, grade gradeFunc) (job.Goal, bool) {
 	charmless := goal
 	charmless.Check.NoDefaultCharms = true
-	for _, candidate := range []types.Goal{goal, charmless} {
+	for _, candidate := range []job.Goal{goal, charmless} {
 		if !grade(candidate.Check).Denied {
 			return candidate, false
 		}
 	}
-	return types.Goal{}, true
+	return job.Goal{}, true
 }
 
 // unrunGatesLimit is how many gates a text rendering lists before it counts the rest.
@@ -84,17 +81,18 @@ const ciTarget = "ci"
 // ancestor's check does not cover it. The ancestor's target gates it too
 // when it spells the path out.
 //
-// Each goal is graded by the installed [CheckGrader] before it is offered: the form a
-// worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
-// project, or one whose root has no ci chain, yields nil.
-func UnrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput) []UnrunGate {
-	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+// Each goal is graded by grader before it is offered: the form a worker may run, else
+// none, with the gate marked IntegratorGates. A nil grader reaches no verdict, so every goal
+// is offered as given. A workspace with
+// no root project, or one whose root has no ci chain, yields nil.
+func UnrunGates(root string, row job.Job, projects []*types.Project, regenerated []RegeneratedOutput, grader CheckGrader) []UnrunGate {
+	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(grader, root, row))
 	return gates
 }
 
 // unrunGates is [UnrunGates] graded by grade. The second result names each
 // gate an ancestor kept because its owner's targets could not be listed.
-func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) ([]UnrunGate, []string) {
+func unrunGates(root string, row job.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) ([]UnrunGate, []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil, nil
 	}
@@ -229,7 +227,7 @@ func spellsOutPath(p *types.Project, sources []types.Glob, file string) bool {
 		root = len(p.Path)
 	}
 	return slices.ContainsFunc(sources, func(g types.Glob) bool {
-		return g.Match(file) && len(types.LiteralPrefix(g.Pattern)) > root
+		return g.Match(file) && len(job.LiteralPrefix(g.Pattern)) > root
 	})
 }
 
@@ -269,7 +267,7 @@ func runsTarget(p *types.Project, target string) bool {
 
 // offeredGates drops the found gates another found gate composes, and gives each one left
 // the goal [gradedGoal] allows.
-func offeredGates(found []unrunFound, row types.Job, lookup func(string) *types.Project, grade gradeFunc) []UnrunGate {
+func offeredGates(found []unrunFound, row job.Job, lookup func(string) *types.Project, grade gradeFunc) []UnrunGate {
 	composed := map[string]bool{}
 	for _, u := range found {
 		_ = types.WalkChain(u.visit.Project, u.visit.Target, lookup, func(m types.ChainVisit) error {
@@ -301,10 +299,10 @@ type unrunFound struct {
 }
 
 // runTargets is the key of every chain member a check or goal of row runs.
-func runTargets(row types.Job, lookup func(string) *types.Project) map[string]bool {
+func runTargets(row job.Job, lookup func(string) *types.Project) map[string]bool {
 	run := map[string]bool{}
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
+		if g.Kind != job.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
 			continue
 		}
 		p := lookup(cmp.Or(g.Check.Project, "."))
@@ -328,7 +326,7 @@ var nonIDChars = regexp.MustCompile(`[^a-z0-9]+`)
 // after it when it is not the root, and a counter after that when taken already holds the
 // id. Two projects can fold to one id ("a/b" and "a-b"), and a target can share its name
 // with a goal the row holds. The id it returns is added to taken.
-func unrunGoal(project, target string, taken map[string]bool) types.Goal {
+func unrunGoal(project, target string, taken map[string]bool) job.Goal {
 	base := target
 	if project != "." {
 		base += "-" + project
@@ -339,7 +337,7 @@ func unrunGoal(project, target string, taken map[string]bool) types.Goal {
 		id = fmt.Sprintf("%s-%d", base, n)
 	}
 	taken[id] = true
-	return types.Goal{ID: id, Check: types.LeaseCheck{Target: target, Project: project}}.Resolve()
+	return job.Goal{ID: id, Check: job.LeaseCheck{Target: target, Project: project}, Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
 }
 
 const unrunHeading = "not run by the check or any goal, and run by ci over your write paths"
@@ -365,7 +363,7 @@ func unrunLines(gates []UnrunGate) []string {
 	shown := gates[:min(len(gates), unrunGatesLimit)]
 	var (
 		lines []string
-		goals []types.Goal
+		goals []job.Goal
 	)
 	for _, g := range shown {
 		line := fmt.Sprintf("%s %s (reads %s)", g.Target, g.Project, g.Source)
@@ -382,7 +380,7 @@ func unrunLines(gates []UnrunGate) []string {
 	if len(goals) == 0 {
 		return lines
 	}
-	if data, err := json.Marshal(goals); err == nil {
+	if data, err := codec.Marshal(goals); err == nil {
 		lines = append(lines, "goals to add: "+string(data))
 	}
 	return lines

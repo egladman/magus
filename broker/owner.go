@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -153,7 +154,7 @@ func (s *server) holdLocked(ctx context.Context, sess *session, h Hold) string {
 		return id
 	}
 	slots := max(h.Slots, 1)
-	id := s.budget.Assert(types.MachineClaim{
+	id := s.budget.Adopt(budget.Claim{
 		Target: "job exec", Slots: slots, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command,
 		Invocation: h.Invocation, Ancestors: h.Ancestors,
 	})
@@ -469,10 +470,10 @@ func (s *server) runLocked(sess *session, slots int) Work {
 // force seats it whatever the cap, for a claim re-asserted on a new broker, whose step
 // is already running. Callers hold s.mu.
 //
-// The seat is the RUN's (see [types.MachineClaim.Run]), so a nested magus under a
+// The seat is the RUN's (see [budget.Claim.Run]), so a nested magus under a
 // seated run shares its seat rather than waiting on its own parent, and it is held until
 // the connection closes, so a run between two steps does not lose it to another.
-func (s *server) seatLocked(sess *session, c types.MachineClaim, force bool) *SeatWait {
+func (s *server) seatLocked(sess *session, c budget.Claim, force bool) *SeatWait {
 	h := sess.hello
 	if h.Tree == "" || h.MaxValidations <= 0 || sess.seat != "" {
 		return nil
@@ -636,12 +637,12 @@ func (c *Client) noteSeat(ctx context.Context, wait *SeatWait) {
 // client runs in, once, for a client acting under a lease. A failure is the caller's
 // misconfiguration and refuses the run with exit 78: guessing a cap would either
 // serialize what the workspace allows or run what it forbids.
-func (c *Client) resolveScope() error {
+func (c *Client) resolveScope(ctx context.Context) error {
 	c.scopeOnce.Do(func() {
 		if c.hello.Lease == "" {
 			return
 		}
-		c.hello.Tree, c.hello.MaxValidations, c.scopeErr = validationScope(c.hello.Dir, c.hello.Lease)
+		c.hello.Tree, c.hello.MaxValidations, c.scopeErr = validationScope(ctx, c.hello.Dir, c.hello.Lease)
 		if c.scopeErr != nil {
 			c.scopeErr = types.ExitError{Code: cache.ExitCodeMachineDeclaration, Err: fmt.Errorf(
 				"broker: cannot tell how many runs job %s's tree may have going: %w", c.hello.Lease, c.scopeErr)}
@@ -653,7 +654,7 @@ func (c *Client) resolveScope() error {
 // validationScope is the root of lease's job tree and the jobs.max_validations of the
 // workspace holding dir. Workspace config only, as every jobs rule that acts reads it. A
 // dir in no workspace caps at the default, per lease.
-func validationScope(dir, lease string) (tree string, maxValidations int, err error) {
+func validationScope(ctx context.Context, dir, lease string) (tree string, maxValidations int, err error) {
 	root := workspaceRoot(dir)
 	cfg, err := config.LoadWorkspaceOnly(root)
 	if err != nil {
@@ -670,7 +671,7 @@ func validationScope(dir, lease string) (tree string, maxValidations int, err er
 	if err != nil {
 		return "", 0, fmt.Errorf("resolve the user state dir that holds the job store: %w", err)
 	}
-	tree, err = job.NewStore(job.Location{Root: root, StateBase: stateBase}).TreeRoot(lease)
+	tree, err = job.NewStore(job.Location{Root: root, StateBase: stateBase}).TreeRoot(ctx, lease)
 	if err != nil {
 		return "", 0, err
 	}

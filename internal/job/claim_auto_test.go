@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,13 +20,13 @@ func leafFanIn(string, []string) (int, error) { return 0, nil }
 
 // provedCaller is the decision for autoCaller with stop, which a holder may still apply.
 func provedCaller(stop string) AutoClaim {
-	return AutoClaim{Request: types.JobClaimRequest{Path: autoCaller, Because: "refs:hint.Render"}, Proof: autoCallerProof, Proved: true, Appliable: true, Stop: stop}
+	return AutoClaim{Request: job.ClaimRequest{Path: autoCaller, Because: "refs:hint.Render"}, Proof: autoCallerProof, Proved: true, Appliable: true, Stop: stop}
 }
 
 type autoClaimCase struct {
 	path  string
 	extra map[string]string
-	edit  func(row *types.Job, rows *[]types.Job, projects *[]*types.Project)
+	edit  func(row *job.Job, rows *[]job.Job, projects *[]*types.Project)
 	fanIn fanInFunc
 	want  AutoClaim
 }
@@ -42,7 +43,7 @@ func decideEach(t *testing.T, cases map[string]autoClaimCase) {
 				require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
 				require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 			}
-			rows := []types.Job{row}
+			rows := []job.Job{row}
 			if tc.edit != nil {
 				tc.edit(&row, &rows, &projects)
 				rows[0] = row
@@ -89,10 +90,10 @@ func TestDecideAutoClaimTakesOneEdgeAndNoHub(t *testing.T) {
 // because's kind, and until then unproved, since ProposeClaim skips a kind the store
 // cannot record.
 func widerClaim(path, because, proof string) AutoClaim {
-	if _, err := types.ParseClaimEvidence(because); err != nil {
+	if _, err := job.ParseClaimEvidence(because); err != nil {
 		return AutoClaim{Stop: path + " is more than one edge from what the job changed: no refs, calls, defines or test proof holds for it"}
 	}
-	return AutoClaim{Request: types.JobClaimRequest{Path: path, Because: because}, Proof: proof, Proved: true, Appliable: true}
+	return AutoClaim{Request: job.ClaimRequest{Path: path, Because: because}, Proof: proof, Proved: true, Appliable: true}
 }
 
 func TestDecideAutoClaimTakesTheWiderEdges(t *testing.T) {
@@ -105,9 +106,9 @@ func TestDecideAutoClaimTakesTheWiderEdges(t *testing.T) {
 		},
 		"a test of a file the job claimed": {
 			path: "internal/free/free_test.go", fanIn: leafFanIn,
-			edit: func(row *types.Job, _ *[]types.Job, _ *[]*types.Project) {
+			edit: func(row *job.Job, _ *[]job.Job, _ *[]*types.Project) {
 				row.Paths.Write = append(row.Paths.Write, "internal/free/free.go")
-				row.Claims = []types.JobClaim{{Path: "internal/free/free.go"}}
+				row.Claims = []job.Claim{{Path: "internal/free/free.go"}}
 			},
 			want: widerClaim("internal/free/free_test.go", "test:internal/free/free.go", "internal/free/free_test.go tests internal/free/free.go: it names Free"),
 		},
@@ -137,7 +138,7 @@ func TestDecideAutoClaimStopsTheWiderEdges(t *testing.T) {
 
 	const test = "internal/lease/held_test.go"
 	stopped := func(stop string, appliable bool) AutoClaim {
-		return AutoClaim{Request: types.JobClaimRequest{Path: test, Because: "test:internal/lease/held.go"},
+		return AutoClaim{Request: job.ClaimRequest{Path: test, Because: "test:internal/lease/held.go"},
 			Proof: "internal/lease/held_test.go tests internal/lease/held.go: it names Held", Proved: true, Appliable: appliable, Stop: stop}
 	}
 	decideEach(t, map[string]autoClaimCase{
@@ -147,23 +148,23 @@ func TestDecideAutoClaimStopsTheWiderEdges(t *testing.T) {
 		},
 		"a generated output": {
 			path: test, fanIn: leafFanIn,
-			edit: func(_ *types.Job, _ *[]types.Job, projects *[]*types.Project) {
+			edit: func(_ *job.Job, _ *[]job.Job, projects *[]*types.Project) {
 				(*projects)[0].TargetOutputs["lease-generate"] = []types.OutputRef{{Glob: test}}
 			},
 			want: stopped("internal/lease/held_test.go is a generated output, which its target regenerates", true),
 		},
 		"a path another live job holds": {
 			path: test, fanIn: leafFanIn,
-			edit: func(_ *types.Job, rows *[]types.Job, _ *[]*types.Project) {
-				*rows = append(*rows, types.Job{ID: "leaser", State: types.StateRunning, Paths: types.JobPaths{Write: []string{test}}})
+			edit: func(_ *job.Job, rows *[]job.Job, _ *[]*types.Project) {
+				*rows = append(*rows, job.Job{ID: "leaser", State: job.StateRunning, Paths: job.Paths{Write: []string{test}}})
 			},
 			want: stopped("["+string(types.WritePathFileShared)+"] internal/lease/held_test.go is held by live job leaser, and a proof never takes a path another job holds", false),
 		},
 		"a job at its cap": {
 			path: test, fanIn: leafFanIn,
-			edit: func(row *types.Job, _ *[]types.Job, _ *[]*types.Project) {
+			edit: func(row *job.Job, _ *[]job.Job, _ *[]*types.Project) {
 				row.MaxClaims = 1
-				row.Claims = []types.JobClaim{{Path: "cmd/magus/vcs_test.go"}}
+				row.Claims = []job.Claim{{Path: "cmd/magus/vcs_test.go"}}
 			},
 			want: stopped("cli-ls-files holds 1 proved claim(s), its max_claims (max_claims on job cli-ls-files)", false),
 		},
@@ -176,25 +177,25 @@ func TestDecideAutoClaimLeavesGeneratedAndConfigFilesToTheHolder(t *testing.T) {
 	decideEach(t, map[string]autoClaimCase{
 		"a generated output is proved and left to the holder": {
 			path: "cmd/magus/gen/flags.go", fanIn: leafFanIn,
-			want: AutoClaim{Request: types.JobClaimRequest{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
+			want: AutoClaim{Request: job.ClaimRequest{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
 				Proof: "cmd/magus/gen/flags.go is an output of .:config-generate, which reads internal/commands/*.go, a source the job changed", Proved: true, Appliable: true,
 				Stop: "cmd/magus/gen/flags.go is a generated output, which its target regenerates"},
 		},
 		"a caller a target outputs is generated": {
 			path: autoCaller, fanIn: leafFanIn,
-			edit: func(_ *types.Job, _ *[]types.Job, projects *[]*types.Project) {
+			edit: func(_ *job.Job, _ *[]job.Job, projects *[]*types.Project) {
 				(*projects)[0].TargetOutputs["render-generate"] = []types.OutputRef{{Glob: autoCaller}}
 			},
 			want: provedCaller("internal/guard/render.go is a generated output, which its target regenerates"),
 		},
 		"no workspace leaves a generated output possible": {
 			path: autoCaller, fanIn: leafFanIn,
-			edit: func(_ *types.Job, _ *[]types.Job, projects *[]*types.Project) { *projects = nil },
+			edit: func(_ *job.Job, _ *[]job.Job, projects *[]*types.Project) { *projects = nil },
 			want: provedCaller("no workspace answered for its targets' outputs, so internal/guard/render.go may be generated"),
 		},
 		"a magusfile is proved and left to the holder": {
 			path: "cmd/magus/testdata/magusfile.buzz", extra: map[string]string{"cmd/magus/testdata/magusfile.buzz": "exec magus vcs ls-files\n"}, fanIn: leafFanIn,
-			want: AutoClaim{Request: types.JobClaimRequest{Path: "cmd/magus/testdata/magusfile.buzz", Because: "test:cmd/magus/vcs.go"},
+			want: AutoClaim{Request: job.ClaimRequest{Path: "cmd/magus/testdata/magusfile.buzz", Because: "test:cmd/magus/vcs.go"},
 				Proof: "cmd/magus/testdata/magusfile.buzz tests cmd/magus/vcs.go: it names \"ls-files\"", Proved: true, Appliable: true,
 				Stop: "cmd/magus/testdata/magusfile.buzz is a magusfile or workspace config, which every job's plan reads"},
 		},
@@ -214,15 +215,15 @@ func TestDecideAutoClaimStopsWhatTheStoreWouldRefuse(t *testing.T) {
 	decideEach(t, map[string]autoClaimCase{
 		"a path another live job holds": {
 			path: autoCaller, fanIn: leafFanIn, want: held,
-			edit: func(_ *types.Job, rows *[]types.Job, _ *[]*types.Project) {
-				*rows = append(*rows, types.Job{ID: "renderer", State: types.StateRunning, Paths: types.JobPaths{Write: []string{autoCaller}}})
+			edit: func(_ *job.Job, rows *[]job.Job, _ *[]*types.Project) {
+				*rows = append(*rows, job.Job{ID: "renderer", State: job.StateRunning, Paths: job.Paths{Write: []string{autoCaller}}})
 			},
 		},
 		"a job at its cap": {
 			path: autoCaller, fanIn: leafFanIn, want: capped,
-			edit: func(row *types.Job, _ *[]types.Job, _ *[]*types.Project) {
+			edit: func(row *job.Job, _ *[]job.Job, _ *[]*types.Project) {
 				row.MaxClaims = 1
-				row.Claims = []types.JobClaim{{Path: "cmd/magus/vcs_test.go"}}
+				row.Claims = []job.Claim{{Path: "cmd/magus/vcs_test.go"}}
 			},
 		},
 	})
@@ -236,10 +237,10 @@ func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
 		{File: "lib/use_test.go", Occurrences: []types.SymbolOccurrence{occ(4)}},
 		{File: "lib/lib.go", Occurrences: []types.SymbolOccurrence{{Line: 3, Status: types.SymbolOccurrenceVerified, Definition: true}, occ(8), occ(9), occ(14)}},
 	}
-	region := func(file string, from, to int, decl string) types.RegionChange {
-		return types.RegionChange{File: types.FileChange{Path: file}, Side: types.RegionNew, Lines: [2]int{from, to}, Declaration: decl, Driver: "golang"}
+	region := func(file string, from, to int, decl string) job.RegionChange {
+		return job.RegionChange{File: job.FileChange{Path: file}, Side: job.RegionNew, Lines: [2]int{from, to}, Declaration: decl, Driver: "golang"}
 	}
-	placed := map[string][]types.RegionChange{
+	placed := map[string][]job.RegionChange{
 		"lib/lib.go": {
 			region("lib/lib.go", 1, 2, ""),
 			region("lib/lib.go", 3, 5, "func Parse(s string) error {"),
@@ -248,17 +249,17 @@ func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
 		},
 		"lib/use_test.go": {region("lib/use_test.go", 3, 6, "func TestParse(t *testing.T) {")},
 	}
-	got, err := CallerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) { return placed[file], nil })
+	got, err := CallerClaims("Parse", "lib", "lib", files, func(file string) ([]job.RegionChange, error) { return placed[file], nil })
 	require.NoError(t, err)
-	assert.Equal(t, []types.JobClaimRequest{
+	assert.Equal(t, []job.ClaimRequest{
 		{Path: "lib/lib.go#Client) Run", Because: "refs:Parse"},
 		{Path: "lib/lib.go#Server) Run", Because: "refs:Parse"},
 		{Path: "lib/use_test.go#TestParse", Because: "refs:Parse"},
 	}, got, "two occurrences in one declaration claim it once, and the definition claims nothing")
 
 	files[0].Occurrences = []types.SymbolOccurrence{occ(1)}
-	_, err = CallerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) {
-		return []types.RegionChange{region(file, 1, 2, "")}, nil
+	_, err = CallerClaims("Parse", "lib", "lib", files, func(file string) ([]job.RegionChange, error) {
+		return []job.RegionChange{region(file, 1, 2, "")}, nil
 	})
 	assert.ErrorContains(t, err, "no declaration holds the occurrence at lib/lib.go:8")
 }
@@ -268,7 +269,7 @@ func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
 // takes that back.
 func TestSessionEndedReadsTheHoldersTombstones(t *testing.T) {
 	s := tempStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "w", State: types.StateDeclared})
+	seed(t, s, job.Job{ID: "w", State: job.StateDeclared})
 	_, ended := s.SessionEnded("w")
 	assert.False(t, ended, "no record names the job")
 
@@ -289,14 +290,14 @@ func TestSessionEndedReadsTheHoldersTombstones(t *testing.T) {
 }
 
 func TestApplyClaimRefusesPathBesideCallers(t *testing.T) {
-	rec := types.Declaration{
-		Schema: types.Schema{Version: types.JobAPIVersion},
+	rec := job.Declaration{
+		Schema: job.Schema{Version: job.APIVersion},
 		ID:     "fix-parser",
-		Claim:  []types.JobClaimRequest{{Path: "lib/lib.go", Callers: "Parse"}},
+		Claim:  []job.ClaimRequest{{Path: "lib/lib.go", Callers: "Parse"}},
 	}
 	open := func() (*Store, error) { return nil, errors.New("a refused record opens no store") }
 
-	_, _, err := ApplyClaim(t.Context(), t.TempDir(), []types.Declaration{rec}, open, false, ClaimEnv{})
+	_, _, err := ApplyClaim(t.Context(), t.TempDir(), []job.Declaration{rec}, open, false, ClaimEnv{})
 
 	assert.ErrorContains(t, err, "names callers of Parse and also a path or a proof")
 }

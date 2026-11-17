@@ -9,8 +9,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -20,7 +21,7 @@ func attentionRows(t *testing.T, root string) []sessions.AttentionRequest {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return sessions.AttentionQueue(fold)
 }
@@ -50,7 +51,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	root := repo.Root()
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
-	seed(t, s, types.Job{ID: "w", Checkpoint: repo.Head(), State: types.StateDeclared})
+	seed(t, s, job.Job{ID: "w", Checkpoint: repo.Head(), State: job.StateDeclared})
 	_, err := s.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
@@ -59,7 +60,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	ended, ok, err := s.EndSession(t.Context(), worker)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, types.StateNoReturn, ended.State)
+	assert.Equal(t, job.StateNoReturn, ended.State)
 	assert.True(t, ended.EndedWithSession(), ended.EndReason)
 	assert.Contains(t, ended.EndReason, "magus job exec w")
 	assert.True(t, s.Binding(worker).Gone, "the record is a tombstone: nothing is graded as that caller until a session binds again")
@@ -67,7 +68,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	queue := attentionRows(t, root)
 	require.Len(t, queue, 1, "the root hears of it once")
 	assert.Equal(t, "w", queue[0].Lease)
-	assert.Contains(t, queue[0].Message, types.EndReasonSessionEnded)
+	assert.Contains(t, queue[0].Message, job.EndReasonSessionEnded)
 
 	_, again, err := s.EndSession(t.Context(), worker)
 	require.NoError(t, err)
@@ -76,7 +77,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 
 	resumed, err := boundStore(loc, "w").Exec(t.Context(), "w")
 	require.NoError(t, err)
-	assert.Equal(t, types.StateRunning, resumed.State)
+	assert.Equal(t, job.StateRunning, resumed.State)
 	assert.Empty(t, resumed.EndReason)
 }
 
@@ -86,7 +87,7 @@ func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
 	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
-	seed(t, s, types.Job{ID: "scout", Checkpoint: repo.Head(), State: types.StateDeclared, ReadOnly: true})
+	seed(t, s, job.Job{ID: "scout", Checkpoint: repo.Head(), State: job.StateDeclared, ReadOnly: true})
 	_, err := s.Exec(t.Context(), "scout")
 	require.NoError(t, err)
 	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
@@ -95,7 +96,7 @@ func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
 	ended, ok, err := s.EndSession(t.Context(), worker)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, types.StateNoReturn, ended.State)
+	assert.Equal(t, job.StateNoReturn, ended.State)
 	assert.True(t, ended.EndedWithSession(), ended.EndReason)
 }
 
@@ -106,7 +107,7 @@ func TestEndSessionLeavesAnIntegrationRowRunning(t *testing.T) {
 	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
-	seed(t, s, types.Job{ID: "integrate", Checkpoint: repo.Head(), State: types.StateDeclared, Integrates: []string{"feat-a"}})
+	seed(t, s, job.Job{ID: "integrate", Checkpoint: repo.Head(), State: job.StateDeclared, Integrates: []string{"feat-a"}})
 	_, err := s.Exec(t.Context(), "integrate")
 	require.NoError(t, err)
 	holder := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
@@ -117,18 +118,18 @@ func TestEndSessionLeavesAnIntegrationRowRunning(t *testing.T) {
 	assert.False(t, ok)
 	binding := s.Binding(holder)
 	assert.Equal(t, []any{"integrate", false}, []any{binding.Job, binding.Gone}, "the binding stays live, never a tombstone")
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Equal(t, job.StateRunning, rows[0].State, rows[0].EndReason)
 	assert.Empty(t, attentionRows(t, repo.Root()))
 }
 
 func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 	root := t.TempDir()
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "untaken", State: types.StateDeclared})
-	seed(t, s, types.Job{ID: "returned", State: types.StateExited})
+	seed(t, s, job.Job{ID: "untaken", State: job.StateDeclared})
+	seed(t, s, job.Job{ID: "returned", State: job.StateExited})
 	callers := map[string]Caller{
 		"untaken":  {Host: "codex", Session: "s1", Agent: "a1"},
 		"returned": {Host: "codex", Session: "s1", Agent: "a2"},
@@ -143,18 +144,18 @@ func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "an identity-less caller shares the checkout's record, so its end ends nothing")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	for _, r := range rows {
-		assert.NotEqual(t, types.StateNoReturn, r.State, r.ID)
+		assert.NotEqual(t, job.StateNoReturn, r.State, r.ID)
 	}
 	assert.Empty(t, attentionRows(t, root))
 }
 
 func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
 	s := tempStore(t, execRepository(t).Root())
-	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
-	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
+	seed(t, s, job.Job{ID: "w", Checkpoint: baseA, State: job.StateNoReturn})
+	require.NoError(t, s.Rewrite(t.Context(), func(f *job.Rows) error {
 		f.Jobs[0].EndReason = "overdue: its deadline passed 1m0s ago"
 		return nil
 	}))
@@ -166,9 +167,9 @@ func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
 func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
 	loc := tempLocation(t, execRepository(t).Root())
 	elsewhere := t.TempDir()
-	seed(t, NewStore(loc), types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
-	require.NoError(t, NewStore(loc).update(t.Context(), func(f *jobsFile) error {
-		f.Jobs[0].EndReason = types.EndReasonSessionEnded + " (claude-code)"
+	seed(t, NewStore(loc), job.Job{ID: "w", Checkpoint: baseA, State: job.StateNoReturn})
+	require.NoError(t, NewStore(loc).Rewrite(t.Context(), func(f *job.Rows) error {
+		f.Jobs[0].EndReason = job.EndReasonSessionEnded + " (claude-code)"
 		f.Jobs[0].CheckoutRoot = elsewhere
 		return nil
 	}))
@@ -194,17 +195,17 @@ func (s *HolderStoppedSuite) SetupTest() {
 	s.root = repo.Root()
 	s.loc = tempLocation(s.T(), s.root)
 	s.store = NewStore(s.loc)
-	seed(s.T(), s.store, types.Job{ID: "w", Checkpoint: repo.Head(), State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}})
+	seed(s.T(), s.store, job.Job{ID: "w", Checkpoint: repo.Head(), State: job.StateDeclared, Paths: job.Paths{Write: []string{"a.go"}}})
 	_, err := s.store.Exec(s.T().Context(), "w")
 	s.Require().NoError(err)
 	s.worker = Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
 	s.Require().NoError(s.store.Bind(s.worker, "w"))
 }
 
-func (s *HolderStoppedSuite) row(id string) types.Job {
-	rows, err := NewStore(s.loc).List()
+func (s *HolderStoppedSuite) row(id string) job.Job {
+	rows, err := NewStore(s.loc).List(s.T().Context())
 	s.Require().NoError(err)
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	s.Require().GreaterOrEqual(i, 0, id)
 	return rows[i]
 }
@@ -253,8 +254,8 @@ func (s *HolderStoppedSuite) TestAnotherCallersStopStampsNothing() {
 }
 
 func (s *HolderStoppedSuite) TestARowNotBeingWorkedIsNotStamped() {
-	seed(s.T(), s.store, types.Job{ID: "untaken", State: types.StateDeclared})
-	seed(s.T(), s.store, types.Job{ID: "returned", State: types.StateExited})
+	seed(s.T(), s.store, job.Job{ID: "untaken", State: job.StateDeclared})
+	seed(s.T(), s.store, job.Job{ID: "returned", State: job.StateExited})
 	for _, id := range []string{"untaken", "returned"} {
 		c := Caller{Host: "codex", Session: "s2", Agent: id}
 		s.Require().NoError(s.store.Bind(c, id))
@@ -269,7 +270,7 @@ func (s *HolderStoppedSuite) TestASessionEndStillEndsAStampedRow() {
 	ended, ok, err := s.store.EndSession(s.T().Context(), s.worker)
 	s.Require().NoError(err)
 	s.True(ok)
-	s.Equal(types.StateNoReturn, ended.State)
+	s.Equal(job.StateNoReturn, ended.State)
 	s.True(ended.EndedWithSession(), ended.EndReason)
 }
 
@@ -280,28 +281,28 @@ func (s *HolderStoppedSuite) TestOneCallEndsAStampedRow() {
 	s.Empty(refused)
 	s.Empty(already)
 	s.Require().Len(ended, 1)
-	s.Equal(types.StateNoReturn, ended[0].State)
+	s.Equal(job.StateNoReturn, ended[0].State)
 	s.False(Editing(s.row("w")), "its paths are free")
 }
 
 func (s *HolderStoppedSuite) TestTheDeadlineEndsAStampedRow() {
 	s.Require().NoError(s.store.StampHolderStopped(s.T().Context(), s.worker))
-	s.Require().NoError(s.store.update(s.T().Context(), func(f *jobsFile) error {
+	s.Require().NoError(s.store.Rewrite(s.T().Context(), func(f *job.Rows) error {
 		f.Jobs[0].Deadline = f.Jobs[0].Updated + 60
 		return nil
 	}))
 
-	rows, err := s.at(s.row("w").Deadline + 60).List()
+	rows, err := s.at(s.row("w").Deadline + 60).List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
-	s.Equal(types.StateNoReturn, rows[0].State, rows[0].EndReason)
+	s.Equal(job.StateNoReturn, rows[0].State, rows[0].EndReason)
 	s.Contains(rows[0].EndReason, overdueReasonPrefix)
 }
 
 func (s *HolderStoppedSuite) TestPruneAllEndsAStampedRowPastStaleAfter() {
 	stale, _ := sweepStore(s.T(), 100_000, 2*time.Hour)
-	stale.landed = func(context.Context, types.Job) string { return "" }
-	plant(s.T(), stale, types.Job{ID: "w", State: types.StateRunning, Registered: 1000, Updated: 1000, HolderStopped: 99_000})
+	stale.landed = func(context.Context, job.Job) string { return "" }
+	plant(s.T(), stale, job.Job{ID: "w", State: job.StateRunning, Registered: 1000, Updated: 1000, HolderStopped: 99_000})
 
 	got, err := stale.Prune(s.T().Context(), PruneOptions{All: true})
 	s.Require().NoError(err)
@@ -316,17 +317,17 @@ func (s *HolderStoppedSuite) TestALaterJobTakesAStaleStampedHoldersPath() {
 	store := NewStore(loc)
 	s.Require().NoError(store.Bind(holder, "gone"))
 	s.Require().NoError(store.StampHolderStopped(s.T().Context(), holder))
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
-	gone := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })]
+	gone := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })]
 	s.NotZero(gone.HolderStopped)
 	facts = facts.WithDeadHolders([]DeadHolder{{Row: gone, Since: gone.HolderStopped, Why: "its holder stopped"}})
 
-	_, err = boundStore(loc, row.ID).Claim(s.T().Context(), row.ID, []types.JobClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}, facts, config.Defaults().Jobs, false)
+	_, err = boundStore(loc, row.ID).Claim(s.T().Context(), row.ID, []job.ClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}, facts, config.Defaults().Jobs, false)
 	s.Require().NoError(err)
-	rows, err = NewStore(loc).List()
+	rows, err = NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
-	s.Empty(rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })].Paths.Write)
+	s.Empty(rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })].Paths.Write)
 }
 
 func (s *HolderStoppedSuite) TestAHolderBackBeforeTheTakeKeepsItsPath() {
@@ -335,39 +336,39 @@ func (s *HolderStoppedSuite) TestAHolderBackBeforeTheTakeKeepsItsPath() {
 	store := NewStore(loc)
 	s.Require().NoError(store.Bind(holder, "gone"))
 	s.Require().NoError(store.StampHolderStopped(s.T().Context(), holder))
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
-	gone := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })]
+	gone := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })]
 	facts = facts.WithDeadHolders([]DeadHolder{{Row: gone, Since: gone.HolderStopped, Why: "its holder stopped"}})
 
 	back := NewStore(loc)
 	back.clock = func() time.Time { return time.Unix(gone.Updated+60, 0) }
 	s.Require().NoError(back.ClearHolderStopped(s.T().Context(), holder))
 
-	_, err = boundStore(loc, row.ID).Claim(s.T().Context(), row.ID, []types.JobClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}, facts, config.Defaults().Jobs, false)
+	_, err = boundStore(loc, row.ID).Claim(s.T().Context(), row.ID, []job.ClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}, facts, config.Defaults().Jobs, false)
 	s.Require().ErrorContains(err, "its holder may be back")
 }
 
 func (s *HolderStoppedSuite) TestALaterForkOverlapsAStampedHolderUntilItEnds() {
 	s.Require().NoError(s.store.StampHolderStopped(s.T().Context(), s.worker))
-	later := types.Job{ID: "later", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}}
+	later := job.Job{ID: "later", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a.go"}}}
 
-	s.Equal(types.WriteProofOverlapping, s.store.WriteProof([]types.Job{s.row("w"), later}, later), "recorded, never refused")
+	s.Equal(job.WriteProofOverlapping, s.store.WriteProof([]job.Job{s.row("w"), later}, later), "recorded, never refused")
 
 	_, _, refused := Abandon(s.T().Context(), NewStore(s.loc), []string{"w"})
 	s.Empty(refused)
-	s.Equal(types.WriteProofAlone, s.store.WriteProof([]types.Job{s.row("w"), later}, later))
+	s.Equal(job.WriteProofAlone, s.store.WriteProof([]job.Job{s.row("w"), later}, later))
 }
 
 func TestTreeRootIsTheTopmostAncestor(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	plant(t, s,
-		types.Job{ID: "plan", State: types.StateRunning},
-		types.Job{ID: "plan/a", Parent: "plan", State: types.StateRunning},
-		types.Job{ID: "plan/a/b", Parent: "plan/a", State: types.StateRunning},
+		job.Job{ID: "plan", State: job.StateRunning},
+		job.Job{ID: "plan/a", Parent: "plan", State: job.StateRunning},
+		job.Job{ID: "plan/a/b", Parent: "plan/a", State: job.StateRunning},
 	)
 	for id, want := range map[string]string{"plan/a/b": "plan", "plan": "plan", "undeclared": "undeclared"} {
-		got, err := s.TreeRoot(id)
+		got, err := s.TreeRoot(t.Context(), id)
 		require.NoError(t, err)
 		assert.Equal(t, want, got, id)
 	}
@@ -392,35 +393,35 @@ func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 	result := passingResult()
 	attempt := passingRun
 	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
-	resolve := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	resolve := func(context.Context, string) (job.CapturedRun, error) { return attempt, nil }
 	empty := result
 	empty.ChangedPaths = nil
-	exited := func(t *testing.T, others ...types.Job) Location {
+	exited := func(t *testing.T, others ...job.Job) Location {
 		t.Helper()
-		loc := declared(t, append([]types.Job{acceptRow()}, others...)...)
+		loc := declared(t, append([]job.Job{acceptRow()}, others...)...)
 		_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolve)
 		require.NoError(t, err)
 		return loc
 	}
-	state := func(t *testing.T, loc Location) types.JobState {
+	state := func(t *testing.T, loc Location) job.State {
 		t.Helper()
-		rows, err := NewStore(loc).List()
+		rows, err := NewStore(loc).List(t.Context())
 		require.NoError(t, err)
-		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == result.Job })].State
+		return rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == result.Job })].State
 	}
 
 	loc := exited(t)
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
 	require.NoError(t, err)
 	require.False(t, status.Verified)
-	assert.Equal(t, types.StateRunning, state(t, loc))
+	assert.Equal(t, job.StateRunning, state(t, loc))
 	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
 
-	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), Paths: types.JobPaths{Write: []string{"cmd/magus/ledger.go"}}, State: types.StateRunning}
+	taker := job.Job{ID: "taker", Agent: job.Instructed("c"), Paths: job.Paths{Write: []string{"cmd/magus/ledger.go"}}, State: job.StateRunning}
 	loc = exited(t, taker)
 	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
 	require.NoError(t, err)
 	require.False(t, status.Verified)
-	assert.Equal(t, types.StateExited, state(t, loc))
+	assert.Equal(t, job.StateExited, state(t, loc))
 	assert.Contains(t, strings.Join(status.Notes, "\n"), "cmd/magus/ledger.go is held by live job taker")
 }

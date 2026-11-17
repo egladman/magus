@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/embed/rankeval"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -76,12 +77,12 @@ func TestRetrievalEval(t *testing.T) {
 	globalCfg = cfg
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	ctx = withMagus(ctx, m)
 
-	r := replayer{root: root, m: m, cfg: cfg, next: newNextGate(root), coverage: memoCoverage(ctx, m, cfg)}
+	r := replayer{root: root, m: m, cfg: cfg, next: newNextGate(ctx, root), coverage: memoCoverage(ctx, m, cfg)}
 	r.domain, err = graphReads.LoadGraph(ctx, m, cfg, false, false, false)
 	require.NoError(t, err)
 	r.symbols, err = graphReads.LoadGraph(ctx, m, cfg, false, false, true)

@@ -37,7 +37,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // survives both, and reads the same way an operator already reads a docs callout.
 //
 // Stroked in currentColor so the stylesheet owns severity color in one place.
-function noticeGlyph(kind: "deny" | "advise" | "pass"): SVGElement {
+function noticeGlyph(kind: "deny" | "advise" | "defer"): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
   svg.setAttribute("class", "console-dashboard-agents__notice");
@@ -65,7 +65,7 @@ function noticeGlyph(kind: "deny" | "advise" | "pass"): SVGElement {
     path("M8 4.7 8 4.9");
     return svg;
   }
-  // pass: a check inside the ring. Present rather than blank so every row keeps the same left edge
+  // defer: a check inside the ring. Present rather than blank so every row keeps the same left edge
   // and the list does not ripple when a decision changes.
   path("M5.2 8.2 7.2 10.2 10.8 5.9");
   return svg;
@@ -169,7 +169,7 @@ export function agentsTile(): Tile {
         const li = h("li", "console-dashboard-row console-dashboard-agents__call");
         // The decision drives both the glyph and the row accent, so a denial is findable without
         // reading: it is the one line here that might need a human.
-        const decision = c.decision === "deny" || c.decision === "advise" ? c.decision : "pass";
+        const decision = c.decision === "deny" || c.decision === "advise" ? c.decision : "defer";
         li.dataset.decision = decision;
         li.append(noticeGlyph(decision));
         const tool = c.tool || (c.mcp ? "mcp tool" : "command");
@@ -187,7 +187,7 @@ export function agentsTile(): Tile {
         const meta = h("span", "console-dashboard-row__meta");
         const age = Math.max(0, Math.round((now - c.atMs) / 1000));
         const bits = [c.mcp ? "mcp" : hostLabel(c.host)];
-        if (c.decision && c.decision !== "pass") bits.push(c.decision);
+        if (c.decision && c.decision !== "defer") bits.push(c.decision);
         bits.push(age < 60 ? age + "s ago" : Math.round(age / 60) + "m ago");
         meta.textContent = bits.join(", ");
         li.append(meta);
@@ -244,7 +244,7 @@ export function agentsTile(): Tile {
         const li = h("li", "console-dashboard-row console-dashboard-agents__call");
         // Same severity vocabulary as the per-call rows below, so one glyph means one thing
         // everywhere in the tile. A host's severity is the worst judgment any of its calls got.
-        const sev = hv.denied > 0 ? "deny" : hv.advised > 0 ? "advise" : "pass";
+        const sev = hv.denied > 0 ? "deny" : hv.advised > 0 ? "advise" : "defer";
         li.dataset.decision = sev;
         li.append(noticeGlyph(sev));
         li.append(h("code", "console-dashboard-row__cmd", hostLabel(hv.host)));

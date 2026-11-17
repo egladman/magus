@@ -9,7 +9,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 //go:embed weights.json
@@ -83,7 +83,7 @@ func LoadWeights() (Weights, error) {
 // weights that produced it. It panics on a Weights that cannot be encoded, such as one
 // holding NaN; LoadWeights never returns one.
 func (w Weights) Digest() string {
-	data, err := json.Marshal(w)
+	data, err := codec.Marshal(w)
 	if err != nil {
 		panic(fmt.Sprintf("textrank: encode weights: %v", err))
 	}
@@ -95,7 +95,7 @@ func decodeWeights(data []byte) (Weights, error) {
 	var head struct {
 		Version *int `json:"version"`
 	}
-	if err := json.Unmarshal(data, &head); err != nil {
+	if err := codec.Unmarshal(data, &head); err != nil {
 		return Weights{}, err
 	}
 	if head.Version != nil && *head.Version != weightsVersion {
@@ -105,7 +105,7 @@ func decodeWeights(data []byte) (Weights, error) {
 		return Weights{}, err
 	}
 	var w Weights
-	if err := json.UnmarshalStrict(data, &w); err != nil {
+	if err := codec.UnmarshalStrict(data, &w); err != nil {
 		return Weights{}, err
 	}
 	if err := w.validate(); err != nil {
@@ -156,7 +156,7 @@ func checkShape(data []byte) error {
 }
 
 // shapeObject returns the members of the JSON object raw, requiring exactly the keys in want.
-func shapeObject(raw json.RawMessage, path string, want ...string) (map[string]json.RawMessage, error) {
+func shapeObject(raw codec.RawMessage, path string, want ...string) (map[string]codec.RawMessage, error) {
 	found, err := shapeMembers(raw, path)
 	if err != nil {
 		return nil, err
@@ -176,9 +176,9 @@ func shapeObject(raw json.RawMessage, path string, want ...string) (map[string]j
 
 // shapeMembers returns the members of the JSON object raw, none of them null: the struct
 // decoder would read a null number as zero.
-func shapeMembers(raw json.RawMessage, path string) (map[string]json.RawMessage, error) {
-	var found map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &found); err != nil || found == nil {
+func shapeMembers(raw codec.RawMessage, path string) (map[string]codec.RawMessage, error) {
+	var found map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &found); err != nil || found == nil {
 		if path == "" {
 			path = "weights"
 		}

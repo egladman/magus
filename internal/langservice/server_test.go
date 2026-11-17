@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ import (
 // frame encodes v as one LSP base-protocol frame (Content-Length header + body).
 func frame(t *testing.T, v any) string {
 	t.Helper()
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	require.NoError(t, err)
 	return fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(body), body)
 }
@@ -31,7 +31,7 @@ func readFrames(t *testing.T, out string) []map[string]any {
 			break
 		}
 		var m map[string]any
-		require.NoError(t, json.Unmarshal(body, &m))
+		require.NoError(t, codec.Unmarshal(body, &m))
 		msgs = append(msgs, m)
 	}
 	return msgs

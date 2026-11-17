@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // exchange names one client call on a proc socket: the label its errors carry, its method
@@ -97,7 +97,7 @@ func roundTrip[Reply any](ctx context.Context, addr string, x exchange, req any)
 
 	var body io.Reader
 	if req != nil {
-		raw, err := json.Marshal(req)
+		raw, err := codec.Marshal(req)
 		if err != nil {
 			return reply, fmt.Errorf("proc: %s: encode: %w", x.op, err)
 		}
@@ -125,7 +125,7 @@ func roundTrip[Reply any](ctx context.Context, addr string, x exchange, req any)
 	if resp.StatusCode/100 != 2 {
 		return reply, fmt.Errorf("proc: %s: %w", x.op, decodeWireError(refusalMessage(raw)))
 	}
-	if err := json.Unmarshal(raw, &reply); err != nil {
+	if err := codec.Unmarshal(raw, &reply); err != nil {
 		return reply, fmt.Errorf("proc: %s: decode reply: %w", x.op, err)
 	}
 	return reply, nil

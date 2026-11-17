@@ -12,10 +12,11 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // runSource is the workspace half a run needs: which targets the magusfile declares for a
@@ -113,7 +114,7 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		handler.LimitRequestBody(w, r)
 		var req diffRunRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := codec.NewDecoder(r.Body).Decode(&req); err != nil {
 			handler.Refuse(w, r, rpcerr.Invalid("the request body is not JSON of the form {\"target\": ..., \"project\": ...}"))
 			return
 		}
@@ -167,9 +168,9 @@ func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunR
 	// deliberately does not guess. A replay is not a stale answer: the cache key covers the
 	// target's sources, so a hit means THIS tree state passed. What can go stale is the reader's
 	// view moving on after the verdict, which as_of covers.
-	if ev, ok := trail.LastRun(h.cacheDir, job.ActionString(argv)); ok {
+	if ev, ok := trail.LastRun(ctx, h.cacheDir, job.ActionString(argv)); ok {
 		out.State = "passed"
-		if ev.Outcome != trail.OutcomeOK {
+		if ev.Outcome != trailtypes.OutcomeOK {
 			out.State = "failed"
 			out.Error = ev.Error
 		}

@@ -8,8 +8,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // HookEnv is what the hook entry takes from the binary that runs it: the facts and the
@@ -38,7 +38,7 @@ type HookEnv struct {
 	// LazyWorkspace stands in for the workspace at root, opened through open only when asked.
 	LazyWorkspace func(root string, open func(context.Context) (types.WorkspaceRepository, error)) types.Inspector
 	// TierRule is the spawn rule every workspace the command opens is given.
-	TierRule func(parent, child typesagent.ModelTier) error
+	TierRule func(parent, child tier.Tier) error
 	// Trace starts the named phase of the command's startup trace and returns its end.
 	Trace func(ctx context.Context, phase string) func()
 	// OpenJobs opens the job store of the session checkout at root without writing.

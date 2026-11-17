@@ -18,7 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/types"
@@ -55,9 +55,9 @@ func NewLogHandler(w io.Writer, format string, opts *slog.HandlerOptions) slog.H
 	}
 	switch strings.ToLower(format) {
 	case "text":
-		return secret.NewRedactingHandler(slog.NewTextHandler(w, opts))
+		return secrets.NewRedactingHandler(slog.NewTextHandler(w, opts))
 	case "json":
-		return secret.NewRedactingHandler(slog.NewJSONHandler(w, opts))
+		return secrets.NewRedactingHandler(slog.NewJSONHandler(w, opts))
 	default:
 		level := slog.LevelInfo
 		if opts.Level != nil {
@@ -423,7 +423,7 @@ func (h *PrettyHandler) printf(ctx context.Context, format string, args ...any) 
 	//
 	// The resolver comes from ctx, the record context Handle was called with, so
 	// the value being printed never has to know secrets exist.
-	_, err := fmt.Fprintf(h.w, "%s", secret.RedactString(ctx, fmt.Sprintf(format, args...)))
+	_, err := fmt.Fprintf(h.w, "%s", secrets.RedactString(ctx, fmt.Sprintf(format, args...)))
 	h.fail(err)
 }
 

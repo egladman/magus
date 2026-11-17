@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -14,7 +15,8 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,7 +48,7 @@ func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Requ
 	case env.IsContinue || input == "":
 		return ShellVerdict{}
 	}
-	if v := Evaluate(deps, input); v.Deny != "" {
+	if v := Evaluate(ctx, deps, input); v.Deny != "" {
 		return v
 	}
 	dialect := effectiveDialect(deps.ShellDialect)
@@ -137,12 +139,13 @@ type settingLine struct {
 }
 
 func settingsLog(cacheDir string) file.JSONL[settingLine] {
-	return file.JSONL[settingLine]{
+	return file.JSONL[settingLine]{JSONL: codec.JSONL[settingLine]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(cacheDir, settingsFile),
 		Key:  func(l settingLine) string { return l.Rule },
 		Live: func(l settingLine) bool { return !l.Removed && l.Setting != nil },
 		Old:  filepath.Join(cacheDir, oldSettingsFile),
-	}
+	}}
 }
 
 // rememberSettings records settings as the cache dir's last applied ones, appending a line
@@ -185,8 +188,8 @@ func rememberSettings(cacheDir string, settings map[string]builtin.Setting) {
 // sameEncoding reports whether a and b encode alike, which is the sameness a setting read back
 // from the file can have: an empty list of markers reads back as none.
 func sameEncoding(a, b builtin.Setting) bool {
-	x, errA := json.Marshal(a)
-	y, errB := json.Marshal(b)
+	x, errA := codec.Marshal(a)
+	y, errB := codec.Marshal(b)
 	return errA == nil && errB == nil && bytes.Equal(x, y)
 }
 

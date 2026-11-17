@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -496,14 +497,14 @@ func Fixed(name string) bool {
 // Verdicts returns the verdicts rule name can give under any setting a workspace may
 // declare, least refusing first: advise alone for a notice, the default alone for a rule a
 // workspace may not set, advise and deny for any other.
-func Verdicts(name string) []types.GuardDecision {
+func Verdicts(name string) []verdict.Decision {
 	if _, notice := notices[name]; notice {
-		return []types.GuardDecision{types.GuardAdvise}
+		return []verdict.Decision{verdict.Advise}
 	}
 	if Fixed(name) {
-		return []types.GuardDecision{types.GuardDecision(defaults[name].String())}
+		return []verdict.Decision{verdict.Decision(defaults[name].String())}
 	}
-	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
+	return []verdict.Decision{verdict.Advise, verdict.Deny}
 }
 
 // Defaults returns every compiled rule's name mapped to the decision it takes when the

@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 func TestUnusedWritePaths(t *testing.T) {
@@ -22,14 +22,14 @@ func TestUnusedWritePaths(t *testing.T) {
 	holderRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1), "a.md": "# A2\n"})
 	s := NewStore(tempLocation(t, root))
 
-	holder := func(paths ...string) types.Job {
-		return types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: paths}, Checkpoint: rev, CheckoutRoot: holderRepo.Root()}
+	holder := func(paths ...string) job.Job {
+		return job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: paths}, Checkpoint: rev, CheckoutRoot: holderRepo.Root()}
 	}
 
 	t.Run("the paths and claims no changed line falls under", func(t *testing.T) {
 		t.Parallel()
 		h := holder("a.md", "b.md", "run.go#A", "run.go#C", "docs/**", "*.md")
-		assert.Equal(t, []string{"b.md", "run.go#C", "docs/**"}, unusedWritePaths(t.Context(), s, []types.Job{h}, h))
+		assert.Equal(t, []string{"b.md", "run.go#C", "docs/**"}, unusedWritePaths(t.Context(), s, []job.Job{h}, h))
 	})
 
 	t.Run("every path used is empty, not unknown", func(t *testing.T) {
@@ -44,19 +44,19 @@ func TestUnusedWritePaths(t *testing.T) {
 		t.Parallel()
 		h := holder("a.md")
 		h.Checkpoint = ""
-		assert.Nil(t, unusedWritePaths(t.Context(), s, []types.Job{h}, h))
+		assert.Nil(t, unusedWritePaths(t.Context(), s, []job.Job{h}, h))
 		assert.Contains(t, describeUnused("A", nil), "could not be read")
 	})
 }
 
-func changedRegion(file, decl, driver string) types.RegionChange {
-	return types.RegionChange{File: types.FileChange{Path: file}, Declaration: decl, Driver: driver}
+func changedRegion(file, decl, driver string) job.RegionChange {
+	return job.RegionChange{File: job.FileChange{Path: file}, Declaration: decl, Driver: driver}
 }
 
 func TestRegionIndexUses(t *testing.T) {
 	t.Parallel()
 
-	regions := []types.RegionChange{
+	regions := []job.RegionChange{
 		changedRegion("internal/job/checkout.go", "HardenWritten", "go"),
 		changedRegion("internal/job/checkout.go", "", "go"),
 		changedRegion("internal/job-x/a.go", "", ""),
@@ -68,13 +68,13 @@ func TestRegionIndexUses(t *testing.T) {
 		".", "internal", "internal/job", "internal/job/", "internal/job/checkout.go", "internal/jo",
 		"internal/job-x", "internal/**", "internal/job/*_test.go", "internal/**/*.go", "docs/**",
 		"*.md", "README.md", "{docs,src}/**", "internal/job/checkout.go#HardenWritten",
-		"internal/job/checkout.go#WriteProof", "internal/job/checkout.go#" + types.Preamble,
+		"internal/job/checkout.go#WriteProof", "internal/job/checkout.go#" + job.Preamble,
 		"internal/job-x/a.go#Anything", "weird/[a].go", "weird", "", "#X",
 	}
 	used := indexRegions(regions)
 	var got []string
 	for _, entry := range entries {
-		linear := slices.ContainsFunc(regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) })
+		linear := slices.ContainsFunc(regions, func(r job.RegionChange) bool { return usesEntry(entry, r.Location()) })
 		assert.Equal(t, linear, used.uses(entry), "entry %q", entry)
 		if used.uses(entry) {
 			got = append(got, entry)
@@ -83,7 +83,7 @@ func TestRegionIndexUses(t *testing.T) {
 	assert.Equal(t, []string{
 		".", "internal", "internal/job", "internal/job/", "internal/job/checkout.go", "internal/job-x",
 		"internal/**", "internal/**/*.go", "docs/**", "*.md", "README.md", "{docs,src}/**",
-		"internal/job/checkout.go#HardenWritten", "internal/job/checkout.go#" + types.Preamble,
+		"internal/job/checkout.go#HardenWritten", "internal/job/checkout.go#" + job.Preamble,
 		"internal/job-x/a.go#Anything", "weird/[a].go", "weird",
 	}, got)
 }
@@ -91,7 +91,7 @@ func TestRegionIndexUses(t *testing.T) {
 // BenchmarkRegionIndexUses is an integration row's soft paths against its merge diff, the
 // shape that ran a guard's write grade past its budget when every entry walked every region.
 func BenchmarkRegionIndexUses(b *testing.B) {
-	regions := make([]types.RegionChange, 0, 4000)
+	regions := make([]job.RegionChange, 0, 4000)
 	entries := make([]string, 0, 526)
 	for i := range 4000 {
 		regions = append(regions, changedRegion(fmt.Sprintf("internal/pkg%d/file%d.go", i%200, i), "", ""))

@@ -16,10 +16,10 @@ import (
 
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/gen/servicetest"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"

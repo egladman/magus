@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -601,7 +602,7 @@ func checkpointReset(ctx context.Context, command string, d Dialect, at location
 	if err != nil {
 		return false
 	}
-	return slices.ContainsFunc(rows, func(r types.Job) bool {
+	return slices.ContainsFunc(rows, func(r job.Job) bool {
 		rev, digest := types.ParseCheckpointToken(r.Checkpoint)
 		return digest == "" && len(rev) >= 7 && strings.HasPrefix(resolved[0], rev)
 	})

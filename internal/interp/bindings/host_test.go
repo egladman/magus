@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,7 +21,7 @@ type emitMagusLogSuite struct {
 	suite.Suite
 	process  bytes.Buffer
 	previous *slog.Logger
-	resolver *secret.Resolver
+	resolver *secrets.Resolver
 }
 
 func TestEmitMagusLog(t *testing.T) { suite.Run(t, new(emitMagusLogSuite)) }
@@ -30,7 +30,7 @@ func (s *emitMagusLogSuite) SetupTest() {
 	s.process.Reset()
 	s.previous = slog.Default()
 	// The display's text handler, redacting as cmd/magus installs it.
-	slog.SetDefault(slog.New(secret.NewRedactingHandler(slog.NewTextHandler(&s.process, &slog.HandlerOptions{
+	slog.SetDefault(slog.New(secrets.NewRedactingHandler(slog.NewTextHandler(&s.process, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
@@ -39,8 +39,8 @@ func (s *emitMagusLogSuite) SetupTest() {
 			return a
 		},
 	}))))
-	s.resolver = secret.New()
-	s.resolver.Register(types.NewSecret(testSecret))
+	s.resolver = secrets.NewResolver()
+	s.resolver.Register(secrets.New(testSecret))
 }
 
 func (s *emitMagusLogSuite) TearDownTest() { slog.SetDefault(s.previous) }
@@ -54,7 +54,7 @@ func (s *emitMagusLogSuite) inTarget(format string, body func(context.Context)) 
 		cache.WithLog(format, slog.LevelInfo), cache.WithLogger(slog.New(slog.DiscardHandler)),
 		cache.WithCollapse(true))
 	s.Require().NoError(err)
-	ctx := secret.ContextWithResolver(s.T().Context(), s.resolver)
+	ctx := secrets.WithResolver(s.T().Context(), s.resolver)
 	var logPath string
 	var stepCtx context.Context
 	_, err = c.Run(ctx, cache.Step{ProjectPath: "p", Target: "t", WorkspaceRoot: root, NoCache: true},
@@ -114,7 +114,7 @@ func (s *emitMagusLogSuite) TestASecretInAFieldKeyIsRedactedOnTheConsoleAndInThe
 }
 
 func (s *emitMagusLogSuite) TestASecretInAFieldKeyIsRedactedOutsideATarget() {
-	ctx := secret.ContextWithResolver(s.T().Context(), s.resolver)
+	ctx := secrets.WithResolver(s.T().Context(), s.resolver)
 
 	emitMagusLog(ctx, slog.LevelWarn, "leak", map[string]string{testSecret: "v"})
 

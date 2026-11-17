@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -422,7 +423,7 @@ func inspectBuzzWorkspace(t *testing.T, root string, cfg config.Config) *Magus {
 	t.Helper()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("buzz"))
-	inspected, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling), workspace.WithLoadedConfig(cfg))
+	inspected, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling), workspace.WithLoadedConfig(cfg))
 	require.NoError(t, err)
 	m := inspected.(*Magus)
 	t.Cleanup(func() { _ = m.Close() })

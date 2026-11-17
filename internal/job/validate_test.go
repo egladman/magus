@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
@@ -54,8 +54,8 @@ func (s *integratedDirectorySuite) SetupTest() {
 
 func (s *integratedDirectorySuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
 
-func (s *integratedDirectorySuite) row(write ...string) types.Job {
-	return types.Job{ID: "integrate", Paths: types.JobPaths{Write: write}}
+func (s *integratedDirectorySuite) row(write ...string) job.Job {
+	return job.Job{ID: "integrate", Paths: job.Paths{Write: write}}
 }
 
 func (s *integratedDirectorySuite) TestDirectoryABranchReplacesWithASymlinkPasses() {
@@ -117,10 +117,10 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	v := validateMerge(t.Context(), s, nil, "w", func(u *types.Job) {
+	v := validateMerge(t.Context(), s, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli", "cli/registry.go"}
-		u.Check = &types.LeaseCheck{Target: "nosuch", Project: "."}
-		u.Goals = []types.Goal{{ID: "elsewhere", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "test", Project: "nowhere"}}}
+		u.Check = &job.LeaseCheck{Target: "nosuch", Project: "."}
+		u.Goals = []job.Goal{{ID: "elsewhere", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "nowhere"}}}
 	}, config.Jobs{}, nil)
 
 	got := codes(v.Problems)
@@ -157,17 +157,17 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(deviations ...types.Deviation) func(*types.Job) {
-		return func(u *types.Job) {
+	declare := func(deviations ...job.Deviation) func(*job.Job) {
+		return func(u *job.Job) {
 			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	v := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
 	require.NotEmpty(t, v.Problems)
-	var deviations []types.Deviation
+	var deviations []job.Deviation
 	for _, p := range v.Problems {
 		require.True(t, types.Permissible(p.Code), "only permissible problems are left: %v", p)
-		deviations = append(deviations, types.Deviation{Code: p.Code, Subject: p.Subject, Reason: "the root regenerates and runs it"})
+		deviations = append(deviations, job.Deviation{Code: job.Code(p.Code), Subject: p.Subject, Reason: "the root regenerates and runs it"})
 	}
 
 	permitted := validateMerge(t.Context(), s, nil, "w", declare(deviations...), config.Jobs{}, nil)
@@ -179,9 +179,9 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	assert.NotZero(t, stored.Validated, "a validated row is stamped")
 	assert.Equal(t, deviations, stored.Deviations)
 
-	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *types.Job) {
+	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli"}, forkCheck()
-		u.Deviations = []types.Deviation{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.WritePathIsDirectory), Subject: "cli", Reason: "it is mine"}, {Code: job.Code(types.GateNotRun), Subject: "lint ."}}
 	}, config.Jobs{}, nil)
 	fields := map[string]types.DiagnosticCode{}
 	for _, p := range wrong.Problems {
@@ -196,7 +196,7 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	t.Parallel()
 
 	root, _ := regeneratedWorkspace(t)
-	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	merge := func(u *job.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
 	v := validateMerge(t.Context(), NewStore(tempLocation(t, root)), nil, "w", merge, config.Jobs{}, nil)
 	assert.Empty(t, v.Problems)
@@ -210,7 +210,7 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	require.Len(t, v.Unchecked, 4)
 	assert.Contains(t, v.Unchecked[0], "the workspace did not load: magusfile.buzz: line 3")
 
-	v = validateMerge(t.Context(), unavailable, nil, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
+	v = validateMerge(t.Context(), unavailable, nil, "scout", func(u *job.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
 	assert.Empty(t, v.Unchecked, "a read-only row with no check skips nothing it would have needed")
 }
 
@@ -218,7 +218,7 @@ func TestValidateDryForkWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	v, err := validateDryFork(t.Context(), s, "w", func(u *types.Job) {
+	v, err := validateDryFork(t.Context(), s, "w", func(u *job.Job) {
 		u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
 	})
 	require.NoError(t, err)
@@ -227,11 +227,11 @@ func TestValidateDryForkWritesNothing(t *testing.T) {
 	assert.Contains(t, got, types.WritePathIsDirectory)
 	assert.Equal(t, "checkpoint", problemAt(t, v.Problems, types.JobCheckpointUnplaceable).Field)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a dry run writes nothing")
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) {
+	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) {
 		u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckpointUnplaceable)
@@ -249,14 +249,14 @@ func TestForkPlan(t *testing.T) { suite.Run(t, new(forkPlanSuite)) }
 
 func (s *forkPlanSuite) SetupTest() { s.store, _ = validateWorkspace(s.T()) }
 
-func (s *forkPlanSuite) plan(merge func(*types.Job), dry bool) ForkPlan {
+func (s *forkPlanSuite) plan(merge func(*job.Job), dry bool) ForkPlan {
 	plan, err := PlanFork(s.T().Context(), s.store, "w", merge, config.Jobs{}, nil, dry)
 	s.Require().NoError(err)
 	return plan
 }
 
 func (s *forkPlanSuite) TestDryRunListsWhatTheForkRefuses() {
-	merge := func(u *types.Job) { u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz" }
+	merge := func(u *job.Job) { u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz" }
 
 	dry := s.plan(merge, true)
 	real := s.plan(merge, false)
@@ -267,21 +267,21 @@ func (s *forkPlanSuite) TestDryRunListsWhatTheForkRefuses() {
 	for _, p := range dry.Validation.Problems {
 		s.ErrorIs(err, p.Code)
 	}
-	rows, lerr := s.store.List()
+	rows, lerr := s.store.List(s.T().Context())
 	s.Require().NoError(lerr)
 	s.Empty(rows)
 }
 
 func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
-	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
-	permit := func(u *types.Job) {
+	merge := func(u *job.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	permit := func(u *job.Job) {
 		merge(u)
-		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: job.ReasonIntegratorRegenerates}}
 	}
 	plan := s.plan(permit, false)
 	s.Require().Empty(plan.Validation.Problems)
 
-	stored, err := WriteFork(s.T().Context(), s.store, plan, func(u *types.Job) { u.Checkpoint = "amended" }, config.Jobs{})
+	stored, err := WriteFork(s.T().Context(), s.store, plan, func(u *job.Job) { u.Checkpoint = "amended" }, config.Jobs{})
 
 	s.Require().NoError(err)
 	want := plan.Validation.Job
@@ -290,12 +290,12 @@ func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
 }
 
 func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
-	plan := s.plan(func(u *types.Job) {
+	plan := s.plan(func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
-		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: job.ReasonIntegratorRegenerates}}
 	}, false)
 	s.Require().Empty(plan.Validation.Problems)
-	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: forkCheck()})
+	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/registry.go"}}, Check: forkCheck()})
 
 	_, err := WriteFork(s.T().Context(), s.store, plan, nil, config.Jobs{})
 
@@ -304,13 +304,13 @@ func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
 }
 
 func (s *forkPlanSuite) TestForkWritesWhenALiveRowOnlyNarrowed() {
-	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: forkCheck()})
-	plan := s.plan(func(u *types.Job) {
+	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/**"}}, Check: forkCheck()})
+	plan := s.plan(func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
-		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: job.ReasonIntegratorRegenerates}}
 	}, false)
 	s.Require().Empty(plan.Validation.Problems)
-	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/rules/guard.md"}}, Check: forkCheck()})
+	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/rules/guard.md"}}, Check: forkCheck()})
 
 	_, err := WriteFork(s.T().Context(), s.store, plan, nil, config.Jobs{})
 
@@ -321,14 +321,14 @@ func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	seed(t, s, types.Job{ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/**", "docs/**"}}, Check: forkCheck()})
-	rows, err := s.List()
+	seed(t, s, job.Job{ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/**", "docs/**"}}, Check: forkCheck()})
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
-	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *job.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
 	assert.Empty(t, narrowed.Problems, "narrowing a glob to a file it covers adds nothing")
 
-	widened := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
+	widened := validateMerge(t.Context(), s, rows, "w", func(u *job.Job) { u.Paths.Write = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
 	assert.Equal(t, "paths.write[2]", problemAt(t, widened.Problems, types.WritePathIsDirectory).Field,
 		"a problem found on what the update adds names the field in the whole row")
 	assert.NotContains(t, codes(widened.Problems), types.JobRecordInvalid, "a shape the row already had is not the update's")
@@ -338,15 +338,15 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	seed(t, s, types.Job{
-		ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: forkCheck(),
-		Agent: &agent.Spec{Instructions: "do the thing"},
-		Goals: []types.Goal{{ID: "g", Kind: types.GoalKindCheck, Check: *forkCheck()}},
+	seed(t, s, job.Job{
+		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/registry.go"}}, Check: forkCheck(),
+		Agent: &job.Agent{Instructions: "do the thing"},
+		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: *forkCheck()}},
 	})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
-	wiped := func(u *types.Job) {
+	wiped := func(u *job.Job) {
 		u.Agent, u.Paths.Write, u.Check, u.Goals = nil, nil, nil, nil
 	}
 	v := validateMerge(t.Context(), s, rows, "w", wiped, config.Jobs{}, nil)
@@ -358,13 +358,13 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"drops agent.instructions", "drops paths.write", "drops check", "drops goals"}, subjects)
 
-	said := func(u *types.Job) {
+	said := func(u *job.Job) {
 		wiped(u)
-		u.Deviations = []types.Deviation{
-			{Code: types.JobRecordInvalid, Subject: "drops agent.instructions", Reason: "the job is reset"},
-			{Code: types.JobRecordInvalid, Subject: "drops paths.write", Reason: "the job is reset"},
-			{Code: types.JobRecordInvalid, Subject: "drops check", Reason: "the job is reset"},
-			{Code: types.JobRecordInvalid, Subject: "drops goals", Reason: "the job is reset"},
+		u.Deviations = []job.Deviation{
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops agent.instructions", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops paths.write", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops check", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops goals", Reason: "the job is reset"},
 		}
 	}
 	v = validateMerge(t.Context(), s, rows, "w", said, config.Jobs{}, nil)
@@ -373,7 +373,7 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	}
 	assert.Len(t, v.Permitted, 4)
 
-	kept := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	kept := validateMerge(t.Context(), s, rows, "w", func(u *job.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
 	for _, p := range kept.Problems {
 		assert.False(t, strings.HasPrefix(p.Subject, types.DropsSubject), "an update that keeps the fields drops none")
 	}
@@ -386,7 +386,7 @@ type ReforkGradeSuite struct {
 	store  *Store
 	worker *Store
 	head   string
-	graded []types.Job
+	graded []job.Job
 }
 
 func TestReforkGradeSuite(t *testing.T) { suite.Run(t, new(ReforkGradeSuite)) }
@@ -399,7 +399,7 @@ func (s *ReforkGradeSuite) SetupTest() {
 
 // grade stands in for the guard, which places the check in the checkout the row names and
 // denies the check and its compiling baseline alike where that checkout has no ./magus.
-func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row types.Job) CheckVerdict {
+func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row job.Job) CheckVerdict {
 	s.graded = append(s.graded, row)
 	if row.CheckoutRoot == "" {
 		return CheckVerdict{}
@@ -410,8 +410,8 @@ func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row types.Job) Che
 	return CheckVerdict{}
 }
 
-func (s *ReforkGradeSuite) declare(u *types.Job) {
-	u.State, u.Checkpoint = types.StateDeclared, s.head
+func (s *ReforkGradeSuite) declare(u *job.Job) {
+	u.State, u.Checkpoint = job.StateDeclared, s.head
 	u.Paths.Write, u.Check = []string{"a.txt"}, goTestCheck()
 }
 
@@ -422,7 +422,7 @@ func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
 	taken, err := s.worker.Exec(ctx, "w")
 	s.Require().NoError(err)
 	s.Require().NotEmpty(taken.CheckoutRoot)
-	_, err = s.store.Update(ctx, "w", func(u *types.Job) { u.State = types.StateFail })
+	_, err = s.store.Update(ctx, "w", func(u *job.Job) { u.State = job.StateFail })
 	s.Require().NoError(err)
 
 	again, err := ForkMerge(ctx, s.store, "w", s.declare, config.Jobs{}, nil)
@@ -430,30 +430,30 @@ func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
 	s.Require().NoError(err, "a refork is not graded in the checkout its last holder took")
 	s.Require().Len(s.graded, 2)
 	graded := s.graded[1]
-	s.Equal(types.Job{}, handout(graded), "the grade reads the row the refork writes")
-	s.Equal(types.Job{}, handout(again))
-	s.Equal(types.StateDeclared, again.State)
+	s.Equal(job.Job{}, handout(graded), "the grade reads the row the refork writes")
+	s.Equal(job.Job{}, handout(again))
+	s.Equal(job.StateDeclared, again.State)
 }
 
 // handout is what exec stamps on a row for the holder that took it.
-func handout(row types.Job) types.Job {
-	return types.Job{ReportedBase: row.ReportedBase, BaseVerdict: row.BaseVerdict, Registered: row.Registered, CheckoutRoot: row.CheckoutRoot}
+func handout(row job.Job) job.Job {
+	return job.Job{ReportedBase: row.ReportedBase, BaseVerdict: row.BaseVerdict, Registered: row.Registered, CheckoutRoot: row.CheckoutRoot}
 }
 
 func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	_, err := Apply(t.Context(), s, []types.Declaration{
-		{ID: "a", Paths: types.JobPaths{Write: []string{"cli"}}, Check: forkCheck()},
-		{ID: "b", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, State: types.StateRunning, Check: forkCheck()},
+	_, err := Apply(t.Context(), s, []job.Declaration{
+		{ID: "a", Paths: job.Paths{Write: []string{"cli"}}, Check: forkCheck()},
+		{ID: "b", Paths: job.Paths{Write: []string{"cli/registry.go"}}, State: job.StateRunning, Check: forkCheck()},
 	}, config.Jobs{}, nil, nil, false)
 	require.ErrorIs(t, err, types.WritePathIsDirectory)
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), `a: "cli", inside project "." is a directory`, "each message names its record")
 	assert.Contains(t, err.Error(), `b: the record for b carries state "running"`)
 
-	rows, lerr := s.List()
+	rows, lerr := s.List(t.Context())
 	require.NoError(t, lerr)
 	assert.Empty(t, rows, "nothing is written while any record has a problem")
 }
@@ -462,25 +462,25 @@ func TestValidateMergePermitsEveryRegeneratedOutputByGlob(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(deviations ...types.Deviation) func(*types.Job) {
-		return func(u *types.Job) {
+	declare := func(deviations ...job.Deviation) func(*job.Job) {
+		return func(u *job.Job) {
 			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	bare := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
 	require.Greater(t, len(bare.Problems), 2, "several outputs and a gate stand unpermitted")
 
-	outputs := validateMerge(t.Context(), s, nil, "w", declare(types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	outputs := validateMerge(t.Context(), s, nil, "w", declare(job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
 	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, slices.Compact(codes(outputs.Problems)), "a glob permits its own code alone")
 
 	both := validateMerge(t.Context(), s, nil, "w", declare(
-		types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
-		types.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
+		job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: "the integrator regenerates it"},
+		job.Deviation{Code: job.Code(types.GateNotRun), Subject: "**", Reason: "the integrator runs it"},
 	), config.Jobs{}, nil)
 	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, codes(both.Problems), "lint is the one gate a glob cannot permit")
 	assert.Len(t, both.Permitted, len(bare.Problems)-1)
 
-	narrow := validateMerge(t.Context(), s, nil, "w", declare(types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	narrow := validateMerge(t.Context(), s, nil, "w", declare(job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
 	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob permits only the subjects it matches")
 	assert.Less(t, len(narrow.Problems), len(bare.Problems))
 }
@@ -489,14 +489,14 @@ func TestIntegratorDeviationsAcceptEveryOutputButADeniedOne(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
-	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
 
 	got := IntegratorDeviations(root, row, projects, ignoresCoverage)
 
 	subjects := make([]string, len(got))
 	for i, w := range got {
-		assert.Equal(t, types.OutputOutsideWritePaths, w.Code)
-		assert.Equal(t, integratorRegenerates, w.Reason)
+		assert.Equal(t, job.Code(types.OutputOutsideWritePaths), w.Code)
+		assert.Equal(t, job.ReasonIntegratorRegenerates, w.Reason)
 		subjects[i] = w.Subject
 	}
 	assert.Contains(t, subjects, "docs/manpage/*.md")
@@ -511,7 +511,7 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
-	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
 	referrers := func(file, _ string) map[string]int {
 		if file != "cli/registry.go" {
 			return nil
@@ -524,7 +524,7 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	assert.Equal(t, []string{"cli/registry_test.go"}, paths, "a test beside a written file is reached; outputs and other directories are not")
 	assert.Len(t, notes, len(paths), "each added path says why")
 
-	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: row.Paths.Write}}, projects, referrers)
+	none, _ := ExtendFootprint(root, job.Job{ReadOnly: true, Paths: job.Paths{Write: row.Paths.Write}}, projects, referrers)
 	assert.Empty(t, none)
 }
 
@@ -532,17 +532,17 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(deviations ...types.Deviation) func(*types.Job) {
-		return func(u *types.Job) {
+	declare := func(deviations ...job.Deviation) func(*job.Job) {
+		return func(u *job.Job) {
 			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
-	glob := types.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
+	glob := job.Deviation{Code: job.Code(types.GateNotRun), Subject: "**", Reason: "the integrator runs it"}
 	got := validateMerge(t.Context(), s, nil, "w", declare(glob), config.Jobs{}, nil)
 	lint := problemAt(t, got.Problems, types.GateNotRun)
 	assert.Equal(t, "lint .", lint.Subject, "a glob leaves the lint gate standing")
 
-	exact := types.Deviation{Code: types.GateNotRun, Subject: "lint .", Reason: "the root lints this one"}
+	exact := job.Deviation{Code: job.Code(types.GateNotRun), Subject: "lint .", Reason: "the root lints this one"}
 	got = validateMerge(t.Context(), s, nil, "w", declare(glob, exact), config.Jobs{}, nil)
 	assert.NotContains(t, codes(got.Problems), types.GateNotRun)
 	assert.Contains(t, codes(got.Permitted), types.GateNotRun)
@@ -552,29 +552,29 @@ func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(paths ...string) func(*types.Job) {
-		return func(u *types.Job) { u.Paths.Write, u.Check = paths, forkCheck() }
+	declare := func(paths ...string) func(*job.Job) {
+		return func(u *job.Job) { u.Paths.Write, u.Check = paths, forkCheck() }
 	}
-	resolve := func(merge func(*types.Job)) (types.Job, string) {
+	resolve := func(merge func(*job.Job)) (job.Job, string) {
 		var notes bytes.Buffer
 		s.notices = &notes
 		merged, err := resolveMerge(t.Context(), s, nil, "w", merge, nil)
 		require.NoError(t, err)
-		var row types.Job
+		var row job.Job
 		merged(&row)
 		return row, notes.String()
 	}
 
 	row, note := resolve(declare("docs/notes.md", "cli/registry.go"))
-	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
+	assert.Equal(t, job.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
 		Args: []string{"cli/registry.go", "docs/notes.md"}}, row.Goals[i].Check, "lint is scoped to the written files, sorted")
 	assert.Contains(t, note, `added the goal "lint" (2 files)`)
 
-	row, note = resolve(func(u *types.Job) {
+	row, note = resolve(func(u *job.Job) {
 		declare("cli/registry.go")(u)
-		u.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+		u.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
 	})
 	assert.Len(t, row.Goals, 1, "a goal that runs lint is kept alone")
 	assert.Empty(t, note)
@@ -594,12 +594,12 @@ func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
 	top.TargetChains = map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}}
 	s := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
 
-	merged, err := resolveMerge(t.Context(), s, nil, "w", func(u *types.Job) { u.Paths.Write, u.Check = []string{"web/app.ts"}, forkCheck() }, nil)
+	merged, err := resolveMerge(t.Context(), s, nil, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"web/app.ts"}, forkCheck() }, nil)
 	require.NoError(t, err)
-	var row types.Job
+	var row job.Job
 	merged(&row)
 
-	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
 	assert.Equal(t, []string{"web/app.ts"}, row.Goals[i].Check.Args)
 }
@@ -622,10 +622,10 @@ func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *test
 		}
 		return SymbolFact{}, true
 	}
-	goals := []types.Goal{
-		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"job.Declare", "job.Typo"}},
-		{ID: "new", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"job.Typo"}},
-		{ID: "bare", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Typo"}},
+	goals := []job.Goal{
+		{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"job.Declare", "job.Typo"}},
+		{ID: "new", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"job.Typo"}},
+		{ID: "bare", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Typo"}},
 	}
 
 	ps := ambiguousSymbolProblems(t.Context(), goals, read)
@@ -657,7 +657,7 @@ func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
 	}}
 	store := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
 	problems := func(paths ...string) types.JobProblems {
-		return directoryWritePathProblems(store, types.Job{Paths: types.JobPaths{Write: paths}})
+		return directoryWritePathProblems(store, job.Job{Paths: job.Paths{Write: paths}})
 	}
 
 	assert.Empty(t, problems("docs/gen"), "every file under it is a declared output")
@@ -674,9 +674,9 @@ func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
 	assert.Len(t, problems("."), 1)
 
 	bare := NewStore(tempLocation(t, root))
-	assert.Len(t, directoryWritePathProblems(bare, types.Job{Paths: types.JobPaths{Write: []string{"docs/gen"}}}), 1, "with no workspace nothing is known to be generated")
+	assert.Len(t, directoryWritePathProblems(bare, job.Job{Paths: job.Paths{Write: []string{"docs/gen"}}}), 1, "with no workspace nothing is known to be generated")
 
-	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/gen"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"docs/gen"}}}
 	assert.True(t, outputInside(row, types.Glob{Pattern: "docs/gen/*.md"}), "the directory claim holds an output glob under it (MGS3044)")
 	assert.False(t, outputInside(row, types.Glob{Pattern: "docs/mixed/*.md"}))
 }
@@ -700,27 +700,27 @@ func (s *FootprintMayExtendSuite) SetupTest() {
 }
 
 func (s *FootprintMayExtendSuite) TestSourceBesideATestMayExtend() {
-	s.True(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"run/run.go"}}}))
+	s.True(FootprintMayExtend(s.root, job.Job{Paths: job.Paths{Write: []string{"run/run.go"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestADirectoryWritePathMayExtend() {
-	s.True(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"run"}}}))
+	s.True(FootprintMayExtend(s.root, job.Job{Paths: job.Paths{Write: []string{"run"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestADirectoryWithNoTestCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"docs/guide.md"}}}))
+	s.False(FootprintMayExtend(s.root, job.Job{Paths: job.Paths{Write: []string{"docs/guide.md"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestANewFileInANewDirectoryCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"fresh/new.go"}}}))
+	s.False(FootprintMayExtend(s.root, job.Job{Paths: job.Paths{Write: []string{"fresh/new.go"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestWritingOnlyTestsCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"run/run_test.go"}}}))
+	s.False(FootprintMayExtend(s.root, job.Job{Paths: job.Paths{Write: []string{"run/run_test.go"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestAReadOnlyRowCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"run/run.go"}}}))
+	s.False(FootprintMayExtend(s.root, job.Job{ReadOnly: true, Paths: job.Paths{Write: []string{"run/run.go"}}}))
 }
 
 // LintGoalTrackedFilesSuite pins that a derived lint goal skips the files the VCS ignores and
@@ -735,13 +735,13 @@ func (s *LintGoalTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([
 	st := NewStore(tempLocation(s.T(), repo.Root())).InWorkspace(ws)
 	var notes bytes.Buffer
 	st.notices = &notes
-	merged, err := resolveMerge(s.T().Context(), st, nil, "w", func(u *types.Job) {
+	merged, err := resolveMerge(s.T().Context(), st, nil, "w", func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"skills/**"}, forkCheck()
 	}, nil)
 	s.Require().NoError(err)
-	var row types.Job
+	var row job.Job
 	merged(&row)
-	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	s.Require().GreaterOrEqual(i, 0, "goals: %v", row.Goals)
 	return row.Goals[i].Check.Args, notes.String()
 }
@@ -805,7 +805,7 @@ func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNames
 func unrunGate() UnrunGate {
 	return UnrunGate{
 		Target: "unit", Project: ".", Source: "**/*.go",
-		Goal: types.Goal{ID: "unit", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "unit", Project: "."}},
+		Goal: job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "unit", Project: "."}},
 	}
 }
 
@@ -880,27 +880,78 @@ func (s *declaredGateSuite) writeConfig(body string) {
 func (s *declaredGateSuite) TestRemoteGateOwnsIt() {
 	s.writeConfig("ci:\n  remote_gate: github-actions\n")
 
-	s.Equal(gateOwner{runs: "github-actions runs it"}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+	s.Equal(gateOwner{runs: "github-actions runs it"}, declaredGateOwner(s.store.root, nil, job.Job{ID: "w"}))
 }
 
 func (s *declaredGateSuite) TestNoOwnerWithoutAConfigOrParent() {
-	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, job.Job{ID: "w"}))
 }
 
 func (s *declaredGateSuite) TestIntegratingParentOwnsIt() {
-	parent := types.Job{ID: "integrate", State: types.StateRunning, Integrates: []string{"a-branch"}}
+	parent := job.Job{ID: "integrate", State: job.StateRunning, Integrates: []string{"a-branch"}}
 
-	s.Equal(gateOwner{runs: integratorRuns}, declaredGateOwner(s.store.root, []types.Job{parent}, types.Job{ID: "w", Parent: "integrate"}))
+	s.Equal(gateOwner{runs: integratorRuns}, declaredGateOwner(s.store.root, []job.Job{parent}, job.Job{ID: "w", Parent: "integrate"}))
 }
 
 func (s *declaredGateSuite) TestAnIntegrationJobOwnsItsOwnGates() {
 	s.writeConfig("ci:\n  remote_gate: github-actions\n")
 
-	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "integrate", Integrates: []string{"a-branch"}}))
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, job.Job{ID: "integrate", Integrates: []string{"a-branch"}}))
 }
 
 func (s *declaredGateSuite) TestUnreadableConfigDeclaresNoOwner() {
 	s.writeConfig("ci: [\n")
 
-	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, job.Job{ID: "w"}))
+}
+
+type acceptValidationSuite struct{ suite.Suite }
+
+func TestAcceptValidation(t *testing.T) { suite.Run(t, new(acceptValidationSuite)) }
+
+func (s *acceptValidationSuite) problems(accept ...job.Basis) types.JobProblems {
+	st, _ := validateWorkspace(s.T())
+	return validateMerge(s.T().Context(), st, nil, "w", func(u *job.Job) {
+		u.Paths.Write = []string{"cli/registry.go"}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}, Accept: accept}}
+	}, config.Jobs{}, nil).Problems
+}
+
+func (s *acceptValidationSuite) at(ps types.JobProblems, field string) (types.JobProblem, bool) {
+	i := slices.IndexFunc(ps, func(p types.JobProblem) bool { return p.Field == field })
+	if i < 0 {
+		return types.JobProblem{}, false
+	}
+	return ps[i], true
+}
+
+func (s *acceptValidationSuite) TestAnUnknownBasisIsAGoalProblem() {
+	p, ok := s.at(s.problems(job.BasisWitnessed, "trusted"), "goals[0].accept[1]")
+
+	s.Require().True(ok)
+	s.Equal(types.JobGoalInvalid, p.Code)
+	s.Contains(p.Message, `accepts "trusted", which is not a basis`)
+}
+
+func (s *acceptValidationSuite) TestANamedBasisIsNoProblem() {
+	ps := s.problems(job.BasisWitnessed, job.BasisReported)
+
+	_, ok := s.at(ps, "goals[0].accept")
+	s.False(ok, codes(ps))
+}
+
+func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
+	st, _ := validateWorkspace(s.T())
+
+	plan, err := PlanFork(s.T().Context(), st, "w", func(u *job.Job) {
+		u.Paths.Write = []string{"cli/registry.go"}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}}}
+	}, config.Jobs{}, nil, true)
+
+	s.Require().NoError(err)
+	unit := slices.IndexFunc(plan.Validation.Job.Goals, func(g job.Goal) bool { return g.ID == "unit" })
+	s.Require().GreaterOrEqual(unit, 0)
+	s.Equal([]job.Basis{job.BasisWitnessed}, plan.Validation.Job.Goals[unit].Accept)
+	_, unresolved := s.at(plan.Validation.Problems, "goals[0].accept")
+	s.False(unresolved)
 }

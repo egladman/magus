@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -81,7 +81,7 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	}
 	// Masked as plain text, not as the marshaled JSON: a secret containing a character
 	// json escapes would not match its escaped form, and would land on disk raw.
-	data, err := json.Marshal(MaskKeyInputs(ctx, inputs))
+	data, err := codec.Marshal(MaskKeyInputs(ctx, inputs))
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func MaskKeyInputs(ctx context.Context, lines []string) []string {
 func RedactKeyInputs(ctx context.Context, lines []string) []string {
 	out := make([]string, len(lines))
 	for i, line := range lines {
-		out[i] = secret.RedactString(ctx, line)
+		out[i] = secrets.RedactString(ctx, line)
 	}
 	return out
 }
@@ -148,7 +148,7 @@ func readKeyInputs(dir string) ([]string, error) {
 		return nil, err
 	}
 	var lines []string
-	if err := json.Unmarshal(data, &lines); err != nil {
+	if err := codec.Unmarshal(data, &lines); err != nil {
 		return nil, err
 	}
 	return lines, nil

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -397,7 +397,7 @@ func BenchmarkMtimeStoreGzipRoundTrip(b *testing.B) {
 			b.Fatal(err)
 		}
 		gz := gzip.NewWriter(f)
-		if err := json.NewEncoder(gz).Encode(shard); err != nil {
+		if err := codec.NewEncoder(gz).Encode(shard); err != nil {
 			b.Fatal(err)
 		}
 		if err := gz.Close(); err != nil {
@@ -414,7 +414,7 @@ func BenchmarkMtimeStoreGzipRoundTrip(b *testing.B) {
 			b.Fatal(err)
 		}
 		var out map[string]mtimeEntry
-		_ = json.NewDecoder(gz2).Decode(&out)
+		_ = codec.NewDecoder(gz2).Decode(&out)
 		gz2.Close()
 		f.Close()
 	}

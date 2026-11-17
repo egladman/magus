@@ -13,7 +13,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -155,7 +155,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 	if o.Workspace != "" {
 		workspace = filesystem.ResolveRulePath(o.Workspace)
 	}
-	return &Policy{
+	p := &Policy{
 		withheld:   &withheldReads{},
 		FS:         filesystem.Ruleset{Rules: rules},
 		Env:        allow,
@@ -169,6 +169,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		opts:       &o,
 		scoped:     newScopedPolicies(),
 	}
+	return p.withConfinement()
 }
 
 // gitConfigGlobal is set to /dev/null in every child's environment that does not

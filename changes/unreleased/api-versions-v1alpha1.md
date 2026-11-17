@@ -1,7 +1,7 @@
 ### Changed
 
 - **Breaking: every versioned format is named `magus.<format>/v1alpha1`.** The integer
-  `schema_version` member is now `api_version`, a string such as `magus.job/v1alpha1`.
+  `schema_version` member is now `api_version`, a string such as `safetyscissors.job/v1alpha1`.
   Versions order `v1alpha1` < `v1alpha2` < `v1beta1` < `v1`, and every format starts at
   alpha. A reader refuses any other version and names the fix.
 - **Breaking: the formats renamed.** Job rows, declarations and results, output records,

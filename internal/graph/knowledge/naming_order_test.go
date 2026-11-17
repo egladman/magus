@@ -27,7 +27,7 @@ func TestConformanceFindsParameterOrderDrift(t *testing.T) {
 		// Takes neither name, so it is no evidence either way.
 		commandFunc("unrelated", "ctx context.Context, w io.Writer"),
 	}
-	subj := commandFunc("jobWatchFiles", "ctx context.Context, out io.Writer, root string, plan func() []types.Job")
+	subj := commandFunc("jobWatchFiles", "ctx context.Context, out io.Writer, root string, plan func() []job.Job")
 	g := namingGraph(t, append(peers, subj))
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})

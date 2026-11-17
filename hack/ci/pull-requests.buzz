@@ -78,7 +78,7 @@ final METHODS = ["squash", "merge", "rebase"];
 // SENSITIVE holds the paths where a mistake is a security or queue-integrity bug, so a
 // change touching one never goes to a mechanical model.
 final SENSITIVE = ["internal/queue/", "internal/guard/", ".github/", "internal/auth/", "internal/sandbox/",
-    "internal/secret/", "internal/handler/token/", "internal/selfupdate/", "spells/cosign/",
+    "libs/secrets/", "internal/handler/token/", "internal/selfupdate/", "spells/cosign/",
     "spells/onepassword/", "spells/system-keychain/", "judge.go",
     "hack/ci/merge-queue.buzz", "hack/policy/"];
 

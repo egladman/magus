@@ -10,6 +10,8 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/types"
 )
 
 // Log is an append-only JSON Lines file of T with no key: every line is an entry, and
@@ -25,7 +27,7 @@ type Log[T any] struct {
 	// Select chooses the entries a compaction keeps, in file order, from all of them; nil
 	// keeps the newest Keep. It sees only complete lines.
 	Select func(all []T, keep int) []T
-	// SkipSync appends without a sync, as [WithoutSync] does. A compaction always syncs.
+	// SkipSync appends without a sync, as [codec.WithoutSync] does. A compaction always syncs.
 	SkipSync bool
 }
 
@@ -57,7 +59,7 @@ func (l Log[T]) Append(ctx context.Context, entries ...T) error {
 			}
 			if partial {
 				l.warnDropped(ctx)
-				return writeEntries(RewriteLines, l.Path, l.Perm, append(all, entries...))
+				return writeEntries(codec.RewriteLines, l.Path, l.Perm, append(all, entries...))
 			}
 		}
 		return writeEntries(l.appendLines, l.Path, l.Perm, entries)
@@ -65,7 +67,7 @@ func (l Log[T]) Append(ctx context.Context, entries ...T) error {
 }
 
 // Compact rewrites the log to the entries Select keeps once it holds more than Keep plus
-// [CompactSlack] of them, or ends in a line no writer finished, and returns the entries
+// [codec.CompactSlack] of them, or ends in a line no writer finished, and returns the entries
 // the file holds afterwards. A log within its bound is read and left as it is, so a caller
 // may compact on any schedule. ctx bounds only the wait for the lock.
 func (l Log[T]) Compact(ctx context.Context) ([]T, error) {
@@ -78,7 +80,7 @@ func (l Log[T]) Compact(ctx context.Context) ([]T, error) {
 		if err != nil {
 			return err
 		}
-		if !partial && len(all) <= l.Keep+CompactSlack {
+		if !partial && len(all) <= l.Keep+codec.CompactSlack {
 			kept = all
 			return nil
 		}
@@ -86,7 +88,7 @@ func (l Log[T]) Compact(ctx context.Context) ([]T, error) {
 		if partial {
 			l.warnDropped(ctx)
 		}
-		return writeEntries(RewriteLines, l.Path, l.Perm, kept)
+		return writeEntries(codec.RewriteLines, l.Path, l.Perm, kept)
 	})
 	return kept, err
 }
@@ -103,9 +105,9 @@ func (l Log[T]) selectKept(all []T) []T {
 
 func (l Log[T]) appendLines(path string, lines [][]byte, perm os.FileMode) error {
 	if l.SkipSync {
-		return AppendLines(path, lines, perm, WithoutSync())
+		return codec.AppendLines(path, lines, perm, codec.WithoutSync())
 	}
-	return AppendLines(path, lines, perm)
+	return codec.AppendLines(path, lines, perm)
 }
 
 func (l Log[T]) warnDropped(ctx context.Context) {
@@ -133,4 +135,71 @@ func endsTorn(path string) (bool, error) {
 		return false, err
 	}
 	return last[0] != '\n', nil
+}
+
+// readEntries decodes each complete line at path as a T and reports whether the file ends in
+// a line no writer finished.
+func readEntries[T any](path string) ([]T, bool, error) {
+	read, err := codec.ReadLines(path)
+	if err != nil {
+		return nil, false, err
+	}
+	all := make([]T, 0, len(read.Lines))
+	for _, line := range read.Lines {
+		var v T
+		if err := codec.Unmarshal(line.Text, &v); err != nil {
+			return nil, false, StoreDiagnostic(&codec.LineError{Path: path, Line: line.N, Err: err})
+		}
+		all = append(all, v)
+	}
+	return all, read.Partial, nil
+}
+
+func writeEntries[T any](to func(string, [][]byte, os.FileMode) error, path string, perm os.FileMode, entries []T) error {
+	lines := make([][]byte, 0, len(entries))
+	for _, v := range entries {
+		b, err := codec.Marshal(v)
+		if err != nil {
+			return err
+		}
+		lines = append(lines, b)
+	}
+	if perm == 0 {
+		perm = 0o644
+	}
+	return to(path, lines, perm)
+}
+
+// StoreDiagnostic gives a store error from libs/codec its magus code: MGS3049 for a store
+// an older magus left beside its replacement, MGS3050 for a line that does not decode. An
+// error that already carries a code, and any other error, comes back as it is.
+func StoreDiagnostic(err error) error {
+	var coded *types.DiagnosticError
+	var legacy *codec.LegacyStoreError
+	var line *codec.LineError
+	switch {
+	case errors.As(err, &coded):
+		return err
+	case errors.As(err, &legacy):
+		return types.WrapDiagnostic(types.LegacyStorePresent, err, "%v", err)
+	case errors.As(err, &line):
+		return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%v", err)
+	}
+	return err
+}
+
+// JSONL is a keyed [codec.JSONL] store whose Load and Update errors carry their magus code,
+// as [StoreDiagnostic] gives it. Every magus store on codec.JSONL is one of these, so no
+// caller maps the codes itself.
+type JSONL[T any] struct{ codec.JSONL[T] }
+
+// Load is [codec.JSONL.Load], its error given a code by [StoreDiagnostic].
+func (l JSONL[T]) Load() ([]T, error) {
+	entries, err := l.JSONL.Load()
+	return entries, StoreDiagnostic(err)
+}
+
+// Update is [codec.JSONL.Update], its error given a code by [StoreDiagnostic].
+func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
+	return StoreDiagnostic(l.JSONL.Update(ctx, fn))
 }

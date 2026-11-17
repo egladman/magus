@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type reportSuite struct {
@@ -71,7 +71,7 @@ func (s *reportSuite) TestWriteCreatesItsDirectoryAndCarriesAttachments() {
 	body, err := os.ReadFile(path)
 	s.Require().NoError(err)
 	var got writtenReport
-	s.Require().NoError(json.Unmarshal(body, &got))
+	s.Require().NoError(codec.Unmarshal(body, &got))
 	s.NotEmpty(got.GeneratedAt)
 	got.GeneratedAt = ""
 	s.Equal(writtenReport{Build: "v1", Cases: []Case{{Subject: "a", Name: "one", Status: OutcomePass}}}, got)

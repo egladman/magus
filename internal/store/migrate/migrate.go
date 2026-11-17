@@ -6,8 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // versionMember is the header member that records a store's version: the number of
@@ -15,7 +14,7 @@ import (
 const versionMember = "migration"
 
 // Entry is one stored line as its JSON members, before the entry type decodes it.
-type Entry map[string]json.RawMessage
+type Entry map[string]codec.RawMessage
 
 // Migration takes every entry of a store from one version to the next.
 type Migration struct {
@@ -97,7 +96,7 @@ func (r result) String() string {
 // as it was. A newer one is a [*NewerError].
 func (s Store) Apply() (result, error) {
 	res := result{Store: s.Name, Path: s.Path, To: s.Version()}
-	read, err := file.ReadLines(s.Path)
+	read, err := codec.ReadLines(s.Path)
 	if err != nil {
 		return res, fmt.Errorf("%s: %w", s.Name, err)
 	}
@@ -125,7 +124,7 @@ func (s Store) Apply() (result, error) {
 			return res, err
 		}
 	}
-	header[versionMember] = json.RawMessage(strconv.Itoa(res.To))
+	header[versionMember] = codec.RawMessage(strconv.Itoa(res.To))
 	if err := s.rewrite(append([]Entry{header}, entries...)); err != nil {
 		return res, err
 	}
@@ -136,12 +135,12 @@ func (s Store) Apply() (result, error) {
 // split decodes lines into the store's header, empty when it has none, and its entries in
 // file order. More than one header line is refused: a reader that takes entries for headers
 // sees several, and the rewrite would keep only the last.
-func (s Store) split(lines []file.Line) (header Entry, entries []Entry, err error) {
+func (s Store) split(lines []codec.Line) (header Entry, entries []Entry, err error) {
 	header = Entry{}
 	var at []string
 	for _, line := range lines {
 		var e Entry
-		if err := json.Unmarshal(line.Text, &e); err != nil {
+		if err := codec.Unmarshal(line.Text, &e); err != nil {
 			return nil, nil, fmt.Errorf("%s: %s:%d: %w", s.Name, s.Path, line.N, err)
 		}
 		if s.Header(e) {
@@ -194,13 +193,13 @@ func (s Store) upHeader(v int, header Entry) (Entry, error) {
 func (s Store) rewrite(entries []Entry) error {
 	lines := make([][]byte, 0, len(entries))
 	for _, e := range entries {
-		b, err := json.Marshal(e)
+		b, err := codec.Marshal(e)
 		if err != nil {
 			return fmt.Errorf("%s: %s: %w", s.Name, s.Path, err)
 		}
 		lines = append(lines, b)
 	}
-	if err := file.RewriteLines(s.Path, lines, 0o644); err != nil {
+	if err := codec.RewriteLines(s.Path, lines, 0o644); err != nil {
 		return fmt.Errorf("%s: %w", s.Name, err)
 	}
 	return nil
@@ -212,7 +211,7 @@ func version(header Entry) (int, error) {
 		return 0, nil
 	}
 	var v int
-	if err := json.Unmarshal(raw, &v); err != nil {
+	if err := codec.Unmarshal(raw, &v); err != nil {
 		return 0, fmt.Errorf("header member %q: %w", versionMember, err)
 	}
 	if v < 0 {

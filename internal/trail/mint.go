@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // MintRecord is what the trail keeps about a minted token: which token, until when, and the
 // grant it was minted under. Never the secret: the credential carries an 8-hex id and no hash.
 // Expires is zero for the operator token, which does not expire.
 type MintRecord struct {
-	Minted  types.Credential `json:"minted"`
-	Expires time.Time        `json:"expires,omitzero"`
-	Minter  types.Credential `json:"minter"`
+	Minted  auth.Credential `json:"minted"`
+	Expires time.Time       `json:"expires,omitzero"`
+	Minter  auth.Credential `json:"minter"`
 }
 
 // AppendMint records one mint under base as a token_lifecycle event whose request blob is the
@@ -28,7 +29,7 @@ func AppendMint(ctx context.Context, base, action string, rec MintRecord) {
 	if base == "" {
 		return
 	}
-	blob, err := json.Marshal(rec)
+	blob, err := codec.Marshal(rec)
 	if err != nil {
 		return
 	}
@@ -37,11 +38,11 @@ func AppendMint(ctx context.Context, base, action string, rec MintRecord) {
 	if !rec.Expires.IsZero() {
 		preview += " until " + rec.Expires.UTC().Format("2006-01-02 15:04")
 	}
-	Append(ctx, base, Event{
+	Append(ctx, base, trailtypes.Event{
 		Ts:           time.Now().UnixMilli(),
-		Kind:         KindTokenLifecycle,
+		Kind:         trailtypes.KindTokenLifecycle,
 		Action:       action,
-		Outcome:      OutcomeOK,
+		Outcome:      trailtypes.OutcomeOK,
 		RequestRef:   ref,
 		RequestBytes: size,
 		Preview:      preview,

@@ -10,7 +10,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 const historyCreatedBy = "magus image.assemble"
@@ -66,9 +66,9 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 // keepUnmodelled copies into fields and config each member of base that the image-spec
 // types have no field for. A modelled member is never copied: buildConfig decided it,
 // and an omitted one was cleared on purpose.
-func keepUnmodelled(fields, config map[string]json.RawMessage, base []byte) error {
-	var baseFields map[string]json.RawMessage
-	if err := json.Unmarshal(base, &baseFields); err != nil {
+func keepUnmodelled(fields, config map[string]codec.RawMessage, base []byte) error {
+	var baseFields map[string]codec.RawMessage
+	if err := codec.Unmarshal(base, &baseFields); err != nil {
 		return err
 	}
 	for k, v := range baseFields {
@@ -80,8 +80,8 @@ func keepUnmodelled(fields, config map[string]json.RawMessage, base []byte) erro
 	if !ok {
 		return nil
 	}
-	var baseConfig map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &baseConfig); err != nil {
+	var baseConfig map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &baseConfig); err != nil {
 		return err
 	}
 	for k, v := range baseConfig {
@@ -188,20 +188,20 @@ func mergeEnv(base []string, set map[string]string, unset []string) []string {
 // and in config: config.md says extra fields MUST NOT be an error, and a Healthcheck or
 // Shell a base set must survive a rebuild.
 func configJSON(cfg ocispec.Image, base []byte) ([]byte, error) {
-	data, err := json.Marshal(cfg)
+	data, err := codec.Marshal(cfg)
 	if err != nil {
 		return nil, err
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
+	var fields map[string]codec.RawMessage
+	if err := codec.Unmarshal(data, &fields); err != nil {
 		return nil, err
 	}
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(fields["config"], &config); err != nil {
+	var config map[string]codec.RawMessage
+	if err := codec.Unmarshal(fields["config"], &config); err != nil {
 		return nil, err
 	}
 	var argsEscaped bool
-	if err := json.Unmarshal(config["ArgsEscaped"], &argsEscaped); err != nil {
+	if err := codec.Unmarshal(config["ArgsEscaped"], &argsEscaped); err != nil {
 		return nil, err
 	}
 	if !argsEscaped {
@@ -212,13 +212,13 @@ func configJSON(cfg ocispec.Image, base []byte) ([]byte, error) {
 			return nil, fmt.Errorf("base config: %w", err)
 		}
 	}
-	fields["config"], err = json.Marshal(config)
+	fields["config"], err = codec.Marshal(config)
 	if err != nil {
 		return nil, err
 	}
 	if len(cfg.History) > 0 {
-		var history []map[string]json.RawMessage
-		if err := json.Unmarshal(fields["history"], &history); err != nil {
+		var history []map[string]codec.RawMessage
+		if err := codec.Unmarshal(fields["history"], &history); err != nil {
 			return nil, err
 		}
 		for i, entry := range cfg.History {
@@ -226,10 +226,10 @@ func configJSON(cfg ocispec.Image, base []byte) ([]byte, error) {
 				delete(history[i], "empty_layer")
 			}
 		}
-		fields["history"], err = json.Marshal(history)
+		fields["history"], err = codec.Marshal(history)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return json.Marshal(fields)
+	return codec.Marshal(fields)
 }

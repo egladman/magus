@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // magus's diagnostic codes are the MGS#### family. The MECHANISM (the Code/Error types, the rendering, the
@@ -880,6 +881,12 @@ const ModelTiersIncomparable DiagnosticCode = "MGS3056"
 // verify pass regenerated. The verdict belongs to the committed bytes. The
 // run fails, and the next one refuses, until the person commits the change.
 const UncommittedRepair DiagnosticCode = "MGS3057"
+
+// JobStoreRecordForeign is a job store line in an API group or version this magus does
+// not read and no migration of its own reaches. Nothing is read or written: the store
+// holds rows no command here can act on, and the remedy is to fork the job again or
+// start a fresh session.
+const JobStoreRecordForeign DiagnosticCode = "MGS3058"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1235,6 +1242,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ModelTierAboveParent,
 	ModelTiersIncomparable,
 	UncommittedRepair,
+	JobStoreRecordForeign,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
@@ -1300,30 +1308,31 @@ var allDiagnosticCodes = []DiagnosticCode{
 // retryTable is where a code declares itself not retryable, once, with what must change
 // first; ClassifyRetry reads it and no call site wraps. A code left out is retryable:
 // MGS3009 and MGS3017 clear on their own (exit 75, RetryInfo).
-var retryTable = map[DiagnosticCode]RetryChange{
-	TargetDependencyCycle:    RetryAfterConfig,
-	WorkspaceNeedsNewerMagus: RetryAfterUpgrade,
-	UnknownConfigKey:         RetryAfterConfig,
-	MisconfiguredEnvVar:      RetryAfterConfig,
-	PathWriteDenied:          RetryAfterWidening,
-	ToolTooOld:               RetryAfterUpgrade,
-	ToolTooNew:               RetryAfterUpgrade,
-	BuildSlotsDeadlocked:     RetryAfterConfig,
-	WritePathIsDirectory:     RetryAfterWidening,
-	PipeCycle:                RetryAfterConfig,
-	JobRecordInvalid:         RetryAfterConfig,
-	JobGoalInvalid:           RetryAfterConfig,
-	JobUngraded:              RetryAfterConfig,
-	JobCheckUnrunnable:       RetryAfterConfig,
-	JobCheckpointUnplaceable: RetryAfterConfig,
-	WritePathTooBroad:        RetryAfterConfig,
-	OutputOutsideWritePaths:  RetryAfterConfig,
-	GateNotRun:               RetryAfterConfig,
-	CheckoutConfigHeld:       RetryAfterConfig,
-	StoreRecordsNewer:        RetryAfterUpgrade,
-	JobStoreWriterOlder:      RetryAfterUpgrade,
-	BearerRejected:           RetryAfterPerson,
-	NoAuthToken:              RetryAfterPerson,
+var retryTable = map[DiagnosticCode]job.RetryChange{
+	TargetDependencyCycle:    job.RetryAfterConfig,
+	WorkspaceNeedsNewerMagus: job.RetryAfterUpgrade,
+	UnknownConfigKey:         job.RetryAfterConfig,
+	MisconfiguredEnvVar:      job.RetryAfterConfig,
+	PathWriteDenied:          job.RetryAfterWidening,
+	ToolTooOld:               job.RetryAfterUpgrade,
+	ToolTooNew:               job.RetryAfterUpgrade,
+	BuildSlotsDeadlocked:     job.RetryAfterConfig,
+	WritePathIsDirectory:     job.RetryAfterWidening,
+	PipeCycle:                job.RetryAfterConfig,
+	JobRecordInvalid:         job.RetryAfterConfig,
+	JobGoalInvalid:           job.RetryAfterConfig,
+	JobUngraded:              job.RetryAfterConfig,
+	JobCheckUnrunnable:       job.RetryAfterConfig,
+	JobCheckpointUnplaceable: job.RetryAfterConfig,
+	WritePathTooBroad:        job.RetryAfterConfig,
+	OutputOutsideWritePaths:  job.RetryAfterConfig,
+	GateNotRun:               job.RetryAfterConfig,
+	CheckoutConfigHeld:       job.RetryAfterConfig,
+	StoreRecordsNewer:        job.RetryAfterUpgrade,
+	JobStoreWriterOlder:      job.RetryAfterUpgrade,
+	JobStoreRecordForeign:    job.RetryAfterPerson,
+	BearerRejected:           job.RetryAfterPerson,
+	NoAuthToken:              job.RetryAfterPerson,
 }
 
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS

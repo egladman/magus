@@ -72,7 +72,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 		// A variable nobody assigned names no file.
 		{`bash "$UNSET/retry.sh"`, ""},
 	} {
-		v := denyScriptContent(strict(Dependencies{}), dir, tt.command, DialectBash)
+		v := denyScriptContent(t.Context(), strict(Dependencies{}), dir, tt.command, DialectBash)
 		if tt.rule == "" {
 			assert.Empty(t, v.Deny, tt.command)
 			continue
@@ -82,7 +82,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 	}
 
 	// With no directory to resolve against, only an absolute path is read.
-	assert.Empty(t, denyScriptContent(Dependencies{}, "", "bash retry.sh", DialectBash).Deny)
+	assert.Empty(t, denyScriptContent(t.Context(), Dependencies{}, "", "bash retry.sh", DialectBash).Deny)
 }
 
 // TestGuardJudgesTheBuzzScriptALineRuns: `magus buzz <file>` writing a tracked file through
@@ -129,7 +129,7 @@ func TestGuardJudgesTheBuzzScriptALineRuns(t *testing.T) {
 		{`magus buzz -e 'fs\writeFile("internal/x.go", content: "")'`, false},
 		{"magus run build .", false},
 	} {
-		v := denyScriptContent(deps, dir, tt.command, DialectBash)
+		v := denyScriptContent(t.Context(), deps, dir, tt.command, DialectBash)
 		if !tt.denied {
 			assert.Empty(t, v.Deny, tt.command)
 			continue
@@ -154,10 +154,10 @@ func TestGuardJudgesTheBuzzScriptUnderItsWorkDir(t *testing.T) {
 		fmt.Sprintf("magus buzz -C %s -s rewrite.buzz", dir),
 		"magus buzz -s -C=.. rewrite.buzz",
 	} {
-		v := denyScriptContent(deps, filepath.Join(dir, "sub"), command, DialectBash)
+		v := denyScriptContent(t.Context(), deps, filepath.Join(dir, "sub"), command, DialectBash)
 		assert.Equal(t, denyRuleInterpreterRewrite, v.Rule.Name, command)
 	}
-	assert.Empty(t, denyScriptContent(deps, filepath.Join(dir, "sub"), "magus buzz rewrite.buzz", DialectBash).Deny,
+	assert.Empty(t, denyScriptContent(t.Context(), deps, filepath.Join(dir, "sub"), "magus buzz rewrite.buzz", DialectBash).Deny,
 		"without -C the script is looked for beside the call, where there is none")
 }
 
@@ -194,7 +194,7 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 			writeFields{OldText: "#!/usr/bin/env bash", NewText: "#!/usr/bin/env bash\nset -e"}, ""},
 		{"edit whose old text is not there", path("ok.sh"), writeFields{OldText: "absent", NewText: "until x; do sleep 1; done"}, ""},
 	} {
-		v := denyScriptWrite(strict(Dependencies{}), tt.file, tt.write)
+		v := denyScriptWrite(t.Context(), strict(Dependencies{}), tt.file, tt.write)
 		if tt.rule == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
@@ -208,7 +208,7 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 	// is judged when `magus buzz` runs it rather than when it is written.
 	require.NoError(t, os.WriteFile(path("tracked.go"), []byte("package x\n"), 0o644))
 	rooted := Dependencies{scope: workspaceScope{root: dir}}
-	assert.Empty(t, denyScriptWrite(rooted, path("gen.buzz"), writeFields{Content: "fs\\writeFile(\"tracked.go\", content: body);\n"}).Deny)
+	assert.Empty(t, denyScriptWrite(t.Context(), rooted, path("gen.buzz"), writeFields{Content: "fs\\writeFile(\"tracked.go\", content: body);\n"}).Deny)
 }
 
 // The command side reaches Judge through the envelope's cwd, which is where a relative

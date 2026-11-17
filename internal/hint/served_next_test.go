@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +29,7 @@ func TestServedNextJournalAppendsAndRotates(t *testing.T) {
 	assert.Len(t, lines, servedNextKept)
 
 	var got ServedNextEntry
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
+	require.NoError(t, codec.Unmarshal([]byte(lines[0]), &got))
 	assert.Equal(t, ServedNextEntry{AtMs: got.AtMs, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}}, got)
 	assert.NotZero(t, got.AtMs)
 
@@ -103,7 +103,7 @@ func TestServedNextJournalSurvivesConcurrentWriters(t *testing.T) {
 	assert.Len(t, lines, writers*each, "every append has to survive; a lost line is a command magus served and then refuses")
 	for _, line := range lines {
 		var entry ServedNextEntry
-		require.NoError(t, json.Unmarshal([]byte(line), &entry), "torn line: %q", line)
+		require.NoError(t, codec.Unmarshal([]byte(line), &entry), "torn line: %q", line)
 		require.Equal(t, "query-explain", entry.ID)
 	}
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -27,9 +28,6 @@ type registryKey struct{}
 type WorkspaceRegistry struct {
 	mu          sync.Mutex
 	projectOpts map[string][]ProjectOption
-	// remoteBackend is the spell name a magusfile chose as the remote cache
-	// backend (via magus.cache.remote); empty when none was wired.
-	remoteBackend string
 	// providers are the spell names a magusfile wired as workspace providers (via
 	// magus.workspace.provider), in wiring order. Ordered, not a set, because two
 	// providers that report the same path must resolve deterministically: the first
@@ -83,19 +81,19 @@ type ShellRule struct {
 //
 // An error means the rule itself failed (it raised, returned something that is not a
 // verdict, or ran out of time), never that it denied: a deny is a verdict.
-type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (types.GuardVerdict, error)
+type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // CommandRule judges one agent shell command for magus\guard.command, with the same
 // facts and error contract as SpawnRule.
-type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (types.GuardVerdict, error)
+type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // WriteRule judges one agent file write for magus\guard.write, with the same facts and
 // error contract as SpawnRule.
-type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error)
+type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // StopRule judges one agent stop event for magus\guard.stop, with the same facts and error
 // contract as SpawnRule.
-type StopRule func(ctx context.Context, req types.StopRequest, facts hint.Gate) (types.GuardVerdict, error)
+type StopRule func(ctx context.Context, req types.StopRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -140,22 +138,6 @@ func registerPathHint(w types.WorkspaceRepository) string {
 	return fmt.Sprintf("explicit configure paths are relative to the workspace root (known projects: %s), "+
 		"to configure the magusfile's own project, omit the path: configure({...})",
 		strings.Join(known, ", "))
-}
-
-// SetRemoteBackend records the spell name a magusfile chose as the remote cache
-// backend. Last writer wins; safe to call concurrently.
-func (r *WorkspaceRegistry) SetRemoteBackend(spellName string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.remoteBackend = spellName
-}
-
-// RemoteBackend returns the remote-cache-backend spell name a magusfile wired, or
-// "" when none was.
-func (r *WorkspaceRegistry) RemoteBackend() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.remoteBackend
 }
 
 // AddProvider records a spell name a magusfile wired as a workspace provider,

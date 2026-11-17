@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -483,9 +484,9 @@ func TestParseChangesByCommit(t *testing.T) {
 		ID:     "abc123",
 		Author: "Ada",
 		Date:   time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC),
-		Files: []types.FileChange{
-			{Path: "api/main.go", Status: types.ChangeModified},
-			{Path: "api/util.go", Status: types.ChangeAdded},
+		Files: []job.FileChange{
+			{Path: "api/main.go", Status: job.ChangeModified},
+			{Path: "api/util.go", Status: job.ChangeAdded},
 		},
 	}, got[0])
 
@@ -493,7 +494,7 @@ func TestParseChangesByCommit(t *testing.T) {
 		ID:     "def456",
 		Author: "Babbage",
 		Date:   time.Date(2026, 6, 19, 9, 0, 0, 0, time.UTC),
-		Files:  []types.FileChange{{Path: "web/app.ts", Status: types.ChangeDeleted}},
+		Files:  []job.FileChange{{Path: "web/app.ts", Status: job.ChangeDeleted}},
 	}, got[1])
 }
 
@@ -510,11 +511,11 @@ func TestParseChangesByCommitRename(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Len(t, got[0].Files, 2)
 
-	assert.Equal(t, types.FileChange{
-		Path: "internal/new.go", PrevPath: "internal/old.go", Status: types.ChangeRenamed,
+	assert.Equal(t, job.FileChange{
+		Path: "internal/new.go", PrevPath: "internal/old.go", Status: job.ChangeRenamed,
 	}, got[0].Files[0], "a rename carries both names")
-	assert.Equal(t, types.FileChange{
-		Path: "internal/copy.go", Status: types.ChangeAdded,
+	assert.Equal(t, job.FileChange{
+		Path: "internal/copy.go", Status: job.ChangeAdded,
 	}, got[0].Files[1], "a copy is an add, with no lineage back to its source")
 }
 
@@ -526,7 +527,7 @@ func TestParseChangesByCommitMalformed(t *testing.T) {
 
 	got := parseChangesByCommit(out)
 	require.Len(t, got, 1)
-	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
+	assert.Equal(t, []job.FileChange{{Path: "good.go", Status: job.ChangeModified}}, got[0].Files)
 }
 
 // A "?" is the letter a non-git driver emits for a status IT could not translate (see
@@ -538,7 +539,7 @@ func TestParseChangesByCommitSkipsAnUntranslatedStatus(t *testing.T) {
 
 	got := parseChangesByCommit(out)
 	require.Len(t, got, 1)
-	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
+	assert.Equal(t, []job.FileChange{{Path: "good.go", Status: job.ChangeModified}}, got[0].Files)
 }
 
 // TestParseChangesByCommitEmpty covers a commit that touched no files and a bad date.

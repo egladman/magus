@@ -11,9 +11,9 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -740,8 +740,8 @@ func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("NPM_TOKEN", "s3cr3t-token")
 
-	r := secret.New()
-	ctx := secret.ContextWithResolver(context.Background(), r)
+	r := secrets.NewResolver()
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	ops := map[string]spells.Op{
 		"publish": {Command: spells.Command{
@@ -779,8 +779,8 @@ func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
 // surfaces as a dispatch error naming both the op and the secret, rather than
 // running the command with a missing value.
 func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
-	r := secret.New() // built-in env provider; NOT_SET_ANYWHERE is deliberately unset
-	ctx := secret.ContextWithResolver(context.Background(), r)
+	r := secrets.NewResolver() // built-in env provider; NOT_SET_ANYWHERE is deliberately unset
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	ops := map[string]spells.Op{
 		"publish": {Command: spells.Command{
@@ -800,8 +800,8 @@ func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 // symbolIndexEnv behavior is unaffected by an op that also declares secrets.
 func TestResolveSecretEnvMergesWithoutClobberingReservedEnv(t *testing.T) {
 	t.Setenv("NPM_TOKEN", "s3cr3t-token")
-	r := secret.New()
-	ctx := secret.ContextWithResolver(context.Background(), r)
+	r := secrets.NewResolver()
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	base := map[string]string{"MAGUS_SYMBOL_INDEX": "/cache/index.scip"}
 	env, err := resolveSecretEnv(ctx, "scip", map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, base)
@@ -815,8 +815,8 @@ func TestResolveSecretEnvMergesWithoutClobberingReservedEnv(t *testing.T) {
 // naming the op and the colliding name, rather than a silent override or drop in a
 // security-sensitive path.
 func TestResolveSecretEnvCollisionErrors(t *testing.T) {
-	r := secret.New()
-	ctx := secret.ContextWithResolver(context.Background(), r)
+	r := secrets.NewResolver()
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	base := map[string]string{"MAGUS_SYMBOL_INDEX": "/cache/index.scip"}
 	_, err := resolveSecretEnv(ctx, "scip", map[string]string{"MAGUS_SYMBOL_INDEX": "MAGUS_SYMBOL_INDEX"}, base)

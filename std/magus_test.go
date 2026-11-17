@@ -14,20 +14,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,7 +95,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 }
 
 func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
-	ctx := types.WithJobLease(t.Context(), "fleet/captured")
+	ctx := jobtypes.WithLease(t.Context(), "fleet/captured")
 	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
 
@@ -385,6 +387,11 @@ type ledgerWorkspace struct {
 func (f *ledgerWorkspace) CacheDir() string { return f.cacheDir }
 func (f *ledgerWorkspace) Root() string     { return f.root }
 
+// CheckGrader lets every check run, as a workspace whose guard denies nothing would.
+func (f *ledgerWorkspace) CheckGrader() job.CheckGrader {
+	return func(context.Context, string, jobtypes.Job) job.CheckVerdict { return job.CheckVerdict{} }
+}
+
 // Not parallel: the job store resolves the per-repository state directory, and
 // jobStoreFromContext offers no seam to redirect it, so the environment is the only
 // thing keeping these rows out of the developer's own store.
@@ -393,14 +400,14 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Agent: agent.Instructed("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ctx, "u1", jobtypes.Put{Agent: jobtypes.Instructed("ship it"), State: new(jobtypes.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	report, err := MagusListJob(ctx)
 	require.NoError(t, err, "a workspace with a cache directory answers here, with no subprocess")
 	require.Len(t, report.Jobs, 1)
 	assert.Equal(t, "u1", report.Jobs[0].ID) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
-	assert.Equal(t, types.StateRunning, report.Jobs[0].State)
+	assert.Equal(t, jobtypes.StateRunning, report.Jobs[0].State)
 }
 
 // A guard rule runs under the rows the guard pinned: list answers from them even with a
@@ -408,26 +415,26 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Agent: agent.Instructed("not what the guard read"), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "on-disk", jobtypes.Put{Agent: jobtypes.Instructed("not what the guard read"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
-	pinned := types.Job{ID: "orchestrator/guard-facts", Agent: agent.Instructed("the seam"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
+	pinned := jobtypes.Job{ID: "orchestrator/guard-facts", Agent: jobtypes.Instructed("the seam"), State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/guard/**"}}}
 	// listed is the list of rows a pinned snapshot holding no tries answers.
-	listed := func(rows []types.Job) types.JobList {
-		l := types.NewJobList(rows)
-		l.Attempts = []types.Attempt{}
+	listed := func(rows []jobtypes.Job) jobtypes.List {
+		l := jobtypes.NewList(rows)
+		l.Attempts = []jobtypes.Attempt{}
 		return l
 	}
 	cases := []struct {
 		name    string
 		snap    job.Snapshot
-		want    types.JobList
+		want    jobtypes.List
 		wantErr string
 	}{
 		{
 			name: "the guard's rows",
-			snap: job.Snapshot{Rows: []types.Job{pinned}},
-			want: listed([]types.Job{pinned}),
+			snap: job.Snapshot{Rows: []jobtypes.Job{pinned}},
+			want: listed([]jobtypes.Job{pinned}),
 		},
 		{name: "an empty store", snap: job.Snapshot{}, want: listed(nil)},
 		{
@@ -449,8 +456,8 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 		})
 	}
 
-	ctx := job.WithSnapshot(ws, job.Snapshot{Rows: []types.Job{pinned}})
-	_, err = MagusPutJob(ctx, pinned.ID, types.JobPut{State: new(types.StatePass)})
+	ctx := job.WithSnapshot(ws, job.Snapshot{Rows: []jobtypes.Job{pinned}})
+	_, err = MagusPutJob(ctx, pinned.ID, jobtypes.Put{State: new(jobtypes.StatePass)})
 	assert.ErrorContains(t, err, "read-only")
 	_, _, err = MagusRegisterJob(ctx, pinned.ID)
 	assert.ErrorContains(t, err, "read-only")
@@ -477,10 +484,10 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	repo.Write("api/x.go", "package api\n\nfunc X() {\n\tpanic(1)\n}\n")
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
-	check, err := types.ParseLeaseCheck("test .")
+	check, err := jobtypes.ParseLeaseCheck("test .")
 	require.NoError(t, err)
 	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, types.JobPut{Checkpoint: new(rev), Paths: types.JobPathsPut{Write: new(paths)}, Check: new(check), State: new(types.StateRunning)})
+		_, err := MagusPutJob(ctx, id, jobtypes.Put{Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: new(check), State: new(jobtypes.StateRunning)})
 		require.NoError(t, err)
 		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
@@ -490,8 +497,8 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, report.Overlaps, 1)
 	require.NotNil(t, report.Overlaps[0].Footprint, "the typed call measures footprints like `magus ls jobs`")
-	assert.Equal(t, types.FootprintShared, report.Overlaps[0].Footprint.Verdict, report.Overlaps[0].Footprint.Reason)
-	assert.Equal(t, job.MeasureOverlaps(ctx, root, report.Jobs, types.NewJobList(report.Jobs).Overlaps), report.Overlaps)
+	assert.Equal(t, jobtypes.FootprintShared, report.Overlaps[0].Footprint.Verdict, report.Overlaps[0].Footprint.Reason)
+	assert.Equal(t, job.MeasureOverlaps(ctx, root, report.Jobs, jobtypes.NewList(report.Jobs).Overlaps), report.Overlaps)
 }
 
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
@@ -502,7 +509,7 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 
 	_, err := MagusListJob(t.Context())
 	require.Error(t, err)
-	_, err = MagusPutJob(t.Context(), "u1", types.JobPut{})
+	_, err = MagusPutJob(t.Context(), "u1", jobtypes.Put{})
 	require.Error(t, err)
 	_, err = MagusClearJob(t.Context())
 	require.Error(t, err)
@@ -512,9 +519,9 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 func TestJobUnmergedAnswersFromThePinnedRows(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true}
-	tries := []types.Attempt{{Job: "r", N: 1, Status: types.AttemptStatus{Result: &types.JobResult{FollowUps: []string{"later"}}}}}
-	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row}, Attempts: tries})
+	row := jobtypes.Job{ID: "r", State: jobtypes.StatePass, ReadOnly: true}
+	tries := []jobtypes.Attempt{{Job: "r", N: 1, Status: jobtypes.AttemptStatus{Result: &jobtypes.Result{FollowUps: []string{"later"}}}}}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []jobtypes.Job{row}, Attempts: tries})
 
 	got, err := MagusUnmergedJob(ctx, t.TempDir())
 
@@ -545,7 +552,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 }
 
 // decodedPut decodes a magus\workspace().putJob opts map as the binding does.
-func decodedPut(t *testing.T, opts map[string]any) types.JobPut {
+func decodedPut(t *testing.T, opts map[string]any) jobtypes.Put {
 	t.Helper()
 	put, err := job.DecodePut(opts)
 	require.NoError(t, err)
@@ -567,7 +574,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
 	require.NoError(t, err)
-	assert.Equal(t, types.StatePass, got.State)
+	assert.Equal(t, jobtypes.StatePass, got.State)
 	assert.Equal(t, "the declared goal", got.Instructions(), "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.Paths.Write)
 	require.NotNil(t, got.Check, "the state advance must not erase the check")
@@ -580,7 +587,7 @@ func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{State: new(types.JobState("passed"))})
+	_, err := MagusPutJob(ctx, "u1", jobtypes.Put{State: new(jobtypes.State("passed"))})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 }
@@ -589,7 +596,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	readOnly := types.JobPut{ReadOnly: new(true)}
+	readOnly := jobtypes.Put{ReadOnly: new(true)}
 	_, err := MagusPutJob(ctx, "u1", readOnly)
 	require.NoError(t, err)
 	_, err = MagusPutJob(ctx, "u2", readOnly)
@@ -607,7 +614,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := jobtypes.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -622,7 +629,7 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
 	require.NoError(t, job.NewStore(job.Location{StateBase: stateBase, CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
-	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := jobtypes.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -640,11 +647,11 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	cacheDir, root := t.TempDir(), t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Agent: agent.Instructed("shared row"), ReadOnly: new(true)})
+	_, err := MagusPutJob(ctx, "u1", jobtypes.Put{Agent: jobtypes.Instructed("shared row"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
-	leases, err := store.List()
+	leases, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, leases, 1)
 	assert.Equal(t, "shared row", leases[0].Instructions())
@@ -931,34 +938,35 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 }
 
-// withJobGrader installs g for the test and restores whatever was installed. The
-// grader is process-wide, so a test that uses it does not run in parallel.
-func withJobGrader(t *testing.T, g job.CheckGrader) {
-	t.Helper()
-	previous := job.SetCheckGrader(g)
-	t.Cleanup(func() { job.SetCheckGrader(previous) })
+// gradedWorkspace is a ledgerWorkspace whose grader judges the checks a put declares, as
+// the root Magus's CheckGrader does.
+type gradedWorkspace struct {
+	*ledgerWorkspace
+	grader job.CheckGrader
 }
+
+func (g *gradedWorkspace) CheckGrader() job.CheckGrader { return g.grader }
 
 // magus\workspace().putJob forks by merge, and the multi-agent skill uses it.
 // So it is held to the guard's verdict on the check, as `magus job fork` is.
-// The installed grader refuses a denied check, with nothing written.
+// The workspace's grader refuses a denied check, with nothing written.
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string
-	withJobGrader(t, func(_ context.Context, root string, row types.Job) job.CheckVerdict {
+	grader := func(_ context.Context, root string, row jobtypes.Job) job.CheckVerdict {
 		roots = append(roots, root)
 		if row.Check.Target != "go-build" {
 			return job.CheckVerdict{}
 		}
 		return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
-	})
+	}
 
 	root := t.TempDir()
-	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
+	ctx := types.WithWorkspace(t.Context(), &gradedWorkspace{ledgerWorkspace: &ledgerWorkspace{cacheDir: t.TempDir(), root: root}, grader: grader})
 	put := func(check string) error {
-		c, err := types.ParseLeaseCheck(check)
+		c, err := jobtypes.ParseLeaseCheck(check)
 		require.NoError(t, err)
-		_, err = MagusPutJob(ctx, "w", types.JobPut{Paths: types.JobPathsPut{Write: new([]string{"run.go"})}, Check: &c})
+		_, err = MagusPutJob(ctx, "w", jobtypes.Put{Paths: jobtypes.PathsPut{Write: new([]string{"run.go"})}, Check: &c})
 		return err
 	}
 
@@ -970,12 +978,12 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 
 	stored, err := jobStoreFromContext(ctx, "job.list")
 	require.NoError(t, err)
-	rows, err := stored.List()
+	rows, err := stored.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused put writes nothing")
 
 	require.NoError(t, put("go::go-vet ."))
-	rows, err = stored.List()
+	rows, err = stored.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 }
@@ -986,7 +994,7 @@ func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(root, "src"), 0o755))
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Paths: types.JobPathsPut{Write: new([]string{"src"})}})
+	_, err := MagusPutJob(ctx, "u1", jobtypes.Put{Paths: jobtypes.PathsPut{Write: new([]string{"src"})}})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, types.WritePathIsDirectory, "the directory is named")
@@ -1000,47 +1008,47 @@ func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	var want map[string]any
-	require.NoError(t, json.Unmarshal([]byte(job.DeclarationSchema), &want))
+	require.NoError(t, codec.Unmarshal([]byte(job.DeclarationSchema), &want))
 	assert.Equal(t, want, got)
 	assert.Contains(t, got, "properties")
 }
 
 type ratedWorkspace struct {
 	ledgerWorkspace
-	tiers *agent.ModelTierSet
-	rows  []types.ModelPricing
+	tiers *tier.Set
+	rows  []model.Row
 }
 
-func (w *ratedWorkspace) ModelTiers(context.Context) *agent.ModelTierSet { return w.tiers }
-func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix         { return nil }
-func (w *ratedWorkspace) CheckSpawn(_, _ agent.ModelTier) error          { return nil }
+func (w *ratedWorkspace) ModelTiers(context.Context) *tier.Set   { return w.tiers }
+func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix { return nil }
+func (w *ratedWorkspace) CheckSpawn(_, _ tier.Tier) error        { return nil }
 func (w *ratedWorkspace) SpawnCeiling(context.Context) (builtin.Setting, error) {
 	return builtin.Setting{Decision: builtin.Advise}, nil
 }
-func (w *ratedWorkspace) Models(context.Context) func() []types.ModelPricing {
-	return func() []types.ModelPricing { return w.rows }
+func (w *ratedWorkspace) Models(context.Context) func() []model.Row {
+	return func() []model.Row { return w.rows }
 }
 
 func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	testkit.Isolate(t)
-	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []agent.ModelTierBounds{{}, {}, {}},
-		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort, agent.SkillVariantShort},
+		Bounds: []tier.Bounds{{}, {}, {}},
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort, tier.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	ws := &ratedWorkspace{
 		ledgerWorkspace: ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()},
 		tiers:           set,
-		rows:            []types.ModelPricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
+		rows:            []model.Row{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
 	}
 
-	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Agent: &agent.Spec{Instructions: "ship it", Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: new(true)})
+	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", jobtypes.Put{Agent: &jobtypes.Agent{Instructions: "ship it", Model: jobtypes.Model{ID: "opus"}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}, ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
-	tier := *got.ModelTier
-	tier.Reason = ""
-	assert.Equal(t, agent.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
+	assigned := *got.ModelTier
+	assigned.Reason = ""
+	assert.Equal(t, tier.Assignment{Name: "principal", Rank: 2, Model: "opus", Skills: assigned.Skills, Source: assigned.Source, Site: assigned.Site}, assigned)
 }
 
 // magus\cmd's nested magus gets the target layer; its caller's exec does not.
@@ -1101,6 +1109,6 @@ func (s *MagusCommandAllSuite) TestACommandCannotReenterThePoolItsStepHolds() {
 }
 
 func (s *MagusCommandAllSuite) TestACommandKeepsItsCallersLease() {
-	ctx := types.WithJobLease(s.T().Context(), "fleet/captured")
+	ctx := jobtypes.WithLease(s.T().Context(), "fleet/captured")
 	s.Equal([]string{"BAGGAGE=magus.lease=fleet/captured"}, batchCommandEnv(ctx))
 }

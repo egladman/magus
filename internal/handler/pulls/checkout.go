@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
 )
 
@@ -78,7 +78,7 @@ func (s *Service) checkout(ctx context.Context, pull *pullsv1.Pull) *pullsv1.Che
 		return &pullsv1.CheckoutPullResponse{Error: err.Error()}
 	}
 	var rec checkoutRecord
-	if err := json.Unmarshal(out, &rec); err != nil {
+	if err := codec.Unmarshal(out, &rec); err != nil {
 		return &pullsv1.CheckoutPullResponse{Error: "read the checkout record: " + err.Error()}
 	}
 	return &pullsv1.CheckoutPullResponse{Path: rec.Path, Remove: rec.Remove, Log: rec.log()}

@@ -16,17 +16,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/store/migrate"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 // tempLocation places a ledger entirely under temp directories, so no test resolves the real
@@ -38,12 +39,15 @@ import (
 // fixtures the same way CI does. The rules that turn on a bound actor pass their own.
 func tempLocation(t *testing.T, root string) Location {
 	t.Helper()
-	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &Actor{}}
+	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: allowEveryCheck}
 }
+
+// allowEveryCheck is a grader whose guard lets every check run.
+func allowEveryCheck(context.Context, string, job.Job) CheckVerdict { return CheckVerdict{} }
 
 // boundStore is a Store acting as the worker leased to id, sharing loc's ledger file.
 func boundStore(loc Location, id string) *Store {
-	loc.Actor = &Actor{Lease: id}
+	loc.Actor = &job.Actor{Lease: id}
 	return NewStore(loc)
 }
 
@@ -52,22 +56,22 @@ func tempStore(t *testing.T, root string) *Store {
 	return NewStore(tempLocation(t, root))
 }
 
-func lease(id string) types.Job {
-	return types.Job{
+func lease(id string) job.Job {
+	return job.Job{
 		ID:         id,
-		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "bounded"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
+		Agent:      &job.Agent{Instructions: "goal for " + id, Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}},
 		Checkpoint: "abc123",
-		Paths:      types.JobPaths{Write: []string{"internal/" + id}, Deny: []string{"MAGUS.md"}},
+		Paths:      job.Paths{Write: []string{"internal/" + id}, Deny: []string{"MAGUS.md"}},
 		Validation: "magus run test",
-		State:      types.StateDeclared,
+		State:      job.StateDeclared,
 	}
 }
 
 // seed writes a row whole, the way a fixture means it: every field this test declared and
 // nothing carried over from a previous one.
-func seed(t *testing.T, s *Store, row types.Job) types.Job {
+func seed(t *testing.T, s *Store, row job.Job) job.Job {
 	t.Helper()
-	stored, err := s.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	stored, err := s.Update(t.Context(), row.ID, func(cur *job.Job) { *cur = row })
 	require.NoError(t, err)
 	return stored
 }
@@ -76,35 +80,35 @@ func TestSoftPathsClaimNothingOfTheirOwn(t *testing.T) {
 	t.Parallel()
 
 	s := NewStore(tempLocation(t, t.TempDir()))
-	soft := func(id string, hard, soft []string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, Paths: types.JobPaths{Write: append(slices.Clone(hard), soft...), Soft: soft}}
+	soft := func(id string, hard, soft []string) job.Job {
+		return job.Job{ID: id, State: job.StateRunning, Paths: job.Paths{Write: append(slices.Clone(hard), soft...), Soft: soft}}
 	}
 	seed(t, s, soft("A", []string{"a.go"}, []string{"a_test.go"}))
 	seed(t, s, soft("B", []string{"b.go"}, []string{"a_test.go"}))
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
-	assert.Empty(t, types.NewJobList(rows).Overlaps, "two rows extending one test file overlap nowhere")
+	assert.Empty(t, job.NewList(rows).Overlaps, "two rows extending one test file overlap nowhere")
 
 	seed(t, s, soft("C", []string{"a_test.go"}, nil))
-	rows, err = s.List()
+	rows, err = s.List(t.Context())
 	require.NoError(t, err)
-	overlaps := types.NewJobList(rows).Overlaps
+	overlaps := job.NewList(rows).Overlaps
 	assert.Empty(t, overlaps, "a hard claim on a soft path is no overlap either")
 
 	seed(t, s, soft("D", []string{"a.go"}, nil))
-	rows, err = s.List()
+	rows, err = s.List(t.Context())
 	require.NoError(t, err)
-	assert.Len(t, types.NewJobList(rows).Overlaps, 1, "hard against hard still overlaps")
+	assert.Len(t, job.NewList(rows).Overlaps, 1, "hard against hard still overlaps")
 
 	t.Run("dropping an unwritten soft path records no release", func(t *testing.T) {
 		t.Parallel()
-		kept, err := s.Update(t.Context(), "A", func(cur *types.Job) { cur.Paths.Write, cur.Paths.Soft = nil, nil })
+		kept, err := s.Update(t.Context(), "A", func(cur *job.Job) { cur.Paths.Write, cur.Paths.Soft = nil, nil })
 		require.NoError(t, err)
 		assert.Equal(t, []string{"a.go"}, releasedPaths(kept), "a.go was held; a_test.go never was")
 	})
 }
 
-func releasedPaths(row types.Job) []string {
+func releasedPaths(row job.Job) []string {
 	out := make([]string, len(row.Releases))
 	for i, r := range row.Releases {
 		out[i] = r.Path
@@ -114,7 +118,7 @@ func releasedPaths(row types.Job) []string {
 
 // stamped copies the fields the store writes itself from got onto want, so a whole-row
 // comparison covers every other field.
-func stamped(want, got types.Job) types.Job {
+func stamped(want, got job.Job) job.Job {
 	want.Requires, want.RegisteredBy, want.Created, want.Updated = got.Requires, got.RegisteredBy, got.Created, got.Updated
 	want.Authority = got.Authority
 	want.Generation = got.Generation
@@ -124,48 +128,48 @@ func stamped(want, got types.Job) types.Job {
 func TestStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	stamped := func(row types.Job, generation int) types.Job {
+	stamped := func(row job.Job, generation int) job.Job {
 		row.Generation = generation
 		return row
 	}
 	tests := []struct {
 		name string
-		puts []types.Job
-		want []types.Job
+		puts []job.Job
+		want []job.Job
 	}{
 		{
 			name: "an unwritten ledger is empty, not an error",
 		},
 		{
 			name: "rows come back in the order they were first recorded",
-			puts: []types.Job{lease("a"), lease("b"), lease("c")},
-			want: []types.Job{stamped(lease("a"), 1), stamped(lease("b"), 1), stamped(lease("c"), 1)},
+			puts: []job.Job{lease("a"), lease("b"), lease("c")},
+			want: []job.Job{stamped(lease("a"), 1), stamped(lease("b"), 1), stamped(lease("c"), 1)},
 		},
 		{
 			name: "a second put on the same id replaces the row in place",
-			puts: []types.Job{
+			puts: []job.Job{
 				lease("a"), lease("b"),
-				{ID: "a", Agent: agent.Instructed("revised"), State: types.StatePass},
+				{ID: "a", Agent: job.Instructed("revised"), State: job.StatePass},
 			},
-			want: []types.Job{
+			want: []job.Job{
 				// The replacement carries no write paths, so the row's paths were
 				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
-					ID: "a", Agent: agent.Instructed("revised"), State: types.StatePass, Generation: 2,
-					Releases: []types.JobRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
+					ID: "a", Agent: job.Instructed("revised"), State: job.StatePass, Generation: 2,
+					Releases: []job.Release{{Path: "internal/a", Digest: job.DigestAbsent}},
 				},
 				stamped(lease("b"), 1),
 			},
 		},
 		{
 			name: "a read-only row carries no paths by design",
-			puts: []types.Job{{ID: "scout", Agent: agent.Instructed("inventory"), ReadOnly: true, State: types.StateRunning}},
-			want: []types.Job{{ID: "scout", Agent: agent.Instructed("inventory"), ReadOnly: true, State: types.StateRunning, Generation: 1}},
+			puts: []job.Job{{ID: "scout", Agent: job.Instructed("inventory"), ReadOnly: true, State: job.StateRunning}},
+			want: []job.Job{{ID: "scout", Agent: job.Instructed("inventory"), ReadOnly: true, State: job.StateRunning, Generation: 1}},
 		},
 		{
 			name: "no_return is stored as its own terminal state",
-			puts: []types.Job{{ID: "a", State: types.StateNoReturn}},
-			want: []types.Job{{ID: "a", State: types.StateNoReturn, Generation: 1}},
+			puts: []job.Job{{ID: "a", State: job.StateNoReturn}},
+			want: []job.Job{{ID: "a", State: job.StateNoReturn, Generation: 1}},
 		},
 	}
 
@@ -179,7 +183,7 @@ func TestStoreRoundTrip(t *testing.T) {
 				assert.NotZero(t, stored.Created, "the store stamps Created")
 				assert.NotZero(t, stored.Updated, "the store stamps Updated")
 			}
-			got, err := s.List()
+			got, err := s.List(t.Context())
 			require.NoError(t, err)
 			require.Len(t, got, len(tt.want))
 			for i, w := range tt.want {
@@ -203,7 +207,7 @@ func TestStoreIsPrivateToItsOwner(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	_, err := s.Update(t.Context(), "row", func(cur *types.Job) { cur.Agent = agent.Instructed("private") })
+	_, err := s.Update(t.Context(), "row", func(cur *job.Job) { cur.Agent = job.Instructed("private") })
 	require.NoError(t, err)
 
 	info, err := os.Stat(filepath.Dir(s.path))
@@ -219,11 +223,11 @@ func TestStorePutRequiresAnID(t *testing.T) {
 
 	ctx := t.Context()
 	s := tempStore(t, t.TempDir())
-	row := types.Job{Agent: agent.Instructed("no id")}
-	_, err := s.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
-	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
+	row := job.Job{Agent: job.Instructed("no id")}
+	_, err := s.Update(ctx, row.ID, func(cur *job.Job) { *cur = row })
+	require.ErrorIs(t, err, job.ErrNoID, "a row with no id could never be updated or referred to again")
 
-	got, err := s.List()
+	got, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, got, "a rejected put writes nothing")
 }
@@ -234,12 +238,12 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	first := seed(t, s, lease("a"))
 
-	second := seed(t, s, types.Job{ID: "a", State: types.StateFail})
+	second := seed(t, s, job.Job{ID: "a", State: job.StateFail})
 	assert.Equal(t, first.Created, second.Created, "an update keeps the row's original creation time")
 
 	// A caller-supplied timestamp is a fact about the caller's clock, so the store
 	// ignores it rather than recording a time the row was not written at.
-	third := seed(t, s, types.Job{ID: "a", Created: 1, Updated: 1})
+	third := seed(t, s, job.Job{ID: "a", Created: 1, Updated: 1})
 	assert.Equal(t, first.Created, third.Created)
 	assert.NotEqual(t, int64(1), third.Updated)
 }
@@ -259,9 +263,9 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	const rounds = 25
 	var wg sync.WaitGroup
 	errs := make(chan error, 2*rounds)
-	for _, apply := range []func(*types.Job){
-		func(u *types.Job) { u.State = types.StatePass },
-		func(u *types.Job) { u.Checkpoint = "deadbeef" },
+	for _, apply := range []func(*job.Job){
+		func(u *job.Job) { u.State = job.StatePass },
+		func(u *job.Job) { u.Checkpoint = "deadbeef" },
 	} {
 		wg.Add(1)
 		go func() {
@@ -278,10 +282,10 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 		require.NoError(t, e)
 	}
 
-	got, err := s.List()
+	got, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, types.StatePass, got[0].State, "the state advance survived the concurrent checkpoint write")
+	assert.Equal(t, job.StatePass, got[0].State, "the state advance survived the concurrent checkpoint write")
 	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
 	assert.Equal(t, "goal for a", got[0].Instructions(), "neither merge erased the row it did not name")
 }
@@ -314,7 +318,7 @@ func TestStoreUpdateSurvivesSeparateStores(t *testing.T) {
 			defer wg.Done()
 			for i := range rounds {
 				row := lease(fmt.Sprintf("w%d-%d", w, i))
-				_, err := s.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+				_, err := s.Update(ctx, row.ID, func(cur *job.Job) { *cur = row })
 				errs <- err
 			}
 		}()
@@ -325,7 +329,7 @@ func TestStoreUpdateSurvivesSeparateStores(t *testing.T) {
 		require.NoError(t, e)
 	}
 
-	got, err := NewStore(loc).List()
+	got, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	ids := make([]string, len(got))
 	for i, u := range got {
@@ -346,13 +350,13 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 
 	ctx := t.Context()
 	s := tempStore(t, t.TempDir())
-	stored, err := s.Update(ctx, "fresh", func(u *types.Job) { u.State = types.StateRunning })
+	stored, err := s.Update(ctx, "fresh", func(u *job.Job) { u.State = job.StateRunning })
 	require.NoError(t, err)
 	assert.NotZero(t, stored.Created)
-	assert.Equal(t, stamped(types.Job{ID: "fresh", State: types.StateRunning}, stored), stored)
+	assert.Equal(t, stamped(job.Job{ID: "fresh", State: job.StateRunning}, stored), stored)
 
-	_, err = s.Update(ctx, "", func(*types.Job) {})
-	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
+	_, err = s.Update(ctx, "", func(*job.Job) {})
+	require.ErrorIs(t, err, job.ErrNoID, "a merge with no id has no row to address")
 }
 
 // TestStorePutRecordsReleasedPaths is the early-release rule the skill
@@ -368,23 +372,23 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
 
 	s := tempStore(t, root)
-	seed(t, s, types.Job{
+	seed(t, s, job.Job{
 		ID:    "u1",
-		Paths: types.JobPaths{Write: []string{"kept.go", "released.go", "pkg", "gone.go"}},
-		State: types.StateRunning,
+		Paths: job.Paths{Write: []string{"kept.go", "released.go", "pkg", "gone.go"}},
+		State: job.StateRunning,
 	})
-	before, err := s.List()
+	before, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, before[0].Releases, "declaring a lease releases nothing")
 
-	stored := seed(t, s, types.Job{
+	stored := seed(t, s, job.Job{
 		ID:    "u1",
-		Paths: types.JobPaths{Write: []string{"kept.go"}},
-		State: types.StateRunning,
+		Paths: job.Paths{Write: []string{"kept.go"}},
+		State: job.StateRunning,
 	})
 
 	require.Len(t, stored.Releases, 3, "every path the put dropped is recorded, in the order it was owned")
-	assert.Equal(t, types.JobRelease{
+	assert.Equal(t, job.Release{
 		Path:       "released.go",
 		Digest:     "sha256:" + fileHash(t, filepath.Join(root, "released.go")),
 		ReleasedAt: stored.Releases[0].ReleasedAt,
@@ -392,11 +396,11 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	assert.NotZero(t, stored.Releases[0].ReleasedAt)
 	// A directory has no single content digest and a path with nothing on disk has no
 	// content at all; both say so by name rather than by a hash-shaped value.
-	assert.Equal(t, types.JobRelease{
-		Path: "pkg", Digest: types.DigestDir, ReleasedAt: stored.Releases[1].ReleasedAt,
+	assert.Equal(t, job.Release{
+		Path: "pkg", Digest: job.DigestDir, ReleasedAt: stored.Releases[1].ReleasedAt,
 	}, stored.Releases[1])
-	assert.Equal(t, types.JobRelease{
-		Path: "gone.go", Digest: types.DigestAbsent, ReleasedAt: stored.Releases[2].ReleasedAt,
+	assert.Equal(t, job.Release{
+		Path: "gone.go", Digest: job.DigestAbsent, ReleasedAt: stored.Releases[2].ReleasedAt,
 	}, stored.Releases[2])
 	for _, r := range stored.Releases {
 		assert.NotEqual(t, "kept.go", r.Path, "a path the lease still owns was not released")
@@ -411,15 +415,15 @@ func TestStorePutReleasesADeclaration(t *testing.T) {
 	const src = "package run\n\nfunc A() {\n\ta()\n}\n\nfunc B() {\n\tb()\n}\n"
 	root := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"run.go#A", "run.go#B", "run.go#Gone"}}, State: types.StateRunning})
+	seed(t, s, job.Job{ID: "u1", Paths: job.Paths{Write: []string{"run.go#A", "run.go#B", "run.go#Gone"}}, State: job.StateRunning})
 
-	stored := seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"run.go#B"}}, State: types.StateRunning})
+	stored := seed(t, s, job.Job{ID: "u1", Paths: job.Paths{Write: []string{"run.go#B"}}, State: job.StateRunning})
 
 	require.Len(t, stored.Releases, 2)
 	sum := sha256.Sum256([]byte("func A() {\n\ta()\n}\n\n"))
-	assert.Equal(t, types.JobRelease{Path: "run.go#A", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: stored.Releases[0].ReleasedAt}, stored.Releases[0],
+	assert.Equal(t, job.Release{Path: "run.go#A", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: stored.Releases[0].ReleasedAt}, stored.Releases[0],
 		"the declaration's own lines, the blank line git places in it included")
-	assert.Equal(t, types.DigestAbsent, stored.Releases[1].Digest, "a declaration no line is placed in any more is absent")
+	assert.Equal(t, job.DigestAbsent, stored.Releases[1].Digest, "a declaration no line is placed in any more is absent")
 }
 
 // A release is the store's to say, not the caller's. A put that does not
@@ -433,27 +437,27 @@ func TestStoreReleasesFollowTheWriteSet(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
 
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	seed(t, s, job.Job{ID: "u1", Paths: job.Paths{Write: []string{"a.go"}}})
 
-	released, err := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
+	released, err := s.Update(ctx, "u1", func(u *job.Job) { u.Paths.Write = nil })
 	require.NoError(t, err)
 	require.Len(t, released.Releases, 1)
 	first := released.Releases[0].Digest
 
-	advanced, err := s.Update(ctx, "u1", func(u *types.Job) { u.State = types.StateRunning })
+	advanced, err := s.Update(ctx, "u1", func(u *job.Job) { u.State = job.StateRunning })
 	require.NoError(t, err)
 	assert.Equal(t, released.Releases, advanced.Releases, "a state advance neither releases nor forgets anything")
 
 	// Owned again, edited, released again: the row keeps ONE entry, carrying the version
 	// the next agent actually inherits.
-	_, err = s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = []string{"a.go"} })
+	_, err = s.Update(ctx, "u1", func(u *job.Job) { u.Paths.Write = []string{"a.go"} })
 	require.NoError(t, err)
-	reowned, err := s.List()
+	reowned, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, reowned[0].Releases, "a path the lease owns again is not a path it released")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("two\n"), 0o644))
-	again, err := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
+	again, err := s.Update(ctx, "u1", func(u *job.Job) { u.Paths.Write = nil })
 	require.NoError(t, err)
 	require.Len(t, again.Releases, 1)
 	assert.NotEqual(t, first, again.Releases[0].Digest, "the second release digests the file as it stands now")
@@ -485,8 +489,8 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "a", "internal/a/store.go"))
 
 	forged := declared
-	forged.ReportedBase, forged.BaseVerdict, forged.Registered = "deadbeef", types.BaseDiverged, 1
-	forged.Unattributed = []types.JobUnattributedWrite{{Path: "docs/forged.md"}}
+	forged.ReportedBase, forged.BaseVerdict, forged.Registered = "deadbeef", job.BaseDiverged, 1
+	forged.Unattributed = []job.UnattributedWrite{{Path: "docs/forged.md"}}
 	stored := seed(t, s, forged)
 
 	assert.NotZero(t, stored.Registered)
@@ -494,7 +498,7 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	assert.Equal(t, "internal/a/store.go", stored.Unattributed[0].Path)
 
 	want := stamped(declared, stored)
-	want.ReportedBase, want.BaseVerdict = head, types.BaseMatch
+	want.ReportedBase, want.BaseVerdict = head, job.BaseMatch
 	want.Registered, want.CheckoutRoot, want.Unattributed = stored.Registered, stored.CheckoutRoot, stored.Unattributed
 	assert.Equal(t, want, stored, "the forged registration is dropped and the one the store observed kept")
 }
@@ -505,24 +509,24 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 	t.Parallel()
 
-	fork := func(criteria string, write, read []string) func(*types.Job) {
-		return Declare(types.Declaration{
-			ID: "a", Agent: agent.Instructed(criteria), Checkpoint: "abc123", Paths: types.JobPaths{Write: write, Read: read}, State: types.StateDeclared,
+	fork := func(criteria string, write, read []string) func(*job.Job) {
+		return Declare(job.Declaration{
+			ID: "a", Agent: job.Instructed(criteria), Checkpoint: "abc123", Paths: job.Paths{Write: write, Read: read}, State: job.StateDeclared,
 		}, 0)
 	}
 	for _, tc := range []struct {
 		name     string
-		from     types.JobState
+		from     job.State
 		criteria string
 		write    []string
 		read     []string
-		want     types.JobState
+		want     job.State
 		widened  int
 	}{
-		{name: "a running row widened keeps running", from: types.StateRunning, criteria: "goal", write: []string{"a.go", "b.go"}, want: types.StateRunning, widened: 1},
-		{name: "an exited row given read paths stays exited", from: types.StateExited, criteria: "goal", write: []string{"a.go"}, read: []string{"docs"}, want: types.StateExited},
-		{name: "a re-fork moving no boundary hands the job out again", from: types.StateExited, criteria: "goal", write: []string{"a.go"}, want: types.StateDeclared},
-		{name: "a rewritten criteria hands the job out again", from: types.StateRunning, criteria: "new goal", write: []string{"a.go", "b.go"}, want: types.StateDeclared, widened: 1},
+		{name: "a running row widened keeps running", from: job.StateRunning, criteria: "goal", write: []string{"a.go", "b.go"}, want: job.StateRunning, widened: 1},
+		{name: "an exited row given read paths stays exited", from: job.StateExited, criteria: "goal", write: []string{"a.go"}, read: []string{"docs"}, want: job.StateExited},
+		{name: "a re-fork moving no boundary hands the job out again", from: job.StateExited, criteria: "goal", write: []string{"a.go"}, want: job.StateDeclared},
+		{name: "a rewritten criteria hands the job out again", from: job.StateRunning, criteria: "new goal", write: []string{"a.go", "b.go"}, want: job.StateDeclared, widened: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -533,18 +537,18 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 			require.NoError(t, err)
 			taken, err := s.Exec(ctx, "a")
 			require.NoError(t, err)
-			_, err = s.Update(ctx, "a", func(u *types.Job) { u.State = tc.from })
+			_, err = s.Update(ctx, "a", func(u *job.Job) { u.State = tc.from })
 			require.NoError(t, err)
 
 			stored, err := s.Update(ctx, "a", fork(tc.criteria, tc.write, tc.read))
 			require.NoError(t, err)
 			assert.ElementsMatch(t, tc.write, stored.Paths.Write)
 			assert.ElementsMatch(t, tc.read, stored.Paths.Read)
-			assert.Equal(t, stamped(types.Job{
+			assert.Equal(t, stamped(job.Job{
 				ID:           "a",
-				Agent:        agent.Instructed(tc.criteria),
+				Agent:        job.Instructed(tc.criteria),
 				Checkpoint:   "abc123",
-				Paths:        types.JobPaths{Write: stored.Paths.Write, Read: stored.Paths.Read}, // order is not what this test pins
+				Paths:        job.Paths{Write: stored.Paths.Write, Read: stored.Paths.Read}, // order is not what this test pins
 				State:        tc.want,
 				ReportedBase: taken.ReportedBase,
 				BaseVerdict:  taken.BaseVerdict,
@@ -562,22 +566,22 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	t.Parallel()
 
-	check := types.LeaseCheck{Target: "go-test", Project: "."}
+	check := job.LeaseCheck{Target: "go-test", Project: "."}
 	for _, tc := range []struct {
 		name  string
-		fork  func(t *testing.T, s *Store, checkpoint string) (types.Job, error)
-		proof types.JobWriteProof
+		fork  func(t *testing.T, s *Store, checkpoint string) (job.Job, error)
+		proof job.WriteProof
 		// validated says the door validates the whole record, which stamps the row.
 		validated bool
 	}{
-		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
-			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
+		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (job.Job, error) {
+			row, _, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
 				`{"api_version":%q,"id":"a","agent":{"instructions": "goal", "worker": {"type": "resumed"}},"checkpoint":%q,"paths":{"write":["a.go"]},"check":{"target":"go-test","project":"."}}`,
-				types.JobAPIVersion, checkpoint)))
+				job.APIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
-		{name: "magus\\workspace().putJob", proof: types.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
+		{name: "magus\\workspace().putJob", proof: job.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (job.Job, error) {
 			put, err := DecodePut(map[string]any{
 				"agent": map[string]any{"instructions": "goal", "worker": map[string]any{"type": "resumed"}}, "checkpoint": checkpoint, "paths": map[string]any{"write": []any{"a.go"}}, "check": "go-test .",
 			})
@@ -595,14 +599,14 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			stored, err := tc.fork(t, tempStore(t, repo.Root()), head)
 			require.NoError(t, err)
 			assert.Equal(t, tc.validated, stored.Validated != 0, "validated stamp")
-			assert.Equal(t, types.Job{
+			assert.Equal(t, job.Job{
 				ID:           "a",
-				Agent:        agent.Instructed("goal"),
+				Agent:        job.Instructed("goal"),
 				Checkpoint:   head,
-				Paths:        types.JobPaths{Write: []string{"a.go"}},
+				Paths:        job.Paths{Write: []string{"a.go"}},
 				Check:        &check,
-				Validation:   check.String(),
-				State:        types.StateDeclared,
+				Validation:   CheckCommand(check),
+				State:        job.StateDeclared,
 				WriteProof:   tc.proof,
 				Generation:   1,
 				Created:      stored.Created,
@@ -635,7 +639,7 @@ func storedLines(t *testing.T, path string) []map[string]any {
 	var out []map[string]any
 	for line := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\n"), "\n") {
 		var m map[string]any
-		require.NoError(t, json.Unmarshal([]byte(line), &m), "line %q", line)
+		require.NoError(t, codec.Unmarshal([]byte(line), &m), "line %q", line)
 		out = append(out, m)
 	}
 	return out
@@ -676,12 +680,12 @@ func recordLine(id, condition, reason, spec, status string) string {
 		conditions = fmt.Sprintf(`"conditions":[{"type":%q,"status":"True","lastTransitionTime":"1970-01-01T00:00:01Z","reason":%q,"message":""}],`, condition, reason)
 	}
 	return fmt.Sprintf(`{"apiVersion":%q,"kind":"Job","metadata":{"name":%q},"spec":{%s},"status":{%s"created":1,"updated":1%s}}`,
-		RecordAPIVersion, id, spec, conditions, status)
+		job.APIVersion, id, spec, conditions, status)
 }
 
 // headerLine is the JobList line at this build's migration.
 func headerLine(extra string) string {
-	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, RecordAPIVersion, len(jobMigrations), extra)
+	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, job.APIVersion, len(jobMigrations()), extra)
 }
 
 // A row a newer magus wrote is an ordinary row to this one: updating it or any other row
@@ -701,21 +705,21 @@ func TestStoreKeepsANewerRowWhole(t *testing.T) {
 		assert.Equal(t, true, storedRow(t, path, "future")["futureTop"], msg)
 	}
 
-	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
+	_, err := s.Update(t.Context(), "other", func(u *job.Job) { u.Agent = job.Instructed("moved") })
 	require.NoError(t, err)
 	kept("an update of another row keeps this row's unknown members")
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"futureTop", "spec.futureSpec", "status.futureStatus"}, rows[0].Unknown, "the row names them")
 
-	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
+	_, err = s.Update(t.Context(), "future", func(u *job.Job) { u.State = job.StatePass })
 	require.NoError(t, err)
 	kept("an update of this row keeps its unknown members")
 	conditions := storedStatus(t, path, "future")["conditions"].([]any)
 	assert.Equal(t, "Complete", conditions[0].(map[string]any)["type"], "the field the update named was applied")
 
 	// A whole-row replace cannot drop what the record carries.
-	_, err = s.Update(t.Context(), "future", func(u *types.Job) { *u = types.Job{State: types.StateRunning} })
+	_, err = s.Update(t.Context(), "future", func(u *job.Job) { *u = job.Job{State: job.StateRunning} })
 	require.NoError(t, err)
 	kept("a whole-row replace keeps them")
 }
@@ -727,26 +731,26 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	s, notices := sweepStore(t, 10_000, time.Hour)
 	future := strings.Replace(recordLine("future", "Declared", "Declared", "", ""),
-		`"metadata":{"name":"future"}`, `"metadata":{"name":"future","annotations":{"batch.magus/requires":"never-implemented"}}`, 1)
+		`"metadata":{"name":"future"}`, `"metadata":{"name":"future","annotations":{"safetyscissors.job/requires":"never-implemented"}}`, 1)
 	other := strings.ReplaceAll(recordLine("other", "Running", "Running", "", ""), `"created":1,"updated":1`, `"created":9999,"updated":9999`)
 	path := plantRaw(t, s, fmt.Sprintf("%s\n%s\n%s", headerLine(""), future, other))
 	before := storedRow(t, path, "future")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 2, "the row is read, not hidden")
 	assert.Empty(t, notices.String(), "the sweep does not end a row it may not write, stale as it is")
-	assert.Equal(t, []types.JobReadOnly{{Job: "future", Lacks: []string{"never-implemented"}}},
-		types.NewJobList(rows).ReadOnly, "every listing names it")
+	assert.Equal(t, []job.ReadOnly{{Job: "future", Lacks: []string{"never-implemented"}}},
+		job.NewList(rows).ReadOnly, "every listing names it")
 
-	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
+	_, err = s.Update(t.Context(), "future", func(u *job.Job) { u.State = job.StatePass })
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (%s) lacks: update magus`,
-		RecordAPIVersion))
+		job.APIVersion))
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 
-	_, err = s.Update(t.Context(), "other", func(u *types.Job) { u.State = types.StatePass })
+	_, err = s.Update(t.Context(), "other", func(u *job.Job) { u.State = job.StatePass })
 	require.NoError(t, err, "every other row stays writable")
 	after := storedRow(t, path, "future")
 	for k, v := range before {
@@ -759,14 +763,14 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	path := plantRaw(t, s, `{"api_version":"magus.job/v1alpha99","requires":["jobs-v2"]}`)
+	path := plantRaw(t, s, `{"api_version":"safetyscissors.job/v1alpha99","requires":["jobs-v2"]}`)
 
-	_, err := s.List()
+	_, err := s.List(t.Context())
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
 	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (%s) lacks, update magus`,
-		path, RecordAPIVersion))
+		path, job.APIVersion))
 
-	_, err = s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
+	_, err = s.Update(t.Context(), "B", func(cur *job.Job) { *cur = lease("B") })
 	require.ErrorIs(t, err, types.JobStoreWriterOlder, "a write refuses the same file")
 }
 
@@ -776,13 +780,13 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	s.clock = func() time.Time { return time.Unix(1_700_000_000, 0) }
-	path := plantRaw(t, s, `{"api_version":"magus.job/v1alpha99","plan":"p1"}`)
+	path := plantRaw(t, s, `{"api_version":"safetyscissors.job/v1alpha99","plan":"p1"}`)
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
 
 	assert.Equal(t, []map[string]any{{
-		"apiVersion": string(RecordAPIVersion), "kind": "JobList", "migration": float64(len(jobMigrations)),
+		"apiVersion": string(job.APIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
 		"plan": "p1", "retained": float64(1_700_000_000),
 	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention stamp rides in it")
 }
@@ -799,7 +803,7 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	require.NoError(t, err)
 	before := storedLines(t, path)
 
-	_, err = s.Update(t.Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
+	_, err = s.Update(t.Context(), "a", func(u *job.Job) { u.Agent = job.Instructed("moved") })
 	require.NoError(t, err)
 	after := storedLines(t, path)
 	require.Len(t, after, len(before)+1, "one line appended, nothing rewritten")
@@ -808,13 +812,13 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	assert.Equal(t, map[string]any{"instructions": "moved", "worker": map[string]any{"type": "Resumed"}},
 		after[len(before)]["spec"].(map[string]any)["agent"], "enum values are CamelCase on the record")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, []string{rows[0].ID, rows[1].ID}, "a row keeps its first line's place")
 	assert.Equal(t, "moved", rows[0].Instructions())
 }
 
-// The file is rewritten to one line per row once superseded lines make it file.CompactDue.
+// The file is rewritten to one line per row once superseded lines make it codec.CompactDue.
 func TestStoreCompactsPastTheBound(t *testing.T) {
 	t.Parallel()
 
@@ -822,17 +826,17 @@ func TestStoreCompactsPastTheBound(t *testing.T) {
 	seed(t, s, lease("a"))
 	path, err := s.Path()
 	require.NoError(t, err)
-	bound := 2 + file.CompactSlack
+	bound := 2 + codec.CompactSlack
 	for i := range bound {
-		_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed(fmt.Sprint(i)) })
+		_, err := s.Update(t.Context(), "a", func(u *job.Job) { u.Agent = job.Instructed(fmt.Sprint(i)) })
 		require.NoError(t, err)
-		assert.False(t, file.CompactDue(len(storedLines(t, path)), 1))
+		assert.False(t, codec.CompactDue(len(storedLines(t, path)), 1))
 	}
 	lines := storedLines(t, path)
 	assert.Less(t, len(lines), bound, "the bound was crossed and the file rewritten")
 	assert.NotContains(t, lines[0], "id", "a rewrite puts the header first")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, fmt.Sprint(bound-1), rows[0].Instructions())
@@ -845,7 +849,7 @@ func TestStoreDeleteRewritesWithoutTheRow(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	seed(t, s, lease("a"))
 	seed(t, s, lease("b"))
-	_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
+	_, err := s.Update(t.Context(), "a", func(u *job.Job) { u.Agent = job.Instructed("moved") })
 	require.NoError(t, err)
 	_, err = s.Delete(t.Context(), "a", false)
 	require.NoError(t, err)
@@ -874,12 +878,12 @@ func TestStoreHandlesALineNoWriterFinished(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	_, err = s.List()
+	_, err = s.List(t.Context())
 	require.ErrorContains(t, err, "ends in a line no writer finished")
 
 	seed(t, s, lease("c"))
 	assert.Contains(t, notices.String(), "ended in a line no writer finished; the rewrite dropped it")
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "c"}, []string{rows[0].ID, rows[1].ID})
 }
@@ -896,13 +900,13 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(old, []byte(`{"jobs":[{"id":"a"}]}`+"\n"), 0o644))
 
-	_, err = s.List()
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	_, err = s.List(t.Context())
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, fmt.Sprintf("set it aside with `mv %s %s.old`", old, old), "the refusal names the move made below")
-	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
-	require.ErrorIs(t, err, file.ErrLegacyStore, "a write is refused too")
+	_, err = s.Update(t.Context(), "a", func(*job.Job) {})
+	require.ErrorIs(t, err, codec.ErrLegacyStore, "a write is refused too")
 	raw, err := os.ReadFile(old)
 	require.NoError(t, err)
 	assert.Equal(t, "{\"jobs\":[{\"id\":\"a\"}]}\n", string(raw))
@@ -934,14 +938,14 @@ func TestStoreClear(t *testing.T) {
 	dropped, err = s.Clear(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 2, dropped, "the count comes from inside the lock, so no door recomputes it")
-	got, err := s.List()
+	got, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, got, "a fresh plan starts from an empty ledger")
 
 	// One plan per repository: the rows are archived, not kept, so a put after a clear is
 	// row one.
 	seed(t, s, lease("c"))
-	got, err = s.List()
+	got, err = s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "c", got[0].ID)
@@ -978,7 +982,7 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 
 	// The point of the store: a plan outlives the process that declared it.
 	second := NewStore(loc)
-	got, err := second.List()
+	got, err := second.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, stamped(lease("a"), got[0]), got[0])
@@ -1004,7 +1008,7 @@ func TestLedgerIsSharedAcrossWorktreesOfOneRepository(t *testing.T) {
 	seed(t, orchestrator, lease("plan/unit"))
 
 	// A separate cache dir, which is what a second worktree actually has.
-	got, err := NewStore(Location{StateBase: base, CacheDir: t.TempDir(), Root: worker}).List()
+	got, err := NewStore(Location{StateBase: base, CacheDir: t.TempDir(), Root: worker}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "plan/unit", got[0].ID)
@@ -1018,18 +1022,18 @@ func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	path := plantRaw(t, s, fmt.Sprintf(
 		`{"id":"adj/store","api_version":%q,"state":"running","created":1,"updated":1,"woolgathering":7}`,
-		types.JobAPIVersion))
+		job.APIVersion))
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
+	_, err := s.Update(t.Context(), "adj/store", func(u *job.Job) { u.State = job.StatePass })
 	require.NoError(t, err)
 
 	assert.Equal(t, float64(7), storedRow(t, path, "adj/store")["woolgathering"],
 		"a member this binary does not know survives an update to a field it does know")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StatePass, rows[0].State, "the field the update named was still applied")
+	assert.Equal(t, job.StatePass, rows[0].State, "the field the update named was still applied")
 }
 
 func TestStoreListReturnsCopies(t *testing.T) {
@@ -1038,12 +1042,12 @@ func TestStoreListReturnsCopies(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	seed(t, s, lease("a"))
 
-	got, err := s.List()
+	got, err := s.List(t.Context())
 	require.NoError(t, err)
 	got[0].Paths.Write[0] = "mutated"
-	got[0].Agent = agent.Instructed("mutated")
+	got[0].Agent = job.Instructed("mutated")
 
-	again, err := s.List()
+	again, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, stamped(lease("a"), again[0]), again[0], "a caller mutating a returned row cannot reach the store")
 }
@@ -1057,7 +1061,7 @@ func TestStoreReportsAnUnreadableFile(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("{not json\n"), 0o644))
 
-	_, err = s.List()
+	_, err = s.List(t.Context())
 	assert.ErrorContains(t, err, path+":1: ", "a corrupt job store is reported, never silently read as empty")
 	assert.ErrorIs(t, err, types.StoreLineUndecodable)
 }
@@ -1068,18 +1072,18 @@ func TestRecordUnattributedWrite(t *testing.T) {
 	s := tempStore(t, root)
 	ctx := t.Context()
 
-	seed(t, s, types.Job{ID: "worker-1", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	seed(t, s, job.Job{ID: "worker-1", Paths: job.Paths{Write: []string{"a.go"}}})
 
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Len(t, rows[0].Unattributed, 1)
 	got := rows[0].Unattributed[0]
 	assert.Equal(t, "a.go", got.Path)
 	assert.NotEmpty(t, got.Digest, "the digest is the whole signal: without it there is nothing to compare")
-	assert.NotEqual(t, types.DigestAbsent, got.Digest)
+	assert.NotEqual(t, job.DigestAbsent, got.Digest)
 	assert.NotZero(t, got.At)
 }
 
@@ -1092,46 +1096,20 @@ func TestRecordUnattributedWriteKeepsOneRowPerPath(t *testing.T) {
 	s := tempStore(t, root)
 	ctx := t.Context()
 
-	seed(t, s, types.Job{ID: "worker-1", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	seed(t, s, job.Job{ID: "worker-1", Paths: job.Paths{Write: []string{"a.go"}}})
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	first := rows[0].Unattributed[0].Digest
 
 	require.NoError(t, os.WriteFile(path, []byte("second\n"), 0o644))
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
-	rows, err = s.List()
+	rows, err = s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows[0].Unattributed, 1, "one row per path")
 	assert.NotEqual(t, first, rows[0].Unattributed[0].Digest, "the newest write is the one that describes the tree")
-}
-
-// The guard calls this on every write it grades, so an unbounded list would make a long editing
-// session against a declared plan grow the ledger without limit.
-func TestRecordUnattributedWriteIsBounded(t *testing.T) {
-	root := t.TempDir()
-	s := tempStore(t, root)
-	ctx := t.Context()
-
-	const over = 5
-	var owned []string
-	for i := range MaxUnattributedWrites + over {
-		owned = append(owned, fmt.Sprintf("f%d.go", i))
-	}
-	seed(t, s, types.Job{ID: "worker-1", Paths: types.JobPaths{Write: owned}})
-	for _, p := range owned {
-		require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", p))
-	}
-
-	rows, err := s.List()
-	require.NoError(t, err)
-	kept := rows[0].Unattributed
-	require.Len(t, kept, MaxUnattributedWrites)
-	// Written f0..f(Max+over-1), so trimming to the last Max drops exactly the first `over`.
-	assert.Equal(t, fmt.Sprintf("f%d.go", over), kept[0].Path, "the oldest are dropped")
-	assert.Equal(t, fmt.Sprintf("f%d.go", MaxUnattributedWrites+over-1), kept[len(kept)-1].Path)
 }
 
 // The generation counts declared-spec changes only: a lifecycle move, a deadline and a
@@ -1147,12 +1125,12 @@ func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
 	wantCreated.Requires = nil // a row carrying only its generation stays writable by an older magus
 	assert.Equal(t, wantCreated, created)
 
-	row.State = types.StateRunning
+	row.State = job.StateRunning
 	row.Deadline = 1 << 40
 	assert.Equal(t, 1, seed(t, s, row).Generation, "state and deadline are not the spec")
 
 	require.NoError(t, s.RecordRework(t.Context(), "a"))
-	row.Agent = agent.Instructed("a sharper goal")
+	row.Agent = job.Instructed("a sharper goal")
 	assert.Equal(t, 2, seed(t, s, row).Generation)
 
 	row.Generation = 9
@@ -1188,7 +1166,7 @@ func TestStoreKeepsTheGenerationWhenWritePathsOnlyWiden(t *testing.T) {
 	assert.Equal(t, 2, seed(t, s, row).Generation, "narrowing or moving the paths is a new spec")
 
 	row.Paths.Write = []string{"cmd/magus/job.go", "types/job.go"}
-	row.Agent = agent.Instructed("a sharper goal")
+	row.Agent = job.Instructed("a sharper goal")
 	assert.Equal(t, 3, seed(t, s, row).Generation, "a widening beside another change still counts")
 }
 
@@ -1197,12 +1175,12 @@ func TestStoreKeepsTheGenerationWhenWritePathsOnlyWiden(t *testing.T) {
 func endAttempt(t *testing.T, s *Store) {
 	t.Helper()
 	require.NoError(t, s.RecordRework(t.Context(), "a"))
-	_, err := s.Update(t.Context(), "a", func(u *types.Job) {
-		u.State = types.StateFail
-		u.Attempt = &types.JobAttempt{Ref: "out1", Failed: true}
+	_, err := s.Update(t.Context(), "a", func(u *job.Job) {
+		u.State = job.StateFail
+		u.Attempt = &job.CapturedRun{Ref: "out1", Failed: true}
 	})
 	require.NoError(t, err)
-	fileTry(t, s, "a", &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}})
+	fileTry(t, s, "a", &job.Result{UnresolvedRisks: []string{"the second worktree was not tried"}})
 }
 
 // A fork of an ended row is the job's next attempt, and the one that
@@ -1223,11 +1201,11 @@ func TestStoreForkOfAnEndedRowFoldsTheAttempt(t *testing.T) {
 	require.Len(t, prior, 1)
 	got := prior[0]
 	// The trail of this checkout is empty, so the fold read no denial.
-	want := types.Attempt{Job: "a", N: 1, Status: types.AttemptStatus{
-		Ended: got.Status.Ended, End: types.AttemptEndExit,
-		Result: &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}},
-		State:  types.StateFail, ObservedGeneration: 1, Checkpoint: first.Checkpoint, ReworkRounds: 1,
-		FailingRefs: []string{"out1"}, DenialsKnown: true, Retry: types.RetryVerdict{Retryable: true},
+	want := job.Attempt{Job: "a", N: 1, Status: job.AttemptStatus{
+		Ended: got.Status.Ended, End: job.AttemptEndExit,
+		Result: &job.Result{UnresolvedRisks: []string{"the second worktree was not tried"}},
+		State:  job.StateFail, ObservedGeneration: 1, Checkpoint: first.Checkpoint, ReworkRounds: 1,
+		FailingRefs: []string{"out1"}, DenialsKnown: true, Retry: job.RetryVerdict{Retryable: true},
 	}}
 	assert.Equal(t, want, got)
 	assert.Equal(t, 2, tries.LiveN("a"))
@@ -1261,19 +1239,19 @@ func TestStoreRefusesAForkPastMaxAttempts(t *testing.T) {
 	row := lease("a")
 	row.MaxAttempts = 2
 	seed(t, s, row)
-	row.Agent = agent.Instructed("reworded while live")
+	row.Agent = job.Instructed("reworded while live")
 	seed(t, s, row)
 	endAttempt(t, s)
 	seed(t, s, row)
 	endAttempt(t, s)
 
-	_, err := s.Update(t.Context(), "a", func(u *types.Job) { *u = row })
-	require.ErrorIs(t, err, ErrMaxAttempts)
+	_, err := s.Update(t.Context(), "a", func(u *job.Job) { *u = row })
+	require.ErrorIs(t, err, job.ErrMaxAttempts)
 	assert.ErrorContains(t, err, "a used 2 of its 2 attempt(s)")
-	assert.Equal(t, types.RetryAfterPerson, types.ClassifyRetry(err).Change)
-	rows, err := s.List()
+	assert.Equal(t, job.RetryAfterPerson, types.ClassifyRetry(err).Change)
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, types.StateFail, rows[0].State, "a refused fork writes nothing")
+	assert.Equal(t, job.StateFail, rows[0].State, "a refused fork writes nothing")
 	assert.Equal(t, 2, triesIn(t, s).LiveN("a"))
 
 	row.MaxAttempts = 3
@@ -1295,7 +1273,7 @@ func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
 	}
 	deny(holderTrail, "lease-write")
 	ended := lease("a")
-	ended.State, ended.CheckoutRoot, ended.Created, ended.Updated = types.StateFail, holder, 1, 2
+	ended.State, ended.CheckoutRoot, ended.Created, ended.Updated = job.StateFail, holder, 1, 2
 
 	for _, tc := range []struct {
 		name      string
@@ -1339,7 +1317,7 @@ func TestRecordUnattributedWriteDoesNotInventARow(t *testing.T) {
 
 	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "never-declared", "a.go"))
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -1348,14 +1326,14 @@ func TestRecordUnattributedWriteDoesNotInventARow(t *testing.T) {
 // take minutes under load. Half exited uncollected and a third ended.
 // Each carries a criteria paragraph, aged across a month. Every row
 // was taken in checkout, so each exited one is a landing candidate.
-func realSizedRows(n int, now int64, checkout string) []types.Job {
+func realSizedRows(n int, now int64, checkout string) []job.Job {
 	criteria := strings.Repeat("Address the findings in the plan's section and say which were deferred. ", 6)
-	rows := make([]types.Job, n)
+	rows := make([]job.Job, n)
 	for i := range rows {
 		age := int64(i*2357) % (30 * 24 * 3600)
-		row := types.Job{
+		row := job.Job{
 			ID:           fmt.Sprintf("job-%04d", i),
-			Agent:        &agent.Spec{Instructions: criteria, Model: agent.Model{ID: "sonnet"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
+			Agent:        &job.Agent{Instructions: criteria, Model: job.Model{ID: "sonnet"}, Worker: job.Worker{Type: job.WorkerTypeResumed}},
 			Checkpoint:   "08566ec817db6ff7932f0a4d62d8a9ed08f8ca18",
 			Validation:   "magus run test . -- -run Store",
 			Registered:   now - age,
@@ -1368,15 +1346,15 @@ func realSizedRows(n int, now int64, checkout string) []types.Job {
 		}
 		switch r := i % 100; {
 		case r < 50:
-			row.State = types.StateExited
+			row.State = job.StateExited
 		case r < 87:
-			row.State = types.StateNoReturn
+			row.State = job.StateNoReturn
 		case r < 95:
-			row.State = types.StatePass
+			row.State = job.StatePass
 		case r < 98:
-			row.State = types.StateRunning
+			row.State = job.StateRunning
 		default:
-			row.State = types.StateDeclared
+			row.State = job.StateDeclared
 		}
 		if row.State.Terminal() && i > 0 && rows[i-1].State.Terminal() {
 			row.Parent = rows[i-1].ID
@@ -1395,7 +1373,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 	for _, tc := range []struct {
 		name   string
 		retain time.Duration
-		// due fills the file with superseded lines up to the bound file.CompactDue sets, the
+		// due fills the file with superseded lines up to the bound codec.CompactDue sets, the
 		// most a read ever decodes.
 		due bool
 	}{
@@ -1403,17 +1381,17 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		{"due", 0, true},
 		{"retained", config.Defaults().Jobs.Retain, false},
 	} {
-		s := NewStore(Location{StateBase: b.TempDir(), CacheDir: b.TempDir(), Root: b.TempDir(), Actor: &Actor{}})
+		s := NewStore(Location{StateBase: b.TempDir(), CacheDir: b.TempDir(), Root: b.TempDir(), Actor: &job.Actor{}})
 		s.retain = &tc.retain
 		s.clock = func() time.Time { return time.Unix(now, 0) }
 		stale := 2 * time.Hour
 		s.staleAfter = &stale
 		probes := 0
-		s.landed = func(context.Context, types.Job) string { probes++; return "" }
+		s.landed = func(context.Context, job.Job) string { probes++; return "" }
 		rows := realSizedRows(1100, now, b.TempDir())
 		// A pass long overdue, so this write runs one, as the first write past the
 		// interval does on a store that has grown this large.
-		if err := s.update(b.Context(), func(f *jobsFile) error { f.Jobs, f.Retained = rows, 1; return nil }); err != nil {
+		if err := s.Rewrite(b.Context(), func(f *job.Rows) error { f.Jobs, f.Retained = rows, 1; return nil }); err != nil {
 			b.Fatal(err)
 		}
 		if tc.due {
@@ -1422,14 +1400,14 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 				b.Fatal(err)
 			}
 			var superseded [][]byte
-			for len(rows)+1+len(superseded) < 2*len(rows)+file.CompactSlack {
-				line, err := json.Marshal(rows[len(superseded)%len(rows)])
+			for len(rows)+1+len(superseded) < 2*len(rows)+codec.CompactSlack {
+				line, err := codec.Marshal(rows[len(superseded)%len(rows)])
 				if err != nil {
 					b.Fatal(err)
 				}
 				superseded = append(superseded, line)
 			}
-			if err := file.AppendLines(path, superseded, 0o644); err != nil {
+			if err := codec.AppendLines(path, superseded, 0o644); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1438,7 +1416,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 			probes = 0
 			var n int
 			for b.Loop() {
-				got, err := s.List()
+				got, err := s.List(b.Context())
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -1449,7 +1427,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		})
 		b.Run(tc.name+"/update", func(b *testing.B) {
 			for b.Loop() {
-				if _, err := s.Update(b.Context(), "job-0098", func(u *types.Job) { u.Agent.Instructions += "." }); err != nil {
+				if _, err := s.Update(b.Context(), "job-0098", func(u *job.Job) { u.Agent.Instructions += "." }); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1462,11 +1440,11 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 // TestStoreRefusesAFileItCannotActOn).
 func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
 	s := tempStore(t, t.TempDir())
-	plantRaw(t, s, fmt.Sprintf(`{"api_version":%q,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, types.JobAPIVersion))
+	plantRaw(t, s, fmt.Sprintf(`{"api_version":%q,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, job.APIVersion))
 
-	_, err := s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
+	_, err := s.Update(t.Context(), "B", func(cur *job.Job) { *cur = lease("B") })
 	require.NoError(t, err)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "B", rows[0].ID)
@@ -1476,15 +1454,16 @@ func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
 func (s *jobSuite) migratingStore(body string, migrations ...migrate.Migration) (*Store, string, *bytes.Buffer) {
 	st := tempStore(s.T(), s.T().TempDir())
 	notices := &bytes.Buffer{}
-	st.notices, st.migrations = notices, migrations
+	st = st.withMigrations(migrations)
+	st.notices = notices
 	return st, plantRaw(s.T(), st, body), notices
 }
 
 // renamed is a migration that renames one spec member of every row carrying it.
 func renamed(from, to string) migrate.Migration {
 	return migrate.Migration{Name: fmt.Sprintf("%s to %s", from, to), Up: func(e migrate.Entry) (migrate.Entry, error) {
-		var spec map[string]json.RawMessage
-		if err := json.Unmarshal(e["spec"], &spec); err != nil {
+		var spec map[string]codec.RawMessage
+		if err := codec.Unmarshal(e["spec"], &spec); err != nil {
 			return nil, err
 		}
 		if v, ok := spec[from]; ok {
@@ -1492,7 +1471,7 @@ func renamed(from, to string) migrate.Migration {
 			spec[to] = v
 		}
 		var err error
-		e["spec"], err = json.Marshal(spec)
+		e["spec"], err = codec.Marshal(spec)
 		return e, err
 	}}
 }
@@ -1500,7 +1479,7 @@ func renamed(from, to string) migrate.Migration {
 // unmigrated is a header behind every migration, and row a running
 // with spec member name.
 func unmigrated(name string) string {
-	return fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion,
+	return fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion,
 		recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), ""))
 }
 
@@ -1508,14 +1487,14 @@ func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 	st, path, notices := s.migratingStore(unmigrated("goal"), renamed("goal", "parent"))
 	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
-	f, err := st.read()
+	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	s.Equal("ship it", f.Jobs[0].Parent, "the row reads under the name the migration gave it")
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0, "the header records the migration")
 	s.Equal(notice, notices.String())
 
-	_, err = st.read()
+	_, err = st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(notice, notices.String(), "a second read migrates nothing")
 }
@@ -1524,7 +1503,7 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 	body := strings.Replace(unmigrated("aim"), `"kind":"JobList"`, `"kind":"JobList","migration":1`, 1)
 	st, path, _ := s.migratingStore(body, renamed("goal", "aim"), renamed("aim", "intent"), renamed("intent", "parent"))
 
-	_, err := st.Update(s.T().Context(), "a", func(u *types.Job) { u.Checkpoint = "abc123" })
+	_, err := st.Update(s.T().Context(), "a", func(u *job.Job) { u.Checkpoint = "abc123" })
 	s.Require().NoError(err)
 	spec := storedSpec(s.T(), path, "a")
 	s.Equal("ship it", spec["parent"], "migrations 2 and 3 ran, in order, before the write")
@@ -1533,12 +1512,12 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 }
 
 func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
+	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
 
-	_, err := st.read()
+	_, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -1547,13 +1526,13 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
+	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, _ := s.migratingStore(body, renamed("goal", "parent"))
 
-	_, err := st.read()
+	_, err := st.Read(s.T().Context())
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder)
 	s.ErrorContains(err, fmt.Sprintf("job store %s is at migration 3, newer than this magus knows (1): update magus", path))
-	_, err = st.Update(s.T().Context(), "b", func(cur *types.Job) { *cur = lease("b") })
+	_, err = st.Update(s.T().Context(), "b", func(cur *job.Job) { *cur = lease("b") })
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder, "a write refuses it too")
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -1566,7 +1545,7 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 		return nil, errors.New("disk on fire")
 	}})
 
-	_, err := st.read()
+	_, err := st.Read(s.T().Context())
 	s.Require().ErrorContains(err, "migration 2 (fail): disk on fire")
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -1576,7 +1555,7 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 
 func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.migrations = []migrate.Migration{renamed("goal", "parent"), renamed("aim", "parent")}
+	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent"), renamed("aim", "parent")})
 	seed(s.T(), st, lease("a"))
 
 	path, err := st.Path()
@@ -1589,18 +1568,18 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 func checkoutStore(t *testing.T, root, state string, extra map[string]any) (*Store, string, *bytes.Buffer) {
 	t.Helper()
 	st := tempStore(t, root)
-	r := recordJob(types.Job{ID: "a", State: types.JobState(state), Created: 1, Updated: 1}, nil)
-	r.Spec.Unknown = map[string]json.RawMessage{"goal": json.RawMessage(`"ship it"`)}
-	line, err := json.Marshal(r)
+	line, err := job.MarshalRecord(job.Job{ID: "a", State: job.State(state), Created: 1, Updated: 1}, nil)
 	require.NoError(t, err)
 	var row map[string]any
-	require.NoError(t, json.Unmarshal(line, &row))
+	require.NoError(t, codec.Unmarshal(line, &row))
+	row["spec"].(map[string]any)["goal"] = "ship it"
 	maps.Copy(row["status"].(map[string]any), extra)
-	line, err = json.Marshal(row)
+	line, err = codec.Marshal(row)
 	require.NoError(t, err)
 	notices := &bytes.Buffer{}
-	st.notices, st.migrations = notices, []migrate.Migration{renamed("goal", "parent")}
-	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion, line)), notices
+	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent")})
+	st.notices = notices
+	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion, line)), notices
 }
 
 // forkCheckout is the worktree member of a row whose fork made root.
@@ -1614,10 +1593,10 @@ func (s *jobSuite) TestAJobCheckoutNeverMigratesTheSharedStore() {
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 
-	_, err = st.read()
+	_, err = st.Read(s.T().Context())
 	s.Require().ErrorContains(err, fmt.Sprintf("job store %s is at migration 0, and this magus writes migration 1 from %s, the checkout of live job a", path, root))
 	s.ErrorContains(err, "the root integrates this change and migrates the store once, from its own checkout")
-	_, err = st.Update(s.T().Context(), "b", func(cur *types.Job) { *cur = lease("b") })
+	_, err = st.Update(s.T().Context(), "b", func(cur *job.Job) { *cur = lease("b") })
 	s.Require().ErrorContains(err, "a job's checkout never migrates the store", "a write refuses it too")
 	after, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -1631,7 +1610,7 @@ func (s *jobSuite) TestADirectoryInsideAJobCheckoutNeverMigratesTheSharedStore()
 	s.Require().NoError(os.Mkdir(nested, 0o755))
 	st, _, _ := checkoutStore(s.T(), nested, "declared", forkCheckout(root))
 
-	_, err := st.read()
+	_, err := st.Read(s.T().Context())
 	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
 }
 
@@ -1639,7 +1618,7 @@ func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
 	root := s.T().TempDir()
 	st, path, _ := checkoutStore(s.T(), root, "pass", forkCheckout(root))
 
-	f, err := st.read()
+	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal("ship it", f.Jobs[0].Parent)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
@@ -1648,7 +1627,7 @@ func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
 func (s *jobSuite) TestTheRootMigratesWhileAJobHoldsAnotherCheckout() {
 	st, path, _ := checkoutStore(s.T(), s.T().TempDir(), "running", forkCheckout(s.T().TempDir()))
 
-	_, err := st.read()
+	_, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
@@ -1659,7 +1638,7 @@ func (s *jobSuite) TestACheckoutAJobWasOnlyTakenInMigrates() {
 	root := s.T().TempDir()
 	st, path, _ := checkoutStore(s.T(), root, "running", map[string]any{"checkoutRoot": root})
 
-	_, err := st.read()
+	_, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
@@ -1676,11 +1655,11 @@ func TestAgentSectionMigration(t *testing.T) {
 }
 
 // migrated is the row line after the job store's own migrations ran over it.
-func (s *agentSectionSuite) migrated(line string) types.Job {
+func (s *agentSectionSuite) migrated(line string) job.Job {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1"}`, line))
-	f, err := st.read()
+	st.notices = &bytes.Buffer{}
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1"}`, line))
+	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	row := storedRow(s.T(), path, f.Jobs[0].ID)
@@ -1693,10 +1672,10 @@ func (s *agentSectionSuite) migrated(line string) types.Job {
 func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
 	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"criteria":"ship it","model":"principal",` +
 		`"model_tier":{"name":"principal","rank":2,"skills":"short","source":"row"}}`)
-	s.Equal(&agent.Spec{
+	s.Equal(&job.Agent{
 		Instructions: "ship it",
-		Model:        agent.Model{Tier: "design"},
-		Worker:       agent.Worker{Type: agent.WorkerTypeResumed},
+		Model:        job.Model{Tier: "design"},
+		Worker:       job.Worker{Type: job.WorkerTypeResumed},
 	}, row.Agent)
 	s.Require().NotNil(row.ModelTier)
 	s.Equal("design", row.ModelTier.Name, "the resolved tier stays on the row, respelled by the four-tier migration")
@@ -1705,17 +1684,17 @@ func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
 func (s *agentSectionSuite) TestAModelTheTierMappedBecomesAnID() {
 	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"model":"opus",` +
 		`"model_tier":{"name":"principal","rank":2,"skills":"short","source":"row","model":"opus"}}`)
-	s.Equal(agent.Model{ID: "opus"}, row.Agent.Model)
+	s.Equal(job.Model{ID: "opus"}, row.Agent.Model)
 }
 
 func (s *agentSectionSuite) TestAModelWithNoTierRecordedBecomesAnID() {
 	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"model":"principal"}`)
-	s.Equal(agent.Model{ID: "principal"}, row.Agent.Model)
+	s.Equal(job.Model{ID: "principal"}, row.Agent.Model)
 }
 
 func (s *agentSectionSuite) TestFreshReasonStartsANewWorker() {
 	row := s.migrated(`{"id":"a","state":"declared","created":1,"updated":1,"follows":"b","fresh_reason":"b read the old limiter"}`)
-	s.Equal(&agent.Spec{Worker: agent.Worker{Type: agent.WorkerTypeNew, Reason: "b read the old limiter"}}, row.Agent)
+	s.Equal(&job.Agent{Worker: job.Worker{Type: job.WorkerTypeNew, Reason: "b read the old limiter"}}, row.Agent)
 }
 
 func (s *agentSectionSuite) TestAServerRowTakesNoSection() {
@@ -1740,11 +1719,11 @@ func TestWorkerResumedMigration(t *testing.T) {
 
 // migrated is the row after the job store's migrations ran over a file
 // already through migration 1.
-func (s *workerResumedSuite) migrated(line string) (types.Job, map[string]any) {
+func (s *workerResumedSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1","migration":1}`, line))
-	f, err := st.read()
+	st.notices = &bytes.Buffer{}
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":1}`, line))
+	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	return f.Jobs[0], storedSpec(s.T(), path, f.Jobs[0].ID)
@@ -1753,14 +1732,14 @@ func (s *workerResumedSuite) migrated(line string) (types.Job, map[string]any) {
 func (s *workerResumedSuite) TestAResumeWorkerBecomesResumed() {
 	row, stored := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,` +
 		`"agent":{"instructions":"ship it","worker":{"type":"resume"}}}`)
-	s.Equal(&agent.Spec{Instructions: "ship it", Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, row.Agent)
+	s.Equal(&job.Agent{Instructions: "ship it", Worker: job.Worker{Type: job.WorkerTypeResumed}}, row.Agent)
 	s.Equal(map[string]any{"type": "Resumed"}, stored["agent"].(map[string]any)["worker"], "the file holds the new spelling, CamelCase")
 }
 
 func (s *workerResumedSuite) TestANewWorkerKeepsItsReason() {
 	row, _ := s.migrated(`{"id":"a","state":"declared","created":1,"updated":1,` +
 		`"agent":{"worker":{"type":"new","reason":"b read the old limiter"}}}`)
-	s.Equal(agent.Worker{Type: agent.WorkerTypeNew, Reason: "b read the old limiter"}, row.Agent.Worker)
+	s.Equal(job.Worker{Type: job.WorkerTypeNew, Reason: "b read the old limiter"}, row.Agent.Worker)
 }
 
 func (s *workerResumedSuite) TestARowWithNoAgentIsUntouched() {
@@ -1785,14 +1764,14 @@ func (s *StaleStampSuite) SetupTest() {
 
 func (s *StaleStampSuite) TestRefusesAnIntegerRow() {
 	plantRaw(s.T(), s.store, `{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}`)
-	_, err := s.store.List()
+	_, err := s.store.List(s.T().Context())
 	s.ErrorContains(err, "record carries no apiVersion")
 	s.ErrorContains(err, fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", s.store.path))
 }
 
 func (s *StaleStampSuite) TestRefusesAMalformedVersion() {
 	plantRaw(s.T(), s.store, `{"id":"a","api_version":"13","state":"running","created":1,"updated":1}`)
-	_, err := s.store.List()
+	_, err := s.store.List(s.T().Context())
 	s.ErrorContains(err, fmt.Sprintf("move %s aside, or delete it", s.store.path))
 }
 
@@ -1814,12 +1793,12 @@ func (s *authoritySuite) SetupTest() {
 	s.loc = tempLocation(s.T(), s.repo.Root())
 }
 
-func (s *authoritySuite) fork(st *Store, row types.Job) (types.Job, error) {
-	return st.Update(s.T().Context(), row.ID, func(cur *types.Job) { *cur = row })
+func (s *authoritySuite) fork(st *Store, row job.Job) (job.Job, error) {
+	return st.Update(s.T().Context(), row.ID, func(cur *job.Job) { *cur = row })
 }
 
 func (s *authoritySuite) TestARootForkRecordsTheRootCheckoutsCommittedRevision() {
-	stored, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	stored, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.Equal(s.repo.Head(), stored.Authority)
 }
@@ -1827,50 +1806,50 @@ func (s *authoritySuite) TestARootForkRecordsTheRootCheckoutsCommittedRevision()
 func (s *authoritySuite) TestNeitherADeclaredCheckpointNorASentAuthoritySetsIt() {
 	head := s.repo.Head()
 	s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	stored, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Checkpoint: head, Authority: "forged"})
+	stored, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Checkpoint: head, Authority: "forged"})
 	s.Require().NoError(err)
 	s.Equal(s.repo.Head(), stored.Authority)
 }
 
 func (s *authoritySuite) TestAWorkersChildTakesItsParentsAuthority() {
-	parent, err := s.fork(NewStore(s.loc), types.Job{ID: "p", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateRunning})
+	parent, err := s.fork(NewStore(s.loc), job.Job{ID: "p", Paths: job.Paths{Write: []string{"a.go"}}, State: job.StateRunning})
 	s.Require().NoError(err)
 	worktree := s.repo.AddWorktree("p")
 	worktree.Commit("the worker's own", map[string]string{"a.go": "package a\n"})
 	worker := s.loc
-	worker.Root, worker.Actor = worktree.Root(), &Actor{Lease: "p"}
+	worker.Root, worker.Actor = worktree.Root(), &job.Actor{Lease: "p"}
 
-	child, err := s.fork(NewStore(worker), types.Job{ID: "p/c", Parent: "p", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	child, err := s.fork(NewStore(worker), job.Job{ID: "p/c", Parent: "p", Paths: job.Paths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.Equal(parent.Authority, child.Authority, "the child's checkout HEAD is the worker's commit, never its authority")
 }
 
 func (s *authoritySuite) TestALaterWriteCarriesTheAuthorityForward() {
-	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	first, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}})
+	again, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go", "b.go"}}})
 	s.Require().NoError(err)
 	s.Equal(first.Authority, again.Authority)
 }
 
 func (s *authoritySuite) TestAForkOfTheNextAttemptRecordsTheRootsHeadThen() {
-	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateFail})
+	_, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}, State: job.StateFail})
 	s.Require().NoError(err)
 	later := s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateDeclared})
+	again, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}, State: job.StateDeclared})
 	s.Require().NoError(err)
 	s.Equal(later, again.Authority)
 }
 
 func (s *authoritySuite) TestAForkWhereNoVersionControlAnswersRecordsNone() {
-	stored, err := s.fork(tempStore(s.T(), s.T().TempDir()), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	stored, err := s.fork(tempStore(s.T(), s.T().TempDir()), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.Empty(stored.Authority)
 }
 
 func (s *authoritySuite) TestTheRootAdvancesARowsAuthority() {
-	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
+	_, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	later := s.repo.Commit("merged", map[string]string{"b.txt": "b\n"})
 	advanced, err := NewStore(s.loc).AdvanceAuthority(s.T().Context(), "a")
@@ -1879,14 +1858,14 @@ func (s *authoritySuite) TestTheRootAdvancesARowsAuthority() {
 }
 
 func (s *authoritySuite) TestALeasedCallerCannotAdvanceItsOwnAuthority() {
-	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateRunning})
+	first, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}, State: job.StateRunning})
 	s.Require().NoError(err)
 	s.repo.Commit("the worker's own", map[string]string{"b.txt": "b\n"})
 	_, err = boundStore(s.loc, "a").AdvanceAuthority(s.T().Context(), "a")
-	var refused *RefusedError
+	var refused *job.RefusedError
 	s.Require().ErrorAs(err, &refused)
 	s.Contains(err.Error(), "only the root advances a row's authority")
-	rows, err := NewStore(s.loc).List()
+	rows, err := NewStore(s.loc).List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(first.Authority, rows[0].Authority)
 }
@@ -1894,4 +1873,25 @@ func (s *authoritySuite) TestALeasedCallerCannotAdvanceItsOwnAuthority() {
 func (s *authoritySuite) TestAdvancingAnUndeclaredRowFails() {
 	_, err := NewStore(s.loc).AdvanceAuthority(s.T().Context(), "nobody")
 	s.ErrorContains(err, "nobody is not declared")
+}
+
+type checkArgvSuite struct{ suite.Suite }
+
+func TestCheckArgv(t *testing.T) { suite.Run(t, new(checkArgvSuite)) }
+
+func (s *checkArgvSuite) TestATargetCheckRunsThroughMagusRun() {
+	got := checkArgv(job.LeaseCheck{Target: "test", Args: []string{"-run", "TestA B"}, NoDefaultCharms: true})
+
+	s.Equal([]string{hint.BinaryName(), "run", "test", ".", "--no-default-charms", "--", "-run", "TestA B"}, got)
+}
+
+func (s *checkArgvSuite) TestAScriptCheckRunsRecordedOrItsTests() {
+	s.Equal([]string{hint.BinaryName(), "buzz", "--record", "probe.buzz"}, checkArgv(job.LeaseCheck{Script: "probe.buzz"}))
+	s.Equal([]string{hint.BinaryName(), "buzz", "-t", "probe.buzz", "--", "x"}, checkArgv(job.LeaseCheck{Script: "probe.buzz", Test: true, Args: []string{"x"}}))
+}
+
+func (s *checkArgvSuite) TestAStoreWithNoCheckoutHasNoCommand() {
+	_, _, err := (&Store{}).checkCommand(job.Job{}, job.Goal{})
+
+	s.ErrorContains(err, "no checkout")
 }

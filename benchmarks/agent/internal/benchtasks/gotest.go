@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // testFuncs maps the `go test -v` name of every test in one directory's test files to its
@@ -160,7 +160,7 @@ func parseTestJSON(r io.Reader) (testRun, error) {
 			continue
 		}
 		var ev testEvent
-		if err := json.Unmarshal(line, &ev); err != nil {
+		if err := codec.Unmarshal(line, &ev); err != nil {
 			return testRun{}, fmt.Errorf("go test -json: %w", err)
 		}
 		switch ev.Action {

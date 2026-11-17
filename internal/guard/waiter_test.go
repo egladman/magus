@@ -18,7 +18,10 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -43,7 +46,7 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		{"sleep 30 && echo done", false},
 		{"echo 'sleep 30; magus server status'", false},
 	} {
-		v := Evaluate(deps, tt.line)
+		v := Evaluate(t.Context(), deps, tt.line)
 		if tt.want {
 			assert.Equal(t, denyRuleSleepPoll, v.Rule.Name, tt.line)
 			assert.Contains(t, v.Deny, "background the work as `magus job exec --timeout <d> -- <command>` and wait for its notice", tt.line)
@@ -52,7 +55,7 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		}
 	}
 	// It denies by default too.
-	v := Evaluate(Dependencies{}, "sleep 30; ./magus server status")
+	v := Evaluate(t.Context(), Dependencies{}, "sleep 30; ./magus server status")
 	assert.Equal(t, denyRuleSleepPoll, v.Rule.Name)
 	assert.NotEmpty(t, v.Deny)
 }
@@ -103,12 +106,12 @@ func TestSpawnWaitsFires(t *testing.T) {
 // sleep-poll to advise.
 func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	judge := func(deps Dependencies, line string) types.GuardJudgment {
+	judge := func(deps Dependencies, line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "timers", Host: "claude-code", CallBackground: true})
 	}
 
 	v := judge(Dependencies{}, "sleep 540")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSleepPoll)}, judgedAs(v))
 
 	lowered := withSetting(string(denyRuleSleepPoll), builtin.Advise)
 	piled := Dependencies{Builtins: map[string]builtin.Setting{
@@ -117,20 +120,20 @@ func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 	}}
 	for i := range monitorPileAdvise - 1 {
 		v = judge(lowered, fmt.Sprintf("sleep %s && echo tick", strings.Repeat("9", i+2)))
-		assert.NotEqual(t, "deny", v.Decision)
+		assert.NotEqual(t, verdict.Deny, v.Decision)
 	}
 	v = judge(piled, "sleep 300")
-	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, judgedAs(v),
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleMonitorPile)}, judgedAs(v),
 		"the third live waiter is advised against")
 	for range monitorPileDeny - monitorPileAdvise - 1 {
 		judge(lowered, "sleep 301")
 	}
 	v = judge(piled, "sleep 302")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
 
 	// A settle in the foreground is not a waiter.
 	v = Judge(ctx, Dependencies{}, Request{Input: "sleep 2", Session: "timers", Host: "claude-code"})
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 }
 
 func TestTimerIsRefusedAndWorkPasses(t *testing.T) {
@@ -159,7 +162,7 @@ func TestTimerIsRefusedAndWorkPasses(t *testing.T) {
 		}
 		v := Judge(ctx, raised, Request{Input: tt.line, Session: "timers-" + name, Host: "claude-code", CallBackground: tt.background})
 		if tt.deny {
-			assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v), name)
+			assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSleepPoll)}, judgedAs(v), name)
 			assert.Contains(t, v.Reason, "wait for that notice or do other work", name)
 		} else {
 			assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, name)
@@ -171,21 +174,21 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 	const title = "orchestrator/impl guard-facts"
 	for _, tt := range []struct {
 		name      string
-		row       types.Job
+		row       job.Job
 		first     bool
 		stopped   bool
 		continued bool
 		want      bool
 	}{
 		// A row stays running after its worker dies, so running alone says nothing.
-		{"a running row no spawn here took", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, false, false, false, false},
-		{"a running row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, false, false, true},
-		{"a declared row nobody took", types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}, false, false, false, false},
-		{"a declared row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, false, false, true},
-		{"a finished row", types.Job{ID: "guard-facts", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, false, false, false},
+		{"a running row no spawn here took", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, false, false, false, false},
+		{"a running row an earlier spawn took", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, true, false, false, true},
+		{"a declared row nobody took", job.Job{ID: "guard-facts", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a/**"}}}, false, false, false, false},
+		{"a declared row an earlier spawn took", job.Job{ID: "guard-facts", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a/**"}}}, true, false, false, true},
+		{"a finished row", job.Job{ID: "guard-facts", State: job.StatePass, Paths: job.Paths{Write: []string{"a/**"}}}, true, false, false, false},
 		// Gap 218: the host's stop releases the row, and a continue takes it back.
-		{"a running row whose worker stopped", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, true, false, false},
-		{"a running row whose stopped worker was continued", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, true, true, true},
+		{"a running row whose worker stopped", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, true, true, false, false},
+		{"a running row whose stopped worker was continued", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, true, true, true, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := fleetFixture(t, tt.row)
@@ -207,7 +210,7 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 				"tool_input": map[string]any{"description": title, "prompt": "Carry the job to its done-when."},
 			}), Host: "claude-code"})
 			if tt.want {
-				require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnDuplicate)}, judgedAs(v), v.Context)
+				require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnDuplicate)}, judgedAs(v), v.Context)
 				assert.Contains(t, v.Reason, "guard-facts")
 			} else {
 				assert.NotEqual(t, string(denyRuleSpawnDuplicate), v.Rule)
@@ -289,10 +292,10 @@ func TestSleepPollLeavesTheOrchestratorsBudgetWait(t *testing.T) {
 func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	assert.Empty(t, BudgetFull(types.MachineSnapshot{}, now), "an unmeasured budget")
-	assert.Empty(t, BudgetFull(types.MachineSnapshot{BudgetSlots: 4, HeldSlots: 3, BudgetMB: 8192, HeldMB: 1024}, now))
+	assert.Empty(t, BudgetFull(budget.Snapshot{}, now), "an unmeasured budget")
+	assert.Empty(t, BudgetFull(budget.Snapshot{BudgetSlots: 4, HeldSlots: 3, BudgetMB: 8192, HeldMB: 1024}, now))
 
-	full := BudgetFull(types.MachineSnapshot{BudgetSlots: 4, HeldSlots: 2, BudgetMB: 8192, HeldMB: 8192, Holders: []types.MachineClaimant{
+	full := BudgetFull(budget.Snapshot{BudgetSlots: 4, HeldSlots: 2, BudgetMB: 8192, HeldMB: 8192, Holders: []budget.Claimant{
 		{Target: "go-test", Dir: "/w/a", Since: now.Add(-90 * time.Second)},
 	}}, now)
 	assert.Contains(t, full, "the build budget is full (mem ")
@@ -304,7 +307,7 @@ func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
 
 func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	spawn := func(agent, description string) types.GuardJudgment {
+	spawn := func(agent, description string) verdict.Judgment {
 		env := map[string]any{
 			"session_id": "nested", "hook_event_name": "PreToolUse", "tool_name": "Agent",
 			"tool_input": map[string]any{"description": description, "prompt": "Carry it out."},
@@ -315,20 +318,20 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 		return Judge(ctx, withSetting(string(advisorySpawnNestedWaiter), builtin.Advise), Request{Input: hookJSON(t, env), Host: "claude-code"})
 	}
 	v := spawn("", "wait for the workers to finish")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWaiter)}, judgedAs(v))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnWaiter)}, judgedAs(v))
 
 	nested := hookJSON(t, map[string]any{
 		"session_id": "nested-default", "hook_event_name": "PreToolUse", "tool_name": "Agent", "agent_id": "a1b2c3",
 		"tool_input": map[string]any{"description": "add the watch flag", "prompt": "Carry it out."},
 	})
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(Judge(ctx, Dependencies{}, Request{Input: nested, Host: "claude-code"})),
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(advisorySpawnNestedWaiter)}, judgedAs(Judge(ctx, Dependencies{}, Request{Input: nested, Host: "claude-code"})),
 		"refused by default")
 
 	v = spawn("a1b2c3", "add the watch flag")
-	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(v),
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(advisorySpawnNestedWaiter)}, judgedAs(v),
 		"set to advise, a worker's helper speaking of watching is advised against")
-	assert.Equal(t, "pass", spawn("a1b2c3", "add the watch flag").Decision, "once a session")
-	assert.Equal(t, "pass", spawn("", "add the watch flag").Decision, "the root is not nested")
+	assert.Equal(t, verdict.Defer, spawn("a1b2c3", "add the watch flag").Decision, "once a session")
+	assert.Equal(t, verdict.Defer, spawn("", "add the watch flag").Decision, "the root is not nested")
 }
 
 // writeRefusalLog writes a run log for args started at at, its target refused with MGS3009
@@ -356,7 +359,7 @@ func writeCodedLog(t *testing.T, runsDir, inv string, at time.Time, code types.D
 		result,
 		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindFinished, Status: result.Status},
 	} {
-		line, err := json.Marshal(ev)
+		line, err := codec.Marshal(ev)
 		require.NoError(t, err)
 		body = append(append(body, line...), '\n')
 	}
@@ -482,8 +485,8 @@ func TestJudgeRefusesARetryAfterARefusal(t *testing.T) {
 
 	v := Judge(ctx, Dependencies{}, Request{Input: "./magus run lint ."})
 	assert.Contains(t, v.Reason, "refused with MGS3009")
-	assert.Equal(t, types.GuardJudgment{
-		APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleSleepPoll),
+	assert.Equal(t, verdict.Judgment{
+		APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: v.Reason, Rule: string(denyRuleSleepPoll),
 	}, v, v.Reason)
 }
 
@@ -507,7 +510,7 @@ func TestEveryServedBackgroundCheckPassesTheGuardForEveryRole(t *testing.T) {
 }
 
 func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), "kill -0 4242 && ./magus run go-test .")
+	v := Evaluate(t.Context(), strict(testDependencies()), "kill -0 4242 && ./magus run go-test .")
 	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
 	require.Len(t, v.Next, 1)
 	assert.Contains(t, v.Next[0].Run, "job exec --timeout")
@@ -516,7 +519,7 @@ func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
 }
 
 func TestProcessPollWithNoRunOnTheLineReadsStatus(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), "ps -p 4242")
+	v := Evaluate(t.Context(), strict(testDependencies()), "ps -p 4242")
 	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run)
@@ -528,7 +531,7 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 	worker := figuresLease()
 	worker.Parent = "figures"
 	ctx, _ := fleetFixture(t, worker)
-	standBudget(t, types.MachineSnapshot{Holders: []types.MachineClaimant{{PID: 4242, Target: "go-test", Project: "."}}})
+	standBudget(t, budget.Snapshot{Holders: []budget.Claimant{{PID: 4242, Target: "go-test", Project: "."}}})
 	for _, line := range []string{
 		"caffeinate -w 4242",
 		"caffeinate -i -w 4242",
@@ -539,7 +542,7 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(v), line)
 	}
 	probe := Judge(ctx, Dependencies{}, Request{Input: "kill -0 4242 && ./magus run go-test .", Lease: worker.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
 	for _, line := range []string{
 		"caffeinate -w 9999",
 		"wait 9999",
@@ -673,7 +676,7 @@ func TestSleepFormPollSuite(t *testing.T) {
 }
 
 func (s *SleepFormPollSuite) refusesBeforeAStatusRead(sleeper string) {
-	v := Evaluate(Dependencies{}, sleeper+"; ./magus server status")
+	v := Evaluate(s.T().Context(), Dependencies{}, sleeper+"; ./magus server status")
 	s.Equal(denyRuleSleepPoll, v.Rule.Name, sleeper)
 }
 
@@ -721,7 +724,7 @@ func (s *WaitRemedySuite) SetupTest() {
 }
 
 func (s *WaitRemedySuite) evaluate(line string) ShellVerdict {
-	return Evaluate(Dependencies{scope: workspaceScope{root: s.root}}, line)
+	return Evaluate(s.T().Context(), Dependencies{scope: workspaceScope{root: s.root}}, line)
 }
 
 func (s *WaitRemedySuite) TestBoundIsTheMeasuredRunWithHalfAgain() {

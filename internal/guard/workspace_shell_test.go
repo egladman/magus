@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 func TestWorkspaceShellDenyStrengthensAPass(t *testing.T) {
@@ -13,13 +15,13 @@ func TestWorkspaceShellDenyStrengthensAPass(t *testing.T) {
 	deps := testDependencies()
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "no-curl-prod",
-		Decision: "deny",
+		Decision: verdict.Deny,
 		Program:  "curl",
 		Args:     []string{"https://prod.example/health"},
 		Reason:   "do not hit prod from an agent shell",
 	}}
 
-	v := Evaluate(deps, "curl -s https://prod.example/health")
+	v := Evaluate(t.Context(), deps, "curl -s https://prod.example/health")
 	assert.Equal(t, denyRuleName("workspace:no-curl-prod"), v.Rule.Name)
 	assert.Contains(t, v.Deny, "do not hit prod")
 	assert.Empty(t, v.Context)
@@ -30,12 +32,12 @@ func TestWorkspaceShellDenySeesBashDashC(t *testing.T) {
 	deps := testDependencies()
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "no-terraform",
-		Decision: "deny",
+		Decision: verdict.Deny,
 		Program:  "terraform",
 		Reason:   "use the workspace terraform target",
 	}}
 
-	v := Evaluate(deps, `bash -c 'terraform apply -auto-approve'`)
+	v := Evaluate(t.Context(), deps, `bash -c 'terraform apply -auto-approve'`)
 	assert.Equal(t, denyRuleName("workspace:no-terraform"), v.Rule.Name)
 }
 
@@ -44,12 +46,12 @@ func TestWorkspaceShellAdviseFillsSilence(t *testing.T) {
 	deps := testDependencies()
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "advise-jq",
-		Decision: "advise",
+		Decision: verdict.Advise,
 		Program:  "jq",
 		Reason:   "prefer magus -o json when the input is a magus record",
 	}}
 
-	v := Evaluate(deps, "jq . file.json")
+	v := Evaluate(t.Context(), deps, "jq . file.json")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "prefer magus -o json")
 }
@@ -59,12 +61,12 @@ func TestWorkspaceShellAdviseDoesNotReplaceBuiltInAdvise(t *testing.T) {
 	deps := testDependencies()
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "advise-rg",
-		Decision: "advise",
+		Decision: verdict.Advise,
 		Program:  "rg",
 		Reason:   "workspace-specific rg note",
 	}}
 
-	v := Evaluate(deps, "rg HandleRequest")
+	v := Evaluate(t.Context(), deps, "rg HandleRequest")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus refs")
 	assert.NotContains(t, v.Context, "workspace-specific rg note")
@@ -75,12 +77,12 @@ func TestWorkspaceShellDenyEscalatesBuiltInAdvise(t *testing.T) {
 	deps := testDependencies()
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "deny-rg",
-		Decision: "deny",
+		Decision: verdict.Deny,
 		Program:  "rg",
 		Reason:   "this workspace forbids repo-wide rg",
 	}}
 
-	v := Evaluate(deps, "rg Foo")
+	v := Evaluate(t.Context(), deps, "rg Foo")
 	assert.Equal(t, denyRuleName("workspace:deny-rg"), v.Rule.Name)
 	assert.Contains(t, v.Deny, "forbids repo-wide rg")
 }
@@ -90,13 +92,13 @@ func TestBuiltInDenyBeatsWorkspaceAdvise(t *testing.T) {
 	deps := strict(testDependencies())
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "advise-go-test",
-		Decision: "advise",
+		Decision: verdict.Advise,
 		Program:  "go",
 		Args:     []string{"test"},
 		Reason:   "should never appear: built-in deny wins",
 	}}
 
-	v := Evaluate(deps, "go test ./...")
+	v := Evaluate(t.Context(), deps, "go test ./...")
 	require.NotEmpty(t, v.Deny)
 	assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 	assert.NotContains(t, v.Deny, "should never appear")
@@ -114,25 +116,25 @@ func TestUnparsedWorkspaceShell(t *testing.T) {
 func (s *UnparsedWorkspaceShellSuite) SetupTest() {
 	s.deps = testDependencies()
 	s.deps.ShellRules = []WorkspaceShellRule{
-		{Name: "no-curl", Decision: "deny", Program: "curl", Args: []string{"https://prod"}, Reason: "do not hit prod"},
-		{Name: "advise-jq", Decision: "advise", Program: "jq", Reason: "prefer -o json"},
+		{Name: "no-curl", Decision: verdict.Deny, Program: "curl", Args: []string{"https://prod"}, Reason: "do not hit prod"},
+		{Name: "advise-jq", Decision: verdict.Advise, Program: "jq", Reason: "prefer -o json"},
 	}
 }
 
 func (s *UnparsedWorkspaceShellSuite) TestALineNamingADeniedProgramIsDenied() {
-	v := Evaluate(s.deps, "curl https://x && (")
+	v := Evaluate(s.T().Context(), s.deps, "curl https://x && (")
 	s.Equal(denyRuleName("workspace:no-curl"), v.Rule.Name)
 	s.Contains(v.Deny, "did not parse")
 	s.Contains(v.Deny, "do not hit prod")
 }
 
 func (s *UnparsedWorkspaceShellSuite) TestAProgramInsideASubshellIsSeen() {
-	v := Evaluate(s.deps, "echo ok && (/usr/bin/curl -s")
+	v := Evaluate(s.T().Context(), s.deps, "echo ok && (/usr/bin/curl -s")
 	s.Equal(denyRuleName("workspace:no-curl"), v.Rule.Name)
 }
 
 func (s *UnparsedWorkspaceShellSuite) TestALineNamingNoDeniedProgramPasses() {
-	v := Evaluate(s.deps, "jq . && (")
+	v := Evaluate(s.T().Context(), s.deps, "jq . && (")
 	s.Empty(v.Deny)
 }
 

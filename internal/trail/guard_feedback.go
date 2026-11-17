@@ -2,14 +2,17 @@ package trail
 
 import (
 	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // GuardFeedback is a deduplicated pattern in pre-tool observations. It is not
@@ -38,8 +41,8 @@ func (f GuardFeedback) NeedsReview() bool {
 // not write a second journal: agent-command activity is the source of truth,
 // and a derived view avoids divergence between what the guard saw and what a
 // later report reads.
-func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, error) {
-	events, err := ReadRecent(base, limit)
+func RecentGuardFeedback(ctx context.Context, base, session string, limit int) ([]GuardFeedback, error) {
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil || len(events) == 0 {
 		return nil, err
 	}
@@ -54,7 +57,10 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		followed   map[sessionKey]bool
 	}
 	candidates := map[string]*candidate{}
-	for command := range agentCommands(base, events) {
+	for command, err := range agentCommands(base, events) {
+		if err != nil {
+			return nil, err
+		}
 		event, request, response := command.event, command.request, command.response
 		if session != "" && request.Session != session {
 			continue
@@ -72,7 +78,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		if key.session == "" || key.host == "" {
 			continue
 		}
-		if response.Decision != "deny" && isMagusRunRequest(request.Command) {
+		if response.Decision != verdict.Deny && isMagusRunRequest(request.Command) {
 			for _, c := range candidates {
 				if c.Rule == "raw-tool" && c.perSession[key] > 0 {
 					c.followed[key] = true
@@ -80,7 +86,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 			}
 			continue
 		}
-		if response.Decision != "deny" || response.Rule == "" {
+		if response.Decision != verdict.Deny || response.Rule == "" {
 			continue
 		}
 		fingerprint := fmt.Sprintf("%s\x00%s", response.Rule, request.Tool)
@@ -125,11 +131,11 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 // retained trail reaches back to since, so an empty result means none rather than unknown:
 // the whole trail fits the retained window, or it holds an agent command at or before since.
 // A missing trail is an empty one; an empty base or lease has no trail to read.
-func LeaseDenials(base, lease string, since int64, limit int) ([]types.JobDenial, bool, error) {
+func LeaseDenials(ctx context.Context, base, lease string, since int64, limit int) ([]job.Denial, bool, error) {
 	if base == "" || lease == "" || limit <= 0 {
 		return nil, false, nil
 	}
-	events, err := ReadRecent(base, maxEvents)
+	events, err := trailtypes.ReadRecent(ctx, base, maxEvents)
 	if err != nil {
 		return nil, false, err
 	}
@@ -137,16 +143,19 @@ func LeaseDenials(base, lease string, since int64, limit int) ([]types.JobDenial
 	from := since * 1000
 	// Rotation keeps a floor of every kind, so only an agent command dates how far back the
 	// agent commands reach.
-	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e Event) bool {
-		return e.Kind == KindAgentCommand && e.Ts <= from
+	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e trailtypes.Event) bool {
+		return e.Kind == trailtypes.KindAgentCommand && e.Ts <= from
 	})
-	held := slices.DeleteFunc(events, func(e Event) bool { return e.Lease != lease || e.Ts < from })
-	var out []types.JobDenial
-	for command := range agentCommands(base, held) {
-		if command.response.Decision != "deny" {
+	held := slices.DeleteFunc(events, func(e trailtypes.Event) bool { return e.Lease != lease || e.Ts < from })
+	var out []job.Denial
+	for command, err := range agentCommands(base, held) {
+		if err != nil {
+			return nil, false, err
+		}
+		if command.response.Decision != verdict.Deny {
 			continue
 		}
-		out = append(out, types.JobDenial{
+		out = append(out, job.Denial{
 			Rule:       command.response.Rule,
 			Reason:     command.response.Reason,
 			Action:     command.event.Action,
@@ -162,29 +171,44 @@ func LeaseDenials(base, lease string, since int64, limit int) ([]types.JobDenial
 
 // agentCommand is one agent-command event with its request and response blobs decoded.
 type agentCommand struct {
-	event    Event
+	event    trailtypes.Event
 	request  agentCommandRequest
 	response agentCommandResponse
 }
 
-// agentCommands yields the agent-command events among events, in their order, whose request
-// and response blobs both read and decode. An event whose blobs rotated away is skipped.
-func agentCommands(base string, events []Event) iter.Seq[agentCommand] {
-	return func(yield func(agentCommand) bool) {
+// agentCommands yields the agent-command events among events, in their order, whose
+// request and response blobs both read and decode. An event whose blobs rotated away is
+// skipped; a blob holding a retired guard decision is yielded as a
+// [*retiredDecisionError], and nothing after it.
+func agentCommands(base string, events []trailtypes.Event) iter.Seq2[agentCommand, error] {
+	return func(yield func(agentCommand, error) bool) {
+		var retired *retiredDecisionError
 		for _, event := range events {
-			if event.Kind != KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
+			if event.Kind != trailtypes.KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
 				continue
 			}
 			command := agentCommand{event: event}
-			raw, err := ReadBlob(base, event.RequestRef)
-			if err != nil || json.Unmarshal(raw, &command.request) != nil {
+			raw, err := trailtypes.ReadBlob(base, event.RequestRef)
+			if err != nil {
 				continue
 			}
-			raw, err = ReadBlob(base, event.ResponseRef)
-			if err != nil || json.Unmarshal(raw, &command.response) != nil {
+			if err := decodeAgentBlob(base, event.RequestRef, raw, &command.request); errors.As(err, &retired) {
+				yield(agentCommand{}, err)
+				return
+			} else if err != nil {
 				continue
 			}
-			if !yield(command) {
+			raw, err = trailtypes.ReadBlob(base, event.ResponseRef)
+			if err != nil {
+				continue
+			}
+			if err := decodeAgentBlob(base, event.ResponseRef, raw, &command.response); errors.As(err, &retired) {
+				yield(agentCommand{}, err)
+				return
+			} else if err != nil {
+				continue
+			}
+			if !yield(command, nil) {
 				return
 			}
 		}

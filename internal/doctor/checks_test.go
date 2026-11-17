@@ -17,15 +17,16 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func writeJournal(t *testing.T, root string, records []map[string]any) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	var b strings.Builder
 	for _, rec := range records {
-		line, err := json.Marshal(rec)
+		line, err := codec.Marshal(rec)
 		require.NoError(t, err)
 		b.Write(line)
 		b.WriteByte('\n')
@@ -369,7 +370,7 @@ func TestCheckGuardWiring(t *testing.T) {
 func writeModHarness(t *testing.T, w *testkit.Workspace, enable bool, installed string) {
 	t.Helper()
 	var descriptor agent.HarnessDescriptor
-	require.NoError(t, json.Unmarshal([]byte(`{
+	require.NoError(t, codec.Unmarshal([]byte(`{
   "api_version": "magus.harness/v1alpha1",
   "id": "mod-host",
   "display": {"name": "Mod Host"},
@@ -786,7 +787,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
-			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), typesagent.SkillVariantShort)))
+			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), tier.SkillVariantShort)))
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
@@ -876,12 +877,12 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{{
+	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{{
 		Session: "s1",
-		Event: sessions.AgentEvent{
-			Host: "h1", Kind: sessions.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",
+		Event: session.AgentEvent{
+			Host: "h1", Kind: session.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",
 		},
-	}}, sessions.InvocationStart{})
+	}}, session.InvocationStart{})
 	require.NoError(t, err)
 }
 
@@ -889,7 +890,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 	t.Run("never loaded", func(t *testing.T) {
 		testkit.Isolate(t)
 
-		got := (&runner{root: t.TempDir()}).checkSessionLoad()
+		got := (&runner{root: t.TempDir()}).checkSessionLoad(t.Context())
 
 		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "has ever been loaded")
@@ -901,7 +902,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 		root := t.TempDir()
 		loadOneEvent(t, root, time.Now().Add(-30*24*time.Hour))
 
-		got := (&runner{root: root}).checkSessionLoad()
+		got := (&runner{root: root}).checkSessionLoad(t.Context())
 
 		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "30 days old")
@@ -912,7 +913,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 		root := t.TempDir()
 		loadOneEvent(t, root, time.Now().Add(-time.Hour))
 
-		got := (&runner{root: root}).checkSessionLoad()
+		got := (&runner{root: root}).checkSessionLoad(t.Context())
 
 		assert.Equal(t, check.OK, got.Status)
 	})
@@ -1349,6 +1350,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		addr := "unix://" + filepath.Join(dir, "magus-424242-deadbeef.sock")
 		srv, err := proc.New(t.Context(), proc.Options{
+			Limiter: cache.NewLimiter(4),
 			Address: addr,
 			Version: "stale-build",
 			Handler: func(context.Context, []string) error { return nil },
@@ -1665,7 +1667,7 @@ func TestCheckObserverRecording(t *testing.T) {
 	// A workspace no agent has run in is the ordinary case, and failing it would train
 	// people to ignore the check.
 	t.Run("nothing recorded", func(t *testing.T) {
-		got := (&runner{root: t.TempDir()}).checkObserverRecording()
+		got := (&runner{root: t.TempDir()}).checkObserverRecording(t.Context())
 		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "no agent activity recorded yet")
 	})
@@ -1677,7 +1679,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		root := t.TempDir()
 		observe(t, root, "file.write", observerMinSample-1)
 
-		got := (&runner{root: root}).checkObserverRecording()
+		got := (&runner{root: root}).checkObserverRecording(t.Context())
 		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "too few to judge")
 		assert.Contains(t, got.Message, strconv.Itoa(observerMinSample-1)+" observation(s)")
@@ -1690,7 +1692,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", 20)
 		observe(t, root, "shell.command", 40)
 
-		got := (&runner{root: root}).checkObserverRecording()
+		got := (&runner{root: root}).checkObserverRecording(t.Context())
 		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "NOT ONE read")
 		require.NotEmpty(t, got.Details)
@@ -1706,7 +1708,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.read", 5)
 		observe(t, root, "file.write", 60)
 
-		got := (&runner{root: root}).checkObserverRecording()
+		got := (&runner{root: root}).checkObserverRecording(t.Context())
 		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "too sparse to explain a change")
 		assert.Contains(t, got.Message, "5 read(s) against 60 write(s)")
@@ -1717,7 +1719,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.read", 60)
 		observe(t, root, "file.write", 10)
 
-		got := (&runner{root: root}).checkObserverRecording()
+		got := (&runner{root: root}).checkObserverRecording(t.Context())
 		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "recording: 60 read(s), 10 write(s)")
 	})

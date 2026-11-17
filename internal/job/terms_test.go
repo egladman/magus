@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/release"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,13 +28,13 @@ func TestTermsDelivery(t *testing.T) {
 
 func (s *termsDeliverySuite) TestAStackedJobNamesTheBranchItIsBasedOn() {
 	row := briefRow()
-	row.Delivery, row.ParentHead = types.DeliveryStacked, "feat/parent"
+	row.Delivery, row.ParentHead = job.DeliveryStacked, "feat/parent"
 	s.Contains(NewTerms(row, TermsFacts{}).String(), "delivery: stacked on feat/parent\n")
 }
 
 func (s *termsDeliverySuite) TestAFoldedJobNamesItsDelivery() {
 	row := briefRow()
-	row.Delivery = types.DeliveryFold
+	row.Delivery = job.DeliveryFold
 	s.Contains(NewTerms(row, TermsFacts{}).String(), "delivery: fold\n")
 }
 
@@ -43,30 +44,30 @@ func (s *termsDeliverySuite) TestARowWithNoDeliveryPrintsNoLine() {
 
 func (s *termsDeliverySuite) TestARetryKeepsTheDeliveryAndTheParentHead() {
 	row := briefRow()
-	row.Delivery, row.ParentHead = types.DeliveryStacked, "feat/parent"
+	row.Delivery, row.ParentHead = job.DeliveryStacked, "feat/parent"
 	want := RetryDeclaration(briefRow())
-	want.Delivery, want.ParentHead = types.DeliveryStacked, "feat/parent"
+	want.Delivery, want.ParentHead = job.DeliveryStacked, "feat/parent"
 	s.Equal(want, RetryDeclaration(row))
 }
 
-func briefRow() types.Job {
-	return types.Job{
+func briefRow() job.Job {
+	return job.Job{
 		ID:     "harness/ledger-per-repo",
 		Parent: "harness",
-		Agent: &agent.Spec{
+		Agent: &job.Agent{
 			Instructions: "Move the lease ledger to the per-repository state dir.\n" +
 				"Done when a row put from one checkout is listed from a second worktree of the same repo.",
-			Model:  agent.Model{Tier: "design"},
-			Worker: agent.Worker{Type: agent.WorkerTypeResumed},
+			Model:  job.Model{Tier: "design"},
+			Worker: job.Worker{Type: job.WorkerTypeResumed},
 		},
 		Checkpoint: "cf5509d09",
-		Paths: types.JobPaths{
+		Paths: job.Paths{
 			Write: []string{"internal/ledger", "cmd/magus/ledger.go"},
 			Deny:  []string{"MAGUS.md", "docs/gen"},
 		},
 		DependsOn:  []string{"harness/session-load"},
 		Validation: "magus run test internal/ledger",
-		State:      types.StateDeclared,
+		State:      job.StateDeclared,
 	}
 }
 
@@ -158,11 +159,11 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Goals = []types.Goal{
-		{ID: "api", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Open"},
+	row.Goals = []job.Goal{
+		{ID: "api", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Open"},
 			Signature: "func Open(root string) error", Description: "opens the ledger at root"},
-		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"OpenLegacy"}},
-		{ID: "unit", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OpenLegacy"}},
+		{ID: "unit", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "test", Project: "."}},
 	}
 	row.Breaks = []string{"--old-flag", "ledger.Open"}
 	facts := TermsFacts{
@@ -232,17 +233,17 @@ func TestTermsNamesTheModelTierAndItsSource(t *testing.T) {
 
 	tests := []struct {
 		name string
-		tier agent.JobModelTier
+		tier tier.Assignment
 		want string
 	}{
 		{
 			name: "a matrix answer names its reason and site",
-			tier: agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			tier: tier.Assignment{Name: "routine", Rank: 0, Skills: tier.SkillVariantFull, Source: tier.SourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
 			want: "job: harness/ledger-per-repo\nmodel tier: routine (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
 		},
 		{
 			name: "a default has no site",
-			tier: agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default"},
+			tier: tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceDefault, Reason: "the declared default"},
 			want: "job: harness/ledger-per-repo\nmodel tier: bounded (rank 1), default: \"the declared default\"\nskills: short\n",
 		},
 	}
@@ -263,8 +264,8 @@ func TestTermsPrintsNoModelTierForARowWithout(t *testing.T) {
 }
 
 // retriedRow is a job on its third attempt of four.
-func retriedRow() types.Job {
-	row := types.Job{ID: "harness/retry", Agent: agent.Instructed("Retry the store."), State: types.StateDeclared}
+func retriedRow() job.Job {
+	row := job.Job{ID: "harness/retry", Agent: job.Instructed("Retry the store."), State: job.StateDeclared}
 	row.Paths.Write = []string{"internal/ledger"}
 	row.Validation = "magus run test internal/ledger"
 	row.MaxAttempts = 4
@@ -273,18 +274,18 @@ func retriedRow() types.Job {
 
 // retriedTries are retriedRow's two ended tries: the second failing with
 // everything a try can leave, the first ended by the sweep.
-func retriedTries() []types.Attempt {
-	first := types.AttemptStatus{State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "routine", DenialsKnown: true}
-	first.Retry = types.RetryVerdict{Retryable: true}
-	second := types.AttemptStatus{State: types.StateFail, ModelTier: "bounded", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
-	second.Unmet = []types.VerificationStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+func retriedTries() []job.Attempt {
+	first := job.AttemptStatus{State: job.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "routine", DenialsKnown: true}
+	first.Retry = job.RetryVerdict{Retryable: true}
+	second := job.AttemptStatus{State: job.StateFail, ModelTier: "bounded", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
+	second.Unmet = []job.VerificationStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	second.Violations = []string{`changed path "docs/x.md" is outside the job's write paths (internal/ledger)`}
-	second.Result = &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}}
-	second.Denials = []types.JobDenial{{Rule: "lease-write", Reason: "docs/x.md belongs to no lease you hold\nask the orchestrator"}}
+	second.Result = &job.Result{UnresolvedRisks: []string{"the second worktree was not tried"}}
+	second.Denials = []job.Denial{{Rule: "lease-write", Reason: "docs/x.md belongs to no lease you hold\nask the orchestrator"}}
 	second.FailingRefs = []string{"out0123456789ab"}
-	second.Retry = types.RetryVerdict{Change: types.RetryAfterWidening,
+	second.Retry = job.RetryVerdict{Change: job.RetryAfterWidening,
 		Reason: "the guard denied its holder under lease-write: docs/x.md belongs to no lease you hold"}
-	return []types.Attempt{{Job: "harness/retry", N: 1, Status: first}, {Job: "harness/retry", N: 2, Status: second}}
+	return []job.Attempt{{Job: "harness/retry", N: 1, Status: first}, {Job: "harness/retry", N: 2, Status: second}}
 }
 
 // The previous attempt is what the next holder starts from, so it renders byte for byte
@@ -353,7 +354,7 @@ func (s *termsTestScopeSuite) TestNoScopeDropsTheSection() {
 }
 
 func (s *termsTestScopeSuite) TestJSONCarriesTestScope() {
-	b, err := json.Marshal(NewTerms(briefRow(), s.facts()))
+	b, err := codec.Marshal(NewTerms(briefRow(), s.facts()))
 	s.Require().NoError(err)
 	s.Contains(string(b), `"test_scope":[{"project":".","spell":"go","op":"go::go-test","files":["pkg/a/x.go"],"operands":["./pkg/a"]}`)
 }

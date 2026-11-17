@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -152,12 +152,12 @@ func (s *positionSuite) TestTheWalkNeverEntersASkippedNode() {
 func (s *positionSuite) TestRetrieveIsByteIdenticalAcrossRuns() {
 	first, _, err := s.g.Retrieve("", s.options("held"))
 	s.Require().NoError(err)
-	a, err := json.Marshal(first)
+	a, err := codec.Marshal(first)
 	s.Require().NoError(err)
 	for range 5 {
 		again, _, err := s.g.Retrieve("", s.options("held"))
 		s.Require().NoError(err)
-		b, err := json.Marshal(again)
+		b, err := codec.Marshal(again)
 		s.Require().NoError(err)
 		s.Equal(string(a), string(b))
 	}

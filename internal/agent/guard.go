@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/egladman/magus/types"
+import "github.com/egladman/magus/libs/safetyscissors/verdict"
 
 // The guard's wire contract: the vocabulary every host glue must handle, in
 // the one package that the CLI producing a verdict imports and the parity tests
@@ -16,16 +16,7 @@ import "github.com/egladman/magus/types"
 // not a bump, and neither is adding a rule. A bump is expensive: a glue that
 // meets a schema it does not recognize fails open, so every one of them must be
 // re-downloaded before it guards again.
-const GuardAPIVersion = types.APIVersion("magus.guard/v1alpha1")
-
-// guardDecisions is every decision a verdict can carry. A new entry here is a
-// promise that all four host glues can express it; the dogfood parity test is
-// what collects on that promise.
-//
-// "ask" blocks the call until the PERSON approves it through the host's own prompt. It
-// is never an escape the agent can clear, and a glue that cannot prompt renders it as a
-// deny, never as an allow.
-var guardDecisions = []string{"pass", "advise", "deny", "ask"}
+const GuardAPIVersion = verdict.APIVersion
 
 // guardInputs is every input the guard judges: a shell command, a file path
 // an edit is about to write (`magus shell --path`), or an MCP tool call
@@ -254,14 +245,30 @@ var guardInputs = []string{"command", "path", "mcp"}
 // magus-command.buzz asks only under default, acceptEdits and auto.
 // cursor-hook.buzz renders an ask only on beforeShellExecution and
 // beforeMCPExecution. A 34 copy can let either run with no prompt.
-const GuardTemplateVersion = 36
+//
+// 37: the guard never answers yes. Its decisions are defer, advise, ask and deny, and the
+// envelope is safetyscissors.verdict/v1alpha1. magus-command.buzz, magus-path.buzz and
+// the plugin glue write no permission decision for a defer, so the host's own flow
+// decides, and cursor-hook.buzz answers a defer, and every gating event no guard judged,
+// with that host's ask. A 36 copy meets "defer" as an unknown decision and refuses every
+// call until it is re-installed.
+const GuardTemplateVersion = 37
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.
 const GuardTemplateMarker = "magus-guard-template:"
 
-// GuardDecisions returns every decision a verdict can carry.
-func GuardDecisions() []string { return append([]string(nil), guardDecisions...) }
+// GuardDecisions returns every decision a verdict can carry. A new entry here is a
+// promise that all four host glues can express it; the dogfood parity test is what
+// collects on that promise.
+//
+// None of them says yes. A defer is no objection: a glue writes no permission decision
+// for it, so the host's own permission flow decides the call. An ask blocks the call
+// until the PERSON approves it through the host's own prompt. It is never an escape the
+// agent can clear, and a glue that cannot prompt renders it as a deny.
+func GuardDecisions() []string {
+	return []string{string(verdict.Defer), string(verdict.Advise), string(verdict.Deny), string(verdict.Ask)}
+}
 
 // GuardInputs returns every input the guard judges.
 func GuardInputs() []string { return append([]string(nil), guardInputs...) }

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +34,7 @@ func rewriteManifest(t *testing.T, c *Cache, project, hash string, m Manifest, m
 	t.Helper()
 	m.Outputs = slices.Clone(m.Outputs) // mutate the copy, never the caller's records
 	mutate(&m)
-	data, err := json.Marshal(m)
+	data, err := codec.Marshal(m)
 	require.NoError(t, err)
 	require.NoError(t, writeAtomic(c.manifestPath(project, hash), data))
 }
@@ -201,7 +201,7 @@ func TestManifestEmptyPlatformMatchesAnyPlatform(t *testing.T) {
 	require.NoError(t, err, "readManifest")
 	require.Equal(t, "linux/amd64", m.Platform, "sanity: snapshot stamped the writer's platform")
 	m.Platform = ""
-	data, err := json.MarshalIndent(m, "", "  ")
+	data, err := codec.MarshalIndent(m, "", "  ")
 	require.NoError(t, err)
 	require.NoError(t, writeAtomic(mp, data))
 
@@ -292,7 +292,7 @@ func BenchmarkManifestRead(b *testing.B) {
 	c := &Cache{dir: dir, store: dir}
 	m := syntheticManifest(20)
 
-	data, err := json.MarshalIndent(m, "", "  ")
+	data, err := codec.MarshalIndent(m, "", "  ")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -321,7 +321,7 @@ func BenchmarkManifestWrite(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		data, err := json.MarshalIndent(m, "", "  ")
+		data, err := codec.MarshalIndent(m, "", "  ")
 		if err != nil {
 			b.Fatal(err)
 		}

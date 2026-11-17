@@ -598,7 +598,7 @@ export fun commentProblems(path: str, before: str, after: str) > [str] {
 export fun decideCode(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
     final found = commentProblems(path, before: before, after: after);
     if (found.len() == 0) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final style = if (once("comment-house-style")) houseStyle + "\n\n" else "";
     return magus\guard.deny(verdict\opening("a comment breaks the house style", problem: found[0]) + "\n"
@@ -713,7 +713,7 @@ export fun longestAddedCssComment(before: str, after: str) > int {
 export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]) > GuardVerdict {
     final added = addedLines(before, after: after);
     if (added == "" or !hasComment(added)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final longest = longestAddedCssComment(before, after: after);
     if (longest > denyFactor * cssFileBudget) {
@@ -748,7 +748,7 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
     if (once("code-comments")) {
         return magus\guard.advise(commentAdvice);
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // decideWrite grades a write: a stylesheet by decideCss, any other file by decideComments.
@@ -763,20 +763,20 @@ export fun decideWrite(path: str, before: str, after: str, once: fun (key: str) 
 // limits. It then advises once per session when a code write adds comments.
 export fun decideComments(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
     if (proseExtensions.indexOf(fileExtension(path)) != null) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final graded = decideCode(path, before: before, after: after, once: once);
-    if (graded.decision != magus\GuardDecision.allow) {
+    if (graded.decision != magus\GuardDecision.defer) {
         return graded;
     }
     final added = addedLines(before, after: after);
     if (added == "" or !hasComment(added)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (once("code-comments")) {
         return magus\guard.advise(commentAdvice);
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 fun spent() > fun (key: str) > bool {
@@ -831,7 +831,7 @@ test "a write that adds a comment to code is advised once per session" {
     std\assert(v.reason.indexOf("keep only the comments that say what the code cannot") != null, message: "states the rule");
     std\assert(v.reason.indexOf("Keep a sentence to 25 words") != null, message: "states the limits");
     std\assert(v.reason.indexOf("Skill(") == null, message: "sends the reader to no skill");
-    std\assert(decideComments("/w/a.go", before: "", after: "package a\n// again", once: once).decision == magus\GuardDecision.allow, message: "only once");
+    std\assert(decideComments("/w/a.go", before: "", after: "package a\n// again", once: once).decision == magus\GuardDecision.defer, message: "only once");
 }
 
 test "every comment form counts" {
@@ -860,11 +860,11 @@ test "prose, a shebang, code alone and an unchanged comment stay silent" {
         "a.go": "package a\nx := a/b",
         "b.go": "",
     }) {
-        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == magus\GuardDecision.allow, message: path);
+        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == magus\GuardDecision.defer, message: path);
     }
     final before = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}\n";
     final after = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() int \{ return 1 }\n";
-    std\assert(decideComments("a.go", before: before, after: after, once: helpers\counter()).decision == magus\GuardDecision.allow, message: "the comment was already there");
+    std\assert(decideComments("a.go", before: before, after: after, once: helpers\counter()).decision == magus\GuardDecision.defer, message: "the comment was already there");
 }
 
 test "codeComments tells the Go kinds apart" {
@@ -889,11 +889,11 @@ test "codeComments reads JSDoc and skips a TypeScript directive" {
 
 test "a short why-comment passes" {
     final v = graded("a.go", after: inBody("\t// keys are sorted; the bsearch below depends on it"));
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
 }
 
 test "a body comment over 3 lines is refused at once, naming the count and the limit" {
-    std\assert(graded("a.go", after: inBody(commentLines(3, indent: "\t"))).decision == magus\GuardDecision.allow, message: "3 lines");
+    std\assert(graded("a.go", after: inBody(commentLines(3, indent: "\t"))).decision == magus\GuardDecision.defer, message: "3 lines");
     final v = graded("/w/internal/a.go", after: inBody(commentLines(4, indent: "\t")));
     std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     verdict\assertVerdict(v.reason, label: "a long body comment");
@@ -916,57 +916,57 @@ test "the house style paragraph goes with a session's first comment denial only"
 test "a Go Example's output block is no prose, however long" {
     final output = "\t// Output:\n" + commentLines(6, indent: "\t") + "\t// " + words(40) + "\n";
     final v = graded("a_test.go", after: inBody(output));
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
     final unordered = graded("a_test.go", after: inBody("\t// Unordered output:\n" + commentLines(6, indent: "\t")));
-    std\assert(unordered.decision == magus\GuardDecision.allow, message: unordered.reason);
+    std\assert(unordered.decision == magus\GuardDecision.defer, message: unordered.reason);
 }
 
 test "an exported doc earns 8 lines and an unexported one 4" {
-    std\assert(graded("a.go", after: onExported(commentLines(8, indent: ""))).decision == magus\GuardDecision.allow, message: "8 exported");
+    std\assert(graded("a.go", after: onExported(commentLines(8, indent: ""))).decision == magus\GuardDecision.defer, message: "8 exported");
     final exported = graded("a.go", after: onExported(commentLines(9, indent: "")));
     std\assert(exported.reason.indexOf("a.go:3: doc comment on an exported declaration, 9 lines, over the limit of 8.") != null, message: exported.reason);
-    std\assert(graded("a.go", after: onUnexported(commentLines(4, indent: ""))).decision == magus\GuardDecision.allow, message: "4 unexported");
+    std\assert(graded("a.go", after: onUnexported(commentLines(4, indent: ""))).decision == magus\GuardDecision.defer, message: "4 unexported");
     final unexported = graded("a.go", after: onUnexported(commentLines(5, indent: "")));
     std\assert(unexported.reason.indexOf("unexported declaration, 5 lines, over the limit of 4.") != null, message: unexported.reason);
 }
 
 test "a sentence over 25 words inside a body is refused, quoted with its count" {
-    std\assert(graded("a.go", after: inBody("\t// " + words(25))).decision == magus\GuardDecision.allow, message: "25 words");
+    std\assert(graded("a.go", after: inBody("\t// " + words(25))).decision == magus\GuardDecision.defer, message: "25 words");
     final v = graded("a.go", after: inBody("\t// " + words(26)));
     std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     std\assert(v.reason.indexOf("a.go:4: comment inside a body, a sentence of 26 words, over the limit of 25: \"" + words(26) + "\"") != null, message: v.reason);
 }
 
 test "a sentence over 25 words on an unexported declaration is refused" {
-    std\assert(graded("a.go", after: onUnexported("// " + words(25))).decision == magus\GuardDecision.allow, message: "25 words");
+    std\assert(graded("a.go", after: onUnexported("// " + words(25))).decision == magus\GuardDecision.defer, message: "25 words");
     final v = graded("a.go", after: onUnexported("// " + words(26)));
     std\assert(v.reason.indexOf("a sentence of 26 words, over the limit of 25") != null, message: v.reason);
 }
 
 test "a sentence over 30 words on an exported declaration is refused" {
-    std\assert(graded("a.go", after: onExported("// " + words(30))).decision == magus\GuardDecision.allow, message: "30 words");
+    std\assert(graded("a.go", after: onExported("// " + words(30))).decision == magus\GuardDecision.defer, message: "30 words");
     final v = graded("a.go", after: onExported("// " + words(31)));
     std\assert(v.reason.indexOf("a sentence of 31 words, over the limit of 30") != null, message: v.reason);
 }
 
 test "a sentence with more than 3 commas, colons or semicolons is refused" {
-    std\assert(graded("a.go", after: inBody("\t// It reads a, b, c and d.")).decision == magus\GuardDecision.allow, message: "3 breaks");
+    std\assert(graded("a.go", after: inBody("\t// It reads a, b, c and d.")).decision == magus\GuardDecision.defer, message: "3 breaks");
     final v = graded("a.go", after: inBody("\t// It reads: a; b, c and d."));
-    std\assert(v.decision == magus\GuardDecision.allow, message: "3 breaks of three kinds");
+    std\assert(v.decision == magus\GuardDecision.defer, message: "3 breaks of three kinds");
     final over = graded("a.go", after: inBody("\t// It reads: a; b, c, d and e."));
     std\assert(over.reason.indexOf("a sentence with 4 commas, colons or semicolons, over the limit of 3: \"It reads: a; b, c, d and e.\"") != null, message: over.reason);
-    std\assert(graded("a.go", after: onExported("// It reads: a; b, c, d and e.")).decision == magus\GuardDecision.allow, message: "an exported doc earns 4");
+    std\assert(graded("a.go", after: onExported("// It reads: a; b, c, d and e.")).decision == magus\GuardDecision.defer, message: "an exported doc earns 4");
     std\assert(graded("a.go", after: onExported("// It reads: a; b, c, d, e and f.")).decision == magus\GuardDecision.deny, message: "5 on an exported doc");
 }
 
 test "the commas of a code span are no clause breaks" {
     final v = graded("a.go", after: inBody("\t// It calls `f(a, b, c, d, e)` once."));
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
 }
 
 test "a block over its word limit is refused" {
     final eleven = "\t// " + words(11);
-    std\assert(graded("a.go", after: inBody(eleven + "\n" + eleven)).decision == magus\GuardDecision.allow, message: "22 words");
+    std\assert(graded("a.go", after: inBody(eleven + "\n" + eleven)).decision == magus\GuardDecision.defer, message: "22 words");
     final v = graded("a.go", after: inBody(eleven + "\n" + eleven + "\n" + eleven));
     std\assert(v.reason.indexOf("a.go:4: comment inside a body, 33 new words, over the limit of 30.") != null, message: v.reason);
     final ten = "// " + words(10);
@@ -977,17 +977,17 @@ test "a block over its word limit is refused" {
 }
 
 test "a trailing comment over 12 words is refused" {
-    std\assert(graded("a.go", after: inBody("\tx := 1 // " + words(12))).decision == magus\GuardDecision.allow, message: "12 words");
+    std\assert(graded("a.go", after: inBody("\tx := 1 // " + words(12))).decision == magus\GuardDecision.defer, message: "12 words");
     final v = graded("a.go", after: inBody("\tx := 1 // " + words(13)));
     std\assert(v.reason.indexOf("a.go:4: trailing comment, 13 new words, over the limit of 12.") != null, message: v.reason);
 }
 
 test "a comment line over 80 columns is refused, a tab counting 4, and a URL line passes" {
-    std\assert(graded("a.go", after: inBody("\t// " + "x".repeat(72) + ".")).decision == magus\GuardDecision.allow, message: "80 columns");
+    std\assert(graded("a.go", after: inBody("\t// " + "x".repeat(72) + ".")).decision == magus\GuardDecision.defer, message: "80 columns");
     final v = graded("a.go", after: inBody("\t// " + "x".repeat(73) + "."));
     std\assert(v.reason.indexOf("a.go:4: a comment line 81 columns wide, over the limit of 80.") != null, message: v.reason);
     final url = "\t// See https://example.com/" + "x".repeat(80) + ".";
-    std\assert(graded("a.go", after: inBody(url)).decision == magus\GuardDecision.allow, message: "a URL");
+    std\assert(graded("a.go", after: inBody(url)).decision == magus\GuardDecision.defer, message: "a URL");
 }
 
 fun legacy() > str {
@@ -998,17 +998,17 @@ fun legacy() > str {
 test "an edit beside a long legacy block passes" {
     final old = legacy();
     final touched = old + "\nfunc g() \{\n\t// One why.\n\ty()\n}\n";
-    std\assert(decideComments("a.go", before: old, after: touched, once: spent()).decision == magus\GuardDecision.allow, message: "a new block beside it");
+    std\assert(decideComments("a.go", before: old, after: touched, once: spent()).decision == magus\GuardDecision.defer, message: "a new block beside it");
     final edited = old.replace("\tx()\n", with: "\tx(1)\n");
-    std\assert(decideComments("a.go", before: old, after: edited, once: spent()).decision == magus\GuardDecision.allow, message: "the code under it");
+    std\assert(decideComments("a.go", before: old, after: edited, once: spent()).decision == magus\GuardDecision.defer, message: "the code under it");
     final preamble = "// Package p is old.\n" + old;
-    std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == magus\GuardDecision.allow, message: "an old package comment");
+    std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == magus\GuardDecision.defer, message: "an old package comment");
 }
 
 test "growing a legacy block is graded on the sentences it adds" {
     final old = legacy();
     final grown = old.replace("\tx()\n", with: "\t// One more why.\n\tx()\n");
-    std\assert(decideComments("a.go", before: old, after: grown, once: spent()).decision == magus\GuardDecision.allow, message: "a short sentence");
+    std\assert(decideComments("a.go", before: old, after: grown, once: spent()).decision == magus\GuardDecision.defer, message: "a short sentence");
     final long = old.replace("\tx()\n", with: "\t// " + words(26) + "\n\tx()\n");
     final v = decideComments("a.go", before: old, after: long, once: spent());
     std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
@@ -1025,12 +1025,12 @@ test "a long Buzz doc comment is refused" {
     final atop = "// " + words(31) + "\nimport \"std\";\n";
     std\assert(graded("a.buzz", after: atop).reason.indexOf("file header comment, a sentence of 31 words") != null, message: "a header");
     final quoted = "namespace a;\n\nfun f() > void \{\n    final s = \"a // \" + \"" + words(20) + "\";\n}\n";
-    std\assert(graded("a.buzz", after: quoted).decision == magus\GuardDecision.allow, message: "a // inside a string");
+    std\assert(graded("a.buzz", after: quoted).decision == magus\GuardDecision.defer, message: "a // inside a string");
 }
 
 test "a Buzz guard template marker meets no limit, and other prose beside it does" {
-    final marker = "// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model\nimport \"std\";\n";
-    std\assert(graded("a.buzz", after: marker).decision == magus\GuardDecision.allow, message: "a marker");
+    final marker = "// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model\nimport \"std\";\n";
+    std\assert(graded("a.buzz", after: marker).decision == magus\GuardDecision.defer, message: "a marker");
     final wide = "// magus-guard-note: " + "x".repeat(70) + "\nimport \"std\";\n";
     std\assert(graded("a.buzz", after: wide).reason.indexOf("columns wide") != null, message: "not a marker");
 }
@@ -1040,7 +1040,7 @@ test "a long TypeScript JSDoc sentence is refused" {
     final v = graded("src/a.ts", after: doc);
     std\assert(v.reason.indexOf("src/a.ts:1: doc comment on an exported declaration, a sentence of 31 words") != null, message: v.reason);
     final directive = "// eslint-disable-next-line " + words(30) + "\nconsole.log(1);\n";
-    std\assert(graded("a.ts", after: directive).decision == magus\GuardDecision.allow, message: "a directive");
+    std\assert(graded("a.ts", after: directive).decision == magus\GuardDecision.defer, message: "a directive");
 }
 
 test "several blocks over their limits are all named" {
@@ -1066,7 +1066,7 @@ test "a comment above the package clause is refused, the lines Go tooling reads 
         "license": "// Copyright 2026 The Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage p\n",
         "directive": "//go:generate go run gen.go\n\npackage p\n",
     }) {
-        std\assert(graded("a.go", after: text).decision == magus\GuardDecision.allow, message: name);
+        std\assert(graded("a.go", after: text).decision == magus\GuardDecision.defer, message: name);
     }
     std\assert(graded("p/doc.go", after: "// Package p is the thing.\npackage p\n").decision == magus\GuardDecision.deny, message: "doc.go is no exception");
 }
@@ -1098,7 +1098,7 @@ test "a stylesheet write is judged by proofread on the lines it adds" {
     std\assert(v.reason.indexOf("/w/console/src/a.css:3: Drop 'simply': state the fact. [filler]") != null, message: v.reason);
     std\assert(v.reason.indexOf("same prose rules as Go ones") != null, message: "states the rule");
     final kept = decideWrite("a.css", before: after, after: after + ".c \{ color: pink; }\n", once: spent(), judge: judgeSays("filler", line: 3));
-    std\assert(kept.decision == magus\GuardDecision.allow, message: "a finding on a comment the write did not add");
+    std\assert(kept.decision == magus\GuardDecision.defer, message: "a finding on a comment the write did not add");
     final clean = decideWrite("a.css", before: "", after: after, once: helpers\counter(), judge: noJudge());
     std\assert(clean.decision == magus\GuardDecision.advise and clean.reason.indexOf("Skill(") == null and clean.reason.indexOf("keep only the comments") != null, message: "a judge that finds nothing leaves the generic advice once");
 }
@@ -1108,7 +1108,7 @@ test "a stylesheet write the judge cannot run on is denied, naming why and the b
     final v = decideWrite("a.css", before: "", after: "/* Simply put. */\n.b \{ color: blue; }\n", once: helpers\counter(), judge: stale);
     std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}: {v.reason}");
     std\assert(v.reason.indexOf("older than its sources") != null and v.reason.indexOf("run `{proofread\build}`") != null, message: v.reason);
-    std\assert(decideWrite("a.css", before: "", after: ".b \{ color: blue; }\n", once: helpers\counter(), judge: stale).decision == magus\GuardDecision.allow, message: "a write with no comment needs no judge");
+    std\assert(decideWrite("a.css", before: "", after: ".b \{ color: blue; }\n", once: helpers\counter(), judge: stale).decision == magus\GuardDecision.defer, message: "a write with no comment needs no judge");
 }
 
 test "a stylesheet comment over twice the largest budget is refused" {
@@ -1117,9 +1117,9 @@ test "a stylesheet comment over twice the largest budget is refused" {
     verdict\assertVerdict(v.reason, label: "a CSS comment");
     std\assert(v.reason.startsWith("a CSS comment runs 17 lines against a budget of at most "), message: v.reason);
     std\assert(v.reason.indexOf("\nThe write is to a.css. ") != null, message: v.reason);
-    std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.allow, message: "16 lines");
+    std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.defer, message: "16 lines");
     final old = cssComment(30) + ".a \{ color: red; }\n";
-    std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.allow, message: "an old long comment is not the write's");
+    std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.defer, message: "an old long comment is not the write's");
 }
 
 test "longestAddedCssComment counts the lines a new comment spans" {
@@ -1137,6 +1137,6 @@ test "judge findings parse from stdin lines" {
 
 test "a write to a file that is not a stylesheet meets the Go rules" {
     final v = decideWrite("a.go", before: "", after: "package a\n// note\n", once: spent(), judge: judgeSays("filler", line: 2));
-    std\assert(v.decision == magus\GuardDecision.allow or v.decision == magus\GuardDecision.advise, message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.defer or v.decision == magus\GuardDecision.advise, message: v.decision);
     std\assert(v.reason.indexOf("same prose rules") == null, message: "not the CSS rule");
 }

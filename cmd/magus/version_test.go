@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -33,6 +34,7 @@ func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 	// Let proc pick a socket under SockDir; a t.TempDir() path can exceed the unix
 	// socket path length limit on macOS.
 	srv, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Version: "v9.9.9",
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *daemon.Server { return &daemon.Server{PID: 1} },

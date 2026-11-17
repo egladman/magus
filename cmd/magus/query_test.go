@@ -32,13 +32,14 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -201,7 +202,7 @@ func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -285,7 +286,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -337,7 +338,7 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -386,7 +387,7 @@ func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Inspect")
 	m, ok := ws.(*magus.Magus)
 	require.True(t, ok, "magus.Inspect returns a *magus.Magus under types.WorkspaceRepository")
@@ -444,7 +445,7 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	globalCfg = cfg
 
 	ctx := context.Background()
-	local, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(magus.TierCeiling))
+	local, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { _ = local.Close() })
 
@@ -499,7 +500,7 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read knowledge
 		}
 	}
 	require.NoError(tb, err)
-	b, err := json.Marshal(res)
+	b, err := codec.Marshal(res)
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -518,7 +519,7 @@ func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read knowledg
 		res = &refsResult{}
 	}
 	require.NoError(tb, proc.Read(context.Background(), f.addr, version, f.root, verb, read, res))
-	b, err := json.Marshal(res)
+	b, err := codec.Marshal(res)
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -530,7 +531,7 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	ctx := context.Background()
 	g, err := graphReads.LoadGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	b, err := json.Marshal(workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, graphReads.MeasuredCoverage(ctx, ws, cfg)))
+	b, err := codec.Marshal(workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, graphReads.MeasuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -600,7 +601,7 @@ func TestLoadedGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
 	gs := f.loadGraphs(t)
 	for _, tc := range graphReadCases {
 		t.Run(tc.name, func(t *testing.T) {
-			b, err := json.Marshal(f.loadedAnswer(t, gs, tc.verb, tc.read))
+			b, err := codec.Marshal(f.loadedAnswer(t, gs, tc.verb, tc.read))
 			require.NoError(t, err)
 			assert.JSONEq(t, f.localAnswer(t, tc.verb, tc.read), string(b))
 		})
@@ -617,7 +618,7 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 	// The gate prints a next step's reason once per session; silent drops it from both.
 	global.silent = true
 	ctx := context.Background()
-	nx := newNextGate(f.root)
+	nx := newNextGate(t.Context(), f.root)
 	for _, tc := range []struct {
 		verb  string
 		input string
@@ -640,7 +641,7 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 				err = writeQueryText(ctx, &got, nx, nx.served(hint.NextForQuery(res.Out)), res)
 			case knowledge.ExplainResult:
 				require.True(t, res.Found)
-				err = writeExplainText(&got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
+				err = writeExplainText(t.Context(), &got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
 			}
 			assert.Equal(t, want, got.String())
 			assert.Equal(t, cmdErr, err, "the same exit status")
@@ -899,7 +900,7 @@ func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magu
 	root := w.Root()
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1049,7 +1050,7 @@ magus\project({"targets": {
 }})
 `
 	w.Magusfile(mf)
-	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()

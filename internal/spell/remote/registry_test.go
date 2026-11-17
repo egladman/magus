@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,7 +31,7 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	spells := config.SpellsConfig{Registries: []config.SpellRegistry{
 		{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_TOKEN"},
 	}}
-	r := secret.New()
+	r := secrets.NewResolver()
 	t.Setenv("SPELL_REGISTRY_TOKEN", "ghp_abcdef123456")
 
 	user, pass, err := registryCredential(t.Context(), spells, "ghcr.io", r)
@@ -44,7 +44,7 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	require.ErrorContains(t, err, "no entry for docker.io")
 
 	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_UNSET"}}}
-	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secret.New())
+	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secrets.NewResolver())
 	require.ErrorContains(t, err, "$SPELL_REGISTRY_UNSET is not set")
 }
 
@@ -53,15 +53,15 @@ func TestNewClientPicksItsCredentialSource(t *testing.T) {
 		{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_CLIENT_TOKEN"},
 	}}
 	t.Setenv("SPELL_CLIENT_TOKEN", "from-provider")
-	r := secret.New()
+	r := secrets.NewResolver()
 	login := Login{
-		ReadToken: func(context.Context) (types.Secret, error) { return types.NewSecret("from-stdin"), nil },
-		Secrets:   func(ctx context.Context) (context.Context, *secret.Resolver, error) { return ctx, r, nil },
+		ReadToken: func(context.Context) (secrets.Secret, error) { return secrets.New("from-stdin"), nil },
+		Secrets:   func(ctx context.Context) (context.Context, *secrets.Resolver, error) { return ctx, r, nil },
 	}
 
 	c, err := NewClient(t.Context(), nil, spells, "ghcr.io", "me", login)
 	require.NoError(t, err)
-	assert.Equal(t, oci.Credentials{Username: "me", Password: types.NewSecret("from-stdin")}, c.Credentials, "--username reads stdin")
+	assert.Equal(t, oci.Credentials{Username: "me", Password: secrets.New("from-stdin")}, c.Credentials, "--username reads stdin")
 
 	c, err = NewClient(t.Context(), nil, spells, "ghcr.io", "", login)
 	require.NoError(t, err)

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // DedupRecord is the -o record of `magus config history dedup`.
@@ -117,14 +117,14 @@ func readMisses(ctx context.Context, path string) ([]MissEvent, error) {
 		var head struct {
 			Type string `json:"type"`
 		}
-		if err := json.Unmarshal(line, &head); err != nil {
+		if err := codec.Unmarshal(line, &head); err != nil {
 			continue
 		}
 		if head.Type != TypeTargetResult {
 			continue
 		}
 		var ev TargetResult
-		if err := json.Unmarshal(line, &ev); err != nil {
+		if err := codec.Unmarshal(line, &ev); err != nil {
 			continue
 		}
 		// A "miss" is a fresh, successful run (not a cache replay) with a real duration.

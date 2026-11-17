@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -124,7 +125,7 @@ func TestDoFixedDelayHoldsThePause(t *testing.T) {
 
 func TestDoStopsOnANonRetryableError(t *testing.T) {
 	t.Parallel()
-	cause := types.NonRetryable(errFake, types.RetryAfterConfig, "edit the config")
+	cause := types.NonRetryable(errFake, job.RetryAfterConfig, "edit the config")
 	tests := map[string]error{
 		"typed":              cause,
 		"typed and wrapped":  fmt.Errorf("fetch: %w", cause),
@@ -155,7 +156,7 @@ func TestDoStopsWhenALaterAttemptIsNonRetryable(t *testing.T) {
 		if calls < 3 {
 			return errFake
 		}
-		return types.NonRetryable(errFake, types.RetryAfterPerson, "no")
+		return types.NonRetryable(errFake, job.RetryAfterPerson, "no")
 	}, WithAttempts(5), WithDelay(time.Nanosecond))
 	require.Error(t, err)
 	assert.Equal(t, 3, calls)

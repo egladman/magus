@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"maps"
 	"os"
@@ -30,8 +29,10 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -779,7 +780,7 @@ func (m *Magus) admitSymbolRefresh(ctx context.Context) (func(), error) {
 		return func() {}, nil
 	}
 	policy := cmp.Or(m.brokerPolicy, m.cfg.Broker)
-	return cache.AdmitMachine(ctx, m.broker, types.MachineClaim{
+	return cache.AdmitMachine(ctx, m.broker, budget.Claim{
 		Project:  ".",
 		Target:   "symbol-refresh",
 		MemoryMB: symbolRefreshMemoryMB,
@@ -1121,7 +1122,7 @@ func (m *Magus) installIndexedProjects(ctx context.Context, touched []projectInd
 				seen = append(seen, key)
 				lim := cache.LimiterFromContext(ctx)
 				err := cache.LendMachineClaim(ctx, func(ctx context.Context) error {
-					return proc.RunChildSync(ctx, lim, func() error { return cd.Dispatch(cache.WithoutSlotHeld(ctx), p, target) })
+					return proc.RunChildSync(ctx, lim, func() error { return cd.Dispatch(budget.WithoutSlotHeld(ctx), p, target) })
 				})
 				if err != nil {
 					return fmt.Errorf("installing %s before its symbol index: %w", idx.projectRef().Display(), err)

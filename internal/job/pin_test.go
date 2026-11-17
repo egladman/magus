@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 // PinSuite pins `magus job pin` and `magus job advance`: the root re-pins a checkout's
@@ -28,20 +28,20 @@ func TestPinSuite(t *testing.T) {
 
 func (s *PinSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"})
-	s.loc = Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root(), Actor: &Actor{}}
+	s.loc = Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root(), Actor: &job.Actor{}}
 	s.bin = filepath.Join(s.repo.Root(), "magus")
 	s.Require().NoError(os.WriteFile(s.bin, []byte("#!/bin/sh\necho one\n"), 0o755))
-	row := types.Job{ID: "pinned-work", State: types.StateDeclared}
-	_, err := s.store().Update(s.T().Context(), row.ID, func(cur *types.Job) { *cur = row })
+	row := job.Job{ID: "pinned-work", State: job.StateDeclared}
+	_, err := s.store().Update(s.T().Context(), row.ID, func(cur *job.Job) { *cur = row })
 	s.Require().NoError(err)
-	_, err = s.store().RecordWorktree(s.T().Context(), row.ID, types.JobWorktree{Root: s.repo.Root(), Binary: s.bin})
+	_, err = s.store().RecordWorktree(s.T().Context(), row.ID, job.Worktree{Root: s.repo.Root(), Binary: s.bin})
 	s.Require().NoError(err)
 }
 
 func (s *PinSuite) store() *Store { return NewStore(s.loc) }
 
-func (s *PinSuite) row() types.Job {
-	rows, err := s.store().List()
+func (s *PinSuite) row() job.Job {
+	rows, err := s.store().List(s.T().Context())
 	s.Require().NoError(err)
 	for _, r := range rows {
 		if r.ID == "pinned-work" {
@@ -49,7 +49,7 @@ func (s *PinSuite) row() types.Job {
 		}
 	}
 	s.FailNow("no row pinned-work")
-	return types.Job{}
+	return job.Job{}
 }
 
 // workerStore binds the checkout to id and returns the store a worker there opens: its
@@ -68,7 +68,7 @@ func (s *PinSuite) TestPinRecordsTheHashTheBinaryHasNow() {
 	want, err := BinaryDigest(s.bin)
 	s.Require().NoError(err)
 	s.Equal(want, s.row().Worktree.BinaryDigest)
-	refusal, err := s.store().PinRefusal(s.bin)
+	refusal, err := s.store().PinRefusal(s.T().Context(), s.bin)
 	s.Require().NoError(err)
 	s.Empty(refusal, "the hook hands calls to the binary it pinned")
 }
@@ -97,8 +97,8 @@ func (s *PinSuite) TestAWorkerAdvancesNothing() {
 }
 
 func (s *PinSuite) TestTheIntegratorAdvancesARowItLands() {
-	integrator := types.Job{ID: "landing", State: types.StateDeclared, Integrates: []string{"pinned-work"}}
-	_, err := s.store().Update(s.T().Context(), integrator.ID, func(cur *types.Job) { *cur = integrator })
+	integrator := job.Job{ID: "landing", State: job.StateDeclared, Integrates: []string{"pinned-work"}}
+	_, err := s.store().Update(s.T().Context(), integrator.ID, func(cur *job.Job) { *cur = integrator })
 	s.Require().NoError(err)
 	head := s.repo.Commit("landed", nil)
 	_, err = PinOrAdvance(s.T().Context(), s.workerStore("landing"), "advance", []string{"pinned-work"})

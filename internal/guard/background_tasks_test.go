@@ -13,7 +13,8 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,10 +160,10 @@ func TestJobBackgroundCommandsNamesWhatTheHolderStillRuns(t *testing.T) {
 	stampHeartbeat(t.Context(), checkout, heartbeat{Session: "s", Lease: "live", Transcript: writeTranscript(t, bgSearchCall, bgSearchResult), At: now})
 	stampHeartbeat(t.Context(), checkout, heartbeat{Session: "s", Lease: "done", Transcript: writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone), At: now})
 
-	got := JobBackgroundCommands(checkout, types.Job{ID: "live", CheckoutRoot: checkout}, now)
+	got := JobBackgroundCommands(checkout, jobtypes.Job{ID: "live", CheckoutRoot: checkout}, now)
 	assert.Contains(t, got, `stop it: TaskStop {"task_id":`)
-	assert.Empty(t, JobBackgroundCommands(checkout, types.Job{ID: "done", CheckoutRoot: checkout}, now))
-	assert.Empty(t, JobBackgroundCommands(checkout, types.Job{ID: "unstamped", CheckoutRoot: checkout}, now))
+	assert.Empty(t, JobBackgroundCommands(checkout, jobtypes.Job{ID: "done", CheckoutRoot: checkout}, now))
+	assert.Empty(t, JobBackgroundCommands(checkout, jobtypes.Job{ID: "unstamped", CheckoutRoot: checkout}, now))
 }
 
 // A session's first checkpoint sweeps the stores no session has written for a week.
@@ -237,13 +238,13 @@ func TestJudgeStopNamesLiveBackgroundTasks(t *testing.T) {
 	t.Run("a subagent with a live task is refused, the task named", func(t *testing.T) {
 		v, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), "", started.Add(4*time.Hour))
 		require.True(t, ok)
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
+		assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
 		assert.Contains(t, v.Reason, "bc0m5o2bg  started 11:37:41Z, 4h0m0s ago: cd ~/.claude/projects; grep -rhoE")
 	})
 	t.Run("set to advise, a subagent is advised", func(t *testing.T) {
 		v, ok := judgeStop(advise, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), "", started.Add(time.Hour))
 		require.True(t, ok)
-		assert.Equal(t, decisionAdvise, v.Decision)
+		assert.Equal(t, verdict.Advise, v.Decision)
 		assert.Contains(t, v.Context, "bc0m5o2bg")
 	})
 	t.Run("set off, nothing is said", func(t *testing.T) {
@@ -257,7 +258,7 @@ func TestJudgeStopNamesLiveBackgroundTasks(t *testing.T) {
 	t.Run("a root is advised of an old task, never refused", func(t *testing.T) {
 		v, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), "", started.Add(rootBackgroundAge))
 		require.True(t, ok)
-		assert.Equal(t, decisionAdvise, v.Decision)
+		assert.Equal(t, verdict.Advise, v.Decision)
 		assert.Contains(t, v.Context, "bc0m5o2bg")
 	})
 	t.Run("a root's young task is one it waits on", func(t *testing.T) {
@@ -278,7 +279,7 @@ func TestJudgeStopAdvisesARootOncePerTask(t *testing.T) {
 	searchStarted := bgTime(t, "2026-10-13T11:37:41.120Z")
 	now := searchStarted.Add(4 * time.Hour)
 	said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
-	stop := func(lines ...string) (types.GuardJudgment, bool) {
+	stop := func(lines ...string) (verdict.Judgment, bool) {
 		return judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, lines...)), "", now)
 	}
 
@@ -287,7 +288,7 @@ func TestJudgeStopAdvisesARootOncePerTask(t *testing.T) {
 
 	v, ok := stop(bgSearchCall, bgSearchResult)
 	require.True(t, ok, "a young task's silence spent nothing")
-	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
 	assert.Equal(t, "magus workspace: a shell command this session ran in the background is still running; stop any nothing waits on:\n"+
 		"  bc0m5o2bg  started 11:37:41Z, 4h0m0s ago: cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c\n"+
 		`    stop it: TaskStop {"task_id": "bc0m5o2bg"}`, v.Context)
@@ -382,8 +383,8 @@ func TestSubagentStoppedNeedsAnAgent(t *testing.T) {
 func TestEndStoppedSessionStampsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	root := t.TempDir()
 	commitCheckout(t, root)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
-	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &jobtypes.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -391,21 +392,21 @@ func TestEndStoppedSessionStampsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	require.NoError(t, store.Bind(worker, "w"))
 	stop := subagentStop(t, worker.Agent, "/x/agent.jsonl")
 
-	ended, err := endStoppedSession(t.Context(), store, worker, stop, "", types.GuardJudgment{Decision: decisionDeny})
+	ended, err := endStoppedSession(t.Context(), store, worker, stop, "", verdict.Judgment{Decision: verdict.Deny})
 	require.NoError(t, err)
 	assert.False(t, ended)
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Zero(t, rows[0].HolderStopped, "a refused stop leaves the agent running")
 
-	ended, err = endStoppedSession(t.Context(), store, worker, stop, "", types.GuardJudgment{})
+	ended, err = endStoppedSession(t.Context(), store, worker, stop, "", verdict.Judgment{})
 	require.NoError(t, err)
 	assert.False(t, ended)
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Equal(t, jobtypes.StateRunning, rows[0].State, rows[0].EndReason)
 	assert.NotZero(t, rows[0].HolderStopped)
 	assert.False(t, store.Binding(worker).Gone)
 }
@@ -413,8 +414,8 @@ func TestEndStoppedSessionStampsTheJobOnlyWhenTheStopStands(t *testing.T) {
 func TestEndStoppedSessionEndsTheJobAtASessionEnd(t *testing.T) {
 	root := t.TempDir()
 	commitCheckout(t, root)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
-	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &jobtypes.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -422,10 +423,10 @@ func TestEndStoppedSessionEndsTheJobAtASessionEnd(t *testing.T) {
 	require.NoError(t, store.Bind(holder, "w"))
 	end := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"})
 
-	ended, err := endStoppedSession(t.Context(), store, holder, end, "", types.GuardJudgment{})
+	ended, err := endStoppedSession(t.Context(), store, holder, end, "", verdict.Judgment{})
 	require.NoError(t, err)
 	assert.True(t, ended)
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
@@ -437,8 +438,8 @@ func TestJudgeStampsTheJobASubagentStopReleasesAndItsNextCallClears(t *testing.T
 	ctx, cacheDir := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{})
 	commitCheckout(t, at.workspace)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: at.workspace, CacheDir: cacheDir, Actor: &job.Actor{}})
-	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: at.workspace, CacheDir: cacheDir, Actor: &jobtypes.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -448,11 +449,11 @@ func TestJudgeStampsTheJobASubagentStopReleasesAndItsNextCallClears(t *testing.T
 	// A stop that stands: stop-unfiled would refuse this unfiled row's first.
 	standing := Dependencies{Builtins: map[string]builtin.Setting{string(denyRuleStopUnfiled): {Decision: builtin.Off}}}
 	v := Judge(ctx, standing, Request{Input: subagentStop(t, worker.Agent, writeTranscript(t)), Host: "claude-code"})
-	assert.Equal(t, decisionPass, v.Decision, v.Reason+v.Context)
-	rows, err := store.List()
+	assert.Equal(t, verdict.Defer, v.Decision, v.Reason+v.Context)
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Equal(t, jobtypes.StateRunning, rows[0].State, rows[0].EndReason)
 	assert.NotZero(t, rows[0].HolderStopped)
 	assert.Equal(t, job.Binding{Job: "w"}, store.Binding(worker), "no tombstone")
 
@@ -460,11 +461,11 @@ func TestJudgeStampsTheJobASubagentStopReleasesAndItsNextCallClears(t *testing.T
 		"session_id": worker.Session, "agent_id": worker.Agent, "hook_event_name": "PreToolUse",
 		"tool_name": "Bash", "tool_input": map[string]any{"command": "ls"},
 	}), Host: "claude-code"})
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Zero(t, rows[0].HolderStopped)
-	assert.Equal(t, types.StateRunning, rows[0].State)
+	assert.Equal(t, jobtypes.StateRunning, rows[0].State)
 }
 
 // A host whose stop names no agent never stamps, so its row reads as running.
@@ -472,8 +473,8 @@ func TestJudgeLeavesTheJobOfAStopNamingNoAgent(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{})
 	commitCheckout(t, at.workspace)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: at.workspace, CacheDir: cacheDir, Actor: &job.Actor{}})
-	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: at.workspace, CacheDir: cacheDir, Actor: &jobtypes.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -481,10 +482,10 @@ func TestJudgeLeavesTheJobOfAStopNamingNoAgent(t *testing.T) {
 	require.NoError(t, store.Bind(holder, "w"))
 
 	Judge(ctx, Dependencies{}, Request{Input: rootStop(t, writeTranscript(t)), Host: "cursor"})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Equal(t, jobtypes.StateRunning, rows[0].State, rows[0].EndReason)
 	assert.Zero(t, rows[0].HolderStopped)
 }
 
@@ -492,12 +493,12 @@ func TestJudgeLeavesTheJobOfAStopNamingNoAgent(t *testing.T) {
 // judge that one, though it is unbounded too.
 func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	judge := func(line string) types.GuardJudgment {
+	judge := func(line string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: line, Session: "bg", Host: "claude-code", CallBackground: true})
 	}
 	v := judge("rsync -a src/ dst/")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleBackgroundUnbounded)}, judgedAs(v))
-	assert.NotEqual(t, "deny", judge("timeout 600 rsync -a src/ dst/").Decision)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleBackgroundUnbounded)}, judgedAs(v))
+	assert.NotEqual(t, verdict.Deny, judge("timeout 600 rsync -a src/ dst/").Decision)
 
 	timer := judge("sleep 540")
 	assert.Equal(t, string(denyRuleSleepPoll), timer.Rule, timer.Reason)
@@ -590,17 +591,17 @@ func TestJudgeSilentDenyLeavesTheOutputReadable(t *testing.T) {
 	result := strings.Replace(strings.Replace(bgSearchResult, "2026-10-13T11:37:42.674Z", started.Format(time.RFC3339Nano), 1),
 		"/private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output", output, 1)
 	transcript := writeTranscript(t, call, result)
-	judge := func(input string) types.GuardJudgment {
+	judge := func(input string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: input, Session: "s1", Host: "claude-code", Transcript: transcript})
 	}
 
 	v := judge("ls")
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundSilent)}, judgedAs(v))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleBackgroundSilent)}, judgedAs(v))
 	assert.Contains(t, v.Reason, "output: "+output)
 	assert.Contains(t, v.Reason, "its output file stays on disk")
 
 	read := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"s1\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"%s\"}}", output)
-	assert.NotEqual(t, decisionDeny, judge(read).Decision, "a read of the output passes")
+	assert.NotEqual(t, verdict.Deny, judge(read).Decision, "a read of the output passes")
 	got, err := os.ReadFile(output)
 	require.NoError(t, err)
 	assert.Equal(t, "partial result\n", string(got))
@@ -651,8 +652,8 @@ func TestASubagentWaitingOnItsBoundedRunKeepsItsJob(t *testing.T) {
 
 	root := t.TempDir()
 	commitCheckout(t, root)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
-	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &jobtypes.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -662,17 +663,17 @@ func TestASubagentWaitingOnItsBoundedRunKeepsItsJob(t *testing.T) {
 
 	said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
 	v, judged := judgeStop(Dependencies{}, said, stop, "", started.Add(time.Hour))
-	assert.Equal(t, []any{types.GuardJudgment{}, false}, []any{v, judged})
+	assert.Equal(t, []any{verdict.Judgment{}, false}, []any{v, judged})
 	_, recorded := said.LastSeen(stoppedAgentKind(worker.Agent))
 	assert.False(t, recorded, "the subagent still holds its job, so its stop is not recorded")
 
 	ended, err := endStoppedSession(t.Context(), store, worker, stop, "", v)
 	require.NoError(t, err)
 	assert.False(t, ended)
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Equal(t, jobtypes.StateRunning, rows[0].State, rows[0].EndReason)
 	assert.False(t, store.Binding(worker).Gone)
 }
 
@@ -686,29 +687,29 @@ func TestJudgeStopLetsAResumedSubagentStop(t *testing.T) {
 		name    string
 		version string
 		from    string
-		want    func(listing string) types.GuardJudgment
+		want    func(listing string) verdict.Judgment
 	}{
-		{"at the floor", "2.1.299", from, func(listing string) types.GuardJudgment {
-			return types.GuardJudgment{
-				APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Rule: string(denyRuleBackgroundLeft),
+		{"at the floor", "2.1.299", from, func(listing string) verdict.Judgment {
+			return verdict.Judgment{
+				APIVersion: agent.GuardAPIVersion, Decision: verdict.Advise, Rule: string(denyRuleBackgroundLeft),
 				Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: host version 2.1.299 resumes this subagent when each task completes.\nA shell command you ran in the background is still running:\n%s", listing),
 			}
 		}},
-		{"below the floor", "2.1.298", from, func(listing string) types.GuardJudgment {
-			return types.GuardJudgment{
-				APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+		{"below the floor", "2.1.298", from, func(listing string) verdict.Judgment {
+			return verdict.Judgment{
+				APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Rule: string(denyRuleBackgroundLeft),
 				Reason: fmt.Sprintf(stopEachTask, listing, "host version 2.1.298 is below 2.1.299, the first that resumes a subagent when its background task completes"),
 			}
 		}},
-		{"no version recorded", "", from, func(listing string) types.GuardJudgment {
-			return types.GuardJudgment{
-				APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+		{"no version recorded", "", from, func(listing string) verdict.Judgment {
+			return verdict.Judgment{
+				APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Rule: string(denyRuleBackgroundLeft),
 				Reason: fmt.Sprintf(stopEachTask, listing, "the transcript names no host version to compare with 2.1.299, the first that resumes a subagent when its background task completes"),
 			}
 		}},
-		{"no floor declared", "2.1.299", "", func(listing string) types.GuardJudgment {
-			return types.GuardJudgment{
-				APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+		{"no floor declared", "2.1.299", "", func(listing string) verdict.Judgment {
+			return verdict.Judgment{
+				APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Rule: string(denyRuleBackgroundLeft),
 				Reason: fmt.Sprintf(stopEachTask, listing, "the wiring declares no host version that resumes a subagent when its background task completes"),
 			}
 		}},
@@ -747,8 +748,8 @@ func TestReadBackgroundTranscriptKeepsTheVersionAcrossACheckpoint(t *testing.T) 
 func waitingStore(t *testing.T) (*job.Store, job.Caller) {
 	root := t.TempDir()
 	commitCheckout(t, root)
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
-	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &jobtypes.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 	require.NoError(t, err)
 	_, err = store.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -764,10 +765,10 @@ func TestASubagentStopWithALiveTaskLeavesItsTryRunning(t *testing.T) {
 	store, worker := waitingStore(t)
 	transcript := writeTranscript(t, bgSearchCall, bgSearchResult)
 
-	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", types.GuardJudgment{})
+	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", verdict.Judgment{})
 	require.NoError(t, err)
 
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(t.Context())
 	require.NoError(t, err)
 	require.Len(t, tries, 1)
 	assert.Zero(t, tries[0].Status.Ended)
@@ -777,13 +778,13 @@ func TestASubagentStopWithNoLiveTaskEndsItsTry(t *testing.T) {
 	store, worker := waitingStore(t)
 	transcript := writeTranscript(t, `{"type":"user"}`)
 
-	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", types.GuardJudgment{})
+	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", verdict.Judgment{})
 	require.NoError(t, err)
 
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(t.Context())
 	require.NoError(t, err)
 	require.Len(t, tries, 1)
-	assert.Equal(t, types.AttemptEndStop, tries[0].Status.End)
+	assert.Equal(t, jobtypes.AttemptEndStop, tries[0].Status.End)
 }
 
 // A stop its host resumes leaves the row as it was, since a wake is
@@ -796,8 +797,8 @@ func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
 		t.Run(fmt.Sprintf("%s at %q", tc.version, tc.from), func(t *testing.T) {
 			root := t.TempDir()
 			commitCheckout(t, root)
-			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
-			_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &jobtypes.Actor{}})
+			_, err := store.Update(t.Context(), "w", func(row *jobtypes.Job) { *row = jobtypes.Job{ID: "w", State: jobtypes.StateDeclared} })
 			require.NoError(t, err)
 			_, err = store.Exec(t.Context(), "w")
 			require.NoError(t, err)
@@ -805,13 +806,13 @@ func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
 			require.NoError(t, store.Bind(worker, "w"))
 			transcript := writeTranscript(t, stampVersion(bgSearchCall, tc.version), stampVersion(bgSearchResult, tc.version))
 
-			ended, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), tc.from, types.GuardJudgment{Decision: decisionAdvise})
+			ended, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), tc.from, verdict.Judgment{Decision: verdict.Advise})
 			require.NoError(t, err)
 			assert.False(t, ended)
-			rows, err := store.List()
+			rows, err := store.List(t.Context())
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
-			assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+			assert.Equal(t, jobtypes.StateRunning, rows[0].State, rows[0].EndReason)
 			assert.Equal(t, tc.stamped, rows[0].HolderStopped != 0)
 		})
 	}

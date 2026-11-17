@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 

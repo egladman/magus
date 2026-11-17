@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/vcs"
 )
@@ -41,21 +42,21 @@ func unrecordedParts() []*viewerv1.Unrecorded {
 
 // GetSessionActivity serves the loaded events of one session that led up to its last write
 // of the requested path.
-func (s *Service) GetSessionActivity(_ context.Context, req *connect.Request[viewerv1.GetSessionActivityRequest]) (*connect.Response[viewerv1.SessionActivity], error) {
-	out, err := s.loadSessionActivity(req.Peer().Addr, req.Msg.GetSession(), req.Msg.GetPath())
+func (s *Service) GetSessionActivity(ctx context.Context, req *connect.Request[viewerv1.GetSessionActivityRequest]) (*connect.Response[viewerv1.SessionActivity], error) {
+	out, err := s.loadSessionActivity(ctx, req.Peer().Addr, req.Msg.GetSession(), req.Msg.GetPath())
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(out), nil
 }
 
-func (s *Service) loadSessionActivity(peer, session, path string) (*viewerv1.SessionActivity, error) {
+func (s *Service) loadSessionActivity(ctx context.Context, peer, hostSession, path string) (*viewerv1.SessionActivity, error) {
 	// The rest of this service rides the share routes. A session's record does not: the diff
 	// routes it annotates are loopback only, and so is this.
 	if !loopbackPeer(peer) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("viewer: session activity is served to local peers only"))
 	}
-	if !sessions.ValidFileID(session) || path == "" {
+	if !session.ValidFileID(hostSession) || path == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("viewer: a session id and a path are required"))
 	}
 	if s.sessionRoot == "" {
@@ -65,24 +66,24 @@ func (s *Service) loadSessionActivity(peer, session, path string) (*viewerv1.Ses
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	return sessionActivity(session, path, sessions.AgentEvents(fold, session)), nil
+	return sessionActivity(hostSession, path, session.AgentEvents(fold, hostSession)), nil
 }
 
 // sessionActivity picks the window: the events after the session's previous write of path, up
 // to and including its last one, ordered by the host's clock and capped at sessionTurnCap.
-func sessionActivity(session, path string, events []sessions.AgentEvent) *viewerv1.SessionActivity {
-	out := &viewerv1.SessionActivity{Session: session, Unrecorded: unrecordedParts()}
-	slices.SortStableFunc(events, func(a, b sessions.AgentEvent) int { return cmp.Compare(a.AtMs, b.AtMs) })
+func sessionActivity(hostSession, path string, events []session.AgentEvent) *viewerv1.SessionActivity {
+	out := &viewerv1.SessionActivity{Session: hostSession, Unrecorded: unrecordedParts()}
+	slices.SortStableFunc(events, func(a, b session.AgentEvent) int { return cmp.Compare(a.AtMs, b.AtMs) })
 	var writes []int
 	for i, ev := range events {
 		out.Host = cmp.Or(out.Host, ev.Host)
 		out.Transcript = cmp.Or(out.Transcript, ev.Transcript)
 		// compat: see knowledge.go's loadKnowledgeAgentContacts.
-		if ev.Kind == sessions.EventFileWrite && (ev.Text == path || vcs.CheckoutRelative(ev.Text) == path) {
+		if ev.Kind == session.EventFileWrite && (ev.Text == path || vcs.CheckoutRelative(ev.Text) == path) {
 			writes = append(writes, i)
 		}
 	}
@@ -105,20 +106,20 @@ func sessionActivity(session, path string, events []sessions.AgentEvent) *viewer
 	return out
 }
 
-func turnToProto(ev sessions.AgentEvent) *viewerv1.SessionTurn {
+func turnToProto(ev session.AgentEvent) *viewerv1.SessionTurn {
 	t := &viewerv1.SessionTurn{
 		Role:        viewerv1.TurnRole_TURN_ROLE_TOOL,
 		Kind:        ev.Kind,
 		Program:     ev.Program,
 		Time:        tsFromMs(ev.AtMs),
-		Verdict:     ev.Verdict,
+		Verdict:     string(ev.Verdict),
 		Rule:        ev.Rule,
 		Exit:        int32(ev.Exit),
 		Denied:      ev.Denied,
 		Interrupted: ev.Interrupted,
 	}
 	// A guard's output can quote the argv the store refuses to keep as a command's text.
-	if ev.Kind != sessions.EventShellCommand && ev.Kind != sessions.EventHookOutput {
+	if ev.Kind != session.EventShellCommand && ev.Kind != session.EventHookOutput {
 		t.Text = ev.Text
 	}
 	return t

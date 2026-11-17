@@ -1,6 +1,10 @@
 package cache
 
-import "context"
+import (
+	"context"
+
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+)
 
 type (
 	limiterKey  struct{}
@@ -9,13 +13,13 @@ type (
 )
 
 // ContextWithLimiter stores lim in ctx for nested callers (e.g. magus.needs) to yield their slot.
-func ContextWithLimiter(ctx context.Context, lim *Limiter) context.Context {
+func ContextWithLimiter(ctx context.Context, lim *budget.Limiter) context.Context {
 	return context.WithValue(ctx, limiterKey{}, lim)
 }
 
 // LimiterFromContext retrieves the Limiter stored by ContextWithLimiter, or nil.
-func LimiterFromContext(ctx context.Context) *Limiter {
-	v, _ := ctx.Value(limiterKey{}).(*Limiter)
+func LimiterFromContext(ctx context.Context) *budget.Limiter {
+	v, _ := ctx.Value(limiterKey{}).(*budget.Limiter)
 	return v
 }
 

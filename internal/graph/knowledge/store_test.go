@@ -7,8 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/readlog"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +50,7 @@ func readManifest(t *testing.T, cacheDir string) manifest {
 	b, err := os.ReadFile(filepath.Join(StoreDir(cacheDir), "manifest.json"))
 	require.NoError(t, err)
 	var m manifest
-	require.NoError(t, json.Unmarshal(b, &m))
+	require.NoError(t, codec.Unmarshal(b, &m))
 	return m
 }
 
@@ -68,8 +68,8 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 	// A pure disk load (no assembly) reproduces the built graph byte-for-byte.
 	loaded, err := NewStore(cacheDir, false, 0, nil, nil).Load(context.Background())
 	require.NoError(t, err)
-	built, _ := json.Marshal(g1.Output())
-	fromDisk, _ := json.Marshal(loaded.Output())
+	built, _ := codec.Marshal(g1.Output())
+	fromDisk, _ := codec.Marshal(loaded.Output())
 	assert.Equal(t, string(built), string(fromDisk))
 }
 
@@ -149,8 +149,8 @@ func TestRebuildIsIdempotent(t *testing.T) {
 	second := snapshotDir(t, shardsDir)
 
 	assert.Equal(t, first, second, "shard files should be byte-identical across idempotent rebuilds")
-	a, _ := json.Marshal(g1.Output())
-	b, _ := json.Marshal(g2.Output())
+	a, _ := codec.Marshal(g1.Output())
+	b, _ := codec.Marshal(g2.Output())
 	assert.Equal(t, string(a), string(b))
 }
 
@@ -461,7 +461,7 @@ func writeManifestBytes(t *testing.T, b []byte) string {
 
 func marshalManifest(t *testing.T, m manifest) []byte {
 	t.Helper()
-	b, err := json.Marshal(m)
+	b, err := codec.Marshal(m)
 	require.NoError(t, err)
 	return b
 }
@@ -493,7 +493,7 @@ func TestProjectPaths(t *testing.T) {
 				"pkg/a": {},
 			}}),
 		},
-		{name: "truncated json reads as no projects", man: []byte(`{"api_version":"magus.job/v1alpha1","shards":{"pkg/a":`)},
+		{name: "truncated json reads as no projects", man: []byte(`{"api_version":"safetyscissors.job/v1alpha1","shards":{"pkg/a":`)},
 		{name: "non-json reads as no projects", man: []byte("not json at all")},
 		{
 			name: "a manifest of nothing but filtered shards",
@@ -725,7 +725,7 @@ func TestStoreWritesCompactShards(t *testing.T) {
 
 	b, err := os.ReadFile(s.shardPath("pkg/b"))
 	require.NoError(t, err)
-	require.True(t, json.Valid(b))
+	require.True(t, codec.Valid(b))
 	assert.NotContains(t, string(b), "\n", "a compact shard is one line")
 
 	sf, err := s.readShard("pkg/b")
@@ -733,7 +733,7 @@ func TestStoreWritesCompactShards(t *testing.T) {
 	assert.Equal(t, readManifest(t, cacheDir).Shards["pkg/b"].Fingerprint, sf.Fingerprint, "the key is the content's, not the bytes'")
 
 	// The same shard written the way an older build wrote it is read to the same content.
-	indented, err := json.MarshalIndent(sf, "", "  ")
+	indented, err := codec.MarshalIndent(sf, "", "  ")
 	require.NoError(t, err)
 	require.Contains(t, string(indented), "\n  ")
 	assert.Less(t, len(b), len(indented), "compact is smaller than the indented form of the same shard")
@@ -980,9 +980,9 @@ func TestEnsureFastFreshClassWhoseShardWentBadResolvesTheFullStampsToRebuild(t *
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var sf shardFile
-	require.NoError(t, json.Unmarshal(b, &sf))
+	require.NoError(t, codec.Unmarshal(b, &sf))
 	sf.Fingerprint = "written-by-another-build"
-	b, err = json.Marshal(sf)
+	b, err = codec.Marshal(sf)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 
@@ -1348,7 +1348,7 @@ func TestStoreWritesALexicalSidecarPerDomainAndSymbolShard(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	require.Len(t, lines, 2, "a header line, then one line per node")
 	var rec lexicalRecord
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &rec))
+	require.NoError(t, codec.Unmarshal([]byte(lines[1]), &rec))
 	assert.Equal(t, "returns the ranking", rec.SymbolDoc)
 }
 

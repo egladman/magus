@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/compress"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -358,7 +359,7 @@ func readZipEntry(e *zip.File, maxSize int64, name string) (string, error) {
 // half the available parallelism (GOMAXPROCS, which respects cgroup CPU limits
 // on Go 1.22+), capped by the limiter's capacity so we never request more slots
 // than the pool holds. Half leaves headroom for other concurrent spell work.
-func defaultArchiveThreads(lim *cache.Limiter) int {
+func defaultArchiveThreads(lim *budget.Limiter) int {
 	cpus := runtime.GOMAXPROCS(0)
 	cap := cpus
 	if lim != nil {
@@ -377,7 +378,7 @@ func defaultArchiveThreads(lim *cache.Limiter) int {
 // resolveThreads returns the effective thread count for an archive operation.
 // opts.Threads > 0 overrides the auto count. The result is clamped to
 // [1, GOMAXPROCS] and, when a limiter is present, to [1, limiter.cap].
-func resolveThreads(opts types.ArchiveOptions, lim *cache.Limiter) int {
+func resolveThreads(opts types.ArchiveOptions, lim *budget.Limiter) int {
 	explicit := opts.Threads
 	var n int
 	if explicit > 0 {
@@ -413,7 +414,7 @@ func archiveHoldThreads(ctx context.Context, opts types.ArchiveOptions) (threads
 	if lim == nil {
 		return threads, func() {}, nil
 	}
-	held := cache.SlotsHeld(ctx)
+	held := budget.SlotsHeld(ctx)
 	reclaim := func() {
 		if held > 0 {
 			_ = lim.AcquireN(context.WithoutCancel(ctx), held)

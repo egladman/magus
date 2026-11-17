@@ -331,8 +331,8 @@ var allChecks = []checkDef{
 		Doc:            "whether the wired observer hook is recording anything",
 		Evidence:       check.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run: func(_ context.Context, r *runner, _ []*types.Project) check.Check {
-			return r.checkObserverRecording()
+		run: func(ctx context.Context, r *runner, _ []*types.Project) check.Check {
+			return r.checkObserverRecording(ctx)
 		},
 	},
 	{
@@ -340,7 +340,7 @@ var allChecks = []checkDef{
 		Doc:            "whether a host transcript has ever been loaded, and how stale the newest of it is",
 		Evidence:       check.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(_ context.Context, r *runner, _ []*types.Project) check.Check { return r.checkSessionLoad() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) check.Check { return r.checkSessionLoad(ctx) },
 	},
 	{
 		Name:           "guard-wiring",
@@ -377,7 +377,7 @@ var allChecks = []checkDef{
 		Doc:            "live jobs a holder took and left quiet past jobs.stale_after, or blocked on a dependency that ended without passing",
 		Evidence:       check.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(_ context.Context, r *runner, _ []*types.Project) check.Check { return r.checkJobTree() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) check.Check { return r.checkJobTree(ctx) },
 	},
 	{
 		Name:     "server-version",
@@ -566,8 +566,8 @@ var allChecks = []checkDef{
 		Doc:            "a guard rule an agent hit repeatedly across sessions",
 		Evidence:       check.EvidenceInferred,
 		NeedsWorkspace: true,
-		run: func(_ context.Context, r *runner, _ []*types.Project) check.Check {
-			return r.checkRecurringGuardDenials()
+		run: func(ctx context.Context, r *runner, _ []*types.Project) check.Check {
+			return r.checkRecurringGuardDenials(ctx)
 		},
 	},
 	{

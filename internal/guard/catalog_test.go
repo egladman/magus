@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -778,7 +779,7 @@ func (s *remedyContractSuite) TestWorktreeRemove() {
 	s.contract(denyRuleWorktreeRemove,
 		func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepository(t)
-			wt, row := r.workerWorktree(types.StatePass)
+			wt, row := r.workerWorktree(job.StatePass)
 			row.ID = "remedy-lock"
 			seedRemedyJob(t, at, row)
 			writeSpawnedAgent(hint.NewGate(at.cacheDir, FactsKey("claude", "remedy")), "agent-remedy", spawnedAgent{Description: "root/worker remedy-lock"})
@@ -786,7 +787,7 @@ func (s *remedyContractSuite) TestWorktreeRemove() {
 		},
 		func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepository(t)
-			wt, row := r.workerWorktree(types.StateExited)
+			wt, row := r.workerWorktree(job.StateExited)
 			row.ID = "remedy-wait"
 			seedRemedyJob(t, at, row)
 			storeTries(t, at, filedTry(row.ID))

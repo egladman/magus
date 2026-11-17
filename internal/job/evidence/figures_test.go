@@ -10,16 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 func TestPlanSVGsDrawWithoutARefusalAndRepeatByteForByte(t *testing.T) {
-	rows := []types.Job{{ID: "lead", Created: 1, State: types.StateRunning}}
+	rows := []jobtypes.Job{{ID: "lead", Created: 1, State: jobtypes.StateRunning}}
 	for _, id := range []string{"a", "b"} {
-		rows = append(rows, types.Job{ID: id, Created: 2, State: types.StateExited, Parent: "lead"})
+		rows = append(rows, jobtypes.Job{ID: id, Created: 2, State: jobtypes.StateExited, Parent: "lead"})
 	}
 	p := job.NewPlan(rows)
-	holder := func(types.Job) string { return "" }
+	holder := func(jobtypes.Job) string { return "" }
 	first, second := t.TempDir(), t.TempDir()
 
 	paths, err := WritePlanSVGs(t.Context(), p, p.Figures(), first, holder)

@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -56,14 +58,14 @@ func TestDecideGateMatrix(t *testing.T) {
 func TestPoolSaturated(t *testing.T) {
 	cases := []struct {
 		name string
-		snap *types.MachineSnapshot
+		snap *budget.Snapshot
 		want bool
 	}{
 		{"nil snapshot fails open", nil, false},
-		{"idle", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2}, false},
-		{"all slots held", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8}, true},
-		{"all memory held", &types.MachineSnapshot{BudgetMB: 1000, HeldMB: 1000}, true},
-		{"unlimited axes never saturate", &types.MachineSnapshot{HeldSlots: 100, HeldMB: 100000}, false},
+		{"idle", &budget.Snapshot{BudgetSlots: 8, HeldSlots: 2}, false},
+		{"all slots held", &budget.Snapshot{BudgetSlots: 8, HeldSlots: 8}, true},
+		{"all memory held", &budget.Snapshot{BudgetMB: 1000, HeldMB: 1000}, true},
+		{"unlimited axes never saturate", &budget.Snapshot{HeldSlots: 100, HeldMB: 100000}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -313,12 +315,12 @@ func seedGreenGate(t *testing.T, root, fp string) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
-		Outcome: sessions.OutcomePass, Fingerprint: fp,
+		Outcome: session.OutcomePass, Fingerprint: fp,
 		Projects: []string{"."}, Charms: []string{"quiet"},
 		Inv: "inv123",
-	}, sessions.InvocationStart{Workspace: root}))
+	}, session.InvocationStart{Workspace: root}))
 }
 
 // poolProbe answers a fixed load, so no test needs a broker.
@@ -371,7 +373,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	rec, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	require.True(t, ok)
@@ -379,7 +381,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	assert.Equal(t, sessions.GateRecord{
 		GateResult: sessions.GateResult{
 			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
-			Outcome: sessions.OutcomePass, Fingerprint: "fp-1",
+			Outcome: session.OutcomePass, Fingerprint: "fp-1",
 			Projects: []string{"."}, Charms: []string{"quiet"},
 			Inv: "inv123",
 		},
@@ -393,7 +395,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 			continue
 		}
 		var payload sessions.GateResult
-		require.NoError(t, json.Unmarshal(r.Payload, &payload))
+		require.NoError(t, codec.Unmarshal(r.Payload, &payload))
 		if payload.Outcome == sessions.OutcomeDeferred {
 			deferred = &payload
 		}
@@ -470,10 +472,10 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
-		Outcome: sessions.OutcomeFail, Fingerprint: "fp-1",
-	}, sessions.InvocationStart{Workspace: root}))
+		Outcome: session.OutcomeFail, Fingerprint: "fp-1",
+	}, session.InvocationStart{Workspace: root}))
 
 	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	g.poolProbe = poolProbe(true)
@@ -614,7 +616,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	cancel()
 	g.Record(cut, nil, true /* cutShort */, nil)
 
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	_, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	assert.False(t, ok, "a cancelled run must record no verdict, whatever it returned")
@@ -622,7 +624,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	g.Record(context.Background(), nil, false, nil)
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a run that finished still records")
-	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
+	assert.Equal(t, session.OutcomePass, rec.Outcome)
 }
 
 // TestGateRecordsAVerdictDecidedBeforeTheSignal is the other half, and the reason
@@ -644,13 +646,13 @@ func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
 
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a verdict decided before the signal must survive it")
-	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
+	assert.Equal(t, session.OutcomePass, rec.Outcome)
 }
 
 // fold2 re-reads the store, since a Fold is a snapshot rather than a live view.
-func fold2(t *testing.T, dir string) sessions.Fold {
+func fold2(t *testing.T, dir string) session.Fold {
 	t.Helper()
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return fold
 }
@@ -702,11 +704,11 @@ func TestGateRunsWhenTheRepairProbeIsMissingOrFails(t *testing.T) {
 }
 
 func TestDescribePoolSaysWhatItSaw(t *testing.T) {
-	saturated, state := DescribePool(&types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8})
+	saturated, state := DescribePool(&budget.Snapshot{BudgetSlots: 8, HeldSlots: 8})
 	assert.True(t, saturated)
 	assert.Equal(t, "saturated: 8 of 8 slots held", state)
 
-	saturated, state = DescribePool(&types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2})
+	saturated, state = DescribePool(&budget.Snapshot{BudgetSlots: 8, HeldSlots: 2})
 	assert.False(t, saturated)
 	assert.Equal(t, "idle: 2 of 8 slots held", state)
 }
@@ -778,7 +780,7 @@ func (s *CIRecordSuite) TestRepairedRunRecordsAFailureWithEachFilesDigest() {
 			Scope:         sessions.GateScopeAffected,
 			Ref:           "b",
 			Commit:        repo.Head(),
-			Outcome:       sessions.OutcomeFail,
+			Outcome:       session.OutcomeFail,
 			Fingerprint:   "fp-1",
 			Projects:      []string{"."},
 			RepairedFiles: []types.RepairedFile{tidyRepair},

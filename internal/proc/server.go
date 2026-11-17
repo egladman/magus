@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"net"
 	"net/http"
@@ -19,7 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
@@ -28,7 +27,11 @@ import (
 	"github.com/egladman/magus/internal/proc/sockdir"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 )
 
 // maxArgs caps runRequest.Args to prevent OOM from untrusted callers.
@@ -108,8 +111,7 @@ func IsJob(ctx context.Context) bool {
 // Options configures the proc server created by New.
 type Options struct {
 	Handler         func(ctx context.Context, args []string) error // required; ctx carries Root/Cwd
-	Limiter         *cache.Limiter                                 // shared budget; nil → private limiter
-	Concurrency     int                                            // ignored when Limiter is set; 0 → default
+	Limiter         *budget.Limiter                                // required; the slots every run and job here draws from
 	Version         string                                         // "" disables version-mismatch check
 	Address         string                                         // "" → auto-generate in SockDir()
 	WorkspaceLister func() []Workspace                             // optional; used by the server's Status RPC
@@ -144,7 +146,7 @@ type Options struct {
 //
 // Every request carries the server's token, the mounted paths included.
 // Where the platform reports a peer uid, the peer must also run as this user.
-// It is admitted as [types.CredentialSocketPeer] and held to its route's Need.
+// It is admitted as [auth.CredentialSocketPeer()] and held to its route's Need.
 // Elsewhere Mount refuses: nothing needing a credential rides a socket that
 // cannot name its caller.
 type Server struct {
@@ -152,7 +154,7 @@ type Server struct {
 	svc  *service
 	http *http.Server
 	// token is the secret every request must carry; see [TokenEnv].
-	token types.Secret
+	token secrets.Secret
 	// peerChecked is whether requests pass the peer-uid guard; see Server.
 	peerChecked bool
 	// extra is what Mount installed for the paths outside /proc/, nil for none.
@@ -232,6 +234,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	if sock := os.Getenv(SocketEnv); sock != "" {
 		return nil, fmt.Errorf("%w: %s=%s", ErrAlreadyAdopted, SocketEnv, sock)
 	}
+	if opts.Limiter == nil {
+		return nil, errors.New("proc: Options.Limiter is nil: pass the limiter whose slots this server's runs share")
+	}
 
 	var ep endpoint.Endpoint
 	if opts.Address != "" {
@@ -255,13 +260,6 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	}
 
 	lim := opts.Limiter
-	if lim == nil {
-		par := opts.Concurrency
-		if par <= 0 {
-			par = cache.DefaultConcurrency()
-		}
-		lim = cache.NewLimiter(par)
-	}
 
 	serverCtx, cancel := context.WithCancel(ctx)
 
@@ -280,7 +278,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	srv := &Server{
 		ep:          ep,
 		svc:         svc,
-		token:       types.NewSecret(hex.EncodeToString(secret)),
+		token:       secrets.New(hex.EncodeToString(secret)),
 		peerChecked: httpx.PeerCredentialsSupported(),
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -341,7 +339,7 @@ func (s *Server) routes() (http.Handler, error) {
 	if !s.peerChecked {
 		return tokened, nil
 	}
-	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, tokened), nil
+	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), auth.CredentialSocketPeer(), tokened), nil
 }
 
 // requireToken refuses any socket request without this server's token.
@@ -504,7 +502,7 @@ type service struct {
 	handler         func(ctx context.Context, args []string) error
 	read            func(ctx context.Context, root, verb string, request []byte) ([]byte, error)
 	stopped         <-chan struct{}
-	lim             *cache.Limiter
+	lim             *budget.Limiter
 	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
 	workspaceLister func() []Workspace
@@ -562,7 +560,7 @@ func (s *service) run(reqCtx context.Context, req runRequest, reply *runReply) e
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
-	ctx = types.WithJobLease(ctx, req.Lease)
+	ctx = job.WithLease(ctx, req.Lease)
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
 	if req.Sandbox.Enabled() {

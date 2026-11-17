@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // denyUnloadableCommit denies a commit, or a continue that commits,
@@ -16,14 +16,14 @@ import (
 // The commit carries the failure into the approved sources, and then
 // no side loads at all.
 func denyUnloadableCommit(asked *rulesAnswer, call judgedCall, at location) bool {
-	if asked.loadFailure == nil || call.seam != seamCommand || asked.answer.Decision == types.GuardDeny {
+	if asked.loadFailure == nil || call.seam != seamCommand || asked.answer.Decision == verdict.Deny {
 		return false
 	}
 	verb := cmp.Or(commitVerb(call.command, call.dialect), continueVerb(call.command, call.dialect))
 	if verb == "" || !commitsHere(call, at) {
 		return false
 	}
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: unloadableCommitDenial(verb, asked.loadFailure).full()}
+	asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: unloadableCommitDenial(verb, asked.loadFailure).full()}
 	asked.rule, asked.by = denyRulePolicyUnloaded, decidedByBuiltin
 	return true
 }

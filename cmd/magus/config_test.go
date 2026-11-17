@@ -12,11 +12,11 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -43,7 +43,7 @@ func (s *configViewSuite) TestJSONCarriesTheReadingList() {
 	var view struct {
 		Sources []map[string]string `json:"sources"`
 	}
-	s.Require().NoError(json.Unmarshal([]byte(out), &view), out)
+	s.Require().NoError(codec.Unmarshal([]byte(out), &view), out)
 	s.Equal([]map[string]string{{"url": "https://go.dev/ref/mod", "topic": "go modules",
 		"verdict": "follow", "why": "the reference", "contradicts": "https://blog.example/go"}}, view.Sources)
 }
@@ -85,19 +85,19 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 
 func TestMintTokenNamesAndRefusesAReusedName(t *testing.T) {
 	outsideAnyWorkspace(t)
-	mint := func(name string, g types.Grant) (auth.Token, error) {
+	mint := func(name string, g auth.Access) (auth.Token, error) {
 		_, rec, err := mintToken(auth.MintRequest{Name: name, Grant: g, TTL: time.Hour}, false)
 		return rec, err
 	}
 	for _, c := range []struct {
-		grant types.Grant
+		grant auth.Access
 		want  string
-	}{{types.GrantConnector, "connector-1"}, {types.GrantConnector, "connector-2"}, {types.GrantViewer, "console-1"}} {
+	}{{auth.AccessConnector(), "connector-1"}, {auth.AccessConnector(), "connector-2"}, {auth.AccessViewer(), "console-1"}} {
 		rec, err := mint("", c.grant)
 		require.NoError(t, err)
 		assert.Equal(t, c.want, rec.Name)
 	}
-	_, err := mint("connector-1", types.GrantConsole)
+	_, err := mint("connector-1", auth.AccessConsole())
 	assert.ErrorIs(t, err, types.TokenNameExists)
 }
 
@@ -165,7 +165,7 @@ func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
 	require.NoError(t, err)
 	cred, ok := auth.Verify(secret.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: tok.ID, Name: tok.Name, Grant: types.GrantConsole}, cred)
+	assert.Equal(t, auth.Credential{Kind: auth.KindStored, ID: tok.ID, Name: tok.Name, Grant: auth.AccessConsole()}, cred)
 	assert.WithinDuration(t, time.Now().Add(console.LinkTokenLifetime), tok.Expires, time.Minute)
 	_, _, err = store.Redeem(code)
 	assert.ErrorIs(t, err, auth.ErrTokenNotFound, "spent on first use")
@@ -180,14 +180,14 @@ func TestCLIMintsAreAudited(t *testing.T) {
 	root := w.Root()
 	t.Chdir(root)
 
-	secret, rec, err := mintToken(auth.MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour}, false)
+	secret, rec, err := mintToken(auth.MintRequest{Name: "laptop", Grant: auth.AccessConsole(), TTL: time.Hour}, false)
 	require.NoError(t, err)
-	code, codeRec, err := mintToken(auth.MintRequest{Grant: types.GrantViewer, TTL: time.Hour}, true)
+	code, codeRec, err := mintToken(auth.MintRequest{Grant: auth.AccessViewer(), TTL: time.Hour}, true)
 	require.NoError(t, err)
 
 	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	events, err := trail.ReadRecent(base, 10)
+	events, err := trail.ReadRecent(t.Context(), base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	want := map[string]auth.Token{"cli.mint": rec, "link.code": codeRec}
@@ -212,9 +212,9 @@ func TestCLIMintsAreAudited(t *testing.T) {
 // revoke by an exact id or an exact name only.
 func TestTokenCommandsShareOneStore(t *testing.T) {
 	outsideAnyWorkspace(t)
-	_, conn, err := mintToken(auth.MintRequest{Grant: types.GrantConnector, TTL: time.Hour}, false)
+	_, conn, err := mintToken(auth.MintRequest{Grant: auth.AccessConnector(), TTL: time.Hour}, false)
 	require.NoError(t, err)
-	_, _, err = mintToken(auth.MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour}, false)
+	_, _, err = mintToken(auth.MintRequest{Name: "laptop", Grant: auth.AccessConsole(), TTL: time.Hour}, false)
 	require.NoError(t, err)
 
 	require.Error(t, tokenRevoke("config console token revoke", []string{conn.ID[:4]}), "no prefix")

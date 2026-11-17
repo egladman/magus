@@ -12,10 +12,10 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
 )
 
 // heartbeatInterval is how often a (session, lease) pair is stamped at most. A stamp
@@ -50,13 +50,13 @@ type heartbeatJSON struct {
 
 // MarshalJSON writes At as unix seconds, which is all the throttle and the report resolve.
 func (h heartbeat) MarshalJSON() ([]byte, error) {
-	return json.Marshal(heartbeatJSON{Session: h.Session, Lease: h.Lease, Transcript: h.Transcript, At: h.At.Unix()})
+	return codec.Marshal(heartbeatJSON{Session: h.Session, Lease: h.Lease, Transcript: h.Transcript, At: h.At.Unix()})
 }
 
 // UnmarshalJSON reads a stamp written by MarshalJSON.
 func (h *heartbeat) UnmarshalJSON(b []byte) error {
 	var raw heartbeatJSON
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := codec.Unmarshal(b, &raw); err != nil {
 		return err
 	}
 	*h = heartbeat{Session: raw.Session, Lease: raw.Lease, Transcript: raw.Transcript, At: time.Unix(raw.At, 0)}
@@ -74,11 +74,12 @@ func heartbeatStore(root string) (file.JSONL[heartbeat], error) {
 		return file.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
 	}
 	sum := sha256.Sum256([]byte(root))
-	return file.JSONL[heartbeat]{
+	return file.JSONL[heartbeat]{JSONL: codec.JSONL[heartbeat]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(stateBase, "magus", "heartbeat", fmt.Sprintf("%s.jsonl", hex.EncodeToString(sum[:8]))),
 		Perm: 0o600,
 		Key:  heartbeat.key,
-	}, nil
+	}}, nil
 }
 
 // stampHeartbeat records that session was judged on a call under lease at now, at most
@@ -154,13 +155,13 @@ func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now tim
 			}
 			lines = append(lines, line)
 		}
-		return file.RewriteLines(store.Path, lines, store.Perm)
+		return codec.RewriteLines(store.Path, lines, store.Perm)
 	})
 }
 
 // newestStamp is the newest stamp under row's lease in the store of the checkout its holder
 // took it in and in workspace's, false when neither holds one.
-func newestStamp(row types.Job, workspace string) (heartbeat, bool) {
+func newestStamp(row jobtypes.Job, workspace string) (heartbeat, bool) {
 	var newest heartbeat
 	for _, root := range slices.Compact([]string{row.CheckoutRoot, workspace}) {
 		if root == "" {
@@ -185,7 +186,7 @@ func newestStamp(row types.Job, workspace string) (heartbeat, bool) {
 
 // deadOwners is each of owners other than exclude holding rel whose holder [deadHolder]
 // judges dead at now.
-func deadOwners(at location, owners []types.Job, rel, exclude string, now time.Time) []job.DeadHolder {
+func deadOwners(at location, owners []jobtypes.Job, rel, exclude string, now time.Time) []job.DeadHolder {
 	var out []job.DeadHolder
 	store := job.NewStore(at.jobs())
 	for _, row := range owners {
@@ -217,7 +218,7 @@ func clearHolderStopped(ctx context.Context, at location, who hookAttribution) {
 // stop passed [SilentLeaseAfter], or it went silent that long with no
 // background command. An untaken row, a server's and an unread
 // transcript are never dead.
-func deadHolder(store *job.Store, at location, row types.Job, now time.Time) (job.DeadHolder, bool) {
+func deadHolder(store *job.Store, at location, row jobtypes.Job, now time.Time) (job.DeadHolder, bool) {
 	if !job.Editing(row) || row.Registered == 0 || row.ServerRun() {
 		return job.DeadHolder{}, false
 	}
@@ -260,7 +261,7 @@ type SilentLease struct {
 //
 // The workspace's stamps are read from the user state dir; cacheDir is the host-scratch
 // directory the transcript reader keeps its own state in.
-func SilentLeases(root, cacheDir string, rows []types.Job, now time.Time, after time.Duration) ([]SilentLease, error) {
+func SilentLeases(root, cacheDir string, rows []jobtypes.Job, now time.Time, after time.Duration) ([]SilentLease, error) {
 	store, err := heartbeatStore(root)
 	if err != nil {
 		return nil, err

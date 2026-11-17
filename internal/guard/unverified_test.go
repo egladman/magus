@@ -10,13 +10,14 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/gen/typestest"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 // UnverifiedReaderSuite pins the reader a command rule's unverified member calls inside a
@@ -103,7 +104,7 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 	}
 	ctx, cancel := context.WithTimeout(s.T().Context(), judgeReserve+100*time.Millisecond)
 	defer cancel()
-	ctx = withPhaseLog(ctx, trail.Phase{})
+	ctx = withPhaseLog(ctx, trailtypes.Phase{})
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
 	s.Require().NoError(err)
@@ -115,7 +116,7 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 
 func (s *UnverifiedReaderSuite) TestAnEarlierRulesLapsedOpenIsNamedAsThatAndNotAsThisRead() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
-	ctx := withPhaseLog(s.T().Context(), trail.Phase{})
+	ctx := withPhaseLog(s.T().Context(), trailtypes.Phase{})
 	judgmentPhases(ctx).record(timedPhase(phaseInspect, 2*time.Second, 2*time.Second, true))
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)

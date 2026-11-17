@@ -23,7 +23,7 @@ final HELP = "cost: two job-store reads\n{USAGE}\n\n"
 
 // RESULT_SCHEMA is the job result schema the spec's skeleton is written to.
 // `./magus job exit --schema` prints the shape a binary accepts.
-final RESULT_SCHEMA = "magus.job-result/v1alpha1";
+final RESULT_SCHEMA = "safetyscissors.job-result/v1alpha1";
 final WORD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=,+@%-";
 
 // The templates switch Mustache's delimiters to <% %>, so a Buzz string

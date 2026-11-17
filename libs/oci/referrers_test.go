@@ -3,7 +3,7 @@ package oci
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -19,7 +19,7 @@ func TestReferrersTagIsAlgDashEncoded(t *testing.T) {
 
 func referrerBody(t *testing.T, subject RawManifest, artifactType string, annotations map[string]string) []byte {
 	t.Helper()
-	body, err := json.Marshal(ocispec.Manifest{
+	body, err := codec.Marshal(ocispec.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
 		MediaType:    ocispec.MediaTypeImageManifest,
 		ArtifactType: artifactType,
@@ -52,7 +52,7 @@ func TestPushManifestKeepsTheReferrersTagWhenTheRegistryHasNoReferrersAPI(t *tes
 	tagged := reg.tags[ReferrersTag(subject.Digest)]
 	reg.mu.Unlock()
 	var idx ocispec.Index
-	require.NoError(t, json.Unmarshal(tagged, &idx))
+	require.NoError(t, codec.Unmarshal(tagged, &idx))
 	require.Len(t, idx.Manifests, 1, "a second push of the same referrer adds nothing")
 	got := idx.Manifests[0]
 	assert.Equal(t, sbom.Digest, got.Digest)

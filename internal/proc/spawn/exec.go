@@ -21,8 +21,9 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/internal/secret"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -339,8 +340,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// prompting `Password: ` displayed nothing until it exited. The live stream is
 		// redacted per write by the tap in internal/cache/capture.go instead; a secret
 		// split across two writes to the TERMINAL is a documented limit.
-		res.Stdout = secret.RedactString(ctx, outBuf.String())
-		res.Stderr = secret.RedactString(ctx, errBuf.String())
+		res.Stdout = secrets.RedactString(ctx, outBuf.String())
+		res.Stderr = secrets.RedactString(ctx, errBuf.String())
 	}
 	// Surface ctx.Err() whenever cancelled, even if the process won the race and
 	// exited 0, so callers can distinguish cancel from a clean finish. errors.Join
@@ -411,15 +412,6 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 	return c, c.ExtraFiles[0], nil
 }
 
-// jobserverFD is the descriptor a jobserver pipe appended to a child's ExtraFiles lands
-// on: after the launcher's ruleset when the child is confined.
-func jobserverFD(confined bool) int {
-	if confined {
-		return firstExtraFD + sandbox.LauncherFiles
-	}
-	return firstExtraFD
-}
-
 // childEnv layers self-reference variables and caller overrides over the base environment.
 //
 // Under a policy the base is its BaseEnv even when that is empty: a sandboxed child
@@ -446,8 +438,13 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	if js := jobserverFromContext(ctx); js != nil {
 		// An error here is a required policy the kernel cannot confine; Exec refuses
 		// that child before it would start, so the answer is never used.
-		confined, _ := policy.KernelConfines()
-		env = append(env, js.environ(env, jobserverFD(confined))...)
+		// The pipe lands after the launcher's own files, which a confined child carries
+		// ahead of every appended one.
+		fd := firstExtraFD
+		if confined, _ := policy.KernelConfines(); confined {
+			fd += scissors.LauncherFiles
+		}
+		env = append(env, js.environ(env, fd)...)
 	}
 	if slots := seatedSlots(ctx); slots > 0 {
 		env = append(env, goEnviron(env, slots)...)

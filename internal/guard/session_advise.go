@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // denyRulePersonAdvisory names a stop the guard holds to show a person's
@@ -44,14 +44,14 @@ func directiveNote(err error) string {
 
 // adviseMessage answers a person's prompt. The prompt carries an open
 // advisory only where the wiring renders context; elsewhere the stop does.
-func adviseMessage(ctx context.Context, at location, who hookAttribution, rendersContext bool) types.GuardJudgment {
-	v := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+func adviseMessage(ctx context.Context, at location, who hookAttribution, rendersContext bool) verdict.Judgment {
+	v := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	if !rendersContext {
 		return v
 	}
 	directive, note := showDirectives(ctx, at, who)
 	if text := strings.TrimSpace(strings.Join([]string{directive, note}, "\n\n")); text != "" {
-		v.Decision, v.Context = decisionAdvise, text
+		v.Decision, v.Context = verdict.Advise, text
 	}
 	return v
 }
@@ -63,7 +63,7 @@ func endsRootTurn(raw string, who hookAttribution) bool {
 		Event string `json:"hook_event_name"`
 		Agent string `json:"agent_id"`
 	}
-	if _, ok := decodeStop(raw); !ok || json.Unmarshal([]byte(raw), &env) != nil {
+	if _, ok := decodeStop(raw); !ok || codec.Unmarshal([]byte(raw), &env) != nil {
 		return false
 	}
 	return env.Event == "Stop" && env.Agent == "" && who.Agent == ""
@@ -71,8 +71,8 @@ func endsRootTurn(raw string, who hookAttribution) bool {
 
 // adviseStop holds a root stop that v lets through, to show the session the
 // advisories it has not seen. A stop v already holds shows them next time.
-func adviseStop(ctx context.Context, at location, who hookAttribution, raw string, v types.GuardJudgment) types.GuardJudgment {
-	if v.Decision == decisionDeny || !endsRootTurn(raw, who) {
+func adviseStop(ctx context.Context, at location, who hookAttribution, raw string, v verdict.Judgment) verdict.Judgment {
+	if v.Decision == verdict.Deny || !endsRootTurn(raw, who) {
 		return v
 	}
 	directive, note := showDirectives(ctx, at, who)
@@ -82,7 +82,7 @@ func adviseStop(ctx context.Context, at location, who hookAttribution, raw strin
 	if directive == "" {
 		return v
 	}
-	v.Decision, v.Reason, v.Rule = decisionDeny, directive, string(denyRulePersonAdvisory)
+	v.Decision, v.Reason, v.Rule = verdict.Deny, directive, string(denyRulePersonAdvisory)
 	return v
 }
 

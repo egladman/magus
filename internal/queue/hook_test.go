@@ -24,7 +24,8 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
@@ -312,7 +313,7 @@ func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 	dir := t.TempDir()
 	env := HookEnv{Sandbox: config.SandboxConfig{Mode: magustypes.SandboxModeRequired}}
 	res, err := CommandGate(script(`echo "$MAGUS_SANDBOX" > seen`), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
-	if abi, abiErr := sandbox.ABI(); abiErr != nil || abi < sandbox.RequiredABI {
+	if abi, abiErr := scissors.ABI(); abiErr != nil || abi < scissors.RequiredABI {
 		require.ErrorIs(t, err, magustypes.SandboxRequired)
 		assert.NoFileExists(t, filepath.Join(dir, "seen"))
 		return
@@ -497,7 +498,7 @@ func TestTwoCandidatesCannotSeeEachOthersCaches(t *testing.T) {
 	cacheDir, err := os.ReadFile(filepath.Join(second.Dir, "dir"))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(second.Home, ".cache", "magus")+"\n", string(cacheDir))
-	if abi, err := sandbox.ABI(); err == nil && abi >= 1 {
+	if abi, err := scissors.ABI(); err == nil && abi >= 1 {
 		read, err := os.ReadFile(filepath.Join(second.Dir, "read"))
 		require.NoError(t, err)
 		assert.Empty(t, string(read), "landlock keeps the first candidate's box out of reach")
@@ -507,7 +508,7 @@ func TestTwoCandidatesCannotSeeEachOthersCaches(t *testing.T) {
 // Where the kernel has landlock, a hook writes in its checkout and its box and nowhere
 // else, and a process it starts is held to the same.
 func TestAHookIsConfinedToItsBoxWhereTheKernelCan(t *testing.T) {
-	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
+	if abi, err := scissors.ABI(); err != nil || abi < 1 {
 		t.Skip("no landlock on this host: best-effort confines the environment only")
 	}
 	dir, outside := t.TempDir(), t.TempDir()
@@ -527,7 +528,7 @@ func TestAHookIsConfinedToItsBoxWhereTheKernelCan(t *testing.T) {
 // the environment of the process that started it, which sits outside that domain.
 // Without the grant it cannot list /proc at all.
 func TestAHooksProcGrantStopsAtItsLandlockDomainWhereTheKernelCan(t *testing.T) {
-	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
+	if abi, err := scissors.ABI(); err != nil || abi < 1 {
 		t.Skip("no landlock on this host: best-effort confines the environment only")
 	}
 	body := `ls /proc >/dev/null && cat /proc/$$/status >/dev/null && touch listed
@@ -582,7 +583,7 @@ func TestAHookCannotWriteTheSharedObjectStore(t *testing.T) {
 	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(own, "index")))
 	assert.Empty(t, p.WritesOutside(cand.Dir, cand.Home, cand.TempDir), "the checkout's own git directory is its to write")
 
-	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
+	if abi, err := scissors.ABI(); err != nil || abi < 1 {
 		t.Skip("no landlock on this host: best-effort confines the environment only")
 	}
 	res, err := CommandGate(script(fmt.Sprintf(`touch %q && touch %q`, filepath.Join(own, "probe"), filepath.Join(objects, "planted"))), HookEnv{}, nil).
@@ -1038,7 +1039,7 @@ func TestGateCommitGatesInTheBoxAndEnvironmentValidationGivesACandidate(t *testi
 // git reads a denied include as a broken config, so a gate on such a checkout fails
 // every git call: the reason a gated checkout persists no credential.
 func TestTheBoxReadsNoConfigIncludedFromOutsideIt(t *testing.T) {
-	if abi, err := sandbox.ABI(); err != nil || abi < sandbox.RequiredABI {
+	if abi, err := scissors.ABI(); err != nil || abi < scissors.RequiredABI {
 		t.Skip("only the kernel sandbox confines git itself")
 	}
 	root, commit := gitRepository(t, map[string]string{"a.txt": "a\n"})

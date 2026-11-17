@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +25,7 @@ import (
 //
 // Untracked files count as new, as ChangedFiles counts them. Binary files and submodules
 // yield nothing: neither has lines to place.
-func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.FileChange) ([]types.RegionChange, error) {
+func (v gitVCS) Regions(ctx context.Context, root, base string, files []job.FileChange) ([]job.RegionChange, error) {
 	if err := checkRequiredRev(base); err != nil {
 		return nil, err
 	}
@@ -93,15 +94,15 @@ func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.Fi
 	}
 	defer os.RemoveAll(tmp)
 
-	var regions []types.RegionChange
+	var regions []job.RegionChange
 	for _, f := range patched {
 		driver := drivers[f.path]
-		place := func(side types.RegionSide) (placement, error) {
+		place := func(side job.RegionSide) (placement, error) {
 			if driver == "" {
 				return placement{}, nil
 			}
 			var body []byte
-			if side == types.RegionOld {
+			if side == job.RegionOld {
 				text, err := v.ReadFileAt(ctx, root, base, f.path)
 				if err != nil {
 					return placement{}, err
@@ -119,22 +120,22 @@ func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.Fi
 			return placement{lines: types.SplitLines(body), decls: decls}, err
 		}
 		var oldPlaced, newPlaced placement
-		if f.hasSide(types.RegionOld) {
-			if oldPlaced, err = place(types.RegionOld); err != nil {
+		if f.hasSide(job.RegionOld) {
+			if oldPlaced, err = place(job.RegionOld); err != nil {
 				return nil, err
 			}
 		}
-		if f.hasSide(types.RegionNew) {
-			if newPlaced, err = place(types.RegionNew); err != nil {
+		if f.hasSide(job.RegionNew) {
+			if newPlaced, err = place(job.RegionNew); err != nil {
 				return nil, err
 			}
 		}
 		for _, h := range f.hunks {
-			regions = appendRegions(regions, f.path, types.RegionOld, h.oldStart, h.oldCount, driver, oldPlaced)
-			regions = appendRegions(regions, f.path, types.RegionNew, h.newStart, h.newCount, driver, newPlaced)
+			regions = appendRegions(regions, f.path, job.RegionOld, h.oldStart, h.oldCount, driver, oldPlaced)
+			regions = appendRegions(regions, f.path, job.RegionNew, h.newStart, h.newCount, driver, newPlaced)
 		}
 	}
-	slices.SortStableFunc(regions, func(a, b types.RegionChange) int {
+	slices.SortStableFunc(regions, func(a, b job.RegionChange) int {
 		return cmp.Or(strings.Compare(a.File.Path, b.File.Path),
 			cmp.Compare(sideOrder(a.Side), sideOrder(b.Side)),
 			cmp.Compare(a.Lines[0], b.Lines[0]))
@@ -154,7 +155,7 @@ var regionDiffFlags = []string{"-U0", "--inter-hunk-context=0", "--diff-algorith
 // RegionsBetween implements types.RegionReporter: the line ranges come from a `git diff
 // --no-index` of the two versions under Regions' pinned flags, and each line is placed by
 // gitPlaceLines on the version that holds it, exactly as Regions places a checkout's.
-func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]types.RegionChange, error) {
+func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]job.RegionChange, error) {
 	if isBinaryContent(before) || isBinaryContent(after) {
 		return nil, nil
 	}
@@ -195,14 +196,14 @@ func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, a
 		if err := os.Mkdir(dir, 0o700); err != nil {
 			return nil, err
 		}
-		if f.hasSide(types.RegionOld) {
+		if f.hasSide(job.RegionOld) {
 			decls, err := gitPlaceLines(ctx, dir, driver, funcnames, before)
 			if err != nil {
 				return nil, err
 			}
 			oldPlaced = placement{lines: types.SplitLines(before), decls: decls}
 		}
-		if f.hasSide(types.RegionNew) {
+		if f.hasSide(job.RegionNew) {
 			decls, err := gitPlaceLines(ctx, dir, driver, funcnames, after)
 			if err != nil {
 				return nil, err
@@ -210,12 +211,12 @@ func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, a
 			newPlaced = placement{lines: types.SplitLines(after), decls: decls}
 		}
 	}
-	var regions []types.RegionChange
+	var regions []job.RegionChange
 	for _, h := range f.hunks {
-		regions = appendRegions(regions, path, types.RegionOld, h.oldStart, h.oldCount, driver, oldPlaced)
-		regions = appendRegions(regions, path, types.RegionNew, h.newStart, h.newCount, driver, newPlaced)
+		regions = appendRegions(regions, path, job.RegionOld, h.oldStart, h.oldCount, driver, oldPlaced)
+		regions = appendRegions(regions, path, job.RegionNew, h.newStart, h.newCount, driver, newPlaced)
 	}
-	slices.SortStableFunc(regions, func(a, b types.RegionChange) int {
+	slices.SortStableFunc(regions, func(a, b job.RegionChange) int {
 		return cmp.Or(cmp.Compare(sideOrder(a.Side), sideOrder(b.Side)), cmp.Compare(a.Lines[0], b.Lines[0]))
 	})
 	return regions, nil
@@ -229,7 +230,7 @@ type placement struct {
 
 // appendRegions splits count lines from start on side into one region per run of lines
 // sharing a declaration, as types.PlaceHunk names them.
-func appendRegions(regions []types.RegionChange, path string, side types.RegionSide, start, count int, driver string, p placement) []types.RegionChange {
+func appendRegions(regions []job.RegionChange, path string, side job.RegionSide, start, count int, driver string, p placement) []job.RegionChange {
 	var hunk []string
 	if p.decls == nil {
 		driver = ""
@@ -248,16 +249,16 @@ func appendRegions(regions []types.RegionChange, path string, side types.RegionS
 		for end+1 < start+count && declAt(end+1) == decl {
 			end++
 		}
-		regions = append(regions, types.RegionChange{
-			File: types.FileChange{Path: path}, Side: side, Lines: [2]int{line, end}, Declaration: decl, Driver: driver,
+		regions = append(regions, job.RegionChange{
+			File: job.FileChange{Path: path}, Side: side, Lines: [2]int{line, end}, Declaration: decl, Driver: driver,
 		})
 		line = end + 1
 	}
 	return regions
 }
 
-func sideOrder(s types.RegionSide) int {
-	if s == types.RegionOld {
+func sideOrder(s job.RegionSide) int {
+	if s == job.RegionOld {
 		return 0
 	}
 	return 1
@@ -276,9 +277,9 @@ type patchHunk struct {
 	newStart, newCount int
 }
 
-func (f patchFile) hasSide(side types.RegionSide) bool {
+func (f patchFile) hasSide(side job.RegionSide) bool {
 	return slices.ContainsFunc(f.hunks, func(h patchHunk) bool {
-		if side == types.RegionOld {
+		if side == job.RegionOld {
 			return h.oldCount > 0
 		}
 		return h.newCount > 0

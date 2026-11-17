@@ -63,6 +63,9 @@ import "project/libs/proofread" as proofreadlib;
 import "project/libs/testpairing";
 import "project/libs/scipbuzz";
 import "project/libs/xdg";
+import "project/libs/codec";
+import "project/libs/safetyscissors";
+import "project/libs/secrets";
 import "project/libs/text" as textlib;
 import "project/libs/termkit";
 import "project/libs/clikit";
@@ -134,8 +137,9 @@ magus\project({
     // libs/result is not a project: result.buzz lives under this tree (go-build embeds it).
     // The rest are the libs whose targets these targets ctx.needs (MGS1062).
     "depends_on": ["proto", "libs/figure", "libs/embed", "libs/clikit", "libs/conventions",
-                   "libs/diagnostics", "libs/gopherbuzz", "libs/proofread", "libs/scipbuzz",
-                   "libs/termkit", "libs/testpairing", "libs/textsearch", "libs/xdg", "libs/text"],
+                   "libs/codec", "libs/diagnostics", "libs/gopherbuzz", "libs/proofread", "libs/scipbuzz",
+                   "libs/safetyscissors", "libs/secrets", "libs/termkit", "libs/testpairing", "libs/textsearch", "libs/xdg",
+                   "libs/text"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",
@@ -275,10 +279,6 @@ magus\project({
             "slots": 4,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
-        // The confinement tests read their children's /proc entries.
-        "landlock-test": {
-            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
-        },
         "coverage-render": {"skip_cache": "reads the profiles CI measured and the assembled site, which it cannot declare as inputs"},
         // Uncached, so each suite it needs keys and replays from its own entry.
         "coverage-measure": {"skip_cache": "composes the suites and reads nothing itself; each member replays from its own cache entry"},
@@ -377,7 +377,7 @@ fun ld_flags() > str !> any {
 // Builds the OpenCode wasm runtime and its wasm_exec.js via go generate.
 export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["internal/interp/bindings/opencode/**/*.go", "internal/interp/bindings/opencode/plugin.buzz",
-        "internal/json/**/*.go",
+        "libs/codec/**/*.go", "libs/codec/go.mod",
         "libs/gopherbuzz/**/*.go", "libs/gopherbuzz/go.mod", "libs/diagnostics/**/*.go",
         "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml"]);
     ctx.writesFiles(["spells/harness/opencode/gen/magus-opencode.wasm", "spells/harness/opencode/gen/wasm_exec.js"]);
@@ -1947,11 +1947,11 @@ fun verify_release_workflow() > [Verdict] !> any {
 }
 
 // Every check that must hold before a tag exists: the Go module proxy caches a tag
-// within the hour, so a failed release burns the version. Returns every verdict
-// rather than stopping at the first.
-fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
+// within the hour, so a failed release burns the version. alreadyThere is the tags already
+// on the commit wouldBeTags go on: none on a new release commit, HEAD's when the release
+// tags HEAD. Returns every verdict rather than stopping at the first.
+fun release_checks(wouldBeTags: [str], rootVersion: str, alreadyThere: [str]) > [Verdict] !> any {
     var checks = mut [<Verdict>];
-    final onHead = tag_names_on_head();
     final branches = local_branches();
 
     // (a) A branch named like a tag is noted, never refused: git supports it. A bare
@@ -1981,16 +1981,16 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         checks.append(failed("development-only shims", shims.stderr.trim()));
     }
 
-    // (b) Simulates version() with these tags on HEAD. Gated only on a root tag: a
+    // (b) Simulates version() on the tagged commit. Gated only on a root tag: a
     // library-only release publishes no assets.
-    final root = releases\rootReleaseTag(wouldBeTags + onHead);
+    final root = releases\rootReleaseTag(wouldBeTags + alreadyThere);
     if (root == "") {
         var stamped = "the nearest tag by distance";
-        final near = wouldBeTags + onHead;
+        final near = wouldBeTags + alreadyThere;
         if (near.len() > 0) { stamped = "one of " + near.join(", ") + ", chosen arbitrarily"; }
-        checks.append(passed("asset names", "no root release tag would sit on HEAD, so "
+        checks.append(passed("asset names", "no root release tag would sit on the tagged commit, so "
             + RELEASE_WORKFLOW + " does not run and nothing is published. A local "
-            + "`magus run release-build` on this commit stamps " + stamped
+            + "`magus run release-build` on that commit stamps " + stamped
             + ", and refuses when that carries a separator"));
     } else {
         var offenders = mut [<str>];
@@ -2007,7 +2007,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
             }
         }
         if (offenders.len() > 0) {
-            checks.append(failed("asset names", "HEAD would stamp version `" + root + "`, naming assets "
+            checks.append(failed("asset names", "the tagged commit would stamp version `" + root + "`, naming assets "
                 + "like `" + offenders[0] + "` that its tool's upload glob cannot match. The "
                 + "build would be green and the release would publish nothing. " + "{offenders.len()}"
                 + " of the assets release.yaml builds are affected."));
@@ -2074,10 +2074,14 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
     return checks;
 }
 
-// Cuts versions in Go's multi-module order: tag each nested module, rewrite root go.mod's
-// requires to those tags, then tag the root. Dry run by default; name <module>@<version>
-// to release one, and unnamed modules stay put. go.mod's replace directives stay because
-// replace is never transitive. It never pushes.
+// Cuts versions in Go's multi-module order. Dry run by default; name <module>@<version> to
+// release one, and unnamed modules stay put. A require naming a tag nobody cut refuses with
+// the run that releases it too; a pseudo-version, an illegal missing version, or a
+// dependency whose tag no longer holds HEAD's tree refuses as well. The release commit points every go.mod at the new
+// versions and drops each released module's in-repo replaces, so `go install` accepts it;
+// the commit after it restores them, so main keeps its replaces. Both are built and the
+// modules installed from a scratch clone first. Nested modules are tagged before the root,
+// all on the release commit. It never pushes.
 
 export fun release(ctx: magus\Context, args: [str]) > void !> any {
     final deliver = ctx.hasCharm("cd");
@@ -2137,19 +2141,6 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    // Only the three computed candidates: a tag cannot be quietly taken back.
-    foreach (m in modules) {
-        final v = wanted[m["key"]];
-        if (v == null) { continue; }
-        final cur = releases\currentVersion(m["prefix"]);
-        if (!releases\isCandidate(v, cur)) {
-            final n = releases\nextVersions(cur);
-            throw "release: {m["key"]} v{v} is not a legal next version from {cur}"
-                + " - choose {n.patch}, {n.minor} or {n.major}"
-                + " (a prerelease or +metadata build of one of those is fine)";
-        }
-    }
-
     // From v2 the module path must end in /vN, and `go get` resolves the path, not the tag.
     // Refused rather than fixed: a rename rewrites every import.
     foreach (m in modules) {
@@ -2168,28 +2159,111 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    // Before creating any tag, so a failure cannot leave half the modules tagged.
+    // Every in-repo require names a tag that exists once this run has tagged. A tag nobody
+    // cut refuses, naming the run that would cut it: a release tags only what it was told to.
+    final gomods = in_repo_gomods();
+    final tagNames = mut [<str>];
+    foreach (t in vcs\tags()) { tagNames.append(t.name); }
+    final releasing = mut {<str: str>};
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v != null) { releasing[m["dir"]] = "v{v}"; }
+    }
+    final plan = releases\pinPlan(gomods, tags: tagNames, releasing: releasing,
+        legal: fun (dir: str, version: str) > bool !> any {
+            foreach (m in modules) {
+                if (m["dir"] == dir) {
+                    return releases\isCandidate(version.sub(1), cur: releases\currentVersion(m["prefix"]));
+                }
+            }
+            return false;
+        });
+    final pinFailures = mut [<str>];
+    foreach (p in plan.problems) { pinFailures.append(p); }
+    if (plan.missing.len() > 0) {
+        final named = mut [<str>];
+        foreach (a in args) {
+            if (a != "") { named.append(a); }
+        }
+        pinFailures.append(releases\missingTagsRefusal(plan.missing, gomods: gomods, args: named));
+    }
+
+    // A dependency released in an earlier run must be the tree HEAD builds against, or a
+    // consumer of what this run tags gets other code than this repo tested.
+    foreach (dir, version in releasing) {
+        final gomod = gomods[gomod_path(dir)];
+        if (gomod == null) { continue; }
+        foreach (req in releases\inRepoRequires(gomod!)) {
+            final dep = releases\moduleDir(req["module"]!);
+            if (releasing[dep] != null) { continue; }
+            final tag = releases\tagName(dep, version: req["version"]!);
+            if (tagNames.indexOf(tag) == null) { continue; }
+            if (tree_id(tag, dir: dep) != tree_id("HEAD", dir: dep)) {
+                pinFailures.append(releases\tagName(dir, version: version) + " requires " + tag
+                    + ", and HEAD's " + dep + " has changed since that tag: release " + dep + " in this run");
+            }
+        }
+    }
+
+    // Only the three computed candidates: a tag cannot be quietly taken back.
     foreach (m in modules) {
         final v = wanted[m["key"]];
         if (v == null) { continue; }
-        final tag = m["prefix"] + "v" + v;
+        final cur = releases\currentVersion(m["prefix"]);
+        if (!releases\isCandidate(v, cur)) {
+            final n = releases\nextVersions(cur);
+            throw "release: {m["key"]} v{v} is not a legal next version from {cur}"
+                + " - choose {n.patch}, {n.minor} or {n.major}"
+                + " (a prerelease or +metadata build of one of those is fine)";
+        }
+    }
+
+    // Before creating any tag, so a failure cannot leave half the modules tagged.
+    foreach (dir, version in releasing) {
+        final tag = releases\tagName(dir, version: version);
         if (vcs\tags(pattern: tag).len() > 0) {
             throw "release: tag " + tag + " already exists";
         }
     }
 
-    // These all run and print; under cd a single failure refuses the release.
-    var wouldBeTags = mut [<str>];
-    foreach (m in modules) {
-        final v = wanted[m["key"]];
-        if (v == null) { continue; }
-        wouldBeTags.append(m["prefix"] + "v" + v);
+    // Nested modules first, each after what it requires, and the root last.
+    final deps = mut {<str: [str]>};
+    foreach (dir, version in releasing) {
+        final gomod = gomods[gomod_path(dir)];
+        final on = mut [<str>];
+        if (gomod -> text) {
+            foreach (req in releases\inRepoRequires(text)) {
+                final dep = releases\moduleDir(req["module"]!);
+                if (releasing[dep] != null) { on.append(dep); }
+            }
+        }
+        deps[dir] = on;
     }
+    final order = mut [<str>];
+    foreach (dir in releases\releaseOrder(releasing.keys(), deps: deps)) {
+        if (dir != ".") { order.append(dir); }
+    }
+    if (releasing["."] != null) { order.append("."); }
+    final wouldBeTags = mut [<str>];
+    foreach (dir in order) { wouldBeTags.append(releases\tagName(dir, version: releasing[dir]!)); }
+
+    // These all run and print; under cd a single failure refuses the release.
     var rootVersion = "";
     if (wanted["magus"] != null) { rootVersion = "{wanted["magus"]}"; }
-
     var failures = 0;
-    foreach (c in verify_release_workflow() + release_checks(wouldBeTags, rootVersion: rootVersion)) {
+    foreach (p in pinFailures) {
+        failures = failures + 1;
+        magus\log.warn("release: FAIL requires - " + p);
+    }
+    if (pinFailures.len() == 0) {
+        magus\log.info("release: OK   requires - every in-repo require names a tag that exists or that this run releases");
+    }
+    // The tags go on the release commit when one is made, and on HEAD beside its tags when
+    // no go.mod changes.
+    final pinned = releases\pinGomods(gomods, releasing: releasing);
+    var alreadyThere = [<str>];
+    if (pinned.next.len() == 0) { alreadyThere = tag_names_on_head(); }
+    foreach (c in verify_release_workflow() + release_checks(wouldBeTags, rootVersion: rootVersion, alreadyThere: alreadyThere)) {
         if (c.note) {
             magus\log.warn("release: NOTE " + c.name + " - " + c.detail);
         } else if (c.ok) {
@@ -2199,13 +2273,41 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
             magus\log.warn("release: FAIL " + c.name + " - " + c.detail);
         }
     }
+
+    // The release commit: every go.mod requiring a released module points at its new
+    // version, and each released module's carries no in-repo replace, so `go install
+    // github.com/egladman/magus/cmd/magus@<version>` accepts it. Built and verified in a
+    // scratch clone before any tag exists here.
+    var staged: ReleaseStage? = null;
+    var scratch = "";
+    var goReleased = false;
+    foreach (dir in order) {
+        if (gomods[gomod_path(dir)] != null) { goReleased = true; }
+    }
+    // A missing tag leaves the scratch install nothing to resolve, so it is not rehearsed.
+    if ((failures == 0 or !deliver) and goReleased and plan.missing.len() == 0) {
+        scratch = fs\tempDir("magus-release-");
+        try {
+            staged = stage_release(scratch, order: order, releasing: releasing, gomods: gomods, pinned: pinned);
+        } catch (e) {
+            failures = failures + 1;
+            magus\log.warn("release: FAIL release commit - {e}");
+        }
+    }
+    if (staged -> s) {
+        foreach (line in s.verified) { magus\log.info("release: OK   install - " + line); }
+    }
+
     // Both refusals follow the whole transcript, so one problem cannot hide another.
     if (failures > 0 and deliver) {
+        cleanup_scratch(scratch);
         throw "release: " + failures + " release check(s) failed; nothing was tagged. "
             + "Drop the cd charm to rehearse until they pass.";
     }
-    if (deliver and dirty) { throw "release: tree is dirty; commit before releasing"; }
-
+    if (deliver and dirty) {
+        cleanup_scratch(scratch);
+        throw "release: tree is dirty; commit before releasing";
+    }
     if (!deliver) {
         magus\log.info("release: DRY RUN - add the cd charm to execute");
         if (dirty) { magus\log.info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
@@ -2214,41 +2316,191 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    // 1. Nested modules first: the root's go.mod must require tags that already exist.
-    // Declared as modified: release amends go.mod, and two targets declaring one output
-    // is MGS1020.
-    ctx.writesFiles(["go.mod"], editsExistingSource: true);
-    var gomod = fs\readFile("go.mod");
-    var rewrote = false;
-    foreach (m in modules) {
-        final v = wanted[m["key"]];
-        if (v == null or m["root"] != "") { continue; }
-        magus\log.info("release: tag " + m["prefix"] + "v" + v);
-        if (deliver) { _ = vcs\cmd(["tag", m["prefix"] + "v" + v]); }
-        // Ask go.mod, not the manifest: golangci-lint compiles libs/testpairing, and the root
-        // never imports it.
-        if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
-            magus\log.info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
-        } else if (m["gomodule"] != "") {
-            magus\log.info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
-            gomod = releases\rewriteRequire(gomod, m["gomodule"], "v" + v);
-            rewrote = true;
+    // Declared as modified: release amends the go.mods, and two targets declaring one
+    // output is MGS1020.
+    ctx.writesFiles(["go.mod", "libs/**/go.mod"], editsExistingSource: true);
+    var at = "HEAD";
+    if (staged -> s) {
+        if (s.release != s.base) {
+            magus\log.info("release: commit " + s.release.sub(0, len: 12) + " - " + s.releaseSubject);
         }
+        if (s.restore != "") {
+            magus\log.info("release: commit " + s.restore.sub(0, len: 12) + " - " + s.restoreSubject);
+        }
+        if (deliver and s.release != s.base) {
+            // The staged commits sit on HEAD, so this fast-forwards the branch to them.
+            _ = vcs\cmd(["fetch", "--quiet", "--no-tags", s.clone, STAGED_BRANCH], vcs\CommandOptions{quiet = true});
+            _ = vcs\cmd(["merge", "--ff-only", "--quiet", "FETCH_HEAD"], vcs\CommandOptions{quiet = true});
+        }
+        at = s.release;
     }
-    if (deliver and rewrote) { fs\writeFile("go.mod", gomod); }
-
-    // 2. Root tag LAST, so it captures the go.mod rewrite above.
-    final rootV = wanted["magus"];
-    if (rootV != null) {
-        magus\log.info("release: tag v" + rootV);
-        if (deliver) { _ = vcs\cmd(["tag", "v" + rootV]); }
+    foreach (tag in wouldBeTags) {
+        magus\log.info("release: tag " + tag);
+        if (deliver) { _ = vcs\cmd(["tag", tag, at]); }
     }
+    cleanup_scratch(scratch);
 
     if (deliver) {
-        magus\log.info("release: done - nothing was pushed. Push the tags deliberately when ready.");
+        magus\log.info("release: done - nothing was pushed. Push the branch and the module tags, then the root's, when ready.");
     } else {
-        magus\log.info("release: dry run only - nothing was tagged or written");
+        magus\log.info("release: dry run only - nothing was committed or tagged here");
     }
+}
+
+// ReleaseStage is a release commit built in a scratch clone: the clone, HEAD it was built
+// on, the release commit the tags name (HEAD itself when no go.mod changes), the commit after it that restores the root's replaces ("" when the root
+// is not released), their subjects, and what the scratch install proved.
+object ReleaseStage {
+    clone: str,
+    base: str,
+    release: str,
+    releaseSubject: str,
+    restore: str,
+    restoreSubject: str,
+    verified: [str],
+}
+
+// STAGED_BRANCH names the last staged commit in the scratch clone, for the fetch here.
+final STAGED_BRANCH = "magus-release";
+
+// in_repo_gomods is every tracked go.mod outside testdata, by path, with its text.
+fun in_repo_gomods() > {str: str} !> any {
+    final listing = vcs\cmd(["ls-files", "--", "go.mod", ":(glob)**/go.mod"], vcs\CommandOptions{quiet = true}).stdout;
+    final gomods = mut {<str: str>};
+    foreach (line in listing.split("\n")) {
+        final path = line.trim();
+        if (path == "" or path.indexOf("testdata/") != null) { continue; }
+        gomods[path] = fs\readFile(path);
+    }
+    return gomods;
+}
+
+// gomod_path is the go.mod of the module at dir.
+fun gomod_path(dir: str) > str {
+    if (dir == ".") { return "go.mod"; }
+    return dir + "/go.mod";
+}
+
+// tree_id is the tree rev holds at dir, "" when it holds none.
+fun tree_id(rev: str, dir: str) > str !> any {
+    var spec = rev + ":" + dir;
+    if (dir == ".") { spec = rev + "^\{tree}"; }
+    return vcs\cmd(["rev-parse", "--verify", "--quiet", spec], vcs\CommandOptions{quiet = true, allowFailure = true}).stdout.trim();
+}
+
+// go_env is the environment the scratch clone's go commands run in, then the go binary:
+// no workspace, its own module cache, the user's cache as a read-only proxy, and in-repo
+// modules fetched straight from the clone, whose tags this run has already cut. The binary
+// is the toolchain's own, asked for here: a mise shim on PATH would read the clone's
+// untrusted mise.toml.
+fun go_env(scratch: str, clone: str) > [str] !> any {
+    final cache = proc\exec("go", args: ["env", "GOMODCACHE"], opts: proc\ExecOptions{quiet = true}).stdout.trim();
+    final goroot = proc\exec("go", args: ["env", "GOROOT"], opts: proc\ExecOptions{quiet = true}).stdout.trim();
+    return ["GOROOT=" + goroot, "GOTOOLCHAIN=local", "GOWORK=off", "GOFLAGS=-mod=mod", "GOPRIVATE=" + releases\MODULE_ROOT,
+            "GOPROXY=file://" + cache + "/cache/download,https://proxy.golang.org",
+            "GOMODCACHE=" + fs\join(scratch, "modcache"), "GOBIN=" + fs\join(scratch, "bin"),
+            "GIT_CONFIG_COUNT=2",
+            "GIT_CONFIG_KEY_0=url.file://" + clone + ".insteadOf", "GIT_CONFIG_VALUE_0=https://" + releases\MODULE_ROOT,
+            "GIT_CONFIG_KEY_1=protocol.file.allow", "GIT_CONFIG_VALUE_1=always",
+            fs\join(goroot, "bin", "go")];
+}
+
+// scratch_go runs go with args in dir under env, go_env's environment and binary, and
+// raises with go's stderr.
+fun scratch_go(env: [str], args: [str], dir: str) > void !> any {
+    final res = proc\exec("env", args: env + args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+    if (!res.ok) {
+        throw "`go " + args.join(" ") + "` in " + dir + ": " + res.stderr.trim();
+    }
+}
+
+// stage_release builds the release commit for the dirs in order in a scratch clone of
+// HEAD, tags them there, and proves each Go module installs from those tags outside this
+// repo. It raises with the step that failed.
+fun stage_release(scratch: str, order: [str], releasing: {str: str}, gomods: {str: str}, pinned: releases\Pinned) > ReleaseStage !> any {
+    final clone = fs\join(scratch, "repo");
+    final head = vcs\cmd(["rev-parse", "HEAD"], vcs\CommandOptions{quiet = true}).stdout.trim();
+    _ = vcs\cmd(["clone", "--quiet", "--shared", "--no-checkout", vcs\root(), clone], vcs\CommandOptions{quiet = true});
+    final inClone = vcs\CommandOptions{dir = clone, quiet = true};
+    _ = vcs\cmd(["checkout", "--quiet", "--detach", head], inClone);
+    final commitAll = fun (args: [str]) > void !> any {
+        _ = vcs\cmd(["add", "--all"], inClone);
+        _ = vcs\cmd(["commit", "--quiet"] + args, inClone);
+    };
+
+    final tags = mut [<str>];
+    foreach (dir in order) { tags.append(releases\tagName(dir, version: releasing[dir]!)); }
+    final tagAll = fun () > void !> any {
+        foreach (tag in tags) { _ = vcs\cmd(["tag", "--force", tag], inClone); }
+    };
+    final restored = pinned.restored;
+    foreach (path, text in pinned.next) { fs\writeFile(fs\join(clone, path), content: text); }
+    var subject = "";
+    if (pinned.next.len() > 0) {
+        subject = "release " + releases\releaseName(tags);
+        commitAll(["--message", subject]);
+    }
+    tagAll();
+    final env = go_env(scratch, clone: clone);
+    // Without its replaces a module's go.sum must vouch for the in-repo modules too. Each
+    // is tidied after what it requires, so the sums it records are of their final trees.
+    foreach (dir in order) {
+        if (restored[gomod_path(dir)] == null) { continue; }
+        scratch_go(env, args: ["mod", "tidy"], dir: fs\join(clone, dir));
+        commitAll(["--amend", "--no-edit"]);
+        tagAll();
+    }
+    final release = vcs\cmd(["rev-parse", "HEAD"], inClone).stdout.trim();
+
+    // A scratch module outside the repo, so no replace and no go.work is in play.
+    final consumer = fs\join(scratch, "consumer");
+    fs\mkdirAll(consumer);
+    scratch_go(env, args: ["mod", "init", "example.test/release-check"], dir: consumer);
+    final verified = mut [<str>];
+    foreach (dir in order) {
+        if (gomods[gomod_path(dir)] == null) { continue; }
+        var module = releases\MODULE_ROOT;
+        if (dir != ".") { module = module + "/" + dir; }
+        final version = releasing[dir]!;
+        scratch_go(env, args: ["get", module + "@" + version], dir: consumer);
+        scratch_go(env, args: ["build", module + "/..."], dir: consumer);
+        verified.append("`go get " + module + "@" + version + "` and `go build " + module + "/...` pass outside the repo");
+        if (restored[gomod_path(dir)] != null and fs\isDir(fs\join(clone, dir, "cmd"))) {
+            var cmds = module + "/cmd/...@" + version;
+            if (dir == ".") { cmds = module + "/cmd/magus@" + version; }
+            scratch_go(env, args: ["install", cmds], dir: consumer);
+            verified.append("`go install " + cmds + "` passes");
+        }
+    }
+
+    var restore = "";
+    var restoreSubject = "";
+    if (restored.len() > 0) {
+        foreach (path, text in restored) {
+            fs\writeFile(fs\join(clone, path), content: text);
+            final sum = fs\join(releases\gomodDir(path), "go.sum");
+            if (tree_id(head, dir: sum) != "") {
+                _ = vcs\cmd(["checkout", "--quiet", head, "--", sum], inClone);
+            } else if (fs\exists(fs\join(clone, sum))) {
+                fs\remove(fs\join(clone, sum));
+            }
+        }
+        restoreSubject = "restore the in-repo replaces after " + releases\releaseName(tags);
+        commitAll(["--message", restoreSubject]);
+        restore = vcs\cmd(["rev-parse", "HEAD"], inClone).stdout.trim();
+    }
+    _ = vcs\cmd(["branch", "--force", STAGED_BRANCH], inClone);
+    return ReleaseStage{ clone = clone, base = head, release = release, releaseSubject = subject,
+        restore = restore, restoreSubject = restoreSubject, verified = verified };
+}
+
+// cleanup_scratch removes a release's scratch clone and module cache; "" is none. go
+// writes the cache read-only, so go clean empties it first.
+fun cleanup_scratch(scratch: str) > void !> any {
+    if (scratch == "") { return; }
+    _ = proc\exec("env", args: ["GOMODCACHE=" + fs\join(scratch, "modcache"), "go", "clean", "-modcache"],
+        opts: proc\ExecOptions{quiet = true, allowFailure = true});
+    fs\removeAll(scratch);
 }
 
 // Rebuilds on every debounced change until interrupted.
@@ -2282,7 +2534,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
     // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
     ctx.needs(generate);
-    ctx.needs(advice_test, landlock_test, cli_test);
+    ctx.needs(advice_test, cli_test);
     // extended adds the tests that need a C toolchain and a docker daemon.
     if (ctx.hasCharm("extended")) {
         ctx.needs(compress_cgo_test, completion_test);
@@ -2407,7 +2659,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     }
     final go_profiles = [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
         "libs/conventions/coverage.out", "libs/testpairing/coverage.out",
-        "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/text/coverage.out", "libs/clikit/coverage.out", "libs/termkit/coverage.out"];
+        "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/text/coverage.out", "libs/clikit/coverage.out", "libs/termkit/coverage.out",
+        "libs/safetyscissors/coverage.out", "libs/secrets/coverage.out", "libs/codec/coverage.out"];
     final buzz = "coverage/buzz/coverage.txt";
     final typescript = "console/coverage.txt";
     final missing = mut [<str>];
@@ -2440,7 +2693,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // CI runs this on main after its shards, so each suite replays their entry.
 export fun coverage_measure(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
-        conventionslib\test, testpairing\test, scipbuzz\test, xdg\test, textlib\test, clikit\test, termkit\test, buzz_test);
+        conventionslib\test, testpairing\test, scipbuzz\test, xdg\test, textlib\test, clikit\test, termkit\test,
+        safetyscissors\test, secrets\test, codec\test, buzz_test);
 }
 
 // Runs the in-file `test "..." {}` blocks in this repo's Buzz modules through magus's
@@ -2515,7 +2769,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
         testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format,
-        proofreadlib\proofread_build, conformance_base, textsearch\install);
+        safetyscissors\format, secrets\format, codec\format, proofreadlib\proofread_build, conformance_base, textsearch\install);
     ctx.readsFiles(["hack/lint/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                     "hack/README.md",
@@ -2539,7 +2793,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/testpairing/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                     "libs/scipbuzz/magusfile.buzz", "libs/ssg/magusfile.buzz", "libs/ssg/*.buzz", "libs/xdg/magusfile.buzz", "libs/text/magusfile.buzz", "libs/termkit/magusfile.buzz",
                     "testdata/latex/onepage/magusfile.buzz",
-                    "libs/clikit/magusfile.buzz", "libs/kustomize/*.buzz",
+                    "libs/clikit/magusfile.buzz", "libs/kustomize/*.buzz", "libs/safetyscissors/magusfile.buzz", "libs/secrets/magusfile.buzz", "libs/codec/magusfile.buzz",
                     "libs/kustomize/testdata/*.yaml",
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
@@ -2558,19 +2812,19 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                     "libs/gopherbuzz/**/*.md", "libs/testpairing/**/*.md",
                     "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md", "libs/text/**/*.md", "libs/termkit/**/*.md",
-                    "libs/clikit/**/*.md", "libs/kustomize/**/*.md",
+                    "libs/clikit/**/*.md", "libs/kustomize/**/*.md", "libs/safetyscissors/**/*.md", "libs/secrets/**/*.md", "libs/codec/**/*.md",
                     "proto/**/*.md",
                     "**/*_test.go", "libs/conventions/**/*_test.go", "libs/proofread/**/*_test.go",
                     "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                     "libs/gopherbuzz/**/*_test.go", "libs/testpairing/**/*_test.go",
                     "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go", "libs/text/**/*_test.go", "libs/termkit/**/*_test.go",
-                    "libs/clikit/**/*_test.go",
+                    "libs/clikit/**/*_test.go", "libs/safetyscissors/**/*_test.go", "libs/secrets/**/*_test.go", "libs/codec/**/*_test.go",
                     "**/*.go",
                     "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
                     "libs/proofread/**/*.go", "libs/proofread/train/**/*.go",
                     "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                     "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go", "libs/text/**/*.go", "libs/termkit/**/*.go",
-                    "libs/clikit/**/*.go", "libs/embed/**/*.go", "libs/train/**/*.go",
+                    "libs/clikit/**/*.go", "libs/embed/**/*.go", "libs/train/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go", "libs/codec/**/*.go",
                     "**/*.ts", "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                     "docs/guides/integrations/agents/**/*.tsx",
@@ -2580,7 +2834,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                     "libs/scipbuzz/**/*.buzz", "libs/testpairing/**/*.buzz", "libs/textsearch/**/*.buzz",
                     "libs/xdg/**/*.buzz", "libs/text/**/*.buzz", "libs/clikit/**/*.buzz", "libs/termkit/**/*.buzz", "libs/embed/**/*.buzz",
-                    "libs/train/**/*.buzz", "libs/proofread/train/**/*.buzz",
+                    "libs/train/**/*.buzz", "libs/proofread/train/**/*.buzz", "libs/safetyscissors/**/*.buzz", "libs/secrets/**/*.buzz", "libs/codec/**/*.buzz",
                     "proto/**/*.buzz",
                     "**/*.css", "console/**/*.css", "docs/**/*.css",
                     "**/*.html", "console/**/*.html", "docs/**/*.html",
@@ -2781,7 +3035,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // tree. lint reads libs/**/*.go and test reads **/*.go, which each nested module's
     // format rewrites (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
-        testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format);
+        testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format,
+        safetyscissors\format, secrets\format, codec\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;
@@ -2910,7 +3165,7 @@ fun publish_report(agent: str, results: str, provider: str) > void !> any {
 // Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into
 // benchmarks/agent/bin. Undeclared like ./magus.
 export fun swegrade_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["benchmarks/agent/cmd/swegrade/*.go", "internal/json/*.go", "go.mod", "go.sum"]);
+    ctx.readsFiles(["benchmarks/agent/cmd/swegrade/*.go", "libs/codec/*.go", "libs/codec/go.mod", "go.mod", "go.sum"]);
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-o", "benchmarks/agent/bin/swegrade", "./benchmarks/agent/cmd/swegrade"],
     });
@@ -2985,23 +3240,11 @@ export fun conventions_test(ctx: magus\Context, args: [str]) > void !> any {
     final names = ["TestNoEnvironmentSniffing", "TestEveryDiagnosticCodeHasARaiseSite",
                    "TestEveryReadMagusEnvVarIsRegistered", "TestStoreMechanicsLiveInInternalFile",
                    "TestStoresAreJSONLines", "TestCommentsNameSymbolsThatExist",
-                   "TestNoDirectEncodingJSONImport", "TestRevealCallsStayCapped"];
+                   "TestNoDirectEncodingJSONImport"];
+    // TestRevealCallsStayCapped is a TestMagusSuite method, so it is picked out at the
+    // second level; none of the other names has a subtest the filter could drop.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-run", "^(" + names.join("|") + ")$", "-count=1", ".", "./internal/json", "./internal/secret"] + args});
-}
-
-// Runs internal/sandbox's tests with landlock required. test skips the
-// confinement test: it links cgo, which cannot confine every thread.
-// Linux only; any other host says it skipped.
-export fun landlock_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["internal/sandbox/**/*.go", "go.mod", "go.sum"]);
-    final platform = os\platform()[0];
-    if (platform != "linux") {
-        magus\log.info("landlock-test: skipped: landlock is Linux's, and this host is {platform}");
-        return;
-    }
-    go["go-test"](ctx.withEnv({"CGO_ENABLED": "0", "MAGUS_TEST_REQUIRE_LANDLOCK": "1", "GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-count=1", "./internal/sandbox/..."]});
+        {"args": ["-run", "^(" + names.join("|") + "|TestMagusSuite)$/^TestRevealCallsStayCapped$", "-count=1", "."] + args});
 }
 
 // Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired

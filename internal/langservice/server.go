@@ -11,9 +11,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Server is the stdio language server `magus buzz lsp` runs. It holds the
@@ -30,17 +30,17 @@ type Server struct {
 // --- LSP wire types (only the fields we read or send) ---
 
 type rpcRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+	JSONRPC string           `json:"jsonrpc"`
+	ID      codec.RawMessage `json:"id,omitempty"`
+	Method  string           `json:"method"`
+	Params  codec.RawMessage `json:"params,omitempty"`
 }
 
 type rpcResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Result  any             `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
+	JSONRPC string           `json:"jsonrpc"`
+	ID      codec.RawMessage `json:"id,omitempty"`
+	Result  any              `json:"result,omitempty"`
+	Error   *rpcError        `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -100,7 +100,7 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 			return fmt.Errorf("lsp: read: %w", err)
 		}
 		var req rpcRequest
-		if err := json.Unmarshal(body, &req); err != nil {
+		if err := codec.Unmarshal(body, &req); err != nil {
 			continue // malformed frame: skip rather than kill the session
 		}
 		if req.Method == "exit" {
@@ -127,19 +127,19 @@ func (s *Server) handle(req rpcRequest) {
 		s.reply(req.ID, nil)
 	case "textDocument/didOpen":
 		var p didOpenParams
-		if json.Unmarshal(req.Params, &p) == nil {
+		if codec.Unmarshal(req.Params, &p) == nil {
 			s.docs[p.TextDocument.URI] = p.TextDocument.Text
 		}
 	case "textDocument/didChange":
 		var p didChangeParams
-		if json.Unmarshal(req.Params, &p) == nil && len(p.ContentChanges) > 0 {
+		if codec.Unmarshal(req.Params, &p) == nil && len(p.ContentChanges) > 0 {
 			// Full sync (we advertise TextDocumentSyncKind.Full): the last change
 			// carries the whole document.
 			s.docs[p.TextDocument.URI] = p.ContentChanges[len(p.ContentChanges)-1].Text
 		}
 	case "textDocument/didClose":
 		var p didCloseParams
-		if json.Unmarshal(req.Params, &p) == nil {
+		if codec.Unmarshal(req.Params, &p) == nil {
 			delete(s.docs, p.TextDocument.URI)
 		}
 	case "textDocument/completion":
@@ -174,9 +174,9 @@ func (s *Server) capabilities() any {
 // resolvePosition resolves a position request to the document text and the byte
 // offset the langservice functions take. ok is false when the document is not
 // open, so the caller returns an empty result.
-func (s *Server) resolvePosition(raw json.RawMessage) (src string, offset int, ok bool) {
+func (s *Server) resolvePosition(raw codec.RawMessage) (src string, offset int, ok bool) {
 	var p positionParams
-	if err := json.Unmarshal(raw, &p); err != nil {
+	if err := codec.Unmarshal(raw, &p); err != nil {
 		return "", 0, false
 	}
 	src, ok = s.docs[p.TextDocument.URI]
@@ -186,7 +186,7 @@ func (s *Server) resolvePosition(raw json.RawMessage) (src string, offset int, o
 	return src, positionToOffset(src, p.Position.Line, p.Position.Character), true
 }
 
-func (s *Server) completion(raw json.RawMessage) any {
+func (s *Server) completion(raw codec.RawMessage) any {
 	src, offset, ok := s.resolvePosition(raw)
 	if !ok {
 		return map[string]any{"isIncomplete": false, "items": []any{}}
@@ -220,7 +220,7 @@ func (s *Server) completion(raw json.RawMessage) any {
 	return map[string]any{"isIncomplete": false, "items": items}
 }
 
-func (s *Server) hover(raw json.RawMessage) any {
+func (s *Server) hover(raw codec.RawMessage) any {
 	src, offset, ok := s.resolvePosition(raw)
 	if !ok {
 		return nil
@@ -238,7 +238,7 @@ func (s *Server) hover(raw json.RawMessage) any {
 	}
 }
 
-func (s *Server) signatureHelp(raw json.RawMessage) any {
+func (s *Server) signatureHelp(raw codec.RawMessage) any {
 	src, offset, ok := s.resolvePosition(raw)
 	if !ok {
 		return nil
@@ -352,19 +352,19 @@ func posMap(text string, offset int) map[string]any {
 
 // --- JSON-RPC base protocol (Content-Length framed) ---
 
-func (s *Server) reply(id json.RawMessage, result any) {
+func (s *Server) reply(id codec.RawMessage, result any) {
 	if len(id) == 0 {
 		return // a notification does not get a response
 	}
 	s.writeMessage(rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
 }
 
-func (s *Server) replyError(id json.RawMessage, code int, msg string) {
+func (s *Server) replyError(id codec.RawMessage, code int, msg string) {
 	s.writeMessage(rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
 }
 
 func (s *Server) writeMessage(v any) {
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if err != nil {
 		slog.ErrorContext(context.Background(), "cannot encode a response", attr.Notice(""), attr.Component("lsp"), attr.Error(err))
 		return

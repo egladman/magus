@@ -8,9 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 // maxOvertakes is how many requests may go ahead of a parked one: a smaller
@@ -40,7 +39,7 @@ type parked struct {
 	since time.Time
 	// claim is what it waits to seat, for status and for the seat it is judged to hold
 	// once starved.
-	claim types.MachineClaim
+	claim budget.Claim
 	// try answers it when the budget can. Callers hold s.mu.
 	try func(p *parked) (reply, outcome)
 	// why is what kept it out at its last try. sent is the key of the last
@@ -121,7 +120,7 @@ func (s *server) park(p *parked) {
 // key is the whole frame, so a wake re-sends one whenever anything the
 // client prints from it changed.
 func (r parkedReply) key() string {
-	b, err := json.Marshal(r)
+	b, err := codec.Marshal(r)
 	if err != nil {
 		return fmt.Sprintf("%+v", r)
 	}
@@ -149,8 +148,8 @@ func (s *server) judgeLocked(p, starved *parked) (reply, outcome) {
 		return r, o
 	}
 	head := starved.claim
-	head.Slots = cache.SlotsFloor(head)
-	id := s.budget.Assert(head)
+	head.Slots = budget.SlotsFloor(head)
+	id := s.budget.Adopt(head)
 	defer s.budget.Release(id)
 	return p.try(p)
 }
@@ -242,30 +241,30 @@ func (s *server) refuseParked(code ErrorCode, why string) {
 // waitingLocked lists the parked requests, oldest first, as status shows them, each with
 // who answers for it and the job tree whose validation seat keeps it out. Callers hold
 // s.mu.
-func (s *server) waitingLocked(now time.Time) []types.MachineWaiter {
-	out := make([]types.MachineWaiter, 0, len(s.queue))
+func (s *server) waitingLocked(now time.Time) []budget.Waiter {
+	out := make([]budget.Waiter, 0, len(s.queue))
 	for _, p := range s.queue {
 		c := p.claim
 		tree := ""
 		if p.why.Seat != nil {
 			tree = p.why.Seat.Tree
 		}
-		out = append(out, types.MachineWaiter{
+		out = append(out, budget.Waiter{
 			Project: c.Project, Target: c.Target, PID: c.PID, MemoryMB: c.MemoryMB,
 			Slots: max(c.Slots, 1), Dir: c.Dir, Command: c.Command, Owner: sessionOwner(p.sess), Tree: tree,
-			Since: p.since, WaitedMS: now.Sub(p.since).Milliseconds(),
+			Since: p.since, WaitedMs: now.Sub(p.since).Milliseconds(),
 		})
 	}
-	slices.SortStableFunc(out, func(a, b types.MachineWaiter) int { return a.Since.Compare(b.Since) })
+	slices.SortStableFunc(out, func(a, b budget.Waiter) int { return a.Since.Compare(b.Since) })
 	return out
 }
 
 // claimTry seats c for sess, parking it while anything a release can clear
 // keeps it out. Only a claim larger than the whole budget is refused at once.
-func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (reply, outcome) {
+func (s *server) claimTry(sess *session, c budget.Claim) func(*parked) (reply, outcome) {
 	return func(p *parked) (reply, outcome) {
 		if wait := s.seatLocked(sess, c, false); wait != nil {
-			p.why = parkedReply{Verdict: types.MachineVerdict{Fits: true, OwnRun: true}, Seat: wait}
+			p.why = parkedReply{Verdict: budget.Verdict{Fits: true, OwnRun: true}, Seat: wait}
 			return reply{}, waiting
 		}
 		v := s.budget.Request(c, s.othersParkedLocked(p))
@@ -274,7 +273,7 @@ func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (re
 			sess.claims[v.ID] = v.Slots
 			if p.sent != "" && !p.why.Verdict.OwnRun {
 				waited := c
-				waited.WaitedMS = max(time.Since(p.since).Milliseconds(), 1)
+				waited.WaitedMs = max(time.Since(p.since).Milliseconds(), 1)
 				s.ledger.claimed(s.conns, sess, waited, v, time.Now())
 			}
 			return reply{typeClaimReply, claimReply{Verdict: v}}, seated
@@ -302,7 +301,7 @@ func (s *server) othersParkedLocked(p *parked) int {
 }
 
 // ownedHolders is holders with each one's owner named. Callers hold s.mu.
-func ownedHolders(conns map[net.Conn]*session, holders []types.MachineClaimant) []types.MachineClaimant {
+func ownedHolders(conns map[net.Conn]*session, holders []budget.Claimant) []budget.Claimant {
 	owners := connectionOwners(conns)
 	out := slices.Clone(holders)
 	for i, h := range out {
@@ -319,22 +318,22 @@ const refusedKeep = 20
 // The zero value is ready; s.mu guards it.
 type budgetLedger struct {
 	// refused is newest first.
-	refused []types.MachineAdmission
+	refused []budget.Admission
 	store   *admissionWriter
 }
 
 // claimed records a claim's verdict when it is the MGS3009 refusal the client turns it
-// into. A grant is recorded when the claim waited on other runs (WaitedMS).
-func (l *budgetLedger) claimed(conns map[net.Conn]*session, sess *session, c types.MachineClaim, v types.MachineVerdict, now time.Time) {
-	outcome := types.AdmissionRefused
+// into. A grant is recorded when the claim waited on other runs (WaitedMs).
+func (l *budgetLedger) claimed(conns map[net.Conn]*session, sess *session, c budget.Claim, v budget.Verdict, now time.Time) {
+	outcome := budget.AdmissionRefused
 	switch {
-	case v.Granted && c.WaitedMS > 0:
-		outcome = types.AdmissionSeated
+	case v.Granted && c.WaitedMs > 0:
+		outcome = budget.AdmissionSeated
 	case v.Granted, v.Fits && v.OwnRun:
 		return
 	}
 	a := machineAdmission(c, sessionOwner(sess), v, connectionOwners(conns), now, outcome)
-	if outcome == types.AdmissionRefused {
+	if outcome == budget.AdmissionRefused {
 		l.refuse(a)
 	}
 	l.store.add(a)
@@ -342,13 +341,13 @@ func (l *budgetLedger) claimed(conns map[net.Conn]*session, sess *session, c typ
 
 // capacity is snap with each holder's owner, the connection that holds its
 // pid, and the refusals remembered.
-func (l *budgetLedger) capacity(conns map[net.Conn]*session, snap types.MachineSnapshot) types.MachineSnapshot {
+func (l *budgetLedger) capacity(conns map[net.Conn]*session, snap budget.Snapshot) budget.Snapshot {
 	snap.Holders = ownedHolders(conns, snap.Holders)
 	snap.Refused = slices.Clone(l.refused)
 	return snap
 }
 
-func (l *budgetLedger) refuse(r types.MachineAdmission) {
+func (l *budgetLedger) refuse(r budget.Admission) {
 	l.refused = slices.Insert(l.refused, 0, r)
 	if len(l.refused) > refusedKeep {
 		l.refused = l.refused[:refusedKeep]
@@ -357,7 +356,7 @@ func (l *budgetLedger) refuse(r types.MachineAdmission) {
 
 // machineAdmission is the record of verdict v on c. A seat records the
 // slots it granted, a refusal the slots asked for.
-func machineAdmission(c types.MachineClaim, owner string, v types.MachineVerdict, owners map[int]string, now time.Time, outcome types.AdmissionOutcome) types.MachineAdmission {
+func machineAdmission(c budget.Claim, owner string, v budget.Verdict, owners map[int]string, now time.Time, outcome budget.AdmissionOutcome) budget.Admission {
 	holders := slices.Clone(v.Holders)
 	for i, h := range holders {
 		holders[i].Owner = owners[h.PID]
@@ -366,10 +365,10 @@ func machineAdmission(c types.MachineClaim, owner string, v types.MachineVerdict
 	if v.Granted && v.Slots > 0 {
 		slots = v.Slots
 	}
-	return types.MachineAdmission{
+	return budget.Admission{
 		At: now, Outcome: outcome, PID: c.PID, Project: c.Project, Target: c.Target, Under: c.Under,
 		MemoryMB: c.MemoryMB, Slots: slots, Dir: c.Dir, Command: c.Command, Owner: owner, Fits: v.Fits,
-		WaitedMS: c.WaitedMS, WaitBoundMS: c.WaitBoundMS, Sizing: c.Sizing,
+		WaitedMs: c.WaitedMs, WaitBound: c.WaitBound, Sizing: c.Sizing,
 		BudgetMB: v.BudgetMB, HeldMB: v.HeldMB, BudgetSlots: v.BudgetSlots, HeldSlots: v.HeldSlots,
 		Holders: holders,
 	}

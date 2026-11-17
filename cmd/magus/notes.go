@@ -278,7 +278,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// The editor owns the terminal: inherit all three streams and wait. `sh -c` so a
 	// value like `code --wait` or `emacsclient -nw` works as written, which is what a
 	// reader's $EDITOR usually is.
-	cmd := exec.Command("sh", "-c", editor+" \"$1\"", "sh", path) //nolint:gosec // the editor is the user's own configured command, by design
+	cmd := exec.Command("sh", "-c", editor+" \"$1\"", "sh", path)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		// An editor that never started (a bad $EDITOR, a missing binary) would otherwise

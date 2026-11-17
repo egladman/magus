@@ -26,8 +26,8 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/types"
 )
 
 // buzzLoadWorkspace opens the workspace a script reads. A variable so a test can count
@@ -260,7 +260,7 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 // scriptCheckHolder names the one live row here whose goal checks script.
 // A CLI process cannot see the host session a hook bound its worker by.
 // Two such rows leave it empty: the run cannot say whose it was.
-func scriptCheckHolder(rows []types.Job, root, script string) string {
+func scriptCheckHolder(rows []jobtypes.Job, root, script string) string {
 	here, err := resolvedDir(root)
 	if err != nil {
 		return ""
@@ -268,7 +268,7 @@ func scriptCheckHolder(rows []types.Job, root, script string) string {
 	holder := ""
 	for _, row := range rows {
 		there, err := resolvedDir(row.CheckoutRoot)
-		if err != nil || there != here || !job.Editing(row) || !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool {
+		if err != nil || there != here || !job.Editing(row) || !slices.ContainsFunc(row.EffectiveGoals(), func(g jobtypes.Goal) bool {
 			return g.Check.Script != "" && path.Clean(g.Check.Script) == path.Clean(script)
 		}) {
 			continue

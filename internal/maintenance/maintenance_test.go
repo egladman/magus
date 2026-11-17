@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -38,18 +39,18 @@ func TestIsDue(t *testing.T) {
 	now := time.UnixMilli(1_000_000_000)
 
 	// Never run within the trail: due.
-	require.True(t, isDue(dir, j, now))
+	require.True(t, isDue(t.Context(), dir, j, now))
 
 	// Ran 25h ago (start + duration = finish): interval elapsed, due.
 	old := now.Add(-25 * time.Hour)
-	trail.Append(t.Context(), dir, trail.Event{Ts: old.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trail.KindJob, Action: "server rotate-activities", Outcome: trail.OutcomeOK})
-	require.True(t, isDue(dir, j, now))
+	trail.Append(t.Context(), dir, trailtypes.Event{Ts: old.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trailtypes.KindJob, Action: "server rotate-activities", Outcome: trailtypes.OutcomeOK})
+	require.True(t, isDue(t.Context(), dir, j, now))
 
 	// A more recent run (1h ago) is newest, so LastRun returns it: not due.
 	recent := now.Add(-time.Hour)
-	trail.Append(t.Context(), dir, trail.Event{Ts: recent.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trail.KindJob, Action: "server rotate-activities", Outcome: trail.OutcomeOK})
-	require.False(t, isDue(dir, j, now))
+	trail.Append(t.Context(), dir, trailtypes.Event{Ts: recent.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trailtypes.KindJob, Action: "server rotate-activities", Outcome: trailtypes.OutcomeOK})
+	require.False(t, isDue(t.Context(), dir, j, now))
 
 	// A run of a DIFFERENT job does not satisfy this one.
-	require.True(t, isDue(dir, scheduledJob{argv: []string{"graph", "build"}, interval: time.Hour, action: "graph build"}, now))
+	require.True(t, isDue(t.Context(), dir, scheduledJob{argv: []string{"graph", "build"}, interval: time.Hour, action: "graph build"}, now))
 }

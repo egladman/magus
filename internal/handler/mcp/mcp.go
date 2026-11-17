@@ -20,14 +20,17 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -38,14 +41,14 @@ import (
 // payload that is not a JSON object goes out as text alone, since the spec
 // requires structured content to be an object.
 func jsonResult(v any) (*mcplib.CallToolResult, error) {
-	b, err := json.Marshal(v)
+	b, err := codec.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: marshal result: %w", err)
 	}
 	if t := bytes.TrimSpace(b); len(t) == 0 || t[0] != '{' {
 		return mcplib.NewToolResultText(string(b)), nil
 	}
-	return mcplib.NewToolResultStructured(json.RawMessage(b), string(b)), nil
+	return mcplib.NewToolResultStructured(codec.RawMessage(b), string(b)), nil
 }
 
 // paramString reads a string parameter from a InvokeRequest.Params map.
@@ -113,12 +116,12 @@ func declaredParams(d ToolDescriptor, fn handlerFn) handlerFn {
 // ToolNeed is what every MCP tool requires of the caller's credential, over either transport.
 // The server holds its /mcp route to the same Need, so a credential the route admits is never
 // refused by a tool behind it.
-var ToolNeed = types.Need{Scope: types.ScopeMCP, Level: types.LevelWrite}
+var ToolNeed = auth.Need{Scope: auth.ScopeMCP, Level: auth.LevelWrite}
 
 // authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
 // The credential is the one on ctx: the server's bearer guard stamps the bearer it verified,
-// ServeStdio stamps types.CredentialStdio, and the socket peer guard stamps
-// types.CredentialSocketPeer. A ctx carrying none of them holds the zero credential, which
+// ServeStdio stamps auth.CredentialStdio(), and the socket peer guard stamps
+// auth.CredentialSocketPeer(). A ctx carrying none of them holds the zero credential, which
 // grants nothing.
 func authorize(fn handlerFn) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -391,7 +394,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		ctx = origin.WithContext(ctx, o)
 		// The one boundary where the client's name is known: every record made under this
 		// call is stamped with it as the origin's Host.
-		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), o.Name)
+		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, job.EntryPointMCP), o.Name)
 		ctx = interactive.WithHints(ctx)
 		// The workspace's secret resolver, so the trail writes below are redacted.
 		//
@@ -433,14 +436,14 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		respRef, respBytes := trail.WriteBlob(ctx, trailDir, "mcp", []byte(respText))
 
 		dur := time.Since(start)
-		ev := trail.Event{
+		ev := trailtypes.Event{
 			Ts:   start.UnixMilli(),
-			Kind: trail.KindMCPToolCall,
+			Kind: trailtypes.KindMCPToolCall,
 			// Append stamps the origin from ctx: the entry point, the client's name as Host,
 			// and the credential authorize checks.
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
-			Outcome:       trail.OutcomeOK,
+			Outcome:       trailtypes.OutcomeOK,
 			DurationMs:    dur.Milliseconds(),
 			RequestRef:    reqRef,
 			RequestBytes:  reqBytes,
@@ -454,11 +457,11 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		// the metric (which takes ev.Outcome), or the view shows green for calls that failed.
 		switch {
 		case err != nil:
-			ev.Outcome = trail.OutcomeError
+			ev.Outcome = trailtypes.OutcomeError
 			ev.Error = err.Error()
 			reqLog.ErrorContext(ctx, "toolerror", slog.Duration("duration", dur), attr.Error(err))
 		case result != nil && result.IsError:
-			ev.Outcome = trail.OutcomeError // the error text is the response body, captured above
+			ev.Outcome = trailtypes.OutcomeError // the error text is the response body, captured above
 			reqLog.WarnContext(ctx, "toolfailed", slog.Duration("duration", dur))
 		default:
 			reqLog.InfoContext(ctx, "tooldone", slog.Duration("duration", dur))
@@ -469,7 +472,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 			// sent, the structured copy of the payload included. Attribute by tool +
 			// outcome only to keep metric cardinality bounded.
 			outcome := observability.OutcomeOK
-			if ev.Outcome == trail.OutcomeError {
+			if ev.Outcome == trailtypes.OutcomeError {
 				outcome = observability.OutcomeError
 			}
 			tel.RecordMCPCall(ctx, observability.MCPCall{
@@ -490,7 +493,7 @@ func argsJSON(args map[string]any) []byte {
 	if len(args) == 0 {
 		return nil
 	}
-	raw, err := json.Marshal(args)
+	raw, err := codec.Marshal(args)
 	if err != nil {
 		return nil
 	}
@@ -522,7 +525,7 @@ func structuredBytes(result *mcplib.CallToolResult) int64 {
 	if result == nil || result.StructuredContent == nil {
 		return 0
 	}
-	b, err := json.Marshal(result.StructuredContent)
+	b, err := codec.Marshal(result.StructuredContent)
 	if err != nil {
 		return 0
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -90,7 +90,7 @@ func TestFromConfigCarriesTheModeAndTheControlRoots(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
 	p := fromConfig(t, root, "", config.SandboxConfig{Mode: types.SandboxModeRequired})
 
-	assert.Equal(t, types.SandboxModeRequired, p.Mode) //nolint:fieldwise // Policy is a handle: a compiled ruleset, a temp dir and pointers to its own state, so no expected value can be built
+	assert.Equal(t, types.SandboxModeRequired, p.Mode)
 	assert.Equal(t, filesystem.ResolveRulePath(root), p.Workspace)
 	assert.Equal(t, []string{filesystem.ResolveRulePath(filepath.Join(root, ".git"))}, p.GitDirs)
 	assert.ErrorIs(t, p.CheckWrite(t.Context(), filepath.Join(root, ".git", "hooks", "pre-commit")), filesystem.ErrDenied)

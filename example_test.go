@@ -12,6 +12,8 @@ import (
 	"github.com/egladman/magus"
 	_ "github.com/egladman/magus/buzzengine"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -87,7 +89,7 @@ func Example_openAWorkspace() {
 	defer cleanup()
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -116,7 +118,7 @@ func Example_listProjectsAndTargets() {
 	reg.RegisterProject("api", magus.WithSpell("guide-list"))
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -150,7 +152,7 @@ func Example_runATarget() {
 	reg.RegisterProject("api", magus.WithSpell("guide-run"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -216,7 +218,7 @@ func Example_readAFailedTarget() {
 	reg.RegisterProject("api", magus.WithSpell("guide-check"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -259,7 +261,7 @@ func Example_whatADiffAffects() {
 	reg.RegisterProject("web", magus.WithDependsOn("api"))
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -288,7 +290,7 @@ func ExampleMagus_Context() {
 	defer cleanup()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -324,7 +326,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
             return magus\guard.deny("Build through the target: magus run build api", {"rule": "targets-only"});
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 
@@ -338,7 +340,7 @@ func Example_judgeAToolCall() {
 	defer cleanup()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -356,7 +358,7 @@ func Example_judgeAToolCall() {
 	}
 	// Output:
 	// cp api/greeting.txt api/out/: deny workspace:targets-only Build through the target: magus run build api
-	// magus run build api: pass
+	// magus run build api: defer
 }
 
 // Example_aDeniedRun runs a target the guard denies. Nothing runs, and the
@@ -380,7 +382,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	reg.RegisterProject("api", magus.WithSpell("guide-denied"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -388,7 +390,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	defer m.Close()
 
 	err = m.Run(ctx, []types.Target{{Path: "api", Name: "build"}}, magus.WithSession("guide-session"))
-	var denied *types.GuardDeniedError
+	var denied *verdict.DeniedError
 	if errors.As(err, &denied) {
 		fmt.Println("denied by:", denied.Judgment.Rule)
 	}
@@ -415,7 +417,7 @@ func Example_aProgramThatIsItsOwnHarness() {
 	reg.RegisterProject("api", magus.WithSpell("guide-harness"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -434,7 +436,7 @@ func Example_aProgramThatIsItsOwnHarness() {
 			fmt.Println("judge:", err)
 			return
 		}
-		if j.Decision == "deny" {
+		if j.Decision == verdict.Deny {
 			reason, _, _ := strings.Cut(j.Reason, "\n")
 			fmt.Printf("denied %q: %s\n", command, reason)
 			continue

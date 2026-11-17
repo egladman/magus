@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,7 +79,7 @@ func FocusAt(w types.WorkspaceReader, dir string) (Focus, bool) {
 func FocusForPaths(w types.WorkspaceReader, paths []string) (Focus, bool) {
 	f := Focus{owners: ownerPaths(w)}
 	for _, p := range paths {
-		rel, ok := workspaceRel(w.Root(), types.LiteralPrefix(p))
+		rel, ok := workspaceRel(w.Root(), job.LiteralPrefix(p))
 		if !ok {
 			continue
 		}

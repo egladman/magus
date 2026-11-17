@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // FactHandler turns the execution journal's result events into durable session facts.
@@ -23,10 +24,10 @@ import (
 // worker goroutine that finished each target.
 type FactHandler struct {
 	dir   string
-	start InvocationStart
+	start session.InvocationStart
 
 	mu     sync.Mutex
-	writer *Writer
+	writer *session.Writer
 	broken bool
 }
 
@@ -42,7 +43,7 @@ type FactHandler struct {
 // (cmd/magus/main.go dispatchAdopted), so "who produces an invocation's facts" is not a
 // CLI-only question. start.Lease is read by the CALLER for that reason; see
 // cmd/magus/journal_hook.go, which documents what the server gets wrong today.
-func NewFactHandler(root string, start InvocationStart) slog.Handler {
+func NewFactHandler(root string, start session.InvocationStart) slog.Handler {
 	dir, err := Dir(root)
 	if err != nil {
 		return nil
@@ -71,14 +72,14 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		return nil
 	}
 	if h.writer == nil {
-		w, err := Open(h.dir, e.Inv, h.start)
+		w, err := openWriter(ctx, h.dir, e.Inv, h.start)
 		if err != nil {
 			h.stopRecording(ctx, err)
 			return nil
 		}
 		h.writer = w
 	}
-	if err := h.writer.Append(KindTargetResult, TargetResult{
+	if err := h.writer.Append(ctx, session.KindTargetResult, session.TargetResult{
 		Target:         e.Target,
 		Project:        e.Project,
 		Outcome:        factOutcome(e.Status),
@@ -160,11 +161,11 @@ func (f factWithAttrs) WithGroup(string) slog.Handler { return f }
 // factOutcome maps the execution journal's three statuses onto the session store's
 // pass/fail axis. A cache hit is a PASS that was replayed, not a third outcome: "did
 // this target end up green" and "did work run" are different questions, and
-// [TargetResult.Replayed] answers the second. A permitted result is green on
+// [session.TargetResult.Replayed] answers the second. A permitted result is green on
 // the same axis, so a push gate and a job's owed check read it as covered.
 func factOutcome(status string) string {
 	if status == journal.StatusFail {
-		return OutcomeFail
+		return session.OutcomeFail
 	}
-	return OutcomePass
+	return session.OutcomePass
 }

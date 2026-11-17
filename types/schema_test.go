@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 		raw, err := os.ReadFile(p)
 		require.NoError(t, err)
 		var g schemaGolden
-		require.NoError(t, json.UnmarshalStrict(raw, &g), p)
+		require.NoError(t, codec.UnmarshalStrict(raw, &g), p)
 		out[v] = g
 	}
 	return out
@@ -61,7 +62,7 @@ func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 var packageQualifier = regexp.MustCompile(`\b[a-z][a-z0-9_]*\.`)
 
 // wireType drops the pointer and every package qualifier, so a type that moves
-// between packages is the same wire type and []types.Goal stays []Goal.
+// between packages is the same wire type and []job.Goal stays []Goal.
 func wireType(t string) string {
 	return packageQualifier.ReplaceAllString(strings.TrimPrefix(t, "*"), "")
 }
@@ -79,7 +80,7 @@ func ledgerViolations(l FormatLedger, goldens map[APIVersion]schemaGolden) []str
 	}
 	versions := slices.SortedFunc(maps.Keys(goldens), APIVersion.Compare)
 	if len(versions) == 0 || versions[len(versions)-1] != l.Version {
-		body, _ := json.MarshalIndent(schemaGolden{Fields: current, Reserved: l.Reserved}, "", "  ")
+		body, _ := codec.MarshalIndent(schemaGolden{Fields: current, Reserved: l.Reserved}, "", "  ")
 		add("no frozen field set for %s; commit testdata/schema/%s.%s.json as\n%s", l.Version, l.Name, l.Version.Version(), body)
 		return out
 	}
@@ -152,9 +153,9 @@ func schemaFields(t reflect.Type) (map[string]string, bool) {
 		tag := f.Tag.Get("json")
 		name, opts, _ := strings.Cut(tag, ",")
 		switch {
-		case !f.IsExported(), f.Anonymous, name == "-":
-		case opts == "unknown":
+		case opts == "unknown", f.Tag.Get("codec") == "unknown":
 			hasBag = true
+		case !f.IsExported(), f.Anonymous, name == "-":
 		case name == "":
 			out[f.Name] = f.Type.String()
 		default:
@@ -299,19 +300,19 @@ func TestLedgerViolations(t *testing.T) {
 func TestSchemaUnknownRoundTrips(t *testing.T) {
 	t.Parallel()
 
-	in := `{"api_version":"magus.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
-	var result JobResult
-	require.NoError(t, json.Unmarshal([]byte(in), &result))
+	in := `{"api_version":"safetyscissors.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
+	var result job.Result
+	require.NoError(t, codec.Unmarshal([]byte(in), &result))
 	// The bag's raw values are the decoder's own; its keys are checked below.
-	assert.Equal(t, JobResult{Schema: Schema{Version: "magus.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
+	assert.Equal(t, job.Result{Schema: job.Schema{Version: "safetyscissors.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
 	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(result.Unknown)))
 
-	out, err := json.Marshal(result)
+	out, err := codec.Marshal(result)
 	require.NoError(t, err)
 	var back map[string]any
-	require.NoError(t, json.Unmarshal(out, &back))
+	require.NoError(t, codec.Unmarshal(out, &back))
 	assert.Equal(t, map[string]any{"x": float64(1)}, back["future_field"])
-	assert.Equal(t, "magus.job-result/v1alpha99", back["api_version"])
+	assert.Equal(t, "safetyscissors.job-result/v1alpha99", back["api_version"])
 }
 
 func TestSchemaUnmet(t *testing.T) {
@@ -320,5 +321,4 @@ func TestSchemaUnmet(t *testing.T) {
 	assert.Nil(t, Schema{}.Unmet(nil))
 	assert.Nil(t, Schema{Requires: []string{"a"}}.Unmet([]string{"a", "b"}))
 	assert.Equal(t, []string{"c", "d"}, Schema{Requires: []string{"c", "a", "d"}}.Unmet([]string{"a"}))
-	assert.Equal(t, []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}, JobFeatures)
 }

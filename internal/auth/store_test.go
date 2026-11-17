@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -56,12 +56,12 @@ func names(toks []Token) []string {
 }
 
 // validGrants mirrors the lattice: every grant Validate accepts.
-func validGrants() []types.Grant {
-	var out []types.Grant
-	for _, tok := range []types.Level{types.LevelNone, types.LevelWrite} {
-		for _, mcp := range []types.Level{types.LevelNone, types.LevelWrite} {
-			for _, con := range []types.Level{types.LevelNone, types.LevelRead, types.LevelWrite} {
-				out = append(out, types.Grant{Tokens: tok, MCP: mcp, Console: con})
+func validGrants() []Access {
+	var out []Access
+	for _, tok := range []Level{LevelNone, LevelWrite} {
+		for _, mcp := range []Level{LevelNone, LevelWrite} {
+			for _, con := range []Level{LevelNone, LevelRead, LevelWrite} {
+				out = append(out, Access{Tokens: tok, MCP: mcp, Console: con})
 			}
 		}
 	}
@@ -76,15 +76,15 @@ func TestMintNeverGrantsMoreThanTheMinterHolds(t *testing.T) {
 	store := isolatedStore(t)
 	grants := validGrants()
 	var n atomic.Int64
-	check := func(minter, req types.Grant) error {
+	check := func(minter, req Access) error {
 		name := fmt.Sprintf("t-%d", n.Add(1))
 		_, rec, err := store.Mint(minter, MintRequest{Name: name, Grant: req, TTL: time.Hour})
 		// The oracle is written out here, not borrowed from Grant.Within, so a wrong Within
 		// fails this test rather than agreeing with itself.
-		within := func(a, b types.Grant) bool {
+		within := func(a, b Access) bool {
 			return a.Tokens <= b.Tokens && a.MCP <= b.MCP && a.Console <= b.Console
 		}
-		wantOK := within(req, minter) && req != (types.Grant{}) && req.Tokens == types.LevelNone
+		wantOK := within(req, minter) && req != (Access{}) && req.Tokens == LevelNone
 		switch {
 		case wantOK && err != nil:
 			return fmt.Errorf("%s minting %s: refused: %w", minter, req, err)
@@ -92,7 +92,7 @@ func TestMintNeverGrantsMoreThanTheMinterHolds(t *testing.T) {
 			return fmt.Errorf("%s minted %s", minter, req)
 		case err == nil && !within(rec.Grant, minter):
 			return fmt.Errorf("%s's record holds %s", minter, rec.Grant)
-		case req.Tokens == types.LevelNone && !within(req, minter) && !errors.Is(err, ErrExceedsGrant):
+		case req.Tokens == LevelNone && !within(req, minter) && !errors.Is(err, ErrExceedsGrant):
 			return fmt.Errorf("%s minting %s: wrong error %w", minter, req, err)
 		}
 		return nil
@@ -111,19 +111,19 @@ func TestMintNeverGrantsMoreThanTheMinterHolds(t *testing.T) {
 func TestMintRefusesEachEscalation(t *testing.T) {
 	store := isolatedStore(t)
 	cases := []struct {
-		minter, req types.Grant
+		minter, req Access
 		want        error
 	}{
-		{types.GrantViewer, types.GrantConsole, ErrExceedsGrant},
-		{types.GrantViewer, types.GrantConnector, ErrExceedsGrant},
-		{types.GrantConnector, types.GrantViewer, ErrExceedsGrant},
-		{types.GrantConnector, types.GrantConsole, ErrExceedsGrant},
-		{types.GrantConsole, types.GrantConnector, ErrExceedsGrant},
-		{types.Grant{}, types.GrantViewer, ErrExceedsGrant},
+		{AccessViewer(), AccessConsole(), ErrExceedsGrant},
+		{AccessViewer(), AccessConnector(), ErrExceedsGrant},
+		{AccessConnector(), AccessViewer(), ErrExceedsGrant},
+		{AccessConnector(), AccessConsole(), ErrExceedsGrant},
+		{AccessConsole(), AccessConnector(), ErrExceedsGrant},
+		{Access{}, AccessViewer(), ErrExceedsGrant},
 		// tokens=write is the operator's alone: not even the operator mints a stored copy.
-		{types.GrantConsole, types.GrantOperator, ErrInvalidTokenRequest},
-		{types.GrantOperator, types.GrantOperator, ErrInvalidTokenRequest},
-		{types.GrantOperator, types.Grant{Tokens: types.LevelWrite}, ErrInvalidTokenRequest},
+		{AccessConsole(), AccessOperator(), ErrInvalidTokenRequest},
+		{AccessOperator(), AccessOperator(), ErrInvalidTokenRequest},
+		{AccessOperator(), Access{Tokens: LevelWrite}, ErrInvalidTokenRequest},
 	}
 	for i, c := range cases {
 		_, _, err := store.Mint(c.minter, MintRequest{Name: fmt.Sprintf("e%d", i), Grant: c.req, TTL: time.Hour})
@@ -142,14 +142,14 @@ func TestMintRefusesALifetimeOutsideTheBound(t *testing.T) {
 		"367 days":  367 * 24 * time.Hour,
 		"a century": 100 * 366 * 24 * time.Hour,
 	} {
-		_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantConsole, TTL: ttl})
+		_, _, err := store.Mint(AccessOperator(), MintRequest{Name: "x", Grant: AccessConsole(), TTL: ttl})
 		assert.ErrorIs(t, err, ErrTokenLifetime, name)
 		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, name)
-		_, _, err = store.MintCode(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantConsole, TTL: ttl})
+		_, _, err = store.MintCode(AccessOperator(), MintRequest{Name: "x", Grant: AccessConsole(), TTL: ttl})
 		assert.ErrorIs(t, err, ErrTokenLifetime, "code "+name)
 	}
 	now := time.Now()
-	_, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "max", Grant: types.GrantConsole, TTL: MaxTokenTTL})
+	_, rec, err := store.Mint(AccessOperator(), MintRequest{Name: "max", Grant: AccessConsole(), TTL: MaxTokenTTL})
 	require.NoError(t, err)
 	assert.WithinDuration(t, now.Add(MaxTokenTTL), rec.Expires, time.Second, "the lifetime asked for is the lifetime stored")
 }
@@ -159,11 +159,11 @@ func TestMintRefusesALifetimeOutsideTheBound(t *testing.T) {
 func TestMintRefusesANameThatLooksLikeAnID(t *testing.T) {
 	store := isolatedStore(t)
 	for _, name := range []string{"3fa9c1d2", "deadbeef", "../x", "a/b", ".hidden"} {
-		_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: name, Grant: types.GrantViewer, TTL: time.Hour})
+		_, _, err := store.Mint(AccessOperator(), MintRequest{Name: name, Grant: AccessViewer(), TTL: time.Hour})
 		assert.ErrorIs(t, err, ErrInvalidTokenRequest, name)
 		assert.ErrorIs(t, err, types.TokenRequestInvalid, name)
 	}
-	_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "3fa9c1d", Grant: types.GrantViewer, TTL: time.Hour})
+	_, _, err := store.Mint(AccessOperator(), MintRequest{Name: "3fa9c1d", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err, "seven hex digits are a name")
 }
 
@@ -171,11 +171,11 @@ func TestMintRefusesANameThatLooksLikeAnID(t *testing.T) {
 func TestMintNamesAnUnnamedToken(t *testing.T) {
 	store := isolatedStore(t)
 	for _, want := range []string{"console-1", "console-2"} {
-		_, rec, err := store.Mint(types.GrantOperator, MintRequest{Grant: types.GrantViewer, TTL: time.Hour})
+		_, rec, err := store.Mint(AccessOperator(), MintRequest{Grant: AccessViewer(), TTL: time.Hour})
 		require.NoError(t, err)
 		assert.Equal(t, want, rec.Name)
 	}
-	_, rec, err := store.Mint(types.GrantOperator, MintRequest{Grant: types.GrantConnector, TTL: time.Hour})
+	_, rec, err := store.Mint(AccessOperator(), MintRequest{Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	assert.Equal(t, "connector-1", rec.Name)
 }
@@ -194,9 +194,9 @@ func editRecord(t *testing.T, path string, edit func(*tokenRecord)) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var rec tokenRecord
-	require.NoError(t, json.Unmarshal(b, &rec))
+	require.NoError(t, codec.Unmarshal(b, &rec))
 	edit(&rec)
-	b, err = json.Marshal(rec)
+	b, err = codec.Marshal(rec)
 	require.NoError(t, err)
 	// A later mtime, so the store's directory signature sees the rewrite.
 	require.NoError(t, os.WriteFile(path, b, 0o600))
@@ -209,7 +209,7 @@ func editRecord(t *testing.T, path string, edit func(*tokenRecord)) {
 func TestExpiredTokensAreRemovedByListAndMint(t *testing.T) {
 	store := isolatedStore(t)
 	for _, name := range []string{"old", "older", "live"} {
-		_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: name, Grant: types.GrantViewer, TTL: time.Hour})
+		_, _, err := store.Mint(AccessOperator(), MintRequest{Name: name, Grant: AccessViewer(), TTL: time.Hour})
 		require.NoError(t, err)
 	}
 	expireOnDisk(t, store.dir, "old")
@@ -223,7 +223,7 @@ func TestExpiredTokensAreRemovedByListAndMint(t *testing.T) {
 
 	// Mint removes them too, and an expired token's name is free again.
 	expireOnDisk(t, store.dir, "live")
-	_, rec, err := reopen(t).Mint(types.GrantOperator, MintRequest{Name: "live", Grant: types.GrantConsole, TTL: time.Hour})
+	_, rec, err := reopen(t).Mint(AccessOperator(), MintRequest{Name: "live", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 	assert.Equal(t, []Token{rec}, list(t, reopen(t)))
 	leftovers, err := filepath.Glob(filepath.Join(store.dir, ".remove-*"))
@@ -235,11 +235,11 @@ func TestExpiredTokensAreRemovedByListAndMint(t *testing.T) {
 // file is checked before it is removed, and put back.
 func TestRemoveExactNeverDeletesALiveTokenThatReusedTheName(t *testing.T) {
 	store := isolatedStore(t)
-	_, old, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour})
+	_, old, err := store.Mint(AccessOperator(), MintRequest{Name: "laptop", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
-	_, err = store.Revoke(types.GrantOperator, "laptop")
+	_, err = store.Revoke(AccessOperator(), "laptop")
 	require.NoError(t, err)
-	secret, live, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour})
+	secret, live, err := store.Mint(AccessOperator(), MintRequest{Name: "laptop", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	assert.ErrorIs(t, store.removeExact(old), errReplaced)
@@ -250,8 +250,8 @@ func TestRemoveExactNeverDeletesALiveTokenThatReusedTheName(t *testing.T) {
 
 func TestMintRefusesAnInvalidOrEmptyGrant(t *testing.T) {
 	store := isolatedStore(t)
-	for _, g := range []types.Grant{{}, {MCP: types.LevelRead}, {Tokens: types.LevelRead}, {Console: 7}} {
-		_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: g, TTL: time.Hour})
+	for _, g := range []Access{{}, {MCP: LevelRead}, {Tokens: LevelRead}, {Console: 7}} {
+		_, _, err := store.Mint(AccessOperator(), MintRequest{Name: "x", Grant: g, TTL: time.Hour})
 		assert.ErrorIs(t, err, ErrInvalidTokenRequest, "%+v", g)
 	}
 }
@@ -265,7 +265,7 @@ func TestMintDiskFailureIsNotARequestError(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o700))
 	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o600))
 	store := &Store{dir: dir}
-	_, _, err = store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantViewer, TTL: time.Hour})
+	_, _, err = store.Mint(AccessOperator(), MintRequest{Name: "x", Grant: AccessViewer(), TTL: time.Hour})
 	require.Error(t, err)
 	for _, sentinel := range []error{ErrInvalidTokenRequest, ErrExceedsGrant, ErrTokenLifetime, ErrTokenExists, ErrTokenNotFound} {
 		assert.NotErrorIs(t, err, sentinel)
@@ -274,17 +274,17 @@ func TestMintDiskFailureIsNotARequestError(t *testing.T) {
 
 func TestMintedTokenLooksUpAsItsCredential(t *testing.T) {
 	store := isolatedStore(t)
-	secret, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConnector, TTL: time.Hour})
+	secret, rec, err := store.Mint(AccessOperator(), MintRequest{Name: "laptop", Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	kind, ok := credentialKind(secret.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, types.KindStored, kind)
+	assert.Equal(t, KindStored, kind)
 	assert.Len(t, secret.Reveal(), tokenLen)
 
 	got, ok := reopen(t).Lookup(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, rec, got)
-	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: rec.ID, Name: "laptop", Grant: types.GrantConnector}, got.Credential())
+	assert.Equal(t, Credential{Kind: KindStored, ID: rec.ID, Name: "laptop", Grant: AccessConnector()}, got.Credential())
 
 	info, err := os.Stat(filepath.Join(store.dir, "laptop.json"))
 	require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestMintedTokenLooksUpAsItsCredential(t *testing.T) {
 
 func TestLookupRefusesAnExpiredToken(t *testing.T) {
 	store := isolatedStore(t)
-	secret, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "brief", Grant: types.GrantViewer, TTL: time.Hour})
+	secret, _, err := store.Mint(AccessOperator(), MintRequest{Name: "brief", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
 	expireOnDisk(t, store.dir, "brief")
 	_, ok := store.Lookup(secret.Reveal())
@@ -304,16 +304,16 @@ func TestLookupRefusesAnExpiredToken(t *testing.T) {
 // secret and a different id, and the old secret stays dead.
 func TestReusedNameIsANewIdentity(t *testing.T) {
 	store := isolatedStore(t)
-	first, a, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour})
+	first, a, err := store.Mint(AccessOperator(), MintRequest{Name: "laptop", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
-	_, _, err = store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour})
+	_, _, err = store.Mint(AccessOperator(), MintRequest{Name: "laptop", Grant: AccessConsole(), TTL: time.Hour})
 	require.ErrorIs(t, err, ErrTokenExists)
 	require.ErrorIs(t, err, types.TokenNameExists)
 
-	removed, err := store.Revoke(types.GrantOperator, "laptop")
+	removed, err := store.Revoke(AccessOperator(), "laptop")
 	require.NoError(t, err)
 	assert.Equal(t, a.ID, removed.ID)
-	second, b, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour})
+	second, b, err := store.Mint(AccessOperator(), MintRequest{Name: "laptop", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	assert.NotEqual(t, a.ID, b.ID)
@@ -328,20 +328,20 @@ func TestReusedNameIsANewIdentity(t *testing.T) {
 // Revoke takes an exact id or an exact name, never a prefix and never one for the other.
 func TestRevokeIsExactIDOrExactName(t *testing.T) {
 	store := isolatedStore(t)
-	_, a, err := store.Mint(types.GrantOperator, MintRequest{Name: "a", Grant: types.GrantViewer, TTL: time.Hour})
+	_, a, err := store.Mint(AccessOperator(), MintRequest{Name: "a", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
-	_, b, err := store.Mint(types.GrantOperator, MintRequest{Name: "b", Grant: types.GrantViewer, TTL: time.Hour})
+	_, b, err := store.Mint(AccessOperator(), MintRequest{Name: "b", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	for _, q := range []string{b.ID[:3], b.ID[:7], "", "  ", "B", b.ID + "0"} {
-		_, err := store.Revoke(types.GrantOperator, q)
+		_, err := store.Revoke(AccessOperator(), q)
 		assert.ErrorIs(t, err, ErrTokenNotFound, "%q", q)
 		assert.ErrorIs(t, err, types.TokenNotFound, "%q", q)
 	}
-	got, err := store.Revoke(types.GrantOperator, a.ID)
+	got, err := store.Revoke(AccessOperator(), a.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "a", got.Name)
-	got, err = store.Revoke(types.GrantOperator, "b")
+	got, err = store.Revoke(AccessOperator(), "b")
 	require.NoError(t, err)
 	assert.Equal(t, b.ID, got.ID)
 	assert.Empty(t, list(t, store))
@@ -351,26 +351,26 @@ func TestRevokeIsExactIDOrExactName(t *testing.T) {
 // token a person uses, nor a connector an agent uses.
 func TestRevokeRefusesATokenOutsideTheRevokersGrant(t *testing.T) {
 	store := isolatedStore(t)
-	_, console, err := store.Mint(types.GrantOperator, MintRequest{Name: "console", Grant: types.GrantConsole, TTL: time.Hour})
+	_, console, err := store.Mint(AccessOperator(), MintRequest{Name: "console", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
-	_, conn, err := store.Mint(types.GrantOperator, MintRequest{Name: "agent", Grant: types.GrantConnector, TTL: time.Hour})
+	_, conn, err := store.Mint(AccessOperator(), MintRequest{Name: "agent", Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	for _, c := range []struct {
-		revoker types.Grant
+		revoker Access
 		q       string
 	}{
-		{types.GrantViewer, console.ID},
-		{types.GrantViewer, "console"},
-		{types.GrantConsole, "agent"},
-		{types.GrantConnector, "console"},
-		{types.Grant{}, conn.ID},
+		{AccessViewer(), console.ID},
+		{AccessViewer(), "console"},
+		{AccessConsole(), "agent"},
+		{AccessConnector(), "console"},
+		{Access{}, conn.ID},
 	} {
 		_, err := store.Revoke(c.revoker, c.q)
 		assert.ErrorIs(t, err, ErrExceedsGrant, "%s revoking %s", c.revoker, c.q)
 		assert.ErrorIs(t, err, types.GrantInsufficient)
 	}
 	assert.Len(t, list(t, store), 2, "a refused revoke deletes nothing")
-	_, err = store.Revoke(types.GrantConsole, "console")
+	_, err = store.Revoke(AccessConsole(), "console")
 	require.NoError(t, err)
 }
 
@@ -378,16 +378,16 @@ func TestRevokeRefusesATokenOutsideTheRevokersGrant(t *testing.T) {
 // secret, and returns the secret: what a process writing tokens.d by hand could do.
 func plant(t *testing.T, dir, file string, edit func(*tokenRecord)) string {
 	t.Helper()
-	secret, err := mintSecret(types.KindStored)
+	secret, err := mintSecret(KindStored)
 	require.NoError(t, err)
 	sum := digest(secret)
 	now := time.Now().UTC()
 	rec := tokenRecord{Version: storeVersion, Token: Token{
-		ID: sum[:8], Name: file, Kind: types.KindStored, SHA256: sum,
-		Grant: types.GrantViewer, Created: now.Add(-time.Minute), Expires: now.Add(time.Hour),
+		ID: sum[:8], Name: file, Kind: KindStored, SHA256: sum,
+		Grant: AccessViewer(), Created: now.Add(-time.Minute), Expires: now.Add(time.Hour),
 	}}
 	edit(&rec)
-	b, err := json.Marshal(rec)
+	b, err := codec.Marshal(rec)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, file+".json"), b, 0o600))
@@ -399,8 +399,8 @@ func plant(t *testing.T, dir, file string, edit func(*tokenRecord)) string {
 // disables the records beside it.
 func TestAPlantedRecordCannotExceedWhatMintWrites(t *testing.T) {
 	cases := map[string]func(*tokenRecord){
-		"tokens=write":           func(r *tokenRecord) { r.Grant = types.GrantOperator },
-		"tokens=write alone":     func(r *tokenRecord) { r.Grant = types.Grant{Tokens: types.LevelWrite} },
+		"tokens=write":           func(r *tokenRecord) { r.Grant = AccessOperator() },
+		"tokens=write alone":     func(r *tokenRecord) { r.Grant = Access{Tokens: LevelWrite} },
 		"year 9999 expiry":       func(r *tokenRecord) { r.Expires = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC) },
 		"no expiry":              func(r *tokenRecord) { r.Expires = time.Time{} },
 		"expires before created": func(r *tokenRecord) { r.Expires = r.Created.Add(-time.Second) },
@@ -408,22 +408,22 @@ func TestAPlantedRecordCannotExceedWhatMintWrites(t *testing.T) {
 		"no creation time":       func(r *tokenRecord) { r.Created = time.Time{} },
 		"name is not the file":   func(r *tokenRecord) { r.Name = "other" },
 		"name ../x":              func(r *tokenRecord) { r.Name = "../x" },
-		"grants nothing":         func(r *tokenRecord) { r.Grant = types.Grant{} },
-		"mcp=read":               func(r *tokenRecord) { r.Grant = types.Grant{MCP: types.LevelRead} },
+		"grants nothing":         func(r *tokenRecord) { r.Grant = Access{} },
+		"mcp=read":               func(r *tokenRecord) { r.Grant = Access{MCP: LevelRead} },
 		"id not its hash":        func(r *tokenRecord) { r.ID = "bbbbbbbb" },
 		"hash malformed":         func(r *tokenRecord) { r.SHA256 = strings.Repeat("z", 64) },
-		"operator kind":          func(r *tokenRecord) { r.Kind = types.KindOperator },
-		"share kind":             func(r *tokenRecord) { r.Kind = types.KindShare },
-		"code past a minute":     func(r *tokenRecord) { r.Kind, r.TokenTTL = types.KindExchange, time.Hour },
+		"operator kind":          func(r *tokenRecord) { r.Kind = KindOperator },
+		"share kind":             func(r *tokenRecord) { r.Kind = KindShare },
+		"code past a minute":     func(r *tokenRecord) { r.Kind, r.TokenTTL = KindExchange, time.Hour },
 		"code for a year+": func(r *tokenRecord) {
-			r.Kind, r.TokenTTL, r.Expires = types.KindExchange, 400*24*time.Hour, r.Created.Add(30*time.Second)
+			r.Kind, r.TokenTTL, r.Expires = KindExchange, 400*24*time.Hour, r.Created.Add(30*time.Second)
 		},
 		"too new": func(r *tokenRecord) { r.Version = "magus.token/v1alpha2" },
 	}
 	for name, edit := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := isolatedStore(t)
-			_, good, err := store.Mint(types.GrantOperator, MintRequest{Name: "good", Grant: types.GrantConsole, TTL: time.Hour})
+			_, good, err := store.Mint(AccessOperator(), MintRequest{Name: "good", Grant: AccessConsole(), TTL: time.Hour})
 			require.NoError(t, err)
 			secret := plant(t, store.dir, "planted", edit)
 
@@ -454,9 +454,9 @@ func TestAPlantedRecordCannotExceedWhatMintWrites(t *testing.T) {
 // A world-readable record is skipped like any other bad one, rather than failing the store.
 func TestAWorldReadableRecordIsSkippedNotFatal(t *testing.T) {
 	store := isolatedStore(t)
-	_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantViewer, TTL: time.Hour})
+	_, _, err := store.Mint(AccessOperator(), MintRequest{Name: "x", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
-	_, _, err = store.Mint(types.GrantOperator, MintRequest{Name: "y", Grant: types.GrantViewer, TTL: time.Hour})
+	_, _, err = store.Mint(AccessOperator(), MintRequest{Name: "y", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(filepath.Join(store.dir, "x.json"), 0o644))
 	fresh := reopen(t)
@@ -471,10 +471,10 @@ func TestAWorldReadableRecordIsSkippedNotFatal(t *testing.T) {
 // bearer everywhere, and is traded once for the stored token it stands for.
 func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 	store := isolatedStore(t)
-	code, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
+	code, rec, err := store.MintCode(AccessOperator(), MintRequest{Grant: AccessConsole(), TTL: 12 * time.Hour})
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(code.Reveal(), prefixExchange))
-	assert.Equal(t, types.KindExchange, rec.Kind)
+	assert.Equal(t, KindExchange, rec.Kind)
 	assert.WithinDuration(t, time.Now().Add(ExchangeCodeTTL), rec.Expires, time.Second)
 	_, ok := store.Lookup(code.Reveal())
 	assert.False(t, ok, "a code is no bearer")
@@ -488,9 +488,9 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 	assert.Equal(t, Token{
 		ID:      sum[:8],
 		Name:    rec.Name,
-		Kind:    types.KindStored,
+		Kind:    KindStored,
 		SHA256:  sum,
-		Grant:   types.GrantConsole,
+		Grant:   AccessConsole(),
 		Created: tok.Created, // the clock at redemption
 		Expires: tok.Expires, // within a second of 12 hours, above
 	}, tok)
@@ -511,14 +511,14 @@ func TestExchangeCodeLifetimeSuite(t *testing.T) {
 
 func (s *ExchangeCodeLifetimeSuite) TestAMintedCodeLivesTenSeconds() {
 	store := isolatedStore(s.T())
-	_, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantViewer, TTL: time.Hour})
+	_, rec, err := store.MintCode(AccessOperator(), MintRequest{Grant: AccessViewer(), TTL: time.Hour})
 	s.Require().NoError(err)
 	s.WithinDuration(time.Now().Add(10*time.Second), rec.Expires, time.Second)
 }
 
 func TestAnExchangeCodeDiesAfterItsLifetime(t *testing.T) {
 	store := isolatedStore(t)
-	code, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantViewer, TTL: time.Hour})
+	code, rec, err := store.MintCode(AccessOperator(), MintRequest{Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
 	editRecord(t, filepath.Join(store.dir, rec.Name+".json"), func(r *tokenRecord) {
 		r.Created = time.Now().Add(-2 * time.Minute).UTC()
@@ -535,7 +535,7 @@ func TestAnExchangeCodeDiesAfterItsLifetime(t *testing.T) {
 // Of two callers racing one code, exactly one gets a token.
 func TestAnExchangeCodeRedeemsOnceUnderARace(t *testing.T) {
 	store := isolatedStore(t)
-	code, _, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantViewer, TTL: time.Hour})
+	code, _, err := store.MintCode(AccessOperator(), MintRequest{Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
 	var wins atomic.Int64
 	var wg sync.WaitGroup
@@ -554,9 +554,9 @@ func TestAnExchangeCodeRedeemsOnceUnderARace(t *testing.T) {
 // A code is minted under the rules a token is: nothing past the minter, no tokens=write.
 func TestMintCodeIsHeldToMintsRules(t *testing.T) {
 	store := isolatedStore(t)
-	_, _, err := store.MintCode(types.GrantViewer, MintRequest{Grant: types.GrantConsole, TTL: time.Hour})
+	_, _, err := store.MintCode(AccessViewer(), MintRequest{Grant: AccessConsole(), TTL: time.Hour})
 	assert.ErrorIs(t, err, ErrExceedsGrant)
-	_, _, err = store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantOperator, TTL: time.Hour})
+	_, _, err = store.MintCode(AccessOperator(), MintRequest{Grant: AccessOperator(), TTL: time.Hour})
 	assert.ErrorIs(t, err, ErrInvalidTokenRequest)
 }
 
@@ -564,7 +564,7 @@ func TestMintCodeIsHeldToMintsRules(t *testing.T) {
 // change on disk is still seen by the next read.
 func TestStoreHandlesShareOneCacheThatSeesChanges(t *testing.T) {
 	store := isolatedStore(t)
-	secret, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantViewer, TTL: time.Hour})
+	secret, rec, err := store.Mint(AccessOperator(), MintRequest{Name: "x", Grant: AccessViewer(), TTL: time.Hour})
 	require.NoError(t, err)
 	other := reopen(t)
 	assert.Same(t, store.state(), other.state())
@@ -646,7 +646,7 @@ func (s *PreFoldTokenSuite) TestAVersionTwoTokenVerifies() {
 }
 
 func (s *PreFoldTokenSuite) TestAVersionTwoTokenRevokes() {
-	_, err := reopen(s.T()).Revoke(types.GrantOperator, "older")
+	_, err := reopen(s.T()).Revoke(AccessOperator(), "older")
 	s.Require().NoError(err)
 	s.NoFileExists(filepath.Join(s.store.dir, "older.json"))
 }
@@ -665,7 +665,7 @@ func TestOperatorVerifiesBesideARetiredStore(t *testing.T) {
 
 	cred, ok := Verify(op.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, types.KindOperator, cred.Kind)
+	assert.Equal(t, KindOperator, cred.Kind)
 	dir, err := StoreDir()
 	require.NoError(t, err)
 	_, err = LoadStore(dir)
@@ -675,9 +675,9 @@ func TestOperatorVerifiesBesideARetiredStore(t *testing.T) {
 // The record on disk and every List entry carry the hash and the id, never the secret.
 func TestStoreNeverHoldsTheSecret(t *testing.T) {
 	store := isolatedStore(t)
-	secret, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantConsole, TTL: time.Hour})
+	secret, _, err := store.Mint(AccessOperator(), MintRequest{Name: "x", Grant: AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
-	listed, err := json.Marshal(list(t, store))
+	listed, err := codec.Marshal(list(t, store))
 	require.NoError(t, err)
 	assert.NotContains(t, string(listed), secret)
 	raw, err := os.ReadFile(filepath.Join(store.dir, "x.json"))

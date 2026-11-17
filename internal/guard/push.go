@@ -18,8 +18,10 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"mvdan.cc/sh/v3/syntax"
@@ -139,8 +141,8 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 // one commit behind HEAD, which is every gate after a commit that was not rebuilt, reads
 // as absent in the log while the redundancy check (MGS3010) refuses to run it again: two
 // rules each blocking the only way past the other.
-func gateVerdictAt(workspace, commit string) gateCoverage {
-	cover, _ := readGateHistory(workspace).recordAt(commit)
+func gateVerdictAt(ctx context.Context, workspace, commit string) gateCoverage {
+	cover, _ := readGateHistory(ctx, workspace).recordAt(commit)
 	return cover
 }
 
@@ -150,12 +152,16 @@ var readGateFold = sessions.ReadGateResults
 // gateHistory is the store's gate verdicts, read once per push judgment.
 // A fold lists and stats every invocation in the store.
 type gateHistory struct {
-	fold sessions.Fold
+	fold session.Fold
 	// read is false when there was no store to read.
 	read bool
 }
 
-func readGateHistory(workspace string) gateHistory {
+// readGateHistory reads the gate verdicts past ctx's deadline: a push step always runs to
+// its answer and the budget only marks the lapse, so a gate found late still covers the
+// push. ctx carries its values in.
+func readGateHistory(ctx context.Context, workspace string) gateHistory {
+	ctx = context.WithoutCancel(ctx)
 	if workspace == "" {
 		return gateHistory{}
 	}
@@ -163,7 +169,7 @@ func readGateHistory(workspace string) gateHistory {
 	if err != nil {
 		return gateHistory{}
 	}
-	fold, err := readGateFold(dir)
+	fold, err := readGateFold(ctx, dir)
 	if err != nil {
 		return gateHistory{}
 	}
@@ -182,10 +188,10 @@ func (h gateHistory) passedBranchGates() []sessions.GateRecord {
 	for i := len(h.fold.Records) - 1; i >= 0 && len(out) < gateReplayScanLimit; i-- {
 		rec := h.fold.Records[i]
 		var g sessions.GateResult
-		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
+		if rec.Kind != sessions.KindGateResult || codec.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
-		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || !matchableRevision(g.Commit) || seen[g.Commit] {
+		if g.Target != string(types.TargetCI) || g.Outcome != session.OutcomePass || !g.Scope.CoversBranch() || !matchableRevision(g.Commit) || seen[g.Commit] {
 			continue
 		}
 		seen[g.Commit] = true
@@ -209,7 +215,7 @@ func (h gateHistory) recordAt(commit string) (gateCoverage, sessions.GateRecord)
 		return gateUnscoped, rec
 	case !rec.BranchVerdict():
 		return gateProjectScoped, rec
-	case rec.Outcome == sessions.OutcomePass:
+	case rec.Outcome == session.OutcomePass:
 		return gatePassed, rec
 	default:
 		return gateFailed, rec
@@ -244,7 +250,7 @@ func readGateOutcome(path, commit string) gateCoverage {
 	var events []journal.Event
 	for sc.Scan() {
 		var ev journal.Event
-		if json.Unmarshal(sc.Bytes(), &ev) != nil {
+		if codec.Unmarshal(sc.Bytes(), &ev) != nil {
 			continue
 		}
 		// The started event is the first line, so a log that is not this commit's gate
@@ -340,7 +346,7 @@ func askUnrenderedDeny(subject string) string {
 // "" otherwise. Asking the root let two pull requests out ungated. A worker's
 // refusal also sends the commit to the orchestrator. A push whose reads ran
 // out of budget before any covered it was not judged, and is refused.
-func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason string) {
+func gradePushWithoutGate(ev pushEvidence, lease string) (decision verdict.Decision, reason string) {
 	cover, commit := ev.cover, ev.commit
 	if ev.lapse.cut != "" && !cover.admits() {
 		return refusePush(ev.lapse.reason(commit), lease)
@@ -373,13 +379,13 @@ func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason strin
 
 // refusePush is the deny for a push, head saying why, bound to job lease
 // unless "".
-func refusePush(head, lease string) (decision, reason string) {
+func refusePush(head, lease string) (decision verdict.Decision, reason string) {
 	gate := fmt.Sprintf("Or run `%s`, which waits for the build budget itself, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
 		hint.Affected.With(string(types.TargetCI)))
 	if lease != "" {
-		return decisionDeny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
+		return verdict.Deny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
 	}
-	return decisionDeny, head + gate
+	return verdict.Deny, head + gate
 }
 
 // movedPushReason refuses a push that follows, on the same line, a command that moves the
@@ -489,7 +495,7 @@ func pushCoverageWithin(ctx context.Context, budget time.Duration, deps Dependen
 // readGates grades ev.commit by the gates recorded in the workspace at, and
 // by a gate on its tree or a waiver. dir is the checkout the push runs in.
 func (ev *pushEvidence) readGates(ctx context.Context, r *pushReads, deps Dependencies, at location, dir string) gateLineage {
-	gates := pushStep(ctx, r, phasePushGateHistory, func() gateHistory { return readGateHistory(at.workspace) })
+	gates := pushStep(ctx, r, phasePushGateHistory, func() gateHistory { return readGateHistory(ctx, at.workspace) })
 	var rec sessions.GateRecord
 	ev.cover, rec = gates.recordAt(ev.commit)
 	if ev.cover == gateUnrun {

@@ -16,7 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -45,7 +46,7 @@ import (
 // checks, write paths and deny paths it did not carry, the outputs and gates those bring
 // in, and the shape problems the row did not already have, so a path the row already held
 // never blocks an unrelated update. A path an entry the row held already covers
-// ([types.PathWithin]) adds nothing, so a holder narrowing a glob to its files adds no path.
+// ([job.PathWithin]) adds nothing, so a holder narrowing a glob to its files adds no path.
 // Its proof is recomputed when its write paths change, and is empty otherwise, which keeps
 // the one it holds.
 //
@@ -54,7 +55,7 @@ import (
 // named in Unchecked instead. read may be nil where no graph is at hand, which skips the
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
-func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
+func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
 	// A new row is not one HardenWritten changes, so its base reads the same before it runs.
 	prev, updates := mergeBase(rows, id, merge)
 	if !updates {
@@ -63,10 +64,10 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		}
 	}
 	rows = HardenWritten(ctx, store, rows)
-	var tries []types.Attempt
+	var tries []job.Attempt
 	var triesErr error
 	if store != nil {
-		tries, triesErr = store.Attempts()
+		tries, triesErr = store.Attempts(ctx)
 	}
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows, Attempts: tries, Err: triesErr})
 	prev, updates = mergeBase(rows, id, merge)
@@ -77,45 +78,45 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	// write paths with every check it runs for an update.
 	judged := merged
 	if updates {
-		ps = append(ps, newProblems(rowDeclaration(prev).Problems(), rowDeclaration(merged).Problems())...)
+		ps = append(ps, newProblems(types.DeclarationProblems(rowDeclaration(prev)), types.DeclarationProblems(rowDeclaration(merged)))...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, droppedProblems(prev, merged)...)
-		var goals []types.Goal
+		var goals []job.Goal
 		for _, gate := range merged.Goals {
-			if !slices.ContainsFunc(prev.Goals, func(g types.Goal) bool { return g.ID == gate.ID }) {
+			if !slices.ContainsFunc(prev.Goals, func(g job.Goal) bool { return g.ID == gate.ID }) {
 				goals = append(goals, gate)
 			}
 		}
-		ps = append(ps, onRow(ambiguousSymbolProblems(ctx, goals, read), types.Job{Goals: goals}, merged)...)
+		ps = append(ps, onRow(ambiguousSymbolProblems(ctx, goals, read), job.Job{Goals: goals}, merged)...)
 		added := slices.DeleteFunc(slices.Clone(merged.Paths.Write), func(p string) bool {
-			return slices.ContainsFunc(prev.Paths.Write, func(held string) bool { return types.PathWithin(p, held) })
+			return slices.ContainsFunc(prev.Paths.Write, func(held string) bool { return job.PathWithin(p, held) })
 		})
-		addedRow := types.Job{ID: id, Paths: types.JobPaths{Write: added, Soft: merged.Paths.Soft}, Parent: merged.Parent, DependsOn: merged.DependsOn}
+		addedRow := job.Job{ID: id, Paths: job.Paths{Write: added, Soft: merged.Paths.Soft}, Parent: merged.Parent, DependsOn: merged.DependsOn}
 		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow, merged.Integrates), addedRow, merged)...)
-		addedDenies := types.Job{ID: id, Paths: types.JobPaths{Deny: slices.DeleteFunc(slices.Clone(merged.Paths.Deny), func(p string) bool { return slices.Contains(prev.Paths.Deny, p) })}}
+		addedDenies := job.Job{ID: id, Paths: job.Paths{Deny: slices.DeleteFunc(slices.Clone(merged.Paths.Deny), func(p string) bool { return slices.Contains(prev.Paths.Deny, p) })}}
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
 		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
 		// Judged on what the update changes, so a check the row already held never blocks an
 		// unrelated update: a new check or goal is graded against every write path, an old
 		// one only against the paths this update adds.
-		checkChanged := !types.SameLeaseCheck(prev.Check, merged.Check)
-		newChecks := types.Job{ID: id, Paths: types.JobPaths{Write: merged.Paths.Write}, Goals: goals}
+		checkChanged := !job.SameLeaseCheck(prev.Check, merged.Check)
+		newChecks := job.Job{ID: id, Paths: job.Paths{Write: merged.Paths.Write}, Goals: goals}
 		if checkChanged {
 			newChecks.Check = merged.Check
 		}
 		ps = append(ps, onRow(narrowedTestProblems(store, newChecks), newChecks, merged)...)
 		if len(added) > 0 {
-			oldChecks := types.Job{ID: id, Paths: types.JobPaths{Write: added}, Check: merged.Check, Goals: merged.Goals}
+			oldChecks := job.Job{ID: id, Paths: job.Paths{Write: added}, Check: merged.Check, Goals: merged.Goals}
 			ps = append(ps, onRow(narrowedTestProblems(store, oldChecks), oldChecks, merged)...)
 		}
 		checks := addedChecks(prev, merged, checkChanged)
 		ps = append(ps, deniedCheckProblems(graded, store, checks)...)
-		judged = types.Job{ID: id, Paths: types.JobPaths{Write: added}, Check: checks.Check, Goals: checks.Goals, ReadOnly: merged.ReadOnly}
+		judged = job.Job{ID: id, Paths: job.Paths{Write: added}, Check: checks.Check, Goals: checks.Goals, ReadOnly: merged.ReadOnly}
 		if !slices.Equal(prev.Paths.Write, merged.Paths.Write) {
 			v.WriteProof = store.WriteProof(rows, merged)
 		}
 	} else {
-		ps = append(ps, rowDeclaration(merged).Problems()...)
+		ps = append(ps, types.DeclarationProblems(rowDeclaration(merged))...)
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
@@ -138,12 +139,12 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 }
 
 // mergeOnto is merge applied to prev as the write stores it: an ended prev the merge brings
-// back is [handedOutAfresh], so a refork is graded without its last holder's checkout.
-func mergeOnto(prev types.Job, merge func(*types.Job)) types.Job {
+// back is [job.Job.HandedOutAfresh], so a refork is graded without its last holder's checkout.
+func mergeOnto(prev job.Job, merge func(*job.Job)) job.Job {
 	merged := prev.Clone()
 	merge(&merged)
 	if prev.State.Terminal() && merged.State.Live() {
-		return handedOutAfresh(merged)
+		return merged.HandedOutAfresh()
 	}
 	return merged
 }
@@ -152,7 +153,7 @@ func mergeOnto(prev types.Job, merge func(*types.Job)) types.Job {
 // the instructions, the write paths, the check and the goals. A record that re-declares a
 // live job without them erases what its holder was given, so it is refused unless a
 // deviation on the field's "drops <field>" subject says the erasure is meant.
-func droppedProblems(prev, merged types.Job) types.JobProblems {
+func droppedProblems(prev, merged job.Job) types.JobProblems {
 	var ps types.JobProblems
 	dropped := func(field string, held, kept bool) {
 		if !held || kept {
@@ -182,13 +183,13 @@ const cheapRefusalSkip = "the symbol, claim, test, check and workspace checks an
 // refuse, with every other check that reads only the record, before the footprint reads and
 // workspace checks that make a fork under load take minutes. Rows are not hardened yet: that
 // only adds hard paths, so a refusal here stands, and a pass is judged again in full.
-func contendedFork(ctx context.Context, store *Store, rows []types.Job, id string, merged types.Job, limits config.Jobs) (types.JobValidation, bool) {
+func contendedFork(ctx context.Context, store *Store, rows []job.Job, id string, merged job.Job, limits config.Jobs) (types.JobValidation, bool) {
 	contended := slices.Concat(forkLimitProblems(rows, id, merged.Parent, limits), sharedCheckoutProblems(store, rows, merged),
 		unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged)))
 	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
 		return types.JobValidation{}, false
 	}
-	ps := slices.Concat(rowDeclaration(merged).Problems(), unscopedProblems(merged), ungradedProblems(merged),
+	ps := slices.Concat(types.DeclarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
 		claimCeilingProblems(merged, limits), directoryWritePathProblems(store, merged), contended)
 	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
@@ -202,7 +203,7 @@ const lintTarget = "lint"
 // permitBut is ps.Permit with lint exempted from globs: a gate on lint is permitted only by a
 // deviation naming its exact subject, so `**` cannot hide the findings a go-test check never
 // shows.
-func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permitted types.JobProblems) {
+func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitted types.JobProblems) {
 	isLint := func(p types.JobProblem) bool {
 		return p.Code == types.GateNotRun && strings.HasPrefix(p.Subject, lintTarget+" ")
 	}
@@ -214,7 +215,7 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 			rest = append(rest, p)
 		}
 	}
-	exact := slices.DeleteFunc(slices.Clone(deviations), func(w types.Deviation) bool { return types.IsGlobMeta(w.Subject) })
+	exact := slices.DeleteFunc(slices.Clone(deviations), func(w job.Deviation) bool { return types.IsGlobMeta(w.Subject) })
 	kept, permitted = rest.Permit(deviations)
 	lintKept, lintPermitted := lint.Permit(exact)
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
@@ -228,7 +229,7 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 // wrote. A file not yet tracked stays, since the args are fixed at fork time and a path the
 // worker will create is untracked then. The notes say how many files were left out, or that
 // the VCS could not be asked and every file was kept.
-func lintGoals(ctx context.Context, root string, row types.Job, ws Workspace, grader CheckGrader) (goals []types.Goal, notes []string) {
+func lintGoals(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (goals []job.Goal, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
 		return nil, nil
 	}
@@ -316,7 +317,7 @@ func filesIn(project string, files []string) []string {
 //
 // The caller skips it for a holder, whose own fork may not widen its boundary, and records
 // the paths it returns as the row's SoftPaths: they overlap nothing until the holder writes.
-func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) (paths, notes []string) {
+func ExtendFootprint(root string, row job.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) (paths, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil, nil
 	}
@@ -347,7 +348,7 @@ func ExtendFootprint(root string, row types.Job, projects []*types.Project, refe
 // a test, and a directory holding a written file holds a test file. It reads the
 // directories and not the index, so the answer does not move with the index's temperature.
 // A directory it cannot read counts as holding a test.
-func FootprintMayExtend(root string, row types.Job) bool {
+func FootprintMayExtend(root string, row job.Job) bool {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return false
 	}
@@ -374,9 +375,6 @@ func FootprintMayExtend(root string, row types.Job) bool {
 	return false
 }
 
-// integratorRegenerates is the reason a record gives for an output the integrator owns.
-const integratorRegenerates = "the integrator regenerates it"
-
 // integratorRuns is the reason given for a gate an
 // integrating ancestor runs.
 const integratorRuns = "the integrator runs it"
@@ -393,7 +391,7 @@ type gateOwner struct {
 // row's gates. ci.remote_gate runs ci on every pushed commit.
 // Failing that, an integrating ancestor gates what it merges.
 // An integration job is that owner itself, so it has none.
-func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
+func declaredGateOwner(root string, rows []job.Job, row job.Job) gateOwner {
 	if row.Integrating() {
 		return gateOwner{}
 	}
@@ -407,11 +405,11 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 	case row.Parent == "":
 		return gateOwner{}
 	}
-	lineage := types.JobAncestors(rows, row.Parent)
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.Parent }); i >= 0 {
+	lineage := job.Ancestors(rows, row.Parent)
+	if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.Parent }); i >= 0 {
 		lineage = append(lineage, rows[i])
 	}
-	if slices.ContainsFunc(lineage, types.Job.Integrating) {
+	if slices.ContainsFunc(lineage, job.Job.Integrating) {
 		return gateOwner{runs: integratorRuns}
 	}
 	return gateOwner{}
@@ -420,16 +418,16 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 // IntegratorDeviations is one deviation per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
 // path touches stays its owner's, and one a deviation of row accepts already needs no new one.
-func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []types.Deviation {
-	var deviations []types.Deviation
+func IntegratorDeviations(root string, row job.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []job.Deviation {
+	var deviations []job.Deviation
 	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
 		glob, _, _ := strings.Cut(o.Output, " !")
 		problem := types.JobProblem{Code: types.OutputOutsideWritePaths, Subject: o.Output}
-		accepted := slices.ContainsFunc(row.Deviations, func(w types.Deviation) bool { return w.Permits(problem) })
-		if accepted || slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return types.PathsIntersect(d, glob) }) {
+		accepted := slices.ContainsFunc(row.Deviations, func(w job.Deviation) bool { return types.DeviationPermits(w, problem) })
+		if accepted || slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return job.PathsIntersect(d, glob) }) {
 			continue
 		}
-		deviations = append(deviations, types.Deviation{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates})
+		deviations = append(deviations, job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: job.ReasonIntegratorRegenerates})
 	}
 	return deviations
 }
@@ -438,7 +436,7 @@ func IntegratorDeviations(root string, row types.Job, projects []*types.Project,
 // and symbol goals settled as a fork settles them, and [validateMerge] over a dry view of
 // store, so nothing is written, no release is requested, no sweep runs and no worktree is
 // made. The error is only a store that could not be read.
-func validateDryFork(ctx context.Context, store *Store, id string, merge func(*types.Job)) (types.JobValidation, error) {
+func validateDryFork(ctx context.Context, store *Store, id string, merge func(*job.Job)) (types.JobValidation, error) {
 	plan, err := PlanFork(ctx, store, id, merge, config.Jobs{}, nil, true)
 	return plan.Validation, err
 }
@@ -449,7 +447,7 @@ func validateDryFork(ctx context.Context, store *Store, id string, merge func(*t
 type ForkPlan struct {
 	Validation types.JobValidation
 	id         string
-	merge      func(*types.Job)
+	merge      func(*job.Job)
 	read       planRead
 }
 
@@ -459,11 +457,11 @@ type ForkPlan struct {
 // a real fork: the sweep writes, and a refusal asks a holder to
 // release a file the fork wanted. The error is only a store that
 // could not be read.
-func PlanFork(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader, dry bool) (ForkPlan, error) {
+func PlanFork(ctx context.Context, store *Store, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader, dry bool) (ForkPlan, error) {
 	if dry {
 		store = store.dry()
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return ForkPlan{}, err
 	}
@@ -475,20 +473,20 @@ func PlanFork(ctx context.Context, store *Store, id string, merge func(*types.Jo
 // amend sets only what the fork learned after validating, such as
 // the checkout it made. Nothing is written while a problem
 // remains, or once the plan the fork was judged against moved.
-func WriteFork(ctx context.Context, store *Store, plan ForkPlan, amend func(*types.Job), limits config.Jobs) (types.Job, error) {
+func WriteFork(ctx context.Context, store *Store, plan ForkPlan, amend func(*job.Job), limits config.Jobs) (job.Job, error) {
 	if err := plan.Validation.Error(); err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	if moved := plan.read.movedIn(readPlan(rows), plan.id); moved != "" {
-		return types.Job{}, fmt.Errorf("job: %s changed after %s was validated, so the plan it was judged against no longer stands: fork it again", moved, plan.id)
+		return job.Job{}, fmt.Errorf("job: %s changed after %s was validated, so the plan it was judged against no longer stands: fork it again", moved, plan.id)
 	}
 	merge := plan.merge
 	if amend != nil {
-		merge = func(u *types.Job) {
+		merge = func(u *job.Job) {
 			plan.merge(u)
 			amend(u)
 		}
@@ -508,13 +506,13 @@ type planEntry struct {
 	write []string
 }
 
-func readPlan(rows []types.Job) planRead {
+func readPlan(rows []job.Job) planRead {
 	read := planRead{}
 	for _, r := range rows {
 		if r.State.Terminal() {
 			continue
 		}
-		rest, _ := json.Marshal([]any{r.Parent, r.Integrates, r.Paths.Deny, WorkingCheckout(r.CheckoutRoot, r)})
+		rest, _ := codec.Marshal([]any{r.Parent, r.Integrates, r.Paths.Deny, WorkingCheckout(r.CheckoutRoot, r)})
 		read[r.ID] = planEntry{rest: string(rest), write: r.Paths.Write}
 	}
 	return read
@@ -534,7 +532,7 @@ func (r planRead) movedIn(now planRead, id string) string {
 		was, read := r[at]
 		is := now[at]
 		narrowed := !slices.ContainsFunc(is.write, func(p string) bool {
-			return !slices.ContainsFunc(was.write, func(held string) bool { return types.PathWithin(p, held) })
+			return !slices.ContainsFunc(was.write, func(held string) bool { return job.PathWithin(p, held) })
 		})
 		if !read || was.rest != is.rest || !narrowed {
 			return at
@@ -543,10 +541,17 @@ func (r planRead) movedIn(now planRead, id string) string {
 	return ""
 }
 
-// validateFork settles a fork's merge (its checkpoint expanded, its symbol goals resolved)
-// and validates it, returning the merge a fork writes. A merge that cannot be settled is a
-// problem in the same pass, and the rest is judged on the merge as given.
-func validateFork(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobValidation, func(*types.Job)) {
+// validateFork settles a fork's merge (its checkpoint expanded, its check goals' accept
+// resolved, its symbol goals resolved) and validates it, returning the merge a fork
+// writes. A merge that cannot be settled is a problem in the same pass, and the rest is
+// judged on the merge as given. A check goal naming an unknown basis stays as declared,
+// so validation reports it as a JobGoalInvalid problem.
+func validateFork(ctx context.Context, store *Store, rows []job.Job, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) (types.JobValidation, func(*job.Job)) {
+	declared := merge
+	merge = func(u *job.Job) {
+		declared(u)
+		u.Goals, _ = resolveAccept(u.Goals)
+	}
 	merge, ps := store.declaredMerge(ctx, rows, id, merge)
 	if resolved, err := resolveMerge(ctx, store, rows, id, merge, read); err != nil {
 		ps = append(ps, resolveProblem(err))
@@ -584,7 +589,7 @@ func (s *Store) loadedWorkspace() (Workspace, string) {
 // that no check or goal of merged runs, and a write path broader than it allows. Each check
 // that could not run is named, with why, in the second result.
 // rows is the plan [declaredGateOwner] reads.
-func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merged, judged types.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
+func workspaceProblems(ctx context.Context, store *Store, rows []job.Job, merged, judged job.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
 	// Soft paths come from the symbol index, so a list judged on them would
 	// change with the index's temperature.
 	judged.Paths.Write = slices.DeleteFunc(slices.Clone(judged.Paths.Write), func(p string) bool {
@@ -594,7 +599,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merg
 	writes := !judged.ReadOnly && len(judged.Paths.Write) > 0
 	if why != "" {
 		var unchecked []string
-		if slices.ContainsFunc(judged.EffectiveGoals(), func(g types.Goal) bool { return g.Kind == types.GoalKindCheck && g.Check.Target != "" }) {
+		if slices.ContainsFunc(judged.EffectiveGoals(), func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && g.Check.Target != "" }) {
 			unchecked = append(unchecked, "the check's project, target and test-selection semantics: "+why)
 		}
 		if writes {
@@ -612,7 +617,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merg
 		return ps, unchecked
 	}
 	// The sources are judged's paths, and the checks that run gates are all of merged's.
-	gated := types.Job{ID: merged.ID, Paths: types.JobPaths{Write: judged.Paths.Write, Deny: merged.Paths.Deny}, Check: merged.Check, Goals: merged.Goals}
+	gated := job.Job{ID: merged.ID, Paths: job.Paths{Write: judged.Paths.Write, Deny: merged.Paths.Deny}, Check: merged.Check, Goals: merged.Goals}
 	regenerated := RegeneratedOutside(store.root, gated, ws.Projects, ws.Ignored)
 	if updates {
 		// An output a path the row already held covers is inside its write paths.
@@ -634,13 +639,13 @@ func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merg
 // its project does not run, as JobCheckUnrunnable. A project that binds spells it carries
 // unresolved cannot tell an op from a typo, so a name its magusfile does not export is
 // named unchecked instead.
-func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []string) {
+func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string) {
 	var (
 		ps        types.JobProblems
 		unchecked []string
 	)
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
+		if g.Kind != job.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
 			continue
 		}
 		field := goalCheckField(row, g)
@@ -654,7 +659,7 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 			slices.Sort(paths)
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".project",
-				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", g.Check.String(), project),
+				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(g.Check), project),
 				Fix:     "name one of its projects: " + listNames(paths),
 			})
 			continue
@@ -670,7 +675,7 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 			continue
 		}
 		if spellsUnresolved(p) {
-			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", g.Check.String(), project))
+			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", CheckCommand(g.Check), project))
 			continue
 		}
 		var targets []string
@@ -690,7 +695,7 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 		if spell != "" && !bound {
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".target",
-				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", g.Check.String(), spell, project),
+				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(g.Check), spell, project),
 				Fix:     "name a spell it binds: " + listNames(p.Spells),
 			})
 			continue
@@ -701,7 +706,7 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 		slices.Sort(targets)
 		ps = append(ps, types.JobProblem{
 			Code: types.JobCheckUnrunnable, Field: field + ".target",
-			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", g.Check.String(), name, project),
+			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(g.Check), name, project),
 			Fix:     "name one of its targets: " + listNames(slices.Compact(targets)),
 		})
 	}
@@ -743,7 +748,7 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			continue
 		}
 		subject := fmt.Sprintf("%s %s", g.Target, g.Project)
-		goal, _ := json.Marshal(g.Goal)
+		goal, _ := codec.Marshal(g.Goal)
 		p := types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),
@@ -759,29 +764,31 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 }
 
 // rowDeclaration is row as the record that would declare it, for the shape checks
-// [types.Declaration.Problems] makes.
-func rowDeclaration(row types.Job) types.Declaration {
-	rec := types.Declaration{
+// [job.Declaration.Problems] makes.
+func rowDeclaration(row job.Job) job.Declaration {
+	rec := job.Declaration{
 		ID: row.ID, Parent: row.Parent, Agent: row.Agent.Clone(), Checkpoint: row.Checkpoint,
-		Paths: types.JobPaths{Write: row.Paths.Write, Read: row.Paths.Read, Deny: row.Paths.Deny}, DependsOn: row.DependsOn,
+		Paths: job.Paths{Write: row.Paths.Write, Read: row.Paths.Read, Deny: row.Paths.Deny}, DependsOn: row.DependsOn,
 		Breaks: row.Breaks, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
 		Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}
-	// A stored row renders its check into Validation too, and a record carries one spelling.
-	if row.Check != nil {
-		rec.Check = row.Check
-	} else {
-		rec.Validation = row.Validation
+	// A row stored before the check record carries only the rendered line; one it could not
+	// parse was refused at the door, so a line that fails here declares no check.
+	rec.Check = row.Check
+	if row.Check == nil && strings.TrimSpace(row.Validation) != "" {
+		if c, err := ParseCheckCommand(row.Validation); err == nil {
+			rec.Check = &c
+		}
 	}
 	return rec
 }
 
 // RetryDeclaration is the spec row was declared with, for forking it again by id alone: every
-// field [types.Declaration.Apply] writes, with no state, so the retry is a new attempt.
-func RetryDeclaration(row types.Job) types.Declaration {
+// field [job.Declaration.Apply] writes, with no state, so the retry is a new attempt.
+func RetryDeclaration(row job.Job) job.Declaration {
 	rec := rowDeclaration(row)
-	rec.Schema = types.Schema{Version: types.JobAPIVersion}
+	rec.Schema = job.Schema{Version: job.APIVersion}
 	rec.State = ""
 	rec.Paths.Soft, rec.Integrates = row.Paths.Soft, row.Integrates
 	rec.BriefFormat, rec.Follows = row.BriefFormat, row.Follows
@@ -798,7 +805,7 @@ func newProblems(before, after types.JobProblems) types.JobProblems {
 
 // onRow moves each field of ps found on part, a row cut to what a merge adds, to the index
 // the same entry has in whole: a write or deny path by its value, a goal by its id.
-func onRow(ps types.JobProblems, part, whole types.Job) types.JobProblems {
+func onRow(ps types.JobProblems, part, whole job.Job) types.JobProblems {
 	for i, p := range ps {
 		list, rest, ok := strings.Cut(p.Field, "[")
 		if !ok {
@@ -821,7 +828,7 @@ func onRow(ps types.JobProblems, part, whole types.Job) types.JobProblems {
 			}
 		case "goals":
 			if k < len(part.Goals) {
-				at = slices.IndexFunc(whole.Goals, func(g types.Goal) bool { return g.ID == part.Goals[k].ID })
+				at = slices.IndexFunc(whole.Goals, func(g job.Goal) bool { return g.ID == part.Goals[k].ID })
 			}
 		}
 		if at >= 0 {
@@ -833,11 +840,11 @@ func onRow(ps types.JobProblems, part, whole types.Job) types.JobProblems {
 
 // goalCheckField is the field of row that declares goal's check: `check` for the row's own,
 // `goals[i].check` for a goal's.
-func goalCheckField(row types.Job, goal types.Goal) string {
-	if goal.ID == types.PrimaryGoalID && row.Check != nil {
+func goalCheckField(row job.Job, goal job.Goal) string {
+	if goal.ID == job.PrimaryGoalID && row.Check != nil {
 		return "check"
 	}
-	if i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == goal.ID }); i >= 0 {
+	if i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == goal.ID }); i >= 0 {
 		return fmt.Sprintf("goals[%d].check", i)
 	}
 	return "check"
@@ -864,7 +871,7 @@ func resolveProblem(err error) types.JobProblem {
 // configuration held whole. A rule that held only at creation would depend on which call
 // wrote the path. added is the job's row carrying only the write paths the write adds, so a
 // path the row already held never blocks an unrelated write.
-func addedWritePathProblems(ctx context.Context, store *Store, added types.Job, integrates []string) types.JobProblems {
+func addedWritePathProblems(ctx context.Context, store *Store, added job.Job, integrates []string) types.JobProblems {
 	if len(added.Paths.Write) == 0 {
 		return nil
 	}
@@ -877,7 +884,7 @@ func addedWritePathProblems(ctx context.Context, store *Store, added types.Job, 
 // merging integrates leaves. A directory here that a branch replaces with a
 // file or a symlink names one file. A branch the VCS cannot compare keeps the
 // refusal.
-func mergedDirectoryProblems(ctx context.Context, store *Store, row types.Job, integrates []string) types.JobProblems {
+func mergedDirectoryProblems(ctx context.Context, store *Store, row job.Job, integrates []string) types.JobProblems {
 	ps := directoryWritePathProblems(store, row)
 	if len(ps) == 0 || len(integrates) == 0 {
 		return ps
@@ -885,7 +892,7 @@ func mergedDirectoryProblems(ctx context.Context, store *Store, row types.Job, i
 	leaves := branchLeaves(ctx, store.root, integrates)
 	row.Paths.Write = slices.Clone(row.Paths.Write)
 	for i, decl := range row.Paths.Write {
-		if p, _ := types.SplitClaim(decl); leaves[path.Clean(strings.TrimSpace(p))] {
+		if p, _ := job.SplitClaim(decl); leaves[path.Clean(strings.TrimSpace(p))] {
 			// Blank, not removed: a problem's field is the entry's index.
 			row.Paths.Write[i] = ""
 		}
@@ -920,7 +927,7 @@ func branchLeaves(ctx context.Context, root string, integrates []string) map[str
 // ungradedProblems finds a writing job that declares neither a check nor a goal, as
 // JobUngraded: `job wait` could never pass it, so the row would end by `job exit` on the
 // holder's word. A read-only job writes nothing to grade and is exempt.
-func ungradedProblems(row types.Job) types.JobProblems {
+func ungradedProblems(row job.Job) types.JobProblems {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || row.Check != nil || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
 		return nil
 	}
@@ -938,7 +945,7 @@ func ungradedProblems(row types.Job) types.JobProblems {
 // JobUngraded. The guard scopes nothing by an empty write set, so its holder could write
 // anywhere, and `job wait` refuses a result that changed nothing on a row that is not
 // read-only: a scout declared this way can only end no_return.
-func unscopedProblems(row types.Job) types.JobProblems {
+func unscopedProblems(row job.Job) types.JobProblems {
 	if row.ReadOnly || len(row.Paths.Write) > 0 {
 		return nil
 	}
@@ -957,11 +964,11 @@ func unscopedProblems(row types.Job) types.JobProblems {
 //
 // Read before the store's lock is taken, so two concurrent forks can each pass a max_live
 // the pair of them exceeds. A limit here is a brake on a runaway fan-out, not a quota.
-func forkLimitProblems(rows []types.Job, id, parent string, limits config.Jobs) types.JobProblems {
+func forkLimitProblems(rows []job.Job, id, parent string, limits config.Jobs) types.JobProblems {
 	var ps types.JobProblems
 	depth, root := 0, id
 	if parent != "" {
-		ancestors := types.JobAncestors(rows, parent)
+		ancestors := job.Ancestors(rows, parent)
 		depth = 1 + len(ancestors)
 		root = parent
 		if len(ancestors) > 0 {
@@ -985,7 +992,7 @@ func forkLimitProblems(rows []types.Job, id, parent string, limits config.Jobs) 
 			continue
 		}
 		rowRoot := r.ID
-		if ancestors := types.JobAncestors(rows, r.ID); len(ancestors) > 0 {
+		if ancestors := job.Ancestors(rows, r.ID); len(ancestors) > 0 {
 			rowRoot = ancestors[len(ancestors)-1].ID
 		}
 		if rowRoot == root {
@@ -1006,21 +1013,21 @@ func forkLimitProblems(rows []types.Job, id, parent string, limits config.Jobs) 
 // namesExistingSymbol reports whether a symbol goal of expect grades a symbol that exists
 // when the job is declared: one a job is to create (present) is the exception, and a name
 // that resolves to nothing under any other expectation is a typo that grades vacuously.
-func namesExistingSymbol(expect types.GoalExpect) bool {
-	return slices.Contains([]types.GoalExpect{types.ExpectChanged, types.ExpectAbsent, types.ExpectUnreferenced}, expect)
+func namesExistingSymbol(expect job.GoalExpect) bool {
+	return slices.Contains([]job.GoalExpect{job.ExpectChanged, job.ExpectAbsent, job.ExpectUnreferenced}, expect)
 }
 
 // ambiguousSymbolProblems finds each symbol a goal names whose bare name resolves to more
 // than one definition, or a `<package>.<Name>` that resolves to none when the goal grades an
 // existing symbol, as JobGoalInvalid, naming each. A name the reader cannot answer for is no
 // problem: a cold graph must not block a declaration, and the goal refuses to certify later.
-func ambiguousSymbolProblems(ctx context.Context, goals []types.Goal, read SymbolReader) types.JobProblems {
+func ambiguousSymbolProblems(ctx context.Context, goals []job.Goal, read SymbolReader) types.JobProblems {
 	if read == nil {
 		return nil
 	}
 	var ps types.JobProblems
 	for i, goal := range goals {
-		if goal.Resolve().Kind != types.GoalKindSymbol {
+		if goal.Resolve().Kind != job.GoalKindSymbol {
 			continue
 		}
 		for j, name := range goal.Symbols {

@@ -35,11 +35,74 @@ packages:
       Unread: {config: {name: DiffUnread}}
       Why: {config: {name: DiffWhy}}
       WhyRelation: {config: {name: DiffWhyRelation}}
-  github.com/egladman/magus/libs/diagnostics:
+  github.com/egladman/magus/libs/apiversion:
     types:
+      APIVersion:
+        config:
+          open: a reader compares it to the one version it reads and names any other, so the set is every version ever written
+  github.com/egladman/magus/libs/safetyscissors/job:
+    # Buzz keeps the names the types had in types, and the agent section's in types/agent.
+    config: {module: ""}
+    types:
+      Agent: {config: {name: Spec, module: magus/agent, required: [worker]}}
+      BaseVerdict: {config: {name: JobBaseVerdict, cases: {"match": matches}}}
+      Block: {config: {name: JobBlock}}
+      CapturedRun: {config: {name: JobAttempt}}
+      Claim: {config: {name: JobClaim}}
       Code:
         config:
-          open: a workspace mints its own codes through magus\raise beside magus's catalog
+          open: the caller names its own problem codes, as magus does with its diagnostic catalog
+      CredentialKind:
+        config:
+          open: the verifier that admits a request defines the kinds, and this module defines none
+      Deferred: {config: {name: JobDeferred}}
+      Denial: {config: {name: JobDenial}}
+      Entry: {config: {name: JobEntry}}
+      ForkFacts: {config: {name: JobForkFacts}}
+      GateAttempt: {config: {name: JobGateAttempt}}
+      Integration: {config: {name: JobIntegration}}
+      List: {config: {name: JobList}}
+      Model: {config: {module: magus/agent}}
+      Overlap: {config: {name: JobOverlap}}
+      OverlapFootprint: {config: {name: JobOverlapFootprint}}
+      Paths: {config: {name: JobPaths}}
+      ReadOnly: {config: {name: JobReadOnly}}
+      Rejection: {config: {name: JobRejection}}
+      Release: {config: {name: JobRelease}}
+      Result: {config: {name: JobResult}}
+      ResultValidation: {config: {name: JobResultValidation}}
+      Run: {config: {name: JobRun}}
+      State: {config: {name: JobState}}
+      Status: {config: {name: JobStatus}}
+      UnattributedWrite: {config: {name: JobUnattributedWrite}}
+      Unmerged: {config: {name: JobUnmerged}}
+      UnmergedReport: {config: {name: JobUnmergedReport}}
+      Worker: {config: {module: magus/agent, required: [type]}}
+      WorkerType: {config: {module: magus/agent, zeroCase: ""}}
+      Worktree: {config: {name: JobWorktree}}
+      WriteProof: {config: {name: JobWriteProof}}
+  github.com/egladman/magus/libs/safetyscissors/step:
+    # Buzz keeps the names the types had in types/agent.
+    config: {module: magus/agent}
+    types:
+      Request: {config: {name: StepRequest}}
+  github.com/egladman/magus/libs/safetyscissors/tier:
+    # Buzz keeps the names the types had in types/agent.
+    config: {module: magus/agent}
+    types:
+      Assignment: {config: {name: JobModelTier}}
+      Bounds: {config: {name: ModelTierBounds}}
+      SkillVariant: {config: {zeroCase: ""}}
+      Source: {config: {name: ModelTierSource, zeroCase: ""}}
+  github.com/egladman/magus/libs/safetyscissors/trail:
+    # Buzz keeps the namespace the types had in types/trail.
+    config: {module: magus/trail}
+  github.com/egladman/magus/libs/safetyscissors/verdict:
+    # Buzz keeps the names the types had in types.
+    config: {module: ""}
+    types:
+      Decision: {config: {name: GuardDecision}}
+      Verdict: {config: {name: GuardVerdict}}
   github.com/egladman/magus/spells:
     types:
       CoverageFormat: {config: {cases: {"go-coverprofile": goProfile}}}
@@ -58,13 +121,6 @@ packages:
       Spec: {config: {required: [platform]}}
       Symlink: {config: {required: [path, target]}}
       Tree: {config: {required: [source, path, modePolicy, symlinks]}}
-  github.com/egladman/magus/types/agent:
-    types:
-      ModelTierSource: {config: {zeroCase: ""}}
-      SkillVariant: {config: {zeroCase: ""}}
-      Spec: {config: {required: [worker]}}
-      Worker: {config: {required: [type]}}
-      WorkerType: {config: {zeroCase: ""}}
   github.com/egladman/magus/internal/queue/types:
     config:
       open: the queue provider script reads it as str until its typed rewrite
@@ -128,8 +184,6 @@ packages:
       HTTPRetry: {config: {name: Retry, module: http}}
       HTTPServerOptions: {config: {name: ServerOptions, module: http}}
       ImpactResult: {config: {name: Impact}}
-      InflightAttention: {config: {zeroCase: unset}}
-      JobBaseVerdict: {config: {cases: {"match": matches}}}
       JobKind: {config: {zeroCase: ""}}
       KnowledgeEdgeRef: {config: {name: EdgeRef}}
       KnowledgeExplainOutput: {config: {name: ExplainResult}}

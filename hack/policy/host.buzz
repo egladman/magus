@@ -91,7 +91,7 @@ export fun decideHost(programs: [helpers\Program], reads: Reads) > GuardVerdict 
             return magus\guard.deny(terminalsDenial);
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // denialFor is the capture denial for path, "" for none. A task capture is read for the
@@ -400,7 +400,7 @@ test "a search whose pattern mentions a log, and a read of source, stay silent" 
         ["head", "-n", "20", "README.md"],
         ["magus", "status"],
     ]) {
-        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 
@@ -450,7 +450,7 @@ test "a capture naming no ref and no invocation is some other command's output, 
     final path = "tasks/9.output";
     foreach (text in ["", "go version go1.26 darwin/arm64\n", "exit 1\ninvalidate the cache\ninvoke\n", "out12345 short\nxout0123456789abx\n"]) {
         final v = judgedWith(capture(path), reads: fakeReads({path: text}, binary: true));
-        std\assert(v.decision == magus\GuardDecision.allow, message: text);
+        std\assert(v.decision == magus\GuardDecision.defer, message: text);
     }
 }
 
@@ -469,7 +469,7 @@ test "with no ./magus in the workspace a capture read is allowed; a terminals re
         ["cat", ".magus/logs/abc.log"],
         ["rg", "needle", ".magus/logs"],
     ]) {
-        std\assert(judgedWith(helpers\request([argv]), reads: none).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(judgedWith(helpers\request([argv]), reads: none).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
     final terminals = judgedWith(helpers\request([["cat", "terminals/266091.txt"]]), reads: none);
     std\assert(terminals.decision == magus\GuardDecision.deny, message: "terminals");
@@ -517,7 +517,7 @@ test "a directory that is not named terminals, and a search for the word, stay s
         ["find", ".", "-name", "*.sh"],
         ["cat", "internal/term.go"],
     ]) {
-        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 

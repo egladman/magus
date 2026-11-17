@@ -22,7 +22,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/oci"
 )
@@ -261,7 +261,7 @@ func (s *containerSuite) TestQualifyReadsANameAsTheDockerCLIDoes() {
 func (s *containerSuite) registry(index, config []byte) (*oci.Client, string) {
 	body, mediaType := index, ocispec.MediaTypeImageIndex
 	if index == nil {
-		man, err := json.Marshal(ocispec.Manifest{
+		man, err := codec.Marshal(ocispec.Manifest{
 			MediaType: ocispec.MediaTypeImageManifest,
 			Config:    ocispec.Descriptor{MediaType: ocispec.MediaTypeImageConfig, Digest: digest.FromBytes(config), Size: int64(len(config))},
 		})
@@ -297,7 +297,7 @@ func imageIndex(ps ...image.Platform) []byte {
 		MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromString("att"), Size: 1,
 		Platform: &ocispec.Platform{OS: "unknown", Architecture: "unknown"},
 	})
-	raw, err := json.Marshal(idx)
+	raw, err := codec.Marshal(idx)
 	if err != nil {
 		panic(err)
 	}
@@ -305,7 +305,7 @@ func imageIndex(ps ...image.Platform) []byte {
 }
 
 func imageConfig(p image.Platform) []byte {
-	raw, err := json.Marshal(ocispec.Image{Platform: ocispec.Platform{OS: p.OS, Architecture: p.Architecture}})
+	raw, err := codec.Marshal(ocispec.Image{Platform: ocispec.Platform{OS: p.OS, Architecture: p.Architecture}})
 	if err != nil {
 		panic(err)
 	}
@@ -383,7 +383,7 @@ func (f *fakeEngine) mux() http.Handler {
 			writeJSON(w, map[string]string{"message": f.createError})
 			return
 		}
-		if err := json.NewDecoder(r.Body).Decode(&f.created); err != nil {
+		if err := codec.NewDecoder(r.Body).Decode(&f.created); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -407,7 +407,7 @@ func (f *fakeEngine) mux() http.Handler {
 	m.HandleFunc("PUT /v1.41/containers/c1/archive", f.archive)
 	m.HandleFunc("POST /v1.41/containers/c1/exec", func(w http.ResponseWriter, r *http.Request) {
 		var req execRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := codec.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -490,7 +490,7 @@ func writeFrame(w io.Writer, stream byte, payload string) {
 }
 
 func writeJSON(w io.Writer, v any) {
-	raw, err := json.Marshal(v)
+	raw, err := codec.Marshal(v)
 	if err != nil {
 		panic(err)
 	}

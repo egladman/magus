@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 type treeOrderSuite struct {
@@ -15,21 +15,21 @@ type treeOrderSuite struct {
 func TestTreeOrder(t *testing.T) { suite.Run(t, new(treeOrderSuite)) }
 
 func (s *treeOrderSuite) TestChildrenNestUnderTheirParent() {
-	plan := types.Job{ID: "plan"}
-	core := types.Job{ID: "plan/core", Parent: "plan"}
-	other := types.Job{ID: "other"}
-	deep := types.Job{ID: "plan/core/deep", Parent: "plan/core"}
+	plan := job.Job{ID: "plan"}
+	core := job.Job{ID: "plan/core", Parent: "plan"}
+	other := job.Job{ID: "other"}
+	deep := job.Job{ID: "plan/core/deep", Parent: "plan/core"}
 
 	s.Equal([]treeLine{
 		{Job: plan, Depth: 0},
 		{Job: core, Depth: 1},
 		{Job: deep, Depth: 2},
 		{Job: other, Depth: 0},
-	}, TreeOrder([]types.Job{plan, core, other, deep}))
+	}, TreeOrder([]job.Job{plan, core, other, deep}))
 }
 
 func (s *treeOrderSuite) TestAClearedParentAndACycleKeepTheirRowsAtDepthZero() {
-	rows := []types.Job{
+	rows := []job.Job{
 		{ID: "orphan", Parent: "cleared-parent"},
 		{ID: "a", Parent: "b"},
 		{ID: "b", Parent: "a"},

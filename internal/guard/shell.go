@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
@@ -21,9 +22,9 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
@@ -738,8 +739,8 @@ func rewritesThroughGrader(c locatedCall, heredoc, hook, placement string) bool 
 // under the lease its checkout record or claim names. A lease merely held
 // there is never inferred. An unreadable store is a deny.
 // dryRun judges as [Request.DryRun] does.
-func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
-	envelope, _ := json.Marshal(map[string]any{
+func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) verdict.Judgment {
+	envelope, _ := codec.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
 			"file_path":  filepath.Join(root, filepath.FromSlash(rel)),
@@ -748,8 +749,8 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 		},
 	})
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
-	ungraded := func(say, why string) types.GuardJudgment {
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
+	ungraded := func(say, why string) verdict.Judgment {
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny,
 			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
 	}
 	if _, err := leaseRows(ctx, at); err != nil {
@@ -759,7 +760,7 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 	lease, from := job.RunLease(ctx, at.jobs())
 	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun, Lease: lease})
 	if lease != "" && v.Lease == lease {
-		v.LeaseFrom = from
+		v.LeaseFrom = string(from)
 	}
 	return v
 }
@@ -788,7 +789,7 @@ func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceReposit
 	}
 	v := judgeEdit(ctx, deps, ws.Root(), rel, before, after, o.DryRun)
 	switch v.Decision {
-	case decisionDeny, decisionAsk:
+	case verdict.Deny, verdict.Ask:
 		return v.Rule, strings.TrimSpace(v.Reason)
 	}
 	return "", ""
@@ -2632,9 +2633,9 @@ const precedentIdentMin = 6
 // A deny is only legitimate once the replacement it names actually works: the
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
-func Evaluate(deps Dependencies, command string) ShellVerdict {
+func Evaluate(ctx context.Context, deps Dependencies, command string) ShellVerdict {
 	d := effectiveDialect(deps.ShellDialect)
-	builtin := evaluateRules(deps, command, d)
+	builtin := evaluateRules(ctx, deps, command, d)
 	// Here rather than in gitGuard, which answers for every backend and names no paths.
 	if builtin.Deny != "" && builtin.Rule.Name == denyRuleStageAll {
 		lead, next := stageAllRemedy(command, d)
@@ -2741,9 +2742,9 @@ func nothingRanNote(command string, d Dialect) string {
 // evaluateRules grades every rule site on the line: a deny the workspace demoted is held
 // while the rules after it take their turn, and outranks whatever advisory the line ends
 // on.
-func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
+func evaluateRules(ctx context.Context, deps Dependencies, command string, d Dialect) ShellVerdict {
 	var held heldAdvice
-	v := deps.grade(evaluateLine(deps, &held, command, d))
+	v := deps.grade(evaluateLine(ctx, deps, &held, command, d))
 	return stronger(v, held.v)
 }
 
@@ -2755,7 +2756,7 @@ func (h *heldAdvice) ends(deps Dependencies, v ShellVerdict) (ShellVerdict, bool
 	return v, v.Deny != "" || v.Context != "" && !v.demoted
 }
 
-func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect) ShellVerdict {
+func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, command string, d Dialect) ShellVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE (a pipe, a redirect, a magus call in a
 	// throwaway copy) rather than which program runs.
@@ -2804,7 +2805,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		if foreignWaitFires(command, d) {
 			wait.Deny, wait.Why = denyBusyWaitForeign, denyBusyWaitForeignWhy
 		} else {
-			wait = wait.withRemedy(waitRemedy(deps, denyRuleBusyWait, command, d))
+			wait = wait.withRemedy(waitRemedy(ctx, deps, denyRuleBusyWait, command, d))
 		}
 		if v, ok := held.ends(deps, wait); ok {
 			return v
@@ -2821,7 +2822,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(work) {
 		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}
-		if lead, next := waitRemedy(deps, denyRuleProcessPoll, command, d); lead != "" {
+		if lead, next := waitRemedy(ctx, deps, denyRuleProcessPoll, command, d); lead != "" {
 			poll = poll.withRemedy(lead, next)
 		} else {
 			// The one-shot read, not --watch: a watch never exits, and a served command that
@@ -2837,7 +2838,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// The same poll with the loop left to the caller's next call.
 	if parsed && sleepPollFires(work) {
 		poll := ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}
-		if v, ok := held.ends(deps, poll.withRemedy(waitRemedy(deps, denyRuleSleepPoll, command, d))); ok {
+		if v, ok := held.ends(deps, poll.withRemedy(waitRemedy(ctx, deps, denyRuleSleepPoll, command, d))); ok {
 			return v
 		}
 	}
@@ -2869,7 +2870,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	// A Buzz program's proc calls start commands this line never spells, so each one is
 	// judged here as the line it would be typed as.
-	if v, ok := buzzSpawnVerdict(deps, held, command, d); ok {
+	if v, ok := buzzSpawnVerdict(ctx, deps, held, command, d); ok {
 		return v
 	}
 	var advisory, chained ShellVerdict

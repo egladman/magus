@@ -37,7 +37,7 @@ func recordShowcase(dir string) error {
 		}
 	}
 	if err := s.Close(); err != nil {
-		return fmt.Errorf("session: %w", err)
+		return fmt.Errorf("close the session: %w", err)
 	}
 	out = append(out, s.Output()[at:]...)
 

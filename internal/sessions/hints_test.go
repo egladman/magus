@@ -7,26 +7,28 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // loadedStore writes events into a temp session store and folds it back, so the lens
 // is exercised against the store it actually reads rather than a hand-built Fold.
-func loadedStore(t *testing.T, events []LoadEvent) Fold {
+func loadedStore(t *testing.T, events []session.LoadEvent) session.Fold {
 	t.Helper()
 	dir := t.TempDir()
-	_, err := LoadEvents(t.Context(), dir, events, InvocationStart{Workspace: dir})
+	_, err := session.LoadEvents(t.Context(), dir, events, session.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return fold
 }
 
 // shellCall builds one loaded shell command. ref keys the dedup, so each one is
 // distinct.
-func shellCall(session, ref string, ms int64, digest string, served, followed []string) LoadEvent {
-	return LoadEvent{Session: session, Event: AgentEvent{
+func shellCall(hostSession, ref string, ms int64, digest string, served, followed []string) session.LoadEvent {
+	return session.LoadEvent{Session: hostSession, Event: session.AgentEvent{
 		Host:         "test",
-		Kind:         EventShellCommand,
+		Kind:         session.EventShellCommand,
 		Ref:          ref,
 		AtMs:         ms,
 		Program:      "magus",
@@ -39,7 +41,7 @@ func shellCall(session, ref string, ms int64, digest string, served, followed []
 // One id followed, one rejected for another magus verb, and a reflex beside both: the
 // three describe different servings and do not sum to served.
 func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
-	fold := loadedStore(t, []LoadEvent{
+	fold := loadedStore(t, []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "d-query", []string{"query-explain", "query-path"}, nil),
 		shellCall("s1", "a2", 2_000, "d-explain", nil, []string{"query-explain"}),
 		shellCall("s1", "a3", 3_000, "d-query", nil, nil),
@@ -63,7 +65,7 @@ func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
 // The table leads with the best-converting hint, and hintUptake is where that order is
 // decided; the renderer prints what it is handed.
 func TestHintUptakeSortsByRateThenServed(t *testing.T) {
-	fold := loadedStore(t, []LoadEvent{
+	fold := loadedStore(t, []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"file-impact"}, nil),
 		shellCall("s1", "a2", 2_000, "", []string{"query-explain"}, []string{"file-impact"}),
 		shellCall("s1", "a3", 3_000, "", []string{"query-path"}, []string{"query-explain"}),
@@ -106,21 +108,21 @@ func TestRenderHintUptakeNamesTheFloor(t *testing.T) {
 // the ids, so every line written after the first load would be uncountable forever.
 func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
 	dir := t.TempDir()
-	early := []LoadEvent{
+	early := []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", nil, nil),
 		shellCall("s1", "a2", 2_000, "", nil, nil),
 	}
-	_, err := LoadEvents(t.Context(), dir, early, InvocationStart{Workspace: dir})
+	_, err := session.LoadEvents(t.Context(), dir, early, session.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
-	joined := []LoadEvent{
+	joined := []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"query-explain"}, nil),
 		shellCall("s1", "a2", 2_000, "", nil, []string{"query-explain"}),
 	}
-	_, err = LoadEvents(t.Context(), dir, joined, InvocationStart{Workspace: dir})
+	_, err = session.LoadEvents(t.Context(), dir, joined, session.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, []HintUptakeRow{{ID: "query-explain", Served: 1, Followed: 1, Rate: 1}}, HintUptake(fold),
 		"one call, counted once, with the ids the second load recovered")

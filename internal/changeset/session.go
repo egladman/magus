@@ -42,8 +42,8 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // ErrNoStateDir is what a Store with no state directory answers when asked to read or record a
@@ -554,18 +554,18 @@ type (
 )
 
 func (s *Store) viewedLog() file.JSONL[viewedLine] {
-	return file.JSONL[viewedLine]{Path: s.viewedPath, Old: oldFile(s.viewedPath, "viewed.json"),
-		Key: func(l viewedLine) string { return l.Digest }, Live: func(l viewedLine) bool { return l.Viewed }}
+	return file.JSONL[viewedLine]{JSONL: codec.JSONL[viewedLine]{Log: slog.With(attr.Component("magus")), Path: s.viewedPath, Old: oldFile(s.viewedPath, "viewed.json"),
+		Key: func(l viewedLine) string { return l.Digest }, Live: func(l viewedLine) bool { return l.Viewed }}}
 }
 
 func (s *Store) seenLog() file.JSONL[seenLine] {
-	return file.JSONL[seenLine]{Path: s.seenPath, Old: oldFile(s.seenPath, "seen-threads.json"),
-		Key: func(l seenLine) string { return l.ID }}
+	return file.JSONL[seenLine]{JSONL: codec.JSONL[seenLine]{Log: slog.With(attr.Component("magus")), Path: s.seenPath, Old: oldFile(s.seenPath, "seen-threads.json"),
+		Key: func(l seenLine) string { return l.ID }}}
 }
 
 func (s *Store) draftsLog() file.JSONL[draftLine] {
-	return file.JSONL[draftLine]{Path: s.draftsPath, Old: oldFile(s.draftsPath, "drafts.json"),
-		Key: func(l draftLine) string { return l.ID }, Live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }}
+	return file.JSONL[draftLine]{JSONL: codec.JSONL[draftLine]{Log: slog.With(attr.Component("magus")), Path: s.draftsPath, Old: oldFile(s.draftsPath, "drafts.json"),
+		Key: func(l draftLine) string { return l.ID }, Live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }}}
 }
 
 // oldFile is name, the JSON document an older magus kept beside path, or "" when the store
@@ -615,8 +615,8 @@ func (s *Store) saveDrafts(drafts []diff.Comment) {
 
 // sameJSON reports whether a and b encode alike.
 func sameJSON(a, b any) bool {
-	x, errA := json.Marshal(a)
-	y, errB := json.Marshal(b)
+	x, errA := codec.Marshal(a)
+	y, errB := codec.Marshal(b)
 	return errA == nil && errB == nil && bytes.Equal(x, y)
 }
 

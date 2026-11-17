@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -19,34 +18,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
-
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 var (
-	read   = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
-	write  = types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
-	tokens = types.Need{Scope: types.ScopeTokens, Level: types.LevelWrite}
+	read   = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelRead}
+	write  = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelWrite}
+	tokens = auth.Need{Scope: auth.ScopeTokens, Level: auth.LevelWrite}
 )
 
 // pinnedNeeds is every guarded path of a server, each Connect procedure and each /api route,
 // and the Need it holds bearers to, written out by hand. It is the reviewer's view: a path
 // that changes tier, or a new one, changes this table in the same diff, and a path the table
 // does not name fails the matrix.
-var pinnedNeeds = map[string]types.Need{
-	"/mcp": {Scope: types.ScopeMCP, Level: types.LevelWrite},
+var pinnedNeeds = map[string]auth.Need{
+	"/mcp": {Scope: auth.ScopeMCP, Level: auth.LevelWrite},
 
 	"/api/":                   read, // the not-found fallback
 	"/api/v1/events":          read,
@@ -166,11 +165,11 @@ func TestShareRoutesHoldTheLoopbackNeeds(t *testing.T) {
 		require.NotEmpty(t, route.Needs, path)
 		for proc, need := range route.Needs {
 			assert.Equal(t, pinnedNeeds[proc], need, proc)
-			assert.True(t, types.GrantViewer.Allows(need), "%s on a share link needs %s", proc, need)
+			assert.True(t, auth.AccessViewer().Allows(need), "%s on a share link needs %s", proc, need)
 		}
 	}
 	for _, path := range []string{"/api/v1/events", "/api/v1/history-metrics"} {
-		assert.Equal(t, map[string]types.Need{path: pinnedNeeds[path]}, requireAPINeeds(path))
+		assert.Equal(t, map[string]auth.Need{path: pinnedNeeds[path]}, requireAPINeeds(path))
 	}
 	assert.Empty(t, serviceRoute("/magus.nothing.v1alpha1.NoService/", http.NotFoundHandler()).Needs,
 		"an unknown service yields no Needs, which the share listener refuses to guard")
@@ -180,14 +179,14 @@ func TestShareRoutesHoldTheLoopbackNeeds(t *testing.T) {
 // not verify at all.
 type bearer struct {
 	token string
-	grant types.Grant
+	grant auth.Access
 	ok    bool
 }
 
 // plant writes a token record straight into tokens.d, standing in for anything that could
 // put a record there: it lets the matrix carry an expired token and records forged to hold
 // another class's hash or more than any mint grants.
-func plant(t *testing.T, name, secret string, grant types.Grant, expires time.Time) {
+func plant(t *testing.T, name, secret string, grant auth.Access, expires time.Time) {
 	t.Helper()
 	dir, err := auth.StoreDir()
 	require.NoError(t, err)
@@ -198,7 +197,7 @@ func plant(t *testing.T, name, secret string, grant types.Grant, expires time.Ti
 		"version": 2, "id": id, "name": name, "class": "stored", "sha256": full,
 		"grant": grant, "created": time.Now().Add(-2 * time.Minute).UTC(), "expires": expires.UTC(),
 	}
-	b, err := json.Marshal(rec)
+	b, err := codec.Marshal(rec)
 	require.NoError(t, err)
 	path := filepath.Join(dir, name+".json")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
@@ -213,44 +212,44 @@ func matrixBearers(t *testing.T) map[string]bearer {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	mint := func(name string, g types.Grant) string {
-		secret, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: g, TTL: time.Hour})
+	mint := func(name string, g auth.Access) string {
+		secret, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: name, Grant: g, TTL: time.Hour})
 		require.NoError(t, err)
 		return secret.Reveal()
 	}
 	op, err := auth.LoadOperator()
 	require.NoError(t, err)
-	connector := mint("connector", types.GrantConnector)
-	console := mint("console", types.GrantConsole)
-	viewer := mint("viewer", types.GrantViewer)
-	revoked := mint("revoked", types.GrantConsole)
-	_, err = store.Revoke(types.GrantOperator, "revoked")
+	connector := mint("connector", auth.AccessConnector())
+	console := mint("console", auth.AccessConsole())
+	viewer := mint("viewer", auth.AccessViewer())
+	revoked := mint("revoked", auth.AccessConsole())
+	_, err = store.Revoke(auth.AccessOperator(), "revoked")
 	require.NoError(t, err)
-	code, _, err := store.MintCode(types.GrantOperator, auth.MintRequest{Grant: types.GrantConsole, TTL: time.Hour})
+	code, _, err := store.MintCode(auth.AccessOperator(), auth.MintRequest{Grant: auth.AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	// Expired: a real mgs_ token whose record's expiry has passed.
-	expired := mint("expired-src", types.GrantConsole)
-	_, err = store.Revoke(types.GrantOperator, "expired-src")
+	expired := mint("expired-src", auth.AccessConsole())
+	_, err = store.Revoke(auth.AccessOperator(), "expired-src")
 	require.NoError(t, err)
-	plant(t, "expired", expired, types.GrantConsole, time.Now().Add(-time.Minute))
+	plant(t, "expired", expired, auth.AccessConsole(), time.Now().Add(-time.Minute))
 	// A record planted to hold tokens=write, and one that never expires: both skipped.
-	escalated := mint("escalated-src", types.GrantViewer)
-	_, err = store.Revoke(types.GrantOperator, "escalated-src")
+	escalated := mint("escalated-src", auth.AccessViewer())
+	_, err = store.Revoke(auth.AccessOperator(), "escalated-src")
 	require.NoError(t, err)
-	plant(t, "escalated", escalated, types.GrantOperator, time.Now().Add(time.Hour))
-	forever := mint("forever-src", types.GrantViewer)
-	_, err = store.Revoke(types.GrantOperator, "forever-src")
+	plant(t, "escalated", escalated, auth.AccessOperator(), time.Now().Add(time.Hour))
+	forever := mint("forever-src", auth.AccessViewer())
+	_, err = store.Revoke(auth.AccessOperator(), "forever-src")
 	require.NoError(t, err)
-	plant(t, "forever", forever, types.GrantConsole, time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC))
+	plant(t, "forever", forever, auth.AccessConsole(), time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	// Wrong class on loopback: a share secret, with a forged record holding its hash.
-	share, _, err := auth.MintShare(types.GrantOperator, time.Hour)
+	share, _, err := auth.MintShare(auth.AccessOperator(), time.Hour)
 	require.NoError(t, err)
-	plant(t, "forged-share", share.Reveal(), types.GrantConsole, time.Now().Add(time.Hour))
+	plant(t, "forged-share", share.Reveal(), auth.AccessConsole(), time.Now().Add(time.Hour))
 	// A forged viewer record holding the operator secret's hash: the operator still verifies
 	// as the operator, since an mgo_ string never reaches the store.
-	plant(t, "forged-operator", op.Reveal(), types.GrantViewer, time.Now().Add(time.Hour))
+	plant(t, "forged-operator", op.Reveal(), auth.AccessViewer(), time.Now().Add(time.Hour))
 	// The operator body restamped as a stored token: well-formed, and in no store.
 	restamped := "mgs_" + strings.TrimPrefix(op.Reveal(), "mgo_")
 
@@ -258,20 +257,20 @@ func matrixBearers(t *testing.T) map[string]bearer {
 	broken[len(broken)-1] ^= 1
 
 	bearers := map[string]bearer{
-		"operator":              {op.Reveal(), types.GrantOperator, true},
-		"connector":             {connector, types.GrantConnector, true},
-		"console":               {console, types.GrantConsole, true},
-		"viewer":                {viewer, types.GrantViewer, true},
-		"share on loopback":     {share.Reveal(), types.Grant{}, false},
-		"link code as a bearer": {code.Reveal(), types.Grant{}, false},
-		"expired":               {expired, types.Grant{}, false},
-		"revoked":               {revoked, types.Grant{}, false},
-		"planted tokens=write":  {escalated, types.Grant{}, false},
-		"planted year-9999":     {forever, types.Grant{}, false},
-		"checksum broken":       {string(broken), types.Grant{}, false},
-		"operator as mgs_":      {restamped, types.Grant{}, false},
-		"not a magus token":     {"dGhpcyBpcyBub3QgYSB0b2tlbg", types.Grant{}, false},
-		"anonymous (no token)":  {"", types.Grant{}, false},
+		"operator":              {op.Reveal(), auth.AccessOperator(), true},
+		"connector":             {connector, auth.AccessConnector(), true},
+		"console":               {console, auth.AccessConsole(), true},
+		"viewer":                {viewer, auth.AccessViewer(), true},
+		"share on loopback":     {share.Reveal(), auth.Access{}, false},
+		"link code as a bearer": {code.Reveal(), auth.Access{}, false},
+		"expired":               {expired, auth.Access{}, false},
+		"revoked":               {revoked, auth.Access{}, false},
+		"planted tokens=write":  {escalated, auth.Access{}, false},
+		"planted year-9999":     {forever, auth.Access{}, false},
+		"checksum broken":       {string(broken), auth.Access{}, false},
+		"operator as mgs_":      {restamped, auth.Access{}, false},
+		"not a magus token":     {"dGhpcyBpcyBub3QgYSB0b2tlbg", auth.Access{}, false},
+		"anonymous (no token)":  {"", auth.Access{}, false},
 	}
 	// The verifier agrees with the expectations the verdicts are derived from.
 	for name, b := range bearers {
@@ -286,13 +285,13 @@ func matrixBearers(t *testing.T) map[string]bearer {
 
 // bootConsoleServer starts a loaded server with a built console, returning its base URL, its
 // mounted patterns and the needs it recorded, and the buffer its log writes to.
-func bootConsoleServer(t *testing.T) (base string, patterns []string, needs map[string]types.Need, logs *syncBuffer, cacheDir string) {
+func bootConsoleServer(t *testing.T) (base string, patterns []string, needs map[string]auth.Need, logs *syncBuffer, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 	builtConsole(t)
 
-	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	logs = &syncBuffer{}
 	d, addr := testServer(t, func(opts mcp.Options) *Server {
@@ -305,7 +304,7 @@ func bootConsoleServer(t *testing.T) (base string, patterns []string, needs map[
 }
 
 // bootUnloadedServer starts a server whose workspace failed to load.
-func bootUnloadedServer(t *testing.T) (base string, patterns []string, needs map[string]types.Need) {
+func bootUnloadedServer(t *testing.T) (base string, patterns []string, needs map[string]auth.Need) {
 	t.Helper()
 	testkit.Isolate(t)
 	root := t.TempDir()
@@ -331,15 +330,15 @@ func testServer(t *testing.T, build func(mcp.Options) *Server) (*Server, netip.A
 	return build(mcp.Options{Version: "test", HTTPAddr: addr, HealthRoutes: map[string]http.Handler{"/readyz": ok}}), addr
 }
 
-func serveMounted(t *testing.T, d *Server, addr netip.AddrPort) (string, []string, map[string]types.Need) {
+func serveMounted(t *testing.T, d *Server, addr netip.AddrPort) (string, []string, map[string]auth.Need) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	type mounted struct {
 		patterns []string
-		needs    map[string]types.Need
+		needs    map[string]auth.Need
 	}
 	got := make(chan mounted, 1)
-	d.onMounted = func(p []string, n map[string]types.Need) { got <- mounted{p, n} }
+	d.onMounted = func(p []string, n map[string]auth.Need) { got <- mounted{p, n} }
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()
 	t.Cleanup(func() {
@@ -359,7 +358,7 @@ func serveMounted(t *testing.T, d *Server, addr netip.AddrPort) (string, []strin
 // checkNeeds asserts the needs a server recorded are the pinned ones, path for path, that every
 // mounted pattern is either guarded by one of them or named in unguardedRoutes, and returns the
 // guarded paths.
-func checkNeeds(t *testing.T, patterns []string, needs map[string]types.Need, optional map[string]string) []string {
+func checkNeeds(t *testing.T, patterns []string, needs map[string]auth.Need, optional map[string]string) []string {
 	t.Helper()
 	for path, need := range needs {
 		want, pinned := pinnedNeeds[path]
@@ -415,7 +414,7 @@ func walkMatrix(t *testing.T, base string, paths []string, bearers map[string]be
 				assert.Equal(t, [2]any{http.StatusUnauthorized, "MGS9001"}, [2]any{status, reason}, cell)
 			case !b.grant.Allows(need):
 				assert.Equal(t, [2]any{http.StatusForbidden, "MGS9015"}, [2]any{status, reason}, cell)
-			case name == "operator" && need.Scope == types.ScopeConsole:
+			case name == "operator" && need.Scope == auth.ScopeConsole:
 				assert.Equal(t, [2]any{http.StatusForbidden, "MGS9015"}, [2]any{status, reason}, cell)
 			default:
 				assert.NotEqual(t, http.StatusUnauthorized, status, cell)
@@ -493,7 +492,7 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	cliSecret, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "from-cli", Grant: types.GrantConnector, TTL: time.Hour})
+	cliSecret, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "from-cli", Grant: auth.AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	call := func(method, body string) []byte {
@@ -513,12 +512,12 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 	var minted struct {
 		Secret string `json:"secret"`
 	}
-	require.NoError(t, json.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"from-console","grant":{"console":"LEVEL_WRITE"},"expireTime":"%s"}`, exp)), &minted))
+	require.NoError(t, codec.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"from-console","grant":{"console":"LEVEL_WRITE"},"expireTime":"%s"}`, exp)), &minted))
 	require.NotEmpty(t, minted.Secret)
 	var doomed struct {
 		Secret string `json:"secret"`
 	}
-	require.NoError(t, json.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"doomed","grant":{"console":"LEVEL_READ"},"expireTime":"%s"}`, exp)), &doomed))
+	require.NoError(t, codec.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"doomed","grant":{"console":"LEVEL_READ"},"expireTime":"%s"}`, exp)), &doomed))
 	call("RevokeToken", `{"name":"doomed"}`)
 	list := call("ListTokens", `{}`)
 

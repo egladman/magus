@@ -22,8 +22,9 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -57,13 +58,13 @@ func MirroredBinary(exe, root string) string {
 // A job holding another checkout its fork made is refused; one holding an adopted checkout is
 // bound to dir, since moving it loses nothing. Nothing is stored: the caller records wt, or
 // discards it with [Store.DiscardWorktree] when the fork is refused.
-func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary string) (wt types.JobWorktree, made bool, err error) {
+func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary string) (wt job.Worktree, made bool, err error) {
 	dir = filepath.Clean(dir)
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
-		return types.JobWorktree{}, false, err
+		return job.Worktree{}, false, err
 	}
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].Worktree.Standing() {
+	if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id }); i >= 0 && rows[i].Worktree.Standing() {
 		held := *rows[i].Worktree
 		switch {
 		case samePath(held.Root, dir):
@@ -71,21 +72,21 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 			followed, err := s.followCheckpoint(ctx, id, held, checkpoint, false)
 			return followed, false, err
 		case held.Made:
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which its fork made and magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
+			return job.Worktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which its fork made and magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
 				id, held.Root, held.Root)
 		}
 	}
 	if _, err := os.Stat(dir); err == nil {
 		wt, err := s.adoptCheckout(ctx, id, dir)
 		if err != nil {
-			return types.JobWorktree{}, false, err
+			return job.Worktree{}, false, err
 		}
 		followed, err := s.followCheckpoint(ctx, id, wt, checkpoint, true)
 		return followed, false, err
 	}
 	revision, digest := types.ParseCheckpointToken(checkpoint)
 	if digest != "" {
-		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkpoint %s carries uncommitted changes, which a new checkout made at %s would not hold: commit them, then fork at the commit",
+		return job.Worktree{}, false, fmt.Errorf("job: %s's checkpoint %s carries uncommitted changes, which a new checkout made at %s would not hold: commit them, then fork at the commit",
 			id, checkpoint, revision)
 	}
 	if revision == "" {
@@ -93,32 +94,32 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		// uncommitted changes stay where they are.
 		token, err := s.CheckoutToken(ctx)
 		if err != nil {
-			return types.JobWorktree{}, false, fmt.Errorf("%s names a checkout and no checkpoint, and the forking checkout's revision cannot be read: %w", id, err)
+			return job.Worktree{}, false, fmt.Errorf("%s names a checkout and no checkpoint, and the forking checkout's revision cannot be read: %w", id, err)
 		}
 		revision, _ = types.ParseCheckpointToken(token)
 	}
 	source, err := filepath.Abs(s.root)
 	if err != nil {
-		return types.JobWorktree{}, false, err
+		return job.Worktree{}, false, err
 	}
 	drv, why := resolveDriver(ctx, source)
 	if drv == nil {
-		return types.JobWorktree{}, false, fmt.Errorf("job: %s names a checkout, and %s", id, why)
+		return job.Worktree{}, false, fmt.Errorf("job: %s names a checkout, and %s", id, why)
 	}
 	base, err := drv.FindCommit(ctx, source, revision)
 	if err != nil {
-		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout starts at %s, which %s cannot find: %w", id, revision, drv.Name(), err)
+		return job.Worktree{}, false, fmt.Errorf("job: %s's checkout starts at %s, which %s cannot find: %w", id, revision, drv.Name(), err)
 	}
 	if err := drv.CreateCheckout(ctx, source, dir, base.ID, id); err != nil {
-		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
+		return job.Worktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
-	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
+	wt = job.Worktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
 	if binary != "" && !BuildsItsOwnMagus(dir) && !builtAt(ctx, binary, base.ID) {
 		slog.InfoContext(ctx, fmt.Sprintf("not placing %s in %s: it is not a clean build at %.12s", binary, dir, base.ID), attr.Notice("note"))
 	} else if binary != "" && !BuildsItsOwnMagus(dir) {
 		placed, err := placeBinary(binary, dir)
 		if err != nil {
-			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.DiscardCheckout(ctx, source, dir, base.ID))
+			return job.Worktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.DiscardCheckout(ctx, source, dir, base.ID))
 		}
 		wt.Binary = placed
 	}
@@ -151,7 +152,7 @@ func CheckpointAtHead(ctx context.Context, dir, checkpoint string) (head string,
 // followCheckpoint moves wt to the revision a fork names. The job's own base
 // stays put, so a retry keeps its commits. Adopting allows an ancestor of the
 // head, which a child in a shared checkout names.
-func (s *Store) followCheckpoint(ctx context.Context, id string, wt types.JobWorktree, checkpoint string, adopting bool) (types.JobWorktree, error) {
+func (s *Store) followCheckpoint(ctx context.Context, id string, wt job.Worktree, checkpoint string, adopting bool) (job.Worktree, error) {
 	revision, digest := types.ParseCheckpointToken(checkpoint)
 	if revision == "" {
 		return wt, nil
@@ -238,7 +239,7 @@ func CheckoutHead(ctx context.Context, dir string) string {
 // rows record for id starts at that head too, and note says so. Its commits
 // are the job's own, and exec would read them as a divergence. An unread
 // head leaves declared, else wt.Base.
-func StartCheckpoint(ctx context.Context, rows []types.Job, id, declared string, wt types.JobWorktree) (checkpoint, note string) {
+func StartCheckpoint(ctx context.Context, rows []job.Job, id, declared string, wt job.Worktree) (checkpoint, note string) {
 	head, at, err := CheckpointAtHead(ctx, wt.Root, declared)
 	revision, _ := types.ParseCheckpointToken(declared)
 	switch {
@@ -251,7 +252,7 @@ func StartCheckpoint(ctx context.Context, rows []types.Job, id, declared string,
 	case at:
 		return declared, ""
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 || !rows[i].Worktree.Standing() || !samePath(rows[i].Worktree.Root, wt.Root) {
 		return declared, ""
 	}
@@ -261,12 +262,12 @@ func StartCheckpoint(ctx context.Context, rows []types.Job, id, declared string,
 
 // RowLive reports whether job id has a row that has not ended, which a fork
 // updates rather than declares.
-func (s *Store) RowLive(id string) (bool, error) {
-	rows, err := s.dry().List()
+func (s *Store) RowLive(ctx context.Context, id string) (bool, error) {
+	rows, err := s.dry().List(ctx)
 	if err != nil {
 		return false, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	return i >= 0 && !rows[i].State.Terminal(), nil
 }
 
@@ -275,7 +276,7 @@ func (s *Store) RowLive(id string) (bool, error) {
 // the source, or "" when none is. Each candidate's own version says what it
 // holds, since a checkout's binary can outlive the base its row records.
 func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (string, error) {
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -317,7 +318,7 @@ func askVersion(ctx context.Context, bin string) (builtVersion, bool) {
 	if err != nil {
 		return v, false
 	}
-	return v, json.Unmarshal(out, &v) == nil
+	return v, codec.Unmarshal(out, &v) == nil
 }
 
 // builtAt reports whether the magus at bin says it was built at base, clean.
@@ -340,7 +341,7 @@ func BinaryContract(ctx context.Context, bin string) string {
 // whose directory checkout lacks: the workspace loads once per process, so the
 // checkout's own declarations cannot be read, and a missing directory is the
 // signal that its revision predates the project.
-func InstallProjects(root, checkout string, row types.Job, projects []*types.Project) string {
+func InstallProjects(root, checkout string, row job.Job, projects []*types.Project) string {
 	if row.ReadOnly {
 		return noInstall
 	}
@@ -396,26 +397,26 @@ func BuildsItsOwnMagus(dir string) bool {
 // adoptCheckout records dir, a standing linked checkout of this repository, as job id's:
 // nothing is made or placed, and its base is what it has checked out. Its source is the
 // primary checkout, so removing it once the job ends never runs from inside it.
-func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (types.JobWorktree, error) {
+func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (job.Worktree, error) {
 	source, err := filepath.Abs(s.root)
 	if err != nil {
-		return types.JobWorktree{}, err
+		return job.Worktree{}, err
 	}
 	drv, why := resolveDriver(ctx, source)
 	if drv == nil {
-		return types.JobWorktree{}, fmt.Errorf("job: %s names the checkout %s, and %s", id, dir, why)
+		return job.Worktree{}, fmt.Errorf("job: %s names the checkout %s, and %s", id, dir, why)
 	}
 	registered, err := drv.RegisteredCheckouts(ctx, source)
 	if err != nil {
-		return types.JobWorktree{}, fmt.Errorf("job: %s names the checkout %s, and the checkouts %s registers cannot be read: %w", id, dir, drv.Name(), err)
+		return job.Worktree{}, fmt.Errorf("job: %s names the checkout %s, and the checkouts %s registers cannot be read: %w", id, dir, drv.Name(), err)
 	}
 	i := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) })
 	p := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return c.Primary })
 	if i < 0 || p < 0 {
-		return types.JobWorktree{}, fmt.Errorf("job: %s names %s as its checkout, which exists and is not a linked checkout of this repository: name a directory that does not exist yet, which the fork makes, or a linked checkout to adopt",
+		return job.Worktree{}, fmt.Errorf("job: %s names %s as its checkout, which exists and is not a linked checkout of this repository: name a directory that does not exist yet, which the fork makes, or a linked checkout to adopt",
 			id, dir)
 	}
-	wt := types.JobWorktree{Root: dir, Source: registered[p].Root, Base: registered[i].Head, Created: time.Now().Unix()}
+	wt := job.Worktree{Root: dir, Source: registered[p].Root, Base: registered[i].Head, Created: time.Now().Unix()}
 	if info, err := os.Stat(filepath.Join(dir, binaryName)); err == nil && info.Mode().IsRegular() {
 		wt.Binary = filepath.Join(dir, binaryName)
 	}
@@ -424,8 +425,8 @@ func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (types.JobWor
 
 // OwnedCheckout is the root of the standing checkout a row records that dir lies in, "" when
 // no row records one there.
-func (s *Store) OwnedCheckout(dir string) (string, error) {
-	rows, err := s.List()
+func (s *Store) OwnedCheckout(ctx context.Context, dir string) (string, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -440,12 +441,12 @@ func (s *Store) OwnedCheckout(dir string) (string, error) {
 // ParentCheckout is the checkout job parent works in when it is not here: the one its fork
 // made or adopted (bound true, so a child inherits it), else the one it was taken in (bound
 // false). It is "" when parent is unknown, works here, or has not been taken.
-func (s *Store) ParentCheckout(here, parent string) (dir string, bound bool, err error) {
-	rows, err := s.List()
+func (s *Store) ParentCheckout(ctx context.Context, here, parent string) (dir string, bound bool, err error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", false, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == parent })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == parent })
 	if i < 0 {
 		return "", false, nil
 	}
@@ -845,7 +846,7 @@ func ShortRevision(id string) string {
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then
 // refused, before anything ran in it.
 // Its branch goes too while it sits at the base.
-func (s *Store) DiscardWorktree(ctx context.Context, wt types.JobWorktree) error {
+func (s *Store) DiscardWorktree(ctx context.Context, wt job.Worktree) error {
 	drv, why := resolveDriver(ctx, wt.Source)
 	if drv == nil {
 		return fmt.Errorf("job: the checkout %s stays, since %s", wt.Root, why)
@@ -929,18 +930,18 @@ func (s *Store) cachedDigest(bin string) (string, error) {
 
 // digestCache is the JSON Lines store at path, keyed by binary path.
 func digestCache(path string) file.JSONL[binaryDigest] {
-	return file.JSONL[binaryDigest]{Path: path, Key: func(d binaryDigest) string { return d.Path }}
+	return file.JSONL[binaryDigest]{JSONL: codec.JSONL[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Key: func(d binaryDigest) string { return d.Path }}}
 }
 
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it
 // may. It may when a live row's standing checkout records bin as its Binary
 // and bin still hashes to that row's BinaryDigest.
-func (s *Store) PinRefusal(bin string) (string, error) {
-	rows, err := s.List()
+func (s *Store) PinRefusal(ctx context.Context, bin string) (string, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
-	pinning := slices.DeleteFunc(rows, func(r types.Job) bool {
+	pinning := slices.DeleteFunc(rows, func(r job.Job) bool {
 		return !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin)
 	})
 	if len(pinning) == 0 {
@@ -950,7 +951,7 @@ func (s *Store) PinRefusal(bin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if slices.ContainsFunc(pinning, func(r types.Job) bool { return r.Worktree.BinaryDigest == digest }) {
+	if slices.ContainsFunc(pinning, func(r job.Job) bool { return r.Worktree.BinaryDigest == digest }) {
 		return "", nil
 	}
 	return fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID), nil
@@ -959,16 +960,16 @@ func (s *Store) PinRefusal(bin string) (string, error) {
 // PinBinary records the hash ./magus in job id's checkout has now on every
 // live row standing at that checkout, and returns those rows. The root pins
 // any row, and the integrator its own after it relinks there. Any other bound
-// caller gets a [*RefusedError]: a worker that pinned its own build would pick
+// caller gets a [*job.RefusedError]: a worker that pinned its own build would pick
 // its judge.
-func (s *Store) PinBinary(ctx context.Context, id string) ([]types.Job, error) {
-	rows, err := s.List()
+func (s *Store) PinBinary(ctx context.Context, id string) ([]job.Job, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
-		return nil, fmt.Errorf("%w: %q", ErrUnknownJob, id)
+		return nil, fmt.Errorf("%w: %q", job.ErrUnknownJob, id)
 	}
 	if actor := s.Actor(); actor.Bound() && (actor.Lease != id || len(rows[i].Integrates) == 0) {
 		return nil, refuse(actor, id, "only the root and a row's own integrator pin the binary that judges it, and a worker that pinned its own build would pick its judge")
@@ -982,12 +983,12 @@ func (s *Store) PinBinary(ctx context.Context, id string) ([]types.Job, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hashing %s's binary to pin it: %w", id, err)
 	}
-	var pinned []types.Job
+	var pinned []job.Job
 	for _, r := range rows {
 		if !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Root, wt.Root) {
 			continue
 		}
-		row, err := s.writeWorktree(ctx, r.ID, func(w *types.JobWorktree) { w.Binary, w.BinaryDigest = bin, digest })
+		row, err := s.writeWorktree(ctx, r.ID, func(w *job.Worktree) { w.Binary, w.BinaryDigest = bin, digest })
 		if err != nil {
 			return pinned, err
 		}
@@ -997,27 +998,25 @@ func (s *Store) PinBinary(ctx context.Context, id string) ([]types.Job, error) {
 }
 
 // RecordWorktree records wt as the checkout job id owns.
-func (s *Store) RecordWorktree(ctx context.Context, id string, wt types.JobWorktree) (types.Job, error) {
-	return s.writeWorktree(ctx, id, func(w *types.JobWorktree) { *w = wt })
+func (s *Store) RecordWorktree(ctx context.Context, id string, wt job.Worktree) (job.Job, error) {
+	return s.writeWorktree(ctx, id, func(w *job.Worktree) { *w = wt })
 }
 
 // writeWorktree rewrites the worktree record of row id, the one field no declaration
-// carries: see [types.Job.Worktree].
-func (s *Store) writeWorktree(ctx context.Context, id string, fn func(*types.JobWorktree)) (types.Job, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var stored types.Job
-	err := s.update(ctx, func(f *jobsFile) error {
-		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id })
+// carries: see [job.Job.Worktree].
+func (s *Store) writeWorktree(ctx context.Context, id string, fn func(*job.Worktree)) (job.Job, error) {
+	var stored job.Job
+	err := s.Rewrite(ctx, func(f *job.Rows) error {
+		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id })
 		if i < 0 {
-			return fmt.Errorf("%w: %q", ErrUnknownJob, id)
+			return fmt.Errorf("%w: %q", job.ErrUnknownJob, id)
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {
 			return err
 		}
 		row := f.Jobs[i].Clone()
 		if row.Worktree == nil {
-			row.Worktree = &types.JobWorktree{}
+			row.Worktree = &job.Worktree{}
 		}
 		fn(row.Worktree)
 		f.Jobs[i] = row
@@ -1029,7 +1028,7 @@ func (s *Store) writeWorktree(ctx context.Context, id string, fn func(*types.Job
 
 // WorkingCheckout is where row's holder works: the checkout it owns, else root. A row
 // forked with --checkout is taken there and nowhere else (see [WrongCheckout]).
-func WorkingCheckout(root string, row types.Job) string {
+func WorkingCheckout(root string, row job.Job) string {
 	if row.Worktree.Standing() {
 		return row.Worktree.Root
 	}
@@ -1038,7 +1037,7 @@ func WorkingCheckout(root string, row types.Job) string {
 
 // WrongCheckout refuses taking row anywhere but the checkout it is bound to, nil when it is
 // bound to none or here is that checkout.
-func WrongCheckout(row types.Job, here string) error {
+func WrongCheckout(row job.Job, here string) error {
 	if !row.Worktree.Standing() || samePath(row.Worktree.Root, here) {
 		return nil
 	}
@@ -1055,7 +1054,7 @@ func WrongCheckout(row types.Job, here string) error {
 // changed. A checkout this store's own workspace sits in is kept, saying so, for a later
 // call from elsewhere, since removing it would pull the directory out from under the caller.
 // It is [Store.EndCheckouts] restoring nothing and given no ended job.
-func (s *Store) EndWorktrees(ctx context.Context) ([]types.Job, error) {
+func (s *Store) EndWorktrees(ctx context.Context) ([]job.Job, error) {
 	return s.EndCheckouts(ctx, nil)
 }
 
@@ -1063,7 +1062,7 @@ func (s *Store) EndWorktrees(ctx context.Context) ([]types.Job, error) {
 // returns why it may not: it holds a change nobody committed, or a commit nothing but it
 // names. A fact that cannot be read keeps it. With written, what magus wrote in it is
 // restored first (see [restoreWritten]).
-func removeWorktree(ctx context.Context, id string, wt types.JobWorktree, written WrittenPaths) string {
+func removeWorktree(ctx context.Context, id string, wt job.Worktree, written WrittenPaths) string {
 	drv, why := resolveDriver(ctx, wt.Source)
 	if drv == nil {
 		return "whether it holds work cannot be read: " + why

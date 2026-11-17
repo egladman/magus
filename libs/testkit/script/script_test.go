@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,7 +59,7 @@ func readRecords(t *testing.T, path string) []Record {
 	var rows []Record
 	for _, line := range strings.Split(strings.TrimSuffix(string(data), "\n"), "\n") {
 		var r Record
-		require.NoError(t, json.Unmarshal([]byte(line), &r), line)
+		require.NoError(t, codec.Unmarshal([]byte(line), &r), line)
 		rows = append(rows, r)
 	}
 	slices.SortFunc(rows, func(a, b Record) int { return strings.Compare(a.Task, b.Task) })

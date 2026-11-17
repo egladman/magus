@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -214,18 +215,18 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 		return true
 	}
 	return slices.ContainsFunc(s.Changed, func(file string) bool {
-		return slices.ContainsFunc(paths, func(p string) bool { return types.PathsIntersect(p, file) })
+		return slices.ContainsFunc(paths, func(p string) bool { return jobtypes.PathsIntersect(p, file) })
 	})
 }
 
 // ExtendedFootprint adds to rec's write paths the tests beside what it writes.
 // It permits the outputs they regenerate as the integrator's. Each kind gets a
 // count line. It skips a bound caller and a workspace that did not load.
-func ExtendedFootprint(ctx context.Context, store *job.Store, graph *Graph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
+func ExtendedFootprint(ctx context.Context, store *job.Store, graph *Graph, root string, rec jobtypes.Declaration, ws job.Workspace) (jobtypes.Declaration, []string) {
 	if store.Actor().Bound() || ws.Unavailable != "" {
 		return rec, nil
 	}
-	var declared types.Job
+	var declared jobtypes.Job
 	rec.Apply(&declared)
 	// Merging every symbol shard costs a GB of heap, so it waits for a row whose
 	// footprint referrers could extend.

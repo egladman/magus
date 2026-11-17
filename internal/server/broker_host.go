@@ -25,8 +25,8 @@ import (
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
 
@@ -138,7 +138,7 @@ func ServeBroker(ctx context.Context, o BrokerRun) error {
 		exits = fmt.Sprintf("exits after %s holding nothing", IdleText(o.IdleExit))
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) %s %s: %d slots, %s; %s",
-		os.Getpid(), from, addr, slots, types.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))
+		os.Getpid(), from, addr, slots, budget.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))
 
 	ctx, stopNow := context.WithCancel(ctx)
 	defer stopNow()
@@ -160,7 +160,7 @@ func ServeBroker(ctx context.Context, o BrokerRun) error {
 		broker.WithVersion(o.Version),
 		broker.WithDrain(drain, o.Config.ShutdownGrace),
 		broker.WithCrashDir(crashReportDir()),
-		broker.WithAdmissionLog(file.Log[types.MachineAdmission]{Path: AdmissionLogPath(), Keep: admissionsKeep}),
+		broker.WithAdmissionLog(file.Log[budget.Admission]{Path: AdmissionLogPath(), Keep: admissionsKeep}),
 	)
 	// The broker's own context may be done (a signal), and Shutdown's wait for a service
 	// still starting returns at once on a done context, so teardown gets a fresh bound.
@@ -279,7 +279,7 @@ func IdleText(d time.Duration) string {
 func BrokerLogPath() string { return StateLogPath("broker.log") }
 
 // AdmissionLogPath is the store of the admissions the broker recorded, one
-// types.MachineAdmission per line.
+// budget.Admission per line.
 func AdmissionLogPath() string { return StateLogPath("admissions.jsonl") }
 
 // admissionsKeep is the admissions a compaction of the store leaves.

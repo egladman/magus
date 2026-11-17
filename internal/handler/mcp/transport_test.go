@@ -14,12 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // wantServerInstructions is the exact block every MCP client reads at session
@@ -86,10 +88,10 @@ func TestServerInstructionsToolNamesResolve(t *testing.T) {
 
 // rpcFrame is the part of a JSON-RPC 2.0 message these tests read.
 type rpcFrame struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      *int            `json:"id"`
-	Result  json.RawMessage `json:"result"`
-	Error   json.RawMessage `json:"error"`
+	JSONRPC string           `json:"jsonrpc"`
+	ID      *int             `json:"id"`
+	Result  codec.RawMessage `json:"result"`
+	Error   codec.RawMessage `json:"error"`
 }
 
 // toolResult is the part of a tools/call result these tests read.
@@ -98,7 +100,7 @@ type toolResult struct {
 	Content []struct {
 		Text string `json:"text"`
 	} `json:"content"`
-	StructuredContent json.RawMessage `json:"structuredContent"`
+	StructuredContent codec.RawMessage `json:"structuredContent"`
 }
 
 const (
@@ -130,7 +132,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, lines.Scan(), "no reply to %s: %v", frame, lines.Err())
 		var got rpcFrame
-		require.NoError(t, json.Unmarshal(lines.Bytes(), &got), "stdout carried a line that is not JSON-RPC: %q", lines.Text())
+		require.NoError(t, codec.Unmarshal(lines.Bytes(), &got), "stdout carried a line that is not JSON-RPC: %q", lines.Text())
 		require.Equal(t, "2.0", got.JSONRPC)
 		require.Empty(t, got.Error, "%s", got.Error)
 		require.NotNil(t, got.ID, "a reply with no id: %q", lines.Text())
@@ -140,7 +142,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	init := exchange(initializeFrame)
 	assert.Equal(t, 1, *init.ID)
 	var initResult mcplib.InitializeResult
-	require.NoError(t, json.Unmarshal(init.Result, &initResult))
+	require.NoError(t, codec.Unmarshal(init.Result, &initResult))
 	assert.Equal(t, "magus", initResult.ServerInfo.Name)
 
 	_, err := io.WriteString(inW, initializedFrame+"\n")
@@ -149,7 +151,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	listed := exchange(toolsListFrame)
 	assert.Equal(t, 2, *listed.ID)
 	var tools mcplib.ListToolsResult
-	require.NoError(t, json.Unmarshal(listed.Result, &tools))
+	require.NoError(t, codec.Unmarshal(listed.Result, &tools))
 	names := make([]string, 0, len(tools.Tools))
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
@@ -163,7 +165,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	call := exchange(toolCallFrame)
 	assert.Equal(t, 3, *call.ID)
 	var result toolResult
-	require.NoError(t, json.Unmarshal(call.Result, &result))
+	require.NoError(t, codec.Unmarshal(call.Result, &result))
 	require.Len(t, result.Content, 1)
 	assert.False(t, result.IsError, result.Content[0].Text)
 	assert.Contains(t, result.Content[0].Text, "cache")
@@ -175,22 +177,22 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		t.Errorf("stdout carried a line nobody asked for: %q", lines.Text())
 	}
 
-	events, err := trail.ReadRecent(m.CacheDir(), 10)
+	events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
 	// The clock, the OS account, the response preview, the content-addressed refs and the sizes
 	// are copied across; this test pins who called and what.
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:   ev.Ts,
-		Kind: trail.KindMCPToolCall,
-		Origin: types.Origin{
-			User: ev.User, UID: ev.UID, EntryPoint: types.EntryPointMCP, Host: "stdio-test/1.0", Credential: types.CredentialStdio,
+		Kind: trailtypes.KindMCPToolCall,
+		Origin: jobtypes.Origin{
+			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: auth.CredentialStdio().Recorded(),
 		},
 		Workspace:     ev.Workspace,
 		UserAgent:     ev.UserAgent,
 		Action:        hint.ToolConfig.String(),
-		Outcome:       trail.OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		DurationMs:    ev.DurationMs,
 		RequestRef:    ev.RequestRef,
 		ResponseRef:   ev.ResponseRef,
@@ -228,8 +230,8 @@ func TestServeStdioRefusesOptionsWithoutAWorkspace(t *testing.T) {
 // all, and a console token's grant.
 func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, types.GrantConnector, types.CredentialStdio.Grant, "stdio reaches the MCP tools and nothing past them")
-	assert.True(t, types.CredentialStdio.Grant.Allows(ToolNeed))
+	assert.Equal(t, auth.AccessConnector(), auth.CredentialStdio().Grant, "stdio reaches the MCP tools and nothing past them")
+	assert.True(t, auth.CredentialStdio().Grant.Allows(ToolNeed))
 
 	ran := 0
 	h := authorize(func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -237,7 +239,7 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		return mcplib.NewToolResultText("ran"), nil
 	})
 	req := callRequest(hint.ToolConfig.String(), nil)
-	with := func(c types.Credential) func(context.Context) context.Context {
+	with := func(c auth.Credential) func(context.Context) context.Context {
 		return func(ctx context.Context) context.Context { return trail.ContextWithCredential(ctx, c) }
 	}
 
@@ -246,10 +248,10 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		want  string
 	}{
 		"no credential":   {func(ctx context.Context) context.Context { return ctx }, "[MGS9015] config needs mcp=write and the caller holds nothing"},
-		"console grant":   {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
-		"stdio":           {with(types.CredentialStdio), "ran"},
-		"connector token": {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}), "ran"},
-		"operator token":  {with(types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}), "ran"},
+		"console grant":   {with(auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
+		"stdio":           {with(auth.CredentialStdio()), "ran"},
+		"connector token": {with(auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}), "ran"},
+		"operator token":  {with(auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}), "ran"},
 	} {
 		res, err := h(tc.stamp(t.Context()), req)
 		require.NoError(t, err, name)
@@ -267,19 +269,19 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	jobs := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.Root()})
-	for _, row := range []types.Job{
-		{ID: "root/worker", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StateRunning},
+	for _, row := range []jobtypes.Job{
+		{ID: "root/worker", Paths: jobtypes.Paths{Write: []string{"internal/job"}}, State: jobtypes.StateRunning},
 		// A row that writes must name what grades it, or the store refuses the put before
 		// it reaches the lease check this test is about.
-		{ID: "root/other", Paths: types.JobPaths{Write: []string{"internal/guard", "internal/hint"}}, State: types.StateRunning,
-			Check: &types.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "root/other", Paths: jobtypes.Paths{Write: []string{"internal/guard", "internal/hint"}}, State: jobtypes.StateRunning,
+			Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}},
 	} {
-		_, err := jobs.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := jobs.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	h, err := HTTPHandler(Options{Magus: m, Logger: quietLogger()})
 	require.NoError(t, err)
-	connector := types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}
+	connector := auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
 	}))
@@ -301,10 +303,10 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 		raw, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		var frame rpcFrame
-		require.NoError(t, json.Unmarshal(raw, &frame), string(raw))
+		require.NoError(t, codec.Unmarshal(raw, &frame), string(raw))
 		var result toolResult
 		if session != "" {
-			require.NoError(t, json.Unmarshal(frame.Result, &result), string(raw))
+			require.NoError(t, codec.Unmarshal(frame.Result, &result), string(raw))
 		}
 		return resp.Header, result
 	}
@@ -326,7 +328,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	}
 	_, result := post("magus.lease=root/other", session, shrink)
 	require.False(t, result.IsError, result.Content)
-	rows, err := jobs.List()
+	rows, err := jobs.List(t.Context())
 	require.NoError(t, err)
 	var paths []string
 	for _, row := range rows {
@@ -345,11 +347,11 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, tc := range map[string]struct {
-		cred      types.Credential
+		cred      auth.Credential
 		wantError bool
 	}{
-		"connector": {types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}, false},
-		"console":   {types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, true},
+		"connector": {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}, false},
+		"console":   {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, true},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), tc.cred)))
@@ -375,9 +377,9 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 
 		_, body := post(session, toolCallFrame)
 		var frame rpcFrame
-		require.NoError(t, json.Unmarshal(body, &frame), "%s: %s", name, body)
+		require.NoError(t, codec.Unmarshal(body, &frame), "%s: %s", name, body)
 		var result toolResult
-		require.NoError(t, json.Unmarshal(frame.Result, &result), name)
+		require.NoError(t, codec.Unmarshal(frame.Result, &result), name)
 		assert.Equal(t, tc.wantError, result.IsError, "%s: %s", name, body)
 		srv.Close()
 	}

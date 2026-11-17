@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -97,7 +97,7 @@ func (s *Store) writeSymbolNames(shards []Shard, key string) error {
 		}
 		return nil
 	}
-	b, err := json.Marshal(buildSymbolNames(shards, key))
+	b, err := codec.Marshal(buildSymbolNames(shards, key))
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (s *Store) readSymbolNames(man *manifest) *symbolNames {
 	path := s.namesPath()
 	n, info, hit, err := decodeFile(path, func(b []byte) (*symbolNames, error) {
 		var n symbolNames
-		err := json.Unmarshal(b, &n)
+		err := codec.Unmarshal(b, &n)
 		return &n, err
 	})
 	if err != nil {

@@ -38,6 +38,8 @@ import (
     "github.com/egladman/magus"
     _ "github.com/egladman/magus/buzzengine"
     "github.com/egladman/magus/libs/diagnostics"
+    "github.com/egladman/magus/libs/safetyscissors/tier"
+    "github.com/egladman/magus/libs/safetyscissors/verdict"
     "github.com/egladman/magus/project"
     "github.com/egladman/magus/spells"
     "github.com/egladman/magus/std"
@@ -119,8 +121,8 @@ func registerCopySpell(name string, runs *int) (unregister func()) {
 ## Open a workspace
 
 `Inspect` reads a workspace without opening its cache. Use it for anything that only
-looks. Every constructor takes a spawn rule, which has no default; `magus.TierCeiling`
-is the one the CLI passes.
+looks. Every constructor takes a spawn rule, which has no default; `tier.Ceiling`
+(`github.com/egladman/magus/libs/safetyscissors/tier`) is the one the CLI passes.
 
 ```go
 // Example_openAWorkspace opens a workspace read-only and lists its projects.
@@ -134,7 +136,7 @@ func Example_openAWorkspace() {
     defer cleanup()
 
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+    ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("inspect:", err)
         return
@@ -172,7 +174,7 @@ func Example_listProjectsAndTargets() {
     reg.RegisterProject("api", magus.WithSpell("guide-list"))
 
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("inspect:", err)
         return
@@ -220,7 +222,7 @@ func Example_runATarget() {
     reg.RegisterProject("api", magus.WithSpell("guide-run"))
 
     ctx := context.Background()
-    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -306,7 +308,7 @@ func Example_readAFailedTarget() {
     reg.RegisterProject("api", magus.WithSpell("guide-check"))
 
     ctx := context.Background()
-    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -360,7 +362,7 @@ func Example_whatADiffAffects() {
     reg.RegisterProject("web", magus.WithDependsOn("api"))
 
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("inspect:", err)
         return
@@ -398,7 +400,7 @@ func ExampleMagus_Context() {
     defer cleanup()
 
     ctx := context.Background()
-    m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -443,7 +445,8 @@ const guardPolicy = `import "magus";
 
 A deny is an answer, not an error: `err` is nil, `Decision` is `deny`, `Rule` names the
 rule and `Reason` is written for the agent. Its first line is the remedy; later lines
-point at the full verdict. A pass has `Decision` set to `pass`. `JudgeWrite` judges a
+point at the full verdict. A call with no objection has `Decision` set to `verdict.Defer`,
+which leaves it to the host's own permission flow. `JudgeWrite` judges a
 file write the same way.
 
 ```go
@@ -457,7 +460,7 @@ func Example_judgeAToolCall() {
     defer cleanup()
 
     ctx := context.Background()
-    m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -475,7 +478,7 @@ func Example_judgeAToolCall() {
     }
     // Output:
     // cp api/greeting.txt api/out/: deny workspace:targets-only Build through the target: magus run build api
-    // magus run build api: pass
+    // magus run build api: defer
 }
 ```
 
@@ -509,7 +512,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     reg.RegisterProject("api", magus.WithSpell("guide-denied"))
 
     ctx := context.Background()
-    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -517,7 +520,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     defer m.Close()
 
     err = m.Run(ctx, []types.Target{{Path: "api", Name: "build"}}, magus.WithSession("guide-session"))
-    var denied *types.GuardDeniedError
+    var denied *verdict.DeniedError
     if errors.As(err, &denied) {
         fmt.Println("denied by:", denied.Judgment.Rule)
     }
@@ -555,7 +558,7 @@ func Example_aProgramThatIsItsOwnHarness() {
     reg.RegisterProject("api", magus.WithSpell("guide-harness"))
 
     ctx := context.Background()
-    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -574,7 +577,7 @@ func Example_aProgramThatIsItsOwnHarness() {
             fmt.Println("judge:", err)
             return
         }
-        if j.Decision == "deny" {
+        if j.Decision == verdict.Deny {
             reason, _, _ := strings.Cut(j.Reason, "\n")
             fmt.Printf("denied %q: %s\n", command, reason)
             continue

@@ -73,7 +73,7 @@ func TestPlugin(t *testing.T) { suite.Run(t, new(pluginSuite)) }
 
 func (s *pluginSuite) SetupTest() {
 	s.client = &fakeClient{files: map[string]bool{}, vars: map[string]string{}}
-	s.magus = &recorder{stdout: `{"api_version":"magus.guard/v1alpha1","decision":"pass"}`}
+	s.magus = &recorder{stdout: `{"api_version":"safetyscissors.verdict/v1alpha1","decision":"defer"}`}
 	runtime, err := openRuntime(context.Background(), pluginSource, s.magus.invoke)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.NoError(runtime.Close()) })
@@ -163,7 +163,7 @@ func (s *pluginSuite) TestDispatchJSONAnswersTheResult() {
 }
 
 func (s *pluginSuite) TestToolBeforeBlocksADeniedCommand() {
-	s.magus.stdout = `{"api_version":"magus.guard/v1alpha1","decision":"deny","reason":"blocked"}`
+	s.magus.stdout = `{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"blocked"}`
 	err := s.plugin.toolBefore(context.Background(), toolCall{Session: "s", Tool: "bash", CallID: "c", Args: []byte(`{"command":"rm -rf ."}`)})
 	s.EqualError(err, "[magus guard] blocked")
 }
@@ -183,11 +183,11 @@ func (s *pluginSuite) TestToolBeforeAddsTheFilePathToAnotherTool() {
 	s.True(s.magus.ran("buzz", "-C", "/repo", "-s", observeScript))
 }
 
-func (s *pluginSuite) TestPermissionAskAllowsAPassedPush() {
+func (s *pluginSuite) TestPermissionAskLeavesADeferredPushToOpenCode() {
 	s.plugin.configure(pluginConfig{bash: map[string]string{"git push": "ask", "git push *": "ask"}})
 	status, err := s.plugin.permissionAsk(context.Background(), permissionRequest{Type: "bash", Command: "git push", Session: "s"})
 	s.Require().NoError(err)
-	s.Equal("allow", status)
+	s.Empty(status, "a defer writes no permission decision")
 }
 
 func (s *pluginSuite) TestPermissionAskLeavesAnUnconfiguredCommand() {
@@ -208,7 +208,7 @@ func (s *pluginSuite) TestToolAfterTakesHeldNotesOnlyWhenTheOutputCarriesThem() 
 }
 
 func (s *pluginSuite) TestGuardStopSendsTheRefusalAndSkipsItsEcho() {
-	s.magus.stdout = `{"api_version":"magus.guard/v1alpha1","decision":"deny","reason":"finish the job"}`
+	s.magus.stdout = `{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"finish the job"}`
 	s.True(s.plugin.guardStop(context.Background(), "root", false))
 	s.Equal([]string{"root: [magus guard] finish the job"}, s.client.prompts)
 	s.plugin.chatMessage(context.Background(), "root", []messagePart{{Type: "text", Text: "[magus guard] finish the job"}})
@@ -216,7 +216,7 @@ func (s *pluginSuite) TestGuardStopSendsTheRefusalAndSkipsItsEcho() {
 }
 
 func (s *pluginSuite) TestGuardStopForgetsAFollowUpItCouldNotSend() {
-	s.magus.stdout = `{"api_version":"magus.guard/v1alpha1","decision":"deny","reason":"finish the job"}`
+	s.magus.stdout = `{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"finish the job"}`
 	s.client.failSend = errors.New("offline")
 	s.False(s.plugin.guardStop(context.Background(), "root", false))
 	s.False(s.plugin.hasFollowUp("root"))
@@ -235,7 +235,7 @@ func (s *pluginSuite) TestWhoIsWalksToTheRootSession() {
 }
 
 func (s *pluginSuite) TestIdleBackgroundChildIsPromptedWhenRefused() {
-	s.magus.stdout = `{"api_version":"magus.guard/v1alpha1","decision":"deny","reason":"report back"}`
+	s.magus.stdout = `{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"report back"}`
 	s.plugin.background["child"] = false
 	s.plugin.event(context.Background(), sessionEvent{Kind: "session.idle", Session: "child"})
 	s.Equal([]string{"child: [magus guard] report back"}, s.client.prompts)

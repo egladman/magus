@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // denyRuleWorkerBackgroundRun names the refusal of a bound worker's magus run the host was
@@ -56,7 +56,7 @@ func (c shellCall) foregroundLimit() (time.Duration, bool) {
 
 // workerRun is the target runs one command makes, under the bound worker making them.
 type workerRun struct {
-	lease types.Job
+	lease job.Job
 	runs  []targetRun
 	// refusals holds check-timeout to one refusal per target per session when the workspace
 	// raised it to deny: the deny gate holds nothing, and a refused run narrowed to one test
@@ -125,7 +125,7 @@ func denyWorkerBackgroundRun(run workerRun, call shellCall) denial {
 // no foreground limits, for a target with no recorded real run, and for a run inside `magus
 // job exec --timeout`, which carries its own bound. The session store is read only once
 // every other condition holds.
-func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
+func adviseCheckTimeout(ctx context.Context, at location, run workerRun, call shellCall) advice {
 	limit, ok := call.foregroundLimit()
 	if !ok || call.background || at.workspace == "" || len(run.runs) == 0 {
 		return advice{}
@@ -139,7 +139,7 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		if len(projects) == 0 {
 			projects = []string{"."}
 		}
-		last, sameArgs := lastRunPriced(dir, projects, r)
+		last, sameArgs := lastRunPriced(ctx, dir, projects, r)
 		need, bound := checkMargin(last)
 		if last == 0 || limit >= need {
 			continue
@@ -172,22 +172,22 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 
 // checkMargin allows a run half again as long as took, for a cold cache or a
 // loaded machine. bound rounds that up to a minute.
-func lastRunPriced(dir string, projects []string, r targetRun) (time.Duration, bool) {
+func lastRunPriced(ctx context.Context, dir string, projects []string, r targetRun) (time.Duration, bool) {
 	var last time.Duration
 	for _, p := range projects {
-		d, ok := sessions.LastRunDurationWith(dir, p, r.target, r.forwarded)
+		d, ok := sessions.LastRunDurationWith(ctx, dir, p, r.target, r.forwarded)
 		if !ok {
-			return lastTargetRun(dir, projects, r.target), false
+			return lastTargetRun(ctx, dir, projects, r.target), false
 		}
 		last = max(last, d)
 	}
 	return last, true
 }
 
-func lastTargetRun(dir string, projects []string, target string) time.Duration {
+func lastTargetRun(ctx context.Context, dir string, projects []string, target string) time.Duration {
 	var last time.Duration
 	for _, p := range projects {
-		if d, ok := sessions.LastRunDuration(dir, p, target); ok {
+		if d, ok := sessions.LastRunDuration(ctx, dir, p, target); ok {
 			last = max(last, d)
 		}
 	}

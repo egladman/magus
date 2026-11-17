@@ -138,63 +138,63 @@ stdout 'identifies the working state'
 # Reading a stash, and naming the entry to restore, are the deliberate forms.
 stdin stash-list.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 stdin stash-pop-ref.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 # The documented bootstrap-deadlock escape: shelve the one hunk an old binary rejects,
 # build, restore. Denying it put the workspace's own answer out of reach.
 stdin stash-push-paths.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 stdin worktree-list.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 stdin reset-soft.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 # -n removes nothing, and the d in --dry-run is not the -d that deletes.
 stdin clean-dry-run.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 # The scoped forms of the non-git backends name what they touch.
 stdin hg-revert-path.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 stdin jj-restore-path.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 # The build-stamp spelling of describe wants a version string to embed, not the identity
 # of a tree it is handing anybody, so the checkpoint advisory would be noise on every
 # build.
 stdin describe-tags.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 # rev-parse answers repository-layout questions too, and --abbrev-ref answers with a
 # branch name; a checkpoint replaces neither.
 stdin rev-parse-toplevel.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 stdin rev-parse-abbrev.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 # A quoted word structurally cannot be a command. This is why the rules read an AST: the
 # unanchored regexes denied `git stash` written as PROSE, including the commit message
 # and the skill whose whole subject is these commands.
 stdin prose.txt
 exec magus shell
-stdout 'pass'
+stdout 'defer'
 
 -- stash.txt --
 git stash

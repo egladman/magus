@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,6 +13,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -58,15 +62,17 @@ func open(repo string) (*ledger, error) {
 	}
 	return &ledger{
 		repo: repo,
-		items: file.JSONL[types.WorkItem]{
+		items: file.JSONL[types.WorkItem]{JSONL: codec.JSONL[types.WorkItem]{
+			Log:  slog.With(attr.Component("magus")),
 			Path: filepath.Join(dir, "work.jsonl"),
 			Key:  types.WorkItem.Key,
 			Live: func(w types.WorkItem) bool { return !w.Dropped },
-		},
-		facts: file.JSONL[fact]{
+		}},
+		facts: file.JSONL[fact]{JSONL: codec.JSONL[fact]{
+			Log:  slog.With(attr.Component("magus")),
 			Path: filepath.Join(dir, "facts.jsonl"),
 			Key:  fact.key,
-		},
+		}},
 		now: time.Now,
 	}, nil
 }
@@ -108,7 +114,7 @@ type surveyTerms struct {
 	// Base is the revision an item is absorbed into. Required.
 	Base string
 	// Jobs are the rows that can track an item; a terminal row tracks none.
-	Jobs []types.Job
+	Jobs []job.Job
 	// LocalOnly is work.local_only. A bad glob fails the survey.
 	LocalOnly []string
 }

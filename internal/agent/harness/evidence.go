@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -74,7 +75,7 @@ func readBlob[T any](t *testing.T, w *workspace, ref string) T {
 		t.Logf("trail blob %s: %v", ref, err)
 		return v
 	}
-	if err := json.Unmarshal(body, &v); err != nil {
+	if err := codec.Unmarshal(body, &v); err != nil {
 		t.Logf("trail blob %s: %v", ref, err)
 	}
 	return v
@@ -124,7 +125,7 @@ func (w *workspace) spawnedAgents(t *testing.T) []spawnedAgent {
 			t.Fatal(err)
 		}
 		var rec spawnedAgent
-		if err := json.Unmarshal(body, &rec); err != nil {
+		if err := codec.Unmarshal(body, &rec); err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
 		out = append(out, rec)
@@ -144,20 +145,20 @@ func (w *workspace) checkpoints(t *testing.T) []checkpoint {
 	var listing struct {
 		Checkpoints []checkpoint `json:"checkpoints"`
 	}
-	if err := json.Unmarshal([]byte(w.magus(t, "session", "-o", "json", "--limit", "0")), &listing); err != nil {
+	if err := codec.Unmarshal([]byte(w.magus(t, "session", "-o", "json", "--limit", "0")), &listing); err != nil {
 		t.Fatalf("magus session -o json: %v", err)
 	}
 	return listing.Checkpoints
 }
 
 // jobRow reads one row from the workspace's own `magus ls jobs`.
-func (w *workspace) jobRow(t *testing.T, id string) types.Job {
+func (w *workspace) jobRow(t *testing.T, id string) job.Job {
 	t.Helper()
-	var listing types.JobList
-	if err := json.Unmarshal([]byte(w.magus(t, "ls", "jobs", "-o", "json")), &listing); err != nil {
+	var listing job.List
+	if err := codec.Unmarshal([]byte(w.magus(t, "ls", "jobs", "-o", "json")), &listing); err != nil {
 		t.Fatalf("magus ls jobs -o json: %v", err)
 	}
-	i := slices.IndexFunc(listing.Jobs, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(listing.Jobs, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
 		t.Fatalf("magus ls jobs lists no row %s", id)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,11 +29,11 @@ func ConsoleSkew(serverVersion, cliVersion string) string {
 
 // InflightScope keeps the caller's changes, or every change when all is set. Never nil,
 // so an empty scope encodes as [].
-func InflightScope(changes []types.InflightChange, all bool) []types.InflightChange {
+func InflightScope(changes []InflightChange, all bool) []InflightChange {
 	if all {
-		return append([]types.InflightChange{}, changes...)
+		return append([]InflightChange{}, changes...)
 	}
-	mine := []types.InflightChange{}
+	mine := []InflightChange{}
 	for _, c := range changes {
 		if c.Mine {
 			mine = append(mine, c)
@@ -45,12 +46,12 @@ func InflightScope(changes []types.InflightChange, all bool) []types.InflightCha
 // branches have nothing left to merge: the stored row's, while some goal of it is unmet, so
 // a follow-up fixing what the merge left red keeps the row. nil when there is no such row or
 // every goal is met.
-func UnfinishedIntegration(ctx context.Context, store *Store, row types.Declaration, observe Observer) ([]string, error) {
-	rows, err := store.List()
+func UnfinishedIntegration(ctx context.Context, store *Store, row job.Declaration, observe Observer) ([]string, error) {
+	rows, err := store.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.ID })
 	if i < 0 || len(rows[i].Integrates) == 0 || len(rows[i].Paths.Write) == 0 {
 		return nil, nil
 	}
@@ -58,7 +59,7 @@ func UnfinishedIntegration(ctx context.Context, store *Store, row types.Declarat
 	if err != nil {
 		return nil, exit.Usagef("magus job fork: %s's goals cannot be graded, so whether it is finished is unknown: %s", row.ID, err)
 	}
-	if !slices.ContainsFunc(status.Gates, func(g types.VerificationStatus) bool { return !g.Verified }) {
+	if !slices.ContainsFunc(status.Gates, func(g job.VerificationStatus) bool { return !g.Verified }) {
 		return nil, nil
 	}
 	return slices.Clone(rows[i].Paths.Write), nil
@@ -81,7 +82,7 @@ func UnloadableMagusfile(err error) error {
 // NoteForkJudgedAsUpdate says when id is live, so its fork is judged only on
 // what it adds. A fork of the same record after the row ends is judged whole.
 func NoteForkJudgedAsUpdate(ctx context.Context, store *Store, id string) bool {
-	live, err := store.RowLive(id)
+	live, err := store.RowLive(ctx, id)
 	if err != nil {
 		slog.InfoContext(ctx, fmt.Sprintf("whether %s is live could not be read", id), attr.Error(err), attr.Notice("note"))
 		return false
@@ -98,7 +99,7 @@ func NoteForkRowEnded(ctx context.Context, store *Store, id string, wasLive bool
 	if !wasLive {
 		return
 	}
-	if live, err := store.RowLive(id); err == nil && !live {
+	if live, err := store.RowLive(ctx, id); err == nil && !live {
 		slog.InfoContext(ctx, fmt.Sprintf("%s ended while this fork ran, so it is judged whole as a new job, not as an update", id), attr.Notice("note"))
 	}
 }
@@ -106,7 +107,7 @@ func NoteForkRowEnded(ctx context.Context, store *Store, id string, wasLive bool
 // FailedProvision is err, from readying wt, with what became of wt.
 // Only a checkout this fork made is removed. An adopted one stays,
 // and so does one an earlier fork of the job made.
-func FailedProvision(ctx context.Context, store *Store, wt types.JobWorktree, made bool, err error) error {
+func FailedProvision(ctx context.Context, store *Store, wt job.Worktree, made bool, err error) error {
 	if !made {
 		return fmt.Errorf("%w: %s stays as it was, since this fork did not make it", err, wt.Root)
 	}
@@ -145,14 +146,14 @@ func RefuseApply(validations []types.JobValidation, err error) error {
 
 // JudgedMerge is row's merge as validation reads it. A job that works in its own checkout
 // shares none, which the standing placeholder says before the worktree exists.
-func JudgedMerge(row types.Declaration, defaultTimeout time.Duration) func(*types.Job) {
+func JudgedMerge(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 	merge := Declare(row, defaultTimeout)
 	if row.Checkout == "" {
 		return merge
 	}
-	return func(u *types.Job) {
+	return func(u *job.Job) {
 		merge(u)
-		u.Worktree = &types.JobWorktree{Root: row.Checkout}
+		u.Worktree = &job.Worktree{Root: row.Checkout}
 	}
 }
 
@@ -167,26 +168,27 @@ func (e listedProblems) Error() string { return strings.TrimSuffix(e.list, "\n")
 func (e listedProblems) Unwrap() error { return e.err }
 func (listedProblems) ExitCode() int   { return exit.Failure }
 
-// RowNotesWith is row's notes over the workspace at root and its projects.
-func RowNotesWith(ctx context.Context, root string, projects []*types.Project, row types.Job, foregroundMax func() (time.Duration, bool)) RowNotes {
+// RowNotesWith is row's notes over the workspace at root and its projects, its gates
+// graded by grader (see [UnrunGates]).
+func RowNotesWith(ctx context.Context, root string, projects []*types.Project, row job.Job, foregroundMax func() (time.Duration, bool), grader CheckGrader) RowNotes {
 	regenerated := RegeneratedOutside(root, row, projects, VCSIgnored(ctx, root))
 	return RowNotes{
 		RegeneratedOutside: regenerated,
-		UnrunGates:         UnrunGates(root, row, projects, regenerated),
-		ForegroundOverrun:  CheckOverrun(root, row, foregroundMax),
+		UnrunGates:         UnrunGates(root, row, projects, regenerated, grader),
+		ForegroundOverrun:  CheckOverrun(ctx, root, row, foregroundMax),
 	}
 }
 
 // CheckOverrun is row's check when its last real run here took longer than a wired host
 // lets a foreground call wait. The session store is read first, and the harnesses are
 // consulted only for a check that has a recorded run.
-func CheckOverrun(root string, row types.Job, foregroundMax func() (time.Duration, bool)) *ForegroundOverrun {
+func CheckOverrun(ctx context.Context, root string, row job.Job, foregroundMax func() (time.Duration, bool)) *ForegroundOverrun {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return nil
 	}
 	lastRun := func(project, target string) (time.Duration, bool) {
-		return sessions.LastRunDuration(dir, project, target)
+		return sessions.LastRunDuration(ctx, dir, project, target)
 	}
 	overrun, ok := OverrunsForeground(row, lastRun, foregroundMax)
 	if !ok {
@@ -199,7 +201,7 @@ func CheckOverrun(root string, row types.Job, foregroundMax func() (time.Duratio
 // embedded row flattens, so the wire shape is the job's own with deletion_candidates,
 // referenced_outside, referenced_outside_gap, foreground_overrun and claim_notes added.
 type ForkOutput struct {
-	types.Job `yaml:",inline"`
+	job.Job `yaml:",inline"`
 	// DeletionCandidates are the unreferenced symbols the write paths cover: findings to
 	// finish or delete, never goals.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`

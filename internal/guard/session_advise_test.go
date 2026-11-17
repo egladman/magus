@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -42,58 +42,58 @@ func (s *SessionAdviseSuite) post(expect string) sessions.Directive {
 	return a
 }
 
-func pass() types.GuardJudgment {
-	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+func pass() verdict.Judgment {
+	return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 }
 
 func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
 	a := s.post("")
 	v := adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
-	s.Equal(ruledAs(decisionDeny, string(denyRulePersonAdvisory)), judgedAs(v))
+	s.Equal(ruledAs(verdict.Deny, string(denyRulePersonAdvisory)), judgedAs(v))
 	s.Contains(v.Reason, a.ID)
 	s.Contains(v.Reason, "not a relay from another agent")
-	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
+	s.Equal(verdict.Defer, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
 func (s *SessionAdviseSuite) TestASubagentStopEventShowsNothing() {
 	s.post("")
-	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, subagentStopRaw, pass()).Decision)
-	s.Equal(decisionDeny, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
+	s.Equal(verdict.Defer, adviseStop(context.Background(), s.at, s.who, subagentStopRaw, pass()).Decision)
+	s.Equal(verdict.Deny, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
 func (s *SessionAdviseSuite) TestAStopNamingAnAgentShowsNothing() {
 	s.post("")
 	child := s.who
 	child.Agent = "a1"
-	s.Equal(decisionPass, adviseStop(context.Background(), s.at, child, rootStopRaw, pass()).Decision)
-	s.Equal(decisionDeny, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
+	s.Equal(verdict.Defer, adviseStop(context.Background(), s.at, child, rootStopRaw, pass()).Decision)
+	s.Equal(verdict.Deny, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
 func (s *SessionAdviseSuite) TestAStopAlreadyHeldShowsItNextTime() {
 	s.post("")
-	held := types.GuardJudgment{Decision: decisionDeny, Reason: "background tasks still run"}
+	held := verdict.Judgment{Decision: verdict.Deny, Reason: "background tasks still run"}
 	s.Equal(held, adviseStop(context.Background(), s.at, s.who, rootStopRaw, held))
 	s.Equal(string(denyRulePersonAdvisory), adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }
 
 func (s *SessionAdviseSuite) TestAPromptWithoutContextLeavesItForTheStop() {
 	s.post("")
-	s.Equal(decisionPass, adviseMessage(context.Background(), s.at, s.who, false).Decision)
+	s.Equal(verdict.Defer, adviseMessage(context.Background(), s.at, s.who, false).Decision)
 	s.Equal(string(denyRulePersonAdvisory), adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }
 
 func (s *SessionAdviseSuite) TestAPromptWithContextShowsItInsteadOfTheStop() {
 	a := s.post("")
 	v := adviseMessage(context.Background(), s.at, s.who, true)
-	s.Equal(decisionAdvise, v.Decision)
+	s.Equal(verdict.Advise, v.Decision)
 	s.Contains(v.Context, a.ID)
-	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
+	s.Equal(verdict.Defer, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
 // A directive reaches every session as the person's own words, so an agent
 // posting or retracting one would put words in the person's mouth.
 func (s *SessionAdviseSuite) deniedToAnAgent(command string) {
-	s.Contains(Evaluate(strict(testDependencies()), command).Deny, "post or retract an advisory")
+	s.Contains(Evaluate(s.T().Context(), strict(testDependencies()), command).Deny, "post or retract an advisory")
 }
 
 func (s *SessionAdviseSuite) TestAnAgentMayNotAdvise() {
@@ -113,7 +113,7 @@ func (s *SessionAdviseSuite) TestAnAgentMayNotRetract() {
 }
 
 func (s *SessionAdviseSuite) TestAnAgentMayListAdvisories() {
-	s.Empty(Evaluate(strict(testDependencies()), `magus session advisories`).Deny)
+	s.Empty(Evaluate(s.T().Context(), strict(testDependencies()), `magus session advisories`).Deny)
 }
 
 func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {
@@ -123,7 +123,7 @@ func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {
 	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "advisories.jsonl"), []byte("{\"kind\":\"shout\"}\n"), 0o644))
 	v := adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
-	s.Equal(decisionPass, v.Decision)
+	s.Equal(verdict.Defer, v.Decision)
 	s.Contains(v.Context, "advisories could not be read")
 }
 

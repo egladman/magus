@@ -7,7 +7,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 )
 
@@ -109,7 +109,7 @@ func baseDependencies(ctx context.Context, l Layout) ([]Dependency, error) {
 			return nil, err
 		}
 		var man ocispec.Manifest
-		if err := json.Unmarshal(data, &man); err != nil {
+		if err := codec.Unmarshal(data, &man); err != nil {
 			return nil, fmt.Errorf("manifest %s: %w", m.Digest, err)
 		}
 		raw := man.Annotations[ocispec.AnnotationBaseImageDigest]

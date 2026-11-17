@@ -11,8 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
 )
@@ -66,11 +65,11 @@ func AppendFeedbackMark(dir string, m trailtypes.Mark, now time.Time) (trailtype
 		m.Examples = m.Examples[:maxMarkExamples]
 	}
 	m.At = now.UnixMilli()
-	line, err := json.Marshal(m)
+	line, err := codec.Marshal(m)
 	if err != nil {
 		return m, err
 	}
-	if err := file.AppendLines(filepath.Join(dir, marksFile), [][]byte{line}, 0o644, file.WithoutSync()); err != nil {
+	if err := codec.AppendLines(filepath.Join(dir, marksFile), [][]byte{line}, 0o644, codec.WithoutSync()); err != nil {
 		return m, fmt.Errorf("feedback: %w", err)
 	}
 	return m, nil
@@ -97,7 +96,7 @@ func ReadFeedbackMarks(dir string) ([]trailtypes.Mark, error) {
 			continue
 		}
 		var m trailtypes.Mark
-		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
+		if err := codec.Unmarshal(sc.Bytes(), &m); err != nil {
 			return nil, fmt.Errorf("feedback: %s:%d: %w", path, n, err)
 		}
 		out = append(out, m)

@@ -1,7 +1,8 @@
 package broker
 
 import (
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -59,9 +60,9 @@ const maxFrameBytes = 4 << 20
 // frame is one line on the wire: a type, the request it belongs to, and a body whose
 // shape the type decides.
 type frame struct {
-	Type string          `json:"type"`
-	ID   uint64          `json:"id,omitzero"`
-	Body json.RawMessage `json:"body,omitempty"`
+	Type string           `json:"type"`
+	ID   uint64           `json:"id,omitzero"`
+	Body codec.RawMessage `json:"body,omitempty"`
 }
 
 // hello is the first frame a client sends: who is on the other end. The broker copies
@@ -101,15 +102,15 @@ type helloReply struct {
 // its step already runs under a broker that has since died. Park queues a
 // claim that can fit until it is seated or cancelled.
 type claimRequest struct {
-	Claim    types.MachineClaim `json:"claim"`
-	Reassert bool               `json:"reassert,omitzero"`
-	Park     bool               `json:"park,omitzero"`
+	Claim    budget.Claim `json:"claim"`
+	Reassert bool         `json:"reassert,omitzero"`
+	Park     bool         `json:"park,omitzero"`
 }
 
 // claimReply is the verdict; a claim that does not fit is not recorded. An unparked
 // claim is answered at once, and whether to ask again is the client's call.
 type claimReply struct {
-	Verdict types.MachineVerdict `json:"verdict"`
+	Verdict budget.Verdict `json:"verdict"`
 	// Seat is set on a claim kept out by its job tree's validation cap: the run waits,
 	// and this names the runs it waits on.
 	Seat *SeatWait `json:"seat,omitempty"`
@@ -118,8 +119,8 @@ type claimReply struct {
 // parkedReply is the first answer to a request the broker parked: what keeps it out now.
 // A wake sends another whenever that changes.
 type parkedReply struct {
-	Verdict types.MachineVerdict `json:"verdict"`
-	Seat    *SeatWait            `json:"seat,omitempty"`
+	Verdict budget.Verdict `json:"verdict"`
+	Seat    *SeatWait      `json:"seat,omitempty"`
 }
 
 // cancelRequest drops this connection's parked request with id ID, which is then

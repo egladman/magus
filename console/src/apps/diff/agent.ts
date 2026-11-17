@@ -68,7 +68,7 @@ function renderTurn(turn: SessionTurn): HTMLElement {
   li.append(h("span", "console-diff-agent__role", turnLabel(turn)));
   li.append(h("span", "console-diff-agent__text", turnText(turn)));
   const notes: string[] = [];
-  if (turn.verdict && turn.verdict !== "pass") notes.push(`guard: ${turn.verdict}`);
+  if (turn.verdict && turn.verdict !== "defer") notes.push(`guard: ${turn.verdict}`);
   if (turn.denied) notes.push("denied by host");
   if (turn.interrupted) notes.push("interrupted");
   if (turn.exit !== 0) notes.push(`exit ${turn.exit}`);

@@ -89,10 +89,13 @@ require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/egladman/magus/libs/apiversion v0.1.0
 	github.com/egladman/magus/libs/clikit v0.1.0
+	github.com/egladman/magus/libs/codec v0.1.0
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/embed v0.1.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
+	github.com/egladman/magus/libs/safetyscissors v0.1.0
 	github.com/egladman/magus/libs/scipbuzz v0.1.0
+	github.com/egladman/magus/libs/secrets v0.1.0
 	github.com/egladman/magus/libs/termkit v0.1.0
 	github.com/egladman/magus/libs/text v0.1.0
 	github.com/egladman/magus/libs/xdg v0.1.0
@@ -137,12 +140,14 @@ tool (
 // a nested module is exercised by the commit that makes it, with no
 // tag-then-bump round trip. Not something to "clean up": without them every
 // in-repo build (go run ./cmd/magus, magus run build) compiles the last tag, not
-// the code beside it. Their one cost downstream is `go install
-// github.com/egladman/magus/cmd/magus@...`, which refuses any module whose go.mod
-// carries a replace directive (see internal/agent/skills/magus-sdk/SKILL.md).
+// the code beside it. `go install github.com/egladman/magus/cmd/magus@...` refuses any
+// module whose go.mod carries a replace directive, so `magus run release` tags a commit
+// that drops them and restores them in the next (docs/guides/releasing.md).
 replace github.com/egladman/magus/libs/apiversion => ./libs/apiversion
 
 replace github.com/egladman/magus/libs/clikit => ./libs/clikit
+
+replace github.com/egladman/magus/libs/codec => ./libs/codec
 
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
@@ -150,7 +155,11 @@ replace github.com/egladman/magus/libs/embed => ./libs/embed
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz
 
+replace github.com/egladman/magus/libs/safetyscissors => ./libs/safetyscissors
+
 replace github.com/egladman/magus/libs/scipbuzz => ./libs/scipbuzz
+
+replace github.com/egladman/magus/libs/secrets => ./libs/secrets
 
 replace github.com/egladman/magus/libs/termkit => ./libs/termkit
 

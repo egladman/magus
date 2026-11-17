@@ -2,8 +2,12 @@
 // about the plan it is running, kept where a human can read them.
 //
 // It gates no run and blocks no write to the tree; the one write it refuses is a write to
-// a job the caller does not own (see [authorizeRow]). One plan per REPOSITORY, so every
+// a job the caller does not own (see [job.AuthorizeRow]). One plan per REPOSITORY, so every
 // worktree and clone reads the same jobs.
+//
+// The row store and its write pipeline are libs/safetyscissors/job's: this package is
+// magus's layer on top of it, the checkouts, grading, validation, sweep, landings, merges
+// and outcomes, wired in as the module store's options (see [NewStore]).
 //
 // The INTENT layer of three, flat stores joined by job id at render time rather than a
 // hierarchy: intent is this package, actions are internal/trail, and effects are the run
@@ -12,7 +16,6 @@
 package job
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -23,88 +26,56 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 )
 
-// ErrNoID reports a lease with no id. The id is what Update upserts on, so a row without
-// one could never be updated or referred to again: it is unaddressable, not merely
-// incomplete.
-var ErrNoID = errors.New("job: a lease needs an id")
-
-// ErrMaxAttempts is a fork of an ended job that would start an attempt past its
-// max_attempts. The error wrapping it is typed not retryable: forking again unchanged meets
-// the same cap.
-var ErrMaxAttempts = errors.New("job: max_attempts reached")
-
-// Store is the repository's lease ledger, one JSON Lines file in the per-repository state
-// directory (see [Store.Path]). Every operation reads the file, acts, and writes what
-// changed, so a Store is cheap to construct and holds no state between calls beyond the
-// path and its lock.
+// Store is the repository's lease ledger: the module's row store ([job.Store]) in the
+// per-repository state directory, with magus's checkouts, grading and sweep wired into it.
+// Every operation reads the file, acts, and writes what changed, so a Store is cheap to
+// construct and holds no state between calls beyond its seams and its locks.
 //
-// TWO locks, because there are two kinds of concurrent writer and neither lock sees the
-// other's:
-//
-//   - The mutex serializes writers within one process while they share a Store, which is
-//     why the server builds exactly one and hands it to both of its doors (the
-//     client MCP tool's magus\job and the console's read route).
-//   - An OS file lock beside jobs.jsonl serializes writers across PROCESSES. The CLI, the
-//     server, and an MCP client each hold their own Store on the same file, from any
-//     worktree or clone of the repository, and workers register and heartbeat against it.
-//     Two read-modify-writes that interleave drop whichever row the loser had not read.
-//
-// Both are taken for the span of ONE call. A caller that merges fields by reading with
-// List and writing back the whole row takes them twice, and two such merges on one id
-// then lose whichever field the second one read before the first wrote. [Store.Update] is
-// that merge done under a single acquisition, and it is what a field-at-a-time writer (the
-// client MCP tool's magus\job.put) has to use.
-//
-// READS take neither. A write appends whole lines in one write or replaces the file by
-// rename, so a reader sees each row's previous line or its next one, waiting [tailWait] out
-// an append it caught mid-write; blocking List behind
-// a writer in another process would buy nothing and would let a wedged writer stall the
-// console.
+// The server builds exactly one and hands it to both of its doors, since the embedded
+// store's mutex serializes writers within one process only while they share it.
 type Store struct {
-	mu sync.Mutex
+	*job.Store
 	storeConfig
-	// dryEnded are the rows a dry-run [Exit] ended, which [Store.unswept] reads as ended
-	// so a dry run ending a tree ends its descendants before their ancestors, as a real one.
-	dryEnded map[string]types.Job
 }
 
-// storeConfig is everything a Store carries but its mutex, so a view ([Store.As],
-// [Store.InWorkspace], [Store.dry]) copies it whole and sets only what differs.
+// storeConfig is everything a Store carries but the module store, so a view
+// ([Store.As], [Store.InWorkspace], [Store.dry]) copies it whole, sets only what differs,
+// and opens the module store over it again.
 type storeConfig struct {
 	path string
 	// err is the failure to work out where this ledger lives, kept so NewStore can stay
-	// a constructor while every operation still reports it. A Store that cannot name its
-	// file must not silently read as an empty ledger: absent rows are how the guard
-	// decides nothing is leased.
+	// a constructor while every operation still reports it.
 	err  error
 	root string
 	// actor pins who this Store writes as; nil resolves the acting party at every write
 	// from cacheDir and the environment. The server builds ONE Store at startup and serves
 	// every MCP job caller from it, so an actor frozen at construction grades all of
 	// them as whoever started the process.
-	actor     *Actor
+	actor     *job.Actor
 	cacheDir  string
 	stateBase string
-	// clock, staleAfter and notices are the sweep's seams (see [Store.List]); nil means
+	// clock, staleAfter and notices are the sweep's seams (see [Store.sweep]); nil means
 	// time.Now, the workspace's jobs.stale_after, and stderr.
 	clock      func() time.Time
 	staleAfter *time.Duration
@@ -115,7 +86,7 @@ type storeConfig struct {
 	outputs   func(root string) AttemptResolver
 	trailBase func(checkoutRoot string) (string, error)
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
-	landed func(context.Context, types.Job) string
+	landed func(context.Context, job.Job) string
 	// grader is Location.Grader.
 	grader CheckGrader
 	// dryRun is Location.DryRun.
@@ -123,10 +94,10 @@ type storeConfig struct {
 	// build is Location.Build.
 	build string
 	// modelTiers and modelTierMatrix are Location's.
-	modelTiers      *agent.ModelTierSet
-	modelRows       func() []types.ModelPricing
-	modelTierMatrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error)
-	spawnRule       func(parent, child agent.ModelTier) error
+	modelTiers      *tier.Set
+	modelRows       func() []model.Row
+	modelTierMatrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error)
+	spawnRule       func(parent, child tier.Tier) error
 	spawnCeiling    func(context.Context) (builtin.Setting, error)
 	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
@@ -152,8 +123,8 @@ type Location struct {
 	// Root is the checkout this Store was opened from. It answers two questions: which
 	// REPOSITORY owns the rows (through vcs.StateDir, which folds every worktree and clone of
 	// one repo onto a single directory), and what a row's paths are relative to when a
-	// release is digested (see Update). A Store built with an empty root still records
-	// releases; it just cannot say what was in them.
+	// release is digested. A Store built with an empty root still records releases; it just
+	// cannot say what was in them.
 	Root string
 	// StateBase is the user state directory the ledger and the checkout records live
 	// under: xdg.StateDir for every caller outside a test, resolved by the caller. Empty
@@ -163,17 +134,15 @@ type Location struct {
 	// is a real value: nil is the only way to say "resolve it at every write, from the
 	// environment and CacheDir through [ActingActor]", which is what every door outside a
 	// test wants.
-	Actor *Actor
+	Actor *job.Actor
 	// Outputs resolves an output ref against the output store of the checkout at root.
 	// Exit and Wait fall back to it when the caller's resolver finds no run, trying the
-	// checkouts the job and its descendants were taken in, so an orchestrator can file a
-	// result its worker recorded in another checkout of the repository. Nil tries the
-	// caller's resolver alone.
+	// checkouts the job and its descendants were taken in. Nil tries the caller's
+	// resolver alone.
 	Outputs func(root string) AttemptResolver
 	// TrailBase resolves the activity trail base of the checkout at checkoutRoot, the cache
-	// dir the guard records a holder's denials in. A fork of an ended job reads the denials of
-	// its last holder there, from whichever checkout the holder took it in. Nil reads only
-	// this Store's own CacheDir, and the denials of a holder in another checkout are unknown.
+	// dir the guard records a holder's denials in. Nil reads only this Store's own
+	// CacheDir, and the denials of a holder in another checkout are unknown.
 	TrailBase func(checkoutRoot string) (string, error)
 	// Grader judges a declared check the way the guard will judge the row's holder running
 	// it, for the fork doors, against the rules of the workspace at Root. Nil grades
@@ -184,70 +153,112 @@ type Location struct {
 	// ended, and no row, notice, probe history or binding record is written. It governs
 	// reads only; a write method still writes.
 	DryRun bool
-	// Build identifies the build whose results the footprint cache holds, so a rebuilt
-	// binary under a long-lived daemon never reads the old code's results as its own.
-	// Empty is the running build ([buildinfo.Build]); a test names another.
+	// Build identifies the build whose results the footprint cache holds. Empty is the
+	// running build ([buildinfo.Build]); a test names another.
 	Build string
+	// Clock is the store's clock for every time it stamps. Nil is time.Now; a fixture
+	// holds it still so the rows it seeds share one declaration time.
+	Clock func() time.Time
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
 	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
-	ModelTiers *agent.ModelTierSet
-	// ModelRows is the harness model rows (mgs_listModels), which name a model by id or
-	// alias for a tier the declaration's hosts do not map. Nil leaves only the hosts to
+	ModelTiers *tier.Set
+	// ModelRows is the harness model rows (mgs_listModels). Nil leaves only the hosts to
 	// resolve a model.
-	ModelRows func() []types.ModelPricing
+	ModelRows func() []model.Row
 	// ModelTierMatrix is the function the workspace registered to choose a tier, or nil.
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.
-	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error)
-	// SpawnRule is the workspace's magus.WithSpawnRule. It judges a row
-	// whose tier and its parent's are both proven. Such a row with no rule
-	// is refused.
-	SpawnRule func(parent, child agent.ModelTier) error
-	// SpawnCeiling reads the workspace's spawn-above-parent-tier setting. A row
-	// SpawnRule ranks above its parent is refused only under deny. Such a row
-	// with no reader is refused.
+	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error)
+	// SpawnRule is the workspace's magus.WithSpawnRule. It judges a row whose tier and its
+	// parent's are both proven. Such a row with no rule is refused.
+	SpawnRule func(parent, child tier.Tier) error
+	// SpawnCeiling reads the workspace's spawn-above-parent-tier setting. A row SpawnRule
+	// ranks above its parent is refused only under deny. Such a row with no reader is
+	// refused.
 	SpawnCeiling func(context.Context) (builtin.Setting, error)
-	// Owners names the projects that own a list of files, the ownership `describe job`
-	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
-	// with no matrix never calls it; nil leaves the request's WriteProjects empty.
+	// Owners names the projects that own a list of files. It is asked only to fill a
+	// matrix's request; nil leaves the request's WriteProjects empty.
 	Owners func(ctx context.Context, files []string) ([]string, error)
-	// PriceContext prices a job's holder's context when the job ends, as the model
-	// table's PriceContext does: the tokens and dollars, and false when the price would be
-	// a guess. Nil leaves every outcome's tokens and cost unknown.
+	// PriceContext prices a job's holder's context when the job ends. Nil leaves every
+	// outcome's tokens and cost unknown.
 	PriceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
 }
 
 // NewStore returns the ledger for loc's repository. The file itself is created by the
 // first write.
 //
-// THE CACHE DIRECTORY IS NOT THE HOME, and that is the whole point of this
-// resolution: a cache dir belongs to one CHECKOUT, so an orchestrator's rows in one
-// worktree were invisible to a worker in another, and a lease-scoped guard rule could
-// not bind across the two. The rows describe a repository's plan, so they key on
-// repository identity exactly as internal/sessions does.
+// THE CACHE DIRECTORY IS NOT THE HOME: a cache dir belongs to one CHECKOUT, and the rows
+// describe a repository's plan, so they key on repository identity exactly as
+// internal/sessions does, under vcs.StateDir.
 //
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
+	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), clock: loc.Clock,
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, spawnCeiling: loc.SpawnCeiling, owners: loc.Owners, priceContext: loc.PriceContext,
-		migrations: jobMigrations}}
+		migrations: jobMigrations()}}
 	s.path, s.err = jobsPath(loc)
+	return s.open()
+}
+
+// open sets s's module store over s's file, its seams reading s. A Store that names no
+// file and no reason it has none fails every operation rather than open one beside the
+// working directory.
+func (s *Store) open() *Store {
+	if s.path == "" && s.err == nil {
+		s.Store = job.Unopened(errors.New("job: this store names no file: open it with NewStore"))
+		return s
+	}
+	if s.err != nil {
+		s.Store = job.Unopened(s.err)
+		return s
+	}
+	opened, err := job.Open(filepath.Dir(s.path),
+		job.WithRoot(s.root),
+		job.WithActor(s.Actor),
+		job.WithOrigin(func(ctx context.Context) job.Origin { return trail.StampOrigin(ctx, job.Origin{}) }),
+		job.WithDenials(s.holderDenials),
+		job.WithWriteHook(s.writeHook),
+		job.WithRetention(s.retainDue),
+		job.WithSweep(s.sweep),
+		job.WithNotices(func(n job.Notice) { fmt.Fprintf(s.noticeWriter(), "job: %s\n", n) }),
+		job.WithClock(s.now),
+		job.WithDeclarationDigest(s.declarationDigest),
+		job.WithHead(s.committedRevision),
+		job.WithMigrations(len(s.migrations), s.migrate),
+		job.WithCredentialKinds(credentialKinds()...),
+		job.WithErrorWrap(diagnose),
+		job.WithTree(s.CheckoutToken),
+		job.WithCheckCommand(s.checkCommand),
+	)
+	if err != nil {
+		s.Store = job.Unopened(err)
+		return s
+	}
+	s.Store = opened
 	return s
 }
 
 // view is a Store over s's file with every seam s has and a mutex of its own; the file
 // lock still serializes it against s and every other writer.
 func (s *Store) view() *Store {
-	return &Store{storeConfig: s.storeConfig}
+	return (&Store{storeConfig: s.storeConfig}).open()
+}
+
+// withMigrations is s reading and writing through migrations instead of [jobMigrations],
+// for a test that plants a store at another migration.
+func (s *Store) withMigrations(migrations []migrate.Migration) *Store {
+	v := &Store{storeConfig: s.storeConfig}
+	v.migrations = migrations
+	return v.open()
 }
 
 // Actor is who this Store writes as RIGHT NOW, for a door that has to refuse before it
 // computes anything: `ledger accept` grades a report and must say a worker cannot grade
 // its own row before it reads one. Resolved per call unless Location pinned one, so a
 // checkout that binds a lease is graded from its next write.
-func (s *Store) Actor() Actor {
+func (s *Store) Actor() job.Actor {
 	if s.actor != nil {
 		return *s.actor
 	}
@@ -257,6 +268,22 @@ func (s *Store) Actor() Actor {
 // place is the part of s's Location that keys the checkout record.
 func (s *Store) place() Location {
 	return Location{CacheDir: s.cacheDir, StateBase: s.stateBase}
+}
+
+// noticeWriter is where s's notices go: Location's seam, else stderr.
+func (s *Store) noticeWriter() io.Writer {
+	if s.notices != nil {
+		return s.notices
+	}
+	return os.Stderr
+}
+
+// now is the Store's clock.
+func (s *Store) now() time.Time {
+	if s.clock != nil {
+		return s.clock()
+	}
+	return time.Now()
 }
 
 // jobsPath places the jobs file: <XDG state>/magus/jobs/<repo>/jobs.jsonl.
@@ -271,25 +298,77 @@ func jobsPath(loc Location) (string, error) {
 	return filepath.Join(dir, jobsFileName), nil
 }
 
+// credentialKinds are the kinds of credential an origin magus records may carry.
+func credentialKinds() []job.CredentialKind {
+	return []job.CredentialKind{auth.KindOperator, auth.KindStored, auth.KindShare, auth.KindExchange, auth.KindStdio, auth.KindSocketPeer}
+}
+
+// jobsFileName and attemptsFileName are the module store's files, named here for the
+// migrations and the refusals that quote them.
 const (
-	jobsFileName = "jobs.jsonl"
-	// documentFileName is the one JSON document an older magus kept the plan in.
-	documentFileName = "jobs.json"
+	jobsFileName     = "jobs.jsonl"
+	attemptsFileName = "attempts.jsonl"
 )
 
-// refuseDocument fails when the store's directory still holds the plan an older magus kept
-// as one JSON document. Reading past it would show an empty plan while the rows sit beside
-// it, and the guard reads an empty plan as nothing leased. The refusal names the move that
-// sets the document aside once no older magus writes it; nothing reads it after that.
-func (s *Store) refuseDocument() error {
-	old := filepath.Join(filepath.Dir(s.path), documentFileName)
-	if err := file.RefuseOld(old); err != nil {
-		err = fmt.Errorf("cannot open job plan %s: %w", s.path, err)
-		return fmt.Errorf("%w: once no older magus writes it, set it aside with `mv %s %s.old`",
-			err, shellQuote(old), shellQuote(old))
+// diagnose is the module store's refusal with magus's code and remedy: the codes a
+// person looks up and the commands that get them past it.
+func diagnose(err error) error {
+	if err == nil {
+		return nil
 	}
-	return nil
+	if coded, ok := errors.AsType[*types.DiagnosticError](err); ok && coded != nil {
+		return err
+	}
+	if refused, ok := errors.AsType[*job.RefusedError](err); ok && refused.Actor.Unstamped {
+		refused.Remedy = unstampedRemedy
+		return err
+	}
+	if newer, ok := errors.AsType[*job.NewerWriterError](err); ok {
+		if len(newer.Lacks) > 0 {
+			return types.WrapDiagnostic(types.JobStoreWriterOlder, err, "%s requires %s, which this magus (%s) lacks, update magus",
+				newer.Path, quoteAll(newer.Lacks), job.APIVersion)
+		}
+		return types.WrapDiagnostic(types.JobStoreWriterOlder, err, "%v: update magus", err)
+	}
+	if newer, ok := errors.AsType[*job.NewerRecordsError](err); ok {
+		if len(newer.Lacks) > 0 {
+			return types.WrapDiagnostic(types.StoreRecordsNewer, err, "%s requires %s, which this magus (%s) lacks: update magus",
+				newer.Record, quoteAll(newer.Lacks), job.APIVersion)
+		}
+		return types.WrapDiagnostic(types.StoreRecordsNewer, err, "%s: %s is %s %s, and this magus reads %s %s: update magus, or %s",
+			newer.Path, newer.Record, newer.Got.APIVersion, newer.Got.Kind, newer.Want.APIVersion, newer.Want.Kind, staleStoreFix(newer.Path))
+	}
+	if version, ok := errors.AsType[*job.RecordVersionError](err); ok {
+		return refuseRecordVersion(err, version.Path, version.Line, version.Want, version.Got)
+	}
+	if legacy, ok := errors.AsType[*job.LegacyDocumentError](err); ok {
+		return fmt.Errorf("cannot open job plan %s, and once no older magus writes it, set it aside with `mv %s %s.old`: %w",
+			legacy.Path, shellQuote(legacy.Document), shellQuote(legacy.Document), file.StoreDiagnostic(legacy.Err))
+	}
+	if refused, ok := errors.AsType[*job.GrantRefusedError](err); ok {
+		return fmt.Errorf("job: a grant is a person's keystroke, and this process acts under lease %q: a person types `%s job grant` at their own terminal", refused.Lease, hint.BinaryName())
+	}
+	if errors.Is(err, job.ErrUnknownJob) {
+		return fmt.Errorf("%w: `%s` lists the declared ids", err, hint.LsJobs)
+	}
+	return file.StoreDiagnostic(err)
 }
+
+// refuseRecordVersion refuses a stored line at version got, which this magus does not read:
+// a newer version of its own group waits for an update, and any other is foreign.
+func refuseRecordVersion(err error, path string, line int, want, got apiversion.APIVersion) error {
+	if errors.Is(want.Refuse(got), apiversion.ErrNewer) {
+		return types.WrapDiagnostic(types.StoreRecordsNewer, err, "%s:%d is %s, newer than this magus reads (%s): update magus",
+			path, line, got, want)
+	}
+	return types.WrapDiagnostic(types.JobStoreRecordForeign, err,
+		"%s:%d is %s, which this magus (%s) does not read and no migration reaches: move %s aside and fork the job again, or start a fresh session",
+		path, line, got, want, shellQuote(path))
+}
+
+// readOnly refuses a write to row when it requires a feature this magus lacks, with
+// magus's code; see [job.Unwritable].
+func readOnly(row job.Job) error { return diagnose(job.Unwritable(row)) }
 
 // shellQuote is p as one POSIX shell word. A copy: internal/guard's shellWord sits in
 // a package that imports this one, and cmd/magus's in package main.
@@ -300,394 +379,17 @@ func shellQuote(p string) string {
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(p, "'", `'\''`))
 }
 
-// Path is the JSON Lines file this Store reads and writes, for a reader that has to name
-// it: a person asking where their plan is kept, or a test planting one. The file itself may
-// not exist yet, which is an empty ledger and not an error.
-func (s *Store) Path() (string, error) { return s.path, s.err }
-
-// jobsFile is the ledger as read: the header and the rows.
-//
-// The file is JSON Lines. The header is the line without an id, written first by every
-// rewrite, and each other line is one version of one row. A row's LAST line is the row, and
-// it keeps the place its first line had, so the rows read in the order they were declared.
-//
-// Each row line is a [jobRecord]. The header's requires annotation
-// refuses the whole file to a reader lacking a feature it names.
-type jobsFile struct {
-	apiversion.TypeMeta
-	Metadata apiversion.Metadata `json:"metadata,omitzero"`
-	// Migration is how many of [jobMigrations] the rows have been through;
-	// see [Store.migrate]. A file past this build's is refused.
-	Migration int `json:"migration,omitzero"`
-	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
-	Retained int64                      `json:"retained,omitempty"`
-	Unknown  map[string]json.RawMessage `json:",unknown"`
-	Jobs     []types.Job                `json:"-"`
-	// stored are the rows' records as read, by id, so a rewrite keeps
-	// what this build does not declare.
-	stored map[string]jobRecord
-}
-
-// header is f without its rows.
-func (f jobsFile) header() jobsFile {
-	return jobsFile{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Migration: f.Migration, Retained: f.Retained, Unknown: f.Unknown}
-}
-
-// RecordAPIVersion is the apiVersion of every line of jobs.jsonl and
-// attempts.jsonl (ADR 0044).
-const RecordAPIVersion apiversion.APIVersion = "batch.magus/v1alpha1"
-
-// recordGroup prefixes the annotations a record carries.
-const recordGroup = "batch.magus"
-
-var (
-	jobListType = apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "JobList"}
-	jobType     = apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Job"}
-	attemptType = apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Attempt"}
-)
-
-// jobsLog is the file a write read, so the write appends only the lines that changed.
-type jobsLog struct {
-	header []byte
-	// rows is the last line of each row, by id.
-	rows    map[string][]byte
-	lines   int
-	partial bool
-}
-
-// tailWait is how long a reader waits for an append it caught mid-write to finish before
-// it reports the file's last line as one no writer finished.
-const tailWait = 50 * time.Millisecond
-
-// readOnly refuses a write to row when it requires a feature this magus lacks. The row
-// stays listed and graded; only writing it is out of reach, since a write by a reader
-// that cannot act on the row's content could corrupt it.
-func readOnly(row types.Job) error {
-	lacks := row.Unmet()
-	if lacks == nil {
-		return nil
-	}
-	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s requires %s, which this magus (%s) lacks: update magus",
-		row.ID, quoteAll(lacks), RecordAPIVersion)
-}
-
-// requiredFeatures are the JobSchema features row's content needs a reader to implement,
-// sorted: a `file#Declaration` claim, a `signature` goal and an attempt record (a cap, a
-// prior attempt, a second attempt) are each read wrongly by a magus older than the version
-// that named them, so a row carrying one is read-only to it. Derived
-// from the content on every write, so a row that drops its last claim is writable again.
-// Any requirement the stored row carried that this build does not know never reaches here:
-// readOnly refused that write.
-func requiredFeatures(row types.Job) []string {
-	var out []string
-	if slices.ContainsFunc(slices.Concat(row.Paths.Write, row.Paths.Deny), types.HasClaim) {
-		out = append(out, "claim-declarations")
-	}
-	if slices.ContainsFunc(row.Goals, func(g types.Goal) bool { return g.Resolve().Expect == types.ExpectSignature }) {
-		out = append(out, "signature-goals")
-	}
-	// Every row has a generation, so a row carrying only that is not stamped: it would make
-	// every row read-only to an older magus.
-	if row.MaxAttempts > 0 {
-		out = append(out, "job-generations")
-	}
-	slices.Sort(out)
-	return out
-}
-
-func quoteAll(names []string) string {
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = strconv.Quote(n)
-	}
-	return strings.Join(quoted, ", ")
-}
-
-// Update applies apply to the row with this id and writes the result back while holding
-// both of the Store's locks ONCE: a merge spread across List and a whole-row write
-// releases them in between, so two concurrent writers advancing different fields of one
-// row each read it before the other wrote, and the second write reverts the first.
-//
-// A caller that wants to replace a row whole rather than merge fields passes an apply that
-// does `*cur = row`; the timestamps and everything else the store computes are ignored on
-// the way in and returned on the way out.
-//
-// The row is CREATED when absent, so declaring a lease and advancing one are the same
-// call, and the id is the key: whatever apply writes into ID is overwritten with it.
-//
-// Releases are stamped here because they are the store's to say: a write that drops a path
-// from WritePaths IS the release announcement, and reading the previous write set and
-// writing the next one has to be one step or a concurrent put decides which release
-// happened.
-//
-// apply runs while the lock is held, so it must not touch the store, and it cannot fail:
-// anything that could be rejected belongs in the caller, before the call.
-//
-// ctx reaches the release digests and nothing else. A cancelled call still WRITES the row,
-// since the merge is already done, but it stops hashing files rather than reading the disk
-// with the store's lock held.
-func (s *Store) Update(ctx context.Context, id string, apply func(*types.Job)) (types.Job, error) {
-	return s.mutate(ctx, id, asDeclaration, func(cur *types.Job, _ bool, _ int64) error {
-		apply(cur)
-		return nil
-	})
-}
-
-// MaxUnattributedWrites bounds how many outside-written paths one row keeps.
-//
-// A cap rather than a growing list because this is written from the guard, which runs on every
-// file write a host makes: without one, a plan left declared over a long editing session would
-// accumulate a row entry per save until the ledger was mostly this. The newest are kept, since a
-// lease asking what moved is asking about the tree it faces now.
-const MaxUnattributedWrites = 32
-
-// RecordUnattributedWrite notes that somebody outside lease id wrote one of its write paths,
-// with the content they left behind.
-//
-// ONE ROW PER PATH, newest wins: a person saves a file a dozen times while an agent works,
-// and the twelfth save is the only one that describes the tree.
-//
-// A missing row is not an error: the lease may have ended between the grading and this call,
-// and a write graded against a plan that has since finished is nothing to report to anybody.
-func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	// An OBSERVATION, and the only ungraded write here: the row it lands on is by
-	// definition somebody else's, so grading it would throw the notice away precisely when
-	// it matters, which is a worker writing a path another lease holds.
-	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
-		if !exists {
-			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
-		}
-		next := make([]types.JobUnattributedWrite, 0, len(cur.Unattributed)+1)
-		for _, w := range cur.Unattributed {
-			if w.Path != path {
-				next = append(next, w)
-			}
-		}
-		next = append(next, types.JobUnattributedWrite{
-			Path: path, Digest: s.fileDigest(ctx, path), At: now,
-		})
-		if len(next) > MaxUnattributedWrites {
-			next = next[len(next)-MaxUnattributedWrites:]
-		}
-		cur.Unattributed = next
-		return nil
-	})
-	if errors.Is(err, errNoSuchJob) {
-		return nil
-	}
-	return err
-}
-
-// errNoSuchJob is internal to RecordUnattributedWrite: mutate creates a row that is not there, and
-// this is how the apply func declines that without inventing a lease nobody declared.
-var errNoSuchJob = errors.New("job: no such lease")
-
-// MaxJobEntries is how many entries one job takes. Past it, the job wants its holder
-// resumed or its lease ended, not a third visitor.
-const MaxJobEntries = 2
-
-// Enter records that the caller will write rel, inside the write paths of live job id,
-// once. The guard then lets one write by somebody other than the holder through and
-// stamps it consumed; see [Store.ConsumeEntry]. A put carrying `enter` is the same write.
-//
-// Refused, and nothing is written, when the job is not live, when the caller is its
-// holder, when rel is outside its write paths (that wants widening, not entering), when
-// an entry for rel is still open, and when the job already took [MaxJobEntries].
-func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
-	rel, err := entryPath(rel)
-	if err != nil {
-		return types.Job{}, err
-	}
-	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
-}
-
-// cleanPath is a path a version control or a person named, as a slash path.
-func cleanPath(p string) string {
-	return path.Clean(filepath.ToSlash(strings.TrimSpace(p)))
-}
-
-// entryPath cleans the path an entry names, refusing one that is not workspace-relative.
-func entryPath(rel string) (string, error) {
-	clean := cleanPath(rel)
-	if clean == "." || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", fmt.Errorf("job: enter %q: name one workspace-relative path inside the job's write paths", rel)
-	}
-	return clean, nil
-}
-
-// requestsEntry reports a write whose only change is one unstamped entry appended to
-// prev's, which is how Enter and a put carrying `enter` reach mutate.
-func requestsEntry(prev, next types.Job) bool {
-	n := len(prev.Entries)
-	if len(next.Entries) != n+1 || next.Entries[n].At != 0 {
-		return false
-	}
-	for k := range n {
-		if !reflect.DeepEqual(next.Entries[k], prev.Entries[k]) {
-			return false
-		}
-	}
-	return true
-}
-
-// authorizeEntry grades an entry: prev is the row before it and next carries the one
-// entry appended to it.
-func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
-	entry := next.Entries[len(next.Entries)-1]
-	switch {
-	case !exists:
-		return fmt.Errorf("%q: there is nothing to enter: %w", id, ErrUnknownJob)
-	case len(changedFields(prev, next)) > 0:
-		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(changedFields(prev, next), ", "))
-	case actor.Lease == id:
-		return refuse(actor, id, "a holder writes its own paths and never enters them")
-	case actor.Bound() && !slices.ContainsFunc(types.JobAncestors(rows, id), func(r types.Job) bool { return r.ID == actor.Lease }):
-		return refuse(actor, id, "a worker enters only a job forked beneath its own")
-	case !prev.State.Live():
-		return fmt.Errorf("job: %s is %s, so its paths are free to write and there is nothing to enter", id, prev.State)
-	}
-	if _, ok := matching(prev.Paths.Write, entry.Path); !ok {
-		return fmt.Errorf("job: %s is outside the write paths of %s (%s), a path the job does not own is widened into it, never entered",
-			entry.Path, id, strings.Join(prev.Paths.Write, ", "))
-	}
-	if open, ok := OpenEntry(prev, entry.Path); ok {
-		return fmt.Errorf("job: %s already has an entry for %s, recorded at %s and not yet written, write it before entering again",
-			id, open.Path, time.Unix(open.At, 0).UTC().Format(time.RFC3339))
-	}
-	if len(prev.Entries) >= MaxJobEntries {
-		return fmt.Errorf("job: %s has taken its %d entries, resume its holder to make the change, or end its lease with `magus job exit %s`",
-			id, MaxJobEntries, id)
-	}
-	return nil
-}
-
-// EntryAdvice is what an entry is answered with: what the entrant may now do, and once.
-func EntryAdvice(row types.Job, rel string) string {
-	return fmt.Sprintf("entered %s on %s (%d of %d entries): your next write to it passes once its holder has been idle for a minute, and is recorded on the job",
-		rel, row.ID, len(row.Entries), MaxJobEntries)
-}
-
-// Entries is the entries recorded on job id in rows, nil when rows holds no such job.
-func Entries(rows []types.Job, id string) []types.JobEntry {
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
-		return rows[i].Entries
-	}
-	return nil
-}
-
-// OpenEntry is the first entry on row that covers rel and has not been consumed.
-func OpenEntry(row types.Job, rel string) (types.JobEntry, bool) {
-	for _, e := range row.Entries {
-		if e.Consumed == 0 && covers(e.Path, rel) {
-			return e, true
-		}
-	}
-	return types.JobEntry{}, false
-}
-
-// ConsumeEntry stamps the open entry on job id covering rel as used. An observation, like
-// RecordUnattributedWrite: the guard records the write it just let through. A job with no
-// open entry for rel is left alone.
-func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
-	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
-		if !exists {
-			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
-		}
-		for i, e := range cur.Entries {
-			if e.Consumed == 0 && covers(e.Path, rel) {
-				cur.Entries[i].Consumed = now
-				return nil
-			}
-		}
-		return nil
-	})
-	if errors.Is(err, errNoSuchJob) {
-		return nil
-	}
-	return err
-}
-
-// boundaryFields are the declared fields a widen or narrow changes, in changedFields'
-// spelling.
-var boundaryFields = []string{"paths.write", "paths.deny", "paths.read"}
-
-// widensInPlace reports a declaration that changes a live row's boundaries and nothing
-// else it declares, while resetting a state its holder already moved past declared: a
-// re-fork that only moves paths. Such a write keeps the stored state, since resetting it
-// would hand the holder's job out again. A deadline may move with it, because a fork
-// re-stamps jobs.default_timeout. A re-fork that changes no boundary still resets the
-// state, which is how a rejected job is handed out again.
-func widensInPlace(prev, next types.Job) bool {
-	if !prev.State.Live() || prev.State == types.StateDeclared || next.State != types.StateDeclared {
-		return false
-	}
-	moved := false
-	for _, field := range changedFields(prev, next) {
-		switch {
-		case slices.Contains(boundaryFields, field):
-			moved = true
-		case field != "state" && field != "deadline":
-			return false
-		}
-	}
-	return moved
-}
-
-// keepDerived carries what the fork derived for prev onto a whole-row
-// record that omits it, so a projection never hardens a path. That is prev's
-// soft paths, unless row names paths.soft for one, and the
-// [IntegratorDeviations].
-func keepDerived(row *types.Job, prev types.Job) {
-	if !slices.ContainsFunc(row.Paths.Soft, func(p string) bool { return slices.Contains(prev.Paths.Write, p) }) {
-		for _, p := range prev.Paths.Soft {
-			if slices.Contains(row.Paths.Write, p) && !slices.Contains(row.Paths.Soft, p) {
-				row.Paths.Soft = append(row.Paths.Soft, p)
-			}
-		}
-	}
-	for _, w := range prev.Deviations {
-		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Deviations, func(have types.Deviation) bool {
-			return have.Code == w.Code && have.Subject == w.Subject
-		}) {
-			row.Deviations = append(row.Deviations, w)
-		}
-	}
-}
-
-// endedAttemptDenials are the guard's denials of the holder of job id since its last
-// attempt began, for the fold a fork of the ended row makes, and whether the trail still
-// reaches back to that start. Only an ended row is read. A dry run, or a trail that cannot
-// be placed or read, gives none and unknown, which the fold records as unknown.
-func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
+// holderDenials are the guard's denials of the holder of job id since since, read from
+// the trail of the checkout it took the job in. A dry run reads none.
+func (s *Store) holderDenials(ctx context.Context, holderCheckout, id string, since int64) ([]job.Denial, bool, error) {
 	if s.dryRun {
-		return nil, false
+		return nil, false, nil
 	}
-	f, err := s.read()
+	base, err := s.holderTrail(holderCheckout)
 	if err != nil {
-		return nil, false
+		return nil, false, err
 	}
-	i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id })
-	if i < 0 || !f.Jobs[i].State.Terminal() {
-		return nil, false
-	}
-	row := f.Jobs[i]
-	base, err := s.holderTrail(row.CheckoutRoot)
-	if err != nil {
-		return nil, false
-	}
-	all, err := s.Attempts()
-	if err != nil {
-		return nil, false
-	}
-	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row, types.NewJobAttempts(all)), maxDenialsRead)
-	if err != nil {
-		return nil, false
-	}
-	return denials, known
+	return trail.LeaseDenials(ctx, base, id, since, maxDenialsRead)
 }
 
 // holderTrail is the trail base of the checkout a holder took its job in: this Store's own
@@ -712,215 +414,81 @@ func (s *Store) holderTrail(checkoutRoot string) (string, error) {
 	return s.trailBase(checkoutRoot)
 }
 
-// List returns every row in the order it was first recorded. The rows are copies, so a
-// caller may keep or mutate them without reaching back into the file's next read.
-//
-// Every read SWEEPS first: a live row magus can prove is dead is ended as no_return with
-// its [types.Job.EndReason], and one line per ended row goes to stderr. See [sweeper.dead]
-// for the rules. The sweep is the one write a read makes, and only when a row is dead, so
-// a plan with nothing to end is still read without either lock.
-func (s *Store) List() ([]types.Job, error) {
-	f, err := s.read()
-	if err != nil {
-		return nil, err
-	}
-	if f, err = s.sweep(f); err != nil {
-		return nil, err
-	}
-	return cloneRows(f.Jobs), nil
-}
-
 // endsOwnRow reports whether this store's caller holds row, so ending it is its holder's.
-func (s *Store) endsOwnRow(row types.Job) bool {
+func (s *Store) endsOwnRow(row job.Job) bool {
 	return s.Actor().Lease == row.ID || (row.CheckoutRoot != "" && row.CheckoutRoot == s.root)
 }
 
-// unswept is [Store.List] without the sweep, for a verb scoped to the rows it names: ending
-// one job must not end, or probe the landed work of, every other row in the plan.
-func (s *Store) unswept() ([]types.Job, error) {
-	f, err := s.read()
-	if err != nil {
-		return nil, err
-	}
-	rows := cloneRows(f.Jobs)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, row := range rows {
-		if ended, ok := s.dryEnded[row.ID]; ok {
-			rows[i] = ended.Clone()
+// writeHook is magus's part of every row write: the rules only magus knows, the fold of an
+// ended row's attempt, the end reasons, the model tier and the outcome a row that just
+// ended records. It runs inside the write, the module store's locks held.
+func (s *Store) writeHook(ctx context.Context, e *job.WriteEvent) error {
+	switch e.Stage {
+	case job.StageAuthorize:
+		if e.Kind == job.AsClaim {
+			return authorizeClaim(e.Actor, e.ID, e.Prev, *e.Row, e.Exists, e.Rows)
 		}
-	}
-	return rows, nil
-}
-
-func (s *Store) endDry(row types.Job) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.dryEnded == nil {
-		s.dryEnded = map[string]types.Job{}
-	}
-	s.dryEnded[row.ID] = row.Clone()
-}
-
-func cloneRows(rows []types.Job) []types.Job {
-	out := make([]types.Job, len(rows))
-	for i, row := range rows {
-		out[i] = row.Clone()
-	}
-	return out
-}
-
-// Clear drops every row, which is how a fresh plan starts, ARCHIVING what it dropped to a
-// timestamped sibling file (jobs-<UTC time>.jsonl) first, and returns how many rows it dropped. Clearing an empty
-// or absent ledger is not an error and archives nothing: the caller asked for an empty
-// ledger and got one.
-//
-// The COUNT comes from inside the lock. Both doors report it, and a preceding List to
-// derive it undercounts a row a concurrent registrant appended between the two calls,
-// which is the one row its author most needs to hear about.
-//
-// The archive is what makes this recoverable rather than merely reported: one clear wipes
-// rows the caller did not write, and nothing else would let them read the plan again.
-// Nothing reads these files back, which is the point: they are for the person who has to
-// work out what the plan was.
-//
-// A bound worker is refused: see [authorizeClear]. ctx bounds the wait for the lock and
-// nothing else.
-func (s *Store) Clear(ctx context.Context) (int, error) {
-	if err := authorizeClear(s.Actor()); err != nil {
-		return 0, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var dropped int
-	err := s.update(ctx, func(f *jobsFile) error {
-		if len(f.Jobs) > 0 {
-			if err := s.archive(*f); err != nil {
-				return err
-			}
+		return authorizeGate(e.Actor, e.ID, *e.Row, e.Exists, e.Rows)
+	case job.StageRefork:
+		if err := refuseAttempt(e.ID, e.Attempts.LiveN(e.ID), *e.Row); err != nil {
+			return err
 		}
-		dropped = len(f.Jobs)
-		*f = f.header()
-		return nil
-	})
-	if err != nil {
-		return 0, err
+		fold := foldAttempt(e.Prev, e.Attempts.Live(e.ID), e.Attempts.Prior(e.ID), e.Denials, e.DenialsKnown, e.Now)
+		e.Fold = &fold
+	case job.StageEnd:
+		switch {
+		case e.Row.State == job.StateNoReturn:
+			e.Row.EndReason = endedReason(e.Prev, e.Attempts.Result(e.ID) != nil, s.endsOwnRow(e.Prev))
+		case e.Row.State == job.StatePass && gradedByHolder(e.Prev):
+			e.Row.EndReason = returnedReason
+		}
+	case job.StageTier:
+		return s.assignTier(ctx, e)
+	case job.StagePlaced:
+		if !e.Exists || e.Prev.State.Terminal() || !e.Row.State.Terminal() {
+			return nil
+		}
+		var ended endings
+		if err := ended.hold(ctx, s, e.Rows, *e.Row); err != nil {
+			return err
+		}
+		e.After = append(e.After, func(ctx context.Context) error { return ended.record(ctx, time.Now().UnixMilli()) })
+	case job.StageDelete:
+		row := e.Row
+		if !row.Worktree.Standing() || !row.Worktree.Made {
+			return nil
+		}
+		here, _ := filepath.Abs(s.root)
+		if kept := endCheckout(ctx, e.Rows, here, *row, *row.Worktree, nil); kept != "" {
+			return fmt.Errorf("job: %s owns the checkout %s, which stays, so the row stays with it: %s",
+				e.ID, row.Worktree.Root, kept)
+		}
+		*row = row.Clone()
+		row.Worktree.Removed = time.Now().Unix()
 	}
-	return dropped, nil
+	return nil
 }
 
-// archive writes the rows a clear or a delete is about to drop beside the ledger, in the
-// ledger's own shape and named for the moment they were dropped. A second drop within the
-// same second overwrites the first archive rather than growing a suffix scheme: two plans
-// wiped in one second is one mistake being repeated, and the rows worth keeping are the
-// ones there now.
-func (s *Store) archive(f jobsFile) error {
-	f.Migration = len(s.migrations)
-	lines, err := encodeJobs(f)
-	if err != nil {
-		return err
-	}
-	stamp := time.Now().UTC().Format("20060102T150405Z")
-	dir := filepath.Dir(s.path)
-	if err := s.archiveAttempts(filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
-		return err
-	}
-	return file.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
-}
-
-// update runs fn over the ledger as it stands under the file lock beside jobs.jsonl, so a
-// read-modify-write cannot interleave with one from another magus process, and writes what
-// fn leaves, with a retention pass when one is due (see [Store.retainDue]). fn returning an
-// error, file.ErrSkipWrite included, writes nothing.
-//
-// The lock wait is BOUNDED, where the workspace project locks (magus/lock.go) wait forever
-// with a heartbeat: their holder is a build that may run for hours, and a ledger write is a
-// small append, so a longer wait means a stuck holder.
-func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
-	if s.err != nil {
-		return s.err
-	}
-	// Made here, before the lock and file helpers create it world-readable.
-	// Rows carry a repository's plan and its checkout paths.
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("job: create store %s: %w", filepath.Dir(s.path), err)
-	}
-	return s.locked(ctx, func() error {
-		f, log, err := s.readFile(false)
+// assignTier gives a row whose requested model changed its tier, and refuses one above
+// its parent's.
+func (s *Store) assignTier(ctx context.Context, e *job.WriteEvent) error {
+	row, prev := e.Row, e.Prev
+	if s.modelTiers != nil && (!e.Exists || prev.Agent.RequestedModel() != row.Agent.RequestedModel()) {
+		assigned, err := s.assignModelTierWithHistory(ctx, *row, e.Rows)
 		if err != nil {
 			return err
 		}
-		gone := make(map[string]bool, len(f.Jobs))
-		for _, row := range f.Jobs {
-			gone[row.ID] = true
-		}
-		if err := fn(&f); err != nil {
-			if errors.Is(err, file.ErrSkipWrite) {
-				return nil
-			}
-			return err
-		}
-		retained := f.Retained
-		if err := s.retainDue(&f, s.now()); err != nil {
-			return err
-		}
-		if retained != 0 && f.Retained != retained {
-			s.pruneFootprints(f.Jobs)
-		}
-		if err := s.write(f, log); err != nil {
-			return err
-		}
-		for _, row := range f.Jobs {
-			delete(gone, row.ID)
-		}
-		return s.dropAttempts(ctx, gone)
-	})
-}
-
-// write records f against log, the file it was read from: the lines of the rows that
-// changed are appended, and the file is rewritten to one line per row instead when a row
-// was dropped, the header changed, the file ended in a line no writer finished, or the
-// appended lines would make it [file.CompactDue].
-func (s *Store) write(f jobsFile, log jobsLog) error {
-	f.Migration = len(s.migrations)
-	lines, err := encodeJobs(f)
-	if err != nil {
-		return err
+		row.ModelTier = &assigned
 	}
-	header, rows := lines[0], lines[1:]
-	var changed [][]byte
-	kept := 0
-	for i, row := range f.Jobs {
-		prev, ok := log.rows[row.ID]
-		if ok {
-			kept++
-		}
-		if !bytes.Equal(rows[i], prev) {
-			changed = append(changed, rows[i])
-		}
+	if !e.Exists || prev.Agent.RequestedModel() != row.Agent.RequestedModel() || prev.Parent != row.Parent {
+		return refuseAboveParent(ctx, s.modelTiers, s.spawnRule, s.spawnCeiling, *row, e.Rows)
 	}
-	dropped := kept < len(log.rows)
-	if len(changed) == 0 && !dropped && bytes.Equal(header, log.header) && !log.partial {
-		return nil
-	}
-	sameHeader := bytes.Equal(header, log.header)
-	if !dropped && sameHeader && !log.partial && !file.CompactDue(log.lines+len(changed), len(f.Jobs)) {
-		return file.AppendLines(s.path, changed, 0o600)
-	}
-	if log.partial {
-		out := s.notices
-		if out == nil {
-			out = os.Stderr
-		}
-		fmt.Fprintf(out, "job: %s ended in a line no writer finished; the rewrite dropped it\n", s.path)
-	}
-	return file.RewriteLines(s.path, lines, 0o600)
+	return nil
 }
 
 // pruneFootprints removes the footprint cache of every checkpoint revision no live row in
 // rows declares, riding the retention pass. Best effort, as for the archives it drops.
-func (s *Store) pruneFootprints(rows []types.Job) {
+func (s *Store) pruneFootprints(rows []job.Job) {
 	dir := s.footprintCache().dir
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -939,55 +507,56 @@ func (s *Store) pruneFootprints(rows []types.Job) {
 	}
 }
 
-// now is the Store's clock.
-func (s *Store) now() time.Time {
-	if s.clock != nil {
-		return s.clock()
+// migrate brings the file at migration found to the last of s.migrations under the
+// module store's lock, refusing a job's checkout. A file past them is refused with MGS3051.
+func (s *Store) migrate(ctx context.Context, storePath string, found int, lines []codec.Line) error {
+	if err := s.refuseCheckoutMigration(found, lines); err != nil {
+		return err
 	}
-	return time.Now()
-}
-
-// read loads the file. An absent file is an empty ledger, not a failure: nothing has
-// been recorded yet for this repository.
-func (s *Store) read() (jobsFile, error) {
-	f, _, err := s.readFile(true)
-	return f, err
-}
-
-// readFile parses the ledger and the log a write compares against.
-//
-// A reader holding no lock may catch an append mid-write, so with wait it reads again for
-// up to [tailWait] while the file ends in an unfinished line, and reports one that stays
-// unfinished. A writer holds the lock, so an unfinished line it finds was left by a writer
-// that died, and the write drops it.
-//
-// A row newer than this magus is read like any other. The members it does
-// not declare ride in its stored record and go back out on the next write.
-// A row requiring a feature this magus
-// lacks is read too, and only a write to it is refused (see readOnly).
-//
-// A file behind [jobMigrations] is migrated first, once, under the lock (see
-// [Store.migrate]); without wait the caller already holds it.
-// A job's checkout refuses it instead (see [Store.refuseCheckoutMigration]).
-func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
-	f, log, lines, err := s.parse(wait)
-	if err != nil || f.Migration == len(s.migrations) || log.lines == 0 {
-		return f, log, err
+	st := migrate.Store{
+		Name:       "job store",
+		Path:       storePath,
+		Header:     headerEntry,
+		Migrations: s.migrations,
 	}
-	if err := s.refuseCheckoutMigration(f.Migration, lines); err != nil {
-		return jobsFile{}, jobsLog{}, err
+	refuse := func(err error) error {
+		if newer, ok := errors.AsType[*migrate.NewerError](err); ok {
+			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s", newer.Error())
+		}
+		return namePath(err, storePath)
 	}
-	if err := s.migrate(f.Migration, !wait); err != nil {
-		return jobsFile{}, jobsLog{}, err
+	if err := st.Check(found); err != nil {
+		return refuse(err)
 	}
-	f, log, _, err = s.parse(wait)
-	return f, log, err
+	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
+		if err := s.moveTries(ctx); err != nil {
+			return fmt.Errorf("moving tries to %s: %w", attemptsFileName, err)
+		}
+	}
+	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped }); i >= found {
+		if err := s.envelopeAttempts(ctx); err != nil {
+			return fmt.Errorf("enveloping %s: %w", attemptsFileName, err)
+		}
+	}
+	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == groupsMoved }); i >= found {
+		if err := s.regroupAttempts(ctx); err != nil {
+			return fmt.Errorf("regrouping %s: %w", attemptsFileName, err)
+		}
+	}
+	res, err := st.Apply()
+	if err != nil {
+		return refuse(err)
+	}
+	if res.Migrated() {
+		fmt.Fprintf(s.noticeWriter(), "job: %s\n", res)
+	}
+	return nil
 }
 
 // refuseCheckoutMigration refuses migrating a file at migration found from
 // a live job's own checkout. Every checkout shares the file. A row only
 // taken here does not count: the root's own checkout is one.
-func (s *Store) refuseCheckoutMigration(found int, lines []file.Line) error {
+func (s *Store) refuseCheckoutMigration(found int, lines []codec.Line) error {
 	if found >= len(s.migrations) {
 		return nil
 	}
@@ -1018,22 +587,26 @@ func (s *Store) refuseCheckoutMigration(found int, lines []file.Line) error {
 
 // unmigratedRows reads the rows of a file at migration found as far as a
 // refusal needs them. Before [recordsEnveloped] a row's line was a
-// types.Job.
-func (s *Store) unmigratedRows(found int, lines []file.Line) ([]types.Job, error) {
+// job.Job.
+func (s *Store) unmigratedRows(found int, lines []codec.Line) ([]job.Job, error) {
 	flat := found <= slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped })
-	var rows []types.Job
+	var rows []job.Job
 	at := map[string]int{}
 	for _, line := range lines {
-		var row types.Job
+		var row job.Job
 		if flat {
-			if err := json.Unmarshal(line.Text, &row); err != nil {
+			if err := codec.Unmarshal(line.Text, &row); err != nil {
 				return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 			}
 		} else {
-			var r jobRecord
-			err := json.Unmarshal(line.Text, &r)
-			if err == nil && r.Kind == jobType.Kind {
-				row, err = r.job()
+			// A record from before [groupsMoved] carries the batch.magus group, which
+			// ReadRecord refuses, so it is read as the migration will write it.
+			text, err := regroupedText(line.Text)
+			if err == nil {
+				row, _, err = job.ReadRecord(text, credentialKinds()...)
+			}
+			if refused, ok := errors.AsType[*apiversion.RefusedError](err); ok && refused.Got.APIVersion != refused.Want.APIVersion {
+				return nil, refuseRecordVersion(err, s.path, line.N, refused.Want.APIVersion, refused.Got.APIVersion)
 			}
 			if err != nil {
 				return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
@@ -1051,445 +624,58 @@ func (s *Store) unmigratedRows(found int, lines []file.Line) ([]types.Job, error
 	return rows, nil
 }
 
-// migrate brings the file at migration found to the last of s.migrations, taking the lock
-// unless held. A file past them is refused with MGS3051 before anything is locked.
-func (s *Store) migrate(found int, held bool) error {
-	st := migrate.Store{
-		Name:       "job store",
-		Path:       s.path,
-		Header:     headerEntry,
-		Migrations: s.migrations,
-	}
-	refuse := func(err error) error {
-		if newer, ok := errors.AsType[*migrate.NewerError](err); ok {
-			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s", newer.Error())
-		}
-		return namePath(err, s.path)
-	}
-	if err := st.Check(found); err != nil {
-		return refuse(err)
-	}
-	apply := func() error {
-		if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
-			if err := s.moveTries(context.Background()); err != nil {
-				return fmt.Errorf("moving tries to %s: %w", attemptsFileName, err)
-			}
-		}
-		if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped }); i >= found {
-			if err := s.envelopeAttempts(); err != nil {
-				return fmt.Errorf("enveloping %s: %w", attemptsFileName, err)
-			}
-		}
-		res, err := st.Apply()
-		if err != nil {
-			return refuse(err)
-		}
-		if res.Migrated() {
-			out := s.notices
-			if out == nil {
-				out = os.Stderr
-			}
-			fmt.Fprintf(out, "job: %s\n", res)
-		}
-		return nil
-	}
-	if held {
-		return apply()
-	}
-	return s.locked(context.Background(), apply)
-}
-
-// parse reads the file as it stands; see [Store.readFile]. A file at
-// another migration than this build's has no rows decoded: they are
-// returned as lines.
-func (s *Store) parse(wait bool) (jobsFile, jobsLog, []file.Line, error) {
-	if s.err != nil {
-		return jobsFile{}, jobsLog{}, nil, s.err
-	}
-	if err := s.refuseDocument(); err != nil {
-		return jobsFile{}, jobsLog{}, nil, err
-	}
-	read, err := s.readLines(wait)
-	if err != nil {
-		return jobsFile{}, jobsLog{}, nil, err
-	}
-	f := jobsFile{stored: map[string]jobRecord{}}
-	log := jobsLog{rows: make(map[string][]byte, len(read.Lines)), lines: len(read.Lines), partial: read.Partial}
-	texts, err := s.takeHeader(read.Lines, &f, &log)
-	if err != nil {
-		return jobsFile{}, jobsLog{}, nil, err
-	}
-	if f.Migration != len(s.migrations) {
-		return f, log, texts, nil
-	}
-	if f.TypeMeta != jobListType && log.header != nil {
-		return jobsFile{}, jobsLog{}, nil, s.refuseRecord(jobListType, f.TypeMeta, 1)
-	}
-	if err := s.decodeRows(texts, &f, &log); err != nil {
-		return jobsFile{}, jobsLog{}, nil, err
-	}
-	if err := s.refuseUnmetFeatures(f); err != nil {
-		return jobsFile{}, jobsLog{}, nil, err
-	}
-	return f, log, nil, nil
-}
-
-// readLines reads the file's lines. With wait it reads again for up to
-// [tailWait] while the file ends in a line no writer finished.
-func (s *Store) readLines(wait bool) (file.Lines, error) {
-	deadline := time.Now().Add(tailWait)
-	for {
-		read, err := file.ReadLines(s.path)
-		if err != nil {
-			return file.Lines{}, fmt.Errorf("job: %w", err)
-		}
-		if !read.Partial || !wait {
-			return read, nil
-		}
-		if time.Now().After(deadline) {
-			return file.Lines{}, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
-// takeHeader sets the header line into f and log, and returns the lines of
-// the rows.
-func (s *Store) takeHeader(lines []file.Line, f *jobsFile, log *jobsLog) ([]file.Line, error) {
-	var texts []file.Line
-	for _, line := range lines {
-		var probe struct {
-			apiversion.TypeMeta
-			ID   json.RawMessage `json:"id"`
-			Spec json.RawMessage `json:"spec"`
-		}
-		if err := json.Unmarshal(line.Text, &probe); err != nil {
-			return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-		}
-		if probe.ID != nil || probe.Spec != nil {
-			texts = append(texts, line)
-			continue
-		}
-		header := jobsFile{}
-		if err := json.Unmarshal(line.Text, &header); err != nil {
-			return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-		}
-		header.stored, log.header = f.stored, line.Text
-		*f = header
-	}
-	return texts, nil
-}
-
-// decodeRows decodes the row lines into f and log, a later line of a row
-// replacing the earlier one in place.
-func (s *Store) decodeRows(texts []file.Line, f *jobsFile, log *jobsLog) error {
-	at := map[string]int{}
-	for _, line := range texts {
-		var r jobRecord
-		if err := json.Unmarshal(line.Text, &r); err != nil {
-			return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-		}
-		row, err := r.job()
-		if refused, ok := errors.AsType[*apiversion.RefusedError](err); ok {
-			return s.refuseRecord(refused.Want, refused.Got, line.N)
-		}
-		if err != nil {
-			return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-		}
-		log.rows[row.ID] = line.Text
-		f.stored[row.ID] = r
-		if i, ok := at[row.ID]; ok {
-			f.Jobs[i] = row
-			continue
-		}
-		at[row.ID] = len(f.Jobs)
-		f.Jobs = append(f.Jobs, row)
-	}
-	return nil
-}
-
-// refuseUnmetFeatures refuses a file requiring a feature this magus lacks.
-func (s *Store) refuseUnmetFeatures(f jobsFile) error {
-	known := make([]apiversion.Feature, len(types.JobFeatures))
-	for i, k := range types.JobFeatures {
-		known[i] = apiversion.Feature(k)
-	}
-	lacks := f.Metadata.Unmet(recordGroup, known)
-	if lacks == nil {
-		return nil
-	}
-	names := make([]string, len(lacks))
-	for i, l := range lacks {
-		names[i] = string(l)
-	}
-	return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s requires %s, which this magus (%s) lacks, update magus",
-		s.path, quoteAll(names), RecordAPIVersion)
-}
-
-// encodeJobs renders the ledger as its lines: the header first, then one line per row.
-// Every row, touched this call or not, keeps what its stored record carries.
-func encodeJobs(f jobsFile) ([][]byte, error) {
-	f.TypeMeta = jobListType
-	header, err := json.Marshal(f)
-	if err != nil {
-		return nil, err
-	}
-	lines := make([][]byte, 0, len(f.Jobs)+1)
-	lines = append(lines, header)
-	for _, row := range f.Jobs {
-		var stored *jobRecord
-		if r, ok := f.stored[row.ID]; ok {
-			stored = &r
-		}
-		line, err := json.Marshal(recordJob(row, stored))
-		if err != nil {
-			return nil, fmt.Errorf("job: %s: %w", row.ID, err)
-		}
-		lines = append(lines, line)
-	}
-	return lines, nil
-}
-
-// Delete removes ONE row and returns it, or reports that no such row exists.
-//
-// A row that is over is still a row: `job exit` moves a job to a terminal state, which is
-// the RECORD of what happened and is what a later reader wants. Delete is for a row that
-// should never have been written -- a demo, a typo, a plan abandoned before it began --
-// and it is the only way to take one out without Clear taking every other lease's row
-// with it.
-//
-// It refuses a TERMINAL row by default. Deleting the record of a job that actually ran
-// destroys the only account of it, and the caller who wants that says so with force. A
-// live row is the opposite case: nothing has happened yet, so there is nothing to lose.
-//
-// A checkout the row owns is ended first, as `job exit` ends it: removed when it is clean
-// and every commit in it is on a branch, else the row stays with it and the error says why.
-//
-// The dropped row is archived first, as Clear archives, so a delete is recoverable from
-// the sibling file rather than only from whatever the caller remembers. Archives last
-// jobs.retain; see [Store.dropExpiredFiles].
-func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, error) {
-	id = strings.TrimSpace(id)
-	if err := authorizeDelete(s.Actor(), id); err != nil {
-		return types.Job{}, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var dropped types.Job
-	err := s.update(ctx, func(f *jobsFile) error {
-		i := slices.IndexFunc(f.Jobs, func(row types.Job) bool { return row.ID == id })
-		if i < 0 {
-			return fmt.Errorf("job: there is no job %q", id)
-		}
-		dropped = f.Jobs[i]
-		if err := readOnly(dropped); err != nil {
-			return err
-		}
-		if dropped.State.Terminal() && !force {
-			return fmt.Errorf("job: %s is %s, and that row is the record of what happened:"+
-				" delete it anyway with --force, or leave it where a later reader can find it",
-				id, dropped.State)
-		}
-		if dropped.Worktree.Standing() && dropped.Worktree.Made {
-			here, _ := filepath.Abs(s.root)
-			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
-			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {
-				return fmt.Errorf("job: %s owns the checkout %s, which stays, so the row stays with it: %s",
-					id, dropped.Worktree.Root, kept)
-			}
-			dropped = dropped.Clone()
-			dropped.Worktree.Removed = time.Now().Unix()
-		}
-		archived := f.header()
-		archived.Jobs, archived.stored = []types.Job{dropped}, f.stored
-		if err := s.archive(archived); err != nil {
-			return err
-		}
-		f.Jobs = slices.Delete(f.Jobs, i, i+1)
-		return nil
-	})
-	if err != nil {
-		return types.Job{}, err
-	}
-	return dropped, nil
-}
-
-// releases carries the row's recorded releases forward and adds the paths this write
-// gave up, the ones prev owned and next does not.
-//
-// A path that is owned again drops OUT of the list: a row saying it both owns and has
-// released the same path tells a reader nothing they can act on. A path released twice
-// keeps its position and takes the NEWER digest, because the version the next agent
-// inherits is the one left behind last. revoked marks what this write gave up as taken from
-// its holder rather than given up by it.
-func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, revoked bool) []types.JobRelease {
-	refork := prev.State.Terminal() && next.State.Live()
-	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
-		switch {
-		// A narrowed release outlives its entry; a re-fork ends it.
-		case r.Narrowed && refork:
-			return true
-		case r.Narrowed && slices.Contains(prev.Paths.Write, r.Path):
-			return false
-		}
-		return slices.Contains(next.Paths.Write, r.Path)
-	})
-	for _, p := range prev.Paths.Write {
-		if slices.Contains(next.Paths.Write, p) || slices.Contains(prev.Paths.Soft, p) {
-			continue
-		}
-		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
-		if at := slices.IndexFunc(out, func(r types.JobRelease) bool { return r.Path == p }); at >= 0 {
-			out[at] = rel
-			continue
-		}
-		out = append(out, rel)
-	}
-	return out
-}
-
-// ReleasedUnderPattern says of each file row released that a pattern of its
-// write paths still names: the release stands, so the pattern does not hold it.
-func ReleasedUnderPattern(row types.Job) []string {
-	var notes []string
-	for _, r := range row.Releases {
-		file, decl := types.SplitClaim(r.Path)
-		if decl != "" || !heldByPattern(row, file) {
-			continue
-		}
-		if claims := claimsOnFile(row, file); len(claims) > 0 {
-			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
-			continue
-		}
-		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `%s#<declaration>`", file, file))
-	}
-	return notes
-}
-
-// digest identifies the content at a released path, resolved inside the workspace.
-// Computed here rather than passed in: a worker announcing a release should not have to
-// hash anything, and a digest the releaser supplied would describe the tree it believed
-// it left rather than the one it did.
-//
-// Everything that is not a readable file inside the root answers with one of the three
-// documented markers rather than a hash; types.DigestAbsent, types.DigestDir and
-// types.DigestUnreadable say which. The absent/unreadable split matters to the next
-// agent: "the releaser deleted it" and "something is there nobody could read" are
-// different problems. A path escaping the root is absent by the same rule: the ledger
-// describes this workspace, so a row is never handed a digest of something outside it.
-//
-// Runs under the store's mutex, which is deliberate (reading the previous owned set and
-// recording what it gave up has to be one step), and is why every branch below is bounded.
-//
-// A released declaration (`run.go#executeStages`) digests the lines the declaration spans
-// in the file now, as the footprint places them, so the next holder inherits that body
-// rather than a file other claims on it keep changing. A declaration no line is placed in
-// any more is absent.
-func (s *Store) digest(ctx context.Context, declared string) string {
-	p, decl := types.SplitClaim(declared)
-	if decl != "" {
-		return s.declarationDigest(ctx, p, decl)
-	}
-	return s.fileDigest(ctx, p)
-}
-
-// fileDigest is digest for a path SplitClaim already cut.
-func (s *Store) fileDigest(ctx context.Context, declared string) string {
-	if s.root == "" {
-		return types.DigestAbsent
-	}
-	if ctx.Err() != nil {
-		return types.DigestUnreadable
-	}
-	// Symlinks are resolved on BOTH sides before the containment check. A link inside
-	// the root pointing outside it was followed and hashed, which is the one thing this
-	// function promises not to do; and the root is resolved too, or a workspace reached
-	// through a symlinked parent (/tmp on macOS) would read as an escape from itself.
-	root, err := filepath.EvalSymlinks(s.root)
-	if err != nil {
-		return types.DigestAbsent
-	}
-	full, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(declared)))
-	if err != nil {
-		// Nothing resolves at the path: a deleted file, a broken link, or a declared
-		// glob, which is a pattern rather than a path.
-		return types.DigestAbsent
-	}
-	rel, err := filepath.Rel(root, full)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return types.DigestAbsent
-	}
-	info, err := os.Stat(full)
-	switch {
-	case err != nil:
-		return types.DigestUnreadable
-	case info.IsDir():
-		return types.DigestDir
-	case !info.Mode().IsRegular():
-		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
-		// somebody writes to it, and it would block holding the store's mutex: one
-		// released fifo would wedge every ledger operation in the server.
-		return types.DigestUnreadable
-	case info.Size() > maxDigestBytes:
-		return types.DigestUnreadable
-	}
-	fh, err := os.Open(full)
-	if err != nil {
-		return types.DigestUnreadable
-	}
-	defer fh.Close()
-	sum := sha256.New()
-	if _, err := io.Copy(sum, fh); err != nil {
-		return types.DigestUnreadable
-	}
-	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
-}
-
-// declarationDigest is digest for one declaration of the file at p. The file passes every
-// check digest makes of a whole file before a line of it is placed.
-func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
-	if whole := s.fileDigest(ctx, p); !strings.HasPrefix(whole, "sha256:") {
-		return whole
-	}
-	root, err := filepath.EvalSymlinks(s.root)
-	if err != nil {
-		return types.DigestUnreadable
-	}
-	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
-	if err != nil {
-		return types.DigestUnreadable
-	}
+// declarationDigest digests the lines one declaration of the file at p spans in body, as
+// the footprint places them, so the next holder inherits that body rather than a file
+// other claims on it keep changing. A declaration no line is placed in any more is absent.
+func (s *Store) declarationDigest(ctx context.Context, p, decl string, body []byte) string {
 	res, err := vcs.Resolve(ctx, s.root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	regions, err := res.VCS.RegionsBetween(ctx, s.root, path.Clean(p), nil, body)
 	if err != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
+	var spans [][2]int
+	for _, r := range regions {
+		if job.NamesDeclaration(decl, r.Declaration) {
+			spans = append(spans, [2]int{r.Lines[0], r.Lines[1]})
+		}
+	}
+	if spans == nil {
+		return job.DigestAbsent
+	}
+	return digestSpans(body, spans)
+}
+
+// digestSpans is the digest of the lines of body that spans name, 1-based and inclusive,
+// in order.
+func digestSpans(body []byte, spans [][2]int) string {
 	lines := strings.SplitAfter(string(body), "\n")
 	var spanned strings.Builder
-	found := false
-	for _, r := range regions {
-		if !types.NamesDeclaration(decl, r.Declaration) {
-			continue
-		}
-		found = true
-		for n := r.Lines[0]; n <= r.Lines[1] && n-1 < len(lines); n++ {
+	for _, r := range spans {
+		for n := r[0]; n <= r[1] && n-1 < len(lines); n++ {
 			spanned.WriteString(lines[n-1])
 		}
-	}
-	if !found {
-		return types.DigestAbsent
 	}
 	sum := sha256.Sum256([]byte(spanned.String()))
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// maxDigestBytes bounds one release digest, because the hash is computed while the store
-// holds its mutex. 32 MiB is far above the source files a lease actually releases and far
-// below the build artifact that would otherwise stall every other ledger caller for as
-// long as it takes to read it; a path over the cap records unreadable, which is what it
-// is from the reader's side.
-const maxDigestBytes = 32 << 20
+// checkCommand is the argv a witnessed run of goal's check carries, run in this store's
+// checkout: [checkArgv].
+func (s *Store) checkCommand(_ job.Job, goal job.Goal) ([]string, string, error) {
+	if s.root == "" {
+		return nil, "", errors.New("this job store has no checkout to run a check in")
+	}
+	return checkArgv(goal.Check), s.root, nil
+}
+
+// quoteAll is names each quoted, joined by commas.
+func quoteAll(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	return strings.Join(quoted, ", ")
+}

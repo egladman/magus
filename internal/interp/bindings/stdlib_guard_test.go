@@ -11,9 +11,9 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"

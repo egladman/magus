@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -171,6 +172,6 @@ func WithTargetRunner(fn func(context.Context, types.TargetRef) error) RunOption
 
 // WithLimiter shares an external Limiter with RunAll instead of creating a private one,
 // so in-process tasks and nested calls compete for the same concurrency budget.
-func WithLimiter(l *Limiter) RunOption {
+func WithLimiter(l *budget.Limiter) RunOption {
 	return func(rc *runCtx) { rc.limiter = l }
 }

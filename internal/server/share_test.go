@@ -15,13 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
 
@@ -62,7 +63,7 @@ func TestShareHandlerRefusesInTheAIPShape(t *testing.T) {
 					Details []detail `json:"details"`
 				} `json:"error"`
 			}
-			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body), rr.Body.String())
+			require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &body), rr.Body.String())
 			assert.Equal(t, tc.status, body.Error.Code)
 			assert.Contains(t, body.Error.Message, tc.reason)
 			require.NotEmpty(t, body.Error.Details)
@@ -83,42 +84,42 @@ func TestShareMintIsAudited(t *testing.T) {
 	routes := map[string]share.Route{"/api/v1/events": {Handler: http.NotFoundHandler(), Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")}}
 	h := (&Server{}).newShareHandler(mgr, consoleDir, routes, trailDir, slog.New(slog.DiscardHandler))
 
-	minter := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: types.GrantConsole}
+	minter := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: auth.AccessConsole()}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/share", nil)
 	req = req.WithContext(trail.ContextWithCredential(req.Context(), minter))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	var resp shareResponse
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &resp))
 	_, secret, ok := strings.Cut(resp.URL, "#token=")
 	require.True(t, ok)
 
-	events, err := trail.ReadRecent(trailDir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), trailDir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	e := events[0]
 	assert.Contains(t, e.Preview, "share link ")
 	assert.Contains(t, e.Preview, "console=read")
 	assert.NotContains(t, e.Preview, secret)
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:           e.Ts,
-		Kind:         trail.KindTokenLifecycle,
+		Kind:         trailtypes.KindTokenLifecycle,
 		Origin:       e.Origin,
 		Action:       "share.mint",
-		Outcome:      trail.OutcomeOK,
+		Outcome:      trailtypes.OutcomeOK,
 		RequestRef:   e.RequestRef,
 		RequestBytes: e.RequestBytes,
 		Preview:      e.Preview,
 	}, e)
-	blob, err := trail.ReadBlob(trailDir, e.RequestRef)
+	blob, err := trailtypes.ReadBlob(trailDir, e.RequestRef)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
 	var rec trail.MintRecord
-	require.NoError(t, json.Unmarshal(blob, &rec))
+	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Len(t, rec.Minted.ID, 8)
 	assert.Equal(t, trail.MintRecord{
-		Minted:  types.Credential{Kind: types.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: types.GrantViewer},
+		Minted:  auth.Credential{Kind: auth.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: auth.AccessViewer()},
 		Expires: rec.Expires, // stamped at mint time
 		Minter:  minter,
 	}, rec)

@@ -53,16 +53,17 @@ ctx := context.Background()
 
 // Inspect: read-only, no cache. Use this for introspection - listing,
 // describing, classifying files - and nothing else.
-ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
+ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(tier.Ceiling))
 
 // Open: builds an on-disk cache and returns the concrete *magus.Magus,
 // which adds Run. Use this when you intend to execute targets.
-m, err := magus.Open(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
+m, err := magus.Open(ctx, "/path/to/workspace", magus.WithSpawnRule(tier.Ceiling))
 ```
 
 Both require a spawn rule: the rule every job spawn is held to. A workspace has no
 default one, so leaving `WithSpawnRule` out fails the constructor, naming
-`magus.TierCeiling`, the reference rule the CLI passes.
+`tier.Ceiling` from `github.com/egladman/magus/libs/safetyscissors/tier`, the reference
+rule the CLI passes.
 
 `Inspect` returns `types.WorkspaceRepository`, an interface: a signal that
 an introspection-only caller should keep coding against the interface rather
@@ -89,7 +90,7 @@ import (
 
 func main() {
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
+    ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(tier.Ceiling))
     if err != nil {
         log.Fatal(err)
     }
@@ -237,7 +238,7 @@ with a nil error; the error is for a judgment that could not be made, such as a
 `*types.EngineNotLinkedError` when the workspace's guard rules need the engine. A rule
 that would ask the person denies, since there is no host to put the question to.
 
-The lease a call acts under rides `ctx` through `types.WithJobLease`, and the session
+The lease a call acts under rides `ctx` through `job.WithLease`, and the session
 names what that agent did before, so a fire-once advice fires once and spawn records
 count. `Run` judges each target the same way before anything runs, as the
 `magus run <target> <project>` line the CLI would be judged by. Pass
@@ -265,8 +266,8 @@ backend is held to the same trust set as a wired one.
 
 The `std` package holds the Go side of every Buzz host module, and its exported API is
 in the same lock as the root package. The job, graph and trail doors take typed
-options: `std.MagusPutJob` a `types.JobPut`, whose nil fields leave the row as it is;
-`std.MagusExitJob` a `types.JobResult`; `std.MagusWaitJob` a `*types.JobResult`, nil
+options: `std.MagusPutJob` a `job.Put`, whose nil fields leave the row as it is;
+`std.MagusExitJob` a `job.Result`; `std.MagusWaitJob` a `*job.Result`, nil
 for the evidence the exit filed; `std.MagusQuery` a `types.KnowledgeQueryOptions`;
 `std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusTrailRead` a
 `types.TrailReadOptions`. Each reads the workspace on `ctx`: pass `m.Context(ctx)`, as
@@ -330,7 +331,7 @@ func TestProjectsOfAMonorepo(t *testing.T) {
         "api/magusfile.buzz": "",
     })
 
-    m, err := magus.Inspect(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
+    m, err := magus.Inspect(t.Context(), ws.Root(), magus.WithSpawnRule(tier.Ceiling))
     require.NoError(t, err)
 
     assert.Len(t, m.All(), 2)

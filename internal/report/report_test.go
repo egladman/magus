@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -70,7 +70,7 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 	for sc.Scan() {
 		line := sc.Bytes()
 		var head envelopeHead
-		require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
+		require.NoError(t, codec.Unmarshal(line, &head), "unmarshal %q", line)
 		assert.Equal(t, envelopeHead{Schema: Schema, Type: TypeTargetResult}, head, "line %q", line)
 	}
 }
@@ -125,7 +125,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 	for i := 0; sc.Scan(); i++ {
 		require.Less(t, i, len(wantTypes), "got more lines than expected")
 		var head envelopeHead
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
+		require.NoError(t, codec.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
 		assert.Equal(t, envelopeHead{Schema: Schema, Type: wantTypes[i]}, head, "line %d", i)
 	}
 }
@@ -186,7 +186,7 @@ func TestConcurrentWrites(t *testing.T) {
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var m map[string]any
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &m), "corrupt line %d: %q", count+1, sc.Bytes())
+		require.NoError(t, codec.Unmarshal(sc.Bytes(), &m), "corrupt line %d: %q", count+1, sc.Bytes())
 		count++
 	}
 	assert.Equal(t, want, uint64(count))
@@ -356,7 +356,7 @@ func TestCacheRunOptions(t *testing.T) {
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var ev TargetResult
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &ev), "unmarshal")
+		require.NoError(t, codec.Unmarshal(sc.Bytes(), &ev), "unmarshal")
 		results = append(results, ev)
 	}
 	require.Len(t, results, 2, "want 2 events: %v", results)
@@ -393,7 +393,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	require.NoError(t, err)
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
-	served := ServedIn(job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
+	served := ServedIn(t.Context(), job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
 	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
 		return fmt.Errorf("exit 2")
 	}, RunOptions(w, served, nil)...)
@@ -410,7 +410,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	var results []TargetResult
 	for _, line := range bytes.Split(bytes.TrimSpace(body), []byte("\n")) {
 		var ev TargetResult
-		require.NoError(t, json.Unmarshal(line, &ev))
+		require.NoError(t, codec.Unmarshal(line, &ev))
 		results = append(results, ev)
 	}
 	require.Len(t, results, 2)
@@ -454,13 +454,13 @@ func TestServedInFiltersForTheActingRole(t *testing.T) {
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
 	loc := job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: t.TempDir()}
-	served := ServedIn(loc)(next)
+	served := ServedIn(t.Context(), loc)(next)
 	require.Len(t, served, 2, "an unbound reader keeps the lot")
 
 	require.NoError(t, os.MkdirAll(filepath.Dir(loc.MarkerPath()), 0o755))
 	require.NoError(t, os.WriteFile(loc.MarkerPath(), []byte("harness/reviewer\n"), 0o644))
 	loc.Root = t.TempDir()
-	served = ServedIn(loc)(next)
+	served = ServedIn(t.Context(), loc)(next)
 	ids := make([]string, len(served))
 	for i, n := range served {
 		ids[i] = n.ID
@@ -559,7 +559,7 @@ func TestStructuredRunEventTypes(t *testing.T) {
 
 			var head envelopeHead
 			line := bytes.TrimSpace(buf.Bytes())
-			require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
+			require.NoError(t, codec.Unmarshal(line, &head), "unmarshal %q", line)
 			assert.Equal(t, envelopeHead{Schema: Schema, Type: tc.wantType}, head)
 
 			// Whole-struct: decode the SAME line back into the event's own type
@@ -567,7 +567,7 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			// target struct, which has no fields for them) and compare against
 			// the original value field by field in one assertion.
 			got := reflect.New(reflect.TypeOf(tc.event)).Interface()
-			require.NoError(t, json.Unmarshal(line, got))
+			require.NoError(t, codec.Unmarshal(line, got))
 			assert.Equal(t, tc.event, reflect.ValueOf(got).Elem().Interface())
 		})
 	}
@@ -592,7 +592,7 @@ func (s *RunSummaryRecordSuite) TestRecordsFilesAndSlots() {
 	s.Require().NoError(s.w.Close())
 
 	var got RunSummary
-	s.Require().NoError(json.Unmarshal(bytes.TrimSpace(s.buf.Bytes()), &got))
+	s.Require().NoError(codec.Unmarshal(bytes.TrimSpace(s.buf.Bytes()), &got))
 	s.Equal(want, got)
 	s.Contains(s.buf.String(), `"files":771`)
 	s.Contains(s.buf.String(), `"slots":12`)
@@ -726,7 +726,7 @@ func TestGraphObserverWritesEachKind(t *testing.T) {
 	sc := bufio.NewScanner(&buf)
 	for sc.Scan() {
 		var l line
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &l), "unmarshal %q", sc.Bytes())
+		require.NoError(t, codec.Unmarshal(sc.Bytes(), &l), "unmarshal %q", sc.Bytes())
 		got = append(got, l)
 	}
 	assert.Equal(t, []line{

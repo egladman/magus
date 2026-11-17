@@ -7,13 +7,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/vcs"
 	driver "github.com/egladman/magus/vcs"
@@ -79,23 +79,26 @@ type CheckpointRecord struct {
 // reporting what it recorded cannot print something the store does not hold.
 //
 // start describes the writing invocation. Its Command and invocation id are set here.
-func RecordCheckpoint(dir string, c Checkpoint, start InvocationStart) (stored Checkpoint, recorded bool, err error) {
+func RecordCheckpoint(ctx context.Context, dir string, c Checkpoint, start session.InvocationStart) (stored Checkpoint, recorded bool, err error) {
 	c.Note = boundMessage(c.Note)
 	id := checkpointInvocationID(checkpointKey(c))
 	// One file, not the whole store. Every checkpoint for this line of work is in the
 	// file checkpointInvocationID names and nowhere else, so folding the store would
 	// decode a 30-day history to answer a question one file holds, on every turn of
 	// every session, which is when this runs.
-	records, _, _, _ := readFile(filepath.Join(dir, id+fileExt))
+	records, err := session.ReadInvocation(ctx, dir, id)
+	if err != nil {
+		return c, false, err
+	}
 	if prev, ok := latestCheckpoint(records); ok && prev == c {
 		return c, false, nil
 	}
 	start.Command = "session checkpoint"
-	w, err := Open(dir, id, start)
+	w, err := openWriter(ctx, dir, id, start)
 	if err != nil {
 		return c, false, err
 	}
-	if err := w.Append(KindCheckpoint, c); err != nil {
+	if err := w.Append(ctx, KindCheckpoint, c); err != nil {
 		return c, false, err
 	}
 	return c, true, nil
@@ -103,7 +106,7 @@ func RecordCheckpoint(dir string, c Checkpoint, start InvocationStart) (stored C
 
 // LatestCheckpoints returns the newest checkpoint per line of work, most recent first:
 // the unfinished work a person arriving at this repository could pick up.
-func LatestCheckpoints(fold Fold) []CheckpointRecord {
+func LatestCheckpoints(fold session.Fold) []CheckpointRecord {
 	newest := map[string]CheckpointRecord{}
 	for _, rec := range fold.Records {
 		c, ok := decodeCheckpoint(rec)
@@ -173,7 +176,7 @@ func checkpointInvocationID(key string) string {
 
 // latestCheckpoint returns the newest checkpoint among records, which the caller has
 // already narrowed to one line of work.
-func latestCheckpoint(records []Record) (Checkpoint, bool) {
+func latestCheckpoint(records []session.Record) (Checkpoint, bool) {
 	var found Checkpoint
 	var ok bool
 	for _, rec := range records {
@@ -185,12 +188,12 @@ func latestCheckpoint(records []Record) (Checkpoint, bool) {
 }
 
 // decodeCheckpoint reports the checkpoint a record carries, and whether it carried one.
-func decodeCheckpoint(rec Record) (Checkpoint, bool) {
+func decodeCheckpoint(rec session.Record) (Checkpoint, bool) {
 	if rec.Kind != KindCheckpoint {
 		return Checkpoint{}, false
 	}
 	var c Checkpoint
-	if json.Unmarshal(rec.Payload, &c) != nil {
+	if codec.Unmarshal(rec.Payload, &c) != nil {
 		return Checkpoint{}, false
 	}
 	return c, true

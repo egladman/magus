@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types/daemon"
 
 	"github.com/egladman/magus"
@@ -25,7 +28,6 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -57,7 +59,7 @@ func newTestRegistry() *wsRegistry {
 // scriptedOpens makes r.open fail until ok is closed, counting every attempt.
 func scriptedOpens(r *wsRegistry, ok <-chan struct{}) *atomic.Int32 {
 	var n atomic.Int32
-	r.open = func(root string, _ *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+	r.open = func(root string, _ *budget.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 		n.Add(1)
 		select {
 		case <-ok:
@@ -339,37 +341,37 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 
-	ctx := trail.ContextWithEntryPoint(t.Context(), types.EntryPointServer)
-	_, err := store.Update(ctx, "sync-graph", func(row *types.Job) {
-		row.State = types.StateRunning
-		row.LastRun = &types.JobRun{Invocation: "inv-1"}
+	ctx := trail.ContextWithEntryPoint(t.Context(), jobtypes.EntryPointServer)
+	_, err := store.Update(ctx, "sync-graph", func(row *jobtypes.Job) {
+		row.State = jobtypes.StateRunning
+		row.LastRun = &jobtypes.Run{Invocation: "inv-1"}
 	})
 	require.NoError(t, err)
 
 	completeJobRow(t.Context(), store, []string{"graph", "build"}, 250*time.Millisecond, nil)
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]
 	assert.True(t, got.ServerRun(), "the server registered its own row")
-	assert.Equal(t, types.StatePass, got.State)
+	assert.Equal(t, jobtypes.StatePass, got.State)
 	require.NotNil(t, got.LastRun)
 	assert.Positive(t, got.LastRun.Ended)
 	run := *got.LastRun
 	run.Ended = 0
-	assert.Equal(t, types.JobRun{Invocation: "inv-1", DurationMs: 250, OK: true}, run)
+	assert.Equal(t, jobtypes.Run{Invocation: "inv-1", DurationMs: 250, OK: true}, run)
 
 	completeJobRow(t.Context(), store, []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateFail, rows[0].State)
+	assert.Equal(t, jobtypes.StateFail, rows[0].State)
 	require.NotNil(t, rows[0].LastRun)
 	run = *rows[0].LastRun
 	run.Ended = 0
-	assert.Equal(t, types.JobRun{Invocation: "inv-1", DurationMs: 1000, Error: "graph build failed"}, run)
+	assert.Equal(t, jobtypes.Run{Invocation: "inv-1", DurationMs: 1000, Error: "graph build failed"}, run)
 }
 
 // TestCompleteJobRowIgnoresAnAdoptedRun keeps the callback narrow: it fires for every
@@ -381,7 +383,7 @@ func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 
 	completeJobRow(t.Context(), store, []string{"run", "test", "."}, time.Second, nil)
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -411,7 +413,7 @@ func (s *RegistryLeaseSuite) SetupTest() {
 		s.dialed = append(s.dialed, lease)
 		return broker.NewClient("unix:///nonexistent/" + lease)
 	}
-	s.r.open = func(_ string, _ *cache.Limiter, b *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+	s.r.open = func(_ string, _ *budget.Limiter, b *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 		s.opened = append(s.opened, b)
 		return &magus.Magus{}, nil
 	}
@@ -659,16 +661,16 @@ func TestWarmInBackgroundTrackedByClose(t *testing.T) {
 }
 
 // testOpen opens root as a library caller would.
-func testOpen(root string, lim *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+func testOpen(root string, lim *budget.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 	cfg, err := LoadWorkspaceConfig(root)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)
 	}
-	return magus.Open(context.Background(), root, workspace.WithLoadedConfig(cfg), workspace.WithLimiter(lim), magus.WithSpawnRule(magus.TierCeiling))
+	return magus.Open(context.Background(), root, workspace.WithLoadedConfig(cfg), workspace.WithLimiter(lim), magus.WithSpawnRule(tier.Ceiling))
 }
 
 // newTestRegistryAt is newRegistry opening workspaces as a library caller would, with the
 // janitor running.
-func newTestRegistryAt(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
+func newTestRegistryAt(ctx context.Context, lim *budget.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
 	return newRegistry(ctx, lim, b, ttl, tel, RegistryDeps{Open: testOpen, LeaseOf: func(string) string { return "" }})
 }

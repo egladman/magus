@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,16 +66,16 @@ func TestSplitRunTargetIdentity(t *testing.T) {
 // A one-line chain chained-run only advises on still words the combined form when every
 // stage shares a target; a chain of different targets keeps chained-run's own text.
 func TestSplitRunLineGivesCombinedForm(t *testing.T) {
-	v := Evaluate(testDependencies(), "magus run lint . || magus run lint docs")
+	v := Evaluate(t.Context(), testDependencies(), "magus run lint . || magus run lint docs")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus run lint . docs", "the combined form the reader can run instead")
 	assert.Contains(t, v.Context, "runs both in one invocation")
 
-	different := Evaluate(testDependencies(), "magus run generate . || magus run lint .")
+	different := Evaluate(t.Context(), testDependencies(), "magus run generate . || magus run lint .")
 	assert.Contains(t, different.Context, "compose through ctx.needs")
 	assert.NotContains(t, different.Context, "runs both in one invocation")
 
-	charms := Evaluate(testDependencies(), "magus run lint . || magus run lint:rw docs")
+	charms := Evaluate(t.Context(), testDependencies(), "magus run lint . || magus run lint:rw docs")
 	assert.NotContains(t, charms.Context, "runs both in one invocation", "lint and lint:rw are two targets")
 }
 
@@ -148,13 +148,13 @@ func TestSplitRunAcrossCallsFiresOncePerSession(t *testing.T) {
 func TestSplitRunRaisedToDenyRefusesEveryFiring(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	deps := withSetting(string(advisorySplitRun), builtin.Deny)
-	judge := func(input string) types.GuardJudgment {
+	judge := func(input string) verdict.Judgment {
 		v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1"})
-		return types.GuardJudgment{Decision: v.Decision, Rule: v.Rule}
+		return verdict.Judgment{Decision: v.Decision, Rule: v.Rule}
 	}
-	refused := types.GuardJudgment{Decision: "deny", Rule: string(advisorySplitRun)}
+	refused := verdict.Judgment{Decision: verdict.Deny, Rule: string(advisorySplitRun)}
 
-	assert.Equal(t, types.GuardJudgment{Decision: "pass"}, judge("magus run lint ."), "a first call has nothing to compare against")
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Defer}, judge("magus run lint ."), "a first call has nothing to compare against")
 	assert.Equal(t, refused, judge("magus run lint docs"))
 	assert.Equal(t, refused, judge("magus run lint web"), "the second firing refuses too")
 }

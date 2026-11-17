@@ -24,6 +24,7 @@ import (
 	// Without the engine no magusfile is evaluated, and a tree that loads nothing
 	// reports zero breakage.
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 // Bump is the size of a release relative to the previous one.
@@ -91,7 +92,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	cfg.Cache.Dir = filepath.Join(scratch, "cache")
 	cfg.Server.Enabled = false
 	cfg.Broker = types.BrokerOff
-	ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders(), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders(), magus.WithSpawnRule(tier.Ceiling))
 	if c, ok := ws.(io.Closer); ok {
 		_ = c.Close()
 	}

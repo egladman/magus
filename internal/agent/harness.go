@@ -14,8 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -104,8 +105,8 @@ type HarnessDescriptor struct {
 	// Tools is the host's tool table, nil for a harness that declares none.
 	Tools *types.HarnessTools `json:"tools,omitempty"`
 	// Models are the rows of the models this host runs; nil for a harness that publishes
-	// none. Never read from JSON, since types.ModelPricing carries no wire tags.
-	Models []types.ModelPricing `json:"-"`
+	// none. Never read from JSON, since model.Row carries no wire tags.
+	Models []model.Row `json:"-"`
 }
 
 // ShortestForegroundMax is the shortest foreground maximum among harnesses, the longest a
@@ -311,9 +312,9 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 // HarnessModelRows is the model rows the wired harnesses publish through mgs_listModels.
 // A harness that does not load contributes none, which the guard reads as no facts about
 // a model rather than an error. ctx must carry the workspace the harness spells load in.
-func HarnessModelRows(ctx context.Context, root string, wired []string) []types.ModelPricing {
+func HarnessModelRows(ctx context.Context, root string, wired []string) []model.Row {
 	ctx = ContextWithWiredHarnesses(ctx, wired)
-	var rows []types.ModelPricing
+	var rows []model.Row
 	for _, id := range wired {
 		if d, _, err := LoadHarness(ctx, root, id); err == nil {
 			rows = append(rows, d.Models...)
@@ -1091,7 +1092,7 @@ func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 // exactEntryIndex is the index of the first entry in entries equal to wanted and not in
 // skip, or -1.
 func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (int, error) {
-	want, err := json.Marshal(wanted)
+	want, err := codec.Marshal(wanted)
 	if err != nil {
 		return -1, fmt.Errorf("agent: marshal managed entry: %w", err)
 	}
@@ -1100,7 +1101,7 @@ func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (in
 		if _, skipped := skip[j]; !ok || skipped {
 			continue
 		}
-		got, err := json.Marshal(entry)
+		got, err := codec.Marshal(entry)
 		if err != nil {
 			return -1, fmt.Errorf("agent: marshal existing harness entry: %w", err)
 		}
@@ -1281,7 +1282,7 @@ func firstSymlinkComponent(dir, rel string) (string, error) {
 // decodeHarnessJSON keeps large numeric values exact and rejects duplicate keys
 // before a merge could collapse an ambiguous user document on re-encode.
 func decodeHarnessJSON(body []byte, dst any) error {
-	return json.UnmarshalLossless(body, dst)
+	return codec.UnmarshalLossless(body, dst)
 }
 
 // KnownHarnesses is useful to generic UIs and tests without leaking a fixed

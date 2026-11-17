@@ -14,8 +14,9 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -110,14 +111,14 @@ func judgedAlike(t *testing.T, judge func(t *testing.T, deps func(*testing.T) De
 
 // benchWorker is a leased worker whose own check is the human-only target, so
 // worker-check-only passes the run and human-only is the rule that answers.
-func benchWorker() types.Job {
-	return types.Job{
+func benchWorker() job.Job {
+	return job.Job{
 		ID:         "bench/run",
 		Parent:     "root",
-		Agent:      agent.Instructed("run the benchmark"),
-		Paths:      types.JobPaths{Write: []string{"benchmarks/agent/**"}},
-		Check:      &types.LeaseCheck{Target: "agent-bench-run", Project: "."},
-		State:      types.StateRunning,
+		Agent:      job.Instructed("run the benchmark"),
+		Paths:      job.Paths{Write: []string{"benchmarks/agent/**"}},
+		Check:      &job.LeaseCheck{Target: "agent-bench-run", Project: "."},
+		State:      job.StateRunning,
 		Registered: 1,
 	}
 }
@@ -131,20 +132,20 @@ func TestHumanOnlyVerdicts(t *testing.T) {
 		command    string
 		lease      bool
 		rendersAsk bool
-		want       string
+		want       verdict.Decision
 		contains   []string
 	}{
-		{"an unbound session through a hook that prompts", "magus run agent-bench-run .", false, true, "ask",
+		{"an unbound session through a hook that prompts", "magus run agent-bench-run .", false, true, verdict.Ask,
 			[]string{"`magus run agent-bench-run .` is run by a person: " + benchReason, "never cached (skip_cache)", "To run it yourself: magus run agent-bench-run ."}},
-		{"affected naming it", "magus affected agent-bench-run", false, true, "ask",
+		{"affected naming it", "magus affected agent-bench-run", false, true, verdict.Ask,
 			[]string{"`magus affected agent-bench-run` is run by a person"}},
-		{"an unbound session through a hook that cannot prompt", "magus run agent-bench-run .", false, false, "deny",
+		{"an unbound session through a hook that cannot prompt", "magus run agent-bench-run .", false, false, verdict.Deny,
 			[]string{"predates approval prompts", "running `magus run agent-bench-run .`", "magus describe harness"}},
-		{"a leased worker", "magus run agent-bench-run .", true, true, "deny",
+		{"a leased worker", "magus run agent-bench-run .", true, true, verdict.Deny,
 			[]string{benchReason, "bound to job bench/run", "Workers do not spend"}},
-		{"a chain reaching it", "magus run bench-all .", false, true, "deny",
+		{"a chain reaching it", "magus run bench-all .", false, true, verdict.Deny,
 			[]string{"- .:agent-bench-run: " + benchReason, "run the targets it composes that are not human-only"}},
-		{"a chain reaching one in another project", "magus run evals-all .", false, true, "deny",
+		{"a chain reaching one in another project", "magus run evals-all .", false, true, verdict.Deny,
 			[]string{"- evals:grade: spends model tokens per case"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -158,7 +159,7 @@ func TestHumanOnlyVerdicts(t *testing.T) {
 				v := Judge(ctx, deps(t), req)
 				assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
 				full := v.Reason
-				if tt.want == "deny" {
+				if tt.want == verdict.Deny {
 					full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
 				}
 				for _, s := range tt.contains {
@@ -180,12 +181,14 @@ func TestHumanOnlyJudgesAClientScript(t *testing.T) {
 			"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; ` + script}})
 	}
 	for _, tt := range []struct {
-		name, script, want, contains string
+		name, script string
+		want         verdict.Decision
+		contains     string
 	}{
-		{"a literal run", `magus\run(["agent-bench-run", "."]);`, "ask", "is run by a person: " + benchReason},
-		{"a literal affected", `magus\cmd("affected", ["agent-bench-run"]);`, "ask", "is run by a person: " + benchReason},
-		{"a computed argv", `final a = ["agent-bench-run"]; magus\run(a);`, "deny", "- .:agent-bench-run: " + benchReason},
-		{"a script that does not parse", `magus\run(`, "deny", "- evals:grade: spends model tokens per case"},
+		{"a literal run", `magus\run(["agent-bench-run", "."]);`, verdict.Ask, "is run by a person: " + benchReason},
+		{"a literal affected", `magus\cmd("affected", ["agent-bench-run"]);`, verdict.Ask, "is run by a person: " + benchReason},
+		{"a computed argv", `final a = ["agent-bench-run"]; magus\run(a);`, verdict.Deny, "- .:agent-bench-run: " + benchReason},
+		{"a script that does not parse", `magus\run(`, verdict.Deny, "- evals:grade: spends model tokens per case"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			judgedAlike(t, func(t *testing.T, deps func(*testing.T) Dependencies) string {
@@ -193,7 +196,7 @@ func TestHumanOnlyJudgesAClientScript(t *testing.T) {
 				v := Judge(ctx, deps(t), Request{Input: client(t, tt.script), Host: "claude-code", RendersAsk: true})
 				assert.Equal(t, verdictWithRule(tt.want, string(denyRuleHumanOnly)), unworded(v))
 				full := v.Reason
-				if tt.want == "deny" {
+				if tt.want == verdict.Deny {
 					full = storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
 					assert.Contains(t, full, "cannot read")
 				}
@@ -246,7 +249,7 @@ func TestHumanOnlyRefusesARunWhosePoliciesLapsed(t *testing.T) {
 		return types.TargetPolicyIndex{}, false
 	}}
 	decision, reason, lapsed := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
-	assert.Equal(t, decisionDeny, decision)
+	assert.Equal(t, verdict.Deny, decision)
 	assert.True(t, lapsed, "a lapse is filed under guard-unfinished, not human-only")
 	assert.Contains(t, reason, "reading this workspace's target policies")
 }
@@ -320,7 +323,7 @@ func TestHumanOnlyOpensTheWorkspaceWhenTheRecordCannotVouch(t *testing.T) {
 		return types.TargetPolicyIndex{Projects: []string{"."}}, false
 	}
 	decision, reason, _ := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
-	assert.Equal(t, "ask", decision)
+	assert.Equal(t, verdict.Ask, decision)
 	assert.Contains(t, reason, benchReason)
 	assert.Equal(t, 1, opens)
 }
@@ -347,7 +350,7 @@ func TestHumanOnlySetToAdviseLetsTheRunProceed(t *testing.T) {
 		deps := src.deps(t)
 		deps.Builtins = map[string]builtin.Setting{string(denyRuleHumanOnly): {Decision: builtin.Advise}}
 		v := Judge(ctx, deps, Request{Input: "magus run agent-bench-run .", RendersAsk: true})
-		assert.NotContains(t, []string{"ask", "deny"}, v.Decision, src.name)
+		assert.NotContains(t, []verdict.Decision{verdict.Ask, verdict.Deny}, v.Decision, src.name)
 	}
 }
 
@@ -367,7 +370,7 @@ func TestHumanOnlyReasonCarriesTheRecord(t *testing.T) {
 
 	for _, src := range humanOnlySources {
 		decision, reason, _ := gradeHumanOnly(ctx, src.deps(t), "", "magus run agent-bench-run .")
-		assert.Equal(t, "ask", decision, src.name)
+		assert.Equal(t, verdict.Ask, decision, src.name)
 		assert.Contains(t, reason, "Recorded: p75 6m12s over 4 runs; never cached (skip_cache).", src.name)
 	}
 }
@@ -389,7 +392,7 @@ func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
 		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)}, v.Rule, src.name)
 		assert.Contains(t, v.Deny, "job bench/run's worker to run `.:agent-bench-run`, which a person runs", src.name)
 		assert.Contains(t, v.Why, benchReason, src.name)
-		assert.Empty(t, judgeBriefCommand(deps, briefInput{text: brief, bound: true}).Deny,
+		assert.Empty(t, judgeBriefCommand(t.Context(), deps, briefInput{text: brief, bound: true}).Deny,
 			"%s: a message to a bound worker is not graded against its row", src.name)
 
 		forbidding := fmt.Sprintf("JOB ID: %s\nNever run `magus run agent-bench-run .` yourself.\n", row.ID)

@@ -5,22 +5,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
 	"log/slog"
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/internal/log/attr"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
-
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/spell"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
+	trailtypes "github.com/egladman/magus/types/trail"
 )
 
 // installHost wires a session for magusfile evaluation, layering host modules
@@ -430,7 +431,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 	m.MapSet("magus__Workspace__putJob", function("magus.Workspace.putJob", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(types.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(job.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("magus__Workspace__clearJobs", function("magus.job.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.IntValue(0), nil
@@ -579,17 +580,17 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return bindgen.ObjectHistory(types.History{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("job", function("magus.job", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(types.Job{ID: firstStr(args)}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(job.Job{ID: firstStr(args)}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("session", function("magus.session", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectSession(types.Session{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("modelTier", function("magus.modelTier", retNull))
 	m.MapSet("magus__Workspace__forkFacts", function("magus.Workspace.forkFacts", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJobForkFacts(types.JobForkFacts{}), nil
+		return bindgen.ObjectJobForkFacts(job.ForkFacts{}), nil
 	}))
 	m.MapSet("magus__Workspace__unmerged", function("magus.Workspace.unmerged", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJobUnmergedReport(types.JobUnmergedReport{}), nil
+		return bindgen.ObjectJobUnmergedReport(job.UnmergedReport{}), nil
 	}))
 	m.MapSet("magus__Workspace__unverified", function("magus.Workspace.unverified", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectUnverifiedReport(types.UnverifiedReport{Unknown: "a dry run reads no recorded runs"}), nil
@@ -598,7 +599,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return historyMetric("models"), nil
 	}))
 	m.MapSet("magus__Job__exit", function("magus.Job.exit", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(types.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(job.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("magus__Job__wait", function("magus.Job.wait", retNull))
 	m.MapSet("magus__Job__register", function("magus.Job.register", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
@@ -1186,7 +1187,7 @@ func pureMagus() vm.Value {
 //
 // The field READ is duplicated (a dozen lines, and the packages cannot share a helper
 // without internal/dry depending on the bindings layer it exists to stand in for); the
-// RULES are not: both call types.SecretGrant.Normalize, which is where every
+// RULES are not: both call secrets.Grant.Normalize, which is where every
 // judgment about a malformed grant lives. Duplicating the extraction is safe because
 // it has no rules in it; duplicating the validation would not be. The message must
 // stay in step with the real one, including its example: the dry run is the pass most
@@ -1218,7 +1219,7 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 		}
 		return v.AsString()
 	}
-	g := types.SecretGrant{
+	g := secrets.Grant{
 		Ref:    field("ref"),
 		Host:   field("host"),
 		Header: field("header"),
@@ -1228,7 +1229,8 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 		return bad
 	}
 	if _, err := g.Normalize(); err != nil {
-		return fmt.Errorf(`magus\secret.%s: %w`, method, err)
+		// Normalize refuses only with a *secrets.GrantError; magus gives every one MGS1027.
+		return fmt.Errorf(`magus\secret.%s: %w`, method, types.WrapDiagnostic(types.SecretGrantInvalid, err, "%s", err.Error()))
 	}
 	return nil
 }

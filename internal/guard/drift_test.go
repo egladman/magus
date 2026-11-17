@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -157,12 +158,12 @@ func TestLeaseCoversWrite(t *testing.T) {
 	base, root := t.TempDir(), t.TempDir()
 	location := location{cacheDir: base, workspace: root}
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: base, Root: root})
-	row := types.Job{
+	row := jobtypes.Job{
 		ID:    "unit-a",
-		State: types.StateRunning,
-		Paths: types.JobPaths{Write: []string{"libs/ui", "app/api"}},
+		State: jobtypes.StateRunning,
+		Paths: jobtypes.Paths{Write: []string{"libs/ui", "app/api"}},
 	}
-	_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 
 	for _, tc := range []struct {

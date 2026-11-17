@@ -23,8 +23,9 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -143,8 +144,8 @@ type OutputDescriptor struct {
 
 // JobAttempt is the descriptor as a job row records the run behind ref: the one copy
 // every reader of output evidence for a job goes through.
-func (d OutputDescriptor) JobAttempt(ref string) types.JobAttempt {
-	return types.JobAttempt{
+func (d OutputDescriptor) JobAttempt(ref string) jobtypes.CapturedRun {
+	return jobtypes.CapturedRun{
 		Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
 		TimestampMs: d.TimestampMs, AttemptID: d.Attempt, DurationMs: d.DurationMs,
 		Revision: d.Revision, Dirty: d.Dirty, Lease: d.Lease, ExtraArgs: slices.Clone(d.ExtraArgs),
@@ -271,14 +272,14 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+outExt), output, privateFilePerm); err != nil {
 		return OutputDescriptor{}, err
 	}
-	descriptor, err := json.Marshal(d)
+	descriptor, err := codec.Marshal(d)
 	if err != nil {
 		return OutputDescriptor{}, err
 	}
 	// The descriptor's free-form fields (ErrMsg today) are Go-side strings that never pass
 	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
 	// rather than each field keeps a field added later covered by construction.
-	descriptor = secret.Redact(ctx, descriptor)
+	descriptor = secrets.Redact(ctx, descriptor)
 	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, privateFilePerm); err != nil {
 		return OutputDescriptor{}, err
 	}
@@ -298,7 +299,7 @@ func readDescriptor(path string) (OutputDescriptor, error) {
 		return OutputDescriptor{}, err
 	}
 	var m OutputDescriptor
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := codec.Unmarshal(data, &m); err != nil {
 		return OutputDescriptor{}, err
 	}
 	return m, nil
@@ -718,7 +719,7 @@ func readEvents(path string) ([]journal.Event, error) {
 			continue
 		}
 		var r journal.Event
-		if json.Unmarshal(line, &r) == nil {
+		if codec.Unmarshal(line, &r) == nil {
 			events = append(events, r)
 		}
 	}
@@ -1010,7 +1011,7 @@ func (s *OutputStore) InvocationEventsSince(inv string, from int64) ([]journal.E
 			continue
 		}
 		var e journal.Event
-		if json.Unmarshal(line, &e) == nil {
+		if codec.Unmarshal(line, &e) == nil {
 			events = append(events, e)
 		}
 	}
@@ -1114,7 +1115,7 @@ func readRunHead(path string) (journal.Event, bool) {
 		return journal.Event{}, false
 	}
 	var ev journal.Event
-	if json.Unmarshal(bytes.TrimSpace(line), &ev) != nil || ev.Kind != journal.KindStarted {
+	if codec.Unmarshal(bytes.TrimSpace(line), &ev) != nil || ev.Kind != journal.KindStarted {
 		return journal.Event{}, false
 	}
 	return ev, true
@@ -1146,7 +1147,7 @@ func readRunTail(path string, size int64) (journal.Event, bool) {
 			continue
 		}
 		var ev journal.Event
-		if json.Unmarshal(line, &ev) == nil && ev.Kind != "" {
+		if codec.Unmarshal(line, &ev) == nil && ev.Kind != "" {
 			return ev, true
 		}
 	}

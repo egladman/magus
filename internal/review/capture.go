@@ -12,8 +12,8 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 )
@@ -360,7 +360,7 @@ func serverDiffReview(ctx context.Context, get ServerGet) *diff.Review {
 		return nil
 	}
 	var sess diff.Review
-	if err := json.Unmarshal(body, &sess); err != nil {
+	if err := codec.Unmarshal(body, &sess); err != nil {
 		return nil
 	}
 	return &sess
@@ -397,7 +397,7 @@ func ServerReviewComments(ctx context.Context, get ServerGet) (comments []diff.R
 		Comments []diff.ReviewComment `json:"threads"`
 		Reason   string               `json:"reason"`
 	}
-	if err := json.Unmarshal(raw, &body); err != nil {
+	if err := codec.Unmarshal(raw, &body); err != nil {
 		return nil, "", false
 	}
 	if body.ID == "" {

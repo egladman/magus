@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,7 +93,7 @@ func TestDecideRefusesANonRetryableCause(t *testing.T) {
 	t.Parallel()
 	passes := []string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass"}
 	volatile := []string{"pass", "volatile", "pass", "volatile", "pass", "volatile", "pass", "pass", "pass", "pass"}
-	nonRetryable := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+	nonRetryable := types.NonRetryable(errors.New("hook is not a command"), job.RetryAfterConfig, "edit the hook")
 	tests := []struct {
 		name       string
 		history    []string

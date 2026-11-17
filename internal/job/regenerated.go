@@ -15,6 +15,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -57,7 +58,7 @@ const RegeneratedLimit = 12
 //
 // It sees declarations only. A coupling nobody declares, such as a version constant a test
 // pins, is not here.
-func RegeneratedOutside(root string, row types.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []RegeneratedOutput {
+func RegeneratedOutside(root string, row job.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []RegeneratedOutput {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
 	}
@@ -204,24 +205,24 @@ func regeneratedLines(outputs []RegeneratedOutput) []string {
 // way covers reads a write: the output's pattern is the path asked about, so
 // `docs/rules/*.md` holds `docs/rules/*.md` and `docs` holds both. A deny path touching
 // the output takes some of it back out.
-func outputInside(row types.Job, g types.Glob) bool {
-	if slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return types.PathsIntersect(d, g.Pattern) }) {
+func outputInside(row job.Job, g types.Glob) bool {
+	if slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return job.PathsIntersect(d, g.Pattern) }) {
 		return false
 	}
 	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
-		p, decl := types.SplitClaim(w)
-		return decl == "" && coversPath(p, g.Pattern)
+		p, decl := job.SplitClaim(w)
+		return decl == "" && job.CoversPath(p, g.Pattern)
 	})
 }
 
 // writtenFiles expands the row's write paths into the files they name: a glob against the
 // tree, a literal directory to the files beneath it, and any other literal as itself,
 // since a job may create the file it names. A file a deny path excludes whole is dropped.
-func writtenFiles(root string, row types.Job) []string {
+func writtenFiles(root string, row job.Job) []string {
 	tree := os.DirFS(root)
 	var out []string
 	for _, entry := range row.Paths.Write {
-		p, _ := types.SplitClaim(entry)
+		p, _ := job.SplitClaim(entry)
 		if p = path.Clean(p); p == "" {
 			continue
 		}
@@ -235,7 +236,7 @@ func writtenFiles(root string, row types.Job) []string {
 			files = []string{p}
 		}
 		for _, f := range files {
-			if _, denied := matching(WholeFileDenies(row.Paths.Deny, f), f); !denied && !slices.Contains(out, f) {
+			if _, denied := job.Matching(WholeFileDenies(row.Paths.Deny, f), f); !denied && !slices.Contains(out, f) {
 				out = append(out, f)
 			}
 		}
@@ -271,7 +272,7 @@ func targetSources(p *types.Project, target string) (sources []types.Glob, decla
 func sourcedBy(sources []types.Glob, written []string) (best types.Glob, specificity int, ok bool) {
 	specificity = -1
 	for _, g := range sources {
-		if n := len(types.LiteralPrefix(g.Pattern)); n > specificity && slices.ContainsFunc(written, g.Match) {
+		if n := len(job.LiteralPrefix(g.Pattern)); n > specificity && slices.ContainsFunc(written, g.Match) {
 			best, specificity = g, n
 		}
 	}

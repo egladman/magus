@@ -4,11 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 )
 
 // notesFile is the location of a region in a path no diff driver covers: the whole file.
-var notesFile = []Location{{Path: "notes.txt"}}
+var notesFile = []job.Location{{Path: "notes.txt"}}
 
 func TestMergeThreeWay(t *testing.T) {
 	cases := []struct {
@@ -93,11 +94,11 @@ func TestMergeThreeWayNamesRegionsByDeclaration(t *testing.T) {
 	got, ok := MergeThreeWay("a.go", []byte(base), []byte(ours), []byte(theirs))
 	assert.False(t, ok)
 	assert.Equal(t, []MergeRegion{
-		{Locations: []Location{{Path: "a.go", Declaration: "func A() {"}}, Kind: MergeBothAdded},
-		{Locations: []Location{{Path: "a.go", Declaration: "func B() {"}}, Kind: 0},
+		{Locations: []job.Location{{Path: "a.go", Declaration: "func A() {"}}, Kind: MergeBothAdded},
+		{Locations: []job.Location{{Path: "a.go", Declaration: "func B() {"}}, Kind: 0},
 	}, got.Regions)
 	assert.Equal(t, "a.go#func A() {: kind 2; a.go#func B() {: not settled", got.Label())
-	assert.Equal(t, []Location{{Path: "a.go", Declaration: "func B() {"}}, got.Unsettled())
+	assert.Equal(t, []job.Location{{Path: "a.go", Declaration: "func B() {"}}, got.Unsettled())
 
 	md, ok := MergeThreeWay("CHANGELOG.md", []byte("# Log\n\n## Unreleased\n"), []byte("# Log\n\n## Unreleased\n- a\n"), []byte("# Log\n\n## Unreleased\n- b\n"))
 	assert.True(t, ok)

@@ -24,14 +24,16 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
@@ -153,7 +155,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	worker := narrowLease()
 	worker.Parent = "harness"
 	_, err = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
-		Update(t.Context(), worker.ID, func(cur *types.Job) { *cur = worker })
+		Update(t.Context(), worker.ID, func(cur *jobtypes.Job) { *cur = worker })
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, worker.ID)
 
@@ -165,7 +167,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trail.ReadRecent(cacheDir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
 	assert.Equal(t, worker.ID, events[0].Lease)
@@ -205,14 +207,14 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 			require.NotNil(t, rule)
 			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
-			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, got)
+			assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "Name a model."}, got)
 
 			command, err := guard.LoadApprovedCommandRule(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, command)
 			got, err = command(t.Context(), types.CommandRequest{Command: "ls", Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
-			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Not in this repository."}, got)
+			assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "Not in this repository."}, got)
 		})
 	}
 }
@@ -267,7 +269,7 @@ const spawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","
 
 // judgeSpawnAt runs one spawn through the hook's own dependencies with the process sitting
 // in root, as the shipped hook does.
-func judgeSpawnAt(t *testing.T, root string) types.GuardJudgment {
+func judgeSpawnAt(t *testing.T, root string) verdict.Judgment {
 	t.Helper()
 	testkit.Isolate(t)
 	t.Chdir(root)
@@ -297,9 +299,9 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	globalCfg.RequiredVersion = ">= 99.0.0"
 
 	v := judgeSpawnAt(t, root)
-	assert.Equal(t, types.GuardJudgment{
+	assert.Equal(t, verdict.Judgment{
 		APIVersion: v.APIVersion,
-		Decision:   "deny",
+		Decision:   verdict.Deny,
 		Reason:     "Name a model.",
 		Rule:       v.Rule, // the rule's catalogued name is pinned by the guard's own tests
 		Lease:      v.Lease,
@@ -319,16 +321,16 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	require.Error(t, err)
 
 	v := judgeSpawnAt(t, root)
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.True(t, strings.HasPrefix(v.Reason, "Name a model.\n\n"), v.Reason)
 	assert.Contains(t, v.Reason, "The working tree's magus\\guard.spawn rule judged nothing: the magusfile failed to load")
 
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
 	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Contains(t, v.Reason, "Not in this repository.")
-	assert.Equal(t, types.GuardJudgment{
+	assert.Equal(t, verdict.Judgment{
 		APIVersion: v.APIVersion,
-		Decision:   "deny",
+		Decision:   verdict.Deny,
 		Reason:     v.Reason, // checked above
 		Rule:       "workspace:command",
 		Lease:      v.Lease,
@@ -360,13 +362,13 @@ magus\guard.command(p\judge);
 	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"policy/a.buzz":  rule("a", `magus\guard.deny("Not in this repository.")`),
-		"policy/b.buzz":  rule("b", `magus\guard.allow()`),
+		"policy/b.buzz":  rule("b", `magus\guard.defer()`),
 		"magusfile.buzz": importing("a"),
 	})
 	root, write := repo.Root(), repo.Write
 
 	write("magusfile.buzz", importing("b"))
-	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
+	write("policy/a.buzz", rule("a", `magus\guard.defer()`))
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 
@@ -377,7 +379,7 @@ magus\guard.command(p\judge);
 	require.NotNil(t, approved)
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardDeny, got.Decision)
+	assert.Equal(t, verdict.Deny, got.Decision)
 }
 
 // A write to the root magusfile whose judgment ran out of time, its rules loaded through the
@@ -385,12 +387,12 @@ magus\guard.command(p\judge);
 // committed rule can be fixed, and is refused once a change is pending.
 func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	testkit.Isolate(t)
-	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.defer();\n});\n"
 	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
 	root := repo.Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	judge := func() types.GuardJudgment {
+	judge := func() verdict.Judgment {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 		ctx = guard.WithLocation(ctx, t.TempDir(), root, root)
@@ -400,12 +402,12 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	}
 
 	v := judge()
-	assert.Equal(t, "advise", v.Decision, v.Reason)
+	assert.Equal(t, verdict.Advise, v.Decision, v.Reason)
 	assert.Contains(t, v.Context, "lets it through, because the guard loads this file itself")
 
 	repo.Write("magusfile.buzz", allow+"// pending\n")
 	v = judge()
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
 }
 
@@ -434,7 +436,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	require.NotNil(t, approved)
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardDeny, got.Decision)
+	assert.Equal(t, verdict.Deny, got.Decision)
 }
 
 // A repeated deny cites a grd ref the reader resolves with `query output` in the checkout
@@ -453,12 +455,12 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+
 		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
-	judge := func() types.GuardJudgment {
+	judge := func() verdict.Judgment {
 		ctx := t.Context()
 		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}
 	first := judge()
-	require.Equal(t, "deny", first.Decision, first.Reason)
+	require.Equal(t, verdict.Deny, first.Decision, first.Reason)
 	again := judge()
 	ref := regexp.MustCompile(`grd[0-9a-f]{16}`).FindString(again.Reason)
 	require.NotEmpty(t, ref, "a repeat deny cites its full verdict: %s", again.Reason)
@@ -470,7 +472,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	primaryCache, err := magus.ResolveCacheDir(primary)
 	require.NoError(t, err)
-	_, err = trail.ReadBlob(primaryCache, ref)
+	_, err = trailtypes.ReadBlob(primaryCache, ref)
 	assert.NoError(t, err, "the primary checkout holds a copy, which every checkout's query output searches")
 }
 
@@ -532,7 +534,7 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 		"lib/policy.buzz": fmt.Sprintf(rule, `deny("no")`),
 	})
 	repo.Write("magusfile.buzz", magusfile+"// pending\n")
-	repo.Write("lib/policy.buzz", fmt.Sprintf(rule, "allow()"))
+	repo.Write("lib/policy.buzz", fmt.Sprintf(rule, "defer()"))
 	chunks := func() []string {
 		var out []string
 		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
@@ -560,7 +562,7 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 	require.NotNil(t, approved)
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardDeny, got.Decision, "the committed rule answers")
+	assert.Equal(t, verdict.Deny, got.Decision, "the committed rule answers")
 	assert.Equal(t, worktree, chunks(), "compiling the committed sources stores nothing")
 }
 
@@ -591,27 +593,27 @@ func (s *staleConfigSuite) SetupTest() {
 	s.T().Cleanup(func() { guardRoot, global = savedRoot, savedFlags })
 }
 
-func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
+func (s *staleConfigSuite) judge(command string) verdict.Judgment {
 	failure := types.DiagnosticErrorf(types.UnknownConfigKey,
 		"magus.yaml has a key this magus does not know:\n  - checkout  (line 1)")
 	ctx := guard.WithStaleConfig(s.T().Context(), failure)
 	var out bytes.Buffer
 	_ = shellCommandWithErrorWriter(ctx, strings.NewReader(""), &out, io.Discard, []string{"-o", "json", command})
-	var v types.GuardJudgment
-	s.Require().NoError(json.Unmarshal(out.Bytes(), &v), out.String())
+	var v verdict.Judgment
+	s.Require().NoError(codec.Unmarshal(out.Bytes(), &v), out.String())
 	return v
 }
 
 func (s *staleConfigSuite) TestAStateChangeIsRefusedAsUnjudged() {
 	v := s.judge("touch notes.txt")
-	s.Equal("deny", v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
 	s.Contains(v.Reason, "hack/dev/bootstrap-checkout.buzz -- --here --verify-ready")
 }
 
 func (s *staleConfigSuite) TestAReadIsRefusedToo() {
 	v := s.judge("cat README.md")
-	s.Equal("deny", v.Decision, "no policy loaded to say which reads the workspace guards")
+	s.Equal(verdict.Deny, v.Decision, "no policy loaded to say which reads the workspace guards")
 }
 
 func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
@@ -631,28 +633,28 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	}
 	body, err := io.ReadAll(r)
 	s.Require().NoError(err)
-	var v types.GuardJudgment
-	s.Require().NoError(json.Unmarshal(body, &v), string(body))
+	var v verdict.Judgment
+	s.Require().NoError(codec.Unmarshal(body, &v), string(body))
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
-	s.Equal("deny", v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
 }
 
 func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
-	s.NotEqual("deny", v.Decision, v.Reason)
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
 }
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the
 // multi-agent skill hands out, and the shape the gate deny is scoped to. Mirrors
 // internal/guard's own narrowLease, unexported there.
-func narrowLease() types.Job {
-	return types.Job{
+func narrowLease() jobtypes.Job {
+	return jobtypes.Job{
 		ID:         "harness/lease-scoped-deny",
-		Agent:      typesagent.Instructed("lease-scoped denies in the guard"),
-		Paths:      types.JobPaths{Write: []string{"cmd/magus/**"}},
+		Agent:      jobtypes.Instructed("lease-scoped denies in the guard"),
+		Paths:      jobtypes.Paths{Write: []string{"cmd/magus/**"}},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
-		State:      types.StateRunning,
+		State:      jobtypes.StateRunning,
 		Registered: 1,
 	}
 }

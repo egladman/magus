@@ -5,24 +5,24 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // PinOrAdvance is `magus job pin` and `magus job advance`, which verb says, over each of
 // ids. It returns the rows the verb changed.
-func PinOrAdvance(ctx context.Context, store *Store, verb string, ids []string) ([]types.Job, error) {
-	var rows []types.Job
+func PinOrAdvance(ctx context.Context, store *Store, verb string, ids []string) ([]job.Job, error) {
+	var rows []job.Job
 	for _, id := range ids {
 		var (
-			changed []types.Job
+			changed []job.Job
 			err     error
 		)
 		if verb == "pin" {
 			changed, err = store.PinBinary(ctx, id)
 		} else {
-			var row types.Job
+			var row job.Job
 			row, err = store.AdvanceAuthority(ctx, id)
-			changed = []types.Job{row}
+			changed = []job.Job{row}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("magus job %s: %w", verb, err)
@@ -33,7 +33,7 @@ func PinOrAdvance(ctx context.Context, store *Store, verb string, ids []string) 
 }
 
 // PrintPinned writes one line per row PinOrAdvance changed.
-func PrintPinned(w io.Writer, verb string, rows []types.Job) {
+func PrintPinned(w io.Writer, verb string, rows []job.Job) {
 	for _, row := range rows {
 		if verb == "pin" {
 			fmt.Fprintf(w, "pinned %s for %s: %s\n", row.Worktree.Binary, row.ID, row.Worktree.BinaryDigest)

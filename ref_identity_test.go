@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -37,7 +38,7 @@ func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	opts := []Option{WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling)}
+	opts := []Option{WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling)}
 	if len(defaultCharms) > 0 {
 		opts = append(opts, workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
 	}
@@ -160,7 +161,7 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "inspect")
 	require.NoError(t, m.load(context.Background()), "load")
 
@@ -198,7 +199,7 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -306,7 +307,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		reg.RegisterProject(projPath, WithSpell(spellName))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}), WithSpawnRule(tier.Ceiling))
 	require.NoError(b, err, "Open")
 	b.Cleanup(func() { _ = m.Close() })
 	return m

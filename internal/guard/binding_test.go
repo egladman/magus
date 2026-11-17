@@ -12,8 +12,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // ExitedHolderBindingSuite pins decision 127: a holder's own `job exit` keeps
@@ -35,9 +35,9 @@ func TestExitedHolderBindingSuite(t *testing.T) {
 const heldJob = "held-job"
 
 func (s *ExitedHolderBindingSuite) SetupTest() {
-	held := types.Job{ID: heldJob, Agent: agent.Instructed("land the held package"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/held/**"}},
-		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1}
-	next := types.Job{ID: "next-job", Agent: agent.Instructed("the next one"), State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/next/**"}}}
+	held := jobtypes.Job{ID: heldJob, Agent: jobtypes.Instructed("land the held package"), State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/held/**"}},
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: jobtypes.BaseMatch, Registered: 1}
+	next := jobtypes.Job{ID: "next-job", Agent: jobtypes.Instructed("the next one"), State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"internal/next/**"}}}
 	s.layers, s.root = fleetLayers(s.T(), held, next)
 	s.at = hookLocation(s.testContext(), Dependencies{})
 	s.who = hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
@@ -46,7 +46,7 @@ func (s *ExitedHolderBindingSuite) SetupTest() {
 }
 
 // judge runs command as the holder, or as its root session when byRoot.
-func (s *ExitedHolderBindingSuite) judge(command string, byRoot bool) types.GuardJudgment {
+func (s *ExitedHolderBindingSuite) judge(command string, byRoot bool) verdict.Judgment {
 	by := s.who
 	if byRoot {
 		by.Agent = ""
@@ -54,17 +54,17 @@ func (s *ExitedHolderBindingSuite) judge(command string, byRoot bool) types.Guar
 	return Judge(s.testContext(), Dependencies{}, Request{Input: bashCall(s.T(), by.Session, by.Agent, command), Host: by.Host})
 }
 
-func (s *ExitedHolderBindingSuite) setState(state types.JobState) {
-	_, err := s.store.Update(s.testContext(), heldJob, func(cur *types.Job) { cur.State = state })
+func (s *ExitedHolderBindingSuite) setState(state jobtypes.State) {
+	_, err := s.store.Update(s.testContext(), heldJob, func(cur *jobtypes.Job) { cur.State = state })
 	s.Require().NoError(err)
 }
 
 // exitOwnJob files the holder's result and moves the row to exited, as the
 // store does once the line runs.
 func (s *ExitedHolderBindingSuite) exitOwnJob() {
-	v := s.judge("./magus job exit held-job --stdin <<'EOF'\n{\"api_version\":\"magus.job-result/v1alpha1\",\"changed_paths\":[],\"unresolved_risks\":[]}\nEOF", false)
-	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
-	s.setState(types.StateExited)
+	v := s.judge("./magus job exit held-job --stdin <<'EOF'\n{\"api_version\":\"safetyscissors.job-result/v1alpha1\",\"changed_paths\":[],\"unresolved_risks\":[]}\nEOF", false)
+	s.Require().NotEqual(verdict.Deny, v.Decision, v.Reason)
+	s.setState(jobtypes.StateExited)
 }
 
 func (s *ExitedHolderBindingSuite) TestOwnExitKeepsTheBinding() {
@@ -77,34 +77,34 @@ func (s *ExitedHolderBindingSuite) TestOwnClientExitKeepsTheBinding() {
 		"agent_id": s.who.Agent, "agent_type": "general-purpose",
 		"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; magus\job("held-job").exit();`}})
 	v := Judge(s.testContext(), Dependencies{}, Request{Input: input, Host: s.who.Host})
-	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
-	s.setState(types.StateExited)
+	s.Require().NotEqual(verdict.Deny, v.Decision, v.Reason)
+	s.setState(jobtypes.StateExited)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestPassedWaitReleasesTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
-	s.setState(types.StatePass)
-	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job wait held-job", true).Decision)
+	s.setState(jobtypes.StatePass)
+	s.NotEqual(verdict.Deny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestFailedWaitReleasesTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
-	s.setState(types.StateFail)
-	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job wait held-job", true).Decision)
+	s.setState(jobtypes.StateFail)
+	s.NotEqual(verdict.Deny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestRejectedWaitKeepsTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
-	s.setState(types.StateExited)
-	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job wait held-job", true).Decision)
+	s.setState(jobtypes.StateExited)
+	s.NotEqual(verdict.Deny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestRmReleasesTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("magus job rm held-job --force", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("magus job rm held-job --force", false).Decision)
 	_, err := s.store.Delete(s.testContext(), heldJob, true)
 	s.Require().NoError(err)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
@@ -113,7 +113,7 @@ func (s *ExitedHolderBindingSuite) TestRmReleasesTheBinding() {
 // The 10-29 trail lost the lease at a `job exit --schema` read, which only
 // prints the schema.
 func (s *ExitedHolderBindingSuite) TestExitSchemaReadKeepsTheBinding() {
-	s.Require().NotEqual(decisionDeny, s.judge("./magus job exit held-job --schema", false).Decision)
+	s.Require().NotEqual(verdict.Deny, s.judge("./magus job exit held-job --schema", false).Decision)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }
 
@@ -140,7 +140,7 @@ func (s *ExitedHolderBindingSuite) TestGlobalDryRunWaitKeepsTheBinding() {
 func (s *ExitedHolderBindingSuite) TestExecOfANewJobAfterOwnExitRebinds() {
 	s.exitOwnJob()
 	v := s.judge("./magus job exec next-job", false)
-	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.Require().NotEqual(verdict.Deny, v.Decision, v.Reason)
 	s.Equal(job.Binding{Job: "next-job"}, boundJob(s.who, s.at))
 }
 
@@ -180,16 +180,16 @@ func (s *BindOnExecSuite) SetupTest() {
 	s.here, err = workspace.FindRoot(s.here)
 	s.Require().NoError(err)
 	commitCheckout(s.T(), s.here)
-	ended := types.EndReasonSessionEnded
-	rows := []types.Job{
-		{ID: "owned-elsewhere", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: elsewhere, Made: true}},
-		{ID: "held-elsewhere", State: types.StateRunning, CheckoutRoot: elsewhere, Registered: 1},
-		{ID: "passed", State: types.StatePass, CheckoutRoot: s.here, Registered: 1},
-		{ID: "free", State: types.StateDeclared},
-		{ID: "paused", State: types.StateDeclared, Paused: 1},
-		{ID: "stopped-here", State: types.StateRunning, CheckoutRoot: s.here, Registered: 1, HolderStopped: 1},
-		{ID: "ended-here", State: types.StateNoReturn, EndReason: ended, CheckoutRoot: s.here, Registered: 1},
-		{ID: "ended-elsewhere", State: types.StateNoReturn, EndReason: ended, CheckoutRoot: elsewhere, Registered: 1},
+	ended := jobtypes.EndReasonSessionEnded
+	rows := []jobtypes.Job{
+		{ID: "owned-elsewhere", State: jobtypes.StateDeclared, Worktree: &jobtypes.Worktree{Root: elsewhere, Made: true}},
+		{ID: "held-elsewhere", State: jobtypes.StateRunning, CheckoutRoot: elsewhere, Registered: 1},
+		{ID: "passed", State: jobtypes.StatePass, CheckoutRoot: s.here, Registered: 1},
+		{ID: "free", State: jobtypes.StateDeclared},
+		{ID: "paused", State: jobtypes.StateDeclared, Paused: 1},
+		{ID: "stopped-here", State: jobtypes.StateRunning, CheckoutRoot: s.here, Registered: 1, HolderStopped: 1},
+		{ID: "ended-here", State: jobtypes.StateNoReturn, EndReason: ended, CheckoutRoot: s.here, Registered: 1},
+		{ID: "ended-elsewhere", State: jobtypes.StateNoReturn, EndReason: ended, CheckoutRoot: elsewhere, Registered: 1},
 	}
 	s.layers, _ = fleetLayers(s.T())
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: rows}))
@@ -249,7 +249,7 @@ func (s *BindOnExecSuite) TestARowEndedWithItsSessionHereBinds() {
 func (s *ExitedHolderBindingSuite) TestForkOutsideTheTreeAfterOwnExitIsRefused() {
 	s.exitOwnJob()
 	v := s.judge("magus job fork other-job --parent other --read-only", false)
-	s.Equal(decisionDeny, v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 }
 
 func (s *ExitedHolderBindingSuite) testContext() context.Context { return s.layers.of(s.T()) }

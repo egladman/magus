@@ -534,9 +534,9 @@ spell rust
 spell system-keychain
 spell typescript
 store magus.event/v1alpha1
-store magus.job-result/v1alpha1
-store magus.job/v1alpha1
 store magus.output-record/v1alpha1
+store safetyscissors.job-result/v1alpha1
+store safetyscissors.job/v1alpha1
 subcommand affected
 subcommand agent
 subcommand buzz

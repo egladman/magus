@@ -30,6 +30,8 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -421,7 +423,7 @@ func (h *Host) Start(ctx context.Context) {
 	cfg := h.Config
 	// The BAGGAGE of whoever started the daemon names nobody it serves. Every run it
 	// adopts restamps its client's lease, and work no client stamped acts under none.
-	ctx = types.WithJobLease(ctx, "")
+	ctx = jobtypes.WithLease(ctx, "")
 	h.started = time.Now()
 	knowledge.SetReadCacheLimit(readCacheBytes)
 	n := cfg.Concurrency
@@ -573,17 +575,17 @@ func (h *Host) recordJobActivity(ctx context.Context, args []string, dur time.Du
 		}
 		root = resolved
 	}
-	ev := trail.Event{
+	ev := trailtypes.Event{
 		Ts:         time.Now().Add(-dur).UnixMilli(),
-		Kind:       trail.KindJob,
-		Origin:     types.Origin{EntryPoint: types.EntryPointServer},
+		Kind:       trailtypes.KindJob,
+		Origin:     jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 		Workspace:  root,
 		Action:     job.ActionString(args),
-		Outcome:    trail.OutcomeOK,
+		Outcome:    trailtypes.OutcomeOK,
 		DurationMs: dur.Milliseconds(),
 	}
 	if err != nil {
-		ev.Outcome = trail.OutcomeError
+		ev.Outcome = trailtypes.OutcomeError
 		ev.Error = err.Error()
 	}
 	trail.Append(ctx, base, ev)
@@ -605,14 +607,14 @@ func completeJobRow(ctx context.Context, store *job.Store, args []string, dur ti
 		return // an adopted run rather than one of the server's own, so there is no row
 	}
 	catalog := job.All()[i]
-	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
-	if _, err := store.Update(ctx, catalog.Name, func(row *types.Job) {
-		row.State = types.StatePass
+	ctx = trail.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
+	if _, err := store.Update(ctx, catalog.Name, func(row *jobtypes.Job) {
+		row.State = jobtypes.StatePass
 		if jobErr != nil {
-			row.State = types.StateFail
+			row.State = jobtypes.StateFail
 		}
 		if row.LastRun == nil {
-			row.LastRun = &types.JobRun{}
+			row.LastRun = &jobtypes.Run{}
 		}
 		row.LastRun.Ended = time.Now().UnixMilli()
 		row.LastRun.DurationMs = dur.Milliseconds()

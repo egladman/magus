@@ -15,14 +15,16 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -33,12 +35,12 @@ import (
 type commandRuleProbe struct {
 	asked  []types.CommandRequest
 	gates  []hint.Gate
-	answer types.GuardVerdict
+	answer verdict.Verdict
 	err    error
 }
 
 func (p *commandRuleProbe) rule() workspace.CommandRule {
-	return func(_ context.Context, req types.CommandRequest, facts hint.Gate) (types.GuardVerdict, error) {
+	return func(_ context.Context, req types.CommandRequest, facts hint.Gate) (verdict.Verdict, error) {
 		p.asked = append(p.asked, req)
 		p.gates = append(p.gates, facts)
 		return p.answer, p.err
@@ -57,7 +59,7 @@ func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 	require.NotEmpty(t, at.dir)
 	probe := &commandRuleProbe{}
 	v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, verdict.Defer, v.Decision)
 	require.Len(t, probe.asked, 1)
 	assert.Equal(t, types.CommandRequest{
 		Host: "claude-code", Session: "8f2c6a1e",
@@ -117,7 +119,7 @@ func TestCommandRuleSeesABareCommand(t *testing.T) {
 // A worker's request carries its lease row, resolved the way every lease-scoped rule
 // resolves it.
 func TestCommandRuleSeesTheWorkersLease(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
+	row := jobtypes.Job{ID: "wave/worker", Agent: jobtypes.Instructed("the guard"), Paths: jobtypes.Paths{Write: []string{"internal/guard/**"}}, State: jobtypes.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}, row.ID)
 
@@ -132,14 +134,14 @@ func TestCommandRuleSeesTheWorkersLease(t *testing.T) {
 
 // A worker's request names the checkout its row owns, and not one another job's fork made.
 func TestCommandRuleSeesTheCheckoutsTheCallerOwns(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
-	other := types.Job{ID: "wave/other", Agent: agent.Instructed("the docs"), Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StateRunning, Registered: 1}
+	row := jobtypes.Job{ID: "wave/worker", Agent: jobtypes.Instructed("the guard"), Paths: jobtypes.Paths{Write: []string{"internal/guard/**"}}, State: jobtypes.StateRunning, Registered: 1}
+	other := jobtypes.Job{ID: "wave/other", Agent: jobtypes.Instructed("the docs"), Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row, other)
 	at, _ := ctx.Value(locationKey{}).(location)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	owned, foreign := t.TempDir(), t.TempDir()
 	for id, root := range map[string]string{row.ID: owned, other.ID: foreign} {
-		_, err := store.RecordWorktree(ctx, id, types.JobWorktree{Root: root, Source: at.workspace})
+		_, err := store.RecordWorktree(ctx, id, jobtypes.Worktree{Root: root, Source: at.workspace})
 		require.NoError(t, err)
 	}
 	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}, row.ID)
@@ -241,34 +243,34 @@ func TestCommandInvocations(t *testing.T) {
 func TestCommandRuleStrengthensOnly(t *testing.T) {
 	t.Run("a built-in deny stands", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
-		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
+		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Defer}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "git stash", Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision)
+		assert.Equal(t, verdict.Deny, v.Decision)
 		assert.NotEqual(t, workspaceCommandRule, v.Rule)
 		assert.Empty(t, probe.asked)
 	})
 	t.Run("a workspace deny blocks", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
-		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Ask for the board once."}}
+		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "Ask for the board once."}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh run watch 1", Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v))
 		assert.Contains(t, v.Reason, "Ask for the board once.")
 
-		commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+		commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 		require.Len(t, commands, 1)
 		assert.Equal(t, decidedByWorktree, commands[0].DecidedBy)
 	})
 	t.Run("a workspace advice fills a pass", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
-		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Batch-poll instead."}}
+		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Batch-poll instead."}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh pr checks 1", Host: "claude-code"})
-		assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: "advise", Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
+		assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: verdict.Advise, Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
 	})
 	t.Run("an allow changes nothing", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
-		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
+		probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Defer}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code"})
-		assert.Equal(t, "pass", v.Decision)
+		assert.Equal(t, verdict.Defer, v.Decision)
 		require.Len(t, probe.asked, 1)
 	})
 }
@@ -290,7 +292,7 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 	again := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, first, again)
 
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.NotEmpty(t, commands)
 	assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
 		readCommandBlob(t, cacheDir, commands[0]).RuleFailures)
@@ -301,30 +303,30 @@ type commandBlob struct {
 	RuleFailures []trail.RuleFailure `json:"rule_failures"`
 }
 
-func readCommandBlob(t *testing.T, cacheDir string, e trail.Event) commandBlob {
+func readCommandBlob(t *testing.T, cacheDir string, e trailtypes.Event) commandBlob {
 	t.Helper()
-	body, err := trail.ReadBlob(cacheDir, e.ResponseRef)
+	body, err := trailtypes.ReadBlob(cacheDir, e.ResponseRef)
 	require.NoError(t, err)
 	var got commandBlob
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	return got
 }
 
 // The approved rule and the working-tree rule both run and the stricter answer stands, so
 // an agent's edit to the policy can tighten it but not loosen it.
 func TestCommandRulesKeepTheStricterSide(t *testing.T) {
-	deny := types.GuardVerdict{Decision: types.GuardDeny, Reason: "no watching"}
-	allow := types.GuardVerdict{Decision: types.GuardAllow}
+	deny := verdict.Verdict{Decision: verdict.Deny, Reason: "no watching"}
+	allow := verdict.Verdict{Decision: verdict.Defer}
 	cases := []struct {
 		name           string
-		live, approved *types.GuardVerdict
-		want           string
+		live, approved *verdict.Verdict
+		want           verdict.Decision
 		decidedBy      string
 	}{
-		{"a tightening in the working tree applies at once", &deny, &allow, "deny", decidedByWorktree},
-		{"a loosening in the working tree waits for approval", &allow, &deny, "deny", decidedByApproved},
-		{"a rule deleted from the working tree still answers from the approved side", nil, &deny, "deny", decidedByApproved},
-		{"no approved side runs the working tree alone", &allow, nil, "pass", ""},
+		{"a tightening in the working tree applies at once", &deny, &allow, verdict.Deny, decidedByWorktree},
+		{"a loosening in the working tree waits for approval", &allow, &deny, verdict.Deny, decidedByApproved},
+		{"a rule deleted from the working tree still answers from the approved side", nil, &deny, verdict.Deny, decidedByApproved},
+		{"no approved side runs the working tree alone", &allow, nil, verdict.Defer, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -340,7 +342,7 @@ func TestCommandRulesKeepTheStricterSide(t *testing.T) {
 			v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
 
-			commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 			require.Len(t, commands, 1)
 			assert.Equal(t, tc.decidedBy, commands[0].DecidedBy)
 		})
@@ -350,13 +352,13 @@ func TestCommandRulesKeepTheStricterSide(t *testing.T) {
 // A working tree that fails to load cannot switch the approved command rule off.
 func TestBrokenWorkingTreeStillRunsTheApprovedCommandRule(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	approved := (&commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no watching"}}).rule()
+	approved := (&commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "no watching"}}).rule()
 	deps := Dependencies{
 		LoadFailure:         errors.New("magusfile.buzz:3:1: expected expression"),
 		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return approved, nil },
 	}
 	v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Contains(t, v.Reason, "no watching")
 }
 
@@ -368,12 +370,12 @@ func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
 		<-ctx.Done()
 		return nil, nil
 	}}
-	judge := func(t *testing.T, command string) (types.GuardJudgment, []trail.RuleFailure) {
+	judge := func(t *testing.T, command string) (verdict.Judgment, []trail.RuleFailure) {
 		ctx, cacheDir := spawnFixture(t)
 		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 		defer cancel()
 		v := Judge(ctx, slow, Request{Input: command, Host: "claude-code", Session: "s1"})
-		commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+		commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 		require.Len(t, commands, 1)
 		return v, readCommandBlob(t, cacheDir, commands[0]).RuleFailures
 	}
@@ -394,13 +396,13 @@ func TestSlowWorkingTreeCommandRuleIsNamedWithItsBudget(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 	defer cancel()
-	deps := Dependencies{CommandRule: func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	deps := Dependencies{CommandRule: func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 		<-ctx.Done()
-		return types.GuardVerdict{}, ctx.Err()
+		return verdict.Verdict{}, ctx.Err()
 	}}
 
 	v := Judge(ctx, deps, Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, verdict.Deny, v.Decision)
 	assert.Regexp(t, `the working tree's magus\\guard\.command rule did not answer within \d+ms`, v.Reason)
 }
 
@@ -476,16 +478,16 @@ func TestCommandRuleSeesAPushItCannotPlace(t *testing.T) {
 // advisory does on one.
 func TestCommandRuleAdviceStandsDownOnAServedCommand(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Batch-poll instead."}}
+	probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Batch-poll instead."}}
 	v, rec := gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
-		types.GuardJudgment{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
-	assert.Equal(t, "pass", v.Decision)
+		verdict.Judgment{Decision: verdict.Defer}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
+	assert.Equal(t, verdict.Defer, v.Decision)
 	assert.Empty(t, rec.decidedBy)
 
-	probe.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}
+	probe.answer = verdict.Verdict{Decision: verdict.Deny, Reason: "no"}
 	v, _ = gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
-		types.GuardJudgment{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
-	assert.Equal(t, "deny", v.Decision, "its deny still holds")
+		verdict.Judgment{Decision: verdict.Defer}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
+	assert.Equal(t, verdict.Deny, v.Decision, "its deny still holds")
 }
 
 // slowCompiles is a telemetry provider for one load that counts its Buzz compile phases and
@@ -531,7 +533,7 @@ func TestColdApprovedCompileLapsesOnlyOnce(t *testing.T) {
 			if rule == nil {
 				return nil, err
 			}
-			return func(ctx context.Context) (types.GuardVerdict, error) {
+			return func(ctx context.Context) (verdict.Verdict, error) {
 				return rule(ctx, types.CommandRequest{Command: "touch notes.txt"}, hint.NewGate(t.TempDir(), "s"))
 			}, err
 		}
@@ -553,7 +555,7 @@ func TestColdApprovedCompileLapsesOnlyOnce(t *testing.T) {
 	first := hook(&slowCompiles{free: free, slow: 2 * share})
 	require.NotNil(t, first.lapse, "the cold compile runs past the hook's deadline")
 	assert.Equal(t, rulesAnswer{
-		answer:   types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"},
+		answer:   verdict.Verdict{Decision: verdict.Deny, Reason: "committed"},
 		by:       decidedByApproved,
 		answered: []string{decidedByApproved},
 	}, hook(&slowCompiles{free: free, slow: 2 * share}), "the next hook answers")
@@ -577,24 +579,24 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 	root := repo.Root()
 	worktreeStore := filepath.Join(cache, "magus", "buzz-bytecode")
 	approvedStore := filepath.Join(cache, "magus", "buzz-bytecode-approved")
-	decide := func(rule workspace.CommandRule) types.GuardDecision {
+	decide := func(rule workspace.CommandRule) verdict.Decision {
 		t.Helper()
 		require.NotNil(t, rule)
 		got, err := rule(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 		require.NoError(t, err)
 		return got.Decision
 	}
-	judge := func(edit string) []types.GuardDecision {
+	judge := func(edit string) []verdict.Decision {
 		t.Helper()
 		repo.Write("lib/policy.buzz", fmt.Sprintf(rule, edit))
 		rules, err := LoadWorkspaceRules(t.Context(), root, types.VCSOptions{})
 		require.NoError(t, err)
 		approved, err := rules.ApprovedCommandRule(t.Context())
 		require.NoError(t, err)
-		return []types.GuardDecision{decide(rules.CommandRule()), decide(approved)}
+		return []verdict.Decision{decide(rules.CommandRule()), decide(approved)}
 	}
 
-	assert.Equal(t, []types.GuardDecision{types.GuardAllow, types.GuardDeny}, judge("allow()"))
+	assert.Equal(t, []verdict.Decision{verdict.Defer, verdict.Deny}, judge("defer()"))
 
 	moved := 0
 	require.NoError(t, filepath.WalkDir(worktreeStore, func(path string, d fs.DirEntry, err error) error {
@@ -614,7 +616,7 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 	}))
 	require.Positive(t, moved, "the unedited magusfile's working-tree chunk has the approved chunk's name")
 
-	assert.Equal(t, []types.GuardDecision{types.GuardAdvise, types.GuardDeny}, judge(`advise("edited again")`))
+	assert.Equal(t, []verdict.Decision{verdict.Advise, verdict.Deny}, judge(`advise("edited again")`))
 }
 
 // committedRules is a root magusfile that registers every function rule, each denying, for a
@@ -663,7 +665,7 @@ func TestOneJudgmentResolvesTheApprovedSourcesOnce(t *testing.T) {
 				require.NotNil(t, command)
 				got, err := command(ctx, types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 				require.NoError(t, err)
-				require.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, got)
+				require.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "committed"}, got)
 				extra = append(extra, compiles.phases.Load()-mark)
 				mark = compiles.phases.Load()
 				write, err := deps.ApprovedWriteRule(ctx)
@@ -701,7 +703,7 @@ func TestApprovedResolveUnderAnExpiredDeadlineIsNotKept(t *testing.T) {
 	require.NotNil(t, rule)
 	got, err := rule(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "committed"}, got)
 }
 
 // A pull request call that follows a cd is judged at the checkout it cds into, so the rule
@@ -787,9 +789,9 @@ func TestNoCommandRuleReadsNoPushedRevision(t *testing.T) {
 	driver.EXPECT().Base().Return("main").Maybe()
 	at := location{dir: repo.Root(), workspace: repo.Root()}
 
-	verdict, _ := gradeWorkspaceCommand(t.Context(), Dependencies{VCS: types.VCSOptions{Driver: driver}},
-		types.GuardJudgment{Decision: decisionPass}, commandRuleInput{command: "git push", dialect: DialectBash}, hookAttribution{}, at)
-	assert.Equal(t, decisionPass, verdict.Decision)
+	got, _ := gradeWorkspaceCommand(t.Context(), Dependencies{VCS: types.VCSOptions{Driver: driver}},
+		verdict.Judgment{Decision: verdict.Defer}, commandRuleInput{command: "git push", dialect: DialectBash}, hookAttribution{}, at)
+	assert.Equal(t, verdict.Defer, got.Decision)
 	driver.AssertNotCalled(t, "FindCommit", mock.Anything, mock.Anything, mock.Anything)
 }
 
@@ -800,7 +802,7 @@ func TestCommandRuleIsHandedThePush(t *testing.T) {
 	at := location{dir: repo.Root(), workspace: repo.Root()}
 
 	gradeWorkspaceCommand(t.Context(), Dependencies{CommandRule: probe.rule()},
-		types.GuardJudgment{Decision: decisionPass}, commandRuleInput{command: "git push", dialect: DialectBash}, hookAttribution{}, at)
+		verdict.Judgment{Decision: verdict.Defer}, commandRuleInput{command: "git push", dialect: DialectBash}, hookAttribution{}, at)
 	require.Len(t, probe.asked, 1)
 	require.NotNil(t, probe.asked[0].Push)
 	assert.Equal(t, repo.Head(), probe.asked[0].Push.Revision)
@@ -810,13 +812,13 @@ func TestCommandRuleCanCallTheUnverifiedReader(t *testing.T) {
 	testkit.Isolate(t)
 	repo := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"})
 	pinned := false
-	deps := Dependencies{CommandRule: func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	deps := Dependencies{CommandRule: func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 		_, pinned = unverified.PinnedReader(ctx)
-		return types.GuardVerdict{}, nil
+		return verdict.Verdict{}, nil
 	}}
 	at := location{dir: repo.Root(), workspace: repo.Root()}
 
-	gradeWorkspaceCommand(t.Context(), deps, types.GuardJudgment{Decision: decisionPass},
+	gradeWorkspaceCommand(t.Context(), deps, verdict.Judgment{Decision: verdict.Defer},
 		commandRuleInput{command: "ls", dialect: DialectBash}, hookAttribution{}, at)
 	assert.True(t, pinned)
 }

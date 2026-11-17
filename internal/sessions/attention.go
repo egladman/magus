@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -14,7 +15,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,13 +43,13 @@ const (
 // answered it. It is attribution and not identity: see [RequestID] for why it stays out of
 // the id.
 type AttentionOpen struct {
-	Request   string            `json:"request"`
-	Outcome   string            `json:"outcome"`
-	Severity  string            `json:"severity,omitempty"`
-	Source    string            `json:"source,omitempty"`
-	Where     string            `json:"where,omitempty"`
-	Lease     string            `json:"lease,omitempty"`
-	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	Request   string          `json:"request"`
+	Outcome   string          `json:"outcome"`
+	Severity  string          `json:"severity,omitempty"`
+	Source    string          `json:"source,omitempty"`
+	Where     string          `json:"where,omitempty"`
+	Lease     string          `json:"lease,omitempty"`
+	LeaseFrom job.LeaseSource `json:"lease_from,omitempty"`
 	// Files are the paths the event named: the subject a person judges. They stay
 	// out of RequestID for the same reason Lease does. A re-fire that adds a path
 	// must not re-key the row someone is about to close, and the first open is the
@@ -81,6 +84,10 @@ func (o AttentionOpen) bounded() AttentionOpen {
 	return o
 }
 
+// Bound is the open as the store keeps it, which makes it a [session.Bounder]: the
+// writer applies the bound, so it holds for a producer that never heard of it.
+func (o AttentionOpen) Bound() any { return o.bounded() }
+
 // boundMessage clamps one stored string to [MaxMessageBytes]. Shared by every payload
 // that carries prose a producer supplied: the bound is a property of the store, not of
 // any one record, and two copies of this rule would rot apart on the first change to
@@ -98,7 +105,7 @@ func boundMessage(s string) string {
 
 // AttentionDispose is the payload of a person closing a request.
 //
-// The disposing invocation is the enclosing [Record.Invocation]; repeating it in the
+// The disposing invocation is the enclosing [session.Record.Invocation]; repeating it in the
 // payload would be a second copy of one fact, free to disagree with the envelope.
 type AttentionDispose struct {
 	Request string `json:"request"`
@@ -148,8 +155,8 @@ type AttentionRequest struct {
 	Source     string `json:"source,omitempty"`
 	Where      string `json:"where,omitempty"`
 	Lease      string `json:"lease,omitempty"`
-	// LeaseFrom is which source answered Lease; see types.LeaseSource.
-	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	// LeaseFrom is which source answered Lease; see job.LeaseSource.
+	LeaseFrom job.LeaseSource `json:"lease_from,omitempty"`
 	// Files are the paths the raising event named. Empty when it named none, which
 	// leaves the message as the only line the row has.
 	Files   []types.FileRef `json:"files,omitempty"`
@@ -182,11 +189,11 @@ type AttentionRequest struct {
 //     the open may sit in a file another process has not finished writing, or in a
 //     kind this build does not know.
 //
-// "First" is well defined because [ReadAll] has already ordered the fold by
+// "First" is well defined because [session.ReadAll] has already ordered the fold by
 // (Ts, Invocation, Seq). Records are consumed in that order and must not be handed to
 // this function out of it; the returned slice is sorted separately, by when each
 // request was last raised.
-func Attention(fold Fold) []AttentionRequest {
+func Attention(fold session.Fold) []AttentionRequest {
 	var order []string
 	byID := make(map[string]*AttentionRequest)
 
@@ -194,7 +201,7 @@ func Attention(fold Fold) []AttentionRequest {
 		switch rec.Kind {
 		case KindAttentionOpen:
 			var open AttentionOpen
-			if json.Unmarshal(rec.Payload, &open) != nil || open.Request == "" {
+			if codec.Unmarshal(rec.Payload, &open) != nil || open.Request == "" {
 				continue
 			}
 			req := byID[open.Request]
@@ -221,7 +228,7 @@ func Attention(fold Fold) []AttentionRequest {
 			}
 		case KindAttentionDispose:
 			var dispose AttentionDispose
-			if json.Unmarshal(rec.Payload, &dispose) != nil || dispose.Request == "" {
+			if codec.Unmarshal(rec.Payload, &dispose) != nil || dispose.Request == "" {
 				continue
 			}
 			req := byID[dispose.Request]
@@ -257,7 +264,7 @@ func Attention(fold Fold) []AttentionRequest {
 
 // AttentionQueue is [Attention] narrowed to the requests nobody has disposed of: the
 // queue itself. Oldest first, so whatever has been waiting longest reads at the top.
-func AttentionQueue(fold Fold) []AttentionRequest {
+func AttentionQueue(fold session.Fold) []AttentionRequest {
 	all := Attention(fold)
 	out := make([]AttentionRequest, 0, len(all))
 	for _, req := range all {
@@ -324,7 +331,7 @@ func (e *DisposedError) Error() string {
 //
 // Disposed requests are candidates on purpose: a prefix that resolves to a closed
 // request has to report THAT (see [DisposeRequest]), not read as a typo.
-func ResolveRequestID(fold Fold, ref string) (string, error) {
+func ResolveRequestID(fold session.Fold, ref string) (string, error) {
 	return resolveRequestID(Attention(fold), ref)
 }
 
@@ -387,16 +394,16 @@ func resolveIDPrefix(ids []string, ref string) (id string, candidates []string) 
 // start describes the writing invocation; its Command is set here, and its id is minted
 // by [NewID]. The returned id is the request's, addressable whether or not this call
 // wrote anything.
-func OpenRequest(dir, sourceID string, open AttentionOpen, start InvocationStart) (id string, opened bool, err error) {
+func OpenRequest(ctx context.Context, dir, sourceID string, open AttentionOpen, start session.InvocationStart) (id string, opened bool, err error) {
 	open.Request = RequestID(sourceID, open)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return open.Request, false, err
 	}
 	if slices.ContainsFunc(AttentionQueue(fold), func(req AttentionRequest) bool { return req.ID == open.Request }) {
 		return open.Request, false, nil
 	}
-	if err := AppendRequest(dir, sourceID, open, start); err != nil {
+	if err := AppendRequest(ctx, dir, sourceID, open, start); err != nil {
 		return open.Request, false, err
 	}
 	return open.Request, true, nil
@@ -405,14 +412,14 @@ func OpenRequest(dir, sourceID string, open AttentionOpen, start InvocationStart
 // AppendRequest is [OpenRequest] without its dedupe, which folds the whole
 // store: for a hook's caller that already knows the block is new. A repeat
 // collapses in the fold.
-func AppendRequest(dir, sourceID string, open AttentionOpen, start InvocationStart) error {
+func AppendRequest(ctx context.Context, dir, sourceID string, open AttentionOpen, start session.InvocationStart) error {
 	open.Request = RequestID(sourceID, open)
 	start.Command = "session notify"
-	w, err := Open(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return err
 	}
-	return w.Append(KindAttentionOpen, open)
+	return w.Append(ctx, KindAttentionOpen, open)
 }
 
 // DisposeRequest closes the request ref names under dir and returns it as the store now
@@ -430,8 +437,8 @@ func AppendRequest(dir, sourceID string, open AttentionOpen, start InvocationSta
 // The returned request is re-read from the store rather than patched in memory: the
 // disposal's timestamp and invocation are whatever landed on disk, and a hand-assembled
 // answer could disagree with what every other worktree is about to read.
-func DisposeRequest(dir, ref, reason string, start InvocationStart) (AttentionRequest, error) {
-	fold, err := ReadAll(dir)
+func DisposeRequest(ctx context.Context, dir, ref, reason string, start session.InvocationStart) (AttentionRequest, error) {
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return AttentionRequest{}, err
 	}
@@ -446,15 +453,15 @@ func DisposeRequest(dir, ref, reason string, start InvocationStart) (AttentionRe
 	}
 
 	start.Command = "session dispose " + id
-	w, err := Open(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return AttentionRequest{}, err
 	}
-	if err := w.Append(KindAttentionDispose, AttentionDispose{Request: id, Note: reason}); err != nil {
+	if err := w.Append(ctx, KindAttentionDispose, AttentionDispose{Request: id, Note: reason}); err != nil {
 		return AttentionRequest{}, err
 	}
 
-	if fold, err = ReadAll(dir); err != nil {
+	if fold, err = session.ReadAll(ctx, dir); err != nil {
 		return AttentionRequest{}, err
 	}
 	all = Attention(fold)

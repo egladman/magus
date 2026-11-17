@@ -3,7 +3,7 @@ module github.com/egladman/magus/libs/conventions
 go 1.26
 
 require (
-	github.com/egladman/magus/libs/proofread v0.0.0-00010101000000-000000000000
+	github.com/egladman/magus/libs/proofread v0.1.0
 	github.com/golangci/plugin-module-register v0.1.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/mod v0.37.0

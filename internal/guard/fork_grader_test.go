@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -39,18 +41,18 @@ func (s *ForkGraderSuite) load(context.Context, string) (Dependencies, *Workspac
 	files := []string{filepath.Join(s.root, "magusfile.buzz")}
 	return Dependencies{
 		Policy: func() PolicyState { return PolicyState{Files: files} },
-		CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 			s.judged.Add(1)
 			if strings.Contains(req.Command, "go-build") {
-				return types.GuardVerdict{Decision: types.GuardDeny, Reason: "no builds"}, nil
+				return verdict.Verdict{Decision: verdict.Deny, Reason: "no builds"}, nil
 			}
-			return types.GuardVerdict{}, nil
+			return verdict.Verdict{}, nil
 		},
 	}, nil
 }
 
-func (s *ForkGraderSuite) row(target string, noCharms bool) types.Job {
-	return types.Job{ID: "w", Check: &types.LeaseCheck{Target: target, Project: ".", NoDefaultCharms: noCharms}}
+func (s *ForkGraderSuite) row(target string, noCharms bool) job.Job {
+	return job.Job{ID: "w", Check: &job.LeaseCheck{Target: target, Project: ".", NoDefaultCharms: noCharms}}
 }
 
 func (s *ForkGraderSuite) TestAGradeReachedOnceIsReadBack() {
@@ -78,8 +80,8 @@ func (s *ForkGraderSuite) TestTheCharmlessFormIsGradedOnItsOwn() {
 
 func (s *ForkGraderSuite) TestRulesThatNameNoFilesAreJudgedEveryTime() {
 	load := func(context.Context, string) (Dependencies, *WorkspaceRules) {
-		return Dependencies{CommandRule: func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
-			return types.GuardVerdict{}, nil
+		return Dependencies{CommandRule: func(context.Context, types.CommandRequest, hint.Gate) (verdict.Verdict, error) {
+			return verdict.Verdict{}, nil
 		}}, nil
 	}
 	g := NewForkGrader(nil, load)

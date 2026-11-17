@@ -1,6 +1,9 @@
 package types
 
-import "github.com/egladman/magus/types/vcs"
+import (
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types/vcs"
+)
 
 // MagusWorkspace is magus\workspace(): the workspace a script reads.
 // Dir is the checkout whose branch its job facts are about, Root unless
@@ -57,6 +60,6 @@ type Session struct {
 // JobRegistration is Job.register()'s answer: the stored row and the
 // sentence derived from it, apart so a caller reads facts from the row.
 type JobRegistration struct {
-	Job    Job    `json:"job"`
-	Advice string `json:"advice"`
+	Job    job.Job `json:"job"`
+	Advice string  `json:"advice"`
 }

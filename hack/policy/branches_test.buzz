@@ -154,7 +154,7 @@ test "a sha:ref push is scored by the commits it publishes" {
     final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
     final seen = mut [<str>];
     final sha = branches\decideNames(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: placedAt("/w/root", seen: seen), once: helpers\counter());
-    std\assert(sha.decision == magus\GuardDecision.allow, message: "sha: {sha.reason}");
+    std\assert(sha.decision == magus\GuardDecision.defer, message: "sha: {sha.reason}");
     std\assert(seen.join(",") == "bafc60786", message: seen.join(","));
 }
 

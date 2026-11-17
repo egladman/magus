@@ -7,14 +7,17 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // Option configures Open or Inspect.
@@ -24,9 +27,10 @@ type Option = workspace.Option
 // beside what only this package reads.
 type options struct {
 	workspace.Load
-	spawnRule SpawnRule
-	stepSpecs []agent.StepSpec
-	stepRules []StepRule
+	spawnRule   SpawnRule
+	stepSpecs   []step.Spec
+	stepRules   []StepRule
+	secretsOpts []secrets.Option
 }
 
 // sdkOption sets what only this package reads. On a bare Load it records
@@ -105,35 +109,22 @@ func WithCacheBackend(b types.CacheBackend) Option {
 
 // SpawnRule decides whether a job at model tier parent may spawn one at tier child: nil
 // allows it, and an error refuses it, saying why. A tier is the zero value when none was
-// assigned. TierCeiling is the reference rule.
-type SpawnRule func(parent, child agent.ModelTier) error
-
-// TierCeiling is the reference SpawnRule: a child's tier is at most its parent's, by the
-// order the workspace's model-tier declaration gives its cases (cheapest first). An
-// unassigned tier on either side bounds nothing, so it allows the spawn.
-// A refusal is a *types.DiagnosticError: types.ModelTierAboveParent for a
-// child ranked above its parent, and types.ModelTiersIncomparable for tiers
-// from two declarations.
-func TierCeiling(parent, child agent.ModelTier) error {
-	if parent.IsZero() || child.IsZero() {
-		return nil
-	}
-	above, err := child.Above(parent)
-	if err != nil {
-		return types.WrapDiagnostic(types.ModelTiersIncomparable, err, "the parent's and the child's model tiers do not compare: %v", err)
-	}
-	if above {
-		return types.DiagnosticErrorf(types.ModelTierAboveParent, "a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
-			parent.Name(), child.Name())
-	}
-	return nil
-}
+// assigned. [tier.Ceiling] is the reference rule.
+type SpawnRule func(parent, child tier.Tier) error
 
 // WithSpawnRule sets the rule the workspace holds every job spawn to. It is required:
 // there is no default rule, so Open and Inspect fail without one or on a nil one, naming
-// TierCeiling, the reference rule the CLI passes.
+// tier.Ceiling, the reference rule the CLI passes.
 func WithSpawnRule(rule SpawnRule) Option {
 	return sdkOption("WithSpawnRule", func(o *options) { o.spawnRule = rule })
+}
+
+// WithSecrets adds options to the resolver Open builds for the workspace's secrets, after
+// the timeouts magus.yaml sets. A named secret provider resolves only through an opener
+// given here (secrets.WithOpener); without one, a magusfile that selects a provider gets
+// an error on its first read. Repeated calls accumulate.
+func WithSecrets(opts ...secrets.Option) Option {
+	return sdkOption("WithSecrets", func(o *options) { o.secretsOpts = append(o.secretsOpts, opts...) })
 }
 
 // SpawnCeiling is the workspace's approved spawn-above-parent-tier setting,
@@ -219,7 +210,7 @@ func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
 // installWorkspaceRegistry puts what a magusfile declares into on ctx: the
 // registry, and the model tiers and step rules m holds.
 func (m *Magus) installWorkspaceRegistry(ctx context.Context) context.Context {
-	ctx = agent.WithModelTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
+	ctx = model.WithTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
 	return steps.WithGroup(ctx, &m.stepRules)
 }
 

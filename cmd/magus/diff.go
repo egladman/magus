@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/job/evidence"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	reviewimpact "github.com/egladman/magus/internal/review/impact"
@@ -32,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -47,7 +47,7 @@ func (cliTokens) Revoke(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = store.Revoke(types.GrantOperator, id)
+	_, err = store.Revoke(auth.AccessOperator(), id)
 	return err
 }
 
@@ -431,7 +431,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content review.Content, p
 		if rerr != nil {
 			return difftypes.Diff{}, fmt.Errorf("magus diff: read --baseline: %w", rerr)
 		}
-		if uerr := json.Unmarshal(raw, &baseline); uerr != nil {
+		if uerr := codec.Unmarshal(raw, &baseline); uerr != nil {
 			return difftypes.Diff{}, fmt.Errorf("magus diff: decode --baseline %s (expected `%s` output): %w",
 				baselinePath, hint.GraphExport.With("--symbols", "-o", "json"), uerr)
 		}
@@ -457,8 +457,11 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content review.Content, p
 	}
 	// The agent record: which sessions wrote each file and what they had read first, from the
 	// guard hook's trail and from loaded transcripts. Empty when neither has anything, which
-	// is the common case rather than a fault.
-	trail.AttachTouches(&rev, m.Root(), m.CacheDir())
+	// is the common case rather than a fault. A record that would not read is a note, so the
+	// review still opens.
+	if terr := trail.AttachTouches(ctx, &rev, m.Root(), m.CacheDir()); terr != nil {
+		rev.Notes = append(rev.Notes, "agent record incomplete: "+terr.Error())
+	}
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.

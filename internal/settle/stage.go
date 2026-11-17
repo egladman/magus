@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -49,7 +50,7 @@ func heldForOtherLeases(ctx context.Context, place func(root string) (job.Locati
 	if err != nil {
 		return nil, fmt.Errorf("place the job store to read which leases share this checkout: %w", err)
 	}
-	rows, err := job.NewStore(loc).List()
+	rows, err := job.NewStore(loc).List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the job store for the paths other leases in this checkout write: %w", err)
 	}
@@ -60,8 +61,8 @@ func heldForOtherLeases(ctx context.Context, place func(root string) (job.Locati
 // otherLeasesPaths maps each of paths that a live row in the checkout at root, other than
 // lease's own, declares among its write paths to that row's id. Two rows covering one path
 // both name it, unless lease is one of them.
-func otherLeasesPaths(rows []types.Job, root, lease string, paths []string) map[string]string {
-	here := slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool {
+func otherLeasesPaths(rows []jobtypes.Job, root, lease string, paths []string) map[string]string {
+	here := slices.DeleteFunc(slices.Clone(rows), func(r jobtypes.Job) bool {
 		return r.CheckoutRoot == "" || !sameDir(r.CheckoutRoot, root)
 	})
 	held := map[string]string{}

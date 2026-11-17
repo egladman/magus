@@ -9,7 +9,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 const (
@@ -55,7 +55,7 @@ func WriteSBOM(ctx context.Context, layout, path string) (Document, error) {
 
 // writeDocument writes v as JSON plus a newline and describes exactly the bytes on disk.
 func writeDocument(path, mediaType string, v any) (Document, error) {
-	data, err := json.Marshal(v)
+	data, err := codec.Marshal(v)
 	if err != nil {
 		return Document{}, err
 	}

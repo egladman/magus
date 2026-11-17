@@ -3,6 +3,7 @@ package job
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
@@ -26,8 +27,8 @@ func apartProjects() ([]*types.Project, string) {
 	}}}, ""
 }
 
-func apartHolder(checkout string) types.Job {
-	return types.Job{ID: "holder", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}, CheckoutRoot: checkout}
+func apartHolder(checkout string) job.Job {
+	return job.Job{ID: "holder", State: job.StateRunning, Paths: job.Paths{Write: []string{"gen/decode.go"}}, CheckoutRoot: checkout}
 }
 
 // apart is HeldApart's first answer for a holder in /repos/landing.
@@ -96,10 +97,10 @@ func (s *jobSuite) forkShare(file string, ws Workspace) error {
 	here := testkit.NewRepository(s.T(), files).Root()
 	there := testkit.NewRepository(s.T(), files)
 	store := NewStore(tempLocation(s.T(), here)).InWorkspace(ws)
-	seed(s.T(), store, types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: []string{file}}, Checkpoint: there.Head(), CheckoutRoot: there.Root()})
-	rows, err := store.List()
+	seed(s.T(), store, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{file}}, Checkpoint: there.Head(), CheckoutRoot: there.Root()})
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
-	return unorderedFileShareProblems(s.T().Context(), store, rows, types.Job{ID: "B", Paths: types.JobPaths{Write: []string{file}}}).Error()
+	return unorderedFileShareProblems(s.T().Context(), store, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{file}}}).Error()
 }
 
 func generatedWorkspace() Workspace {
@@ -122,29 +123,29 @@ func (s *jobSuite) TestAForkWithNoWorkspaceSaysTheScopeCheckDidNotRun() {
 	s.ErrorContains(err, "the workspace did not load: boom")
 }
 
-func overlapRows() []types.Job {
-	return []types.Job{
-		{ID: "landing", State: types.StateRunning, CheckoutRoot: "/repos/landing"},
-		{ID: "mandate", State: types.StateRunning, CheckoutRoot: "/repos/mandate"},
-		{ID: "beside", State: types.StateRunning, CheckoutRoot: "/repos/landing"},
+func overlapRows() []job.Job {
+	return []job.Job{
+		{ID: "landing", State: job.StateRunning, CheckoutRoot: "/repos/landing"},
+		{ID: "mandate", State: job.StateRunning, CheckoutRoot: "/repos/mandate"},
+		{ID: "beside", State: job.StateRunning, CheckoutRoot: "/repos/landing"},
 	}
 }
 
 func (s *jobSuite) TestOverlapsDropAGeneratedOutputHeldInAnotherCheckout() {
-	got := ContendedOverlaps(overlapRows(), []types.JobOverlap{
+	got := ContendedOverlaps(overlapRows(), []job.Overlap{
 		{JobA: "landing", JobB: "mandate", PathsA: []string{"gen/decode.go"}, PathsB: []string{"gen/**"}},
 	}, apartProjects)
 	s.Empty(got)
 }
 
 func (s *jobSuite) TestOverlapsKeepAGeneratedOutputHeldInOneCheckout() {
-	pair := types.JobOverlap{JobA: "landing", JobB: "beside", PathsA: []string{"gen/decode.go"}, PathsB: []string{"gen/decode.go"}}
-	s.Equal([]types.JobOverlap{pair}, ContendedOverlaps(overlapRows(), []types.JobOverlap{pair}, apartProjects))
+	pair := job.Overlap{JobA: "landing", JobB: "beside", PathsA: []string{"gen/decode.go"}, PathsB: []string{"gen/decode.go"}}
+	s.Equal([]job.Overlap{pair}, ContendedOverlaps(overlapRows(), []job.Overlap{pair}, apartProjects))
 }
 
 func (s *jobSuite) TestOverlapsKeepHandWrittenGroundBesideAGeneratedOutput() {
-	got := ContendedOverlaps(overlapRows(), []types.JobOverlap{
+	got := ContendedOverlaps(overlapRows(), []job.Overlap{
 		{JobA: "landing", JobB: "mandate", PathsA: []string{"gen/decode.go", "run.go"}, PathsB: []string{"**/*.go"}},
 	}, apartProjects)
-	s.Equal([]types.JobOverlap{{JobA: "landing", JobB: "mandate", PathsA: []string{"run.go"}, PathsB: []string{"**/*.go"}}}, got)
+	s.Equal([]job.Overlap{{JobA: "landing", JobB: "mandate", PathsA: []string{"run.go"}, PathsB: []string{"**/*.go"}}}, got)
 }

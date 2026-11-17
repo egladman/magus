@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -27,14 +28,14 @@ func committedRepository(t *testing.T) (root, head string) {
 	return repo.Root(), repo.Head()
 }
 
-func checkpointMerge(token string) func(*types.Job) {
-	return func(u *types.Job) {
-		u.Check, u.State, u.Paths.Write, u.Checkpoint = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}, token
+func checkpointMerge(token string) func(*job.Job) {
+	return func(u *job.Job) {
+		u.Check, u.State, u.Paths.Write, u.Checkpoint = forkCheck(), job.StateDeclared, []string{"internal/job/store.go"}, token
 	}
 }
 
-func checkpointRecord(id, token string) types.Declaration {
-	return types.Declaration{ID: id, Paths: types.JobPaths{Write: []string{"internal/job/store.go"}}, Check: forkCheck(), Checkpoint: token}
+func checkpointRecord(id, token string) job.Declaration {
+	return job.Declaration{ID: id, Paths: job.Paths{Write: []string{"internal/job/store.go"}}, Check: forkCheck(), Checkpoint: token}
 }
 
 // The defect: a fork named a full-length revision the repository never held, and nothing
@@ -50,12 +51,12 @@ func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 	assert.Contains(t, err.Error(), madeUpRevision)
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 
-	_, err = Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", madeUpRevision)}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{checkpointRecord("applied", madeUpRevision)}, config.Jobs{}, nil, nil, false)
 	require.Error(t, err, "magus job apply stored a revision the repository does not hold")
 	assert.Contains(t, err.Error(), madeUpRevision)
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused checkpoint writes no row")
 }
@@ -77,7 +78,7 @@ func TestARealAbbreviatedCheckpointIsStoredExpanded(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fmt.Sprintf("%s+%s", older, digest), forked.Checkpoint)
 
-	applied, err := Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", head[:9])}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(t.Context(), s, []job.Declaration{checkpointRecord("applied", head[:9])}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, head, applied[0].Next.Checkpoint)
 }
@@ -98,11 +99,11 @@ func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nor an ancestor")
 
-	_, err = Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", elsewhere[:9])}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{checkpointRecord("applied", elsewhere[:9])}, config.Jobs{}, nil, nil, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nor an ancestor")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -118,10 +119,10 @@ func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
 	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
 	repo.Git("switch", "-q", "main")
 	s := NewStore(tempLocation(t, repo.Root()))
-	own := func(token string) func(*types.Job) {
-		return func(u *types.Job) {
+	own := func(token string) func(*job.Job) {
+		return func(u *job.Job) {
 			checkpointMerge(token)(u)
-			u.Worktree = &types.JobWorktree{Root: filepath.Join(t.TempDir(), "own")}
+			u.Worktree = &job.Worktree{Root: filepath.Join(t.TempDir(), "own")}
 		}
 	}
 
@@ -150,7 +151,7 @@ func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
 	assert.Contains(t, err.Error(), madeUp)
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
-	_, err = Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", madeUp)}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{checkpointRecord("applied", madeUp)}, config.Jobs{}, nil, nil, false)
 	require.Error(t, err, "a dirty tree reproduces its own digest, not this one")
 	assert.Contains(t, err.Error(), dirtyToken(t, root))
 }
@@ -168,8 +169,8 @@ func TestAForkByMergeNamingNoCheckpointRecordsTheCheckouts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, dirtyToken(t, root), forked.Checkpoint)
 
-	reader, err := ForkMerge(t.Context(), s, "reader", func(u *types.Job) {
-		u.State, u.ReadOnly = types.StateDeclared, true
+	reader, err := ForkMerge(t.Context(), s, "reader", func(u *job.Job) {
+		u.State, u.ReadOnly = job.StateDeclared, true
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, reader.Checkpoint, "a read-only job is graded on no diff")

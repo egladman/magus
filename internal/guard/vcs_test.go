@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -128,7 +129,7 @@ func TestHooksOffRefusesSkippingTheRepositorysHooks(t *testing.T) {
 	}
 	for i, command := range append(off, on...) {
 		want := i < len(off)
-		v := Evaluate(testDependencies(), command)
+		v := Evaluate(t.Context(), testDependencies(), command)
 		if want {
 			assert.Equal(t, denyRuleHooksOff, v.Rule.Name, "%q", command)
 			assert.NotEmpty(t, v.Deny, "%q", command)
@@ -166,7 +167,7 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		"git -c include.path=/tmp/aliases x":                  {Name: denyRuleInlineAlias, Arg: "include.path"},
 		"git status && git -C . -c alias.x=clean x -fd":       {Name: denyRuleInlineAlias, Arg: "alias.x"},
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Equal(t, want, v.Rule, "%q", command)
 		assert.NotEmpty(t, v.Deny, "%q", command)
 	}
@@ -181,7 +182,7 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		"git --no-pager describe":                     advisoryCheckpointState,
 		"git -C . rev-parse HEAD":                     advisoryCheckpointState,
 	} {
-		v := Evaluate(advising(testDependencies(), string(advisoryCheckpointState)), command)
+		v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryCheckpointState)), command)
 		assert.Empty(t, v.Deny, "%q", command)
 		assert.Equal(t, string(rule), v.advisoryName(), "%q", command)
 	}
@@ -203,7 +204,7 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		// Prose naming an alias is not a git option.
 		"echo 'git -c alias.x=reset x'",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Empty(t, v.Deny, "%q", command)
 		assert.Empty(t, v.Context, "%q", command)
 	}
@@ -224,10 +225,10 @@ func TestGitGuardFallbackReadsPastGlobalOptions(t *testing.T) {
 	} {
 		_, parsed := ParseCommands(cmd)
 		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Equal(t, string(want), v.RuleName(), "%q", cmd)
 	}
-	assert.Empty(t, Evaluate(strict(testDependencies()), "git -C . stash list && (").Deny)
+	assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), "git -C . stash list && (").Deny)
 }
 
 // TestGitGuardFollowsDashCIntoAnotherCheckout pins that pointing git at a sibling
@@ -245,10 +246,10 @@ func TestGitGuardFollowsDashCIntoAnotherCheckout(t *testing.T) {
 		fmt.Sprintf("git -C %s checkout MERGE_HEAD -- a.go", wt): {Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"},
 		fmt.Sprintf("git --work-tree=%s clean -fd", wt):          {Name: denyRuleWholeTree, Arg: "git clean"},
 	} {
-		assert.Equal(t, want, Evaluate(strict(testDependencies()), command).Rule, "%q", command)
+		assert.Equal(t, want, Evaluate(t.Context(), strict(testDependencies()), command).Rule, "%q", command)
 	}
 	for _, command := range []string{fmt.Sprintf("git -C %s status", wt), "git -C .. -C wt-feature log -1"} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Empty(t, v.Deny, "%q", command)
 		assert.Empty(t, v.Context, "%q", command)
 	}
@@ -350,7 +351,7 @@ func TestNonGitVCSGuardReadsPastGlobalOptions(t *testing.T) {
 		"jj --config aliases.x=abandon x":              {Name: denyRuleInlineAlias, Arg: "aliases.x"},
 		"jj --config-toml 'aliases.x=[\"abandon\"]' x": {Name: denyRuleInlineAlias, Arg: "--config-toml"},
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Equal(t, want, v.Rule, "%q", command)
 		assert.NotEmpty(t, v.Deny, "%q", command)
 	}
@@ -365,12 +366,12 @@ func TestNonGitVCSGuardReadsPastGlobalOptions(t *testing.T) {
 		"jj --ignore-working-copy status",
 		"jj --config ui.x=y workspace list",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Empty(t, v.Deny, "%q", command)
 		assert.Empty(t, v.Context, "%q", command)
 	}
 	for _, command := range []string{"hg -R . push", "sl --cwd . push --to main", "jj --at-op @ -R . git push"} {
-		assert.Equal(t, string(advisoryPushGate), Evaluate(strict(testDependencies()), command).RuleName(), "%q", command)
+		assert.Equal(t, string(advisoryPushGate), Evaluate(t.Context(), strict(testDependencies()), command).RuleName(), "%q", command)
 	}
 }
 
@@ -402,7 +403,7 @@ type checkpointAdviceSuite struct{ suite.Suite }
 func TestCheckpointAdviceSuite(t *testing.T) { suite.Run(t, new(checkpointAdviceSuite)) }
 
 // judgeRevisionRead judges a revision read under the lease row given.
-func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) types.GuardJudgment {
+func (s *checkpointAdviceSuite) judgeRevisionRead(row job.Job) verdict.Judgment {
 	who := hookAttribution{Host: "claude-code", Session: "5d1e7c20", Agent: "b7a4f9"}
 	ctx, _ := fleetFixture(s.T(), row)
 	bindCaller(s.T(), ctx, who, row.ID)
@@ -414,7 +415,7 @@ func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) types.GuardJudg
 
 // A read-only lease has nothing to park, so the advice does not reach it.
 func (s *checkpointAdviceSuite) TestReadOnlyLeaseIsNotAdvisedToCheckpoint() {
-	scout := types.Job{ID: "scout/read-only", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	scout := job.Job{ID: "scout/read-only", ReadOnly: true, State: job.StateRunning, Registered: 1}
 	s.NotEqual(string(advisoryCheckpointState), s.judgeRevisionRead(scout).Rule)
 }
 

@@ -21,8 +21,8 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -238,7 +238,7 @@ func writeSpellCacheBundle(ctx context.Context, w io.Writer, s *signer, key Spel
 	if err != nil {
 		return SpellCacheStats{}, err
 	}
-	idx, err := json.Marshal(spellCacheIndex{Schema: spellCacheSchema, Key: key, Name: name, Created: now.UTC(), Files: files})
+	idx, err := codec.Marshal(spellCacheIndex{Schema: spellCacheSchema, Key: key, Name: name, Created: now.UTC(), Files: files})
 	if err != nil {
 		return SpellCacheStats{}, err
 	}
@@ -334,7 +334,7 @@ func readSpellCacheBundle(ctx context.Context, r io.Reader, v *verifier, want sp
 		return SpellCacheStats{}, err
 	}
 	var idx spellCacheIndex
-	if err := json.Unmarshal(idxBytes, &idx); err != nil {
+	if err := codec.Unmarshal(idxBytes, &idx); err != nil {
 		return SpellCacheStats{}, fmt.Errorf("index: %w", err)
 	}
 	if err := want.check(idx); err != nil {
@@ -558,7 +558,7 @@ func (c *Cache) saveSpellCache(ctx context.Context, key SpellCacheKey, roots []S
 	}
 	res.Transferred = counted.N
 
-	ptr, err := json.Marshal(spellCachePointer{Key: name})
+	ptr, err := codec.Marshal(spellCachePointer{Key: name})
 	if err != nil {
 		return res, err
 	}
@@ -655,7 +655,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		data, err := io.ReadAll(rc)
 		_ = rc.Close()
 		if err == nil {
-			err = json.Unmarshal(data, &ptr)
+			err = codec.Unmarshal(data, &ptr)
 		}
 		if err != nil || !strings.HasPrefix(ptr.Key, fmt.Sprintf("%s-%s-", key.Spell, short(key.Tools))) {
 			continue

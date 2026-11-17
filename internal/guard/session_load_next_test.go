@@ -5,21 +5,22 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/stretchr/testify/assert"
 )
 
 // shellAt builds one loaded shell command at ms, for a synthetic stream.
-func shellAt(session string, ms int64) sessions.LoadEvent {
-	return sessions.LoadEvent{
-		Session: session,
-		Event:   sessions.AgentEvent{Kind: sessions.EventShellCommand, AtMs: ms, Program: "magus"},
+func shellAt(hostSession string, ms int64) session.LoadEvent {
+	return session.LoadEvent{
+		Session: hostSession,
+		Event:   session.AgentEvent{Kind: session.EventShellCommand, AtMs: ms, Program: "magus"},
 	}
 }
 
 // The serving call is the newest one that had already started when the line was
 // written; the call that runs the same command inside the lookahead took it up.
 func TestJoinServedNextStampsServedAndFollowed(t *testing.T) {
-	events := []sessions.LoadEvent{
+	events := []session.LoadEvent{
 		shellAt("s1", 1_000),
 		shellAt("s1", 2_000),
 		shellAt("s1", 3_000),
@@ -40,7 +41,7 @@ func TestJoinServedNextStampsServedAndFollowed(t *testing.T) {
 // Past the lookahead is a rejection, not a delayed follow: the metric has to stay
 // comparable with the measurement that set the window.
 func TestJoinServedNextStopsAtTheLookahead(t *testing.T) {
-	events := []sessions.LoadEvent{shellAt("s1", 1_000)}
+	events := []session.LoadEvent{shellAt("s1", 1_000)}
 	commands := []string{"magus query ledger"}
 	for i := range sessions.NextLookahead + 1 {
 		events = append(events, shellAt("s1", int64(2_000+i)))
@@ -60,7 +61,7 @@ func TestJoinServedNextStopsAtTheLookahead(t *testing.T) {
 // A line older than every call, or younger than the window, belongs to no call: the
 // journal outlives the transcript a load happens to carry.
 func TestJoinServedNextLeavesUnattributableLinesAlone(t *testing.T) {
-	events := []sessions.LoadEvent{shellAt("s1", 5_000)}
+	events := []session.LoadEvent{shellAt("s1", 5_000)}
 	commands := []string{"magus query ledger"}
 
 	JoinServedNext(events, commands, []hint.ServedNextEntry{
@@ -74,7 +75,7 @@ func TestJoinServedNextLeavesUnattributableLinesAlone(t *testing.T) {
 // A follow is credited only inside the session that was served: two hosts running at
 // once share a journal and must not share each other's uptake.
 func TestJoinServedNextStaysInsideOneSession(t *testing.T) {
-	events := []sessions.LoadEvent{shellAt("s1", 1_000), shellAt("s2", 2_000)}
+	events := []session.LoadEvent{shellAt("s1", 1_000), shellAt("s2", 2_000)}
 	commands := []string{"magus query ledger", "magus explain spell:go"}
 
 	JoinServedNext(events, commands, []hint.ServedNextEntry{
@@ -89,7 +90,7 @@ func TestJoinServedNextStaysInsideOneSession(t *testing.T) {
 // otherwise counts the later `explain spell:gomod` as having taken it up, and the rate
 // is the one number this join exists to produce.
 func TestJoinServedNextDoesNotCreditALongerArgument(t *testing.T) {
-	events := []sessions.LoadEvent{shellAt("s1", 1_000), shellAt("s1", 2_000), shellAt("s1", 3_000)}
+	events := []session.LoadEvent{shellAt("s1", 1_000), shellAt("s1", 2_000), shellAt("s1", 3_000)}
 	commands := []string{"magus query ledger", "magus explain spell:gomod", "echo magus explain spell:go"}
 
 	JoinServedNext(events, commands, []hint.ServedNextEntry{
@@ -104,7 +105,7 @@ func TestJoinServedNextDoesNotCreditALongerArgument(t *testing.T) {
 // by several processes and hand-editable, and `magus session load` is a user-facing
 // command that must not crash on its content.
 func TestJoinServedNextSurvivesALineWithNoArgv(t *testing.T) {
-	events := []sessions.LoadEvent{shellAt("s1", 1_000)}
+	events := []session.LoadEvent{shellAt("s1", 1_000)}
 	commands := []string{"magus query ledger"}
 
 	JoinServedNext(events, commands, []hint.ServedNextEntry{

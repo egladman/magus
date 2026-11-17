@@ -33,7 +33,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/proc/spawn"
@@ -42,6 +41,8 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -87,7 +88,7 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 				if loc.StateBase, err = xdg.StateDir(); err != nil {
 					return nil, err
 				}
-				rows, err := job.NewStore(loc).List()
+				rows, err := job.NewStore(loc).List(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -652,7 +653,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 		in.CoverageGaps = rootModuleGaps(src.root, knowledge.CoverageGaps(in.Coverage, in.Symbols))
 	}
 	if needs(knowledge.ClassSession) {
-		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
+		in.AgentContacts = loadKnowledgeAgentContacts(ctx, src.root)
 	}
 	return in
 }
@@ -737,7 +738,7 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) {
 		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
 	}
-	targetPolicies, humanOnlyErr := json.Marshal(src.targetPolicies)
+	targetPolicies, humanOnlyErr := codec.Marshal(src.targetPolicies)
 	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown && humanOnlyErr == nil {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
@@ -861,7 +862,7 @@ func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
 		return "", false
 	}
 	for _, v := range []any{src.graph, src.projects, src.spells} {
-		b, err := json.Marshal(v)
+		b, err := codec.Marshal(v)
 		if err != nil {
 			return "", false
 		}
@@ -881,7 +882,7 @@ func foldKnowledgeSite(h *knowledge.InputHash, cfg config.Config, root, cacheDir
 	h.String(root)
 	h.String(cacheDir)
 	h.String(cfg.HistoryPath)
-	b, err := json.Marshal(cfg.Knowledge)
+	b, err := codec.Marshal(cfg.Knowledge)
 	if err != nil {
 		return false
 	}
@@ -1202,7 +1203,7 @@ func inNestedModule(root, dir string) bool {
 // builds exactly the graph it built before. A record whose payload this build cannot
 // decode is skipped rather than failing the graph, which is the same tolerance every
 // other reader of the store applies to a kind it does not know.
-func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
+func loadKnowledgeAgentContacts(ctx context.Context, root string) []knowledge.AgentContact {
 	if root == "" {
 		return nil
 	}
@@ -1210,14 +1211,14 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAgentEvents(dir)
+	fold, err := session.FoldAgentEvents(ctx, dir)
 	if err != nil {
 		return nil
 	}
 	var out []knowledge.AgentContact
 	for _, rec := range fold.Records {
-		var ev sessions.AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) != nil {
+		var ev session.AgentEvent
+		if codec.Unmarshal(rec.Payload, &ev) != nil {
 			continue
 		}
 		// A file event carries its path in Text; a shell command's Text is never
@@ -1234,8 +1235,8 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 			// A loaded event is filed under the host session, so that is its invocation id.
 			Session: rec.Invocation,
 			Path:    vcs.CheckoutRelative(ev.Text),
-			Read:    ev.Kind == sessions.EventFileRead,
-			Write:   ev.Kind == sessions.EventFileWrite,
+			Read:    ev.Kind == session.EventFileRead,
+			Write:   ev.Kind == session.EventFileWrite,
 			AtMs:    ev.AtMs,
 			Denied:  ev.Denied,
 		})
@@ -2152,7 +2153,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 	if fp != "" && !refresh {
 		if b, err := os.ReadFile(path); err == nil {
 			var f vcsHistoryFile
-			if err := json.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
+			if err := codec.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
 				log.DebugContext(ctx, "reusing cached vcs history", slog.Int("files", len(f.Entries)))
 				return f.Entries, f.Couplings
 			}
@@ -2164,7 +2165,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 	if fp == "" || len(entries) == 0 || cacheImmutable(cfg) {
 		return entries, couplings
 	}
-	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries, Couplings: couplings})
+	b, err := codec.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries, Couplings: couplings})
 	if err == nil {
 		err = file.WriteFileAtomic(path, b, 0o644)
 	}

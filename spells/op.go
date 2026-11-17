@@ -146,7 +146,7 @@ type Command struct {
 	//
 	// It is the declarative escape hatch for the two shapes that cannot reach a
 	// magusfile body: a command op (static argv) and a provided project (no magusfile).
-	// Refs resolve through the same secret.Resolver at spawn and are injected into ONLY
+	// Refs resolve through the same secrets.Resolver at spawn and are injected into ONLY
 	// this child's environment (never into Args, never logged, never returned by
 	// `magus describe`), and Resolver.Read registers each value for redaction. Charms
 	// patch Args only. Refs are static data, so the op stays hashable and describable

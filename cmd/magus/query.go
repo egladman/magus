@@ -28,7 +28,6 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
@@ -38,10 +37,11 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/textindex"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -163,7 +163,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	noteShardErrors(ctx, root, "magus query")
 
 	stop := observability.TraceFromContext(ctx).Phase("query.next")
-	nx := newNextGate(root)
+	nx := newNextGate(ctx, root)
 	next := nx.served(hint.NextForQuery(out))
 	stop()
 
@@ -336,7 +336,7 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 func emitExplainCard(ctx context.Context, root, input string, opts output.Options, source sourceWindow, res knowledge.ExplainResult) error {
 	out := res.Out
 	stop := observability.TraceFromContext(ctx).Phase("explain.next")
-	nx := newNextGate(root)
+	nx := newNextGate(ctx, root)
 	next := nx.served(hint.NextForExplain(out))
 	stop()
 
@@ -360,7 +360,7 @@ func emitExplainCard(ctx context.Context, root, input string, opts output.Option
 		return emitNames(os.Stdout, []string{out.Node.ID})
 	}
 
-	return writeExplainText(os.Stdout, root, input, nx, next, res)
+	return writeExplainText(ctx, os.Stdout, root, input, nx, next, res)
 }
 
 func noteExplainRefresh(ctx context.Context, root, input string, res *knowledge.ExplainResult) {
@@ -451,7 +451,7 @@ func explainMissAnswer(ctx context.Context, root, input string, ans types.Knowle
 // writeExplainText writes res, the node asked resolved to, as `magus explain` prints it
 // in text form, with next under it, and returns the error that sets the exit status.
 // res must be found.
-func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types.NextStep, res knowledge.ExplainResult) error {
+func writeExplainText(_ context.Context, w io.Writer, root, asked string, nx nextGate, next []types.NextStep, res knowledge.ExplainResult) error {
 	out := res.Out
 	fmt.Fprint(w, knowledge.ResolutionNote(asked, out))
 	fmt.Fprint(w, render.ExplainText(out))
@@ -768,7 +768,7 @@ func createRefreshLog(dir string) (*os.File, error) {
 // under cfg, the configuration the server resolves for m's root now.
 func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb string, request []byte) ([]byte, error) {
 	var read knowledge.GraphRead
-	if err := json.Unmarshal(request, &read); err != nil {
+	if err := codec.Unmarshal(request, &read); err != nil {
 		return nil, fmt.Errorf("magus server: decode the %s read: %w", verb, err)
 	}
 	if digest := config.ReadDigest(cfg); digest == "" || read.Config != digest {
@@ -805,7 +805,7 @@ func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(res)
+	return codec.Marshal(res)
 }
 
 // splitCSV splits a comma-separated flag value, trimming blanks.
@@ -852,7 +852,7 @@ func queryOutputCommand(ctx context.Context, root string, qf *flaggen.QueryFlags
 	}
 	ref := pos[1]
 	if !cache.LooksLikeRef(ref) {
-		if !trail.ValidRef(ref) {
+		if !trailtypes.ValidRef(ref) {
 			msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
 			slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg)))
 			return exit.Reported(exit.Usage)

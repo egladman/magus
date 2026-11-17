@@ -25,10 +25,11 @@ import (
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/buildinfo"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -115,7 +116,7 @@ func TestBrokerStatusPrintsItsRows(t *testing.T) {
 	c, err := broker.Dial(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	defer func() { _ = c.Close() }()
-	_, err = c.Request(t.Context(), types.MachineClaim{Project: "api", Target: "test", MemoryMB: 1024, Slots: 2, Dir: "/src/a"})
+	_, err = c.Request(t.Context(), budget.Claim{Project: "api", Target: "test", MemoryMB: 1024, Slots: 2, Dir: "/src/a"})
 	require.NoError(t, err)
 
 	st, err := server.QueryBroker(t.Context())
@@ -229,7 +230,7 @@ func TestARunUnderJobExecWaitsItsBoundOnABudgetStrangersFill(t *testing.T) {
 	stranger, err := broker.Dial(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	defer func() { _ = stranger.Close() }()
-	v, err := stranger.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
+	v, err := stranger.Request(t.Context(), budget.Claim{Project: "other", Target: "test", Slots: 1, PID: 1})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -279,7 +280,7 @@ func serveOtherBuild(ln net.Listener, hangup bool) {
 				var f struct {
 					ID uint64 `json:"id"`
 				}
-				_ = json.Unmarshal(line, &f)
+				_ = codec.Unmarshal(line, &f)
 				refusal := `{"type":"error","id":%d,"body":{"code":"protocol","message":"protocol 99"}}`
 				_, _ = fmt.Fprintf(nc, refusal+"\n", f.ID)
 			}()

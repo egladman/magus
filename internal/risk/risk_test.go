@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -426,7 +427,7 @@ func TestCommentOnlyDeclaredDirectives(t *testing.T) {
 }
 
 func claimedRegion(declaration string, kind types.MergeKind) types.MergeRegion {
-	return types.MergeRegion{Locations: []types.Location{{Path: "a.go", Declaration: declaration}}, Kind: kind}
+	return types.MergeRegion{Locations: []job.Location{{Path: "a.go", Declaration: declaration}}, Kind: kind}
 }
 
 const claimsBase = "package a\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc A() int { return 1 }\nfunc B() int { return 2 }\n"
@@ -475,7 +476,7 @@ func TestMergeByClaims(t *testing.T) {
 			ours:    strings.Replace(claimsBase, `"fmt"`, `"errors"`, 1),
 			theirs:  strings.Replace(claimsBase, `"fmt"`, `"io"`, 1),
 			want:    strings.Replace(claimsBase, "\t\"fmt\"\n", "\t\"errors\"\n\t\"io\"\n", 1),
-			regions: []types.MergeRegion{claimedRegion(types.Preamble, types.MergeImportSet)},
+			regions: []types.MergeRegion{claimedRegion(job.Preamble, types.MergeImportSet)},
 		},
 		{
 			name:   "adjacent import edits, unclaimed",

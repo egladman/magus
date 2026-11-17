@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/service/identity"
@@ -33,8 +32,10 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -344,7 +345,7 @@ func toSlashRel(root, p string) string {
 }
 
 func (*runner) checkJSONCodec() check.Check {
-	v := json.Version()
+	v := codec.Version()
 	msg := "encoding/json " + v
 	if v == "v2" {
 		msg += " (GOEXPERIMENT=jsonv2; faster marshaling)"
@@ -1920,11 +1921,24 @@ func (r *runner) ownVersion() string {
 // Commands with no reads is the diagnostic pattern. An empty trail is NOT a failure: a
 // workspace where no agent has run yet is the ordinary case, and failing it would train
 // people to ignore the check.
-func (r *runner) checkObserverRecording() check.Check {
-	const name = "agent-observer"
+func (r *runner) checkObserverRecording(ctx context.Context) check.Check {
 	const window = 2000
+	reads, writes, shell, err := trail.ObservedCounts(ctx, r.cacheDir(), window)
+	c := observerCheck(window, reads, writes, shell)
+	if err != nil {
+		// The counts leave out what did not decode, so a verdict on them alone would
+		// say nothing of the records it could not read.
+		if c.Status == check.OK {
+			c.Status = check.Advice
+		}
+		c.Details = append(c.Details, fmt.Sprintf("records left out of the counts: %v", err))
+	}
+	return c
+}
 
-	reads, writes, shell := trail.ObservedCounts(r.cacheDir(), window)
+// observerCheck judges the observed counts in the newest window events.
+func observerCheck(window, reads, writes, shell int) check.Check {
+	const name = "agent-observer"
 	total := reads + writes + shell
 	switch {
 	case total == 0:
@@ -1990,18 +2004,18 @@ func (r *runner) checkObserverRecording() check.Check {
 //
 // Advice rather than fail, on the doctrine that a convention magus recommends is never a
 // gate: a repository nobody audits is not a broken repository.
-func (r *runner) checkSessionLoad() check.Check {
+func (r *runner) checkSessionLoad(ctx context.Context) check.Check {
 	const name = "session-load"
 
 	dir, err := sessions.Dir(r.root)
 	if err != nil {
 		return check.Check{Name: name, Status: check.Advice, Message: err.Error()}
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return check.Check{Name: name, Status: check.Advice, Message: err.Error()}
 	}
-	newest := sessions.NewestEventMs(fold)
+	newest := session.NewestEventMs(fold)
 	if newest == 0 {
 		return check.Check{
 			Name: name, Status: check.Advice,

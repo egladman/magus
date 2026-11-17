@@ -9,13 +9,14 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
 // seamStop is the magus\guard.stop seam.
 const seamStop functionSeam = "stop"
 
-// workspaceStopRule is the GuardJudgment.Rule an unnamed magus\guard.stop answer carries.
+// workspaceStopRule is the verdict.Judgment Rule an unnamed magus\guard.stop answer carries.
 const workspaceStopRule = workspaceShellPrefix + "stop"
 
 // stopEvents are the host hook events the stop rule is asked about: an agent ending its
@@ -26,16 +27,16 @@ var stopEvents = []string{"Stop", "SubagentStop"}
 // check did not deny, strengthen only. A rule that fails or runs out of time judges
 // nothing: refusing a stop on a broken rule would hold the session open with no way to end
 // it, so the failure is told beside the verdict instead.
-func gradeWorkspaceStop(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, raw string, who hookAttribution, at location, lease string) types.GuardJudgment {
+func gradeWorkspaceStop(ctx context.Context, deps Dependencies, judged verdict.Judgment, raw string, who hookAttribution, at location, lease string) verdict.Judgment {
 	if deps.StopRule == nil && deps.ApprovedStopRule == nil {
-		return verdict
+		return judged
 	}
-	if verdict.Decision == decisionDeny || !slices.Contains(stopEvents, who.Event) {
-		return verdict
+	if judged.Decision == verdict.Deny || !slices.Contains(stopEvents, who.Event) {
+		return judged
 	}
 	env, ok := decodeStop(raw)
 	if !ok {
-		return verdict
+		return judged
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := stopRequest(ctx, deps, env, who, at, lease, facts)
@@ -43,7 +44,7 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, verdict types.Gu
 		if rule == nil {
 			return nil
 		}
-		return func(ctx context.Context) (types.GuardVerdict, error) { return rule(ctx, req, facts) }
+		return func(ctx context.Context) (verdict.Verdict, error) { return rule(ctx, req, facts) }
 	}
 	var resolve func(context.Context) (ruleCall, error)
 	if deps.ApprovedStopRule != nil {
@@ -54,17 +55,17 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, verdict types.Gu
 	}
 	asked := askWorkspaceRules(ctx, seamStop, deps, resolve, bind(deps.StopRule))
 	decided := ""
-	if verdict.Decision != decisionPass {
+	if judged.Decision != verdict.Defer {
 		decided = decidedByBuiltin
 	}
-	verdict, _ = applyWorkspaceAnswer(verdict, decided, asked, workspaceStopRule)
-	if note := stopFailureNote(asked); note != "" && verdict.Decision != decisionDeny {
-		verdict.Context = strings.Join(slices.DeleteFunc([]string{verdict.Context, note}, func(s string) bool { return s == "" }), "\n\n")
-		if verdict.Decision == decisionPass {
-			verdict.Decision = decisionAdvise
+	judged, _ = applyWorkspaceAnswer(judged, decided, asked, workspaceStopRule)
+	if note := stopFailureNote(asked); note != "" && judged.Decision != verdict.Deny {
+		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
+		if judged.Decision == verdict.Defer {
+			judged.Decision = verdict.Advise
 		}
 	}
-	return verdict
+	return judged
 }
 
 // stopRequest is the request the stop rule is handed for env.

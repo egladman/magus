@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -16,7 +17,7 @@ import (
 // check would mint there now is the key the run was stored under. Any lookup that fails
 // answers no, so the clock judges the run as it would without this.
 func runsAtCurrentKey(graphIn func(tree string) *Graph, env Env) job.CurrentRun {
-	return func(ctx context.Context, tree string, run types.JobAttempt) bool {
+	return func(ctx context.Context, tree string, run jobtypes.CapturedRun) bool {
 		if run.Ref == "" || run.Failed {
 			return false
 		}
@@ -52,7 +53,7 @@ func runsAtCurrentKey(graphIn func(tree string) *Graph, env Env) job.CurrentRun 
 // is the graph of the checkout the job's work lives in: a worker's unintegrated branch is
 // invisible to the waiter's.
 func Observer(root string, graphIn func(tree string) *Graph, env Env) job.Observer {
-	return func(ctx context.Context, row types.Job) (job.Observed, error) {
+	return func(ctx context.Context, row jobtypes.Job) (job.Observed, error) {
 		tree := job.WorkTree(root, row)
 		graph := graphIn(tree)
 		seen, err := job.CheckpointObserver(root, GraphSymbolReader(graph.LoadScoped(row.Paths.Write)))(ctx, row)
@@ -74,7 +75,7 @@ func Observer(root string, graphIn func(tree string) *Graph, env Env) job.Observ
 // observeSymbolDelta reads the delta of the diff seen was graded on, in tree, the checkout
 // that diff was read in, against graph, which is that tree's. A graph that will not load
 // leaves the delta unknown, as does a stale index when graph must not build.
-func observeSymbolDelta(ctx context.Context, tree string, row types.Job, seen job.Observed, graph *Graph) (job.SymbolDelta, bool) {
+func observeSymbolDelta(ctx context.Context, tree string, row jobtypes.Job, seen job.Observed, graph *Graph) (job.SymbolDelta, bool) {
 	if row.ReadOnly || tree == "" || !seen.ChangedKnown || seen.ChangedRevision == "" {
 		return job.SymbolDelta{}, false
 	}

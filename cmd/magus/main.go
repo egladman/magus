@@ -69,6 +69,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
@@ -95,9 +96,6 @@ func runCLI() int {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return 1
 	}
-	// Before the worker branches: a worker runs magus\workspace().putJob.
-	// That opens its own Store inside std and grades the check through this.
-	job.SetCheckGrader(guard.NewCheckGrader(loadGuardDependencies))
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return transform.Serve(context.Background(), os.Stdin, os.Stdout, os.Stderr)
@@ -158,9 +156,9 @@ func runCLI() int {
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
-	rootCtx = types.WithJobLease(rootCtx, trail.LeaseFromEnv())
+	rootCtx = jobtypes.WithLease(rootCtx, trail.LeaseFromEnv())
 	// The verbs that are another entry point (the hook, the server) restamp this.
-	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
+	rootCtx = trail.ContextWithEntryPoint(rootCtx, jobtypes.EntryPointCLI)
 	rootCtx = interactive.WithHints(rootCtx)
 	// An agent host's hook judged this invocation before it ran, and a person typing it
 	// answers for it: the Run family must not judge it a second time in process.

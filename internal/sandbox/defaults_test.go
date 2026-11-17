@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -445,8 +447,11 @@ func TestScopedCutsTheSpellLayer(t *testing.T) {
 // A lease-narrowed policy stays narrowed through Scoped.
 func TestScopedKeepsTheLeaseBoundary(t *testing.T) {
 	o, root := hostOptions(t)
-	b := &leaseBoundary{id: "l1", root: filesystem.ResolveRulePath(o.Workspace), granted: []string{filepath.Join(o.Workspace, "pkg")}}
-	p := b.apply(BuildPolicy(o))
+	require.NoError(t, os.Mkdir(filepath.Join(o.Workspace, "pkg"), 0o755))
+	b, ok := scissors.LeaseBoundary(jobtypes.Job{ID: "l1", Parent: "root", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"pkg"}}},
+		jobtypes.LeaseSourceMarker, o.Workspace)
+	require.True(t, ok)
+	p := narrow(BuildPolicy(o), b)
 	scoped := p.Scoped([]string{"go"}, nil)
 	assert.ErrorIs(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/main.go")), filesystem.ErrDenied)
 	require.NoError(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/pkg/x.go")))

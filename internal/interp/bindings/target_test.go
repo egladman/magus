@@ -3,6 +3,7 @@ package bindings
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,14 +15,15 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
@@ -386,24 +388,18 @@ func TestNeedsMarksADependencyFailureParkedOrInline(t *testing.T) {
 
 func TestBuildCache(t *testing.T) {
 	t.Run("valid spell handle records the remote backend", func(t *testing.T) {
-		reg := workspace.NewWorkspaceRegistry()
-		// buildCache captures the ctx at construction; remote() records onto that
-		// registry regardless of the call-time ctx.
-		cache := buildCache(workspace.ContextWithRegistry(context.Background(), reg), nil)
-
-		handle := vm.NewMap()
-		handle.MapSet("name", vm.StringValue("aws-s3"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
-		assert.Equal(t, "aws-s3", reg.RemoteBackend())
+		parsed, err := parseChoices(t, context.Background(), `magus\cache.remote({"name": "aws-s3"});`)
+		require.NoError(t, err)
+		assert.Equal(t, "aws-s3", parsed.Choices.RemoteBackend)
 	})
 
-	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
-		// describe/parse runs have no per-Open registry; remote() must not panic and
-		// simply records nothing.
+	t.Run("no evaluation record in context is refused", func(t *testing.T) {
 		cache := buildCache(context.Background(), nil)
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StringValue("aws-s3"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
+		err := callVoidDirect(t, requireDirect(t, cache, "remote"), handle)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is a magusfile declaration")
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
@@ -564,35 +560,73 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 }
 
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
-	r := secret.New()
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
+	p := testkit.NewSecretProvider(map[string]string{"op://vault/token": "op-token-value"})
+	r := secrets.NewResolver(secrets.WithOpener(p.Opener()))
 
-	handle := vm.NewMap()
-	handle.MapSet("name", vm.StringValue("onepassword"))
-	require.NoError(t, callSecret(t, secretObj, "provider", handle))
-	assert.Equal(t, "onepassword", r.ProviderName())
+	// The same evaluation's read goes through the selected provider.
+	parsed, err := parseChoices(t, secrets.WithResolver(context.Background(), r),
+		`import "std";
+magus\secret.provider({"name": "onepassword"});
+try {
+    _ = magus\secret.read("op://vault/token");
+} catch (e: any) {
+    std\print("read failed: {e}");
+}`)
+
+	require.NoError(t, err)
+	assert.Equal(t, "onepassword", parsed.Choices.SecretProvider, "the selection is returned for the workspace's later runs")
+	assert.Empty(t, r.ProviderName(), "the run's resolver is derived from, never changed")
+	assert.Equal(t, 1, p.Fetches("op://vault/token"))
+	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=op-token-value"))))
+}
+
+// parseChoices evaluates a magusfile whose top level is body through [interp.Parse], the
+// path a workspace load takes, and returns what it chose.
+func parseChoices(t *testing.T, ctx context.Context, body string) (interp.Parsed, error) {
+	t.Helper()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, fmt.Sprintf("import \"magus\";\n%s\n", body))
+	srcs, err := interp.FindAll(dir)
+	require.NoError(t, err)
+	return interp.Parse(ctx, srcs[0])
 }
 
 func TestSecretProviderRejectsNonHandles(t *testing.T) {
-	r := secret.New()
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
+	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
 
-	err := callSecret(t, secretObj, "provider")
+	// Typed as any, so the value reaches the binding rather than the type checker.
+	_, err := parseChoices(t, ctx, `final handle: any = "onepassword";
+magus\secret.provider(handle);`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "expected an imported spell handle")
 
 	// A map with no name is a map, not a spell handle: catching it here beats a lookup
 	// failure later with nothing to point at.
-	err = callSecret(t, secretObj, "provider", vm.NewMap())
+	parsed, err := parseChoices(t, ctx, `import "std";
+try {
+    magus\secret.provider({});
+} catch (e: any) {
+    std\print("refused: {e}");
+}`)
+	require.NoError(t, err)
+	assert.Empty(t, parsed.Choices.SecretProvider, "a rejected handle must not be recorded")
+	_, err = parseChoices(t, ctx, `magus\secret.provider({});`)
+	require.ErrorContains(t, err, "not a spell handle")
+}
+
+func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	handle := vm.NewMap()
+	handle.MapSet("name", vm.StringValue("onepassword"))
+	err := callSecret(t, secretObj, "provider", handle)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a spell handle")
-	assert.Empty(t, r.ProviderName(), "a rejected handle must not be recorded")
+	assert.Contains(t, err.Error(), "is a magusfile declaration")
 }
 
 func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
-	r := secret.New()
+	r := secrets.NewResolver()
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), r), nil)
 
 	require.NoError(t, callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_TOKEN")))
 
@@ -602,14 +636,14 @@ func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 }
 
 func TestSecretReadRejectsEmptyReference(t *testing.T) {
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
 	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StringValue("")), "non-empty reference string")
 }
 
 func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
-	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	err := callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
@@ -648,7 +682,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
-	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
 	ctx = journal.WithLogger(ctx, slog.New(rec))
 	ctx = journal.WithStep(ctx, "demo", "publish")
 
@@ -694,6 +728,38 @@ func TestSecretGrantArgRejectsNoArguments(t *testing.T) {
 			})
 		})
 	}
+}
+
+// SecretGrantSuite pins MGS1027 onto a refused grant: a grant decides where a credential
+// may go, so a malformed one gets a code a magusfile can branch on, not a bare string.
+type SecretGrantSuite struct{ suite.Suite }
+
+func TestSecretGrantSuite(t *testing.T) { suite.Run(t, new(SecretGrantSuite)) }
+
+func (s *SecretGrantSuite) TestARefusedGrantCarriesMGS1027() {
+	grant := vm.NewMap()
+	grant.MapSet("ref", vm.StringValue("TOKEN"))
+	grant.MapSet("host", vm.StringValue("*.example.com"))
+	grant.MapSet("header", vm.StringValue("Authorization"))
+
+	_, err := secretGrantArg("endpoint", []vm.Value{grant})
+	var d *types.DiagnosticError
+	s.Require().ErrorAs(err, &d)
+	s.Equal(types.SecretGrantInvalid, d.Code)
+	s.Contains(err.Error(), "wildcard", "the module's reason survives the mapping")
+	var ge *secrets.GrantError
+	s.Require().ErrorAs(err, &ge, "the module's typed error stays in the chain")
+}
+
+func (s *SecretGrantSuite) TestAnEndpointOutsideARunIsRefusedByName() {
+	grant := vm.NewMap()
+	grant.MapSet("ref", vm.StringValue("TOKEN"))
+	grant.MapSet("host", vm.StringValue("api.example.com"))
+	grant.MapSet("header", vm.StringValue("Authorization"))
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+
+	err := callVoidDirect(s.T(), requireDirect(s.T(), secretObj, "endpoint"), grant)
+	s.Require().ErrorContains(err, "belongs to a run")
 }
 
 // magus\review.provider is the fourth provider namespace, wired exactly as the other three:
@@ -1207,7 +1273,7 @@ func (i inlineInterceptor) InterceptTarget(ctx context.Context, name string, inv
 // claimLog is a machine admitter that seats every claim and records it.
 type claimLog struct {
 	mu       sync.Mutex
-	claims   []types.MachineClaim
+	claims   []budget.Claim
 	released []string
 }
 
@@ -1225,14 +1291,14 @@ func (l *claimLog) claimed() []string {
 	return out
 }
 
-func (l *claimLog) Claim(_ context.Context, c types.MachineClaim, _ func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (l *claimLog) Claim(_ context.Context, c budget.Claim, _ func(budget.Verdict)) (budget.Verdict, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.claims = append(l.claims, c)
-	return types.MachineVerdict{Granted: true, Fits: true, ID: c.Target}, nil
+	return budget.Verdict{Granted: true, Fits: true, ID: c.Target}, nil
 }
 
-func (l *claimLog) Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (l *claimLog) Request(ctx context.Context, c budget.Claim) (budget.Verdict, error) {
 	return l.Claim(ctx, c, nil)
 }
 

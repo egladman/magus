@@ -9,7 +9,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -203,7 +203,7 @@ func pipfileLock(lockfile string) map[string][]string {
 		Default map[string]map[string]any `json:"default"`
 		Develop map[string]map[string]any `json:"develop"`
 	}
-	if json.Unmarshal(data, &lock) != nil {
+	if codec.Unmarshal(data, &lock) != nil {
 		return nil
 	}
 	out := map[string][]string{}

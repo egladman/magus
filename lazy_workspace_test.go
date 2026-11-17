@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,7 @@ func countingOpen(t *testing.T) (string, func(context.Context) (*Magus, error), 
 	opens := new(int)
 	return root, func(ctx context.Context) (*Magus, error) {
 		*opens++
-		ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+		ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			return nil, err
 		}

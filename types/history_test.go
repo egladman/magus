@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 func TestConformanceJSONCarriesPropose(t *testing.T) {
@@ -21,10 +21,10 @@ func TestConformanceJSONCarriesPropose(t *testing.T) {
 		}},
 		Answer: ClassifyAnswer(true, "", nil),
 	}
-	b, err := json.Marshal(out)
+	b, err := codec.Marshal(out)
 	require.NoError(t, err)
 	var got map[string]any
-	require.NoError(t, json.Unmarshal(b, &got))
+	require.NoError(t, codec.Unmarshal(b, &got))
 	distributions, _ := got["distributions"].([]any)
 	require.Len(t, distributions, 1)
 	assert.EqualValues(t, 938, distributions[0].(map[string]any)["propose"])

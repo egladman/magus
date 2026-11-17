@@ -15,6 +15,8 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -63,10 +65,10 @@ type commandRuleInput struct {
 //
 // The cost and stall rules are graded first: they too only add, and they read the
 // verdict every compiled rule reached.
-func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
-	verdict = gradeStall(deps, gradeMainCommand(ctx, deps, verdict, in, who, at), in.lease, at)
-	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil || verdict.Decision == decisionDeny {
-		return verdict, workspaceRuleRecord{}
+func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, judged verdict.Judgment, in commandRuleInput, who hookAttribution, at location) (verdict.Judgment, workspaceRuleRecord) {
+	judged = gradeStall(deps, gradeMainCommand(ctx, deps, judged, in, who, at), in.lease, at)
+	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil || judged.Decision == verdict.Deny {
+		return judged, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
@@ -82,7 +84,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 		if rule == nil {
 			return nil
 		}
-		return func(ctx context.Context) (types.GuardVerdict, error) { return rule(ctx, req, facts) }
+		return func(ctx context.Context) (verdict.Verdict, error) { return rule(ctx, req, facts) }
 	}
 	var resolve func(context.Context) (ruleCall, error)
 	if deps.ApprovedCommandRule != nil {
@@ -94,26 +96,26 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 	ctx = unverified.WithReader(ctx, guardUnverified(deps))
 	asked := askWorkspaceRules(ctx, seamCommand, deps, resolve, bind(deps.CommandRule))
 	denied := asked.denyShort(ctx, func() judgedCall { return commandCall(ctx, in, at) }, at)
-	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
-		return verdict, workspaceRuleRecord{failures: asked.failures}
+	if in.preauth != "" && asked.answer.Decision != verdict.Deny {
+		return judged, workspaceRuleRecord{failures: asked.failures}
 	}
 	decided := ""
-	if verdict.Decision != decisionPass {
+	if judged.Decision != verdict.Defer {
 		decided = decidedByBuiltin
 	}
-	verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceCommandRule)
+	judged, decided = applyWorkspaceAnswer(judged, decided, asked, workspaceCommandRule)
 	if asked.by == "" {
 		decided = ""
 	}
 	if denied {
-		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+		return judged, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
 	note := ruleFailureNote(ruleFailureReport{
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
 		judging: func() string { return judgingBinaryNote(ctx, deps, at, asked.loadFailure, in.lease) },
 		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 	})
-	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+	return applyRuleFailureNote(judged, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 
 // gatedVerb names, in backticks, the first call on the line that must wait while no side
@@ -230,11 +232,11 @@ func isPullRequestText(c hint.Invocation) bool {
 // actingRole is where a caller acting under lease, spawned as spawned, stands, and the
 // lease's job row. A bound id the job store does not carry comes back with only its ID set,
 // so the rule can tell a dangling binding from no binding.
-func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *types.Job) {
+func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *job.Job) {
 	if lease == "" {
 		return types.AgentRoleRoot, nil
 	}
-	row := &types.Job{ID: lease}
+	row := &job.Job{ID: lease}
 	if rows, err := leaseRows(ctx, at); err == nil {
 		for _, r := range rows {
 			if r.ID == lease {

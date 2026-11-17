@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,9 +32,38 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 `)
 	require.NoError(t, err)
 	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
-	cases := map[string]types.GuardVerdict{
-		"named": {Decision: types.GuardDeny, Reason: "Lead with the outcome.", Rule: "pull-request-text"},
-		"other": {Decision: types.GuardDeny, Reason: "unnamed"},
+	cases := map[string]verdict.Verdict{
+		"named": {Decision: verdict.Deny, Reason: "Lead with the outcome.", Rule: "pull-request-text"},
+		"other": {Decision: verdict.Deny, Reason: "unnamed"},
+	}
+	for command, want := range cases {
+		got, err := rule(t.Context(), types.CommandRequest{Command: command}, facts)
+		require.NoError(t, err, command)
+		assert.Equal(t, want, got, command)
+	}
+}
+
+// A rule may ask: the call waits on the person, by the member or the enum case.
+func TestCommandRuleMayAsk(t *testing.T) {
+	rule, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.command == "git push") {
+        return magus\guard.ask("A person approves pushes.");
+    }
+    if (req.command == "gh pr merge") {
+        return GuardVerdict{decision = magus\GuardDecision.ask, reason = "A person merges."};
+    }
+    return magus\guard.defer();
+});
+`)
+	require.NoError(t, err)
+	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
+	cases := map[string]verdict.Verdict{
+		"git push":    {Decision: verdict.Ask, Reason: "A person approves pushes."},
+		"gh pr merge": {Decision: verdict.Ask, Reason: "A person merges."},
+		"ls":          {Decision: verdict.Defer},
 	}
 	for command, want := range cases {
 		got, err := rule(t.Context(), types.CommandRequest{Command: command}, facts)
@@ -51,7 +81,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.command == "git push") {
         return magus\guard.deny("Ask before pushing.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `)
 	require.NoError(t, err)
@@ -59,11 +89,11 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 	got, err := rule(t.Context(), types.CommandRequest{Command: "git push"}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Ask before pushing."}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "Ask before pushing."}, got)
 
 	got, err = rule(t.Context(), types.CommandRequest{Command: "ls"}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Defer}, got)
 }
 
 // A rule that denies on the caller's role denies a worker and passes the root.
@@ -75,7 +105,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.role == magus\AgentRole.worker) {
         return magus\guard.deny("A worker does not build.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `)
 	require.NoError(t, err)
@@ -83,11 +113,11 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 	got, err := rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleWorker}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "A worker does not build."}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "A worker does not build."}, got)
 
 	got, err = rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleRoot}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Defer}, got)
 }
 
 // Comparing a boundary record's enum field to a string literal is always false, so a
@@ -100,7 +130,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.role == "worker") {
         return magus\guard.deny("A worker does not build.");
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `)
 	require.ErrorContains(t, err, "BZZ1005")
@@ -158,7 +188,7 @@ func TestGuardVerdictRuleNameIsValidated(t *testing.T) {
 func TestRunDirRetainsNothingWhenTheMagusfileRegistersARule(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `import "magus";
-magus\guard.command(fun (req: magus\CommandRequest) > magus\GuardVerdict { return magus\guard.allow(); });
+magus\guard.command(fun (req: magus\CommandRequest) > magus\GuardVerdict { return magus\guard.defer(); });
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	reg := workspace.NewWorkspaceRegistry()
@@ -229,7 +259,7 @@ func commandRuleSource(reason string) string {
 	return fmt.Sprintf(commandRuleTemplate, reason)
 }
 
-func (s *FunctionRuleLoadSuite) commandVerdict() types.GuardVerdict {
+func (s *FunctionRuleLoadSuite) commandVerdict() verdict.Verdict {
 	rule := s.reg.CommandRule()
 	s.Require().NotNil(rule, "the registry holds no command rule")
 	got, err := rule(s.T().Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(s.T().TempDir(), "claude-code/s1"))
@@ -278,7 +308,7 @@ const stepRuleSource = `
 import "magus";
 import "magus/agent";
 magus\guard.step("ci", fun (req: StepRequest) > GuardVerdict {
-    return magus\guard.allow();
+    return magus\guard.defer();
 });
 `
 

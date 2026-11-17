@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,9 +38,9 @@ type Env struct {
 	RefsGraph       func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error)
 	DomainGraph     func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error)
 	// Notes are the regenerated outputs and unrun gates of row in m.
-	Notes func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate)
+	Notes func(ctx context.Context, m *magus.Magus, row jobtypes.Job) ([]job.RegeneratedOutput, []job.UnrunGate)
 	// HolderCell names a row's holder in a plan figure.
-	HolderCell func(row types.Job) string
+	HolderCell func(row jobtypes.Job) string
 	// GateMergeScanLimit is how many commits the green-gate scan reads for a merge.
 	GateMergeScanLimit int
 }

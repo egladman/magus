@@ -13,11 +13,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/embedtable"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // The knowledge graph as something a team SHARES rather than each member rebuilds.
@@ -80,16 +79,16 @@ func NoGraphDestinationError(verb string) error {
 // magus\secret.read, which is what keeps the credential source pluggable: a workspace
 // picks its provider and this never learns which one. The token never passed through
 // this run's resolver, so it is registered there for redaction.
-func ReadToken(ctx context.Context) (types.Secret, error) {
+func ReadToken(ctx context.Context) (secrets.Secret, error) {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return types.Secret{}, fmt.Errorf("read token from stdin: %w", err)
+		return secrets.Secret{}, fmt.Errorf("read token from stdin: %w", err)
 	}
-	tok := types.NewSecret(strings.TrimSpace(string(raw)))
+	tok := secrets.New(strings.TrimSpace(string(raw)))
 	if tok.IsZero() {
-		return types.Secret{}, fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
+		return secrets.Secret{}, fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
 	}
-	secret.ResolverFromContext(ctx).Register(tok)
+	secrets.ResolverFromContext(ctx).Register(tok)
 	return tok, nil
 }
 
@@ -278,7 +277,7 @@ func PullMergedGraph(ctx context.Context, client *oci.Client, src oci.Reference,
 	}
 	out := g.Output()
 	out.SourceBaseURL = sourceBase
-	body, err := json.Marshal(out)
+	body, err := codec.Marshal(out)
 	if err != nil {
 		return nil, fmt.Errorf("encode graph: %w", err)
 	}

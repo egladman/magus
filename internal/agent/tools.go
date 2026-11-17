@@ -12,10 +12,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // ToolRowsVersion is the layout of a tool rows directory this build writes and reads, kept in
@@ -27,8 +29,8 @@ const ToolRowsVersion types.APIVersion = "magus.tool-rows/v1alpha1"
 // publishes through mgs_listModels, and the workspace's model-tier declaration, nil when it
 // declares none or turned tiers off.
 type ModelFacts struct {
-	Rows  []types.ModelPricing
-	Tiers *typesagent.ModelTierSet
+	Rows  []model.Row
+	Tiers *tier.Set
 }
 
 func validateHarnessTools(t types.HarnessTools) error {
@@ -113,7 +115,7 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 		return nil, nil
 	}
 	ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
+		ModelTiers(ctx context.Context) *tier.Set
 	})
 	if !ok {
 		return nil, fmt.Errorf("agent: harness %s: no workspace is loaded, so its model tiers are unknown", id)
@@ -233,7 +235,7 @@ func (r ToolRows) Models() (ModelFacts, error) {
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model tiers at %s, %s: %w", r.Dir, reinstall, err)
 	}
-	var tiers *typesagent.ModelTierSet
+	var tiers *tier.Set
 	if lines := jsonLines(body); len(lines) > 0 {
 		if tiers, err = decodeTiers(lines); err != nil {
 			return ModelFacts{}, fmt.Errorf("the model tiers at %s do not read, %s: %w", r.Dir, reinstall, err)
@@ -318,7 +320,7 @@ func (r ToolRows) Limits() (types.Limits, error) {
 		return types.Limits{}, fmt.Errorf("no host limits at %s, rewrite them with `magus agent harness install`: %w", r.Dir, err)
 	}
 	var limits types.Limits
-	if err := json.Unmarshal(bytes.TrimSpace(body), &limits); err != nil {
+	if err := codec.Unmarshal(bytes.TrimSpace(body), &limits); err != nil {
 		return types.Limits{}, fmt.Errorf("the host limits at %s do not read, rewrite them with `magus agent harness install`: %w", r.Dir, err)
 	}
 	return limits, nil
@@ -339,7 +341,7 @@ func ToolRowsFromContext(ctx context.Context) (ToolRows, bool) {
 	return rows, ok
 }
 
-// modelRowLine is one model row as the models file keeps it; types.ModelPricing carries no
+// modelRowLine is one model row as the models file keeps it; model.Row carries no
 // wire tags.
 type modelRowLine struct {
 	ID           string  `json:"id"`
@@ -355,7 +357,7 @@ type modelRowLine struct {
 	StepFactor   float64 `json:"step_factor,omitzero"`
 }
 
-func encodeModelRows(rows []types.ModelPricing) string {
+func encodeModelRows(rows []model.Row) string {
 	var b strings.Builder
 	for _, r := range rows {
 		line := modelRowLine{
@@ -370,19 +372,18 @@ func encodeModelRows(rows []types.ModelPricing) string {
 	return b.String()
 }
 
-func decodeModelRows(body []byte) ([]types.ModelPricing, error) {
-	var rows []types.ModelPricing
+func decodeModelRows(body []byte) ([]model.Row, error) {
+	var rows []model.Row
 	for i, raw := range jsonLines(body) {
 		var line modelRowLine
-		if err := json.Unmarshal(raw, &line); err != nil {
+		if err := codec.Unmarshal(raw, &line); err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		row := types.ModelPricing{
-			ID: line.ID, Tier: line.Tier, Alias: line.Alias, Window: line.Window, Input: types.USDPerMTok(line.Input), CacheWrite5m: types.USDPerMTok(line.CacheWrite5m),
-			CacheWrite1h: types.USDPerMTok(line.CacheWrite1h), CacheRead: types.USDPerMTok(line.CacheRead), Output: types.USDPerMTok(line.Output),
+		row := model.Row{
+			ID: line.ID, Tier: line.Tier, Alias: line.Alias, Window: line.Window, Price: budget.Price{Input: budget.USDPerMTok(line.Input), CacheWrite5m: budget.USDPerMTok(line.CacheWrite5m), CacheWrite1h: budget.USDPerMTok(line.CacheWrite1h), CacheRead: budget.USDPerMTok(line.CacheRead), Output: budget.USDPerMTok(line.Output)},
 		}
 		if line.PriceStep > 0 {
-			row.LongContext = &types.PriceStep{Above: line.PriceStep, Multiplier: line.StepFactor}
+			row.LongContext = &budget.PriceStep{Above: line.PriceStep, Multiplier: line.StepFactor}
 		}
 		rows = append(rows, row)
 	}
@@ -392,13 +393,13 @@ func decodeModelRows(body []byte) ([]types.ModelPricing, error) {
 // tierLine is a model-tier declaration as the tiers file keeps it: each list by rank,
 // cheapest first, and each host's model alias for every rank.
 type tierLine struct {
-	Enum    string                    `json:"enum"`
-	Site    string                    `json:"site"`
-	Cases   []string                  `json:"cases"`
-	Default int                       `json:"default"`
-	Bounds  []tierBoundsLine          `json:"bounds"`
-	Skills  []typesagent.SkillVariant `json:"skills"`
-	Hosts   map[string][]string       `json:"hosts,omitempty"`
+	Enum    string              `json:"enum"`
+	Site    string              `json:"site"`
+	Cases   []string            `json:"cases"`
+	Default int                 `json:"default"`
+	Bounds  []tierBoundsLine    `json:"bounds"`
+	Skills  []tier.SkillVariant `json:"skills"`
+	Hosts   map[string][]string `json:"hosts,omitempty"`
 }
 
 type tierBoundsLine struct {
@@ -406,17 +407,19 @@ type tierBoundsLine struct {
 	MaxContext int64 `json:"max_context,omitzero"`
 }
 
-func encodeTiers(set *typesagent.ModelTierSet) string {
+func encodeTiers(set *tier.Set) string {
 	if set == nil {
 		return ""
 	}
 	tiers := set.All()
 	line := tierLine{Enum: set.Enum(), Site: set.Site(), Default: set.Default().Rank()}
 	for _, t := range tiers {
-		b := set.Bounds(t)
+		// Every t comes from set.All, so neither lookup can refuse it as foreign.
+		b, _ := set.Bounds(t)
+		skills, _ := set.Skills(t)
 		line.Cases = append(line.Cases, t.Name())
 		line.Bounds = append(line.Bounds, tierBoundsLine{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
-		line.Skills = append(line.Skills, set.Skills(t))
+		line.Skills = append(line.Skills, skills)
 	}
 	for _, host := range set.Hosts() {
 		if line.Hosts == nil {
@@ -433,28 +436,28 @@ func encodeTiers(set *typesagent.ModelTierSet) string {
 	return b.String()
 }
 
-func decodeTiers(lines [][]byte) (*typesagent.ModelTierSet, error) {
+func decodeTiers(lines [][]byte) (*tier.Set, error) {
 	if len(lines) != 1 {
 		return nil, fmt.Errorf("%d lines, and a declaration is one", len(lines))
 	}
 	var line tierLine
-	if err := json.Unmarshal(lines[0], &line); err != nil {
+	if err := codec.Unmarshal(lines[0], &line); err != nil {
 		return nil, err
 	}
-	decl := typesagent.ModelTierDeclaration{Enum: line.Enum, Site: line.Site, Cases: line.Cases, Default: line.Default, Skills: line.Skills}
+	decl := tier.Declaration{Enum: line.Enum, Site: line.Site, Cases: line.Cases, Default: line.Default, Skills: line.Skills}
 	for _, b := range line.Bounds {
-		decl.Bounds = append(decl.Bounds, typesagent.ModelTierBounds{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
+		decl.Bounds = append(decl.Bounds, tier.Bounds{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
 	}
 	if len(line.Hosts) > 0 {
 		decl.Hosts = line.Hosts
 	}
-	return typesagent.NewModelTierSet(decl)
+	return tier.NewSet(decl)
 }
 
 // writeJSONLine appends v as one line. Each value written holds only strings, numbers and
 // lists and maps of them, which always marshal.
 func writeJSONLine(b *strings.Builder, v any) {
-	raw, _ := json.Marshal(v)
+	raw, _ := codec.Marshal(v)
 	b.Write(raw)
 	b.WriteByte('\n')
 }

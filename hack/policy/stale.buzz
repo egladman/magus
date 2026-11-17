@@ -254,14 +254,14 @@ final unstampedAdvice = "./magus carries no go-build stamp: it was linked by a b
 // never denies: running a stale binary is how it gets rebuilt.
 export fun decideStale(bin: HookBinary, once: fun (key: str) > bool) > GuardVerdict {
     if (!isStale(bin)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (!bin.stamped) {
         if (once("stale-binary:unstamped")) { return magus\guard.advise(unstampedAdvice); }
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (!once("stale-binary:" + bin.moved.join(","))) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final text = "./magus was built before {movedList(bin)}. "
         + "This verdict, and the workspace it loads, come from the PREVIOUS sources. "
@@ -402,12 +402,12 @@ fun rebuildRemedy(binary: str, workspace: str) > str {
 export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinary, onBase: fun (commit: str) > BaseCheck) > GuardVerdict {
     final w = stateWrite(programs);
     if (w == null) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final hook = bin();
     final verb = w!.verb;
     if (elsewhere(w!.root, workspace: hook.workspace)) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (isStale(hook)) {
         var why = "it carries no go-build stamp, so nothing can say which sources it was built from";
@@ -423,7 +423,7 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
             + "undo what a newer magus wrote.");
     }
     if (!w!.shared or !hook.ours) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (hook.commit == "") {
         return magus\guard.deny("./magus names no commit to check against the base branch; rebuild it\n"
@@ -437,7 +437,7 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
             + "The check failed: {check.unreadable}. `magus {verb}` writes state every checkout of this repository shares.");
     }
     if (!check.known or check.contained) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     return magus\guard.deny("./magus was not built from {check.base}; run this from a checkout at {check.base} with that checkout's own ./magus\n"
         + "./magus was built from {hook.commit}, which is not on {check.base}. `magus {verb}` writes state every checkout of this repository shares. A branch's build stamps "
@@ -490,7 +490,7 @@ test "a ./magus whose sources moved is advised once per moved set, naming them" 
     std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names the file");
     std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
     std\assert(v.reason.indexOf("magus.old") == null, message: "no deadlock talk for a Go source");
-    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == magus\GuardDecision.allow, message: "once per set");
+    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == magus\GuardDecision.defer, message: "once per set");
     std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == magus\GuardDecision.advise, message: "a new set speaks again");
 
     final decls = decideStale(stale(["internal/spell/gen/decls/magus.buzz"]), once: helpers\counter());
@@ -506,9 +506,9 @@ test "an unstamped ./magus is advised once; another binary and an unmoved one st
     final once = helpers\counter();
     final unstamped = HookBinary{ ours = true, stamped = false, moved = [<str>] };
     std\assert(decideStale(unstamped, once: once).decision == magus\GuardDecision.advise, message: "unstamped");
-    std\assert(decideStale(unstamped, once: once).decision == magus\GuardDecision.allow, message: "once");
-    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: helpers\counter()).decision == magus\GuardDecision.allow, message: "not ours");
-    std\assert(decideStale(stale([<str>]), once: helpers\counter()).decision == magus\GuardDecision.allow, message: "nothing moved");
+    std\assert(decideStale(unstamped, once: once).decision == magus\GuardDecision.defer, message: "once");
+    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: helpers\counter()).decision == magus\GuardDecision.defer, message: "not ours");
+    std\assert(decideStale(stale([<str>]), once: helpers\counter()).decision == magus\GuardDecision.defer, message: "nothing moved");
 }
 
 test "the rebuild itself is not held up by the staleness it cures" {
@@ -635,17 +635,17 @@ test "a build off the base branch is denied shared writes and allowed its own ch
         final v = writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"]));
         std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("./magus was not built from origin/main; run this from a checkout at origin/main") == 0, message: v.reason);
-        std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == magus\GuardDecision.allow, message: "on the base: " + argv.join(" "));
+        std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == magus\GuardDecision.defer, message: "on the base: " + argv.join(" "));
     }
     foreach (argv in [
         ["./magus", "agent", "install", ".claude/skills", "--force"],
         ["./magus", "config", "set", "key=cache.dir,value=/tmp/c"],
         ["./magus", "agent", "harness", "install"],
     ]) {
-        std\assert(writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"])).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"])).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
     final unknownBase = fun (commit: str) > BaseCheck { return BaseCheck{ base = "origin/main", known = false, contained = false }; };
-    std\assert(writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: unknownBase).decision == magus\GuardDecision.allow, message: "a base the repository cannot answer for");
+    std\assert(writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: unknownBase).decision == magus\GuardDecision.defer, message: "a base the repository cannot answer for");
     final noCommit = writeVerdict(["./magus", "init"], bin: built(""), onBase: mainHolds([<str>]));
     std\assert(noCommit.decision == magus\GuardDecision.deny and noCommit.reason.indexOf("names no commit") != null, message: "a stamp with no commit");
 }
@@ -662,7 +662,7 @@ test "a base ref that cannot be resolved denies shared writes, naming why" {
         std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf(check.unreadable) != null, message: v.reason);
     }
-    std\assert(writeVerdict(["./magus", "config", "set", "key=cache.dir,value=/tmp/c"], bin: built("c1"), onBase: broken).decision == magus\GuardDecision.allow,
+    std\assert(writeVerdict(["./magus", "config", "set", "key=cache.dir,value=/tmp/c"], bin: built("c1"), onBase: broken).decision == magus\GuardDecision.defer,
         message: "a checkout's own state is not judged against the base");
 }
 
@@ -678,10 +678,10 @@ test "read-only verbs, dry runs and another binary stay with the advisory" {
         ["./magus", "run", "lint", "."],
         ["./magus", "doctor"],
     ]) {
-        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
     final other = fun () > HookBinary { return HookBinary{ ours = false, stamped = false, moved = [<str>] }; };
-    std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: "not this workspace's binary");
+    std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == magus\GuardDecision.defer, message: "not this workspace's binary");
 }
 
 test "an init whose --root names another workspace is not judged by this one's binary" {
@@ -690,7 +690,7 @@ test "an init whose --root names another workspace is not judged by this one's b
             path = "/repo/magus", workspace = "/repo" };
     };
     foreach (argv in [["./magus", "init", "--root", "/other"], ["./magus", "--root=/repo-two/", "init"]]) {
-        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
     foreach (argv in [["./magus", "init", "--root", "/repo"], ["./magus", "init", "--root", "/repo/sub"], ["./magus", "init", "--root", "sub"]]) {
         std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.deny, message: argv.join(" "));
@@ -704,7 +704,7 @@ test "a squash-merged build is judged by its stamped sources, not its ancestry" 
 
     final sameSources = fun (commit: str) > BaseCheck { return BaseCheck{ base = "origin/main", known = true, contained = true }; };
     foreach (argv in stateWriters) {
-        std\assert(writeVerdict(argv, bin: built("squashed"), onBase: sameSources).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: built("squashed"), onBase: sameSources).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
 }
 

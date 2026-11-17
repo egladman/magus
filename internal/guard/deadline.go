@@ -19,8 +19,9 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // hookBudget bounds one hook judgment, from the moment magus starts judging to its verdict.
@@ -261,10 +262,10 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 
 // JudgeLapsed is [Judge], and whether its deny describes the clock and not the
 // call. A rule's own deny stays a deny when some other phase ran out of time.
-func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.GuardJudgment, bool) {
+func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (verdict.Judgment, bool) {
 	log := &phaseLog{start: time.Now()}
 	v := Judge(context.WithValue(ctx, phaseLogKey{}, log), deps, req)
-	return v, v.Decision == decisionDeny && log.lapseDenied()
+	return v, v.Decision == verdict.Deny && log.lapseDenied()
 }
 
 // JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
@@ -283,9 +284,9 @@ func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.Gua
 // A call to a tool the host's tool rows call inert, carrying nothing a rule reads, passes
 // without judge running at all: every tool reaches the guard, and loading the workspace's
 // rules for a todo list costs the host a hook's worth of waiting.
-func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) types.GuardJudgment) types.GuardJudgment {
+func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) verdict.Judgment) verdict.Judgment {
 	if inertCall(req) {
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	}
 	if req.DryRun {
 		return judge(ctx)
@@ -298,7 +299,7 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 	log := &phaseLog{start: time.Now()}
 	ctx = context.WithValue(ctx, phaseLogKey{}, log)
 	deadline, _ := ctx.Deadline()
-	done := make(chan types.GuardJudgment, 1)
+	done := make(chan verdict.Judgment, 1)
 	go func() { done <- judge(ctx) }()
 	timer := time.NewTimer(time.Until(deadline) + judgeReserve)
 	defer timer.Stop()
@@ -434,7 +435,7 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 
 // unjudged is the verdict for a hook call whose judgment did not answer within the bound,
 // in the stance a lapsed workspace rule phase takes: a call that changes state is denied
-// and one that only reads passes with a note. A call with nothing to judge passes as it
+// and one that only reads defers with a note. A call with nothing to judge defers as it
 // would have. It ends the call's judgment mark, since the host got its answer in time.
 //
 // The built-in rules that read only the call run first (lapsedRules), and what they refuse
@@ -447,9 +448,9 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 //
 // A bound worker's command, and a subagent's write or command reaching a live
 // job's checkout, are never degraded.
-func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) types.GuardJudgment {
+func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) verdict.Judgment {
 	elapsed := time.Since(log.start)
-	pass := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	deferred := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	input, isPath, callDir := req.Input, req.IsPath, ""
 	if filepath.IsAbs(req.Dir) {
@@ -473,7 +474,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	mark := begunJudgment(ctx)
 	mark.end()
 	if req.Observe || req.Message || input == "" || (isEnvelope && (env.NothingToJudge || env.LoadedSkill != "")) {
-		return pass
+		return deferred
 	}
 	stalled, isStalled := log.stalled()
 	finished := log.finished()
@@ -496,27 +497,27 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		pushes = slices.ContainsFunc(cmds, isPush)
 		writesOutside = call.changes && !pushes && writesOnlyOutside(input, d, callDir, hookLocation(ctx, base).workspace, userHome())
 	}
-	verdict := pass
-	verdict.Lease, verdict.LeaseFrom = lease, leaseFrom
+	judged := deferred
+	judged.Lease, judged.LeaseFrom = lease, string(leaseFrom)
 	inARow := mark.recordLapse()
 	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir, callDir)
 	switch {
 	case builtins.Deny != "":
-		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
+		judged.Decision, judged.Reason, judged.Rule = verdict.Deny, builtins.Deny, builtins.RuleName()
 	case writesOutside:
-		verdict = applyRuleFailureNote(verdict, unjudgedOutsideNote(), advisoryUnfinished)
+		judged = applyRuleFailureNote(judged, unjudgedOutsideNote(), advisoryUnfinished)
 	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes ||
 		!isPath && lapsedPersonOnly(ctx, base, log, hookLocation(ctx, base).workspace, input) ||
 		lapsedInJobCheckout(ctx, base, who, lease, isPath, input, callDir, effectiveDialect(base.ShellDialect))):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
-		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, lapseReason(call, lapse, false), string(advisoryUnfinished)
+		judged.Decision, judged.Reason, judged.Rule = verdict.Deny, lapseReason(call, lapse, false), string(advisoryUnfinished)
 	case call.changes:
 		where := stallSite(stalled, isStalled, finished)
-		verdict = applyRuleFailureNote(verdict, degradedNote(call, where, inARow), advisoryUnfinished)
+		judged = applyRuleFailureNote(judged, degradedNote(call, where, inARow), advisoryUnfinished)
 	default:
-		verdict = applyRuleFailureNote(verdict, unjudgedNote(), advisoryUnfinished)
+		judged = applyRuleFailureNote(judged, unjudgedNote(), advisoryUnfinished)
 	}
 	row := &phaseLog{start: log.start, done: finished}
 	if isStalled {
@@ -524,8 +525,8 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	row.done = append(row.done, timedPhase(phaseAnswer, elapsed, hookBudget, true))
 	ctx = context.WithValue(ctx, phaseLogKey{}, row)
-	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, lease, "", "", "", verdict, workspaceRuleRecord{}, base.judging(callDir))
-	return verdict
+	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, lease, "", "", "", judged, workspaceRuleRecord{}, base.judging(callDir))
+	return judged
 }
 
 // lapsedInJobCheckout reports a call a lease boundary exists to grade: a bound
@@ -539,15 +540,15 @@ func lapsedInJobCheckout(ctx context.Context, base Dependencies, who hookAttribu
 	if err != nil {
 		return false
 	}
-	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
-	if !isPath && slices.ContainsFunc(live, func(row types.Job) bool { return row.ID == lease }) {
+	live := slices.DeleteFunc(slices.Clone(rows), func(row job.Job) bool { return !row.State.Live() })
+	if !isPath && slices.ContainsFunc(live, func(row job.Job) bool { return row.ID == lease }) {
 		return true
 	}
 	wheres := []string{input}
 	if !isPath {
 		wheres = lineReach(input, d, callDir)
 	}
-	return slices.ContainsFunc(live, func(row types.Job) bool {
+	return slices.ContainsFunc(live, func(row job.Job) bool {
 		root := row.CheckoutRoot
 		if row.Worktree.Standing() {
 			root = row.Worktree.Root

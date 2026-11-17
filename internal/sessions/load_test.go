@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,12 +16,12 @@ import (
 
 // firstWordRejudge stands in for the guard's rules, which this package cannot import: it
 // names the first word as the program and passes every command.
-func firstWordRejudge(text string) (program, verdict, rule string) {
+func firstWordRejudge(text string) (program string, decision verdict.Decision, rule string) {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
-		return "", VerdictPass, ""
+		return "", verdict.Defer, ""
 	}
-	return fields[0], VerdictPass, ""
+	return fields[0], verdict.Defer, ""
 }
 
 // loadStream does what `magus session load --file` does: read the stream, then store
@@ -33,7 +35,7 @@ func loadStream(t *testing.T, root string, lines ...string) (LoadSummary, error)
 	if err != nil {
 		return summary, err
 	}
-	result, err := LoadEvents(t.Context(), dir, summary.Events, InvocationStart{Workspace: root, Command: "session load"})
+	result, err := session.LoadEvents(t.Context(), dir, summary.Events, session.InvocationStart{Workspace: root, Command: "session load"})
 	require.NoError(t, err)
 	summary.Loaded, summary.Deduped, summary.Store = result.Loaded, result.Deduped, dir
 	summary.ByKind = result.ByKind
@@ -61,13 +63,13 @@ func storeBytes(t *testing.T, root string) string {
 	return b.String()
 }
 
-func loadedEvent(t *testing.T, root, session string, i int) AgentEvent {
+func loadedEvent(t *testing.T, root, hostSession string, i int) session.AgentEvent {
 	t.Helper()
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
-	events := AgentEvents(fold, session)
+	events := session.AgentEvents(fold, hostSession)
 	require.Greater(t, len(events), i)
 	return events[i]
 }
@@ -96,9 +98,9 @@ func TestLoadIsIdempotent(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
-	assert.Len(t, AgentEvents(fold, "s1"), 3, "a second load must not double the history")
+	assert.Len(t, session.AgentEvents(fold, "s1"), 3, "a second load must not double the history")
 }
 
 func TestLoadDropsAnotherRepositorysEvents(t *testing.T) {
@@ -177,19 +179,19 @@ func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
 // transcript carries a person's own commands, paths and prompts, and a fixture is
 // committed forever.
 var adapterCases = map[string]string{
-	EventSkillLoad:    `{"host":"claude-code","session":"s1","ts":1788955200100,"kind":"skill.load","ref":"t1","text":"magus-run","outcome":{"exit":null,"denied":false,"interrupted":false}}`,
-	EventShellCommand: `{"host":"claude-code","session":"s1","ts":1788955202000,"kind":"shell.command","ref":"t2","text":"blocked-command","outcome":{"exit":null,"denied":true,"interrupted":false}}`,
-	EventHookOutput:   `{"host":"claude-code","session":"s1","ts":1788955202500,"kind":"hook.output","ref":"t2","text":"the guard said so"}`,
-	EventSpawn:        `{"host":"claude-code","session":"s1","ts":1788955204000,"kind":"spawn","ref":"t3","text":"Explore"}`,
-	EventFileRead:     `{"host":"claude-code","session":"s1","ts":1788955206000,"kind":"file.read","ref":"t5","text":"README.md"}`,
-	EventFileWrite:    `{"host":"claude-code","session":"s1","ts":1788955207000,"kind":"file.write","ref":"t6","text":"AGENTS.md"}`,
-	EventMagusCall:    `{"host":"claude-code","session":"s1","ts":1788955208000,"kind":"magus.call","ref":"t7","text":"mcp__magus__magus_query"}`,
+	session.EventSkillLoad:    `{"host":"claude-code","session":"s1","ts":1788955200100,"kind":"skill.load","ref":"t1","text":"magus-run","outcome":{"exit":null,"denied":false,"interrupted":false}}`,
+	session.EventShellCommand: `{"host":"claude-code","session":"s1","ts":1788955202000,"kind":"shell.command","ref":"t2","text":"blocked-command","outcome":{"exit":null,"denied":true,"interrupted":false}}`,
+	session.EventHookOutput:   `{"host":"claude-code","session":"s1","ts":1788955202500,"kind":"hook.output","ref":"t2","text":"the guard said so"}`,
+	session.EventSpawn:        `{"host":"claude-code","session":"s1","ts":1788955204000,"kind":"spawn","ref":"t3","text":"Explore"}`,
+	session.EventFileRead:     `{"host":"claude-code","session":"s1","ts":1788955206000,"kind":"file.read","ref":"t5","text":"README.md"}`,
+	session.EventFileWrite:    `{"host":"claude-code","session":"s1","ts":1788955207000,"kind":"file.write","ref":"t6","text":"AGENTS.md"}`,
+	session.EventMagusCall:    `{"host":"claude-code","session":"s1","ts":1788955208000,"kind":"magus.call","ref":"t7","text":"mcp__magus__magus_query"}`,
 }
 
 // A kind the session contract gains with no adapter case is a kind no load has
 // ever been shown to store.
 func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
-	for _, kind := range EventKinds {
+	for _, kind := range session.EventKinds() {
 		assert.Contains(t, adapterCases, kind,
 			"adapterCases has no line for %q: every kind in the session contract needs one", kind)
 	}
@@ -200,18 +202,18 @@ func TestLoadStoresEveryAdapterCase(t *testing.T) {
 	root := t.TempDir()
 
 	lines := make([]string, 0, len(adapterCases))
-	for _, kind := range EventKinds {
+	for _, kind := range session.EventKinds() {
 		lines = append(lines, adapterCases[kind])
 	}
 	summary, err := loadStream(t, root, lines...)
 	require.NoError(t, err)
 
 	want := map[string]int{}
-	for _, kind := range EventKinds {
+	for _, kind := range session.EventKinds() {
 		want[kind] = 1
 	}
 	assert.Equal(t, want, summary.ByKind, "each adapter line loads as the kind it names")
 	command := loadedEvent(t, root, "s1", 0)
-	require.Equal(t, EventShellCommand, command.Kind)
+	require.Equal(t, session.EventShellCommand, command.Kind)
 	assert.True(t, command.Denied, "the denial rides on the command it belongs to")
 }

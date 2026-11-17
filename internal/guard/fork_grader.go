@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,7 +41,7 @@ func NewForkGrader(held types.WorkspaceRepository, load RulesLoader) *ForkGrader
 }
 
 // Grade is the job.CheckGrader of the fork.
-func (f *ForkGrader) Grade(ctx context.Context, root string, row types.Job) job.CheckVerdict {
+func (f *ForkGrader) Grade(ctx context.Context, root string, row jobtypes.Job) job.CheckVerdict {
 	rules := f.rules.current(ctx, root)
 	return f.verdicts.Grade(gradeKey(root, rules, row), func() job.CheckVerdict {
 		return gradeCheck(ctx, rules.judging(f.rules.opens), root, row)
@@ -52,11 +53,11 @@ func (f *ForkGrader) Grade(ctx context.Context, root string, row types.Job) job.
 // makes it between validations), and the whole pending row, check and charms included.
 // "" means no key: rules that did not load name no files, and a row that does not encode
 // cannot be told from another.
-func gradeKey(root string, rules gradingRules, row types.Job) string {
+func gradeKey(root string, rules gradingRules, row jobtypes.Job) string {
 	if len(rules.sources) == 0 {
 		return ""
 	}
-	encoded, err := json.Marshal(row)
+	encoded, err := codec.Marshal(row)
 	if err != nil {
 		return ""
 	}

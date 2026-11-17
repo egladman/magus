@@ -24,8 +24,9 @@ and fail as `unknown revision libs/gopherbuzz/v0.0.0`{{end}}.
 Say `go get` succeeds only for a version you ran it against, and say how: a scratch
 module, `go get github.com/egladman/magus@<version>`, then `go build ./...`{{if .Full}}. A worked
 example that compiles for you inside the module but fails for them is worse than
-admitting you did not check. `go install .../cmd/magus@<version>` refuses the
-root module at any version, since its `go.mod` carries replace directives{{end}}.
+admitting you did not check. `go install .../cmd/magus@<version>` works from a
+release tag cut by `{{cmd "run"}} release`, whose commit drops the replaces; a commit on
+main carries them, so `@main` or a pseudo-version is refused{{end}}.
 
 ## Entry points
 
@@ -43,7 +44,7 @@ interface, and a caller who later needs `Run` should switch to `Open` and get
 the concrete type, not type-assert their way there.{{else}}A caller who later needs
 `Run` switches to `Open`, never type-asserts.{{end}}
 
-Both require `magus.WithSpawnRule(magus.TierCeiling)` (it has no default), and
+Both require `magus.WithSpawnRule(tier.Ceiling)` (it has no default), and
 a workspace with a magusfile needs `import _ "github.com/egladman/magus/buzzengine"`.
 `magus.FindRoot(dir)` walks up from `dir` to the workspace root, the same walk the CLI
 does; an empty `dir` is an error, not the working directory.
@@ -54,9 +55,9 @@ does; an empty `dir` is an error, not the working directory.
 | `(*Magus).Run(ctx, targets, magus.WithSession(id))` | judges each target first; a deny is a `*types.GuardDeniedError` and nothing runs |
 | `WithEnv`, `WithStderr`, `WithCommandLine` | the process state a workspace reads; without each it reads no environment, discards notices, records an empty command line |
 | `WithVCSDriver`, `WithCacheBackend` (Open), `WithObserver` (Run) | the three swappable parts, one option each |
-| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`types.JobPut`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
+| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
-The lease a call acts under rides `ctx` (`types.WithJobLease`). The SDK never retries,
+The lease a call acts under rides `ctx` (`job.WithLease`). The SDK never retries,
 re-grades or routes around a refusal.{{if .Full}} It has no agent loop: it answers what a loop asks
 and never decides what runs next.{{end}}
 

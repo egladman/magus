@@ -171,7 +171,7 @@ export fun rows(t: magus\trail\Trail, marks: [magus\trail\Mark]) > [Row] {
             }
         } else if (o.decision == "advise") {
             _ = bump(bySection[1], key: o.rule, rule: o.rule, shape: "", agent: observationAgent(o), example: clip(what));
-        } else if (o.decision == "pass" and o.tool == "shell.command" and o.rule == "" and o.preauthorizedBy == "") {
+        } else if (o.decision == "defer" and o.tool == "shell.command" and o.rule == "" and o.preauthorizedBy == "") {
             final seen = mut [<str>];
             foreach (shape in o.shapes) {
                 if (seen.indexOf(shape) == null) {

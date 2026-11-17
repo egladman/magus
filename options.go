@@ -4,15 +4,16 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // WithJobReader has the guard's lease rules read jobs from r in place of
 // the workspace's job store: a Go program embedding magus brings its own tasks
-// as jobs. The lease a call puts on its context (types.WithJobLease) names the
+// as jobs. The lease a call puts on its context (job.WithLease) names the
 // job r answers for. Open fails on a nil r.
-func WithJobReader(r types.JobReader) Option {
+func WithJobReader(r job.Reader) Option {
 	return func(o workspace.Options) { l := o.Loading(); l.JobReader, l.JobReaderGiven = r, true }
 }
 
@@ -20,7 +21,7 @@ func WithJobReader(r types.JobReader) Option {
 // spec covers is denied. Open fails on a malformed spec, and on a spec that
 // is not inert when no built-in rule, StepRule or magus\guard.step rule
 // for its kind judges it. Repeated options add specs.
-func WithStepSpecs(specs ...agent.StepSpec) Option {
+func WithStepSpecs(specs ...step.Spec) Option {
 	return sdkOption("WithStepSpecs", func(o *options) { o.stepSpecs = append(o.stepSpecs, specs...) })
 }
 
@@ -29,7 +30,7 @@ func WithStepSpecs(specs ...agent.StepSpec) Option {
 // It is called for every step, whatever its kind, and the strictest
 // decision wins. An error means it judged nothing, and Judge returns it.
 // A verdict reports under step:<rule>, or step:<kind> with no rule named.
-type StepRule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdict, error)
+type StepRule func(ctx context.Context, req step.Request) (verdict.Verdict, error)
 
 // WithStepRule adds rule to the ones Judge runs, in the order given. Open
 // fails on a nil rule.

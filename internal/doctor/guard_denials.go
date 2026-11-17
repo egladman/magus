@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -21,9 +22,9 @@ const recurringGuardDenialLimit = 500
 // defect. What is reportable is that it KEEPS happening, because that is the part no single
 // session can see. This states the evidence only; choosing a destination is a human's job,
 // and the magus-workspace-rules skill carries the method for choosing it.
-func (r *runner) checkRecurringGuardDenials() check.Check {
+func (r *runner) checkRecurringGuardDenials(ctx context.Context) check.Check {
 	const name = "recurring-guard-denials"
-	feedback, err := trail.RecentGuardFeedback(r.cacheDir(), "", recurringGuardDenialLimit)
+	feedback, err := trail.RecentGuardFeedback(ctx, r.cacheDir(), "", recurringGuardDenialLimit)
 	if err != nil {
 		return check.Check{
 			Name:     name,

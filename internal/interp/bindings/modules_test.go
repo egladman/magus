@@ -932,8 +932,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	require.NoError(t, err)
 	require.NotNil(t, src, "Find: no source found")
 
-	targets, err := interp.Parse(context.Background(), src)
+	parsed, err := interp.Parse(context.Background(), src)
 	require.NoError(t, err)
+	targets := parsed.Targets
 
 	keys := make(map[string]bool, len(targets))
 	for _, tgt := range targets {
@@ -1139,8 +1140,9 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 
 	src, err := interp.Find(dir)
 	require.NoError(t, err)
-	targets, err := interp.Parse(context.Background(), src)
+	parsed, err := interp.Parse(context.Background(), src)
 	require.NoError(t, err)
+	targets := parsed.Targets
 	require.Len(t, targets, 2)
 }
 
@@ -1307,8 +1309,9 @@ export fun go_vet(ctx: magus\Context, args: [str]) > void {}
 	require.NoError(t, os.WriteFile(path, []byte(source), 0o644))
 
 	src := &interp.Source{Dir: dir, Files: []string{path}}
-	targets, err := interp.Parse(context.Background(), src)
+	parsed, err := interp.Parse(context.Background(), src)
 	require.NoError(t, err)
+	targets := parsed.Targets
 
 	got := map[string]interp.Target{}
 	for _, tgt := range targets {

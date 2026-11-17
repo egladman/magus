@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Manifest is the on-disk record of a single cache entry.
@@ -146,7 +146,7 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 // tier returns, local or imported.
 func (c *Cache) parseManifest(data []byte, projectPath, hash string) (*Manifest, error) {
 	var m Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := codec.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("magus/cache: manifest %s: %w", shortHash(hash), err)
 	}
 	// Identity is required, not merely matched when present: a signed output bundle's

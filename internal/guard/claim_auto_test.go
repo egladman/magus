@@ -9,9 +9,10 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -35,12 +36,12 @@ var autoClaimTree = map[string]string{
 
 // autoClaimFixture checkpoints autoClaimTree for row, changes hint.Render, and seeds row
 // and others. Hub is used by 26 files and every other name by one.
-func autoClaimFixture(t *testing.T, row types.Job, others ...types.Job) (context.Context, string, Dependencies) {
+func autoClaimFixture(t *testing.T, row job.Job, others ...job.Job) (context.Context, string, Dependencies) {
 	t.Helper()
 	repo := testkit.NewRepository(t, autoClaimTree)
 	row.CheckoutRoot, row.Checkpoint = repo.Root(), repo.Head()
 	repo.Write("internal/hint/render.go", "package hint\n\nfunc Render() string {\n\treturn \"y\"\n}\n")
-	ctx, _ := fleetFixture(t, append([]types.Job{row}, others...)...)
+	ctx, _ := fleetFixture(t, append([]job.Job{row}, others...)...)
 
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return([]*types.Project{{
@@ -75,9 +76,9 @@ func autoClaimFixture(t *testing.T, row types.Job, others ...types.Job) (context
 	return ctx, repo.Root(), deps
 }
 
-func autoClaimRow() types.Job {
-	return types.Job{ID: "render-change", Agent: agent.Instructed("change hint.Render"), State: types.StateRunning,
-		Paths: types.JobPaths{Write: []string{"internal/hint/render.go"}}, Registered: 1}
+func autoClaimRow() job.Job {
+	return job.Job{ID: "render-change", Agent: job.Instructed("change hint.Render"), State: job.StateRunning,
+		Paths: job.Paths{Write: []string{"internal/hint/render.go"}}, Registered: 1}
 }
 
 func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
@@ -85,7 +86,7 @@ func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
 	ctx, root, deps := autoClaimFixture(t, row)
 
 	got := gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, "internal/guard/render.go"))
-	assert.Equal(t, writeGrade{Decision: "advise", Why: got.Why,
+	assert.Equal(t, writeGrade{Decision: verdict.Advise, Why: got.Why,
 		Context: "magus workspace: claimed internal/guard/render.go for lease render-change by refs:hint.Render: internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go.",
 	}, got)
 
@@ -93,7 +94,7 @@ func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []string{"internal/hint/render.go", "internal/guard/render.go"}, stored.Paths.Write)
 	require.Len(t, stored.Claims, 1)
-	assert.Equal(t, types.JobClaim{Path: "internal/guard/render.go", Evidence: types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.Render"},
+	assert.Equal(t, job.Claim{Path: "internal/guard/render.go", Evidence: job.ClaimEvidence{Kind: job.ClaimRefs, Subject: "hint.Render"},
 		Proof: "internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go",
 		At:    stored.Claims[0].At, By: stored.Claims[0].By}, stored.Claims[0])
 	assert.NotZero(t, stored.Claims[0].At)
@@ -108,7 +109,7 @@ func TestGradeLeasedWriteClaimsATestOfAFileTheJobHolds(t *testing.T) {
 	ctx, root, deps := autoClaimFixture(t, row)
 
 	got := gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, "internal/lease/lease_test.go"))
-	assert.Equal(t, writeGrade{Decision: "advise", Why: got.Why,
+	assert.Equal(t, writeGrade{Decision: verdict.Advise, Why: got.Why,
 		Context: "magus workspace: claimed internal/lease/lease_test.go for lease render-change by test:internal/lease/lease.go: internal/lease/lease_test.go tests internal/lease/lease.go: it names Lease.",
 	}, got)
 
@@ -118,8 +119,8 @@ func TestGradeLeasedWriteClaimsATestOfAFileTheJobHolds(t *testing.T) {
 }
 
 func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {
-	holder := types.Job{ID: "held-change", Agent: agent.Instructed("own held"), State: types.StateRunning,
-		Paths: types.JobPaths{Write: []string{"internal/held/held.go"}}, Registered: 1}
+	holder := job.Job{ID: "held-change", Agent: job.Instructed("own held"), State: job.StateRunning,
+		Paths: job.Paths{Write: []string{"internal/held/held.go"}}, Registered: 1}
 	for name, tc := range map[string]struct {
 		path, stop string
 		maxClaims  int
@@ -155,11 +156,11 @@ func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {
 			row.MaxClaims = tc.maxClaims
 			ctx, root, deps := autoClaimFixture(t, row, holder)
 			if tc.before != "" {
-				require.Equal(t, "advise", gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, tc.before)).Decision)
+				require.Equal(t, verdict.Advise, gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, tc.before)).Decision)
 			}
 
 			got := gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, tc.path))
-			want := writeGrade{Decision: "deny", Reason: got.Reason, Next: got.Next}
+			want := writeGrade{Decision: verdict.Deny, Reason: got.Reason, Next: got.Next}
 			if tc.served {
 				want.Rule = string(denyRuleLeaseClaim)
 			}
@@ -188,5 +189,5 @@ func TestServedHubClaimLinePassesTheGuardForTheWorker(t *testing.T) {
 	got := gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, "internal/hub/hub.go"))
 	require.Len(t, got.Next, 1)
 	v := Judge(ctx, deps, Request{Input: got.Next[0].Run, Lease: row.ID, Dir: root})
-	assert.NotEqual(t, "deny", v.Decision, "%s: %s", got.Next[0].Run, v.Reason)
+	assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", got.Next[0].Run, v.Reason)
 }

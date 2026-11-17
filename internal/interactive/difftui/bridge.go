@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types/diff"
 )
 
@@ -35,7 +35,7 @@ import (
 // waited on, and drained in full at close.
 type Bridge struct {
 	addr    string
-	token   types.Secret
+	token   secrets.Secret
 	tokenID string // revoked at close; empty when the bridge minted no record
 	tokens  Tokens
 	session *diff.Review
@@ -123,7 +123,7 @@ func DialBridge(ctx context.Context, tk Tokens, addr string, paths []string, asO
 		return nil
 	}
 	var sess diff.Review
-	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
+	if err := codec.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		warn("the review is not shared with the server: its session did not decode", attr.Error(err))
 		return nil
 	}
@@ -319,7 +319,7 @@ func (b *Bridge) drainBudget() time.Duration {
 // lost mark. close cancels it once the drain budget is spent, so a post outlives the process's
 // interest in it by nothing.
 func (b *Bridge) post(ctx context.Context, op sessionOp) {
-	body, err := json.Marshal(op)
+	body, err := codec.Marshal(op)
 	if err != nil {
 		return
 	}

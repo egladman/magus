@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os/exec"
@@ -12,9 +13,9 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -43,9 +44,9 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	// The version is READ from the constant, not typed as a digit: this case is about the
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
 	// it at the version check instead, naming nothing it came here to compare.
-	piped, err := DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
+	piped, _, err := DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
 	  "api_version": %q,
-	  "id": "adj/store",`, types.JobAPIVersion) + `
+	  "id": "adj/store",`, job.APIVersion) + `
 	  "parent": "adjacency",
 	  "agent": {"model": {"tier": "design"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
 	  "checkpoint": "cf5509d09",
@@ -58,13 +59,13 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 
 	fromFlags, err := FlagDeclaration("adj/store", *spec, tierWords("design"))
 	require.NoError(t, err)
-	require.NoError(t, fromFlags.Validate())
+	require.NoError(t, types.ValidateDeclaration(fromFlags))
 
-	var a, b types.Job
+	var a, b job.Job
 	fromFlags.Apply(&a)
 	piped.Apply(&b)
 	assert.Equal(t, a, b)
-	assert.Equal(t, types.BriefFormatBuzz, a.BriefFormat)
+	assert.Equal(t, job.BriefFormatBuzz, a.BriefFormat)
 }
 
 // A brief format is one of the two, refused at fork rather than read as markdown later.
@@ -72,18 +73,18 @@ func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
 	t.Parallel()
 	d, err := FlagDeclaration("adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords())
 	require.NoError(t, err)
-	err = d.Validate()
+	err = types.ValidateDeclaration(d)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `brief_format "json"`)
 }
 
 // tierWords reads a --model word as a store declaring tiers would.
-func tierWords(tiers ...string) func(string) typesagent.Model {
-	return func(word string) typesagent.Model {
+func tierWords(tiers ...string) func(string) job.Model {
+	return func(word string) job.Model {
 		if slices.Contains(tiers, word) {
-			return typesagent.Model{Tier: word}
+			return job.Model{Tier: word}
 		}
-		return typesagent.Model{ID: word}
+		return job.Model{ID: word}
 	}
 }
 
@@ -98,13 +99,13 @@ func TestForkAgentFlags(t *testing.T) {
 	suite.Run(t, new(forkAgentFlagsSuite))
 }
 
-func (s *forkAgentFlagsSuite) fork(args ...string) types.Declaration {
+func (s *forkAgentFlagsSuite) fork(args ...string) job.Declaration {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := flaggen.BindJobFork(flags)
 	s.Require().NoError(flags.Parse(args))
 	d, err := FlagDeclaration("adj/store", *spec, tierWords("design"))
 	s.Require().NoError(err)
-	s.Require().NoError(d.Validate())
+	s.Require().NoError(types.ValidateDeclaration(d))
 	return d
 }
 
@@ -113,26 +114,26 @@ func (s *forkAgentFlagsSuite) TestNoAgentFlagWritesNoSection() {
 }
 
 func (s *forkAgentFlagsSuite) TestInstructionsResumeTheWarmWorker() {
-	s.Equal(&typesagent.Spec{
+	s.Equal(&job.Agent{
 		Instructions: "ship it",
-		Worker:       typesagent.Worker{Type: typesagent.WorkerTypeResumed},
+		Worker:       job.Worker{Type: job.WorkerTypeResumed},
 	}, s.fork("--read-only", "--instructions", "ship it").Agent)
 }
 
 func (s *forkAgentFlagsSuite) TestModelNamingATierRequestsTheTier() {
-	s.Equal(&typesagent.Spec{
-		Model:  typesagent.Model{Tier: "design"},
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed},
+	s.Equal(&job.Agent{
+		Model:  job.Model{Tier: "design"},
+		Worker: job.Worker{Type: job.WorkerTypeResumed},
 	}, s.fork("--read-only", "--model", "design").Agent)
 }
 
 func (s *forkAgentFlagsSuite) TestModelNamingNoTierRequestsTheID() {
-	s.Equal(typesagent.Model{ID: "opus"}, s.fork("--read-only", "--model", "opus").Agent.Model)
+	s.Equal(job.Model{ID: "opus"}, s.fork("--read-only", "--model", "opus").Agent.Model)
 }
 
 func (s *forkAgentFlagsSuite) TestNewWorkerStartsANewWorkerForItsReason() {
-	s.Equal(&typesagent.Spec{
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "the warm one read the old limiter"},
+	s.Equal(&job.Agent{
+		Worker: job.Worker{Type: job.WorkerTypeNew, Reason: "the warm one read the old limiter"},
 	}, s.fork("--read-only", "--new-worker", "the warm one read the old limiter").Agent)
 }
 
@@ -146,7 +147,7 @@ func TestForkListFlags(t *testing.T) {
 	suite.Run(t, new(forkListFlagsSuite))
 }
 
-func (s *forkListFlagsSuite) declare(args ...string) (types.Declaration, error) {
+func (s *forkListFlagsSuite) declare(args ...string) (job.Declaration, error) {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := flaggen.BindJobFork(flags)
 	s.Require().NoError(flags.Parse(args))
@@ -181,22 +182,38 @@ func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 	require.Error(t, refused.Set(""))
 }
 
-func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0)
-	cases := map[string]int64{
-		"":                     0,
-		"2h":                   now.Add(2 * time.Hour).Unix(),
-		"2027-01-15T09:00:00Z": 1_800_003_600,
-	}
-	for raw, want := range cases {
-		got, err := types.ParsePauseUntil(raw, now)
-		require.NoError(t, err, raw)
-		assert.Equal(t, want, got, raw)
-	}
-	for _, raw := range []string{"-2h", "tomorrow"} {
-		_, err := types.ParsePauseUntil(raw, now)
-		assert.Error(t, err, raw)
-	}
+type pauseUntilSuite struct{ suite.Suite }
+
+func TestPauseUntilSuite(t *testing.T) { suite.Run(t, new(pauseUntilSuite)) }
+
+func (s *pauseUntilSuite) TestAnEmptyBoundIsNoBound() {
+	at, err := ParsePauseUntil("", time.Unix(1000, 0))
+	s.Require().NoError(err)
+	s.Zero(at)
+}
+
+func (s *pauseUntilSuite) TestAPauseLapsesAtADurationOrAnInstant() {
+	now := time.Unix(1000, 0)
+	at, err := ParsePauseUntil("2h", now)
+	s.Require().NoError(err)
+	s.Equal(int64(1000+7200), at)
+	at, err = ParsePauseUntil("1970-01-01T00:20:00Z", now)
+	s.Require().NoError(err)
+	s.Equal(int64(1200), at)
+}
+
+func (s *pauseUntilSuite) TestABoundNotAheadOfNowIsRefused() {
+	_, err := ParsePauseUntil("-2h", time.Unix(1000, 0))
+	refused, ok := errors.AsType[*pauseUntilError](err)
+	s.Require().True(ok, err)
+	s.Contains(refused.Error(), "is not ahead of now")
+}
+
+func (s *pauseUntilSuite) TestABoundThatIsNeitherIsRefused() {
+	_, err := ParsePauseUntil("tomorrow", time.Unix(1000, 0))
+	refused, ok := errors.AsType[*pauseUntilError](err)
+	s.Require().True(ok, err)
+	s.Equal("tomorrow", refused.Until)
 }
 
 type forkDeliverySuite struct {
@@ -208,23 +225,23 @@ func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
 func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := flaggen.BindJobFork(flags)
-	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", types.DeliveryFold}))
+	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", job.DeliveryFold}))
 	row, err := FlagDeclaration("adj/store", *spec, tierWords())
 	s.Require().NoError(err)
-	s.Require().NoError(row.Validate())
-	s.Equal(types.DeliveryFold, row.Delivery)
+	s.Require().NoError(types.ValidateDeclaration(row))
+	s.Equal(job.DeliveryFold, row.Delivery)
 }
 
 func (s *forkDeliverySuite) TestAStackedForkRecordsThisCheckoutsBranch() {
 	r := testkit.NewRepository(s.T(), nil)
 	r.Git("switch", "-q", "-c", "feat/parent")
-	row, err := StackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked}, types.VCSOptions{})
+	row, err := StackedHead(s.T().Context(), r.Root(), job.Declaration{ID: "child", Delivery: job.DeliveryStacked}, types.VCSOptions{})
 	s.Require().NoError(err)
 	s.Equal("feat/parent", row.ParentHead)
 }
 
 func (s *forkDeliverySuite) TestAStackedForkKeepsTheHeadTheRecordNames() {
-	row, err := StackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliveryStacked, ParentHead: "feat/named"}, types.VCSOptions{})
+	row, err := StackedHead(s.T().Context(), "", job.Declaration{ID: "child", Delivery: job.DeliveryStacked, ParentHead: "feat/named"}, types.VCSOptions{})
 	s.Require().NoError(err)
 	s.Equal("feat/named", row.ParentHead)
 }
@@ -232,12 +249,12 @@ func (s *forkDeliverySuite) TestAStackedForkKeepsTheHeadTheRecordNames() {
 func (s *forkDeliverySuite) TestAStackedForkOnNoBranchIsRefused() {
 	r := testkit.NewRepository(s.T(), nil)
 	r.Git("switch", "-q", "--detach")
-	_, err := StackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked}, types.VCSOptions{})
+	_, err := StackedHead(s.T().Context(), r.Root(), job.Declaration{ID: "child", Delivery: job.DeliveryStacked}, types.VCSOptions{})
 	s.Require().ErrorContains(err, "is on no branch")
 }
 
 func (s *forkDeliverySuite) TestAnUnstackedForkReadsNoBranch() {
-	row, err := StackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliverySeparate}, types.VCSOptions{})
+	row, err := StackedHead(s.T().Context(), "", job.Declaration{ID: "child", Delivery: job.DeliverySeparate}, types.VCSOptions{})
 	s.Require().NoError(err)
 	s.Empty(row.ParentHead)
 }
@@ -251,24 +268,24 @@ type widenSuite struct {
 func TestWidenSuite(t *testing.T) { suite.Run(t, new(widenSuite)) }
 
 func (s *widenSuite) SetupTest() {
-	row := types.Job{ID: "w", State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = CheckCommand(*row.Check)
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
 }
 
 func (s *widenSuite) apply(add ...string) []Applied {
-	rec, err := WidenedDeclaration(s.store, "w", add)
+	rec, err := WidenedDeclaration(s.T().Context(), s.store, "w", add)
 	s.Require().NoError(err)
-	applied, err := Apply(s.T().Context(), s.store, []types.Declaration{rec}, config.Jobs{}, nil, func() string { return "" }, false)
+	applied, err := Apply(s.T().Context(), s.store, []job.Declaration{rec}, config.Jobs{}, nil, func() string { return "" }, false)
 	s.Require().NoError(err)
 	return applied
 }
 
 func (s *widenSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
-	before, err := s.store.List()
+	before, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	want := before[0]
 	want.Paths.Write, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
@@ -278,7 +295,7 @@ func (s *widenSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
 	s.Require().Len(applied, 1)
 	want.Validated, want.WriteProof = applied[0].Next.Validated, applied[0].Next.WriteProof
 	s.Equal(want, applied[0].Next)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(want, rows[0])
 }
@@ -291,7 +308,7 @@ func (s *widenSuite) TestAPathTheRowHoldsChangesNothing() {
 }
 
 func (s *widenSuite) TestAnUnknownJobIsAUsageError() {
-	_, err := WidenedDeclaration(s.store, "nope", []string{"b.go"})
+	_, err := WidenedDeclaration(s.T().Context(), s.store, "nope", []string{"b.go"})
 
 	s.Require().Error(err)
 	s.Equal(exit.Usage, exit.Code(err))
@@ -306,17 +323,17 @@ type narrowSuite struct {
 func TestNarrowSuite(t *testing.T) { suite.Run(t, new(narrowSuite)) }
 
 func (s *narrowSuite) SetupTest() {
-	row := types.Job{ID: "w", State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go", "b.go", "c.go#Run"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
-	row.Goals = []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}}
+	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = CheckCommand(*row.Check)
+	row.Goals = []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}}
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
 }
 
-func (s *narrowSuite) release(paths ...string) types.Declaration {
-	held, err := WidenedDeclaration(s.store, "w", nil)
+func (s *narrowSuite) release(paths ...string) job.Declaration {
+	held, err := WidenedDeclaration(s.T().Context(), s.store, "w", nil)
 	s.Require().NoError(err)
 	rec, err := NarrowedDeclaration(held, "w", paths)
 	s.Require().NoError(err)
@@ -336,7 +353,7 @@ func (s *narrowSuite) TestADeclarationClaimIsReleasedByItsWholeValue() {
 }
 
 func (s *narrowSuite) TestAPathTheJobLacksIsAUsageError() {
-	held, err := WidenedDeclaration(s.store, "w", nil)
+	held, err := WidenedDeclaration(s.T().Context(), s.store, "w", nil)
 	s.Require().NoError(err)
 
 	_, err = NarrowedDeclaration(held, "w", []string{"nope.go"})
@@ -361,7 +378,7 @@ func TestStackedHeadSuite(t *testing.T) { suite.Run(t, new(stackedHeadSuite)) }
 
 func (s *stackedHeadSuite) TestStackedHeadPreservesResolutionFailures() {
 	repo := testkit.NewRepository(s.T(), nil)
-	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
+	row := job.Declaration{ID: "child", Delivery: job.DeliveryStacked}
 
 	got, err := StackedHead(s.T().Context(), repo.Root(), row, types.VCSOptions{Name: "not-a-vcs"})
 
@@ -372,7 +389,7 @@ func (s *stackedHeadSuite) TestStackedHeadPreservesResolutionFailures() {
 }
 
 func (s *stackedHeadSuite) TestStackedHeadPreservesMetadataFailures() {
-	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
+	row := job.Declaration{ID: "child", Delivery: job.DeliveryStacked}
 
 	got, err := StackedHead(s.T().Context(), s.T().TempDir(), row, types.VCSOptions{Name: "git"})
 
@@ -380,4 +397,42 @@ func (s *stackedHeadSuite) TestStackedHeadPreservesMetadataFailures() {
 	s.ErrorAs(err, &cause)
 	s.ErrorContains(err, "child is stacked with no pull request base")
 	s.Equal(row, got)
+}
+
+type resolveAcceptSuite struct{ suite.Suite }
+
+func TestResolveAccept(t *testing.T) { suite.Run(t, new(resolveAcceptSuite)) }
+
+func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
+	in := []job.Goal{
+		{ID: "unit", Check: job.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}, Accept: []job.Basis{job.BasisReported}},
+		{ID: "docs", Kind: job.GoalKindPaths, Paths: []string{"docs"}},
+	}
+
+	got, defaulted := resolveAccept(in)
+
+	s.Equal([]string{"unit"}, defaulted, "only the goal naming no basis defaulted")
+	s.Equal([]job.Basis{job.BasisWitnessed}, got[0].Accept, "an unnamed kind is a check")
+	s.Equal([]job.Basis{job.BasisReported}, got[1].Accept, "a goal naming its bases keeps them")
+	s.Empty(got[2].Accept, "only a check goal accepts a basis")
+	s.Empty(in[0].Accept, "the caller's goals are not written through")
+}
+
+func (s *resolveAcceptSuite) TestADecodedRecordNamesTheCheckGoalThatDefaulted() {
+	_, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"api_version":"` + string(job.APIVersion) + `","id":"w",` +
+		`"paths":{"write":["a.go"]},"goals":[{"id":"unit","kind":"check","check":{"target":"test","project":"."}},` +
+		`{"id":"lint","kind":"check","check":{"target":"lint","project":"."},"accept":["reported"]}]}`))
+
+	s.Require().NoError(err)
+	s.Equal([]DefaultedAccept{{Job: "w", Goal: "unit"}}, defaulted)
+	s.Equal(`w: check goal "unit" names no accept, so it defaulted to accept [witnessed]`, defaulted[0].String())
+}
+
+func (s *resolveAcceptSuite) TestADecodedRecordValidatesWithItsCheckGoalResolved() {
+	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + string(job.APIVersion) + `","id":"w",` +
+		`"goals":[{"id":"unit","check":{"target":"test","project":"."}}]}`))
+
+	s.Require().NoError(err)
+	s.Equal([]job.Basis{job.BasisWitnessed}, row.Goals[0].Accept)
 }

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -29,15 +31,15 @@ func dispose(t *testing.T, root, id string) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.DisposeRequest(dir, id, "confirmed", sessions.InvocationStart{})
+	_, err = sessions.DisposeRequest(t.Context(), dir, id, "confirmed", session.InvocationStart{})
 	require.NoError(t, err)
 }
 
-func storedRows(t *testing.T, s *Store) map[string]types.Job {
+func storedRows(t *testing.T, s *Store) map[string]job.Job {
 	t.Helper()
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
-	out := map[string]types.Job{}
+	out := map[string]job.Job{}
 	for _, r := range rows {
 		out[r.ID] = r
 	}
@@ -47,10 +49,10 @@ func storedRows(t *testing.T, s *Store) map[string]types.Job {
 func TestExitWithoutAResultRefusesALiveDescendantAndNamesIt(t *testing.T) {
 	t.Parallel()
 	loc := declared(t,
-		types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true},
-		types.Job{ID: "plan/a", Parent: "plan", State: types.StateDeclared, ReadOnly: true},
-		types.Job{ID: "plan/a/x", Parent: "plan/a", State: types.StateExited, ReadOnly: true},
-		types.Job{ID: "plan/b", Parent: "plan", State: types.StateNoReturn, ReadOnly: true},
+		job.Job{ID: "plan", State: job.StateRunning, ReadOnly: true},
+		job.Job{ID: "plan/a", Parent: "plan", State: job.StateDeclared, ReadOnly: true},
+		job.Job{ID: "plan/a/x", Parent: "plan/a", State: job.StateExited, ReadOnly: true},
+		job.Job{ID: "plan/b", Parent: "plan", State: job.StateNoReturn, ReadOnly: true},
 	)
 	s := NewStore(loc)
 
@@ -58,15 +60,15 @@ func TestExitWithoutAResultRefusesALiveDescendantAndNamesIt(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ending plan would end 2 live job(s) below it: plan/a (declared, session holder, never taken); plan/a/x (exited")
 	assert.Contains(t, err.Error(), "`magus job exit plan plan/a plan/a/x`", "an ended descendant needs no restating")
-	assert.Equal(t, types.StateRunning, storedRows(t, s)["plan"].State)
+	assert.Equal(t, job.StateRunning, storedRows(t, s)["plan"].State)
 }
 
 func TestAbandonEndsATreeOnlyWhenEveryLiveDescendantIsNamed(t *testing.T) {
 	t.Parallel()
 	loc := declared(t,
-		types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true},
-		types.Job{ID: "plan/a", Parent: "plan", State: types.StateDeclared, ReadOnly: true},
-		types.Job{ID: "plan/b", Parent: "plan", State: types.StateDeclared, ReadOnly: true},
+		job.Job{ID: "plan", State: job.StateRunning, ReadOnly: true},
+		job.Job{ID: "plan/a", Parent: "plan", State: job.StateDeclared, ReadOnly: true},
+		job.Job{ID: "plan/b", Parent: "plan", State: job.StateDeclared, ReadOnly: true},
 	)
 	s := NewStore(loc)
 
@@ -76,7 +78,7 @@ func TestAbandonEndsATreeOnlyWhenEveryLiveDescendantIsNamed(t *testing.T) {
 	assert.Contains(t, refused[0].Error(), "ending plan would end 1 live job(s) below it: plan/b")
 	require.Len(t, ended, 1, "a named job with nothing live below it still ends")
 	assert.Equal(t, "plan/a", ended[0].ID)
-	assert.Equal(t, types.StateRunning, storedRows(t, s)["plan"].State)
+	assert.Equal(t, job.StateRunning, storedRows(t, s)["plan"].State)
 
 	ended, already, refused = Abandon(t.Context(), s, []string{"plan", "plan/b", "plan"})
 	assert.Empty(t, already)
@@ -88,7 +90,7 @@ func TestAbandonEndsATreeOnlyWhenEveryLiveDescendantIsNamed(t *testing.T) {
 	assert.Equal(t, []string{"plan/b", "plan"}, ids, "descendants end before their ancestors")
 	rows := storedRows(t, s)
 	for id, r := range rows {
-		assert.Equal(t, types.StateNoReturn, r.State, id)
+		assert.Equal(t, job.StateNoReturn, r.State, id)
 	}
 
 	ended, already, refused = Abandon(t.Context(), s, []string{"plan/a"})
@@ -102,8 +104,8 @@ func TestAbandonEndsATreeOnlyWhenEveryLiveDescendantIsNamed(t *testing.T) {
 func TestAbandonUnderADryRunWritesNothing(t *testing.T) {
 	t.Parallel()
 	loc := declared(t,
-		types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true},
-		types.Job{ID: "plan/a", Parent: "plan", State: types.StateDeclared, ReadOnly: true},
+		job.Job{ID: "plan", State: job.StateRunning, ReadOnly: true},
+		job.Job{ID: "plan/a", Parent: "plan", State: job.StateDeclared, ReadOnly: true},
 	)
 	before := storedRows(t, NewStore(loc))
 	dry := loc
@@ -115,7 +117,7 @@ func TestAbandonUnderADryRunWritesNothing(t *testing.T) {
 	ids := make([]string, len(ended))
 	for i, r := range ended {
 		ids[i] = r.ID
-		assert.Equal(t, types.StateNoReturn, r.State, r.ID)
+		assert.Equal(t, job.StateNoReturn, r.State, r.ID)
 	}
 	assert.Equal(t, []string{"plan/a", "plan"}, ids)
 	assert.Equal(t, before, storedRows(t, NewStore(loc)))
@@ -163,18 +165,18 @@ func TestEndCheckoutsReleasesTheCheckoutBindingOfAnEndedRow(t *testing.T) {
 func TestExitWithAResultRefusesADescendantStillWorking(t *testing.T) {
 	t.Parallel()
 	row := acceptRow()
-	loc := declared(t, row, types.Job{ID: "harness/child", Parent: row.ID, State: types.StateRunning, ReadOnly: true})
+	loc := declared(t, row, job.Job{ID: "harness/child", Parent: row.ID, State: job.StateRunning, ReadOnly: true})
 	result := passingResult()
-	resolve := func(context.Context, string) (types.JobAttempt, error) { return passingRun, nil }
+	resolve := func(context.Context, string) (job.CapturedRun, error) { return passingRun, nil }
 
 	_, err := Exit(t.Context(), NewStore(loc), row.ID, &result, resolve)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "1 job(s) below it are still working: harness/child (running")
 
-	seed(t, NewStore(loc), types.Job{ID: "harness/child", Parent: row.ID, State: types.StateExited, ReadOnly: true})
+	seed(t, NewStore(loc), job.Job{ID: "harness/child", Parent: row.ID, State: job.StateExited, ReadOnly: true})
 	stored, err := Exit(t.Context(), NewStore(loc), row.ID, &result, resolve)
 	require.NoError(t, err, "an exited descendant keeps its result, and the parent's stays live beside it")
-	assert.Equal(t, types.StateExited, stored.State)
+	assert.Equal(t, job.StateExited, stored.State)
 }
 
 // A descendant holding uncommitted work ends only once a person disposes the request the
@@ -184,8 +186,8 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
-	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
-	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root()})
+	seed(t, s, job.Job{ID: "plan", State: job.StateRunning, ReadOnly: true})
+	seed(t, s, job.Job{ID: "plan/w", Parent: "plan", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root()})
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.txt"), []byte("half done\n"), 0o644))
 
 	for range 2 {
@@ -204,7 +206,7 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 		Where: "plan plan/w", Files: []types.FileRef{{Value: filepath.Join(repo.Root(), "a.txt")}}, Message: req.Message,
 	}, req)
 	for id, r := range storedRows(t, s) {
-		assert.Equal(t, types.StateRunning, r.State, id)
+		assert.Equal(t, job.StateRunning, r.State, id)
 	}
 
 	dispose(t, repo.Root(), requests[0].ID)
@@ -218,8 +220,8 @@ func TestAbandonNeedsNoPersonForADescendantHoldingNoWork(t *testing.T) {
 	t.Parallel()
 	repo := execRepository(t)
 	s := NewStore(tempLocation(t, repo.Root()))
-	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
-	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root()})
+	seed(t, s, job.Job{ID: "plan", State: job.StateRunning, ReadOnly: true})
+	seed(t, s, job.Job{ID: "plan/w", Parent: "plan", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root()})
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "other.txt"), []byte("not its paths\n"), 0o644))
 
 	ended, _, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
@@ -231,8 +233,8 @@ func TestAbandonNeedsNoPersonForADescendantHoldingNoWork(t *testing.T) {
 func TestAbandonWaitsOnAPersonWhenADescendantsCheckIsRunning(t *testing.T) {
 	t.Parallel()
 	loc := declared(t,
-		types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true},
-		types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, ReadOnly: true, LastRun: &types.JobRun{Invocation: "inv-1"}},
+		job.Job{ID: "plan", State: job.StateRunning, ReadOnly: true},
+		job.Job{ID: "plan/w", Parent: "plan", State: job.StateRunning, ReadOnly: true, LastRun: &job.Run{Invocation: "inv-1"}},
 	)
 	ended, _, refused := Abandon(t.Context(), NewStore(loc), []string{"plan", "plan/w"})
 	assert.Empty(t, ended)
@@ -247,7 +249,7 @@ func gitRepository(t *testing.T, files map[string]string) (*Store, *testkit.Repo
 	return NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()}), repo
 }
 
-func endedFork(t *testing.T, s *Store, id string) types.Job {
+func endedFork(t *testing.T, s *Store, id string) job.Job {
 	t.Helper()
 	row := forkInto(t, s, id, "")
 	_, err := Exit(t.Context(), s, id, nil, nil)
@@ -309,7 +311,7 @@ func TestEndCheckoutsRestoresAGoFileOnlyGofmtChanged(t *testing.T) {
 
 	changed, err := s.EndCheckouts(ctx, none)
 	require.NoError(t, err)
-	byID := map[string]types.JobWorktree{}
+	byID := map[string]job.Worktree{}
 	for _, r := range changed {
 		byID[r.ID] = *r.Worktree
 	}
@@ -324,7 +326,7 @@ func TestEndCheckoutsKeepsACheckoutALiveJobIsHeldIn(t *testing.T) {
 	ctx := t.Context()
 	s, _ := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	row := endedFork(t, s, "w1")
-	seed(t, s, types.Job{ID: "w2", State: types.StateRunning, ReadOnly: true, CheckoutRoot: row.Worktree.Root})
+	seed(t, s, job.Job{ID: "w2", State: job.StateRunning, ReadOnly: true, CheckoutRoot: row.Worktree.Root})
 
 	changed, err := s.EndCheckouts(ctx, nil)
 	require.NoError(t, err)
@@ -344,14 +346,14 @@ func TestEndCheckoutsNeverRemovesACheckoutTheForkDidNotMake(t *testing.T) {
 	repo.Git("worktree", "add", "-q", "--detach", linked)
 	linked, err := filepath.EvalSymlinks(linked)
 	require.NoError(t, err)
-	adopted := types.JobWorktree{Root: linked, Source: repo.Root(), Base: repo.Head(), Created: 1}
-	seed(t, s, types.Job{ID: "taken", State: types.StateRunning, ReadOnly: true, CheckoutRoot: linked})
+	adopted := job.Worktree{Root: linked, Source: repo.Root(), Base: repo.Head(), Created: 1}
+	seed(t, s, job.Job{ID: "taken", State: job.StateRunning, ReadOnly: true, CheckoutRoot: linked})
 	for _, id := range []string{"adopted", "deleted"} {
-		seed(t, s, types.Job{ID: id, State: types.StateDeclared, ReadOnly: true})
+		seed(t, s, job.Job{ID: id, State: job.StateDeclared, ReadOnly: true})
 		_, err := s.RecordWorktree(ctx, id, adopted)
 		require.NoError(t, err)
 	}
-	_, err = s.Update(ctx, "adopted", func(cur *types.Job) { cur.State = types.StateRunning })
+	_, err = s.Update(ctx, "adopted", func(cur *job.Job) { cur.State = job.StateRunning })
 	require.NoError(t, err)
 	for _, id := range []string{"taken", "adopted"} {
 		_, err := Exit(ctx, s, id, nil, nil)
@@ -387,11 +389,11 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	staleAfter := 2 * time.Hour
 	s.clock = func() time.Time { return time.Unix(now, 0) }
 	s.staleAfter = &staleAfter
-	s.landed = func(context.Context, types.Job) string { return "" }
+	s.landed = func(context.Context, job.Job) string { return "" }
 	old := now - int64((3 * time.Hour).Seconds())
 	plant(t, s,
-		types.Job{ID: "done", State: types.StateExited, Registered: old, Updated: old},
-		types.Job{ID: "done/w", Parent: "done", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root(), Updated: now - 60},
+		job.Job{ID: "done", State: job.StateExited, Registered: old, Updated: old},
+		job.Job{ID: "done/w", Parent: "done", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root(), Updated: now - 60},
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.txt"), []byte("half done\n"), 0o644))
 
@@ -424,19 +426,19 @@ func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
 	loc := declared(t, row)
 	stored, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.StateNoReturn, stored.State)
+	assert.Equal(t, job.StateNoReturn, stored.State)
 	assert.Nil(t, stored.Attempt)
-	tries, err := NewStore(loc).Attempts()
+	tries, err := NewStore(loc).Attempts(t.Context())
 	require.NoError(t, err)
-	live := types.NewJobAttempts(tries).Live(row.ID)
+	live := job.NewAttempts(tries).Live(row.ID)
 	assert.Nil(t, live.Status.Result)
-	assert.Equal(t, types.AttemptEndExit, live.Status.End, "the exit ends the try")
+	assert.Equal(t, job.AttemptEndExit, live.Status.End, "the exit ends the try")
 }
 
 type exitCommittedSuite struct {
 	suite.Suite
 	repo *testkit.Repo
-	row  types.Job
+	row  job.Job
 	loc  Location
 }
 
@@ -450,9 +452,9 @@ func (s *exitCommittedSuite) SetupTest() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.repo.Root(), "internal/ledger/a.go"), []byte("package ledger // edited\n"), 0o644))
 }
 
-func (s *exitCommittedSuite) exit() (types.Job, error) {
+func (s *exitCommittedSuite) exit() (job.Job, error) {
 	result := passingResult()
-	return Exit(s.T().Context(), boundStore(s.loc, s.row.ID), s.row.ID, &result, func(context.Context, string) (types.JobAttempt, error) {
+	return Exit(s.T().Context(), boundStore(s.loc, s.row.ID), s.row.ID, &result, func(context.Context, string) (job.CapturedRun, error) {
 		attempt := passingRun
 		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
 		return attempt, nil
@@ -464,9 +466,9 @@ func (s *exitCommittedSuite) TestUncommittedEditIsRefusedNamingThePath() {
 
 	s.ErrorContains(err, "hold uncommitted work")
 	s.ErrorContains(err, "internal/ledger/a.go")
-	rows, listErr := NewStore(s.loc).List()
+	rows, listErr := NewStore(s.loc).List(s.T().Context())
 	s.Require().NoError(listErr)
-	s.Equal(types.StateRunning, rows[0].State)
+	s.Equal(job.StateRunning, rows[0].State)
 }
 
 func (s *exitCommittedSuite) TestCommittedEditIsAccepted() {
@@ -475,5 +477,5 @@ func (s *exitCommittedSuite) TestCommittedEditIsAccepted() {
 	exited, err := s.exit()
 
 	s.Require().NoError(err)
-	s.NotEqual(types.StateRunning, exited.State)
+	s.NotEqual(job.StateRunning, exited.State)
 }

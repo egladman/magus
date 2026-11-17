@@ -16,12 +16,15 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -49,24 +52,39 @@ func (s *sdkOptionSuite) TestWithStepRuleRecordsMisuseOnABareLoad() {
 
 func (s *sdkOptionSuite) TestWithSpawnRuleRecordsMisuseOnABareLoad() {
 	l := &workspace.Load{}
-	WithSpawnRule(TierCeiling)(l)
+	WithSpawnRule(tier.Ceiling)(l)
 	s.Require().Len(l.Misuse, 1)
 	s.EqualError(l.Misuse[0], "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestWithSecretsRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts()))(l)
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithSecrets sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestWithSecretsAccumulates() {
+	o := collectOptions([]Option{
+		WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts())),
+		WithSecrets(secrets.WithShortSecret(func(context.Context, string) {})),
+	})
+	s.Len(o.secretsOpts, 2)
 }
 
 func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {
 	misused := func(o workspace.Options) {
 		bare := &workspace.Load{}
-		WithSpawnRule(TierCeiling)(bare)
+		WithSpawnRule(tier.Ceiling)(bare)
 		o.Loading().Misuse = append(o.Loading().Misuse, bare.Misuse...)
 	}
-	_, err := Inspect(context.Background(), s.T().TempDir(), WithSpawnRule(TierCeiling), misused)
+	_, err := Inspect(context.Background(), s.T().TempDir(), WithSpawnRule(tier.Ceiling), misused)
 	s.EqualError(err, "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
 
 func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {
-	o := collectOptions([]Option{WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling)})
-	s.Equal([]agent.StepSpec{refundSpec}, o.stepSpecs)
+	o := collectOptions([]Option{WithStepSpecs(refundSpec), WithSpawnRule(tier.Ceiling)})
+	s.Equal([]step.Spec{refundSpec}, o.stepSpecs)
 	s.NotNil(o.spawnRule)
 }
 
@@ -95,7 +113,7 @@ func TestWithDependsOnRelativeSibling(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("extensions/drape", WithDependsOn("../api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := ws.Get("extensions/drape")
 	require.NotNil(t, p, "project extensions/drape not found")
@@ -114,7 +132,7 @@ func TestWithDependsOnRelativeUpTwo(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("a/b/c", WithDependsOn("../../../x"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := ws.Get("a/b/c")
 	require.NotNil(t, p, "project a/b/c not found")
@@ -133,7 +151,7 @@ func TestWithDependsOnBarePathUnchanged(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -148,7 +166,7 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("../outside"))
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	assert.Error(t, err, "Inspect: expected error for path escaping workspace root")
 }
 
@@ -162,7 +180,7 @@ func TestWithSpellAddsLanguage(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not discovered")
@@ -178,7 +196,7 @@ func TestWithSpellMultipleTools(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"), WithSpell("rust"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -197,7 +215,7 @@ func TestWithSpellUnknownTool(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("nope"))
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	assert.ErrorIs(t, err, types.ErrSpellNotRegistered, "Inspect: expected error for unknown tool")
 }
 
@@ -214,7 +232,7 @@ func TestApplyIdempotent(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -233,7 +251,7 @@ func TestApplyIdempotent(t *testing.T) {
 
 	// A second Inspect with the same registry must not double the deps;
 	// each *Workspace is distinct.
-	ws2, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws2, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "second Open")
 	p2 := ws2.Get(".")
 	require.NotNil(t, p2, "project . not found in second workspace")
@@ -247,7 +265,7 @@ func TestWithSpell(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -306,7 +324,7 @@ func TestProvidedProjectIsAFullProject(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.AddProvider(nx)
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -336,7 +354,7 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 	reg.AddProvider(nx)
 	reg.RegisterProject("libs/foo", workspace.WithSources("schema/**/*.json"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -353,7 +371,7 @@ func TestProviderCannotShadowAMagusfile(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.AddProvider(nx)
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -368,7 +386,7 @@ func TestNoProviderWiredChangesNothing(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
 	provider(t, spells.ProvidedProject{Path: "libs/foo"})
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	assert.Nil(t, ws.Get("libs/foo"), "no wiring, no fold")
@@ -385,7 +403,7 @@ func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.AddProvider(nx)
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), string(types.ProviderPathRejected))
@@ -407,7 +425,7 @@ func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 	reg.AddProvider(nx)
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -427,7 +445,7 @@ func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	reg.AddProvider(nx)
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -453,7 +471,7 @@ func TestWithWatchIgnoreReachesTheProject(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithWatchIgnore(IgnoreGlob("**/*.tmp"), IgnoreLiteral("node_modules")))
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -476,7 +494,7 @@ func TestWithWatchIgnoreRejectsAMalformedRegexAtOpen(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithWatchIgnore(IgnoreRegex("(unclosed")))
 
-	_, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	_, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	assert.Error(t, err, "an ignore pattern that cannot compile must not open the workspace")
 }
 
@@ -500,7 +518,7 @@ func TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone(t *testing.T) {
 		"api/magusfile.buzz": "",
 	})
 
-	ws, err := Inspect(context.Background(), root, WithoutWorkspaceProviders(), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(context.Background(), root, WithoutWorkspaceProviders(), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	paths := make([]string, 0, len(ws.All()))
@@ -549,7 +567,7 @@ func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
 			if tc.yaml != "" {
 				files["magus.yaml"] = tc.yaml
 			}
-			m, err := Open(t.Context(), writeWorkspace(t, files), append(tc.opts, WithSpawnRule(TierCeiling))...)
+			m, err := Open(t.Context(), writeWorkspace(t, files), append(tc.opts, WithSpawnRule(tier.Ceiling))...)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				return
@@ -614,14 +632,14 @@ func TestRefuseHumanOnlyInGate(t *testing.T) {
 }
 
 // modelTiers declares low and high, cheapest first, as a magusfile's enum would.
-func modelTiers(t *testing.T) (low, high agent.ModelTier) {
+func modelTiers(t *testing.T) (low, high tier.Tier) {
 	t.Helper()
-	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum:   "Tier",
 		Site:   "magusfile.buzz:1",
 		Cases:  []string{"low", "high"},
-		Bounds: make([]agent.ModelTierBounds, 2),
-		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
+		Bounds: make([]tier.Bounds, 2),
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	low, err = set.Parse("low")
@@ -631,48 +649,33 @@ func modelTiers(t *testing.T) (low, high agent.ModelTier) {
 	return low, high
 }
 
-// SpawnRuleSuite holds TierCeiling's refusals to their codes, through the rule
-// itself and through the job store that a fork door opens with it.
+// SpawnRuleSuite holds tier.Ceiling's refusals to their codes through the job store
+// that a fork door opens with it.
 type SpawnRuleSuite struct {
 	suite.Suite
 }
 
 func TestSpawnRuleSuite(t *testing.T) { suite.Run(t, new(SpawnRuleSuite)) }
 
-func (s *SpawnRuleSuite) TestARankAboveTheParentIsModelTierAboveParent() {
-	low, high := modelTiers(s.T())
-	err := TierCeiling(low, high)
-	s.Require().ErrorIs(err, types.ModelTierAboveParent)
-	var d *types.DiagnosticError
-	s.Require().ErrorAs(err, &d)
-	s.Equal(types.ModelTierAboveParent, d.Code)
-}
-
-func (s *SpawnRuleSuite) TestTiersFromTwoDeclarationsAreModelTiersIncomparable() {
-	low, _ := modelTiers(s.T())
-	otherLow, _ := modelTiers(s.T())
-	s.Require().ErrorIs(TierCeiling(otherLow, low), types.ModelTiersIncomparable)
-}
-
 func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	t := s.T()
-	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
+	set, err := tier.NewSet(tier.Declaration{
 		Enum: "Tier", Site: "magusfile.buzz:1", Cases: []string{"low", "high"}, Default: 0,
-		Bounds: make([]agent.ModelTierBounds, 2),
-		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
+		Bounds: make([]tier.Bounds, 2),
+		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort},
 	})
 	s.Require().NoError(err)
 	store := job.NewStore(job.Location{
-		StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{},
-		ModelTiers: set, SpawnRule: TierCeiling,
+		StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &jobtypes.Actor{},
+		ModelTiers: set, SpawnRule: tier.Ceiling,
 		SpawnCeiling: func(context.Context) (builtin.Setting, error) { return builtin.Setting{Decision: builtin.Deny}, nil },
 	})
 	put := func(id, parent, model string) error {
-		row := types.Job{
-			ID: id, Parent: parent, Agent: &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: model}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, Checkpoint: "abc123",
-			Paths: types.JobPaths{Write: []string{"internal/" + id}}, Validation: "magus run test", State: types.StateDeclared,
+		row := jobtypes.Job{
+			ID: id, Parent: parent, Agent: &jobtypes.Agent{Instructions: "goal for " + id, Model: jobtypes.Model{Tier: model}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}, Checkpoint: "abc123",
+			Paths: jobtypes.Paths{Write: []string{"internal/" + id}}, Validation: "magus run test", State: jobtypes.StateDeclared,
 		}
-		_, err := store.Update(t.Context(), id, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(t.Context(), id, func(cur *jobtypes.Job) { *cur = row })
 		return err
 	}
 	s.Require().NoError(put("p", "", "low"))
@@ -682,36 +685,19 @@ func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	s.False(types.ClassifyRetry(err).Retryable, "a person forks the higher-tier row")
 }
 
-// TestTierCeilingHoldsAChildAtMostItsParentsTier: a child may run at its parent's tier or
-// below, never above, and an unassigned tier bounds nothing.
-func TestTierCeilingHoldsAChildAtMostItsParentsTier(t *testing.T) {
-	low, high := modelTiers(t)
-	assert.NoError(t, TierCeiling(high, low))
-	assert.NoError(t, TierCeiling(high, high))
-	err := TierCeiling(low, high)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `"low"`)
-	assert.Contains(t, err.Error(), `"high"`)
-	assert.NoError(t, TierCeiling(agent.ModelTier{}, high), "an unassigned parent bounds nothing")
-	assert.NoError(t, TierCeiling(low, agent.ModelTier{}), "an unassigned child is bounded by nothing")
-
-	otherLow, _ := modelTiers(t)
-	assert.Error(t, TierCeiling(otherLow, low), "two declarations cannot be ordered against each other")
-}
-
 // TestSpawnRuleHasNoDefault: an omitted or nil rule fails the open, naming the reference
 // rule, so no workspace exists that allows every spawn.
 func TestSpawnRuleHasNoDefault(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	_, err := Inspect(t.Context(), root)
-	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	require.ErrorContains(t, err, "WithSpawnRule(tier.Ceiling)")
 	_, err = Open(t.Context(), root)
-	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	require.ErrorContains(t, err, "WithSpawnRule(tier.Ceiling)")
 	_, err = Inspect(t.Context(), root, WithSpawnRule(nil))
-	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	require.ErrorContains(t, err, "WithSpawnRule(tier.Ceiling)")
 
 	low, high := modelTiers(t)
-	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	assert.NoError(t, ws.(*Magus).internals().CheckSpawn(high, low))
 	assert.Error(t, ws.(*Magus).internals().CheckSpawn(low, high))
@@ -724,14 +710,14 @@ func TestWithVCSDriverIsTheWorkspacesVCS(t *testing.T) {
 	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().Name().Return("fossil").Maybe()
 
-	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver), WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	assert.Same(t, driver, ws.VCSOptions().Driver)
 
-	_, err = Inspect(t.Context(), root, WithVCSDriver(nil), WithSpawnRule(TierCeiling))
+	_, err = Inspect(t.Context(), root, WithVCSDriver(nil), WithSpawnRule(tier.Ceiling))
 	require.ErrorContains(t, err, "nil driver")
 
-	_, err = Inspect(t.Context(), root, WithVCSDriver(driver), workspace.WithLoadedConfig(config.Config{VCS: config.VCS{Name: "git"}}), WithSpawnRule(TierCeiling))
+	_, err = Inspect(t.Context(), root, WithVCSDriver(driver), workspace.WithLoadedConfig(config.Config{VCS: config.VCS{Name: "git"}}), WithSpawnRule(tier.Ceiling))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"fossil"`)
@@ -752,7 +738,7 @@ func ExampleWorkspaceRegistry_withSpell() {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithSpell(name))
 
-	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(tier.Ceiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return

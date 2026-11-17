@@ -374,7 +374,7 @@ func TestReadNavigationAdvisesWhenSetToAdvise(t *testing.T) {
 	deps := advising(readDeps(root), string(denyRuleReadNavigation))
 	deps.callDir = root
 
-	requireAdvisedOnce(t, Evaluate(deps, `cat internal/store/store.go`), denyRuleReadNavigation)
+	requireAdvisedOnce(t, Evaluate(t.Context(), deps, `cat internal/store/store.go`), denyRuleReadNavigation)
 }
 
 func TestReadNavigationLinesComeFromTheWorkspace(t *testing.T) {

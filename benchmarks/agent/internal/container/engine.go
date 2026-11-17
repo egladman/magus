@@ -13,7 +13,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/image"
 )
 
@@ -67,7 +67,7 @@ func (e *engineClient) Pull(ctx context.Context, ref string, platform image.Plat
 		return err
 	}
 	defer resp.Body.Close()
-	dec := json.NewDecoder(resp.Body)
+	dec := codec.NewDecoder(resp.Body)
 	for {
 		var msg struct {
 			Error string `json:"error"`
@@ -148,7 +148,7 @@ func (e *engineClient) exec(ctx context.Context, id, dir string, argv []string, 
 	if err := e.call(ctx, http.MethodPost, path.Join("/containers", id, "exec"), nil, req, &created); err != nil {
 		return 0, err
 	}
-	body, err := json.Marshal(map[string]bool{"Detach": false, "Tty": false})
+	body, err := codec.Marshal(map[string]bool{"Detach": false, "Tty": false})
 	if err != nil {
 		return 0, err
 	}
@@ -205,7 +205,7 @@ func demux(r io.Reader, stdout, stderr io.Writer) error {
 func (e *engineClient) call(ctx context.Context, method, p string, q url.Values, in, out any) error {
 	var body io.Reader
 	if in != nil {
-		raw, err := json.Marshal(in)
+		raw, err := codec.Marshal(in)
 		if err != nil {
 			return err
 		}
@@ -219,7 +219,7 @@ func (e *engineClient) call(ctx context.Context, method, p string, q url.Values,
 	if out == nil {
 		return nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := codec.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("container: %s %s: decode: %w", method, p, err)
 	}
 	return nil
@@ -255,7 +255,7 @@ func (e *engineClient) do(ctx context.Context, method, p string, q url.Values, b
 		if readErr != nil {
 			return nil, fmt.Errorf("container: %s %s: %s, and its body did not read: %w", method, p, resp.Status, readErr)
 		}
-		if json.Unmarshal(raw, &msg) != nil || msg.Message == "" {
+		if codec.Unmarshal(raw, &msg) != nil || msg.Message == "" {
 			msg.Message = strings.TrimSpace(string(raw))
 		}
 		return nil, fmt.Errorf("container: %s %s: %s: %s", method, p, resp.Status, msg.Message)

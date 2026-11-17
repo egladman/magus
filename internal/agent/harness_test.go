@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -64,7 +64,7 @@ func mergeHarness(t *testing.T, root, id string) types.HarnessInstallation {
 			require.NoError(t, err)
 			require.NoError(t, decodeHarnessJSON(body, &doc))
 		}
-		encoded, err := json.MarshalIndent(mergeFragment(doc, file.Fragment), "", "  ")
+		encoded, err := codec.MarshalIndent(mergeFragment(doc, file.Fragment), "", "  ")
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(path, append(encoded, '\n'), 0o644))
 	}
@@ -143,10 +143,10 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 
 	current, err := PlanHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
-	encoded, err := json.Marshal(current.Wired)
+	encoded, err := codec.Marshal(current.Wired)
 	require.NoError(t, err)
 	var wired []types.HarnessWired
-	require.NoError(t, json.Unmarshal(encoded, &wired))
+	require.NoError(t, codec.Unmarshal(encoded, &wired))
 	assert.Equal(t, []types.HarnessWired{{File: "test-host/hooks.json", Key: "hooks.before", Entries: []map[string]any{command, pathEntry}}}, wired,
 		"a current harness still names what it wires, and only the managed entries")
 }
@@ -155,10 +155,10 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 // so a whole-value comparison does not depend on which Go types the descriptor decoded into.
 func normalizeFiles(t *testing.T, files map[string]types.HarnessFile) map[string]types.HarnessFile {
 	t.Helper()
-	encoded, err := json.Marshal(files)
+	encoded, err := codec.Marshal(files)
 	require.NoError(t, err)
 	var out map[string]types.HarnessFile
-	require.NoError(t, json.Unmarshal(encoded, &out))
+	require.NoError(t, codec.Unmarshal(encoded, &out))
 	return out
 }
 
@@ -230,7 +230,7 @@ func TestPlanHarnessRejectsDuplicateKeys(t *testing.T) {
 
 	_, err := PlanHarness(context.Background(), root, "test-host")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate JSON object key")
+	assert.Contains(t, err.Error(), `duplicate key: "hooks"`)
 }
 
 // TestPlanHarnessForAMissingFileCreatesIt pins the first-time case: the plan writes nothing,
@@ -528,7 +528,7 @@ func TestPlanHarnessRetiresOnlyEntriesMarkedAsMagus(t *testing.T) {
 			Start []map[string]any `json:"start"`
 		} `json:"hooks"`
 	}
-	require.NoError(t, json.Unmarshal(body, &doc))
+	require.NoError(t, codec.Unmarshal(body, &doc))
 	var commands []string
 	for _, entry := range doc.Hooks.Start {
 		_, cmds := EntryCommands(entry)
@@ -791,7 +791,7 @@ func writePromptHarness(t *testing.T, root string) {
 }
 
 func strconvQuote(s string) string {
-	b, _ := json.Marshal(s)
+	b, _ := codec.Marshal(s)
 	return string(b)
 }
 
@@ -824,7 +824,7 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 	var got map[string]any
 	body, err := os.ReadFile(config)
 	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	assert.Equal(t, map[string]any{
 		"model":      "m",
 		"permission": map[string]any{"edit": "ask", "bash": map[string]any{"git push *": "ask"}},
@@ -924,7 +924,7 @@ func TestPlanHarnessPlansSettings(t *testing.T) {
 	var got map[string]any
 	body, err := os.ReadFile(config)
 	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	assert.Equal(t, map[string]any{
 		"model":                  "m",
 		"enabledPlugins":         map[string]any{"other@x": true, "magus@magus": true},
@@ -1301,7 +1301,7 @@ func loadHostSchema(t *testing.T, rel string) *jsonschema.Resolved {
 	raw, err := os.ReadFile(filepath.Join(hostSchemaDir, rel))
 	require.NoError(t, err, "read the vendored schema %s", rel)
 	var schema jsonschema.Schema
-	require.NoError(t, json.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
+	require.NoError(t, codec.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
 	// nil loader on purpose: a schema that grew a remote $ref would fail here rather
 	// than turn every run of this test into an HTTP request.
 	resolved, err := schema.Resolve(nil)
@@ -1313,7 +1313,7 @@ func loadHostSchema(t *testing.T, rel string) *jsonschema.Resolved {
 func decodeJSON(t *testing.T, label, body string) any {
 	t.Helper()
 	var doc any
-	require.NoError(t, json.Unmarshal([]byte(body), &doc), "%s must be valid JSON", label)
+	require.NoError(t, codec.Unmarshal([]byte(body), &doc), "%s must be valid JSON", label)
 	return doc
 }
 
@@ -1432,7 +1432,7 @@ func TestCodexHookEventsAreNamedByItsSchema(t *testing.T) {
 			} `json:"hooks"`
 		} `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal(raw, &schema))
+	require.NoError(t, codec.Unmarshal(raw, &schema))
 	known := schema.Properties.Hooks.Properties
 	require.NotEmpty(t, known, "the codex schema must name the events it supports")
 	require.NotContains(t, known, "PreToolUseTypo",
@@ -1444,7 +1444,7 @@ func TestCodexHookEventsAreNamedByItsSchema(t *testing.T) {
 		var config struct {
 			Hooks map[string]any `json:"hooks"`
 		}
-		require.NoError(t, json.Unmarshal(body, &config))
+		require.NoError(t, codec.Unmarshal(body, &config))
 		require.NotEmpty(t, config.Hooks, "%s registers no hooks", file)
 		for event := range config.Hooks {
 			assert.Contains(t, known, event,
@@ -1476,7 +1476,7 @@ func hookCommands(t *testing.T, path string) []string {
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var doc any
-	require.NoError(t, json.Unmarshal(body, &doc), "parse %s", path)
+	require.NoError(t, codec.Unmarshal(body, &doc), "parse %s", path)
 	var out []string
 	var walk func(any)
 	walk = func(node any) {

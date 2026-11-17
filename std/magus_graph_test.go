@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -339,10 +339,10 @@ func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 
 	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
-	b, err := json.Marshal(got)
+	b, err := codec.Marshal(got)
 	require.NoError(t, err)
 	var report types.Holds
-	require.NoError(t, json.Unmarshal(b, &report))
+	require.NoError(t, codec.Unmarshal(b, &report))
 	require.Len(t, report.Holds, 1)
 	assert.False(t, report.Holds[0].Established, "six cases are under the workspace's cohort gate of seven")
 
@@ -408,10 +408,10 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 
 	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
-	b, err := json.Marshal(got)
+	b, err := codec.Marshal(got)
 	require.NoError(t, err)
 	var report types.Holds
-	require.NoError(t, json.Unmarshal(b, &report))
+	require.NoError(t, codec.Unmarshal(b, &report))
 	assert.Equal(t, types.Holds{
 		Holds: []types.Precedent{{
 			Family: types.PrecedentErrSentinelName, Scope: types.PrecedentScope{Language: "go"}, Key: types.PrecedentKey{Prefix: "err"},
@@ -439,10 +439,10 @@ func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
 	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err, "a failed freshen is a verdict on its index, not an error")
 	assert.True(t, ws.readAfter, "freshness is read after the freshen, so it judges the rebuilt index")
-	b, err := json.Marshal(got)
+	b, err := codec.Marshal(got)
 	require.NoError(t, err)
 	var report types.Holds
-	require.NoError(t, json.Unmarshal(b, &report))
+	require.NoError(t, codec.Unmarshal(b, &report))
 	stale.Detail = "docs changed\nscip-buzz is not on PATH"
 	assert.Equal(t, []types.SymbolIndexStatus{fresh, stale}, report.Indexes,
 		"the freshen's error rides on the index it left stale, and a current index carries none")
@@ -473,10 +473,10 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
-	b, err := json.Marshal(got)
+	b, err := codec.Marshal(got)
 	require.NoError(t, err)
 	var report types.Symbols
-	require.NoError(t, json.Unmarshal(b, &report))
+	require.NoError(t, codec.Unmarshal(b, &report))
 	assert.Equal(t, types.Symbols{
 		Symbols: []types.SymbolDecl{{
 			Node: open, Source: "internal/a/open.go:3", Language: "go", Name: "Open",
@@ -514,10 +514,10 @@ func conformanceAtAnchor() *types.ConformanceOptions {
 
 func decodeConformanceReport(t *testing.T, got types.ConformanceReport) types.ConformanceReport {
 	t.Helper()
-	b, err := json.Marshal(got)
+	b, err := codec.Marshal(got)
 	require.NoError(t, err)
 	var report types.ConformanceReport
-	require.NoError(t, json.Unmarshal(b, &report))
+	require.NoError(t, codec.Unmarshal(b, &report))
 	return report
 }
 

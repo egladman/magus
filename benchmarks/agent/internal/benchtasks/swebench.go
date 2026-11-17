@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/bench"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 const (
@@ -81,8 +81,8 @@ type rowsPage struct {
 	NumRowsTotal int  `json:"num_rows_total"`
 	Partial      bool `json:"partial"`
 	Rows         []struct {
-		Row            json.RawMessage `json:"row"`
-		TruncatedCells []string        `json:"truncated_cells"`
+		Row            codec.RawMessage `json:"row"`
+		TruncatedCells []string         `json:"truncated_cells"`
 	} `json:"rows"`
 }
 
@@ -150,17 +150,17 @@ func checkCardLicense(ctx context.Context, g getter) error {
 	}
 	var card struct {
 		CardData struct {
-			License json.RawMessage `json:"license"`
+			License codec.RawMessage `json:"license"`
 		} `json:"cardData"`
 	}
-	if err := json.Unmarshal(body, &card); err != nil {
+	if err := codec.Unmarshal(body, &card); err != nil {
 		return fmt.Errorf("dataset card: %w", err)
 	}
 	var one string
 	var many []string
-	if json.Unmarshal(card.CardData.License, &one) == nil {
+	if codec.Unmarshal(card.CardData.License, &one) == nil {
 		many = []string{one}
-	} else if err := json.Unmarshal(card.CardData.License, &many); err != nil {
+	} else if err := codec.Unmarshal(card.CardData.License, &many); err != nil {
 		return fmt.Errorf("dataset card license %s: %w", card.CardData.License, err)
 	}
 	if !slices.Equal(many, []string{"mit"}) {
@@ -172,7 +172,7 @@ func checkCardLicense(ctx context.Context, g getter) error {
 // fetchGoRows pages through the whole table and returns the Go rows' raw JSON in
 // instance_id order and the digest of the pages, checking each repository contributes the
 // count the card lists.
-func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, error) {
+func fetchGoRows(ctx context.Context, g getter) ([]codec.RawMessage, string, error) {
 	var kept []keyedRow
 	perRepo := map[string]int{}
 	pages := sha256.New()
@@ -184,7 +184,7 @@ func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, erro
 		}
 		fmt.Fprintf(pages, "%s", body)
 		var page rowsPage
-		if err := json.Unmarshal(body, &page); err != nil {
+		if err := codec.Unmarshal(body, &page); err != nil {
 			return nil, "", fmt.Errorf("rows at offset %d: %w", offset, err)
 		}
 		if page.Partial || len(page.Rows) == 0 {
@@ -204,7 +204,7 @@ func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, erro
 		}
 	}
 	slices.SortFunc(kept, func(a, b keyedRow) int { return strings.Compare(a.id, b.id) })
-	raw := make([]json.RawMessage, len(kept))
+	raw := make([]codec.RawMessage, len(kept))
 	for i, k := range kept {
 		raw[i] = k.raw
 	}
@@ -213,7 +213,7 @@ func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, erro
 
 type keyedRow struct {
 	id  string
-	raw json.RawMessage
+	raw codec.RawMessage
 }
 
 // keepGoRows appends page's rows of a Go repository to kept, counting every row it reads
@@ -225,7 +225,7 @@ func keepGoRows(page rowsPage, seen *int, perRepo map[string]int, kept []keyedRo
 			InstanceID string `json:"instance_id"`
 			Repo       string `json:"repo"`
 		}
-		if err := json.Unmarshal(r.Row, &head); err != nil {
+		if err := codec.Unmarshal(r.Row, &head); err != nil {
 			return nil, fmt.Errorf("row %d: %w", *seen, err)
 		}
 		if _, ok := goRepos[head.Repo]; !ok {
@@ -240,9 +240,9 @@ func keepGoRows(page rowsPage, seen *int, perRepo map[string]int, kept []keyedRo
 	return kept, nil
 }
 
-func multilingualTask(raw json.RawMessage) (bench.Task, error) {
+func multilingualTask(raw codec.RawMessage) (bench.Task, error) {
 	var r multilingualRow
-	if err := json.Unmarshal(raw, &r); err != nil {
+	if err := codec.Unmarshal(raw, &r); err != nil {
 		return bench.Task{}, err
 	}
 	created, err := time.Parse(time.DateTime, r.CreatedAt)

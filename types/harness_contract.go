@@ -4,7 +4,7 @@ import (
 	"path"
 	"slices"
 
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 // The harness contract's records: what a harness spell's mgs_ functions return
@@ -15,7 +15,7 @@ import (
 // installation choice, not a claim about a host or model: magus cannot reliably observe
 // either one.
 //
-// It is a superset of [SkillVariant] rather than the same type, because a form may name
+// It is a superset of [tier.SkillVariant] rather than the same type, because a form may name
 // two bodies: SkillFormBoth writes each skill short and its twin full.
 type SkillForm string
 
@@ -31,11 +31,11 @@ const (
 
 // Variant returns the body this form's primary entries carry. SkillFormBoth's twins are
 // full regardless.
-func (f SkillForm) Variant() agent.SkillVariant {
+func (f SkillForm) Variant() tier.SkillVariant {
 	if f == SkillFormFull {
-		return agent.SkillVariantFull
+		return tier.SkillVariantFull
 	}
-	return agent.SkillVariantShort
+	return tier.SkillVariantShort
 }
 
 // ToolCapability is what a host tool can do to a workspace, in magus's own words. The shape
@@ -145,6 +145,15 @@ type HarnessModel struct {
 	Window int64     `json:"window,omitzero"`
 	Price  Price     `json:"price"`
 	Step   PriceStep `json:"step,omitzero"`
+}
+
+// PriceStep is a long-context surcharge as a harness spell returns it: every price is
+// multiplied by Multiplier once a call's prompt passes Above tokens. It copies
+// budget.PriceStep so the Buzz mirror stays in types and budget never becomes a
+// boundary package.
+type PriceStep struct {
+	Above      int64
+	Multiplier float64
 }
 
 // HarnessTool is one row of a host's tool table: a tool by the host's own name, and what

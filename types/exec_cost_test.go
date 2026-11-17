@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 func TestPeakRSSKernelFloorTakesTheMaximum(t *testing.T) {
@@ -134,10 +136,10 @@ func TestStepCurveSumsConcurrentExecs(t *testing.T) {
 	)
 	RecordPeakRSS(ctx, 4<<30)
 
-	var want MemoryCurve
+	var want budget.Curve
 	want[2] = 5 << 10
 	want[10] = 512
-	want[MemoryCurveBuckets-1] = 256
+	want[budget.CurveBuckets-1] = 256
 	assert.Equal(t, want, Curve(ctx), "a bucket sums each exec's largest sample in it")
 	assert.Equal(t, int64(5<<30), PeakRSS(ctx), "concurrent execs add, above the kernel floor")
 

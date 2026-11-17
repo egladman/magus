@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net"
@@ -21,20 +20,23 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	statusv1alpha1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +91,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -119,7 +121,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	connectorTok, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "test", Grant: types.GrantConnector, TTL: time.Hour})
+	connectorTok, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "test", Grant: auth.AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	// status issues a GET and returns only the status code. It must NOT read the
@@ -190,7 +192,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -255,7 +257,7 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -330,7 +332,7 @@ func TestServeRefusesAnInexactAllowedOrigin(t *testing.T) {
 	root := fixtureWorkspace(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	opts := mcp.Options{
 		Magus:    m,
@@ -352,7 +354,7 @@ func TestServeConsoleDefaultTrustsNoHostedOrigin(t *testing.T) {
 	root := fixtureWorkspace(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	port := freePort(t)
 	d := New(mcp.Options{
@@ -389,13 +391,13 @@ func TestServeConsoleDefaultTrustsNoHostedOrigin(t *testing.T) {
 
 // mintConsoleToken mints a console token, the one a browser route takes. The
 // daemon under test must already have minted the operator token.
-func mintConsoleToken(t *testing.T) types.Secret {
+func mintConsoleToken(t *testing.T) secrets.Secret {
 	t.Helper()
 	dir, err := auth.StoreDir()
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	secret, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "console", Grant: types.GrantConsole, TTL: time.Hour})
+	secret, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "console", Grant: auth.AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 	return secret
 }
@@ -431,7 +433,7 @@ func TestServeConsoleRoutesRefuseTheOperatorToken(t *testing.T) {
 	root := fixtureWorkspace(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	port := freePort(t)
 	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
@@ -484,7 +486,7 @@ func TestServeConsoleAllowedOriginCORS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -611,7 +613,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -626,7 +628,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	}
 	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: routes})
 	mounted := make(chan []string, 1)
-	d.onMounted = func(p []string, _ map[string]types.Need) { mounted <- p }
+	d.onMounted = func(p []string, _ map[string]auth.Need) { mounted <- p }
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()
@@ -684,7 +686,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 				} `json:"details"`
 			}
 			//nolint:testifylint // assertRefused reports every route; require would stop at the first
-			if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
+			if !assert.NoError(t, codec.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
 				return
 			}
 			assert.Contains(t, []string{"unauthenticated", "permission_denied", "not_found"}, got.Code, what)
@@ -705,7 +707,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 			} `json:"error"`
 		}
 		//nolint:testifylint // assertRefused reports every route; require would stop at the first
-		if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
+		if !assert.NoError(t, codec.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
 			return
 		}
 		assert.Equal(t, resp.StatusCode, got.Error.Code, what)
@@ -890,16 +892,16 @@ func TestMCPHTTPOff(t *testing.T) {
 	srv, _, socket := serverSocket(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	builtConsole(t)
-	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	off := false
-	socketNeeds := make(chan map[string]types.Need, 1)
+	socketNeeds := make(chan map[string]auth.Need, 1)
 	d, tcp := testServer(t, func(opts mcp.Options) *Server {
 		opts.Magus = m
 		opts.Config.MCP.HTTP = &off
 		return New(opts, WithSocket(srv))
 	})
-	d.onSocketMounted = func(n map[string]types.Need) { socketNeeds <- n }
+	d.onSocketMounted = func(n map[string]auth.Need) { socketNeeds <- n }
 	base, patterns, needs := serveMounted(t, d, tcp)
 
 	assert.NotContains(t, patterns, "/mcp")
@@ -964,7 +966,7 @@ func TestMCPFailedAuthIsRateLimited(t *testing.T) {
 			} `json:"error"`
 		}
 		body, _ := io.ReadAll(resp.Body)
-		require.NoError(t, json.Unmarshal(body, &got), "%s", body)
+		require.NoError(t, codec.Unmarshal(body, &got), "%s", body)
 		require.NotEmpty(t, got.Error.Details)
 		return got.Error.Details[0].Reason
 	}
@@ -998,7 +1000,7 @@ func TestMCPFailedAuthIsRateLimited(t *testing.T) {
 // with a connector token and refused with the operator token.
 func TestInsecureBindListensWhereItSays(t *testing.T) {
 	testkit.Isolate(t)
-	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	port := freePort(t)
 	logs := &syncBuffer{}
@@ -1108,7 +1110,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 			Type string `json:"type"`
 		} `json:"details"`
 	}
-	require.NoError(t, json.Unmarshal(body, &connectErr), "%s", body)
+	require.NoError(t, codec.Unmarshal(body, &connectErr), "%s", body)
 	assert.Equal(t, "failed_precondition", connectErr.Code)
 	assert.Contains(t, connectErr.Message, "[MGS3016] workspace /repo failed to load: magusfile.buzz:3:3 [BZZ1005]")
 	var kinds []string
@@ -1133,7 +1135,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 			} `json:"details"`
 		} `json:"error"`
 	}
-	require.NoError(t, json.Unmarshal(body, &aip), "%s", body)
+	require.NoError(t, codec.Unmarshal(body, &aip), "%s", body)
 	assert.Equal(t, "FAILED_PRECONDITION", aip.Error.Status)
 	require.Len(t, aip.Error.Details, 4)
 	assert.Equal(t, "MGS3016", aip.Error.Details[0].Reason)
@@ -1162,7 +1164,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -1171,7 +1173,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	loadedAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), loadedPort)
 	loaded := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: loadedAddr, HealthRoutes: map[string]http.Handler{"/readyz": ok}})
 	loadedMounted := make(chan []string, 1)
-	loaded.onMounted = func(p []string, _ map[string]types.Need) { loadedMounted <- p }
+	loaded.onMounted = func(p []string, _ map[string]auth.Need) { loadedMounted <- p }
 	loadedErr := make(chan error, 1)
 	go func() { loadedErr <- loaded.Serve(ctx) }()
 	loadedBase := fmt.Sprintf("http://127.0.0.1:%d", loadedPort)
@@ -1228,7 +1230,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 			Code    string `json:"code"`
 			Message string `json:"message"`
 		}
-		require.NoError(t, json.Unmarshal(body, &got), "%s: %s", name, body)
+		require.NoError(t, codec.Unmarshal(body, &got), "%s: %s", name, body)
 		assert.Equal(t, "failed_precondition", got.Code, name)
 		assert.Contains(t, got.Message, "[MGS3016]", name)
 	}
@@ -1258,6 +1260,7 @@ func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	path := filepath.Join(dir, "server.sock")
 	srv, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 		Address: "unix://" + path,
 	})
@@ -1300,19 +1303,19 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	srv, addr, client := serverSocket(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	builtConsole(t)
-	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
-	socketNeeds := make(chan map[string]types.Need, 1)
+	socketNeeds := make(chan map[string]auth.Need, 1)
 	d, tcp := testServer(t, func(opts mcp.Options) *Server {
 		opts.Magus = m
 		return New(opts, WithSocket(srv))
 	})
-	d.onSocketMounted = func(n map[string]types.Need) { socketNeeds <- n }
+	d.onSocketMounted = func(n map[string]auth.Need) { socketNeeds <- n }
 	base, _, tcpNeeds := serveMounted(t, d, tcp)
 
 	onSocket := <-socketNeeds
-	want := map[string]types.Need{}
+	want := map[string]auth.Need{}
 	for path, need := range tcpNeeds {
 		if !strings.HasPrefix(path, "/api/") {
 			want[path] = need

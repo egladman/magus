@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // DecodePut reads one put from a param map shaped like magus\job.put's opts, the map
@@ -21,8 +21,8 @@ import (
 // validation, and every refusal [PutMerge] makes are errors, joined rather than returned
 // at the first one: a client that mistyped two params learns about both in one round trip.
 // `op` and `id` may ride alongside, since they are how a door names the call.
-func DecodePut(params map[string]any) (types.JobPut, error) {
-	var put types.JobPut
+func DecodePut(params map[string]any) (job.Put, error) {
+	var put job.Put
 	err := unknownParams(params)
 	str := func(key string, dst **string) {
 		v, ok, e := mergeString(params, key)
@@ -55,7 +55,7 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	if v, ok, e := mergeString(params, "brief_format"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		f := types.BriefFormat(strings.TrimSpace(v))
+		f := job.BriefFormat(strings.TrimSpace(v))
 		put.BriefFormat = &f
 	}
 	str("timeout", &put.Timeout)
@@ -67,12 +67,12 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	}
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
-	if goals, ok, e := decodeObjects[types.Goal](params, "goals", "goals"); e != nil {
+	if goals, ok, e := decodeObjects[job.Goal](params, "goals", "goals"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
 		put.Goals = &goals
 	}
-	if deviations, ok, e := decodeObjects[types.Deviation](params, "deviations", "deviations"); e != nil {
+	if deviations, ok, e := decodeObjects[job.Deviation](params, "deviations", "deviations"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
 		put.Deviations = &deviations
@@ -80,14 +80,14 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 
 	// check and validation are two spellings of one field, so a put naming each of them is
 	// a caller that does not know which one it meant.
-	check := func(key string, parse func(string) (types.LeaseCheck, error)) {
+	check := func(key string, parse func(string) (job.LeaseCheck, error)) {
 		v, ok, e := mergeString(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case !ok:
 		case strings.TrimSpace(v) == "":
-			put.Check = &types.LeaseCheck{}
+			put.Check = &job.LeaseCheck{}
 		default:
 			c, perr := parse(v)
 			if perr != nil {
@@ -103,17 +103,16 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	case hasCheck && hasLine:
 		err = errors.Join(err, errors.New("job: a put carries `check` or a rendered `validation` line, not both"))
 	case hasCheck:
-		check("check", types.ParseLeaseCheck)
+		check("check", job.ParseLeaseCheck)
 	case hasLine:
-		// compat(until: no client still sends a rendered line; observe: the grep
-		// types.Job.Validation names).
-		check("validation", types.ParseLeaseRunLine)
+		// compat: see ParseCheckCommand.
+		check("validation", ParseCheckCommand)
 	}
 
 	if v, ok, e := mergeString(params, "state"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		s := types.JobState(strings.TrimSpace(v))
+		s := job.State(strings.TrimSpace(v))
 		put.State = &s
 	}
 	if v, present := params["read_only"]; present {
@@ -151,7 +150,7 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 		err = errors.Join(err, perr)
 	}
 	if err != nil {
-		return types.JobPut{}, err
+		return job.Put{}, err
 	}
 	return put, nil
 }
@@ -163,39 +162,39 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 // runs it while holding the lock and has no way to report a failure. A state outside the
 // vocabulary, a timeout that does not parse, goals that do not validate, a negative
 // max_attempts, and an enter beside any other field are errors, joined.
-func PutMerge(p types.JobPut) (func(*types.Job), error) {
+func PutMerge(p job.Put) (func(*job.Job), error) {
 	var (
-		set []func(*types.Job)
+		set []func(*job.Job)
 		err error
 	)
 	if p.Parent != nil {
 		v := strings.TrimSpace(*p.Parent)
-		set = append(set, func(u *types.Job) { u.Parent = v })
+		set = append(set, func(u *job.Job) { u.Parent = v })
 	}
 	if p.Agent != nil {
 		switch spec := p.Agent.Trimmed(); {
-		case *spec == agent.Spec{}:
-			set = append(set, func(u *types.Job) { u.Agent = nil })
+		case *spec == job.Agent{}:
+			set = append(set, func(u *job.Job) { u.Agent = nil })
 		case spec.Validate() != nil:
 			err = errors.Join(err, fmt.Errorf("job: %w", spec.Validate()))
 		default:
-			set = append(set, func(u *types.Job) { u.Agent = spec.Clone() })
+			set = append(set, func(u *job.Job) { u.Agent = spec.Clone() })
 		}
 	}
 	if p.Checkpoint != nil {
 		v := strings.TrimSpace(*p.Checkpoint)
-		set = append(set, func(u *types.Job) { u.Checkpoint = v })
+		set = append(set, func(u *job.Job) { u.Checkpoint = v })
 	}
 	if p.Follows != nil {
 		v := strings.TrimSpace(*p.Follows)
-		set = append(set, func(u *types.Job) { u.Follows = v })
+		set = append(set, func(u *job.Job) { u.Follows = v })
 	}
 	if p.BriefFormat != nil {
 		if f := *p.BriefFormat; f != "" && !f.Valid() {
 			err = errors.Join(err, fmt.Errorf("job: brief_format %q is not one of %s, or empty for magus.yaml's agents.brief_format",
 				f, strings.Join(f.Values(), ", ")))
 		} else {
-			set = append(set, func(u *types.Job) { u.BriefFormat = f })
+			set = append(set, func(u *job.Job) { u.BriefFormat = f })
 		}
 	}
 	delivery, derr := deliverySetters(p)
@@ -203,49 +202,49 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 	set = append(set, delivery...)
 	for _, l := range []struct {
 		v     *[]string
-		apply func(*types.Job, []string)
+		apply func(*job.Job, []string)
 	}{
-		{p.Paths.Write, func(u *types.Job, v []string) { u.Paths.Write = v }},
-		{p.Paths.Deny, func(u *types.Job, v []string) { u.Paths.Deny = v }},
-		{p.Paths.Read, func(u *types.Job, v []string) { u.Paths.Read = v }},
-		{p.DependsOn, func(u *types.Job, v []string) { u.DependsOn = v }},
-		{p.Breaks, func(u *types.Job, v []string) { u.Breaks = v }},
+		{p.Paths.Write, func(u *job.Job, v []string) { u.Paths.Write = v }},
+		{p.Paths.Deny, func(u *job.Job, v []string) { u.Paths.Deny = v }},
+		{p.Paths.Read, func(u *job.Job, v []string) { u.Paths.Read = v }},
+		{p.DependsOn, func(u *job.Job, v []string) { u.DependsOn = v }},
+		{p.Breaks, func(u *job.Job, v []string) { u.Breaks = v }},
 	} {
 		if l.v != nil {
 			v, apply := slices.Clone(*l.v), l.apply
-			set = append(set, func(u *types.Job) { apply(u, v) })
+			set = append(set, func(u *job.Job) { apply(u, v) })
 		}
 	}
 	if p.Goals != nil {
-		goals := slices.Clone(*p.Goals)
-		if e := (types.Declaration{ID: "merge", Goals: goals}).Validate(); e != nil {
+		goals, _ := resolveAccept(*p.Goals)
+		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Goals: goals})); e != nil {
 			err = errors.Join(err, e)
 		} else {
-			set = append(set, func(u *types.Job) { u.Goals = goals })
+			set = append(set, func(u *job.Job) { u.Goals = goals })
 		}
 	}
 	if p.Deviations != nil {
 		deviations := slices.Clone(*p.Deviations)
-		if e := (types.Declaration{ID: "merge", Deviations: deviations}).Validate(); e != nil {
+		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Deviations: deviations})); e != nil {
 			err = errors.Join(err, e)
 		} else {
-			set = append(set, func(u *types.Job) { u.Deviations = deviations })
+			set = append(set, func(u *job.Job) { u.Deviations = deviations })
 		}
 	}
 	if p.Check != nil {
 		if p.Check.Target == "" && p.Check.Script == "" {
-			set = append(set, func(u *types.Job) { u.Check, u.Validation = nil, "" })
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = nil, "" })
 		} else {
 			c := *p.Check
 			c.Args = slices.Clone(c.Args)
-			set = append(set, func(u *types.Job) { u.Check, u.Validation = &c, c.String() })
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = &c, CheckCommand(c) })
 		}
 	}
 	if p.State != nil {
-		if s := *p.State; !types.ValidJobState(s) {
-			err = errors.Join(err, fmt.Errorf("job: state must be one of %s", types.JobStateVocabulary()))
+		if s := *p.State; !job.ValidState(s) {
+			err = errors.Join(err, fmt.Errorf("job: state must be one of %s", job.StateVocabulary()))
 		} else {
-			set = append(set, func(u *types.Job) { u.State = s })
+			set = append(set, func(u *job.Job) { u.State = s })
 		}
 	}
 	// A length, never an instant: the deadline is stamped when the store applies the merge.
@@ -253,7 +252,7 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 		if d, perr := types.ParseJobTimeout(*p.Timeout); perr != nil {
 			err = errors.Join(err, perr)
 		} else {
-			set = append(set, func(u *types.Job) {
+			set = append(set, func(u *job.Job) {
 				u.Deadline = 0
 				if d > 0 {
 					u.Deadline = deadlineAfter(d)
@@ -264,45 +263,45 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 	// An entry changes no declared field, so it travels alone and the store grades it as
 	// an entry; see Store.Enter.
 	if p.Enter != nil {
-		rel, perr := entryPath(*p.Enter)
+		rel, perr := job.EntryPath(*p.Enter)
 		for _, key := range declaredKeys(p) {
 			perr = errors.Join(perr, fmt.Errorf("job: a put carrying enter enters a job and declares nothing, so %s does not belong beside it", key))
 		}
 		if perr != nil {
 			err = errors.Join(err, perr)
 		} else {
-			set = append(set, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
+			set = append(set, func(u *job.Job) { u.Entries = append(u.Entries, job.Entry{Path: rel}) })
 		}
 	}
 	if p.ReadOnly != nil {
 		b := *p.ReadOnly
-		set = append(set, func(u *types.Job) { u.ReadOnly = b })
+		set = append(set, func(u *job.Job) { u.ReadOnly = b })
 	}
 	if p.MaxAttempts != nil {
 		if n := *p.MaxAttempts; n < 0 {
 			err = errors.Join(err, errors.New("job: max_attempts must be a whole number of at least 0"))
 		} else {
-			set = append(set, func(u *types.Job) { u.MaxAttempts = n })
+			set = append(set, func(u *job.Job) { u.MaxAttempts = n })
 		}
 	}
 	if p.MaxClaims != nil {
 		if n := *p.MaxClaims; n < 0 {
 			err = errors.Join(err, errors.New("job: max_claims must be a whole number of at least 0"))
 		} else {
-			set = append(set, func(u *types.Job) { u.MaxClaims = n })
+			set = append(set, func(u *job.Job) { u.MaxClaims = n })
 		}
 	}
 	if p.Weight != nil {
-		if w := *p.Weight; !types.ValidJobWeight(w) {
+		if w := *p.Weight; !job.ValidWeight(w) {
 			err = errors.Join(err, fmt.Errorf("job: weight %v is outside (0,1]", w))
 		} else {
-			set = append(set, func(u *types.Job) { u.Weight = w })
+			set = append(set, func(u *job.Job) { u.Weight = w })
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	return func(u *types.Job) {
+	return func(u *job.Job) {
 		for _, apply := range set {
 			apply(u)
 		}
@@ -310,26 +309,26 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 }
 
 // deliverySetters writes p's delivery and parent head, refusing a delivery
-// outside types.JobDeliveries.
-func deliverySetters(p types.JobPut) ([]func(*types.Job), error) {
-	var set []func(*types.Job)
+// outside job.Deliveries.
+func deliverySetters(p job.Put) ([]func(*job.Job), error) {
+	var set []func(*job.Job)
 	if p.Delivery != nil {
 		d := strings.TrimSpace(*p.Delivery)
-		if d != "" && !slices.Contains(types.JobDeliveries(), d) {
-			return nil, fmt.Errorf("job: delivery %q is not one of %s, or empty to clear it", d, strings.Join(types.JobDeliveries(), ", "))
+		if d != "" && !slices.Contains(job.Deliveries(), d) {
+			return nil, fmt.Errorf("job: delivery %q is not one of %s, or empty to clear it", d, strings.Join(job.Deliveries(), ", "))
 		}
-		set = append(set, func(u *types.Job) { u.Delivery = d })
+		set = append(set, func(u *job.Job) { u.Delivery = d })
 	}
 	if p.ParentHead != nil {
 		h := strings.TrimSpace(*p.ParentHead)
-		set = append(set, func(u *types.Job) { u.ParentHead = h })
+		set = append(set, func(u *job.Job) { u.ParentHead = h })
 	}
 	return set, nil
 }
 
 // declaredKeys names the fields p sets other than Enter, by the keys a put map spells
 // them with.
-func declaredKeys(p types.JobPut) []string {
+func declaredKeys(p job.Put) []string {
 	var keys []string
 	for _, f := range []struct {
 		key string
@@ -473,15 +472,15 @@ var putPathKeys = []string{"write", "read", "deny"}
 
 // decodePutPaths reads a put's paths, an object or the JSON string of one.
 // Each member reads as [mergeList] reads a list, named paths.<member>.
-func decodePutPaths(params map[string]any) (types.JobPathsPut, error) {
-	var put types.JobPathsPut
+func decodePutPaths(params map[string]any) (job.PathsPut, error) {
+	var put job.PathsPut
 	v, present := params["paths"]
 	if !present {
 		return put, nil
 	}
 	if s, ok := v.(string); ok {
 		var m map[string]any
-		if err := json.Unmarshal([]byte(s), &m); err != nil {
+		if err := codec.Unmarshal([]byte(s), &m); err != nil {
 			return put, fmt.Errorf("job: paths must be an object of %s: %w", strings.Join(putPathKeys, ", "), err)
 		}
 		v = m
@@ -516,24 +515,24 @@ func decodePutPaths(params map[string]any) (types.JobPathsPut, error) {
 // decodeAgent reads the agent section, strictly. It also takes the section
 // as a JSON string, for a client held to scalars. Null decodes to the zero
 // Spec, which [PutMerge] reads as a clear.
-func decodeAgent(params map[string]any) (agent.Spec, bool, error) {
+func decodeAgent(params map[string]any) (job.Agent, bool, error) {
 	v, present := params["agent"]
 	if !present {
-		return agent.Spec{}, false, nil
+		return job.Agent{}, false, nil
 	}
 	if v == nil {
-		return agent.Spec{}, true, nil
+		return job.Agent{}, true, nil
 	}
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if s, ok := v.(string); ok {
 		body, err = []byte(s), nil
 	}
-	var spec agent.Spec
+	var spec job.Agent
 	if err == nil {
-		err = json.UnmarshalStrict(body, &spec)
+		err = codec.UnmarshalStrict(body, &spec)
 	}
 	if err != nil {
-		return agent.Spec{}, false, fmt.Errorf("job: agent must be an object of model {id, tier}, instructions and worker {type, reason}: %w", err)
+		return job.Agent{}, false, fmt.Errorf("job: agent must be an object of model {id, tier}, instructions and worker {type, reason}: %w", err)
 	}
 	return spec, true, nil
 }
@@ -546,7 +545,7 @@ func decodeObjects[T any](params map[string]any, key, what string) ([]T, bool, e
 	if !present {
 		return nil, false, nil
 	}
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if s, ok := v.(string); ok {
 		body, err = []byte(s), nil
 	}
@@ -554,7 +553,7 @@ func decodeObjects[T any](params map[string]any, key, what string) ([]T, bool, e
 		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
 	var objects []T
-	if err := json.Unmarshal(body, &objects); err != nil {
+	if err := codec.Unmarshal(body, &objects); err != nil {
 		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
 	return objects, true, nil

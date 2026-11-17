@@ -2,6 +2,7 @@ package status
 
 import (
 	"encoding/base64"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"testing"
 	"time"
@@ -203,9 +204,9 @@ func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 		BrokerPolicy: types.BrokerRequired,
 		Broker: &daemon.Broker{
 			PID: 48213, Protocol: "magus.broker/v1alpha1", Socket: "unix:///run/magus/broker.sock", IdleExitSeconds: 600,
-			Capacity: types.MachineSnapshot{
+			Capacity: budget.Snapshot{
 				BudgetMB: 48 << 10, HeldMB: 12 << 10, BudgetSlots: 10, HeldSlots: 4,
-				Holders: []types.MachineClaimant{{
+				Holders: []budget.Claimant{{
 					Project: "api", Target: "test", PID: 48190, MemoryMB: 12 << 10, Slots: 4,
 					Dir: "/src/a", Command: "magus affected ci", Since: since,
 				}},

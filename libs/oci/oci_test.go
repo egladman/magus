@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -341,7 +341,7 @@ func manifestSubject(body []byte) string {
 	var m struct {
 		Subject *ocispec.Descriptor `json:"subject"`
 	}
-	if json.Unmarshal(body, &m) != nil || m.Subject == nil {
+	if codec.Unmarshal(body, &m) != nil || m.Subject == nil {
 		return ""
 	}
 	return m.Subject.Digest.String()
@@ -361,12 +361,12 @@ func (r *inMemoryRegistry) serveReferrers(w http.ResponseWriter, subject string)
 			continue
 		}
 		var m ocispec.Manifest
-		_ = json.Unmarshal(body, &m)
+		_ = codec.Unmarshal(body, &m)
 		idx.Manifests = append(idx.Manifests, ocispec.Descriptor{
 			MediaType: r.types[name], Digest: digest.Digest(name), Size: int64(len(body)), ArtifactType: m.ArtifactType,
 		})
 	}
-	body, _ := json.Marshal(idx)
+	body, _ := codec.Marshal(idx)
 	w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
 	_, _ = w.Write(body)
 }
@@ -392,7 +392,7 @@ func (r *inMemoryRegistry) serveTags(w http.ResponseWriter, req *http.Request) {
 	if r.link != "" {
 		w.Header().Set("Link", r.link)
 	}
-	body, _ := json.Marshal(map[string]any{"name": "team/graph", "tags": page})
+	body, _ := codec.Marshal(map[string]any{"name": "team/graph", "tags": page})
 	_, _ = w.Write(body)
 }
 
@@ -607,7 +607,7 @@ func TestArtifactManifestCarriesAnnotations(t *testing.T) {
 	assert.Equal(t, ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromBytes(rawA.Body), Size: int64(len(rawA.Body))}, rawA.Descriptor)
 
 	var m ocispec.Manifest
-	require.NoError(t, json.Unmarshal(rawA.Body, &m))
+	require.NoError(t, codec.Unmarshal(rawA.Body, &m))
 	assert.Equal(t, a.Annotations, m.Annotations)
 
 	_, err = Artifact{ArtifactType: testArtifactType}.Manifest()
@@ -650,7 +650,7 @@ func TestTokenCarriesCredentialsOnPull(t *testing.T) {
 	require.NoError(t, err)
 
 	authed := reg.client()
-	authed.Credentials = Credentials{Username: "bot", Password: types.NewSecret("s3cret-token")}
+	authed.Credentials = Credentials{Username: "bot", Password: secrets.New("s3cret-token")}
 	_, err = authed.GetArtifact(t.Context(), reg.ref("team/graph", "v1"), testArtifactType)
 	require.NoError(t, err)
 	_, err = authed.Tags(t.Context(), reg.ref("team/graph", ""))
@@ -733,7 +733,7 @@ func TestAuthorizeAnswersABasicChallenge(t *testing.T) {
 	reg.basicOnly = true
 	reg.mu.Unlock()
 	c := reg.client()
-	c.Credentials = Credentials{Username: "bot", Password: types.NewSecret("s3cret-token")}
+	c.Credentials = Credentials{Username: "bot", Password: secrets.New("s3cret-token")}
 
 	ref := reg.ref("team/x", "v1")
 	_, err := c.PushArtifact(t.Context(), ref.repository(), testArtifact(Blob{Title: "only", MediaType: "application/json", Data: []byte(`{}`)}), ref.Tag)

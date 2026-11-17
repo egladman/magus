@@ -3,7 +3,7 @@ package types
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 func TestResultConstructors(t *testing.T) {
@@ -31,7 +31,7 @@ func TestResultJSON(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := json.Marshal(tc.in)
+			got, err := codec.Marshal(tc.in)
 			if err != nil {
 				t.Fatal(err)
 			}

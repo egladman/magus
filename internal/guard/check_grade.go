@@ -11,7 +11,8 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // NewCheckGrader grades a declared check against the guard's rules for the workspace at the
@@ -19,9 +20,10 @@ import (
 // that declares none pays nothing, and are reused until a file they were read from
 // changes: a grader lives as long as the Store, or the daemon, it was made for, and
 // grading against rules an edit has since replaced would admit or refuse the wrong check.
-// runCLI installs one with job.SetCheckGrader for every door that opens a Store naming
-// none, such as magus\workspace().putJob. `magus job fork` grades with a [ForkGrader]
-// instead, which judges alike and keeps what it opened for the rest of the fork.
+// A door that opens a Store hands one over as job.Location.Grader, and the workspace's
+// own is magus.Magus.CheckGrader, which magus\workspace().putJob grades with. `magus job
+// fork` grades with a [ForkGrader] instead, which judges alike and keeps what it opened
+// for the rest of the fork.
 func NewCheckGrader(load RulesLoader) job.CheckGrader {
 	return newRulesByRoot(load, nil).grade
 }
@@ -39,12 +41,12 @@ type rulesByRoot struct {
 	load   RulesLoader
 	mu     sync.Mutex
 	loaded map[string]gradingRules
-	// opens is handed to every judgment as Dependencies.Opens: nil for the
-	// installed grader, which outlives any one tree, and one fork's kept workspaces for a fork's.
+	// opens is handed to every judgment as Dependencies.Opens: nil for a store's
+	// grader, which outlives any one tree, and one fork's kept workspaces for a fork's.
 	opens *OpenedWorkspaces
 }
 
-func (r *rulesByRoot) grade(ctx context.Context, root string, row types.Job) job.CheckVerdict {
+func (r *rulesByRoot) grade(ctx context.Context, root string, row jobtypes.Job) job.CheckVerdict {
 	return gradeCheck(ctx, r.current(ctx, root).judging(r.opens), root, row)
 }
 
@@ -113,10 +115,10 @@ func (g gradingRules) unchanged() bool {
 // come from a verdict on the check. Rules that would not load defer the grade instead
 // (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
 // A deny from a judgment that ran out of time defers too.
-func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.Job) job.CheckVerdict {
+func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtypes.Job) job.CheckVerdict {
 	if deps.LoadFailure != nil {
 		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
-		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", row.Check, why),
+		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", job.CheckCommand(*row.Check), why),
 			attr.Unchecked())
 		return job.CheckVerdict{Deferred: why}
 	}
@@ -130,7 +132,7 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 		}
 		row.CheckoutRoot = dir
 	}
-	judge := func(pending types.Job) (types.GuardJudgment, bool) {
+	judge := func(pending jobtypes.Job) (verdict.Judgment, bool) {
 		return JudgeLapsed(ctx, deps, Request{
 			Input:      ownBinaryPrefix + workerCheckLine(*pending.Check),
 			DryRun:     true,
@@ -139,14 +141,14 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 			Dir:        dir,
 		})
 	}
-	deferLapse := func(v types.GuardJudgment) job.CheckVerdict {
+	deferLapse := func(v verdict.Judgment) job.CheckVerdict {
 		first, _, _ := strings.Cut(strings.TrimSpace(v.Reason), "\n")
 		why := fmt.Sprintf("the guard ran out of time grading it: %s", first)
-		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", row.Check, why), attr.Unchecked())
+		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", job.CheckCommand(*row.Check), why), attr.Unchecked())
 		return job.CheckVerdict{Deferred: why}
 	}
 	declared, lapsed := judge(row)
-	if declared.Decision != string(types.GuardDeny) {
+	if declared.Decision != verdict.Deny {
 		return job.CheckVerdict{}
 	}
 	if lapsed {
@@ -156,12 +158,12 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 	compiling := job.CompilingCheck()
 	baseline.Check = &compiling
 	baselineVerdict, lapsed := judge(baseline)
-	if baselineVerdict.Decision == string(types.GuardDeny) && lapsed {
+	if baselineVerdict.Decision == verdict.Deny && lapsed {
 		return deferLapse(baselineVerdict)
 	}
-	if baselineVerdict.Decision == string(types.GuardDeny) {
+	if baselineVerdict.Decision == verdict.Deny {
 		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
-		return job.CheckVerdict{NotGraded: fmt.Sprintf("the guard denies this worker `%s` as well, so the deny describes the binary or the workspace and not the check: %s", compiling, first)}
+		return job.CheckVerdict{NotGraded: fmt.Sprintf("the guard denies this worker `%s` as well, so the deny describes the binary or the workspace and not the check: %s", job.CheckCommand(compiling), first)}
 	}
 	return job.CheckVerdict{Denied: true, Rule: declared.Rule, Reason: declared.Reason}
 }
@@ -186,9 +188,9 @@ const ownBinaryPrefix = "./"
 
 // workerCheckLine renders c with --budget-wait 0, which a worker's run needs.
 // A script check has no such flag and is rendered as stored.
-func workerCheckLine(c types.LeaseCheck) string {
+func workerCheckLine(c jobtypes.LeaseCheck) string {
 	if c.Script != "" {
-		return c.String()
+		return job.CheckCommand(c)
 	}
 	return WorkerCheckCommand(c)
 }

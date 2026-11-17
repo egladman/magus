@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +36,7 @@ func logRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 			continue
 		}
 		var rec map[string]any
-		require.NoError(t, json.Unmarshal([]byte(line), &rec))
+		require.NoError(t, codec.Unmarshal([]byte(line), &rec))
 		out = append(out, rec)
 	}
 	return out

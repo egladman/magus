@@ -195,15 +195,25 @@ as on every other host. The tool name is part of the key because Cursor reuses o
 2026.10.01). A filed verdict whose after-call event never came is removed after a
 day.
 
-The shell is gated on `preToolUse`, and a command that passes runs exactly as Cursor
-sent it. Cursor already gives a command empty stdin (probed live), and magus
+The shell is gated on `preToolUse`, and a command the guard defers runs exactly as
+Cursor sent it. Cursor already gives a command empty stdin (probed live), and magus
 transforms nothing a host sends, on this host or any other. `beforeShellExecution` then sees the same line, recognizes it as already
-judged, and allows it; it judges only a command `preToolUse` never saw, which keeps
+judged, and defers it; it judges only a command `preToolUse` never saw, which keeps
 it as the fallback.
+
+The guard never answers yes. Its decisions are defer, advise, ask and deny, and a
+defer is no objection. Cursor must answer every gating event, so the script answers
+a defer or an advise with Cursor's own `permission: "ask"`, never `allow`: Cursor's
+approval flow decides the call. On `beforeShellExecution` and `beforeMCPExecution`
+that is Cursor's prompt, so a command or MCP call the guard defers now meets it;
+Cursor's own allowlist and auto-run settings still apply. `allow` is written only
+for `subagentStart`, which records a spawn `preToolUse` already judged. Every other
+event no guard judged gets `ask` too: an empty command, a `Task` with no prompt, an
+MCP call left to `beforeMCPExecution`, and a hook event that was not JSON.
 
 A run of a `human_only` target gets the verdict `ask`. Cursor documents `ask` on
 `preToolUse` as accepted by its schema and not enforced, so that event files the
-verdict and allows the line, and `beforeShellExecution` answers `permission: "ask"`
+verdict and answers `ask` there, and `beforeShellExecution` answers `permission: "ask"`
 from the file. Cursor shows you the reason, and approving runs it. `beforeMCPExecution`
 renders an ask the same way. A push at a commit no passing gate covers is denied. A
 session bound to a job lease is denied, because workers do not publish. Any decision
@@ -319,10 +329,10 @@ sources:
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 36
-// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model
-// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
+// magus-guard-template: 37
+// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model
+// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model defer=none ask=human
 
 import "std";
 import "flags";
@@ -341,14 +351,22 @@ import "lib/hook" as hook;
 // grew past the brief's own caps and must not refill Cursor's window (or RSS).
 final SESSION_BRIEF_MAX_BYTES = 16384;
 
+// ALLOW answers only subagentStart, no permission question: preToolUse judged its Task.
 final ALLOW = `{"permission":"allow"}`;
+
+// DEFER answers a call the guard defers or advises. The guard never answers yes, and
+// Cursor must answer every gating event, so this is Cursor's ask: its own approval flow
+// decides the call. It also answers every gating event no guard judged: an empty
+// command, a Task with no prompt, an MCP call left to beforeMCPExecution, and an event
+// that was not JSON.
+final DEFER = `{"permission":"ask"}`;
 
 // The only reply a beforeSubmitPrompt hook owes Cursor: the message goes through.
 final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
 final UNAVAILABLE_TEXT = "magus guard could not judge this call: no magus binary was found";
-final UNREADABLE = "magus guard could not judge this call, so it is refused: the hook event on stdin was not JSON. Check the Cursor hook configuration and version.";
+final UNREADABLE = "magus guard could not judge this call: the hook event on stdin was not JSON, so Cursor asks you instead. Check the Cursor hook configuration and version.";
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
 final AGENT_NAME = "--agent-name";
@@ -445,7 +463,7 @@ fun denyBoth(message: str) > str {
         "permission": "deny",
         "user_message": message,
         "agent_message": message,
-    }) catch ALLOW;
+    }) catch DEFER;
 }
 
 // stateDir holds the verdicts a gating event files for the event after it. It is under
@@ -847,8 +865,8 @@ fun blockedAsk(reason: str, command: str) > str {
 }
 
 // gateReply renders a verdict for a gating event. An ask is a prompt where
-// the event shows one, else a deny. Pass and advise allow: advice waits for
-// the after-call event. An unknown decision is refused, never consent.
+// the event shows one, else a deny. A defer or an advise is DEFER, Cursor's ask:
+// advice waits for the after-call event. An unknown decision is refused, never consent.
 // A deny shows the person its first line. A blocked ask keeps its whole text:
 // its last line says what the person must do.
 fun gateReply(v: Verdict, eventName: str, command: str) > str {
@@ -863,20 +881,20 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         if (rendersPrompt(eventName)) { return askReply(v.reason); }
         return blockedAsk(v.reason, command: command);
     }
-    if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
+    if (v.decision == "defer" or v.decision == "advise") { return DEFER; }
     if (v.decision == UNJUDGED and hook\recovers(command, root: v.root)) {
         return json\stringify({
-            "permission": "allow",
+            "permission": "ask",
             "user_message": hook\firstLine(v.reason),
             "agent_message": v.reason,
-        }) catch ALLOW;
+        }) catch DEFER;
     }
     if (v.decision == UNJUDGED) { return denyBoth(v.reason); }
     return json\stringify({
         "permission": "deny",
         "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
         "agent_message": "magus guard returned the decision {v.decision}, which this hook does not know, so it refuses the call rather than allow it.",
-    }) catch ALLOW;
+    }) catch DEFER;
 }
 
 // fileVerdict keeps what the after-call event owes the model. A denied call has no
@@ -901,14 +919,14 @@ fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool) > str {
 // prompt. A record it cannot write leaves that event to judge the call.
 fun gateShell(scope: Scope, event: any?) > str {
     final command = hook\field(event, dotPath: "tool_input.command");
-    if (command == "") { return ALLOW; }
+    if (command == "") { return DEFER; }
     final v = verdict(scope, payload: command, asPath: false, ask: true);
     fileVerdict(scope, event: event, v: v);
     if (v.decision == "ask") {
         remember("ask", parts: [scope.session, command], value: v.reason);
-        return ALLOW;
+        return DEFER;
     }
-    if (v.decision == "pass" or v.decision == "advise") {
+    if (v.decision == "defer" or v.decision == "advise") {
         remember("shell", parts: [scope.session, command], value: "");
     }
     return gateReply(v, eventName: "preToolUse", command: command);
@@ -1172,7 +1190,7 @@ fun gateTool(scope: Scope, event: any?) > str {
     final tool = hook\field(event, dotPath: "tool_name");
     if (tool == "Task") {
         final spawn = taskPayload(scope, event: event);
-        if (spawn == "") { return ALLOW; }
+        if (spawn == "") { return DEFER; }
         return gateCall(scope, event: event, payload: spawn, asPath: false);
     }
     if (tool == "Shell") { return gateShell(scope, event: event); }
@@ -1186,7 +1204,7 @@ fun gateTool(scope: Scope, event: any?) > str {
     if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false); }
     if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true); }
     // beforeMCPExecution judges an MCP call, with the server name this event lacks.
-    if (tool.startsWith(MCP_TOOL_PREFIX)) { return ALLOW; }
+    if (tool.startsWith(MCP_TOOL_PREFIX)) { return DEFER; }
     // Every other call goes to magus whole: it passes a tool its table knows touches
     // nothing, and names one no rule can read rather than letting it run unseen.
     final input = hook\dig(event, dotPath: "tool_input") ?? {<str: any>};
@@ -1254,7 +1272,7 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
         final command = hook\field(event, dotPath: "command");
         final asked = recall("ask", parts: [scope.session, command]);
         if (asked != null) { return askReply(asked!); }
-        if (recall("shell", parts: [scope.session, command]) != null) { return ALLOW; }
+        if (recall("shell", parts: [scope.session, command]) != null) { return DEFER; }
         return gateCall(scope, event: event, payload: command, asPath: false);
     }
     if (eventName == "preToolUse") { return gateTool(scope, event: event); }
@@ -1265,12 +1283,12 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
 fun main(args: [str]) > void {
     final event = json\parse(io\stdin.readAll() catch "") catch null;
     if (event == null) {
-        // No event name to gate on, so this refuses whatever the event was; an event
+        // No event name to gate on, so this asks whatever the event was; an event
         // that reads no permission still logs the reason.
         if (hook\noticeOnce("", family: "unreadable", file: "cursor-hook.buzz")) {
             io\stderr.write(UNREADABLE + "\n") catch void;
         }
-        io\stdout.write(denyBoth(UNREADABLE)) catch void;
+        io\stdout.write(askReply(UNREADABLE)) catch void;
         return;
     }
     final eventName = readEventName(event);
@@ -1325,7 +1343,7 @@ test "a call no magus could judge is refused, and the person reads why" {
     std\assert(reply["user_message"] == v.reason, message: "the person reads the whole fix");
 }
 
-test "while no magus judges, Cursor lets the repair magus supplied alone run" {
+test "while no magus judges, Cursor asks before the repair magus supplied alone runs" {
     final saved = env\get("__MAGUS_REPAIR_LINES") catch "";
     final savedRoot = env\get("__MAGUS_REPAIR_ROOT") catch "";
     final line = "magus self update";
@@ -1333,11 +1351,31 @@ test "while no magus judges, Cursor lets the repair magus supplied alone run" {
     env\set("__MAGUS_REPAIR_ROOT", value: "/w") catch void;
     final v = unjudged("v", fix: "f", root: "/w");
     final allowed: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line)) catch {<str: any>};
-    std\assert(allowed["permission"] == "allow", message: "{allowed}");
+    std\assert(allowed["permission"] == "ask", message: "{allowed}");
     final refused: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line + " && ls")) catch {<str: any>};
     std\assert(refused["permission"] == "deny", message: "{refused}");
     env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
     env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
+}
+
+test "a defer or an advise is Cursor's ask, never its allow" {
+    foreach (decision in ["defer", "advise"]) {
+        final v = Verdict{ decision = decision, reason = "", context = "fyi" };
+        final reply: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: "ls")) catch {<str: any>};
+        std\assert(reply["permission"] == "ask", message: "{decision}: {reply}");
+    }
+}
+
+test "a retired decision is refused" {
+    final v = Verdict{ decision = "pass", reason = "", context = "" };
+    final reply: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: "ls")) catch {<str: any>};
+    std\assert(reply["permission"] == "deny", message: "{reply}");
+}
+
+test "an empty command is Cursor's ask, never its allow" {
+    final scope = Scope{ bin = "/nonexistent/magus", agent = "cursor", session = "s1", transcript = "" };
+    final reply: {str: any} = json\parse(gateShell(scope, event: {"tool_input": {"command": ""}})) catch {<str: any>};
+    std\assert(reply["permission"] == "ask", message: "{reply}");
 }
 ```
 
@@ -1425,7 +1463,7 @@ produces a follow-up before relying on it.
 envelope magus recognizes a spawn by, a `tool_input` carrying a `prompt`, and gates
 it, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule can
 deny it and a title of the form `<parent>/<role> <job>` names the job. One with no
-`prompt` has nothing to judge and is allowed. To join a subagent's own calls to a
+`prompt` has nothing to judge and gets Cursor's ask. To join a subagent's own calls to a
 job, write the marker line documented in [Any other host](any-host.md#lease-capture)
 at the top of the prompt you hand the subagent.
 

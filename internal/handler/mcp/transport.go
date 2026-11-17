@@ -25,12 +25,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // uaCtxKey keys the client's HTTP User-Agent in a request context. It is set by
@@ -80,7 +80,7 @@ func callerActor(ctx context.Context) (actor job.Actor, ok bool) {
 		return job.Actor{Lease: lease}, true
 	}
 	switch trail.CredentialFromContext(ctx).Kind {
-	case "", types.KindStdio:
+	case "", auth.KindStdio:
 		return job.Actor{}, false
 	}
 	return job.Actor{Unstamped: true}, true
@@ -207,7 +207,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 // or ctx ends; either is a clean stop and returns nil. out carries protocol frames only, so
 // the caller must keep every other write off it.
 //
-// Every call is admitted as types.CredentialStdio: the caller is the process that launched
+// Every call is admitted as auth.CredentialStdio(): the caller is the process that launched
 // this one, so there is no bearer to verify, and authorize still holds each tool to ToolNeed.
 func ServeStdio(ctx context.Context, opts Options, in io.Reader, out io.Writer) error {
 	if err := opts.validate(); err != nil {
@@ -234,7 +234,7 @@ func ServeStdio(ctx context.Context, opts Options, in io.Reader, out io.Writer) 
 	stdio := mcpserver.NewStdioServer(buildServer(opts, log, hooks, originFn))
 	stdio.SetErrorLogger(slog.NewLogLogger(log.Handler(), slog.LevelError))
 	stdio.SetContextFunc(func(ctx context.Context) context.Context {
-		return trail.ContextWithCredential(ctx, types.CredentialStdio)
+		return trail.ContextWithCredential(ctx, auth.CredentialStdio())
 	})
 	if err := stdio.Listen(ctx, in, out); err != nil && ctx.Err() == nil {
 		return fmt.Errorf("mcp: serve stdio: %w", err)

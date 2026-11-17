@@ -22,9 +22,11 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/journal"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -784,7 +786,7 @@ func approvedRegistry(ctx context.Context, root string, approved headPolicy, pen
 	}
 	reg := newRuleLoad()
 	lctx := interp.WithGuardRules(reg.within(ctx))
-	lctx = secret.ContextWithResolver(lctx, secret.New())
+	lctx = secrets.WithResolver(lctx, journal.NewSecretResolver())
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithApprovedSourceReader(lctx, read)
 	for _, src := range interp.Sources(root, files) {
@@ -948,7 +950,7 @@ func LoadWorkspaceRules(ctx context.Context, root string, opts types.VCSOptions)
 	// target imports) is not a guard rule, and compiling it is most of a hook's
 	// cost. See guardRulesFilter in internal/interp.
 	lctx := interp.WithGuardRules(load.within(ctx))
-	lctx = secret.ContextWithResolver(lctx, secret.New())
+	lctx = secrets.WithResolver(lctx, journal.NewSecretResolver())
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithSourceLog(lctx, log)
 	for _, src := range srcs {
@@ -972,7 +974,7 @@ func (r *WorkspaceRules) ShellRules() ([]WorkspaceShellRule, Dialect) {
 	for i, s := range src {
 		out[i] = WorkspaceShellRule{
 			Name:     s.Name,
-			Decision: s.Decision,
+			Decision: verdict.Decision(s.Decision),
 			Program:  s.Program,
 			Args:     s.Args,
 			Reason:   s.Reason,

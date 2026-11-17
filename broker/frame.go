@@ -9,7 +9,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // frameReader reads frames off one connection. It keeps its buffer across calls: a
@@ -42,7 +42,7 @@ func (r *frameReader) read() (frame, error) {
 		break
 	}
 	var f frame
-	if err := json.Unmarshal(bytes.TrimSpace(line), &f); err != nil {
+	if err := codec.Unmarshal(bytes.TrimSpace(line), &f); err != nil {
 		return frame{}, fmt.Errorf("broker: decode frame: %w", err)
 	}
 	if f.Type == "" {
@@ -67,13 +67,13 @@ func (w *frameWriter) write(typ string, id uint64, body any) error {
 func (w *frameWriter) writeFiles(typ string, id uint64, body any, files []*os.File) error {
 	f := frame{Type: typ, ID: id}
 	if body != nil {
-		raw, err := json.Marshal(body)
+		raw, err := codec.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("broker: encode %s: %w", typ, err)
 		}
 		f.Body = raw
 	}
-	line, err := json.Marshal(f)
+	line, err := codec.Marshal(f)
 	if err != nil {
 		return fmt.Errorf("broker: encode %s: %w", typ, err)
 	}
@@ -92,5 +92,5 @@ func decodeBody(f frame, v any) error {
 	if len(f.Body) == 0 {
 		return nil
 	}
-	return json.Unmarshal(f.Body, v)
+	return codec.Unmarshal(f.Body, v)
 }

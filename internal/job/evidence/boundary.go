@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -21,7 +22,7 @@ import (
 // DeletionCandidates is the unreferenced symbols in row's write paths, or nil when the
 // symbol index is not there to ask: no index is not the same as nothing to delete, and the
 // fork must not fail for it.
-func DeletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row types.Job) []types.UnreferencedEntry {
+func DeletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row jobtypes.Job) []types.UnreferencedEntry {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
 	}
@@ -35,7 +36,7 @@ func DeletionCandidates(ctx context.Context, load func(context.Context) *knowled
 // ReferencedOutside is the files outside row's write paths that use what they define, and
 // the gap that makes the list unknown. With no graph, or one holding no symbols, Referrers
 // answers nil for every file, which reads the same as nothing outside using them.
-func ReferencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) (files []job.ReferencedFile, gap string) {
+func ReferencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row jobtypes.Job, projects []*types.Project) (files []job.ReferencedFile, gap string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil, ""
 	}
@@ -66,7 +67,7 @@ const leaseAffinityCommits = 200
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
 // already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
-func LeaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *Graph, env Env) job.TermsFacts {
+func LeaseBoundary(ctx context.Context, root string, store *job.Store, row jobtypes.Job, leases []jobtypes.Job, graph *Graph, env Env) job.TermsFacts {
 	if len(row.Paths.Write) == 0 {
 		return job.TermsFacts{}
 	}
@@ -122,7 +123,7 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 		}
 		for _, glob := range p.AllOutputs() {
 			rooted := glob.Root(p.Path)
-			if seen[rooted.String()] || !slices.ContainsFunc(owned, func(o string) bool { return types.PathsIntersect(o, rooted.Pattern) }) {
+			if seen[rooted.String()] || !slices.ContainsFunc(owned, func(o string) bool { return jobtypes.PathsIntersect(o, rooted.Pattern) }) {
 				continue
 			}
 			seen[rooted.String()] = true
@@ -139,7 +140,7 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 	return out
 }
 
-// leasedBoundary is every path another [job.Editing] lease owns ([types.Job.HardPaths]). A
+// leasedBoundary is every path another [job.Editing] lease owns ([jobtypes.Job.HardPaths]). A
 // terminal or exited row claims nothing: that is the same rule the overlap report follows,
 // and the reason a worker releasing a path early lets a waiter start against it.
 //
@@ -148,12 +149,12 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 //
 // Nor does a lease in another checkout claim a generated output ([job.HeldApart]): row's
 // holder, working in here, regenerates its own copy.
-func leasedBoundary(row types.Job, leases []types.Job, here string, projects job.Projects) []job.TermsBoundary {
-	ancestors := types.JobAncestors(leases, row.ID)
+func leasedBoundary(row jobtypes.Job, leases []jobtypes.Job, here string, projects job.Projects) []job.TermsBoundary {
+	ancestors := jobtypes.Ancestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
-		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !job.Editing(other) || blocked ||
-			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
+		if _, blocked := jobtypes.BlockedOn(leases, other); other.ID == row.ID || !job.Editing(other) || blocked ||
+			slices.ContainsFunc(ancestors, func(a jobtypes.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
 		for _, p := range other.HardPaths() {

@@ -22,9 +22,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -403,7 +403,7 @@ func TestPipeNoticesStatusUnknown(t *testing.T) {
 		Attrs map[string]any `json:"attrs"`
 	}
 	var rec notice
-	if err := json.Unmarshal(records.Bytes(), &rec); err != nil {
+	if err := codec.Unmarshal(records.Bytes(), &rec); err != nil {
 		t.Fatalf("record %q: %v", records.String(), err)
 	}
 	want := notice{

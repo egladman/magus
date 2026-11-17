@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -22,7 +22,7 @@ import (
 type IntegrationMergePathsSuite struct {
 	suite.Suite
 	root string
-	row  types.Job
+	row  jobtypes.Job
 }
 
 func TestIntegrationMergePathsSuite(t *testing.T) {
@@ -53,13 +53,13 @@ func (s *IntegrationMergePathsSuite) SetupTest() {
 }
 
 func (s *IntegrationMergePathsSuite) grade(rel string) (writeGrade, string) {
-	return gradeClaimOutside(s.T().Context(), Dependencies{}, location{}, s.root, s.row, []types.Job{s.row}, nil, rel)
+	return gradeClaimOutside(s.T().Context(), Dependencies{}, location{}, s.root, s.row, []jobtypes.Job{s.row}, nil, rel)
 }
 
 func (s *IntegrationMergePathsSuite) TestAPathABranchItIntegratesChangedIsInScope() {
 	g, stop := s.grade("merged.go")
 	s.Empty(stop)
-	s.Equal(decisionAdvise, g.Decision)
+	s.Equal(verdict.Advise, g.Decision)
 	s.Contains(g.Context, "merged.go is in scope")
 	s.Contains(g.Context, "job-a")
 }
@@ -87,9 +87,9 @@ func C() {
 
 // claimFixture is a git checkout holding run.go under the golang driver, with a plan where
 // own-a claims run.go#A and the writer, own-b, claims run.go#B.
-func claimFixture(t *testing.T, extra ...types.Job) (context.Context, string) {
+func claimFixture(t *testing.T, extra ...jobtypes.Job) (context.Context, string) {
 	t.Helper()
-	leases := []types.Job{claimLease("own-a", "run.go#A"), claimLease("own-b", "run.go#B")}
+	leases := []jobtypes.Job{claimLease("own-a", "run.go#A"), claimLease("own-b", "run.go#B")}
 	ctx, root := fleetFixture(t, append(leases, extra...)...)
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go diff=golang\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "run.go"), []byte(claimedGo), 0o644))
@@ -101,10 +101,10 @@ func claimFixture(t *testing.T, extra ...types.Job) (context.Context, string) {
 	return ctx, root
 }
 
-func claimLease(id string, paths ...string) types.Job {
-	return types.Job{
-		ID: id, Agent: agent.Instructed("work on " + id), Paths: types.JobPaths{Write: paths}, State: types.StateRunning,
-		Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
+func claimLease(id string, paths ...string) jobtypes.Job {
+	return jobtypes.Job{
+		ID: id, Agent: jobtypes.Instructed("work on " + id), Paths: jobtypes.Paths{Write: paths}, State: jobtypes.StateRunning,
+		Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: jobtypes.BaseMatch, Registered: 1,
 	}
 }
 
@@ -114,7 +114,7 @@ func TestAnIntegrationRowObservesNoClaimFacts(t *testing.T) {
 	row := claimLease("integration", "run.go")
 	row.Integrates = []string{"job-a", "job-b"}
 
-	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []types.Job{row}, nil, "other.go")
+	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []jobtypes.Job{row}, nil, "other.go")
 
 	assert.Equal(t, writeGrade{}, g)
 	assert.Equal(t, "integration integrates 2 branches, and none of them changed other.go", stop)
@@ -155,7 +155,7 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 				return
 			}
 			// The reason is checked by substring below, so it is copied across.
-			require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleClaimedDeclaration)}, got)
+			require.Equal(t, writeGrade{Decision: verdict.Deny, Reason: got.Reason, Rule: string(denyRuleClaimedDeclaration)}, got)
 			assert.Contains(t, got.Reason, "Lease own-a (work on own-a) claims it as run.go#A")
 			assert.Contains(t, got.Reason, "magus workspace: this edit changes func A() { in run.go, a declaration lease own-a claims;")
 			assert.Contains(t, got.Reason, "`magus job exit own-a`")
@@ -168,7 +168,7 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 	ctx, root := claimFixture(t)
 	run := filepath.Join(root, "run.go")
-	judge := func(toolInput map[string]any) types.GuardJudgment {
+	judge := func(toolInput map[string]any) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "own-b", Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": root,
 			"tool_input": toolInput,
@@ -183,12 +183,12 @@ func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 		map[string]any{"old_string": "b()", "new_string": "b2()"},
 		map[string]any{"old_string": "a()", "new_string": "a2()", "replace_all": true},
 	}})
-	assert.Equal(t, "deny", multi.Decision, "every edit of a list is placed")
+	assert.Equal(t, verdict.Deny, multi.Decision, "every edit of a list is placed")
 
-	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "old_string": "b()", "new_string": "b2()"}).Decision)
-	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "content": strings.Replace(claimedGo, "b()", "b2()", 1)}).Decision,
+	assert.NotEqual(t, verdict.Deny, judge(map[string]any{"file_path": run, "old_string": "b()", "new_string": "b2()"}).Decision)
+	assert.NotEqual(t, verdict.Deny, judge(map[string]any{"file_path": run, "content": strings.Replace(claimedGo, "b()", "b2()", 1)}).Decision,
 		"a whole-file write that changes only the writer's declaration is placed like an edit and passes")
-	assert.Equal(t, "deny", judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
+	assert.Equal(t, verdict.Deny, judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
 		"a whole-file write that drops another job's declaration is placed like an edit and denied")
 }
 
@@ -214,7 +214,7 @@ func TestNarrowedHold(t *testing.T) { suite.Run(t, new(narrowedHoldSuite)) }
 
 // narrowedLease holds file by name and claims decls. The store drops a
 // release a new row carries, so narrowSeeded records it later.
-func narrowedLease(id, file string, decls ...string) types.Job {
+func narrowedLease(id, file string, decls ...string) jobtypes.Job {
 	row := claimLease(id, file)
 	for _, d := range decls {
 		row.Paths.Write = append(row.Paths.Write, fmt.Sprintf("%s#%s", file, d))
@@ -230,7 +230,7 @@ func narrowSeeded(ctx context.Context, t *testing.T, root, id, file string) {
 	require.NoError(t, err)
 }
 
-func (s *narrowedHoldSuite) start(leases ...types.Job) {
+func (s *narrowedHoldSuite) start(leases ...jobtypes.Job) {
 	ctx, root := fleetFixture(s.T(), leases...)
 	s.ctx, s.root = func() context.Context { return ctx }, root
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, ".gitattributes"), []byte("*.buzz diff=buzz\n*.go diff=golang\n"), 0o644))
@@ -243,10 +243,10 @@ func (s *narrowedHoldSuite) start(leases ...types.Job) {
 	s.Require().NoError(err, "%s", out)
 }
 
-func (s *narrowedHoldSuite) row(id string) types.Job {
+func (s *narrowedHoldSuite) row(id string) jobtypes.Job {
 	rows, err := leaseRows(s.ctx(), hookLocation(s.ctx(), Dependencies{}))
 	s.Require().NoError(err)
-	return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })]
+	return rows[slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == id })]
 }
 
 func (s *narrowedHoldSuite) write(lease, file string, fields writeFields) writeGrade {
@@ -265,7 +265,7 @@ func (s *narrowedHoldSuite) TestAPatternHoldNarrowsOnFirstWrite() {
 		"before the holder writes, its pattern claims no key another lease could collide with")
 
 	got := s.write("cfg", "magusfile.buzz", timeout)
-	s.Require().Equal("advise", got.Decision, got.Reason)
+	s.Require().Equal(verdict.Advise, got.Decision, got.Reason)
 	s.Contains(got.Context, `lease cfg now holds magusfile.buzz by "magusfile.buzz#project.targets.test"`)
 	cfg := s.row("cfg")
 	s.Equal([]string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, cfg.Paths.Write)
@@ -275,8 +275,8 @@ func (s *narrowedHoldSuite) TestAPatternHoldNarrowsOnFirstWrite() {
 	s.True(strings.HasPrefix(cfg.Releases[0].Digest, "sha256:"), cfg.Releases[0].Digest)
 
 	s.Empty(s.write("cfg", "magusfile.buzz", timeout).Decision, "a key it claims narrows nothing more")
-	s.Equal("deny", s.write("cfg", "magusfile.buzz", name).Decision, "a key another lease claims")
-	s.Equal("deny", s.write("keys", "magusfile.buzz", timeout).Decision, "the holder's new claim is graded")
+	s.Equal(verdict.Deny, s.write("cfg", "magusfile.buzz", name).Decision, "a key another lease claims")
+	s.Equal(verdict.Deny, s.write("keys", "magusfile.buzz", timeout).Decision, "the holder's new claim is graded")
 	s.Empty(s.write("keys", "magusfile.buzz", name).Decision)
 	s.Len(s.row("cfg").Paths.Write, 2, "a denied write narrows nothing")
 }
@@ -285,7 +285,7 @@ func (s *narrowedHoldSuite) TestAPatternHoldOnAnyPlacedFileNarrows() {
 	s.start(claimLease("code", "*.go"))
 
 	got := s.write("code", "run.go", writeFields{OldText: "c()", NewText: "c2()"})
-	s.Require().Equal("advise", got.Decision, got.Reason)
+	s.Require().Equal(verdict.Advise, got.Decision, got.Reason)
 	s.Contains(got.Context, `lease code now holds run.go by "run.go#C"`)
 	s.Equal([]string{"*.go", "run.go#C"}, s.row("code").Paths.Write)
 }
@@ -295,12 +295,12 @@ func (s *narrowedHoldSuite) TestANarrowedLiteralEntryGrowsOnWrite() {
 	narrowSeeded(s.ctx(), s.T(), s.root, "lit", "run.go")
 
 	got := s.write("lit", "run.go", writeFields{OldText: "c()", NewText: "c2()"})
-	s.Require().Equal("advise", got.Decision, got.Reason)
+	s.Require().Equal(verdict.Advise, got.Decision, got.Reason)
 	s.Contains(got.Context, `lease lit's hold on run.go grew by "run.go#C"; it now holds the file by "run.go#B", "run.go#C"`)
 	s.Equal([]string{"run.go", "run.go#B", "run.go#C"}, s.row("lit").Paths.Write, "the entry stays")
 
 	s.Empty(s.write("lit", "run.go", writeFields{OldText: "b()", NewText: "b2()"}).Decision, "a write inside its claims grows nothing")
-	s.Equal("deny", s.write("lit", "run.go", writeFields{OldText: "a()", NewText: "a2()"}).Decision, "a declaration another lease claims")
+	s.Equal(verdict.Deny, s.write("lit", "run.go", writeFields{OldText: "a()", NewText: "a2()"}).Decision, "a declaration another lease claims")
 	s.Len(s.row("lit").Paths.Write, 3, "a denied write grows nothing")
 }
 
@@ -309,7 +309,7 @@ func (s *narrowedHoldSuite) TestANarrowedHoldWithNoClaimYetIsDeniedAnotherJobsDe
 	narrowSeeded(s.ctx(), s.T(), s.root, "lit", "run.go")
 
 	got := s.write("lit", "run.go", writeFields{OldText: "a()", NewText: "a2()"})
-	s.Equal(writeGrade{Decision: "deny", Rule: string(denyRuleClaimedDeclaration)},
+	s.Equal(writeGrade{Decision: verdict.Deny, Rule: string(denyRuleClaimedDeclaration)},
 		writeGrade{Decision: got.Decision, Rule: got.Rule}, got.Reason)
 }
 
@@ -353,12 +353,12 @@ func TestKeyClaimNamesItsOwnKey(t *testing.T) {
 		name   string
 		lease  string
 		fields writeFields
-		want   string
+		want   verdict.Decision
 	}{
 		{"release writes its own key", "rel", release, ""},
 		{"release-build writes its own key", "build", build, ""},
-		{"release writes the sibling's key", "rel", build, "deny"},
-		{"release-build writes the sibling's key", "build", release, "deny"},
+		{"release writes the sibling's key", "rel", build, verdict.Deny},
+		{"release-build writes the sibling's key", "build", release, verdict.Deny},
 	} {
 		assert.Equal(t, tc.want, gradeLeasedEdit(ctx, Dependencies{}, tc.lease, magusfile, tc.fields).Decision, tc.name)
 	}

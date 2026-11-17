@@ -9,8 +9,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -138,19 +138,19 @@ func heredocContent(w heredocWrite, written map[string]string) (string, bool) {
 // target, reached without recording anything: a write a call makes some other way than
 // through that tool is held to the same rules. content is "" when the call's text for the
 // file is unknown, which the write rules read as a write they judge by path alone.
-func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, target, content string) types.GuardJudgment {
+func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, target, content string) verdict.Judgment {
 	input := map[string]any{"file_path": target}
 	if content != "" {
 		input["content"] = content
 	}
-	envelope, err := json.Marshal(map[string]any{
+	envelope, err := codec.Marshal(map[string]any{
 		"session_id": who.Session,
 		"agent_id":   who.Agent,
 		"cwd":        callDir,
 		"tool_input": input,
 	})
 	if err != nil {
-		return types.GuardJudgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: verdict.Defer}
 	}
 	// Judged as its own call, so it must not end the outer call's mark of a judgment in
 	// progress.
@@ -208,14 +208,14 @@ func judgeHeredocWrites(ctx context.Context, deps Dependencies, req Request, who
 			written[w.path] = content
 		}
 		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, w.path, content); v.Decision {
-		case decisionDeny:
+		case verdict.Deny:
 			first, _, _ := strings.Cut(v.Reason, "\n")
 			return ShellVerdict{
 				Deny: fmt.Sprintf("this heredoc writes %s, and that write is refused [%s]: %s", w.name, v.Rule, first),
 				Why:  "A here-document into a file is a file write, judged by the rules the host's write tool meets.\n" + v.Reason,
 				Rule: denyRule{Name: denyRuleHeredocWrite, Arg: v.Rule},
 			}
-		case decisionAdvise:
+		case verdict.Advise:
 			if advised.Context == "" {
 				advised = ShellVerdict{
 					Context: fmt.Sprintf("magus workspace: this heredoc writes %s, judged as that write [%s]: %s", w.name, v.Rule, v.Context),

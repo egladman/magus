@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 // grantedClaim hands Run the admission RunAll took for the step, so a miss reports it.
@@ -21,7 +22,7 @@ func grantedClaim(claim stepClaim) RunOption {
 // runs; it takes no isolation lock, so unlike an exclusive step it does not also
 // serialize replays. On an unlimited limiter (budget <= 0) there is nothing to throttle
 // against and AcquireN returns immediately.
-func stepSlots(s Step, lim *Limiter) int {
+func stepSlots(s Step, lim *budget.Limiter) int {
 	slots := s.Slots
 	if slots < 1 {
 		slots = 1
@@ -38,9 +39,9 @@ func stepSlots(s Step, lim *Limiter) int {
 //
 // Inside Cache.Run's callback, so a replayed step opens no pipe, and the pool closes the
 // moment the body returns: whatever tokens a child still holds die with it.
-func runSeated(ctx context.Context, lim *Limiter, slots int, fn func(context.Context) error) error {
+func runSeated(ctx context.Context, lim *budget.Limiter, slots int, fn func(context.Context) error) error {
 	ctx = ContextWithLimiter(ctx, lim)
-	ctx = WithSlotsHeld(ctx, slots)
+	ctx = budget.WithSlotsHeld(ctx, slots)
 	ctx, closeJobserver, err := spawn.SeatJobserver(ctx, slots)
 	if err != nil {
 		return err

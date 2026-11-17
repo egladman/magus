@@ -20,9 +20,12 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -115,7 +118,7 @@ func budgetHolderWait(ctx context.Context, command string, d Dialect) bool {
 	if err != nil {
 		return false
 	}
-	return slices.ContainsFunc(s.Holders, func(h types.MachineClaimant) bool {
+	return slices.ContainsFunc(s.Holders, func(h budget.Claimant) bool {
 		return h.PID > 0 && slices.Contains(pids, strconv.Itoa(h.PID))
 	})
 }
@@ -220,7 +223,7 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago, and a worker's check never waits for the budget: free a holder, or file the check as owed %q with `%s --stdin`.",
-			run, r.code, ago, types.OwedNoSeat, hint.JobExit.With(deps.lease)),
+			run, r.code, ago, job.OwedNoSeat, hint.JobExit.With(deps.lease)),
 		Why: denyRefusedRetryWhy,
 	}
 }
@@ -294,7 +297,7 @@ func readRefusal(rest *bufio.Reader) (time.Time, types.DiagnosticCode, bool) {
 		var ev journal.Event
 		// The byte search before decoding keeps a log full of output cheap.
 		if slices.ContainsFunc(refusalCodes, func(code types.DiagnosticCode) bool { return bytes.Contains(line, fmt.Appendf(nil, `"%s"`, code)) }) &&
-			json.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
+			codec.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
 			slices.Contains(refusalCodes, types.DiagnosticCode(ev.DiagnosticCode)) {
 			return time.UnixMilli(ev.Ts), types.DiagnosticCode(ev.DiagnosticCode), true
 		}
@@ -339,7 +342,7 @@ func readRunLog(path string, modified time.Time, read func(started journal.Event
 	rd := bufio.NewReader(f)
 	first, _ := rd.ReadBytes('\n')
 	var started journal.Event
-	if json.Unmarshal(first, &started) != nil || started.Kind != journal.KindStarted || started.Command == nil {
+	if codec.Unmarshal(first, &started) != nil || started.Kind != journal.KindStarted || started.Command == nil {
 		return
 	}
 	read(started, modified, rd)
@@ -363,7 +366,7 @@ const budgetReadTimeout = time.Second
 
 // budgetSnapshot reads this user's machine build budget from its broker. A var so a test
 // stands a budget in without a broker.
-var budgetSnapshot = func(ctx context.Context) (types.MachineSnapshot, error) {
+var budgetSnapshot = func(ctx context.Context) (budget.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(ctx, budgetReadTimeout)
 	defer cancel()
 	st, err := broker.QueryStatus(ctx, broker.DefaultAddr())
@@ -374,13 +377,13 @@ var budgetSnapshot = func(ctx context.Context) (types.MachineSnapshot, error) {
 // it: how full, who holds it, and that it frees as those runs end. "" when a slot and
 // memory are both free, or the budget is unmeasured. Holders are read oldest first, as
 // the broker serves them.
-func BudgetFull(s types.MachineSnapshot, now time.Time) string {
+func BudgetFull(s budget.Snapshot, now time.Time) string {
 	var held []string
 	if s.BudgetSlots > 0 && s.HeldSlots >= s.BudgetSlots {
 		held = append(held, fmt.Sprintf("slots %d/%d", s.HeldSlots, s.BudgetSlots))
 	}
 	if s.BudgetMB > 0 && s.HeldMB >= s.BudgetMB {
-		held = append(held, fmt.Sprintf("mem %s/%s", types.FormatMB(s.HeldMB), types.FormatMB(s.BudgetMB)))
+		held = append(held, fmt.Sprintf("mem %s/%s", budget.FormatMB(s.HeldMB), budget.FormatMB(s.BudgetMB)))
 	}
 	if len(held) == 0 {
 		return ""
@@ -442,7 +445,7 @@ func waitBound(target string, took time.Duration, measured bool, ceiling time.Du
 // lastRunHere is the newest real run of r's target in root's session store,
 // the longest over several projects. One project with no run leaves the line
 // unmeasured. So does `affected`: no one project's run prices the diff's set.
-func lastRunHere(root string, r targetRun) (time.Duration, bool) {
+func lastRunHere(ctx context.Context, root string, r targetRun) (time.Duration, bool) {
 	if root == "" || r.verb != "run" {
 		return 0, false
 	}
@@ -456,7 +459,7 @@ func lastRunHere(root string, r targetRun) (time.Duration, bool) {
 	}
 	var last time.Duration
 	for _, p := range projects {
-		d, ok := sessions.LastRunDuration(dir, p, r.target)
+		d, ok := sessions.LastRunDuration(ctx, dir, p, r.target)
 		if !ok {
 			return 0, false
 		}
@@ -499,12 +502,12 @@ func waitedRun(command string, d Dialect) ([]string, targetRun, bool) {
 
 // waitRemedy backgrounds a waiting line's target run under job exec. A line
 // waitedRun declines gets an empty lead, which withRemedy reads as no remedy.
-func waitRemedy(deps Dependencies, rule denyRuleName, command string, d Dialect) (string, types.NextStep) {
+func waitRemedy(ctx context.Context, deps Dependencies, rule denyRuleName, command string, d Dialect) (string, types.NextStep) {
 	run, r, ok := waitedRun(command, d)
 	if !ok {
 		return "", types.NextStep{}
 	}
-	took, measured := lastRunHere(deps.scope.root, r)
+	took, measured := lastRunHere(ctx, deps.scope.root, r)
 	bound, note := waitBound(r.target, took, measured, configuredBackgroundLimits(deps).ceiling)
 	argv := boundedRunArgv(run[0], formatLimit(bound), run)
 	next := hint.NextForDenyRemedy(string(rule), argv,
@@ -754,19 +757,19 @@ func denySpawnWaiter() denial {
 // already attributed to it, the host has not said that worker stopped (on stops), and the row
 // is still being worked. A running row alone is not enough: a row stays running after its
 // worker dies, and only this session's own record says a worker of its own holds it.
-func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (types.Job, bool) {
+func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (jobtypes.Job, bool) {
 	row, ok := spawnTitleJob(ctx, at, title)
 	if !ok || !row.State.Editing() {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	return row, liveSpawnedJob(facts, stops, rows, row.ID)
 }
 
-func denySpawnDuplicate(row types.Job) denial {
+func denySpawnDuplicate(row jobtypes.Job) denial {
 	return denial{
 		Say: fmt.Sprintf("job %s already has a worker (%s); continue that worker with a message, or stop it before spawning another: `%s` names it.", row.ID, string(row.State), hint.DescribeJob.With(row.ID)),
 		Why: "Two workers on one job write the same paths from two contexts, and each reports a result the other never saw. " +

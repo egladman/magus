@@ -20,15 +20,17 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -111,7 +113,7 @@ type account struct {
 	billing types.AgentBilling
 	// overrides are the rows agents.models declares. The harness rows are not kept here:
 	// they belong to the request judged, and location.modelTable layers these over them.
-	overrides []types.ModelPricing
+	overrides []model.Row
 	// cacheTTL is agents.prompt_cache_ttl, zero when unset; loadErr is why magus.yaml did
 	// not load, which a reader of cacheTTL must say rather than read zero as unset.
 	cacheTTL time.Duration
@@ -151,7 +153,7 @@ func accountAt(root string) account {
 // harnesses publish, then the workspace's agents.models over them. The harness rows can
 // take a workspace load, so a call that needs only billing reads accountAt instead.
 func (at location) modelTable() model.Table {
-	var harness []types.ModelPricing
+	var harness []model.Row
 	if at.models != nil {
 		harness = at.models()
 	}
@@ -230,7 +232,7 @@ func writeCostState(facts hint.Gate, st costState) {
 	if facts.CacheDir() == "" {
 		return
 	}
-	body, err := json.Marshal(st)
+	body, err := codec.Marshal(st)
 	if err != nil {
 		return
 	}
@@ -310,7 +312,7 @@ func (st *costState) readRecord(line []byte) []toolResult {
 		return nil
 	}
 	var rec transcriptUsage
-	if json.Unmarshal(line, &rec) != nil || rec.IsSidechain {
+	if codec.Unmarshal(line, &rec) != nil || rec.IsSidechain {
 		return nil
 	}
 	if tokens, window, ok := rec.contextSize(); ok {
@@ -325,7 +327,7 @@ func (st *costState) readRecord(line []byte) []toolResult {
 		return results
 	}
 	var blocks []contentBlock
-	if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && json.Unmarshal(rec.Message.Content, &blocks) == nil {
+	if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && codec.Unmarshal(rec.Message.Content, &blocks) == nil {
 		for _, b := range blocks {
 			if b.Type == "tool_result" {
 				st.noteRefs(b.Content)
@@ -337,11 +339,11 @@ func (st *costState) readRecord(line []byte) []toolResult {
 
 // noteRefs adds to Refs every minted output ref, invocation id and guard verdict ref a
 // tool result's text names.
-func (st *costState) noteRefs(raw json.RawMessage) {
+func (st *costState) noteRefs(raw codec.RawMessage) {
 	var text string
-	if json.Unmarshal(raw, &text) != nil {
+	if codec.Unmarshal(raw, &text) != nil {
 		var blocks []contentBlock
-		_ = json.Unmarshal(raw, &blocks)
+		_ = codec.Unmarshal(raw, &blocks)
 		for _, b := range blocks {
 			text += b.Text + "\n"
 		}
@@ -375,13 +377,13 @@ func namesRef(w string) bool {
 // contentBlock is one entry of a message's content: a tool call the model made, or the
 // result handed back for one.
 type contentBlock struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Input     map[string]any  `json:"input"`
-	ToolUseID string          `json:"tool_use_id"`
-	Content   json.RawMessage `json:"content"`
-	Text      string          `json:"text"`
+	Type      string           `json:"type"`
+	ID        string           `json:"id"`
+	Name      string           `json:"name"`
+	Input     map[string]any   `json:"input"`
+	ToolUseID string           `json:"tool_use_id"`
+	Content   codec.RawMessage `json:"content"`
+	Text      string           `json:"text"`
 }
 
 // toolCalls files the tool calls rec starts in Pending and returns the results it hands
@@ -412,7 +414,7 @@ func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 		switch rec.Payload.Type {
 		case "function_call":
 			var args map[string]any
-			_ = json.Unmarshal([]byte(rec.Payload.Arguments), &args)
+			_ = codec.Unmarshal([]byte(rec.Payload.Arguments), &args)
 			start(rec.Payload.CallID, rec.Payload.Name, inputClass(args))
 		case "function_call_output":
 			finish(rec.Payload.CallID, resultChars(rec.Payload.Output))
@@ -423,7 +425,7 @@ func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 		return nil
 	}
 	var blocks []contentBlock
-	if json.Unmarshal(rec.Message.Content, &blocks) != nil {
+	if codec.Unmarshal(rec.Message.Content, &blocks) != nil {
 		return nil
 	}
 	for _, b := range blocks {
@@ -439,16 +441,16 @@ func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 
 // resultChars is the size of a tool result: a string's length, the text of a list of
 // blocks, or the encoded size of anything else.
-func resultChars(raw json.RawMessage) int {
+func resultChars(raw codec.RawMessage) int {
 	if len(raw) == 0 {
 		return 0
 	}
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if codec.Unmarshal(raw, &s) == nil {
 		return len(s)
 	}
 	var blocks []contentBlock
-	if json.Unmarshal(raw, &blocks) == nil {
+	if codec.Unmarshal(raw, &blocks) == nil {
 		n := 0
 		for _, b := range blocks {
 			n += len(b.Text)
@@ -688,14 +690,14 @@ func invocationClass(c hint.Invocation) types.DelegableClass {
 //
 // An observation is the same call another hook judges, so it records the thread alone and
 // nothing a metric counts: counting both would count the call twice.
-func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, verdict types.GuardJudgment) types.AgentFacts {
+func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, judged verdict.Judgment) types.AgentFacts {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	if who.Agent != "" && verdict.Decision != "" {
+	if who.Agent != "" && judged.Decision != "" {
 		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
 	out := types.AgentFacts{Thread: thread, ThreadFrom: from}
-	if verdict.Decision == "" {
+	if judged.Decision == "" {
 		return out
 	}
 	out.Billing = accountAt(at.workspace).billing
@@ -704,7 +706,7 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 		out.DelegableClass = delegableClass(input, at)
 		free = costFree(input, at)
 	}
-	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
+	ran := judged.Decision == verdict.Defer || judged.Decision == verdict.Advise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
 		var st costState
@@ -713,7 +715,7 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	}
 	setContext(&out, callerContext(at, who, thread, facts))
 	if lease != "" {
-		observeStall(ctx, at, who, lease, verdict)
+		observeStall(ctx, at, who, lease, judged)
 	}
 	recordAgentCalls(ctx, out, results)
 	return out
@@ -833,7 +835,7 @@ func orchestration(st costState, from types.ThreadSource) types.Orchestration {
 // confirmed, and Orchestrates proven while a row the thread handed out is live (an exited
 // row waits on its `job wait`). The role is the live lease, never history: once every row
 // ends it orchestrates nothing. It writes nothing; observeCall files what it returns.
-func sessionCostState(at location, who hookAttribution, live func(id string) (types.Job, bool), now time.Time) costState {
+func sessionCostState(at location, who hookAttribution, live func(id string) (job.Job, bool), now time.Time) costState {
 	st := readCostState(hint.NewGate(at.cacheDir, who.factsKey()))
 	if len(st.Forks) > 0 {
 		confirmForks(&st, live, now)
@@ -910,7 +912,7 @@ func forkedIDs(line string) []string {
 // confirmForks moves to st.Forked each fork the store now shows live, created no earlier
 // than the call that ran it. A fork older than forkConfirmWindow that the store never
 // showed is dropped.
-func confirmForks(st *costState, live func(id string) (types.Job, bool), now time.Time) {
+func confirmForks(st *costState, live func(id string) (job.Job, bool), now time.Time) {
 	for id, judged := range st.Forks {
 		at := time.Unix(0, judged)
 		if row, ok := live(id); ok && row.Created >= at.Unix() {
@@ -931,21 +933,21 @@ func confirmForks(st *costState, live func(id string) (types.Job, bool), now tim
 
 // liveRowLookup finds a live row in the job store, read once however many ids it is asked
 // for. An unreadable store finds none.
-func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job, bool) {
-	rows := sync.OnceValue(func() []types.Job {
+func liveRowLookup(ctx context.Context, at location) func(id string) (job.Job, bool) {
+	rows := sync.OnceValue(func() []job.Job {
 		rows, err := leaseRows(ctx, at)
 		if err != nil {
 			return nil
 		}
 		return rows
 	})
-	return func(id string) (types.Job, bool) {
+	return func(id string) (job.Job, bool) {
 		for _, row := range rows() {
 			if row.ID == id && row.State.Live() {
 				return row, true
 			}
 		}
-		return types.Job{}, false
+		return job.Job{}, false
 	}
 }
 
@@ -1221,7 +1223,7 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 }
 
 // runsCheck reports a run of check's target in check's project, "." when it names none.
-func runsCheck(check *types.LeaseCheck, r targetRun) bool {
+func runsCheck(check *job.LeaseCheck, r targetRun) bool {
 	if check == nil || check.Target == "" || r.verb != "run" || r.target != check.Target {
 		return false
 	}

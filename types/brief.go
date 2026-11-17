@@ -1,17 +1,5 @@
 package types
 
-// BriefFormat is the shape a spawn or continuation brief takes. markdown is prose and runs
-// only the brief rules the guard always runs; buzz is one Brief literal the guard
-// type-checks before the worker sees it.
-type BriefFormat string
-
-const (
-	// BriefFormatMarkdown is a prose brief, the default.
-	BriefFormatMarkdown BriefFormat = "markdown"
-	// BriefFormatBuzz is a brief written as one Brief literal.
-	BriefFormatBuzz BriefFormat = "buzz"
-)
-
 // Brief is what a buzz-format brief declares beyond the job record: the job it is for,
 // the goal and why, the decisions already made, and the evidence behind them. A field with
 // no omitempty is required.

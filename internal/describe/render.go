@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -479,7 +479,7 @@ func writeOverlaps(w io.Writer, overlaps []types.FileClaim) {
 // names of its top-level properties, the two shapes a --schema flag renders besides the
 // raw text.
 func ParseSchema(raw string) (doc map[string]any, names []string, err error) {
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+	if err := codec.Unmarshal([]byte(raw), &doc); err != nil {
 		return nil, nil, fmt.Errorf("parse embedded schema: %w", err)
 	}
 	props, _ := doc["properties"].(map[string]any)

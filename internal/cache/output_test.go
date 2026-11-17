@@ -5,17 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -26,6 +15,19 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // mustPersist stores one execution and returns its step ref, failing the test on error.
@@ -177,7 +179,7 @@ func TestOutputDescriptorJobAttemptCarriesTheRunsIdentity(t *testing.T) {
 		Inv: "inv1", ErrMsg: "exit 1", Platform: "linux/amd64",
 	}
 	got := d.JobAttempt("outdead")
-	assert.Equal(t, types.JobAttempt{
+	assert.Equal(t, jobtypes.CapturedRun{
 		Found: true, Ref: "outdead", Project: "api", Target: "test:rw", Spell: "go", Failed: true,
 		TimestampMs: 1_700_000_000_000, DurationMs: 900, AttemptID: "outdeadbeefcafe-0a1b2c3d",
 		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
@@ -206,7 +208,7 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 		t.Helper()
 		return recordIn(t.Context())
 	}
-	adopted := types.WithJobLease(t.Context(), "wave/client")
+	adopted := jobtypes.WithLease(t.Context(), "wave/client")
 
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Empty(t, record().Lease, "a run under no lease records none")
@@ -659,7 +661,7 @@ func TestInvocationByID(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	f, err := os.Create(filepath.Join(runs, "inv123.jsonl"))
 	require.NoError(t, err)
-	enc := json.NewEncoder(f)
+	enc := codec.NewEncoder(f)
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: "agent"}}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
 	require.NoError(t, f.Close())
@@ -682,7 +684,7 @@ func TestInvocationEventsByID(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	f, err := os.Create(filepath.Join(runs, "invaudit1.jsonl"))
 	require.NoError(t, err)
-	enc := json.NewEncoder(f)
+	enc := codec.NewEncoder(f)
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "image-login"}}}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindSecret, Project: ".", Target: "image-login", Text: `read secret "GHCR_TOKEN" via onepassword`}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
@@ -724,7 +726,7 @@ func TestInvocationReadsRefuseTraversal(t *testing.T) {
 	require.NoError(t, os.MkdirAll(outside, 0o755))
 	f, err := os.Create(filepath.Join(outside, "hosts.jsonl"))
 	require.NoError(t, err)
-	require.NoError(t, json.NewEncoder(f).Encode(journal.Event{Kind: journal.KindStarted, Text: "not yours"}))
+	require.NoError(t, codec.NewEncoder(f).Encode(journal.Event{Kind: journal.KindStarted, Text: "not yours"}))
 	require.NoError(t, f.Close())
 
 	// Relative to <runs>/inv, because the id's own leading segment is one of the levels the
@@ -758,7 +760,7 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	path := filepath.Join(runs, "invtail1.jsonl")
 	f, err := os.Create(path)
 	require.NoError(t, err)
-	enc := json.NewEncoder(f)
+	enc := codec.NewEncoder(f)
 	require.NoError(t, enc.Encode(journal.Event{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}))
 	require.NoError(t, f.Close())
 
@@ -769,9 +771,9 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	assert.Equal(t, "compiling", events[0].Text)
 
 	// The writer appends a whole line plus the first half of the next one.
-	line, err := json.Marshal(journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"})
+	line, err := codec.Marshal(journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"})
 	require.NoError(t, err)
-	torn, err := json.Marshal(journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass})
+	torn, err := codec.Marshal(journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass})
 	require.NoError(t, err)
 	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
@@ -815,7 +817,7 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 		p := filepath.Join(runs, name+".jsonl")
 		f, err := os.Create(p)
 		require.NoError(t, err)
-		enc := json.NewEncoder(f)
+		enc := codec.NewEncoder(f)
 		for _, e := range evs {
 			require.NoError(t, enc.Encode(e))
 		}
@@ -1158,7 +1160,7 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 
 	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
-	hit, err := c2.Run(types.WithJobLease(t.Context(), "wave/hit"), step, build)
+	hit, err := c2.Run(jobtypes.WithLease(t.Context(), "wave/hit"), step, build)
 	require.NoError(t, err)
 	require.True(t, hit.Hit, "second run must hit")
 	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")

@@ -13,9 +13,11 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // claudeLimits are the foreground limits one host's wiring declares: two minutes for a call
@@ -71,7 +73,7 @@ func TestDenyWorkerBackgroundRunRefusesOnlyABackgroundedCheck(t *testing.T) {
 		integratorCtx, integrator := integratorFixture(t, integrated, "root/integrate "+integrated.ID)
 		assert.Empty(t, workerDenial(integratorCtx, integrator, integrated.ID, "./magus affected ci", background), "the checkout's integrator")
 		done := figuresLease()
-		done.State = types.StatePass
+		done.State = job.StatePass
 		doneCtx, _ := fleetFixture(t, done)
 		assert.Empty(t, workerDenial(doneCtx, deps, done.ID, "./magus run diagrams_generate docs", background), "a finished row")
 	})
@@ -87,7 +89,7 @@ func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 	flagged := Judge(ctx, Dependencies{}, Request{Input: command, Lease: row.ID, CallBackground: true})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorkerBackgroundRun)), unworded(flagged))
 
-	envelope, err := json.Marshal(map[string]any{
+	envelope, err := codec.Marshal(map[string]any{
 		"hook_event_name": "PreToolUse",
 		"tool_name":       "Shell",
 		"tool_input":      map[string]any{"command": command, "run_in_background": true, "timeout": 600000},
@@ -97,7 +99,7 @@ func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorkerBackgroundRun)), unworded(enveloped))
 
 	foreground := Judge(ctx, Dependencies{}, Request{Input: command, Lease: row.ID})
-	assert.NotEqual(t, "deny", foreground.Decision, "a foreground run of the check passes")
+	assert.NotEqual(t, verdict.Deny, foreground.Decision, "a foreground run of the check passes")
 }
 
 func TestDecodeHookEnvelopeReadsHowTheHostRunsACommand(t *testing.T) {
@@ -120,10 +122,10 @@ func recordRun(t *testing.T, root, project, target string, took time.Duration) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	w, err := sessions.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)), sessions.InvocationStart{Command: "run"})
+	w, err := session.Open(t.Context(), dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)), session.InvocationStart{Command: "run"})
 	require.NoError(t, err)
-	require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{
-		Target: target, Project: project, Outcome: sessions.OutcomePass, DurationMs: took.Milliseconds(),
+	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{
+		Target: target, Project: project, Outcome: session.OutcomePass, DurationMs: took.Milliseconds(),
 	}))
 }
 
@@ -131,7 +133,7 @@ func recordRun(t *testing.T, root, project, target string, took time.Duration) {
 // Judge makes of it.
 func checkTimeoutAdvice(ctx context.Context, lease, command string, call shellCall) advice {
 	run, _ := workerRuns(ctx, Dependencies{}, lease, command)
-	return adviseCheckTimeout(hookLocation(ctx, Dependencies{}), run, call)
+	return adviseCheckTimeout(ctx, hookLocation(ctx, Dependencies{}), run, call)
 }
 
 // A worker's magus run whose timeout falls short of the target's last real run is told the
@@ -218,7 +220,7 @@ func TestCheckTimeoutSendsANarrowedRunToTheBoundedForm(t *testing.T) {
 		req := Request{Input: bounded, Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3", CallBackground: background,
 			HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
 		v := Judge(ctx, Dependencies{}, req)
-		assert.NotEqual(t, "deny", v.Decision, "background %v: %s", background, v.Reason)
+		assert.NotEqual(t, verdict.Deny, v.Decision, "background %v: %s", background, v.Reason)
 	}
 }
 
@@ -243,11 +245,11 @@ func (s *NarrowedRunPriceSuite) SetupTest() {
 func (s *NarrowedRunPriceSuite) recordNarrowed(took time.Duration) {
 	dir, err := sessions.Dir(s.root)
 	s.Require().NoError(err)
-	w, err := sessions.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
-		sessions.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"})
+	w, err := session.Open(s.T().Context(), dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
+		session.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(sessions.KindTargetResult, sessions.TargetResult{
-		Target: "diagrams-generate", Project: "docs", Outcome: sessions.OutcomePass, DurationMs: took.Milliseconds(),
+	s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, session.TargetResult{
+		Target: "diagrams-generate", Project: "docs", Outcome: session.OutcomePass, DurationMs: took.Milliseconds(),
 	}))
 }
 

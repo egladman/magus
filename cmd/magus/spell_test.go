@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -76,7 +76,7 @@ func (r *spellRegistry) serve(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 		slices.Sort(tags)
-		body, _ := json.Marshal(map[string]any{"tags": tags})
+		body, _ := codec.Marshal(map[string]any{"tags": tags})
 		_, _ = w.Write(body)
 	case strings.Contains(p, "/blobs/"):
 		b, ok := r.blobs[last]
@@ -152,7 +152,7 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 	require.NoError(t, digest.Digest(built).Validate(), "build prints a manifest digest: %q", built)
 
 	var res remotespell.BuildResult
-	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
+	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
 	layer, err := os.ReadFile(layerPath)
 	require.NoError(t, err)
 	assert.Equal(t, remotespell.BuildResult{
@@ -221,7 +221,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 	assert.Equal(t, remotespell.Lock{Version: "magus.spell-lock/v1alpha1", Spells: map[string]remotespell.LockEntry{path: {Tag: "v1", Digest: d}}}, lock)
 
 	var res spellLockResult
-	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "lock", "-o", "json")), &res))
+	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, repo, "lock", "-o", "json")), &res))
 	assert.Equal(t, spellLockResult{Spells: []remotespell.LockSummary{{Path: path, Tag: "v1", Digest: d}}}, res)
 
 	pulled := strings.Split(strings.TrimSpace(runSpell(t, repo, "pull", path)), "\n")
@@ -254,7 +254,7 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	assert.Equal(t, shipped.Digest, ref.Digest, "the stamped digest is the artifact a release publishes")
 
 	var res remotespell.BuildResult
-	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
+	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
 	assert.Equal(t, shipped.Layer, res.Layer, "`spell build` packs the same layer")
 
 	spellBuzz, err := os.ReadFile(filepath.Join(dst, "spell.buzz"))
@@ -264,8 +264,8 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	require.NoError(t, bindings.CheckSpellFile(t.Context(), filepath.Join(dst, "spell.buzz")), "the copy loads as a workspace spell")
 
 	var pullRes remotespell.PullResult
-	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "pull", "magus/spell/go", t.TempDir(), "-o", "json")), &pullRes))
-	override, err := json.Marshal(pullRes.Override)
+	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, repo, "pull", "magus/spell/go", t.TempDir(), "-o", "json")), &pullRes))
+	override, err := codec.Marshal(pullRes.Override)
 	require.NoError(t, err)
 	assert.JSONEq(t, fmt.Sprintf(`{"import":"magus/spell/go","path":%q}`, filepath.ToSlash(pullRes.Dir)), string(override),
 		"a copy outside the workspace is declared by its absolute path")
@@ -277,7 +277,7 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 func TestSpellPullSourceOnlySpell(t *testing.T) {
 	dst := filepath.Join(t.TempDir(), "endoflife-date")
 	var res remotespell.PullResult
-	require.NoError(t, json.Unmarshal([]byte(runSpell(t, t.TempDir(), "pull", "magus/spell/endoflife-date", dst, "-o", "json")), &res))
+	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, t.TempDir(), "pull", "magus/spell/endoflife-date", dst, "-o", "json")), &res))
 	assert.Equal(t, "ghcr.io/egladman/magus/spells/endoflife-date@"+res.Digest.String(), res.Reference)
 	assert.Zero(t, res.Override)
 	require.NoError(t, bindings.CheckSpellFile(t.Context(), filepath.Join(dst, "spell.buzz")))
@@ -336,7 +336,7 @@ func TestSpellPushShipped(t *testing.T) {
 // reference per line, the same references the json form carries.
 func TestSpellLsShipped(t *testing.T) {
 	var res shippedSpellsResult
-	require.NoError(t, json.Unmarshal([]byte(runSpell(t, t.TempDir(), "ls", "magus/spell", "-o", "json")), &res))
+	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, t.TempDir(), "ls", "magus/spell", "-o", "json")), &res))
 	require.NotEmpty(t, res.Spells)
 	var refs []string
 	for _, s := range res.Spells {

@@ -44,7 +44,7 @@ export fun readUnverified(dir: str, revision: str) > result\Result::<UnverifiedR
 // hack/dev/land-commits.buzz both call it, with the same read.
 export fun decidePush(push: CommandPush?, read: fun (dir: str, revision: str) > result\Result::<UnverifiedReport>) > GuardVerdict {
     if (push == null) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     final p = push!;
     if (p.revision == "") {
@@ -68,7 +68,7 @@ export fun decidePush(push: CommandPush?, read: fun (dir: str, revision: str) > 
         }
     }
     if (checkable.len() == 0 and unclaimed.len() == 0) {
-        return magus\guard.allow();
+        return magus\guard.defer();
     }
     if (checkable.len() == 0) {
         return magus\guard.advise(unclaimedNote(unclaimed, report: report, dir: p.dir), opts: {"rule": "push-unverified"});
@@ -268,14 +268,14 @@ final pushed = CommandPush{ tool = "git", dir = "/w", revision = "0123456789abcd
 
 test "a line that publishes nothing is allowed without a read" {
     final asked = mut [<str>];
-    std\assert(decidePush(null, read: stub(UnverifiedReport{}, asked: asked)).decision == magus\GuardDecision.allow, message: "no push");
+    std\assert(decidePush(null, read: stub(UnverifiedReport{}, asked: asked)).decision == magus\GuardDecision.defer, message: "no push");
     std\assert(asked.len() == 0, message: "read {asked.len()} times");
 }
 
 test "a push whose changed files a passing run read is allowed" {
     final asked = mut [<str>];
     final v = decidePush(pushed, read: stub(UnverifiedReport{ revision = pushed.revision, base = "origin/main", changed = ["a.go"] }, asked: asked));
-    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
     std\assert(asked.len() == 1 and asked[0] == pushed.revision, message: "the pushed revision is read");
 }
 

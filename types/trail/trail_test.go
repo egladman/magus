@@ -3,24 +3,38 @@ package trail
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestTrailSectionLetters(t *testing.T) {
+type trailSuite struct{ suite.Suite }
+
+func TestTrail(t *testing.T) { suite.Run(t, new(trailSuite)) }
+
+func (s *trailSuite) TestSectionLettersRunInLabelOrder() {
 	var letters string
-	for _, s := range Sections {
-		require.NoError(t, s.Validate())
-		letters += s.Letter()
+	for _, sec := range Sections() {
+		s.Require().NoError(sec.Validate())
+		letters += sec.letter()
 	}
-	assert.Equal(t, "ABCD", letters, "labels are A refused, B advised, C unguarded, D next-not-taken")
-	assert.Empty(t, Section("passed").Letter())
-	assert.ErrorContains(t, Section("passed").Validate(), "refused, advised, unguarded, next-not-taken")
+	s.Equal("ABCD", letters, "labels are A refused, B advised, C unguarded, D next-not-taken")
 }
 
-func TestTrailVerdictValidate(t *testing.T) {
-	for _, v := range Verdicts {
-		require.NoError(t, v.Validate())
+func (s *trailSuite) TestSectionOutsideTheSetNamesTheOnesThatExist() {
+	s.Empty(Section("passed").letter())
+	err := Section("passed").Validate()
+	var unknown *UnknownValueError
+	s.Require().ErrorAs(err, &unknown)
+	s.Equal("section", unknown.Field)
+	s.ErrorContains(err, "refused, advised, unguarded, next-not-taken")
+}
+
+func (s *trailSuite) TestVerdictValidate() {
+	for _, v := range Verdicts() {
+		s.Require().NoError(v.Validate())
 	}
-	assert.ErrorContains(t, Verdict("bad").Validate(), "should-deny, should-advise, wrong-deny, fine")
+	err := Verdict("bad").Validate()
+	var unknown *UnknownValueError
+	s.Require().ErrorAs(err, &unknown)
+	s.Equal("verdict", unknown.Field)
+	s.ErrorContains(err, "should-deny, should-advise, wrong-deny, fine")
 }

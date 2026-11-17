@@ -18,6 +18,9 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +33,7 @@ func openSandboxed(t *testing.T, mode types.SandboxMode) *Magus {
   mode: %s
 `, string(mode)),
 	})
-	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -63,8 +66,8 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 	m := openSandboxed(t, types.SandboxModeBestEffort)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.ws.Root})
 	for _, id := range []string{"fleet/client", "fleet/daemon"} {
-		_, err := store.Update(t.Context(), id, func(cur *types.Job) {
-			*cur = types.Job{ID: id, Parent: "fleet/root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"pkg/**"}}}
+		_, err := store.Update(t.Context(), id, func(cur *jobtypes.Job) {
+			*cur = jobtypes.Job{ID: id, Parent: "fleet/root", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"pkg/**"}}}
 		})
 		require.NoError(t, err)
 	}
@@ -78,14 +81,14 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 		return p.Lease
 	}
 
-	assert.Equal(t, "fleet/client", leaseOf(types.WithJobLease(t.Context(), "fleet/client")))
+	assert.Equal(t, "fleet/client", leaseOf(jobtypes.WithLease(t.Context(), "fleet/client")))
 	assert.Equal(t, "fleet/daemon", leaseOf(t.Context()), "with no lease on ctx the environment's claim stands")
 }
 
 // Required is refused where the kernel cannot confine the children, before any run
 // starts, rather than at the first child.
 func TestApplySandboxRefusesARequiredWorkspaceTheKernelCannotConfine(t *testing.T) {
-	if abi, err := sandbox.ABI(); err == nil && abi >= sandbox.RequiredABI {
+	if abi, err := scissors.ABI(); err == nil && abi >= scissors.RequiredABI {
 		t.Skipf("landlock ABI %d confines children here", abi)
 	}
 	m := openSandboxed(t, types.SandboxModeRequired)
@@ -137,7 +140,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `, s.granted),
 		"magus.yaml": "sandbox:\n  mode: best-effort\n",
 	})
-	m, err := Open(s.T().Context(), root, WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), root, WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	s.m = m

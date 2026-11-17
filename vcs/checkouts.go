@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // checkNewCheckout refuses a dir CreateCheckout cannot make: relative, already there, or
@@ -41,11 +44,12 @@ type checkoutRecord struct {
 }
 
 func madeCheckouts(meta string) file.JSONL[checkoutRecord] {
-	return file.JSONL[checkoutRecord]{
+	return file.JSONL[checkoutRecord]{JSONL: codec.JSONL[checkoutRecord]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(meta, madeCheckoutsFile),
 		Key:  func(r checkoutRecord) string { return r.Resolved },
 		Live: func(r checkoutRecord) bool { return !r.Removed },
-	}
+	}}
 }
 
 func recordMadeCheckout(ctx context.Context, meta string, r checkoutRecord) error {

@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPauseRecordsItsOwnerReasonAndBound(t *testing.T) {
 	s := tempStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "w", State: types.StateRunning, Registered: 1})
+	seed(t, s, job.Job{ID: "w", State: job.StateRunning, Registered: 1})
 	until := time.Now().Add(time.Hour).Unix()
 
 	rows, err := s.Pause(t.Context(), "release build needs the machine", until, "w")
@@ -23,8 +23,8 @@ func TestPauseRecordsItsOwnerReasonAndBound(t *testing.T) {
 	assert.NotEmpty(t, first.PausedBy.User, "the pause names the account that wrote it")
 	got := first
 	// Who and when are the store's and the clock's own; the pause fields are the subject.
-	got.Paused, got.PausedBy, got.Updated, got.Created, got.RegisteredBy = 0, types.Origin{}, 0, 0, types.Origin{}
-	assert.Equal(t, types.Job{ID: "w", State: types.StateRunning,
+	got.Paused, got.PausedBy, got.Updated, got.Created, got.RegisteredBy = 0, job.Origin{}, 0, 0, job.Origin{}
+	assert.Equal(t, job.Job{ID: "w", State: job.StateRunning,
 		Registered: 1, Generation: 1, PauseReason: "release build needs the machine", PausedUntil: until}, got)
 
 	rows, err = s.Pause(t.Context(), "still building", 0, "w")
@@ -35,13 +35,13 @@ func TestPauseRecordsItsOwnerReasonAndBound(t *testing.T) {
 
 	rows, err = s.Resume(t.Context(), "w")
 	require.NoError(t, err)
-	assert.Equal(t, []any{int64(0), types.Origin{}, "", int64(0)},
+	assert.Equal(t, []any{int64(0), job.Origin{}, "", int64(0)},
 		[]any{rows[0].Paused, rows[0].PausedBy, rows[0].PauseReason, rows[0].PausedUntil}, "a resume clears who paused it, why and until when")
 }
 
 func TestPauseRefusesNoReasonAndAPastBound(t *testing.T) {
 	s := tempStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "w", State: types.StateRunning, Registered: 1})
+	seed(t, s, job.Job{ID: "w", State: job.StateRunning, Registered: 1})
 
 	_, err := s.Pause(t.Context(), " ", 0, "w")
 	assert.EqualError(t, err, "job: a pause names its reason, which the holder and the person resuming it read")
@@ -53,9 +53,9 @@ func TestPauseRefusesNoReasonAndAPastBound(t *testing.T) {
 func TestPausedLineNamesWhoPausedItAndWhy(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "w", Paused: 1, PausedBy: types.Origin{User: "eli"}, PauseReason: "release build", PausedUntil: 1_800_000_000}
+	row := job.Job{ID: "w", Paused: 1, PausedBy: job.Origin{User: "eli"}, PauseReason: "release build", PausedUntil: 1_800_000_000}
 	assert.Equal(t, "job w is paused by eli: release build (until 2027-01-15T08:00:00Z), so its holder starts no magus run until `magus job resume w`", PausedLine(row))
-	assert.Equal(t, "job w is paused, so its holder starts no magus run until `magus job resume w`", PausedLine(types.Job{ID: "w", Paused: 1}))
+	assert.Equal(t, "job w is paused, so its holder starts no magus run until `magus job resume w`", PausedLine(job.Job{ID: "w", Paused: 1}))
 }
 
 // A paused row outlives the read sweep and `prune --all` while its pause holds; past its
@@ -64,17 +64,17 @@ func TestPausedJobOutlivesTheSweepAndPruneUntilItsPauseLapses(t *testing.T) {
 	const now = int64(100_000)
 	old := now - int64((3 * time.Hour).Seconds())
 	s, _ := sweepStore(t, now, 2*time.Hour)
-	s.landed = func(context.Context, types.Job) string { return "" }
+	s.landed = func(context.Context, job.Job) string { return "" }
 	plant(t, s,
-		types.Job{ID: "held", State: types.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now + 60},
-		types.Job{ID: "lapsed", State: types.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now - 60},
-		types.Job{ID: "taken", State: types.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy"},
-		types.Job{ID: "taken-lapsed", State: types.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now},
+		job.Job{ID: "held", State: job.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now + 60},
+		job.Job{ID: "lapsed", State: job.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now - 60},
+		job.Job{ID: "taken", State: job.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy"},
+		job.Job{ID: "taken-lapsed", State: job.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now},
 	)
 
 	rows := states(t, s)
-	assert.Equal(t, types.StateDeclared, rows["held"].State, "the sweep leaves a paused row alone")
-	assert.Equal(t, types.Job{ID: "lapsed", State: types.StateNoReturn, Updated: now, Paused: old, PauseReason: "busy", PausedUntil: now - 60,
+	assert.Equal(t, job.StateDeclared, rows["held"].State, "the sweep leaves a paused row alone")
+	assert.Equal(t, job.Job{ID: "lapsed", State: job.StateNoReturn, Updated: now, Paused: old, PauseReason: "busy", PausedUntil: now - 60,
 		EndReason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"}, rows["lapsed"])
 
 	got, err := s.Prune(t.Context(), PruneOptions{All: true})

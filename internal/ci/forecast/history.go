@@ -65,6 +65,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"path/filepath"
@@ -73,7 +74,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -272,7 +275,7 @@ type Outcome struct {
 	// Curve is the run's memory over its own duration (types.Curve). The zero curve,
 	// omitted, is UNMEASURED: a fully replayed run, a platform that cannot sample, or
 	// an outcome written before v9.
-	Curve types.MemoryCurve `json:"curve,omitzero"`
+	Curve budget.Curve `json:"curve,omitzero"`
 	// Charms and ArgsHash are the run's [Shape]; the target is the key the outcome is
 	// filed under. Two runs of one target reach different peaks when their shapes
 	// differ (`-- -run TestOne` against the whole suite).
@@ -887,7 +890,7 @@ func (r Run) matches(ref, target string) bool {
 }
 
 // oldHistoryFile is the JSON document an older magus kept the history in, beside the
-// store. It is named when found, never read; see [file.RefuseOld].
+// store. It is named when found, never read; see [codec.RefuseOld].
 const oldHistoryFile = "v1.json"
 
 // historyLine is one line of the history store: one entry, or, with Removed set, the
@@ -922,7 +925,7 @@ type statsEntry struct {
 func (l *historyLine) UnmarshalJSON(b []byte) error {
 	type plain historyLine
 	var p plain
-	if err := json.Unmarshal(b, &p); err != nil {
+	if err := codec.Unmarshal(b, &p); err != nil {
 		return err
 	}
 	set := 0
@@ -959,12 +962,13 @@ func historyLog(path string) file.JSONL[historyLine] {
 	if old == filepath.Clean(path) {
 		old = ""
 	}
-	return file.JSONL[historyLine]{
+	return file.JSONL[historyLine]{JSONL: codec.JSONL[historyLine]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: path,
 		Key:  historyLine.key,
 		Live: func(l historyLine) bool { return !l.Removed },
 		Old:  old,
-	}
+	}}
 }
 
 // UnsupportedVersionError is a history file a newer magus wrote. Load leaves the file
@@ -993,7 +997,7 @@ func (h *History) Load(ctx context.Context, path string) error {
 	}
 	lines, err := historyLog(path).Load()
 	if err != nil {
-		return fmt.Errorf("forecast: read history: %w", err)
+		return fmt.Errorf("forecast: read history: %w", file.StoreDiagnostic(err))
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -1069,7 +1073,7 @@ func UpdateHistory(ctx context.Context, path string, fn func(*History) error) er
 		add, failed = changedLines(path, entries, fn)
 		return add
 	})
-	if err = cmp.Or(failed, err); err != nil {
+	if err = cmp.Or(failed, file.StoreDiagnostic(err)); err != nil {
 		return fmt.Errorf("forecast: update history: %w", err)
 	}
 	return nil
@@ -1081,7 +1085,7 @@ func UpdateHistory(ctx context.Context, path string, fn func(*History) error) er
 func changedLines(path string, entries []historyLine, fn func(*History) error) ([]historyLine, error) {
 	before := make(map[string][]byte, len(entries))
 	for _, e := range entries {
-		b, err := json.Marshal(e)
+		b, err := codec.Marshal(e)
 		if err != nil {
 			return nil, err
 		}
@@ -1100,7 +1104,7 @@ func changedLines(path string, entries []historyLine, fn func(*History) error) (
 	for _, l := range h.lines() {
 		k := l.key()
 		kept[k] = true
-		b, err := json.Marshal(l)
+		b, err := codec.Marshal(l)
 		if err != nil {
 			return nil, err
 		}
@@ -1183,7 +1187,7 @@ func (h *History) MeasuredRuns() MeasuredRuns {
 		for key, st := range targets {
 			var kept []Outcome
 			for _, o := range st.RecentOutcomes {
-				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o) || o.Curve != (types.MemoryCurve{})) {
+				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o) || o.Curve != (budget.Curve{})) {
 					kept = append(kept, Outcome{
 						Result: o.Result, DurationMs: o.DurationMs, MaxRSSBytes: o.MaxRSSBytes, CPUMs: o.CPUMs,
 						Slots: o.Slots, Curve: o.Curve, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
@@ -1237,8 +1241,8 @@ const saturatedMilli = 900
 // profile. target resolves as [History.PredictPeakRSS] does, and spells serving one
 // target fold as [Measurement] folds: the larger bucket, the wider duration band, the
 // fewer runs.
-func (x MeasuredRuns) Profile(project, target string, shape Shape) types.MemoryProfile {
-	var out types.MemoryProfile
+func (x MeasuredRuns) Profile(project, target string, shape Shape) budget.Profile {
+	var out budget.Profile
 	for _, s := range targetHistories(x.projects[project], target) {
 		p := curveProfile(s.RecentOutcomes, shape)
 		switch {
@@ -1258,17 +1262,17 @@ func (x MeasuredRuns) Profile(project, target string, shape Shape) types.MemoryP
 }
 
 // curveProfile is [MeasuredRuns.Profile] over one spell's outcomes.
-func curveProfile(outcomes []Outcome, shape Shape) types.MemoryProfile {
+func curveProfile(outcomes []Outcome, shape Shape) budget.Profile {
 	var runs []Outcome
 	for _, o := range outcomes {
-		if o.Curve != (types.MemoryCurve{}) && shape.matches(o) {
+		if o.Curve != (budget.Curve{}) && shape.matches(o) {
 			runs = append(runs, o)
 		}
 	}
 	if len(runs) == 0 {
-		return types.MemoryProfile{}
+		return budget.Profile{}
 	}
-	out := types.MemoryProfile{Runs: len(runs)}
+	out := budget.Profile{Runs: len(runs)}
 	column := make([]int64, len(runs))
 	for i := range out.Curve {
 		for j, o := range runs {

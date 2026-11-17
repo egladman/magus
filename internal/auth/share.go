@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -33,23 +34,23 @@ type ShareToken struct {
 }
 
 // MintShare mints a share token that expires ttl from now and returns its secret once, for
-// the link. A share link holds [types.GrantViewer]. It refuses a minter whose grant does not
+// the link. A share link holds [AccessViewer()]. It refuses a minter whose grant does not
 // include that (ErrExceedsGrant, coded GrantInsufficient) and a ttl outside [MinShareTTL,
 // MaxShareTTL] (ErrShareLifetime, coded TokenLifetimeOutOfRange).
-func MintShare(minter types.Grant, ttl time.Duration) (secret types.Secret, tok ShareToken, err error) {
-	if !types.GrantViewer.Within(minter) {
-		return types.Secret{}, ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
-			"auth: a share link needs %s, the minter holds %s", types.GrantViewer, grantOrNothing(minter))
+func MintShare(minter Access, ttl time.Duration) (secret secrets.Secret, tok ShareToken, err error) {
+	if !AccessViewer().Within(minter) {
+		return secrets.Secret{}, ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
+			"auth: a share link needs %s, the minter holds %s", AccessViewer(), grantOrNothing(minter))
 	}
 	if ttl < MinShareTTL || ttl > MaxShareTTL {
-		return types.Secret{}, ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
+		return secrets.Secret{}, ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
 			"auth: a share link lives between 1 minute and 24 hours; asked for %s", ttl)
 	}
-	plain, err := mintSecret(types.KindShare)
+	plain, err := mintSecret(KindShare)
 	if err != nil {
-		return types.Secret{}, ShareToken{}, err
+		return secrets.Secret{}, ShareToken{}, err
 	}
-	return types.NewSecret(plain), ShareToken{SHA256: digest(plain), Expires: time.Now().Add(ttl).UTC()}, nil
+	return secrets.New(plain), ShareToken{SHA256: digest(plain), Expires: time.Now().Add(ttl).UTC()}, nil
 }
 
 // Expired reports whether now is past the token's expiry.
@@ -64,8 +65,8 @@ func (t ShareToken) ID() string {
 }
 
 // Credential is the credential this token verifies as.
-func (t ShareToken) Credential() types.Credential {
-	return types.Credential{Kind: types.KindShare, ID: t.ID(), Grant: types.GrantViewer}
+func (t ShareToken) Credential() Credential {
+	return Credential{Kind: KindShare, ID: t.ID(), Grant: AccessViewer()}
 }
 
 // Verify reports whether presented is exactly this token and unexpired at now. Anything that
@@ -75,7 +76,7 @@ func (t ShareToken) Verify(presented string, now time.Time) bool {
 	if t.SHA256 == "" || t.Expired(now) {
 		return false
 	}
-	if kind, ok := credentialKind(presented); !ok || kind != types.KindShare {
+	if kind, ok := credentialKind(presented); !ok || kind != KindShare {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(digest(presented))) == 1

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -17,7 +18,7 @@ import (
 func TestCheckRecurringGuardDenialsReportsNoTrailAsClean(t *testing.T) {
 	root := t.TempDir()
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:    "recurring-guard-denials",
@@ -33,7 +34,7 @@ func TestCheckRecurringGuardDenialsIgnoresAOneOffDenial(t *testing.T) {
 	root := t.TempDir()
 	recordGuardDenial(t, filepath.Join(root, ".magus"), "claude-code", "session-1")
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:    "recurring-guard-denials",
@@ -54,10 +55,10 @@ func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {
 	recordGuardDenial(t, base, "claude-code", "session-1")
 	trail.AppendAgentCommand(context.Background(), base, trail.AgentCommand{
 		Host: "claude-code", Session: "session-1", Tool: "shell.command",
-		Command: "magus run test .", Decision: "pass",
+		Command: "magus run test .", Decision: verdict.Defer,
 	})
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:     "recurring-guard-denials",
@@ -77,7 +78,7 @@ func TestCheckRecurringGuardDenialsCountsTwoSessionsWithoutClaimingFollowUp(t *t
 	recordGuardDenial(t, base, "codex", "first")
 	recordGuardDenial(t, base, "codex", "second")
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:     "recurring-guard-denials",
@@ -94,6 +95,6 @@ func recordGuardDenial(t *testing.T, base, host, session string) {
 	t.Helper()
 	trail.AppendAgentCommand(context.Background(), base, trail.AgentCommand{
 		Host: host, Session: session, Tool: "shell.command", Command: "go test ./...",
-		Decision: "deny", Reason: "run through magus", Rule: "raw-tool",
+		Decision: verdict.Deny, Reason: "run through magus", Rule: "raw-tool",
 	})
 }

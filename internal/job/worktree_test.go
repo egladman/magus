@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -27,7 +27,7 @@ type FollowCheckpointSuite struct {
 	store *Store
 	loc   Location
 	repo  *testkit.Repo
-	row   types.Job
+	row   job.Job
 	start string
 }
 
@@ -47,7 +47,7 @@ func (s *FollowCheckpointSuite) advance() string {
 	return s.repo.Head()
 }
 
-func (s *FollowCheckpointSuite) fork(checkpoint string) (types.JobWorktree, error) {
+func (s *FollowCheckpointSuite) fork(checkpoint string) (job.Worktree, error) {
 	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", s.row.Worktree.Root, checkpoint, "")
 	s.False(made)
 	return wt, err
@@ -99,18 +99,18 @@ func (s *FollowCheckpointSuite) TestAReforkOverTheJobsOwnCommitsStartsAtTheHead(
 	mine := s.head()
 	wt, err := s.fork(s.start)
 	s.Require().NoError(err)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", s.start, wt)
 
 	s.Equal(mine, checkpoint)
 	s.Contains(note, fmt.Sprintf("stands at %.12s, not the checkpoint %.12s", mine, s.start))
-	_, err = s.store.Update(s.T().Context(), "w1", func(u *types.Job) { u.Checkpoint = checkpoint })
+	_, err = s.store.Update(s.T().Context(), "w1", func(u *job.Job) { u.Checkpoint = checkpoint })
 	s.Require().NoError(err)
 	taken, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: wt.Root}).Exec(s.T().Context(), "w1")
 	s.Require().NoError(err)
-	s.Equal(types.BaseMatch, taken.BaseVerdict)
+	s.Equal(job.BaseMatch, taken.BaseVerdict)
 }
 
 func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
@@ -118,7 +118,7 @@ func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
 	mine := s.head()
 	wt, err := s.fork("")
 	s.Require().NoError(err)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", "", wt)
@@ -129,7 +129,7 @@ func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
 
 func (s *FollowCheckpointSuite) TestACheckoutAnotherJobHoldsKeepsTheDeclaredCheckpoint() {
 	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w2", s.start, *s.row.Worktree)
@@ -150,7 +150,7 @@ type JJFollowCheckpointSuite struct {
 	suite.Suite
 	store *Store
 	root  string
-	row   types.Job
+	row   job.Job
 }
 
 func TestJJFollowCheckpointSuite(t *testing.T) {
@@ -189,12 +189,12 @@ func (s *JJFollowCheckpointSuite) SetupTest() {
 	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", dir, base, "")
 	s.Require().NoError(err)
 	s.Require().True(made)
-	seed(s.T(), s.store, types.Job{ID: "w1", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
+	seed(s.T(), s.store, job.Job{ID: "w1", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a.txt"}}})
 	s.row, err = s.store.RecordWorktree(s.T().Context(), "w1", wt)
 	s.Require().NoError(err)
 }
 
-func (s *JJFollowCheckpointSuite) fork(checkpoint string) (types.JobWorktree, error) {
+func (s *JJFollowCheckpointSuite) fork(checkpoint string) (job.Worktree, error) {
 	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", s.row.Worktree.Root, checkpoint, "")
 	s.False(made)
 	return wt, err
@@ -237,14 +237,14 @@ func TestInstallProjectsNamesOwnersWithAnInstallTarget(t *testing.T) {
 		{Path: "docs", MagusfileTargets: []string{"install"}},
 		{Path: "libs/xdg"},
 	}
-	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}}
 	assert.Equal(t, "docs", InstallProjects(t.TempDir(), dirWith(t, "docs"), row, projects))
 }
 
 func TestInstallProjectsSaysNoneForAGoOnlyJob(t *testing.T) {
 	t.Parallel()
 	projects := []*types.Project{{Path: "."}, {Path: "docs", MagusfileTargets: []string{"install"}}}
-	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), types.Job{Paths: types.JobPaths{Write: []string{"main.go"}}}, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), job.Job{Paths: job.Paths{Write: []string{"main.go"}}}, projects))
 }
 
 func TestInstallProjectsSkipsAProjectTheCheckoutLacks(t *testing.T) {
@@ -255,7 +255,7 @@ func TestInstallProjectsSkipsAProjectTheCheckoutLacks(t *testing.T) {
 		{Path: "docs", MagusfileTargets: []string{"install"}},
 		{Path: "libs/embed/train", MagusfileTargets: []string{"install"}},
 	}
-	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/a.md", "libs/embed/train/x.go"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"docs/a.md", "libs/embed/train/x.go"}}}
 	assert.Equal(t, "docs", InstallProjects(t.TempDir(), checkout, row, projects))
 	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), row, projects))
 }
@@ -265,7 +265,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	var notes strings.Builder
 	s.notices = &notes
-	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	merge := func(u *job.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
 	quiet := s.view()
 	quiet.notices = io.Discard
@@ -278,7 +278,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 func TestInstallProjectsSaysNoneForAReadOnlyJob(t *testing.T) {
 	t.Parallel()
 	projects := []*types.Project{{Path: "docs", MagusfileTargets: []string{"install"}}}
-	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), types.Job{ReadOnly: true}, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), job.Job{ReadOnly: true}, projects))
 }
 
 func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
@@ -293,7 +293,7 @@ func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
 func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
 	t.Parallel()
 	store, _ := validateWorkspace(t)
-	cold := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: &types.LeaseCheck{Target: "site-generate", Project: "docs"}}
+	cold := job.Job{ID: "w", Paths: job.Paths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: &job.LeaseCheck{Target: "site-generate", Project: "docs"}}
 	warm := cold.Clone()
 	warm.Paths.Write = append(warm.Paths.Write, "cli/registry_test.go")
 	warm.Paths.Soft = []string{"cli/registry_test.go"}
@@ -318,12 +318,12 @@ func worktreeStore(t *testing.T) (*Store, Location, *testkit.Repo) {
 
 // forkInto makes job id's checkout in a fresh directory, declares the job and records the
 // checkout on it, the way `magus job fork --checkout` does.
-func forkInto(t *testing.T, s *Store, id, binary string) types.Job {
+func forkInto(t *testing.T, s *Store, id, binary string) job.Job {
 	t.Helper()
 	wt, made, err := s.ForkWorktree(t.Context(), id, filepath.Join(t.TempDir(), id), "", binary)
 	require.NoError(t, err)
 	require.True(t, made)
-	seed(t, s, types.Job{ID: id, State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
+	seed(t, s, job.Job{ID: id, State: job.StateDeclared, Paths: job.Paths{Write: []string{"a.txt"}}})
 	row, err := s.RecordWorktree(t.Context(), id, wt)
 	require.NoError(t, err)
 	return row
@@ -376,7 +376,7 @@ func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
 	assert.False(t, made, "an adopted checkout is not the fork's to discard")
 	source := wt.Source
 	assert.True(t, samePath(repo.Root(), source), "removal runs from the primary checkout, not from inside the adopted one")
-	assert.Equal(t, types.JobWorktree{Root: dir, Source: source, Base: repo.Head(), Created: wt.Created}, wt)
+	assert.Equal(t, job.Worktree{Root: dir, Source: source, Base: repo.Head(), Created: wt.Created}, wt)
 
 	linked, err := s.LinkedCheckout(ctx, dir)
 	require.NoError(t, err)
@@ -385,13 +385,13 @@ func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, primary)
 
-	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
+	seed(t, s, job.Job{ID: "finish", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a.txt"}}})
 	_, err = s.RecordWorktree(ctx, "finish", wt)
 	require.NoError(t, err)
-	owned, err := s.OwnedCheckout(dir)
+	owned, err := s.OwnedCheckout(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, dir, owned)
-	none, err := s.OwnedCheckout(repo.Root())
+	none, err := s.OwnedCheckout(t.Context(), repo.Root())
 	require.NoError(t, err)
 	assert.Empty(t, none)
 
@@ -414,8 +414,8 @@ func TestParentCheckoutIsWhereTheParentWorksWhenNotHere(t *testing.T) {
 	s, _, repo := worktreeStore(t)
 	parent := forkInto(t, s, "parent", "")
 	elsewhere := t.TempDir()
-	seed(t, s, types.Job{ID: "taken", State: types.StateRunning, ReadOnly: true, CheckoutRoot: elsewhere})
-	seed(t, s, types.Job{ID: "untaken", State: types.StateDeclared, ReadOnly: true})
+	seed(t, s, job.Job{ID: "taken", State: job.StateRunning, ReadOnly: true, CheckoutRoot: elsewhere})
+	seed(t, s, job.Job{ID: "untaken", State: job.StateDeclared, ReadOnly: true})
 
 	for name, tc := range map[string]struct {
 		here, parent, dir string
@@ -427,7 +427,7 @@ func TestParentCheckoutIsWhereTheParentWorksWhenNotHere(t *testing.T) {
 		"a parent nobody took":             {here: repo.Root(), parent: "untaken"},
 		"a parent the store does not know": {here: repo.Root(), parent: "nobody"},
 	} {
-		dir, bound, err := s.ParentCheckout(tc.here, tc.parent)
+		dir, bound, err := s.ParentCheckout(t.Context(), tc.here, tc.parent)
 		require.NoError(t, err, name)
 		assert.Equal(t, tc.dir, dir, name)
 		assert.Equal(t, tc.bound, bound, name)
@@ -600,7 +600,7 @@ func TestExecTakesAJobInItsOwnCheckoutAndNowhereElse(t *testing.T) {
 	taken, err := NewStore(Location{StateBase: loc.StateBase, CacheDir: loc.CacheDir, Root: row.Worktree.Root}).Exec(ctx, "w1")
 	require.NoError(t, err)
 	assert.Equal(t, row.Worktree.Root, taken.CheckoutRoot)
-	assert.Equal(t, types.StateRunning, taken.State)
+	assert.Equal(t, job.StateRunning, taken.State)
 }
 
 // A worker the host isolated in a fresh linked checkout takes a job nobody took, whose fork
@@ -620,7 +620,7 @@ func TestExecBindsAnUntakenAdoptedJobToAFreshCheckoutAtItsCheckpoint(t *testing.
 	}
 	landing := linked("landing", checkpoint)
 	for _, id := range []string{"w1", "w2"} {
-		seed(t, s, types.Job{ID: id, State: types.StateDeclared, Checkpoint: checkpoint, Paths: types.JobPaths{Write: []string{"a.txt"}}})
+		seed(t, s, job.Job{ID: id, State: job.StateDeclared, Checkpoint: checkpoint, Paths: job.Paths{Write: []string{"a.txt"}}})
 		wt, made, err := s.ForkWorktree(ctx, id, landing, "", "")
 		require.NoError(t, err)
 		require.False(t, made)
@@ -715,7 +715,7 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	changed, err := s.EndWorktrees(ctx)
 	require.NoError(t, err)
 	require.Len(t, changed, 2)
-	kept := map[string]types.JobWorktree{}
+	kept := map[string]job.Worktree{}
 	for _, row := range changed {
 		kept[row.ID] = *row.Worktree
 	}
@@ -748,7 +748,7 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 	assert.NoDirExists(t, clean.Worktree.Root, "a clean checkout goes with its row")
 	assert.NotZero(t, dropped.Worktree.Removed)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "dirty", rows[0].ID)
@@ -1190,7 +1190,7 @@ func (s *ReviewCheckoutRefusalSuite) TestRemoveRefusesTheBaseItself() {
 
 func TestReviewCheckoutRecordKeepsTheFieldNamesTheConsoleReads(t *testing.T) {
 	t.Parallel()
-	data, err := json.Marshal(ReviewCheckoutRecord{Bootstrap: ReviewBootstrap{Install: []string{}}})
+	data, err := codec.Marshal(ReviewCheckoutRecord{Bootstrap: ReviewBootstrap{Install: []string{}}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"path":"","revision":"","vcs":"","bootstrap":{"ran":false,"install":[],"harnesses":false,"hook":"","hook_note":""},"remove":""}`, string(data))
 }
@@ -1222,7 +1222,7 @@ func (s *ForkAgainSuite) SetupTest() {
 	s.start = s.repo.Head()
 }
 
-func (s *ForkAgainSuite) fork(checkpoint string) (types.JobWorktree, error) {
+func (s *ForkAgainSuite) fork(checkpoint string) (job.Worktree, error) {
 	wt, _, err := s.store.ForkWorktree(s.T().Context(), "w1", filepath.Join(s.T().TempDir(), "w1"), checkpoint, "")
 	return wt, err
 }
@@ -1287,7 +1287,7 @@ type BinaryPinSuite struct {
 	suite.Suite
 	store *Store
 	loc   Location
-	row   types.Job
+	row   job.Job
 	bin   string
 }
 
@@ -1308,7 +1308,7 @@ func (s *BinaryPinSuite) write(body string) {
 }
 
 func (s *BinaryPinSuite) refusal(bin string) string {
-	why, err := s.store.PinRefusal(bin)
+	why, err := s.store.PinRefusal(s.T().Context(), bin)
 	s.Require().NoError(err)
 	return why
 }
@@ -1357,16 +1357,16 @@ func (s *BinaryPinSuite) TestTheCacheAnswersWhileTheFileKeepsItsIdentity() {
 }
 
 func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
-	worker := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: s.loc.Root, Actor: &Actor{Lease: "w1"}})
+	worker := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: s.loc.Root, Actor: &job.Actor{Lease: "w1"}})
 	_, err := worker.PinBinary(s.T().Context(), "w1")
-	var refused *RefusedError
+	var refused *job.RefusedError
 	s.Require().ErrorAs(err, &refused)
 	s.Contains(refused.Rule, "a worker that pinned its own build would pick its judge")
 }
 
 func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	cache := digestCache(filepath.Join(s.T().TempDir(), digestCacheName))
-	for i := range 2 + file.CompactSlack {
+	for i := range 2 + codec.CompactSlack {
 		s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
 			return []binaryDigest{{Path: "/a", Size: int64(i), Digest: "sha256:old"}}
 		}))
@@ -1377,7 +1377,7 @@ func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	got, err := cache.Load()
 	s.Require().NoError(err)
 	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, got)
-	read, err := file.ReadLines(cache.Path)
+	read, err := codec.ReadLines(cache.Path)
 	s.Require().NoError(err)
 	s.Len(read.Lines, 1)
 }

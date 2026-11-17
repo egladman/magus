@@ -62,8 +62,8 @@
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 36
-// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
+// magus-guard-template: 37
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model defer=none ask=human
 
 import "io";
 import "flags";
@@ -85,7 +85,7 @@ final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToo
 final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this write from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
 
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
-final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
+final DEFER_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "defer"}}`;
 
 
 // What magus's own decoder tests to tell an envelope from a bare path. `\{` escapes the
@@ -202,7 +202,7 @@ fun main(args: [str]) > void {
     var response = env\get("HOST_RESPONSE") catch "";
     var rendersAsk = [<str>];
     if (response == "") {
-        response = DENY_HEAD + askBranch + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
+        response = DENY_HEAD + askBranch + adviseBranch() + DEFER_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         rendersAsk = ["--renders-ask"];
     }
 
@@ -240,7 +240,7 @@ fun main(args: [str]) > void {
     var trail = "";
     if (judged.trail.len() > 0) { trail = judged.trail.join("\n") + "\n"; }
 
-    // A pass and a broken guard both render nothing; see magus-command.buzz for why
+    // A defer and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         var why = "it could not be run";

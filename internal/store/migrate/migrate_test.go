@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -75,7 +75,7 @@ func (s *migrateSuite) TestUpSeveralVersionsInOrder() {
 func (s *migrateSuite) TestAHeaderRewriteRunsBeforeTheVersionIsSet() {
 	m := renameMember("plan", "book")
 	m.Header = func(e Entry) (Entry, error) {
-		e["book"], e["migration"] = e["plan"], json.RawMessage("99")
+		e["book"], e["migration"] = e["plan"], codec.RawMessage("99")
 		delete(e, "plan")
 		return e, nil
 	}
@@ -140,7 +140,7 @@ func (s *migrateSuite) TestAFailingMigrationLeavesTheOldFileIntact() {
 	body := "{\"id\":\"a\",\"attempt\":1}\n{\"id\":\"b\",\"attempt\":\"x\"}\n"
 	st := s.store(body, renameMember("attempt", "run"), Migration{Name: "number the run", Up: func(e Entry) (Entry, error) {
 		var n int
-		if err := json.Unmarshal(e["run"], &n); err != nil {
+		if err := codec.Unmarshal(e["run"], &n); err != nil {
 			return nil, errors.New("run is not a number")
 		}
 		return e, nil

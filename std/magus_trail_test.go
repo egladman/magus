@@ -51,8 +51,8 @@ func TestDecodeTrailMark(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, trailtypes.Mark{
-		ID: "fb0123456789ab", Section: trailtypes.Unguarded, Key: "grep -rn <arg>",
-		Verdict: trailtypes.ShouldDeny, Note: "guard it", Session: "s1", Examples: []string{"grep -rn a b"},
+		ID: "fb0123456789ab", Section: trailtypes.SectionUnguarded, Key: "grep -rn <arg>",
+		Verdict: trailtypes.VerdictShouldDeny, Note: "guard it", Session: "s1", Examples: []string{"grep -rn a b"},
 	}, m)
 
 	_, err = decodeTrailMark(map[string]any{"id": 7})

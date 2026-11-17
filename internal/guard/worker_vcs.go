@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -109,7 +110,7 @@ func workerMerge(inv hint.Invocation) (operand string, ok bool) {
 // integrates, counts too, so the holder merges them with a message or from a path
 // integrationMerge does not read. A job id is its branch name, so a stacked job reaches the work it builds on without a
 // second base.
-func mergesBase(operand, base string, row types.Job) bool {
+func mergesBase(operand, base string, row job.Job) bool {
 	if row.Integrating() && slices.Contains(row.Integrates, operand) {
 		return true
 	}
@@ -171,7 +172,7 @@ func addsCheckout(c hint.Invocation) bool {
 // removesOwnCheckout reports whether each worktree removal on command names the checkout
 // row's fork made for it, which its holder may remove; the worktree-remove rule still
 // judges whether that loses work.
-func removesOwnCheckout(command, cwd string, row types.Job) bool {
+func removesOwnCheckout(command, cwd string, row job.Job) bool {
 	if !row.Worktree.Standing() {
 		return false
 	}
@@ -237,7 +238,7 @@ func scratchCheckouts() (string, error) {
 // integrationScratchCall reports a git call an integration holder may run on
 // a detached scratch checkout. It makes or removes one, or stages, commits or
 // merges an integrated branch in it. Every job checkout has a branch.
-func integrationScratchCall(ctx context.Context, row types.Job, inv hint.Invocation, site vcsSite) bool {
+func integrationScratchCall(ctx context.Context, row job.Job, inv hint.Invocation, site vcsSite) bool {
 	if !row.Integrating() || inv.Name != "git" || site.gitDir != "" || parseGit(inv.Args).configured {
 		return false
 	}
@@ -258,7 +259,7 @@ func integrationScratchCall(ctx context.Context, row types.Job, inv hint.Invocat
 }
 
 // sharesRepository reports dir in a checkout of row's own repository.
-func sharesRepository(row types.Job, dir string) bool {
+func sharesRepository(row job.Job, dir string) bool {
 	_, mine, ok := gitCheckout(row.CheckoutRoot)
 	if !ok {
 		return false
@@ -271,7 +272,7 @@ func sharesRepository(row types.Job, dir string) bool {
 // dir under scratchCheckouts, or `git worktree remove [--force] <dir>` of a
 // detached checkout there. rest is the words after `worktree`. A relative dir
 // resolves from cwd.
-func scratchWorktreeChange(ctx context.Context, row types.Job, rest []string, cwd string) bool {
+func scratchWorktreeChange(ctx context.Context, row job.Job, rest []string, cwd string) bool {
 	if firstWordIs(rest, "remove") {
 		return detachedScratch(ctx, row, worktreeRemoveTarget(rest, cwd))
 	}
@@ -283,7 +284,7 @@ func scratchWorktreeChange(ctx context.Context, row types.Job, rest []string, cw
 // lies outside row's checkouts and scratchCheckouts. A removal never passes:
 // its proof of ownership is files a worker can plant. A symlink swapped into
 // dir after the judgment is not seen.
-func otherRepositoryWorktreeAdd(ctx context.Context, row types.Job, inv hint.Invocation, site vcsSite) bool {
+func otherRepositoryWorktreeAdd(ctx context.Context, row job.Job, inv hint.Invocation, site vcsSite) bool {
 	g := parseGit(inv.Args)
 	if g.sub != "worktree" || g.configured || site.gitDir != "" {
 		return false
@@ -301,7 +302,7 @@ func otherRepositoryWorktreeAdd(ctx context.Context, row types.Job, inv hint.Inv
 // inRepositoryCheckout reports dir within the main checkout or a registered
 // worktree of row's repository, a nested repository there included. A list
 // that cannot be read reports true.
-func inRepositoryCheckout(ctx context.Context, row types.Job, dir string) bool {
+func inRepositoryCheckout(ctx context.Context, row job.Job, dir string) bool {
 	if row.CheckoutRoot == "" {
 		return true
 	}
@@ -365,7 +366,7 @@ func literalDir(word, cwd string) string {
 
 // inScratch reports dir lying below scratchCheckouts and outside row's own
 // checkout.
-func inScratch(row types.Job, dir string) bool {
+func inScratch(row job.Job, dir string) bool {
 	scratch, err := scratchCheckouts()
 	if err != nil || dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
 		return false
@@ -374,7 +375,7 @@ func inScratch(row types.Job, dir string) bool {
 }
 
 // inOwnCheckout reports dir in row's checkout_root or recorded worktree.
-func inOwnCheckout(row types.Job, dir string) bool {
+func inOwnCheckout(row job.Job, dir string) bool {
 	own := []string{row.CheckoutRoot}
 	if row.Worktree != nil {
 		own = append(own, row.Worktree.Root)
@@ -384,7 +385,7 @@ func inOwnCheckout(row types.Job, dir string) bool {
 
 // detachedScratch reports dir standing in a git checkout under
 // scratchCheckouts, outside row's own, with no branch checked out.
-func detachedScratch(ctx context.Context, row types.Job, dir string) bool {
+func detachedScratch(ctx context.Context, row job.Job, dir string) bool {
 	if dir == "" {
 		return false
 	}
@@ -457,7 +458,7 @@ func splitOptions(words, valued []string) (flags, positional []string) {
 
 // checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the
 // refused call as the reader typed it.
-func checkoutAddDenial(what string, row types.Job, role string) string {
+func checkoutAddDenial(what string, row job.Job, role string) string {
 	return fmt.Sprintf("magus workspace: %s makes a checkout by hand, and lease %s is %s: `%s` makes a job's checkout, and removes it once the job ends",
 		what, row.ID, role, hint.JobFork.With("<job>", "--checkout", "<dir>"))
 }
@@ -524,7 +525,7 @@ func movesNamedPaths(c hint.Invocation) bool {
 
 // refMoveRoot is the checkout row may move refs in: its own worktree, else
 // an integration job's fork checkout. "" when it has neither.
-func refMoveRoot(row types.Job) string {
+func refMoveRoot(row job.Job) string {
 	switch {
 	case row.Worktree.Standing():
 		return row.Worktree.Root
@@ -536,7 +537,7 @@ func refMoveRoot(row types.Job) string {
 
 // moveRefusal is lease-vcs's answer for a call movesNamedPaths reports.
 // A row with no checkout of its own is not placed.
-func moveRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+func moveRefusal(ctx context.Context, opts types.VCSOptions, row job.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	sub, _ := vcsSubcommand(inv)
 	op := fmt.Sprintf("%s %s", inv.Name, sub)
 	root := cmp.Or(row.CheckoutRoot, "<checkout>")
@@ -601,7 +602,7 @@ func boundPathOperands(command string, d Dialect, start string) []placedWord {
 // directoryLandings grades each destination a directory move creates. A missing
 // destination holds nothing to walk; it will hold the source's files. It maps
 // the destination's absolute path to the first landing me may not write.
-func directoryLandings(command string, d Dialect, start, home, checkout string, me types.Job) map[string]string {
+func directoryLandings(command string, d Dialect, start, home, checkout string, me job.Job) map[string]string {
 	calls, ok := locateCalls(command, d, start, movesNamedPaths, false)
 	if !ok {
 		return nil
@@ -633,7 +634,7 @@ func directoryLandings(command string, d Dialect, start, home, checkout string, 
 
 // firstUnwritableLanding is the first file of source, named under rel, that me
 // may not write. A walk that cannot finish answers rel, so it stays refused.
-func firstUnwritableLanding(source, rel string, me types.Job) string {
+func firstUnwritableLanding(source, rel string, me job.Job) string {
 	outside := ""
 	err := filepath.WalkDir(source, func(p string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -664,7 +665,7 @@ func firstUnwritableLanding(source, rel string, me types.Job) string {
 // reattachesOwnBranch reports `git switch -C <row id> [HEAD]` or `git checkout
 // -B <row id> [HEAD]` for a row with its own checkout. It keeps a detached
 // HEAD's commits. Any other name, start point or flag stays refused.
-func reattachesOwnBranch(c hint.Invocation, row types.Job) bool {
+func reattachesOwnBranch(c hint.Invocation, row job.Job) bool {
 	if c.Name != "git" || !row.Worktree.Standing() || vcsMutation(c) != "" {
 		return false
 	}

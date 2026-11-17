@@ -9,21 +9,21 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // leaseClaimFixture is a running job that released registry.go, which its verification then
 // sends it back to.
-func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
+func leaseClaimFixture(t *testing.T) (context.Context, string, jobtypes.Job) {
 	t.Helper()
-	row := types.Job{
+	row := jobtypes.Job{
 		ID:         "cli-ls-files",
-		Agent:      agent.Instructed("add vcs ls-files"),
-		State:      types.StateRunning,
-		Paths:      types.JobPaths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
+		Agent:      jobtypes.Instructed("add vcs ls-files"),
+		State:      jobtypes.StateRunning,
+		Paths:      jobtypes.Paths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
 		Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
@@ -34,9 +34,9 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 	}
 	held := job.NewStore(job.Location{
 		CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, StateBase: fixture.StateBase(t), Root: root,
-		Actor: &job.Actor{Lease: row.ID},
+		Actor: &jobtypes.Actor{Lease: row.ID},
 	})
-	stored, err := held.Update(ctx, row.ID, func(u *types.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
+	stored, err := held.Update(ctx, row.ID, func(u *jobtypes.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	return ctx, root, stored
@@ -47,7 +47,7 @@ func TestGradeLeasedWriteServesAProvedClaim(t *testing.T) {
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "internal/commands/registry.go"))
 	// The reason is checked by substring below, so it is copied across.
-	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleLeaseClaim), Next: got.Next}, got)
+	require.Equal(t, writeGrade{Decision: verdict.Deny, Reason: got.Reason, Rule: string(denyRuleLeaseClaim), Next: got.Next}, got)
 	require.Len(t, got.Next, 1)
 	assert.Equal(t, "deny-lease-claim", got.Next[0].ID)
 	assert.Contains(t, got.Next[0].Run, "job apply --stdin <<<")
@@ -60,7 +60,7 @@ func TestGradeLeasedWriteServesAProvedClaim(t *testing.T) {
 	assert.LessOrEqual(t, len(say), 1024, "a refusal never grows a context")
 
 	unproved := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "README.md"))
-	require.Equal(t, writeGrade{Decision: "deny", Reason: unproved.Reason}, unproved, "a write no proof covers stays lease-write")
+	require.Equal(t, writeGrade{Decision: verdict.Deny, Reason: unproved.Reason}, unproved, "a write no proof covers stays lease-write")
 	assert.NotContains(t, unproved.Reason, "job apply")
 }
 
@@ -73,7 +73,7 @@ func TestServedClaimLinePassesTheGuardForTheWorker(t *testing.T) {
 	line := got.Next[0].Run
 
 	v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: row.ID, Dir: root})
-	assert.NotEqual(t, "deny", v.Decision, "%s: %s", line, v.Reason)
+	assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", line, v.Reason)
 
 	write := Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: row.ID, Input: hookJSON(t, map[string]any{
 		"session_id": "5d1c", "hook_event_name": "PreToolUse", "tool_name": "Write", "cwd": root,

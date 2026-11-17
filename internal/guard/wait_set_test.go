@@ -37,7 +37,7 @@ var waitLines = map[string]string{
 }
 
 func (s *WaitSetSuite) served(line string) ShellVerdict {
-	return Evaluate(Dependencies{scope: workspaceScope{root: s.root}}, line)
+	return Evaluate(s.T().Context(), Dependencies{scope: workspaceScope{root: s.root}}, line)
 }
 
 func magusSpans(text string) [][]string {

@@ -21,10 +21,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
-	"github.com/egladman/magus/types"
 )
 
 const (
@@ -59,7 +59,7 @@ type Service struct {
 	workspaces func() []Workspace
 	// The two sources WatchActivityEvents merges with the trail, both optional: see
 	// [WithJobs] and [WithFileChanges].
-	jobs  func() []types.Job
+	jobs  func() []job.Job
 	files func(context.Context) <-chan jobstore.FeedEvent
 	// poll is the follow loop's cadence, zero for [defaultPoll]. Injectable so a test does
 	// not wait on the production one.
@@ -102,7 +102,7 @@ var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 // page_token is a decimal offset into the filtered, newest-first stream, and next_page_token is
 // set while events remain, so "load older activity" walks the whole retained trail instead of
 // stopping at the first page.
-func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
+func (s *Service) ListActivityEvents(ctx context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
 	limit := int(req.Msg.GetPageSize())
 	if limit <= 0 {
 		limit = defaultPageSize
@@ -117,7 +117,7 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 
 	filter := req.Msg.GetFilter()
 	matched := make([]trail.Event, 0, limit)
-	for _, e := range readMerged(s.loaded(), maxWindow) {
+	for _, e := range readMerged(ctx, s.loaded(), maxWindow) {
 		if matchFilter(e, filter) {
 			matched = append(matched, e)
 		}
@@ -163,12 +163,13 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 	return pe
 }
 
-// wireCredential maps a verified credential onto the wire, nil for none.
-func wireCredential(c types.Credential) *activityv1.Credential {
-	if c == (types.Credential{}) {
+// wireCredential maps a recorded credential onto the wire, nil for none. An origin keeps no
+// grant, so the wire's grant stays empty.
+func wireCredential(c job.Credential) *activityv1.Credential {
+	if c == (job.Credential{}) {
 		return nil
 	}
-	return &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
+	return &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name}
 }
 
 // pageOffset reads a page token as an offset into the filtered stream. An unparseable token errors
@@ -207,10 +208,10 @@ func pageBounds(total, offset, limit int) (from, to int, next string) {
 //
 // limit is the READ WINDOW, not the page: the caller filters and pages what comes back, so cutting
 // here to a page size would starve a filtered page of matches sitting just past the boundary.
-func readMerged(workspaces []Workspace, limit int) []trail.Event {
+func readMerged(ctx context.Context, workspaces []Workspace, limit int) []trail.Event {
 	merged := make([]trail.Event, 0, limit)
 	for _, w := range workspaces {
-		events, err := trail.ReadRecent(w.CacheDir, limit)
+		events, err := trail.ReadRecent(ctx, w.CacheDir, limit)
 		if err != nil {
 			continue
 		}
@@ -260,7 +261,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 
 // matchFilter applies the ActivityQuery's set filters (kinds/actors/actions) and the time
 // window, all ANDed; an empty or absent field does not constrain. An actors entry matches
-// an event whose origin names it in any one field (types.Origin.Names), never the rendered
+// an event whose origin names it in any one field (job.Origin.Names), never the rendered
 // label.
 func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	if q == nil {
@@ -340,7 +341,7 @@ func encodeKind(k trail.Kind) activityv1.Kind {
 		return activityv1.Kind_KIND_AGENT_SPAWN
 	case trail.KindNotes:
 		return activityv1.Kind_KIND_NOTES
-	case trail.KindCredentialGrant:
+	case trail.KindGrantIssued:
 		return activityv1.Kind_KIND_CREDENTIAL_GRANT
 	case trail.KindGuardPolicy:
 		return activityv1.Kind_KIND_GUARD_POLICY

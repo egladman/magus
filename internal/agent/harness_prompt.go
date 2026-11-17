@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -148,8 +148,8 @@ func keyParent(doc map[string]any, rel string, key []string) (parent map[string]
 }
 
 func sameJSON(a, b any) bool {
-	ea, errA := json.Marshal(a)
-	eb, errB := json.Marshal(b)
+	ea, errA := codec.Marshal(a)
+	eb, errB := codec.Marshal(b)
 	return errA == nil && errB == nil && bytes.Equal(ea, eb)
 }
 

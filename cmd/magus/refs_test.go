@@ -13,9 +13,10 @@ import (
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -358,7 +359,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err, "magus.Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -407,7 +408,7 @@ func TestReportRefsMissCarriesTheIndexCauseInTheVerdictBlock(t *testing.T) {
 	})
 	require.NoError(t, err)
 	var record types.KnowledgeRefsOutput
-	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
+	require.NoError(t, codec.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
 	assert.Equal(t, ans.IndexCause, record.Answer.IndexCause)
 	assert.Contains(t, stderr.String(), fmt.Sprintf("why: %s\n", ans.IndexCause.Why))
 	assert.Contains(t, stderr.String(), fmt.Sprintf("fix: %s\n", ans.IndexCause.Fix))

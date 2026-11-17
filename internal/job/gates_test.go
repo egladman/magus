@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -47,65 +47,65 @@ func gateTargets(gates []UnrunGate) []string {
 func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 	t.Parallel()
 
-	check := func(target string) *types.LeaseCheck { return &types.LeaseCheck{Target: target, Project: "."} }
-	goal := func(target string) types.Goal {
-		return types.Goal{ID: "g-" + target, Check: types.LeaseCheck{Target: target, Project: "."}}.Resolve()
+	check := func(target string) *job.LeaseCheck { return &job.LeaseCheck{Target: target, Project: "."} }
+	goal := func(target string) job.Goal {
+		return job.Goal{ID: "g-" + target, Check: job.LeaseCheck{Target: target, Project: "."}}.Resolve()
 	}
-	row := func(mutate func(*types.Job)) types.Job {
-		r := types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"internal/job/gates.go"}}, Check: check("go-test")}
+	row := func(mutate func(*job.Job)) job.Job {
+		r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: check("go-test")}
 		mutate(&r)
 		return r
 	}
 
 	for _, tc := range []struct {
 		name        string
-		row         types.Job
+		row         job.Job
 		regenerated []RegeneratedOutput
 		want        []string
 	}{
 		{
 			name: "a go-test check leaves the linter and the build; compile rides with the build",
-			row:  row(func(*types.Job) {}),
+			row:  row(func(*job.Job) {}),
 			want: []string{".:lint", ".:build", ".:gen"},
 		},
 		{
 			name: "a goal that runs a target covers it",
-			row:  row(func(r *types.Job) { r.Goals = []types.Goal{goal("lint")} }),
+			row:  row(func(r *job.Job) { r.Goals = []job.Goal{goal("lint")} }),
 			want: []string{".:build", ".:gen"},
 		},
 		{
 			name: "a check's chain members count as run",
-			row:  row(func(r *types.Job) { r.Check = check("build") }),
+			row:  row(func(r *job.Job) { r.Check = check("build") }),
 			want: []string{".:lint", ".:go-test", ".:gen"},
 		},
 		{
 			name: "a script check covers nothing",
-			row:  row(func(r *types.Job) { r.Check = &types.LeaseCheck{Script: "hack/check.buzz"} }),
+			row:  row(func(r *job.Job) { r.Check = &job.LeaseCheck{Script: "hack/check.buzz"} }),
 			want: []string{".:lint", ".:go-test", ".:build", ".:gen"},
 		},
 		{
 			name:        "what the root regenerates is left to that list",
-			row:         row(func(*types.Job) {}),
+			row:         row(func(*job.Job) {}),
 			regenerated: []RegeneratedOutput{{Output: "out/gen.go", Target: ".:gen", Source: "**/*.go"}},
 			want:        []string{".:lint", ".:build"},
 		},
 		{
 			name: "a project whose sources the write paths miss is not listed",
-			row:  row(func(r *types.Job) { r.Paths.Write = []string{"docs/page.md"} }),
+			row:  row(func(r *job.Job) { r.Paths.Write = []string{"docs/page.md"} }),
 			want: []string{"docs:lint"},
 		},
 		{
 			name: "a read-only job writes nothing",
-			row:  row(func(r *types.Job) { r.ReadOnly = true }),
+			row:  row(func(r *job.Job) { r.ReadOnly = true }),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := UnrunGates(t.TempDir(), tc.row, gatesWorkspace(), tc.regenerated)
+			got := UnrunGates(t.TempDir(), tc.row, gatesWorkspace(), tc.regenerated, nil)
 			assert.Equal(t, tc.want, gateTargets(got))
 			for _, g := range got {
-				require.NoError(t, g.Goal.Validate(), "the goal to add must be declarable as printed")
+				require.NoError(t, types.ValidateGoal(g.Goal), "the goal to add must be declarable as printed")
 			}
 		})
 	}
@@ -131,9 +131,9 @@ func (s *owningProjectGateSuite) workspace() []*types.Project {
 	}
 }
 
-func (s *owningProjectGateSuite) gates(check *types.LeaseCheck, write ...string) []string {
-	row := types.Job{ID: "j", Paths: types.JobPaths{Write: write}, Check: check}
-	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil))
+func (s *owningProjectGateSuite) gates(check *job.LeaseCheck, write ...string) []string {
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: check}
+	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil, nil))
 }
 
 func (s *owningProjectGateSuite) TestGateNamesTheOwningProject() {
@@ -141,13 +141,13 @@ func (s *owningProjectGateSuite) TestGateNamesTheOwningProject() {
 }
 
 func (s *owningProjectGateSuite) TestAnAncestorsCheckDoesNotSatisfyIt() {
-	got := s.gates(&types.LeaseCheck{Target: "test", Project: "."}, "libs/buzz/lexer.go")
+	got := s.gates(&job.LeaseCheck{Target: "test", Project: "."}, "libs/buzz/lexer.go")
 
 	s.Equal([]string{"libs/buzz:test"}, got)
 }
 
 func (s *owningProjectGateSuite) TestTheOwningProjectsCheckSatisfiesIt() {
-	s.Empty(s.gates(&types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go"))
+	s.Empty(s.gates(&job.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go"))
 }
 
 func (s *owningProjectGateSuite) TestARootFileStaysWithTheRoot() {
@@ -155,7 +155,7 @@ func (s *owningProjectGateSuite) TestARootFileStaysWithTheRoot() {
 }
 
 func (s *owningProjectGateSuite) TestFilesInBothGateBoth() {
-	got := s.gates(&types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go", "internal/a.go")
+	got := s.gates(&job.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go", "internal/a.go")
 
 	s.Equal([]string{".:test"}, got)
 }
@@ -190,8 +190,8 @@ func (s *owningProjectGateSuite) reachingWorkspace() []*types.Project {
 }
 
 func (s *owningProjectGateSuite) reaching(write ...string) []UnrunGate {
-	row := types.Job{ID: "j", Paths: types.JobPaths{Write: write}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
-	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil)
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil, nil)
 }
 
 func (s *owningProjectGateSuite) TestARootTargetSpellingOutThePathKeepsItsGate() {
@@ -218,16 +218,16 @@ func (s *owningProjectGateSuite) unresolvedStore() *Store {
 	return NewStore(tempLocation(s.T(), root)).InWorkspace(Workspace{Projects: projects})
 }
 
-func (s *owningProjectGateSuite) validated(store *Store, check *types.LeaseCheck, write string) types.JobValidation {
-	v, err := validateDryFork(s.T().Context(), store, "j", func(u *types.Job) {
-		u.Paths.Write, u.Check, u.Agent = []string{write}, check, agent.Instructed("c")
+func (s *owningProjectGateSuite) validated(store *Store, check *job.LeaseCheck, write string) types.JobValidation {
+	v, err := validateDryFork(s.T().Context(), store, "j", func(u *job.Job) {
+		u.Paths.Write, u.Check, u.Agent = []string{write}, check, job.Instructed("c")
 	})
 	s.Require().NoError(err)
 	return v
 }
 
 func (s *owningProjectGateSuite) TestAnOwnerWithUnresolvedSpellsIsNamedUnchecked() {
-	v := s.validated(s.unresolvedStore(), &types.LeaseCheck{Target: "test", Project: "."}, "libs/spelled/a.go")
+	v := s.validated(s.unresolvedStore(), &job.LeaseCheck{Target: "test", Project: "."}, "libs/spelled/a.go")
 
 	s.Contains(v.Unchecked, "whether project \"libs/spelled\" runs `test`: it binds spells it carries unresolved, so `test .` gates its files")
 }
@@ -240,7 +240,7 @@ func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
 	root := testkit.NewRepository(s.T(), map[string]string{"a.go": "package a\n"}).Root()
 	store := NewStore(tempLocation(s.T(), root)).InWorkspace(Workspace{Projects: projects})
 
-	v := s.validated(store, &types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
+	v := s.validated(store, &job.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
 
 	s.Empty(v.Unchecked)
 }
@@ -248,9 +248,9 @@ func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
 func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	t.Parallel()
 
-	r := types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
-	assert.Empty(t, UnrunGates(t.TempDir(), r, []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}, nil))
-	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil), "no root project")
+	r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	assert.Empty(t, UnrunGates(t.TempDir(), r, []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}, nil, nil))
+	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil, nil), "no root project")
 }
 
 func TestUnrunGoalNamesTheProject(t *testing.T) {
@@ -258,7 +258,7 @@ func TestUnrunGoalNamesTheProject(t *testing.T) {
 
 	assert.Equal(t, "lint", unrunGoal(".", "lint", map[string]bool{}).ID)
 	assert.Equal(t, "lint-libs-conventions", unrunGoal("libs/conventions", "lint", map[string]bool{}).ID)
-	assert.Equal(t, types.GoalKindCheck, unrunGoal(".", "lint", map[string]bool{}).Kind)
+	assert.Equal(t, job.GoalKindCheck, unrunGoal(".", "lint", map[string]bool{}).Kind)
 }
 
 // Two projects can fold to one id, and a ci target can share its name with a goal the row
@@ -277,9 +277,9 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 		{Path: "a/b", Sources: types.MustParseGlobs("**/*.go")},
 		{Path: "a-b", Sources: types.MustParseGlobs("**/*.go")},
 	}
-	row := types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
 
-	got := UnrunGates(t.TempDir(), row, projects, nil)
+	got := UnrunGates(t.TempDir(), row, projects, nil, nil)
 
 	var ids []string
 	for _, g := range got {
@@ -290,7 +290,7 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 
 // workerGrade is the guard's answer for a worker: the build of magus is never its to run, and
 // a test only without default charms.
-func workerGrade(c types.LeaseCheck) CheckVerdict {
+func workerGrade(c job.LeaseCheck) CheckVerdict {
 	switch {
 	case c.Target == "build":
 		return CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
@@ -303,7 +303,7 @@ func workerGrade(c types.LeaseCheck) CheckVerdict {
 func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"internal/job/gates.go"}}, Check: &types.LeaseCheck{Target: "compile", Project: "."}}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: &job.LeaseCheck{Target: "compile", Project: "."}}
 
 	got, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, workerGrade)
 
@@ -321,7 +321,7 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 	assert.Contains(t, lines, "build . (reads **/*.go): the integrator gates it; no worker may run it")
 	assert.NotContains(t, lines[len(lines)-1], `"id":"build"`)
 
-	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, nil)
+	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, gradeWith(nil, "", row))
 	for _, g := range ungraded {
 		assert.False(t, g.IntegratorGates, "with no grader every goal is offered as it is")
 	}

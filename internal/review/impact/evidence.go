@@ -57,3 +57,28 @@ func evidenceGapLines(gap trail.ConsultGap) []string {
 		}
 	}
 }
+
+// evidenceNoteLines names each trail record the section skipped.
+func evidenceNoteLines(notes []string) []string {
+	out := make([]string, 0, len(notes))
+	for _, n := range notes {
+		out = append(out, "      skipped: "+n)
+	}
+	return out
+}
+
+// errorNotes splits err, joined or not, into one note per error.
+func errorNotes(err error) []string {
+	if err == nil {
+		return nil
+	}
+	joined, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		return []string{err.Error()}
+	}
+	var out []string
+	for _, e := range joined.Unwrap() {
+		out = append(out, errorNotes(e)...)
+	}
+	return out
+}

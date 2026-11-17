@@ -500,10 +500,6 @@ export fun isCandidate(v: str, cur: str) > bool !> any {
     return false;
 }
 
-// rewriteRequire points go.mod's require for module at version, preserving the
-// line's indentation. The `replace` directive names the same module and must NOT
-// be touched: it is the local-development path, ignored by every downstream
-// consumer, and rewriting it would break building inside this repo.
 // modulePath returns the path go.mod declares, or "" when it declares none.
 //
 // Needed for Go's major-version suffix rule, which applies to the path: from v2 on
@@ -621,18 +617,412 @@ test "the fallback names the branch URL" {
     std\assert(msg.indexOf("pushed") != null, message: "says the branch already made it");
 }
 
-export fun rewriteRequire(gomod: str, module: str, version: str) > str {
-    var kept = mut [];
+// MODULE_ROOT is the root module's path; every in-repo module's path starts with it.
+export final MODULE_ROOT = "github.com/egladman/magus";
+
+// moduleDir is the repository directory of the module at path: "." for the root, "" for
+// a module outside this repository.
+export fun moduleDir(path: str) > str {
+    if (path == MODULE_ROOT) { return "."; }
+    if (!path.startsWith(MODULE_ROOT + "/")) { return ""; }
+    return path.sub(MODULE_ROOT.len() + 1);
+}
+
+// tagName is the tag Go resolves version of the module at dir through: the bare version
+// for the root, the directory then the version for a nested module.
+export fun tagName(dir: str, version: str) > str {
+    if (dir == ".") { return version; }
+    return dir + "/" + version;
+}
+
+// gomodDir is the directory of the go.mod at path, "." for the root's.
+export fun gomodDir(path: str) > str {
+    if (path == "go.mod") { return "."; }
+    return path.sub(0, len: path.len() - "/go.mod".len());
+}
+
+test "in-repo module paths, directories and tags" {
+    assert\equal(moduleDir(MODULE_ROOT), want: ".", message: "the root");
+    assert\equal(moduleDir(MODULE_ROOT + "/libs/codec"), want: "libs/codec", message: "a nested module");
+    assert\equal(moduleDir("github.com/egladman/magusx"), want: "", message: "a lookalike path");
+    assert\equal(moduleDir("golang.org/x/sys"), want: "", message: "an outside module");
+    assert\equal(tagName(".", version: "v0.5.0"), want: "v0.5.0", message: "the root tag");
+    assert\equal(tagName("libs/codec", version: "v0.1.0"), want: "libs/codec/v0.1.0", message: "a nested tag");
+    assert\equal(gomodDir("go.mod"), want: ".", message: "the root go.mod");
+    assert\equal(gomodDir("libs/proofread/train/go.mod"), want: "libs/proofread/train", message: "a nested go.mod");
+}
+
+// inRepoRequires lists gomod's requires of in-repo modules as {"module", "version"}, from
+// a `require path version` line or a line of a require block. A replace never counts.
+export fun inRepoRequires(gomod: str) > [{str: str}] {
+    final found = mut [<{str: str}>];
+    var block = false;
+    foreach (raw in gomod.split("\n")) {
+        var line = raw.trim();
+        final comment = line.indexOf("//");
+        if (comment -> at) { line = line.sub(0, len: at).trim(); }
+        if (line == "") { continue; }
+        if (block) {
+            if (line == ")") {
+                block = false;
+                continue;
+            }
+        } else if (line == "require (") {
+            block = true;
+            continue;
+        } else if (line.startsWith("require ")) {
+            line = line.sub("require ".len()).trim();
+        } else {
+            continue;
+        }
+        final fields = line.split(" ").filter(fun (i: int, f: str) > bool => f != "");
+        if (fields.len() != 2 or moduleDir(fields[0]) == "") { continue; }
+        found.append({"module": fields[0], "version": fields[1]});
+    }
+    return found;
+}
+
+test "the in-repo requires of both require forms, and no replace" {
+    final gomod = "module example.com/m\n\nrequire " + MODULE_ROOT + "/libs/xdg v0.1.0\n\nrequire (\n"
+        + "\tgolang.org/x/sys v0.30.0\n\t" + MODULE_ROOT + "/libs/codec v0.1.0\n"
+        + "\t" + MODULE_ROOT + "/libs/diagnostics v0.2.0 // indirect\n)\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final got = inRepoRequires(gomod);
+    assert\equal(got.len(), want: 3, message: "two in a block, one on its own line");
+    assert\equal(got[0]["module"]!, want: MODULE_ROOT + "/libs/xdg", message: "the single-line form");
+    assert\equal(got[1]["version"]!, want: "v0.1.0", message: "a block line");
+    assert\equal(got[2]["version"]!, want: "v0.2.0", message: "an indirect require, comment dropped");
+}
+
+// isPseudoVersion reports whether v is a Go pseudo-version, which names a commit rather
+// than a tag: a 14-digit UTC timestamp then a 12-hex-digit revision, after a "-" or a ".".
+// The zero placeholder v0.0.0-00010101000000-000000000000 is one.
+export fun isPseudoVersion(v: str) > bool {
+    final parts = v.split("-");
+    if (parts.len() < 3) { return false; }
+    final rev = parts[parts.len() - 1];
+    final stampField = parts[parts.len() - 2].split(".");
+    final stamp = stampField[stampField.len() - 1];
+    if (rev.len() != 12 or stamp.len() != 14) { return false; }
+    for (var i = 0; i < 14; i = i + 1) {
+        final b = stamp.byte(i);
+        if (b < 48 or b > 57) { return false; }
+    }
+    for (var i = 0; i < 12; i = i + 1) {
+        final b = rev.byte(i);
+        if (!((b >= 48 and b <= 57) or (b >= 97 and b <= 102))) { return false; }
+    }
+    return true;
+}
+
+test "pseudo-versions in every form Go mints, and tags that are not" {
+    std\assert(isPseudoVersion("v0.0.0-00010101000000-000000000000"), message: "the zero placeholder");
+    std\assert(isPseudoVersion("v0.39.1-0.20260109155911-b69ac100ecb7"), message: "after a release");
+    std\assert(isPseudoVersion("v1.2.0-rc.1.0.20260109155911-b69ac100ecb7"), message: "after a prerelease");
+    std\assert(!isPseudoVersion("v0.1.0"), message: "a release");
+    std\assert(!isPseudoVersion("v0.0.0"), message: "the bare zero version");
+    std\assert(!isPseudoVersion("v0.5.0-rc.1"), message: "a prerelease");
+    std\assert(!isPseudoVersion("v0.0.0-00010101000000-00000000000z"), message: "a revision that is not hex");
+}
+
+// PinPlan is what stands between a release and its tags in the in-repo requires: the
+// legal versions requires name that nobody tagged and this run does not release
+// (directory to version), and the requires no run can release past.
+export object PinPlan {
+    missing: {str: str},
+    problems: [str],
+}
+
+// pinPlan checks every in-repo require in gomods (go.mod path to its text) against tags,
+// the tag names that exist, and releasing, each directory this run releases to its new
+// version. A require of a module being released is rewritten to the new version, so it
+// passes. One naming a missing tag is missing when legal(dir, version) says that version
+// is a legal next one, so naming it in the run would cut it. A pseudo-version, an illegal
+// missing version, and two go.mods requiring different missing versions of one module are
+// problems.
+export fun pinPlan(gomods: {str: str}, tags: [str], releasing: {str: str}, legal: fun (dir: str, version: str) > bool !> any) > PinPlan !> any {
+    final missing = mut {<str: str>};
+    final problems = mut [<str>];
+    final paths = gomods.keys().cloneMutable();
+    _ = paths.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (path in paths) {
+        foreach (req in inRepoRequires(gomods[path]!)) {
+            final module = req["module"]!;
+            final version = req["version"]!;
+            final dir = moduleDir(module);
+            if (isPseudoVersion(version)) {
+                problems.append(path + " requires " + module + " at the pseudo-version " + version
+                    + ", which names a commit rather than a tag; require a tag");
+                continue;
+            }
+            if (releasing[dir] != null) { continue; }
+            final tag = tagName(dir, version: version);
+            if (tags.indexOf(tag) != null) { continue; }
+            final other = missing[dir];
+            if (other -> v) {
+                if (v != version) {
+                    problems.append(path + " requires " + module + " " + version + " and another go.mod requires "
+                        + v + ", neither of them tagged; require one version");
+                }
+                continue;
+            }
+            if (!legal(dir, version: version)) {
+                problems.append(path + " requires " + module + " " + version + ", and " + tag
+                    + " does not exist and is not a legal next version to release");
+                continue;
+            }
+            missing[dir] = version;
+        }
+    }
+    return PinPlan{ missing = missing, problems = problems };
+}
+
+// missingTagsRefusal is the refusal for missing, the untagged versions requires name
+// (directory to version): each as the module@version a run names, in dependency order
+// by gomods, then the release invocation args extended by them, which cuts them all.
+export fun missingTagsRefusal(missing: {str: str}, gomods: {str: str}, args: [str]) > str !> any {
+    final deps = mut {<str: [str]>};
+    foreach (dir, version in missing) {
+        final on = mut [<str>];
+        final gomod = gomods[if (dir == ".") "go.mod" else dir + "/go.mod"];
+        if (gomod -> text) {
+            foreach (req in inRepoRequires(text)) {
+                final dep = moduleDir(req["module"]!);
+                if (missing[dep] != null) { on.append(dep); }
+            }
+        }
+        deps[dir] = on;
+    }
+    final named = mut [<str>];
+    foreach (dir in releaseOrder(missing.keys(), deps: deps)) {
+        final key = if (dir == ".") "magus" else dir;
+        named.append(key + "@" + missing[dir]!.sub(1));
+    }
+    return "requires name tags that do not exist: " + named.join(", ") + ". Release them in this run: `magus run release -- "
+        + (args + named).join(" ") + "`";
+}
+
+test "a release names the untagged requires in dependency order, with the run that adds them" {
+    final gomods = {"libs/safetyscissors/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.1.0
+",
+        "libs/codec/go.mod": "module " + MODULE_ROOT + "/libs/codec
+"};
+    final got = missingTagsRefusal({"libs/safetyscissors": "v0.1.0", "libs/codec": "v0.1.0", "libs/apiversion": "v0.1.0"},
+        gomods: gomods, args: ["magus@0.5.0"]);
+    assert\equal(got, want: "requires name tags that do not exist: libs/apiversion@0.1.0, libs/codec@0.1.0, "
+        + "libs/safetyscissors@0.1.0. Release them in this run: `magus run release -- magus@0.5.0 libs/apiversion@0.1.0 "
+        + "libs/codec@0.1.0 libs/safetyscissors@0.1.0`", message: got);
+}
+
+test "a release finds the untagged requires, and refuses a commit or a version it cannot release" {
+    final head = "module " + MODULE_ROOT + "\n\nrequire (\n\t" + MODULE_ROOT + "/libs/codec v0.1.0\n\t"
+        + MODULE_ROOT + "/libs/xdg v0.1.0\n\t" + MODULE_ROOT + "/libs/text v0.2.0\n)\n";
+    final lib = "module " + MODULE_ROOT + "/libs/safetyscissors\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n";
+    final legal = fun (dir: str, version: str) > bool => version == "v0.1.0";
+    final plan = pinPlan({"go.mod": head, "libs/safetyscissors/go.mod": lib}, tags: ["libs/xdg/v0.1.0"],
+        releasing: {".": "v0.5.0", "libs/text": "v0.2.0"}, legal: legal);
+    assert\equal(plan.missing, want: {"libs/codec": "v0.1.0"}, message: "the untagged codec, once for both go.mods");
+    assert\equal(plan.problems, want: [<str>], message: "xdg is tagged, text is released in the run");
+
+    final pseudo = "require " + MODULE_ROOT + "/libs/embed v0.0.0-00010101000000-000000000000\n";
+    final refused = pinPlan({"libs/train/go.mod": pseudo, "go.mod": "require " + MODULE_ROOT + "/libs/codec v0.3.0\n"},
+        tags: [<str>], releasing: {<str: str>}, legal: legal);
+    assert\equal(refused.missing, want: {<str: str>}, message: "nothing missing to name");
+    assert\equal(refused.problems.len(), want: 2, message: "the pseudo-version and the illegal version");
+    std\assert(refused.problems[0].startsWith("go.mod requires " + MODULE_ROOT + "/libs/codec v0.3.0"),
+        message: "go.mod sorts first: {refused.problems[0]}");
+    std\assert(refused.problems[1].indexOf("pseudo-version") != null, message: refused.problems[1]);
+
+    final split = pinPlan({"a/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.1.0\n",
+        "b/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.0.1\n"}, tags: [<str>], releasing: {<str: str>},
+        legal: fun (dir: str, version: str) > bool => true);
+    assert\equal(split.problems.len(), want: 1, message: "two untagged versions of one module");
+}
+
+// releaseOrder is dirs in dependency order: each after every directory deps lists for it,
+// ties by name. A cycle raises, since no order tags it.
+export fun releaseOrder(dirs: [str], deps: {str: [str]}) > [str] !> any {
+    final pending = dirs.cloneMutable();
+    _ = pending.sort(fun (a: str, b: str) > bool => a < b);
+    final order = mut [<str>];
+    while (pending.len() > 0) {
+        var next = "";
+        foreach (d in pending) {
+            var ready = true;
+            foreach (dep in deps[d] ?? [<str>]) {
+                if (pending.indexOf(dep) != null) { ready = false; }
+            }
+            if (ready) {
+                next = d;
+                break;
+            }
+        }
+        if (next == "") {
+            throw "release: the modules " + pending.join(", ") + " require each other, so no order tags them";
+        }
+        order.append(next);
+        _ = pending.remove(pending.indexOf(next)!);
+    }
+    return order;
+}
+
+test "modules release after what they require, the root last" {
+    final order = releaseOrder([".", "libs/safetyscissors", "libs/codec", "libs/apiversion", "libs/clikit"],
+        deps: {".": ["libs/safetyscissors", "libs/codec", "libs/apiversion", "libs/clikit"],
+               "libs/safetyscissors": ["libs/apiversion", "libs/codec"], "libs/clikit": ["libs/apiversion"]});
+    assert\equal(order, want: ["libs/apiversion", "libs/clikit", "libs/codec", "libs/safetyscissors", "."],
+        message: "dependency order, ties by name");
+    var raised = "";
+    try {
+        _ = releaseOrder(["a", "b"], deps: {"a": ["b"], "b": ["a"]});
+    } catch (e: str) {
+        raised = e;
+    }
+    std\assert(raised.indexOf("require each other") != null, message: "a cycle raises");
+}
+
+// rewriteRequire points go.mod's require for module at version, keeping the line's
+// indentation and any trailing comment. The `replace` directive names the same module and
+// is not touched: it is the local-development path, ignored by every downstream consumer.
+export fun rewriteRequire(gomod: str, module: str, version: str) > str !> any {
+    final kept = mut [<str>];
     var found = false;
     foreach (line in gomod.split("\n")) {
-        final at = line.indexOf(module + " v");
-        if (at != null and line.indexOf("=>") == null) {
-            kept.append(line.sub(0, at) + module + " " + version);
-            found = true;
-        } else {
+        final found_at = line.indexOf(module + " v");
+        if (found_at == null or line.indexOf("=>") != null) {
             kept.append(line);
+            continue;
         }
+        final at = found_at!;
+        final lead = line.sub(0, len: at).trim();
+        if (lead != "" and lead != "require") {
+            kept.append(line);
+            continue;
+        }
+        final rest = line.sub(at + module.len() + 1);
+        var suffix = "";
+        if (rest.indexOf(" ") -> end) { suffix = rest.sub(end); }
+        kept.append(line.sub(0, len: at) + module + " " + version + suffix);
+        found = true;
     }
     if (!found) { throw "release: go.mod has no require line for " + module; }
     return kept.join("\n");
+}
+
+test "a require moves to the new version and keeps its comment" {
+    final gomod = "require (\n\t" + MODULE_ROOT + "/libs/diagnostics v0.2.0 // indirect\n\t"
+        + MODULE_ROOT + "/libs/text v0.1.0\n\t" + MODULE_ROOT + "/libs/textsearch v0.1.0\n)\n\n"
+        + "replace " + MODULE_ROOT + "/libs/text => ./libs/text\n";
+    final got = rewriteRequire(rewriteRequire(gomod, module: MODULE_ROOT + "/libs/diagnostics", version: "v0.3.0"),
+        module: MODULE_ROOT + "/libs/text", version: "v0.2.0");
+    std\assert(got.indexOf("libs/diagnostics v0.3.0 // indirect\n") != null, message: got);
+    std\assert(got.indexOf("libs/text v0.2.0\n") != null, message: got);
+    std\assert(got.indexOf("libs/textsearch v0.1.0") != null, message: "a longer path is another module");
+    std\assert(got.indexOf("libs/text => ./libs/text") != null, message: "the replace stays");
+}
+
+// dropInRepoReplaces removes gomod's replace directives for in-repo modules, single-line
+// or in a block, and keeps the rest. A release commit carries the result, so `go install
+// <module>@<version>` accepts the module: it refuses any go.mod with a replace.
+export fun dropInRepoReplaces(gomod: str) > str {
+    final kept = mut [<str>];
+    var block = false;
+    foreach (line in gomod.split("\n")) {
+        final t = line.trim();
+        if (t == "replace (") {
+            block = true;
+            kept.append(line);
+            continue;
+        }
+        if (block and t == ")") { block = false; }
+        var directive = "";
+        if (t.startsWith("replace ")) {
+            directive = t.sub("replace ".len());
+        } else if (block) {
+            directive = t;
+        }
+        final fields = directive.split(" ");
+        if (directive != "" and directive.indexOf("=>") != null and moduleDir(fields[0]) != "") { continue; }
+        kept.append(line);
+    }
+    return kept.join("\n");
+}
+
+test "a release commit's go.mod keeps no in-repo replace" {
+    final gomod = "module " + MODULE_ROOT + "\n\nreplace " + MODULE_ROOT + "/libs/codec => ./libs/codec\n\n"
+        + "replace golang.org/x/sys => ../sys\n\nreplace (\n\t" + MODULE_ROOT + "/libs/xdg => ./libs/xdg\n)\n";
+    final got = dropInRepoReplaces(gomod);
+    std\assert(got.indexOf("libs/codec =>") == null, message: "a single-line replace goes");
+    std\assert(got.indexOf("libs/xdg =>") == null, message: "a block line goes");
+    std\assert(got.indexOf("golang.org/x/sys => ../sys") != null, message: "an outside replace stays");
+    assert\equal(inRepoRequires(got).len(), want: 0, message: "and no require appears");
+}
+
+// releaseName names what a release cuts for its commit subjects: the root tag and how many
+// module tags ride with it, or the module tags themselves when three or fewer, so a
+// subject stays one short line.
+export fun releaseName(tags: [str]) > str {
+    final root = rootReleaseTag(tags);
+    if (root != "") {
+        final nested = tags.len() - 1;
+        if (nested == 0) { return root; }
+        if (nested == 1) { return root + " and 1 module tag"; }
+        return root + " and {nested} module tags";
+    }
+    if (tags.len() <= 3) { return tags.join(" "); }
+    return "{tags.len()} module tags";
+}
+
+test "a release subject stays one short line" {
+    assert\equal(releaseName(["v0.5.0"]), want: "v0.5.0", message: "the root alone");
+    assert\equal(releaseName(["libs/codec/v0.1.0", "v0.5.0"]), want: "v0.5.0 and 1 module tag", message: "one beside the root");
+    assert\equal(releaseName(["libs/a/v0.1.0", "libs/b/v0.1.0", "v0.5.0"]), want: "v0.5.0 and 2 module tags", message: "several");
+    assert\equal(releaseName(["libs/a/v0.1.0", "libs/b/v0.1.0"]), want: "libs/a/v0.1.0 libs/b/v0.1.0", message: "a few modules");
+    assert\equal(releaseName(["libs/a/v1", "libs/b/v1", "libs/c/v1", "libs/d/v1"]), want: "4 module tags", message: "many modules");
+}
+
+// Pinned is what a release commit does to the go.mods: next is each changed go.mod's
+// text on the release commit (path to text), and restored is the text main carries after
+// it for each go.mod whose in-repo replaces the release commit drops.
+export object Pinned {
+    next: {str: str},
+    restored: {str: str},
+}
+
+// pinGomods points every in-repo require of a module in releasing (directory to new
+// version) at that version, and drops the in-repo replaces of each released module's own
+// go.mod, so `go install` accepts it. A go.mod with nothing to change is in neither map.
+export fun pinGomods(gomods: {str: str}, releasing: {str: str}) > Pinned !> any {
+    final next = mut {<str: str>};
+    final restored = mut {<str: str>};
+    foreach (path, text in gomods) {
+        var pinned = text;
+        foreach (req in inRepoRequires(text)) {
+            final version = releasing[moduleDir(req["module"]!)];
+            if (version -> v) { pinned = rewriteRequire(pinned, module: req["module"]!, version: v); }
+        }
+        final dropped = dropInRepoReplaces(pinned);
+        if (releasing[gomodDir(path)] != null and dropped != pinned) {
+            restored[path] = pinned;
+            pinned = dropped;
+        }
+        if (pinned != text) { next[path] = pinned; }
+    }
+    return Pinned{ next = next, restored = restored };
+}
+
+test "a release pins requires everywhere and drops replaces only where it releases" {
+    final lib = "module " + MODULE_ROOT + "/libs/safetyscissors\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final app = "module " + MODULE_ROOT + "/libs/clikit\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final quiet = "module " + MODULE_ROOT + "/libs/xdg\n";
+    final got = pinGomods({"libs/safetyscissors/go.mod": lib, "libs/clikit/go.mod": app, "libs/xdg/go.mod": quiet},
+        releasing: {"libs/safetyscissors": "v0.2.0", "libs/codec": "v0.2.0"});
+    std\assert(got.next["libs/safetyscissors/go.mod"]!.indexOf("libs/codec v0.2.0") != null, message: "pinned");
+    std\assert(got.next["libs/safetyscissors/go.mod"]!.indexOf("=>") == null, message: "a released module drops its replace");
+    std\assert(got.restored["libs/safetyscissors/go.mod"]!.indexOf("libs/codec => ../codec") != null, message: "and gets it back");
+    std\assert(got.next["libs/clikit/go.mod"]!.indexOf("libs/codec => ../codec") != null, message: "an unreleased module keeps its replace");
+    std\assert(got.restored["libs/clikit/go.mod"] == null, message: "so nothing restores it");
+    std\assert(got.next["libs/xdg/go.mod"] == null, message: "an untouched go.mod is not in the commit");
 }

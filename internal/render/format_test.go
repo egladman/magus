@@ -23,12 +23,12 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 func TestWriteFormattedJSON(t *testing.T) {
@@ -151,11 +151,12 @@ var glueCoverageHost = regexp.MustCompile(`magus-guard-coverage:.*\bhost=(\S+)`)
 // glueVerdicts are the decisions `magus shell` renders, plus one it never does. The values
 // are fixed here rather than taken from a run so the rendered bytes belong to the test, and
 // the reason carries the characters a naive template would break on. The unknown decision
-// stands in for a contract that grew after a copy was installed: it must never render as
-// an allow.
+// stands in for a contract that grew after a copy was installed, and the retired pass for
+// one that shrank: neither may render as a yes.
 var glueVerdicts = []map[string]any{
 	{"decision": "deny", "reason": `git stash is denied here: "quoted" & <angled>`},
 	{"decision": "advise", "context": "magus workspace: `magus refs <sym>` for code"},
+	{"decision": "defer"},
 	{"decision": "pass"},
 	{"decision": "ask", "reason": `pushing abc1234, which no passing gate covers: "quoted" & <angled>`},
 	{"decision": "maybe", "reason": "a decision no template knows"},
@@ -215,7 +216,7 @@ func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir(t), rel))
 	require.NoError(t, err, "read the vendored schema %s", rel)
 	var schema jsonschema.Schema
-	require.NoError(t, json.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
+	require.NoError(t, codec.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
 	// nil loader on purpose: a schema that grew a remote $ref would fail here rather
 	// than turn every run of this test into an HTTP request.
 	resolved, err := schema.Resolve(nil)
@@ -226,7 +227,7 @@ func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 func glueDecode(t *testing.T, label, body string) any {
 	t.Helper()
 	var doc any
-	require.NoError(t, json.Unmarshal([]byte(body), &doc), "%s must be valid JSON: %s", label, body)
+	require.NoError(t, codec.Unmarshal([]byte(body), &doc), "%s must be valid JSON: %s", label, body)
 	return doc
 }
 
@@ -339,7 +340,7 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 						decision = ""
 					}
 					switch decision {
-					case "maybe":
+					case "maybe", "pass":
 						assert.Contains(t, text, "deny", "%s (%s) must refuse a decision it does not know, never allow it", name, a.label)
 					case "ask":
 						assert.NotEmpty(t, text, "%s (%s) renders an ask as nothing, which the host takes as allow", name, a.label)
@@ -394,18 +395,19 @@ func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
 	})
 	t.Run("approval request for a prompted run", func(t *testing.T) {
 		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "ask"))
-		assert.Contains(t, render(t, "magus run agent-bench-run .", "PermissionRequest", "pass"), `"behavior":"allow"`)
+		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "defer"),
+			"a defer is no decision: the person answers Codex's prompt")
 	})
 	t.Run("run no rule prompts for", func(t *testing.T) {
 		got := render(t, "magus run lint .", "PreToolUse", "ask")
 		assert.Contains(t, got, `"permissionDecision":"deny"`)
 		assert.Contains(t, got, "own terminal")
-		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "pass"), "allow",
-			"a pass is not consent to a prompt magus did not configure")
+		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "defer"), "allow",
+			"a defer is not consent to any prompt")
 	})
 }
 
-// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a pass renders
+// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a defer renders
 // nothing and an advise renders its context alone, whatever the host or the tool. Claude
 // Code and Cursor already give a shell command a closed stdin, Codex never did, and a
 // rewrite would take a command out of reach of the person's own permission rules.
@@ -422,9 +424,9 @@ func TestGlueNeverRewritesTheCommand(t *testing.T) {
 			tmpl, err := template.New(tc.label).Funcs(funcs).Option("missingkey=error").Parse(body)
 			require.NoError(t, err)
 
-			var pass strings.Builder
-			require.NoError(t, tmpl.Execute(&pass, map[string]any{"decision": "pass"}))
-			assert.Empty(t, pass.String(), "a pass renders nothing")
+			var deferred strings.Builder
+			require.NoError(t, tmpl.Execute(&deferred, map[string]any{"decision": "defer"}))
+			assert.Empty(t, deferred.String(), "a defer renders nothing")
 
 			var advise strings.Builder
 			require.NoError(t, tmpl.Execute(&advise, map[string]any{"decision": "advise", "context": "said once"}))
@@ -456,7 +458,7 @@ func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
 	var schema struct {
 		Properties map[string]any `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal(raw, &schema))
+	require.NoError(t, codec.Unmarshal(raw, &schema))
 	require.NotEmpty(t, schema.Properties, "%s must name the fields it grades", rel)
 	return schema.Properties
 }
@@ -469,7 +471,7 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				"glob": "*.go", "type": "go", "output_mode": "content",
 				"-A": 20, "-B": 2, "-C": 3, "-i": true, "multiline": true,
 			}
-			raw, err := json.Marshal(map[string]any{
+			raw, err := codec.Marshal(map[string]any{
 				"hook_event_name": event, "conversation_id": "grep-session",
 				"tool_name": "Grep", "tool_input": input, "cwd": ".",
 			})
@@ -487,25 +489,25 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 			judged, err := os.ReadFile(record)
 			require.NoError(t, err)
 			var payload struct {
-				ToolName  string          `json:"tool_name"`
-				Input     json.RawMessage `json:"tool_input"`
-				SessionID string          `json:"session_id"`
-				Cwd       string          `json:"cwd"`
+				ToolName  string           `json:"tool_name"`
+				Input     codec.RawMessage `json:"tool_input"`
+				SessionID string           `json:"session_id"`
+				Cwd       string           `json:"cwd"`
 			}
-			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
-			want, err := json.Marshal(input)
+			require.NoError(t, codec.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
+			want, err := codec.Marshal(input)
 			require.NoError(t, err)
 			gotInput := payload.Input
 			payload.Input = nil
 			assert.Equal(t, struct {
-				ToolName  string          `json:"tool_name"`
-				Input     json.RawMessage `json:"tool_input"`
-				SessionID string          `json:"session_id"`
-				Cwd       string          `json:"cwd"`
+				ToolName  string           `json:"tool_name"`
+				Input     codec.RawMessage `json:"tool_input"`
+				SessionID string           `json:"session_id"`
+				Cwd       string           `json:"cwd"`
 			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
 			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
 			if event == "preToolUse" {
-				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
+				assert.Equal(t, "ask", glueDecode(t, event, out).(map[string]any)["permission"], "an advise is Cursor's ask")
 			} else {
 				assert.Contains(t, out, "use magus refs HandleRequest --source")
 			}
@@ -530,7 +532,7 @@ const cursorReadingListStub = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\n"
 
 // hint is the additional_context the hook returns for a search of terms.
 func (s *cursorReadingListSuite) hint(terms string, env map[string]string) string {
-	event, err := json.Marshal(map[string]any{
+	event, err := codec.Marshal(map[string]any{
 		"hook_event_name": "postToolUse", "conversation_id": "c",
 		"tool_name": "WebSearch", "tool_input": map[string]any{"search_term": terms},
 	})
@@ -542,7 +544,7 @@ func (s *cursorReadingListSuite) hint(terms string, env map[string]string) strin
 	var reply struct {
 		Context string `json:"additional_context"`
 	}
-	s.Require().NoError(json.Unmarshal([]byte(out), &reply), out)
+	s.Require().NoError(codec.Unmarshal([]byte(out), &reply), out)
 	return reply.Context
 }
 
@@ -596,7 +598,7 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 		named := glueSchemaPropertyNames(t, ev.schema)
 		for i, verdict := range glueVerdicts {
 			t.Run(fmt.Sprintf("%s/%d-%s", name, i, verdict["decision"]), func(t *testing.T) {
-				verdictJSON, err := json.Marshal(verdict)
+				verdictJSON, err := codec.Marshal(verdict)
 				require.NoError(t, err)
 				out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
 					label: name, host: "cursor", event: ev.event, stub: glueVerdictEcho,
@@ -612,10 +614,10 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 					switch verdict["decision"] {
 					case "ask":
 						assert.Equal(t, "ask", reply["permission"], "an ask is Cursor's own approval prompt")
-					case "pass", "advise":
-						assert.Equal(t, "allow", reply["permission"])
+					case "defer", "advise":
+						assert.Equal(t, "ask", reply["permission"], "the guard never answers yes: a defer is Cursor's ask")
 					default:
-						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
+						assert.Equal(t, "deny", reply["permission"], "only defer and advise go to Cursor's prompt; %s must not", verdict["decision"])
 					}
 				case "advise":
 					if verdict["decision"] == "advise" {
@@ -711,7 +713,7 @@ func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
 }
 
 func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
-	verdict, err := json.Marshal(types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
+	verdict, err := codec.Marshal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: audienceReason})
 	s.Require().NoError(err)
 	s.T().Setenv("GLUE_VERDICT", string(verdict))
 	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,
@@ -805,7 +807,7 @@ func (s *unjudgedHookSuite) TestCursorRefusesAndShowsThePersonTheFix() {
 const glueBrokenMultiLineMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'magus.yaml has keys this magus does not know:' >&2\necho '  - guard.newest  (line 4)' >&2\nexit 3\n"
 
 func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
-	encoded, err := json.Marshal(command)
+	encoded, err := codec.Marshal(command)
 	s.Require().NoError(err)
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
 }
@@ -830,7 +832,7 @@ func (s *unjudgedHookSuite) suppliedRepair() string {
 
 // repairEvent is a shell call from root.
 func (s *unjudgedHookSuite) repairEvent(root, command string) string {
-	encoded, err := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
+	encoded, err := codec.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
 		"cwd": root, "tool_input": map[string]any{"command": command}})
 	s.Require().NoError(err)
 	return string(encoded)
@@ -860,13 +862,13 @@ func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsAR
 	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 }
 
-func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
+func (s *unjudgedHookSuite) TestCursorAsksBeforeTheRepairLine() {
 	root := s.suppliedRepair()
-	encoded, err := json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
+	encoded, err := codec.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
 		"command": "magus self update", "cwd": root})
 	s.Require().NoError(err)
 	reply := s.reply("cursor-hook.buzz", "cursor", string(encoded))
-	s.Equal("allow", reply["permission"])
+	s.Equal("ask", reply["permission"])
 	s.Contains(reply["user_message"], "could not judge this call")
 }
 

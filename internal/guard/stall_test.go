@@ -16,8 +16,9 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 // HookRowAppendSuite pins that the rows a hook files never read the session
@@ -42,18 +43,18 @@ func (s *HookRowAppendSuite) SetupTest() {
 func (s *HookRowAppendSuite) assertTwoOpensOneRow() {
 	dir, err := sessions.Dir(s.root)
 	s.Require().NoError(err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
-	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r sessions.Record) bool { return r.Kind != sessions.KindAttentionOpen })
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r session.Record) bool { return r.Kind != sessions.KindAttentionOpen })
 	s.Len(opens, 2)
 	s.Len(sessions.AttentionQueue(fold), 1)
 }
 
 func (s *HookRowAppendSuite) TestAStallRowAppends() {
 	who := hookAttribution{Host: "test-host", Session: "s"}
-	verdict := types.GuardJudgment{Rule: string(denyRuleLeaseWrite), Reason: "outside"}
-	fileStallRow(s.testContext(), s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
-	fileStallRow(s.testContext(), s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
+	judged := verdict.Judgment{Rule: string(denyRuleLeaseWrite), Reason: "outside"}
+	fileStallRow(s.testContext(), s.at, who, "lease-b", judged, stallRecord{Refusals: 1})
+	fileStallRow(s.testContext(), s.at, who, "lease-b", judged, stallRecord{Refusals: 1})
 	s.assertTwoOpensOneRow()
 }
 
@@ -79,7 +80,7 @@ func TestGradeStallNamesTheExitOnTheVerdictLine(t *testing.T) {
 	t.Parallel()
 	at := location{cacheDir: t.TempDir()}
 	on := withSetting(string(denyRuleStall), builtin.Advise)
-	blocked := types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
+	blocked := verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
 
 	v := gradeStall(on, blocked, "job-a", at)
 	assert.Equal(t, fmt.Sprintf("outside the write paths. Only the root can clear this: exit with `%s`, naming it in unresolved_risks.\nthe rationale",
@@ -102,19 +103,19 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 	testkit.Isolate(t)
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	deps := withSetting(string(denyRuleStall), builtin.Advise)
-	write := func() types.GuardJudgment {
+	write := func() verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: filepath.Join(root, "README.md"), IsPath: true, Session: "s", Host: "test-host", Lease: "lease-b"})
 	}
 
 	first := write()
-	require.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite)}, judgedAs(first))
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseWrite)}, judgedAs(first))
 	assert.Contains(t, first.Reason, hint.JobExit.With("lease-b", "--stdin"))
 	again := write()
 	assert.NotContains(t, again.Reason, hint.JobExit.With("lease-b", "--stdin"), "said once")
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	queue := sessions.AttentionQueue(fold)
 	require.Len(t, queue, 1, "one row per lease and rule")

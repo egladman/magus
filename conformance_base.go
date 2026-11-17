@@ -23,13 +23,13 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -352,7 +352,7 @@ type keptMeasure struct {
 
 // writeConformanceEntry keeps out at entry, a path conformanceEntry gave.
 func writeConformanceEntry(entry string, out types.Conformance) error {
-	line, err := json.Marshal(keptMeasure{Name: filepath.Base(entry), Measure: out})
+	line, err := codec.Marshal(keptMeasure{Name: filepath.Base(entry), Measure: out})
 	if err != nil {
 		return fmt.Errorf("conformance: encode %s: %w", entry, err)
 	}
@@ -377,10 +377,10 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 		return types.Conformance{}, false, fmt.Errorf("conformance: read %s: %w", entry, err)
 	}
 	var line struct {
-		Name    string          `json:"name"`
-		Measure json.RawMessage `json:"measure"`
+		Name    string           `json:"name"`
+		Measure codec.RawMessage `json:"measure"`
 	}
-	if err := json.Unmarshal(data, &line); err != nil {
+	if err := codec.Unmarshal(data, &line); err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
 	}
 	if line.Name != filepath.Base(entry) {
@@ -389,14 +389,14 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 	}
 	raw := line.Measure
 	var out types.Conformance
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := codec.Unmarshal(raw, &out); err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
 	}
 	var keys struct {
-		Rows          json.RawMessage `json:"rows"`
-		Distributions json.RawMessage `json:"distributions"`
+		Rows          codec.RawMessage `json:"rows"`
+		Distributions codec.RawMessage `json:"distributions"`
 	}
-	if err := json.Unmarshal(raw, &keys); err != nil {
+	if err := codec.Unmarshal(raw, &keys); err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
 	}
 	drifted := len(out.Distributions) == 0 && out.Answer.Verdict == types.VerdictFound
@@ -411,7 +411,7 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 // plan's indexers, under baseMeasureVersion. Its name keeps the key's parts
 // apart, so whyRemeasure can name the one that moved.
 func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, error) {
-	policy, err := json.Marshal(m.cfg.Knowledge.Conformance)
+	policy, err := codec.Marshal(m.cfg.Knowledge.Conformance)
 	if err != nil {
 		return "", fmt.Errorf("conformance: digest the policy: %w", err)
 	}

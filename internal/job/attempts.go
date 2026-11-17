@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,48 +28,16 @@ var wideningRules = []string{"claimed-declaration", "focus-read", "lease-claim",
 // paths with.
 const outsideWritePaths = "outside the job's write paths"
 
-// nextGeneration is row's Generation once written over prev: 1 for a new row, and one more
-// than prev's for a write that changes the declared spec ([specChanges]). An observation
-// declares nothing, and neither does a write that only widens the write paths: evidence
-// taken under the narrower set still asks what the wider one asks.
-func nextGeneration(prev, row types.Job, exists bool, kind grading) int {
-	if !exists {
-		return 1
-	}
-	generation := max(prev.Generation, 1)
-	if kind != asObservation && changesSpec(prev, row) {
-		generation++
-	}
-	return generation
-}
-
-// changesSpec reports whether row declares anything prev did not, other than write paths
-// that each hold every path prev held.
-func changesSpec(prev, row types.Job) bool {
-	changes := specChanges(prev, row)
-	if len(changes) == 1 && changes[0] == "paths.write" {
-		return !widens(prev.Paths.Write, row.Paths.Write)
-	}
-	return len(changes) > 0
-}
-
-// widens reports whether every path in held lies within some path of next.
-func widens(held, next []string) bool {
-	return !slices.ContainsFunc(held, func(h string) bool {
-		return !slices.ContainsFunc(next, func(n string) bool { return types.PathWithin(h, n) })
-	})
-}
-
 // refuseAttempt refuses a fork of ended row prev, declared again as row, that starts an
 // attempt past row's max_attempts. The cap read is the new record's, so a fork that raises
 // it in the same write passes. used is prev's live attempt.
-func refuseAttempt(id string, used int, row types.Job) error {
+func refuseAttempt(id string, used int, row job.Job) error {
 	if row.MaxAttempts == 0 || used < row.MaxAttempts {
 		return nil
 	}
 	err := fmt.Errorf("%w: %s used %d of its %d attempt(s): fork it with a record raising max_attempts (`%s`), or the root does the job itself",
-		ErrMaxAttempts, id, used, row.MaxAttempts, hint.JobFork.With("--stdin"))
-	return types.NonRetryable(err, types.RetryAfterPerson, "a person raises max_attempts or does the job")
+		job.ErrMaxAttempts, id, used, row.MaxAttempts, hint.JobFork.With("--stdin"))
+	return types.NonRetryable(err, job.RetryAfterPerson, "a person raises max_attempts or does the job")
 }
 
 // foldAttempt is ended row prev as the attempt the next one inherits: what it ended as,
@@ -76,7 +45,7 @@ func refuseAttempt(id string, used int, row types.Job) error {
 // denials the guard's refusals of its holder and known whether the trail still reached back
 // to its start. now stands in for an end prev never stamped.
 // live is prev's try, and earlier the tries before it.
-func foldAttempt(prev types.Job, live types.Attempt, earlier []types.Attempt, denials []types.JobDenial, known bool, now int64) types.Attempt {
+func foldAttempt(prev job.Job, live job.Attempt, earlier []job.Attempt, denials []job.Denial, known bool, now int64) job.Attempt {
 	a := live.Clone()
 	p := &a.Status
 	p.State, p.ObservedGeneration, p.EndReason = prev.State, prev.Generation, prev.EndReason
@@ -84,7 +53,7 @@ func foldAttempt(prev types.Job, live types.Attempt, earlier []types.Attempt, de
 	p.ReworkRounds, p.Widenings = prev.ReworkRounds, prev.Widenings
 	p.Denials, p.DenialsKnown = slices.Clone(denials[max(len(denials)-maxFolded, 0):]), known
 	if p.Ended == 0 {
-		p.Ended, p.End = cmp.Or(prev.Updated, now), types.AttemptEndJob
+		p.Ended, p.End = cmp.Or(prev.Updated, now), job.AttemptEndJob
 	}
 	if prev.ModelTier != nil {
 		p.ModelTier = prev.ModelTier.Name
@@ -93,7 +62,7 @@ func foldAttempt(prev types.Job, live types.Attempt, earlier []types.Attempt, de
 		p.Unmet = cloneGates(r.Unmet[:min(len(r.Unmet), maxFolded)])
 		p.Violations = slices.Clone(r.Violations[:min(len(r.Violations), maxFolded)])
 	}
-	runs := make([]types.JobAttempt, 0, len(prev.GateAttempts)+1)
+	runs := make([]job.CapturedRun, 0, len(prev.GateAttempts)+1)
 	if prev.Attempt != nil {
 		runs = append(runs, *prev.Attempt)
 	}
@@ -114,31 +83,31 @@ func foldAttempt(prev types.Job, live types.Attempt, earlier []types.Attempt, de
 // write paths needs a widening; a goal unmet in p and in the attempt before it needs a
 // person, since a second agent already failed it. Anything else, an end the sweep wrote
 // included, is retryable as is.
-func classifyAttempt(p types.Attempt, earlier []types.Attempt) types.RetryVerdict {
+func classifyAttempt(p job.Attempt, earlier []job.Attempt) job.RetryVerdict {
 	for _, d := range p.Status.Denials {
 		if slices.Contains(wideningRules, d.Rule) {
 			reason := "the guard denied its holder under " + d.Rule
 			if line := firstLine(d.Reason); line != "" {
 				reason += ": " + line
 			}
-			return types.RetryVerdict{Change: types.RetryAfterWidening, Reason: reason}
+			return job.RetryVerdict{Change: job.RetryAfterWidening, Reason: reason}
 		}
 	}
 	for _, v := range p.Status.Violations {
 		if strings.Contains(v, outsideWritePaths) {
-			return types.RetryVerdict{Change: types.RetryAfterWidening, Reason: v}
+			return job.RetryVerdict{Change: job.RetryAfterWidening, Reason: v}
 		}
 	}
 	if n := len(earlier); n > 0 {
 		before := earlier[n-1]
 		for _, goal := range p.Status.Unmet {
-			if slices.ContainsFunc(before.Status.Unmet, func(g types.VerificationStatus) bool { return g.ID == goal.ID }) {
-				return types.RetryVerdict{Change: types.RetryAfterPerson,
+			if slices.ContainsFunc(before.Status.Unmet, func(g job.VerificationStatus) bool { return g.ID == goal.ID }) {
+				return job.RetryVerdict{Change: job.RetryAfterPerson,
 					Reason: fmt.Sprintf("goal %s was unmet in attempts %d and %d", goal.ID, before.N, p.N)}
 			}
 		}
 	}
-	return types.RetryVerdict{Retryable: true}
+	return job.RetryVerdict{Retryable: true}
 }
 
 // evidenceAt is the evidence row holds for a grade at its own generation: its result and the
@@ -150,9 +119,9 @@ func classifyAttempt(p types.Attempt, earlier []types.Attempt) types.RetryVerdic
 // diff either way, and only marks prior. A record with no stamp is unknown and grades as
 // current.
 // result is what row's live attempt filed.
-func evidenceAt(row types.Job, result *types.JobResult) (ev graded, prior int) {
+func evidenceAt(row job.Job, result *job.Result) (ev graded, prior int) {
 	older := func(observed int) bool {
-		if !row.StaleAt(observed) {
+		if !row.SpecChangedSince(observed) {
 			return false
 		}
 		if prior == 0 || observed < prior {
@@ -160,7 +129,7 @@ func evidenceAt(row types.Job, result *types.JobResult) (ev graded, prior int) {
 		}
 		return true
 	}
-	ev.result = types.JobResult{Job: row.ID}
+	ev.result = job.Result{Job: row.ID}
 	if result != nil {
 		ev.result = *result
 		older(result.ObservedGeneration)
@@ -177,8 +146,8 @@ func evidenceAt(row types.Job, result *types.JobResult) (ev graded, prior int) {
 }
 
 // unmetGates are the goals among gates that did not verify, at most maxFolded, copied.
-func unmetGates(gates []types.VerificationStatus) []types.VerificationStatus {
-	var out []types.VerificationStatus
+func unmetGates(gates []job.VerificationStatus) []job.VerificationStatus {
+	var out []job.VerificationStatus
 	for _, g := range gates {
 		if !g.Verified && len(out) < maxFolded {
 			out = append(out, g)
@@ -187,7 +156,7 @@ func unmetGates(gates []types.VerificationStatus) []types.VerificationStatus {
 	return cloneGates(out)
 }
 
-func cloneGates(in []types.VerificationStatus) []types.VerificationStatus {
+func cloneGates(in []job.VerificationStatus) []job.VerificationStatus {
 	if in == nil {
 		return nil
 	}

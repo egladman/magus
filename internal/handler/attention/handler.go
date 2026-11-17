@@ -8,16 +8,18 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
 // consoleHost stamps the disposing invocation as having come through the console.
 //
-// sessions.InvocationStart.Host names the client that drove an invocation, and the CLI
+// session.InvocationStart.Host names the client that drove an invocation, and the CLI
 // leaves it empty because nothing on its run path knows the answer. This route DOES know
 // its client, so it is recorded as a fact at the moment of the write, beside the
 // credential the bearer guard verified. Neither says a person acted: any process of the
@@ -109,7 +111,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.Fail(w, r, "attention", err)
 		return
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(r.Context(), dir)
 	if err != nil {
 		h.Fail(w, r, "attention", err)
 		return
@@ -123,7 +125,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	handler.LimitRequestBody(w, r)
 	var body disposeRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := codec.NewDecoder(r.Body).Decode(&body); err != nil {
 		handler.Refuse(w, r, rpcerr.Invalid("the request body is not JSON of the form {\"id\": ..., \"reason\": ...}: "+err.Error()))
 		return
 	}
@@ -133,8 +135,8 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, sessions.InvocationStart{
-		Origin:    trail.StampOrigin(r.Context(), types.Origin{Host: consoleHost}),
+	req, err := sessions.DisposeRequest(r.Context(), dir, body.ID, body.Reason, session.InvocationStart{
+		Origin:    trail.StampOrigin(r.Context(), jobtypes.Origin{Host: consoleHost}),
 		Workspace: h.root,
 		Version:   h.version,
 	})

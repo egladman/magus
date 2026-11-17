@@ -24,8 +24,9 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/server"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -42,6 +43,7 @@ func TestServerStopTerminatesLiveServer(t *testing.T) {
 	// Let proc pick a random socket under SockDir; a t.TempDir() path can exceed the unix
 	// socket path length limit on macOS.
 	srv, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 	})
 	require.NoError(t, err)
@@ -81,6 +83,7 @@ func TestServerStopStalePools(t *testing.T) {
 	privateSockDir(t)
 	addr := "unix://" + filepath.Join(proc.SockDir(), "magus-424242-deadbeef.sock")
 	srv, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Address: addr,
 		Version: "stale-build",
 		Handler: func(context.Context, []string) error { return nil },
@@ -220,7 +223,7 @@ func checkReviewWorkspace(t *testing.T, provider string, opts ...magus.Option) (
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	root := w.Root()
-	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(magus.TierCeiling))...)
+	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(tier.Ceiling))...)
 	require.NoError(t, err, "fixture workspace must open")
 
 	prev := bindings.ReviewProvider()
@@ -253,7 +256,7 @@ export fun review_threads(target: Target, req: ReviewRef) > any !> any {
 // mergedReviewEvents returns the review.merged events the job left on the trail.
 func mergedReviewEvents(t *testing.T, cacheDir string) []trail.Event {
 	t.Helper()
-	events, err := trail.ReadRecent(cacheDir, 20)
+	events, err := trail.ReadRecent(t.Context(), cacheDir, 20)
 	require.NoError(t, err)
 	var out []trail.Event
 	for _, e := range events {
@@ -444,7 +447,7 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 	require.NoError(t, err)
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

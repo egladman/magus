@@ -3,6 +3,7 @@ package types
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -16,9 +17,9 @@ func TestAPIVersion(t *testing.T) {
 }
 
 func (s *APIVersionSuite) TestParseAcceptsAlpha() {
-	v, err := ParseAPIVersion("magus.job/v1alpha1")
+	v, err := ParseAPIVersion("safetyscissors.job/v1alpha1")
 	s.Require().NoError(err)
-	s.Equal(JobAPIVersion, v)
+	s.Equal(APIVersion(job.APIVersion), v)
 }
 
 func (s *APIVersionSuite) TestParseAcceptsStable() {
@@ -28,7 +29,7 @@ func (s *APIVersionSuite) TestParseAcceptsStable() {
 
 func (s *APIVersionSuite) TestParseRefusesAnInteger() {
 	_, err := ParseAPIVersion("13")
-	s.EqualError(err, `api version "13" is not <group>/v<major>[alpha<n>|beta<n>], as in "magus.job/v1alpha1"`)
+	s.EqualError(err, `api version "13" is not <group>/v<major>[alpha<n>|beta<n>], as in "safetyscissors.job/v1alpha1"`)
 }
 
 func (s *APIVersionSuite) TestParseRefusesAVersionWithNoGroup() {
@@ -37,18 +38,18 @@ func (s *APIVersionSuite) TestParseRefusesAVersionWithNoGroup() {
 }
 
 func (s *APIVersionSuite) TestParseRefusesAZeroMajor() {
-	_, err := ParseAPIVersion("magus.job/v0alpha1")
+	_, err := ParseAPIVersion("safetyscissors.job/v0alpha1")
 	s.Error(err)
 }
 
 func (s *APIVersionSuite) TestParseRefusesAnUnnumberedAlpha() {
-	_, err := ParseAPIVersion("magus.job/v1alpha")
+	_, err := ParseAPIVersion("safetyscissors.job/v1alpha")
 	s.Error(err)
 }
 
 func (s *APIVersionSuite) TestGroupAndVersionSplitAtTheSlash() {
-	s.Equal("magus.job", JobAPIVersion.Group())
-	s.Equal("v1alpha1", JobAPIVersion.Version())
+	s.Equal("safetyscissors.job", APIVersion(job.APIVersion).Group())
+	s.Equal("v1alpha1", APIVersion(job.APIVersion).Version())
 }
 
 func (s *APIVersionSuite) TestMalformedHasNoParts() {
@@ -60,15 +61,15 @@ func (s *APIVersionSuite) TestMalformedHasNoParts() {
 }
 
 func (s *APIVersionSuite) TestStabilityReadsTheSuffix() {
-	s.Equal(StabilityAlpha, APIVersion("magus.job/v1alpha2").Stability())
-	s.Equal(StabilityBeta, APIVersion("magus.job/v1beta1").Stability())
-	s.Equal(StabilityStable, APIVersion("magus.job/v1").Stability())
+	s.Equal(StabilityAlpha, APIVersion("safetyscissors.job/v1alpha2").Stability())
+	s.Equal(StabilityBeta, APIVersion("safetyscissors.job/v1beta1").Stability())
+	s.Equal(StabilityStable, APIVersion("safetyscissors.job/v1").Stability())
 }
 
 func (s *APIVersionSuite) TestCompareOrdersKubernetesStyle() {
 	ordered := []APIVersion{
-		"magus.job/v1alpha1", "magus.job/v1alpha2", "magus.job/v1alpha10",
-		"magus.job/v1beta1", "magus.job/v1", "magus.job/v2alpha1", "magus.job/v2",
+		"safetyscissors.job/v1alpha1", "safetyscissors.job/v1alpha2", "safetyscissors.job/v1alpha10",
+		"safetyscissors.job/v1beta1", "safetyscissors.job/v1", "safetyscissors.job/v2alpha1", "safetyscissors.job/v2",
 	}
 	for i := 1; i < len(ordered); i++ {
 		s.Equal(-1, ordered[i-1].Compare(ordered[i]), "%s < %s", ordered[i-1], ordered[i])
@@ -77,7 +78,7 @@ func (s *APIVersionSuite) TestCompareOrdersKubernetesStyle() {
 }
 
 func (s *APIVersionSuite) TestCompareEqual() {
-	s.Zero(JobAPIVersion.Compare("magus.job/v1alpha1"))
+	s.Zero(APIVersion(job.APIVersion).Compare("safetyscissors.job/v1alpha1"))
 }
 
 func (s *APIVersionSuite) TestCompareOrdersByGroupFirst() {
@@ -85,29 +86,29 @@ func (s *APIVersionSuite) TestCompareOrdersByGroupFirst() {
 }
 
 func (s *APIVersionSuite) TestCompareSortsMalformedFirst() {
-	s.Equal(-1, APIVersion("13").Compare(JobAPIVersion))
+	s.Equal(-1, APIVersion("13").Compare(APIVersion(job.APIVersion)))
 }
 
 func (s *APIVersionSuite) TestRefuseVersionAcceptsItsOwnVersion() {
-	s.NoError(RefuseVersion(JobAPIVersion, JobAPIVersion, "the row", "delete it"))
+	s.NoError(RefuseVersion(APIVersion(job.APIVersion), APIVersion(job.APIVersion), "the row", "delete it"))
 }
 
 func (s *APIVersionSuite) TestRefuseVersionNamesAMissingVersion() {
-	err := RefuseVersion(JobAPIVersion, "", "the row", "delete the job store")
-	s.EqualError(err, "the row: record carries no apiVersion, and this reader reads only magus.job/v1alpha1: delete the job store")
+	err := RefuseVersion(APIVersion(job.APIVersion), "", "the row", "delete the job store")
+	s.EqualError(err, "the row: record carries no apiVersion, and this reader reads only safetyscissors.job/v1alpha1: delete the job store")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionAsksForANewerMagus() {
-	err := RefuseVersion(JobAPIVersion, "magus.job/v1alpha2", "the row", "delete it")
-	s.EqualError(err, "the row: record is magus.job/v1alpha2, newer than the magus.job/v1alpha1 this reader reads: upgrade magus")
+	err := RefuseVersion(APIVersion(job.APIVersion), "safetyscissors.job/v1alpha2", "the row", "delete it")
+	s.EqualError(err, "the row: record is safetyscissors.job/v1alpha2, newer than the safetyscissors.job/v1alpha1 this reader reads: upgrade magus")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionNamesTheFixForAnOlderVersion() {
-	err := RefuseVersion("magus.job/v1alpha2", JobAPIVersion, "the row", "delete it")
-	s.EqualError(err, "the row: record is magus.job/v1alpha1, and this reader reads only magus.job/v1alpha2: delete it")
+	err := RefuseVersion("safetyscissors.job/v1alpha2", APIVersion(job.APIVersion), "the row", "delete it")
+	s.EqualError(err, "the row: record is safetyscissors.job/v1alpha1, and this reader reads only safetyscissors.job/v1alpha2: delete it")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionNamesTheFixForAnotherGroup() {
-	err := RefuseVersion(JobAPIVersion, "magus.event/v9", "the row", "delete it")
-	s.EqualError(err, "the row: record is magus.event/v9, and this reader reads only magus.job/v1alpha1: delete it")
+	err := RefuseVersion(APIVersion(job.APIVersion), "magus.event/v9", "the row", "delete it")
+	s.EqualError(err, "the row: record is magus.event/v9, and this reader reads only safetyscissors.job/v1alpha1: delete it")
 }

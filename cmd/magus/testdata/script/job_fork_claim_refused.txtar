@@ -21,7 +21,7 @@ stdin $WORK/unversioned.json
 ! exec magus job fork --stdin
 stderr 'MGS3037'
 stderr 'carries no api_version'
-stderr 'add "api_version": "magus\.job/v1alpha1" to the record'
+stderr 'add "api_version": "safetyscissors\.job/v1alpha1" to the record'
 ! stdout .
 exec magus describe job wave/w -o template='{{.job.paths.write}}'
 stdout '^\[pricing/total\.sh pricing/tax\.sh\]$'
@@ -34,11 +34,11 @@ exec magus describe job wave/w -o template='{{.job.paths.write}}'
 stdout '^\[pricing/total\.sh pricing/tax\.sh\]$'
 
 -- wave.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh", "pricing/tax.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh", "pricing/tax.sh"]}, "check": {"target": "test", "project": "."}}
 -- unversioned.json --
 {"id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "refs:total"}]}
 -- claim.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- .gitignore --
 .magus/
 -- magus.yaml --

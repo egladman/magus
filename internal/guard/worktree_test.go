@@ -9,6 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -25,7 +27,7 @@ type worktreeRepo struct {
 	main   string
 	parent string
 	// tries are the attempts the judged store holds.
-	tries []types.Attempt
+	tries []jobtypes.Attempt
 }
 
 func newWorktreeRepository(t *testing.T) worktreeRepo {
@@ -86,17 +88,17 @@ func (r worktreeRepo) commitFiles(dir string, files map[string]string) string {
 }
 
 // judge runs the rule for command from the main checkout, against a job store holding rows.
-func (r worktreeRepo) judge(command string, rows ...types.Job) ShellVerdict {
+func (r worktreeRepo) judge(command string, rows ...jobtypes.Job) ShellVerdict {
 	r.t.Helper()
 	return r.judgeIn(r.main, command, rows...)
 }
 
-func (r worktreeRepo) judgeIn(callDir, command string, rows ...types.Job) ShellVerdict {
+func (r worktreeRepo) judgeIn(callDir, command string, rows ...jobtypes.Job) ShellVerdict {
 	r.t.Helper()
 	return r.judgeWith(Dependencies{}, callDir, command, rows...)
 }
 
-func (r worktreeRepo) judgeWith(deps Dependencies, callDir, command string, rows ...types.Job) ShellVerdict {
+func (r worktreeRepo) judgeWith(deps Dependencies, callDir, command string, rows ...jobtypes.Job) ShellVerdict {
 	r.t.Helper()
 	ctx := job.WithSnapshot(r.t.Context(), job.Snapshot{Rows: rows, Attempts: r.tries})
 	at := location{cacheDir: r.t.TempDir(), workspace: r.main, dir: callDir}
@@ -116,7 +118,7 @@ func rootSession(t *testing.T, spawns map[string]spawnedAgent) Dependencies {
 
 // workerWorktree is a worktree locked the way Claude Code locks an isolated worker's,
 // with the job w1 it was taken for.
-func (r worktreeRepo) workerWorktree(state types.JobState) (string, types.Job) {
+func (r worktreeRepo) workerWorktree(state jobtypes.State) (string, jobtypes.Job) {
 	r.t.Helper()
 	wt := r.addLocked("worker")
 	return wt, workerRow(state, wt)
@@ -132,8 +134,8 @@ func (r worktreeRepo) addLocked(name string) string {
 }
 
 // workerRow is job w1 taken in wt.
-func workerRow(state types.JobState, wt string) types.Job {
-	return types.Job{ID: "w1", State: state, CheckoutRoot: wt}
+func workerRow(state jobtypes.State, wt string) jobtypes.Job {
+	return jobtypes.Job{ID: "w1", State: state, CheckoutRoot: wt}
 }
 
 // spawnedW1 is the record the root's spawn of job w1's worker files.
@@ -170,7 +172,9 @@ func TestWorktreeRemovePassesWhenNothingCanBeLost(t *testing.T) {
 func TestWorktreeRemovePassesAnUngradedRowOnlyWhenNothingCanBeLost(t *testing.T) {
 	r := newWorktreeRepository(t)
 	clean := r.add("clean")
-	row := func(wt string) types.Job { return types.Job{ID: "u", State: types.StateExited, CheckoutRoot: wt} }
+	row := func(wt string) jobtypes.Job {
+		return jobtypes.Job{ID: "u", State: jobtypes.StateExited, CheckoutRoot: wt}
+	}
 	assert.Equal(t, ShellVerdict{}, r.judge("git worktree remove "+clean, row(clean)))
 
 	unlanded := r.add("unlanded")
@@ -201,7 +205,7 @@ func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 	assertRemovalDenied(t, r.judge("git worktree remove "+ahead), "1 commit(s) on it", "--not --remotes origin/main")
 
 	held := r.add("held")
-	live := types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: held}
+	live := jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: held}
 	assertRemovalDenied(t, r.judge("git worktree remove "+held, live), "job w1 (running) was taken in it", "describe job w1")
 
 	locked := r.add("locked")
@@ -232,19 +236,19 @@ func TestWorktreeRemoveRequiresLandedCommitsWhateverTheJobState(t *testing.T) {
 	r := newWorktreeRepository(t)
 	wt := r.add("worker")
 	r.commit(wt)
-	for _, state := range []types.JobState{types.StatePass, types.StateFail, types.StateNoReturn} {
-		assertRemovalDenied(t, r.judge("git worktree remove "+wt, types.Job{ID: "w", State: state, CheckoutRoot: wt}),
+	for _, state := range []jobtypes.State{jobtypes.StatePass, jobtypes.StateFail, jobtypes.StateNoReturn} {
+		assertRemovalDenied(t, r.judge("git worktree remove "+wt, jobtypes.Job{ID: "w", State: state, CheckoutRoot: wt}),
 			"1 commit(s) on it", "1 path(s) they changed read differently in your checkout's HEAD, first worker.txt")
 	}
 
-	v := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt})
+	v := r.judge("git worktree remove "+wt, jobtypes.Job{ID: "w", State: jobtypes.StateExited, CheckoutRoot: wt})
 	assertRemovalDenied(t, v, "1 commit(s) on it")
 	assert.Contains(t, v.Lead, "job w exited without filing a result")
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, hint.JobExit.Argv("w"), v.Next[0].Argv, "an exited job with no result is told to file one")
 
-	r.tries = []types.Attempt{filedTry("w")}
-	filed := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt})
+	r.tries = []jobtypes.Attempt{filedTry("w")}
+	filed := r.judge("git worktree remove "+wt, jobtypes.Job{ID: "w", State: jobtypes.StateExited, CheckoutRoot: wt})
 	assertRemovalDenied(t, filed, "job w (exited)")
 	require.Len(t, filed.Next, 1)
 	assert.Equal(t, hint.JobWait.Argv("w"), filed.Next[0].Argv, "an exited job with a filed result waits for its grade")
@@ -274,7 +278,7 @@ func (s *FinishedWorkerWorktreeSuite) SetupTest() { s.repo = s.repo.of(s.T()) }
 
 func (s *FinishedWorkerWorktreeSuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
 
-func (s *FinishedWorkerWorktreeSuite) assertRemovalForcedTwicePasses(state types.JobState) {
+func (s *FinishedWorkerWorktreeSuite) assertRemovalForcedTwicePasses(state jobtypes.State) {
 	r := s.repo
 	deps := rootSession(s.T(), spawnedW1)
 	for _, command := range []string{
@@ -287,11 +291,11 @@ func (s *FinishedWorkerWorktreeSuite) assertRemovalForcedTwicePasses(state types
 }
 
 func (s *FinishedWorkerWorktreeSuite) TestRemovalForcedTwicePassesForAPassedJob() {
-	s.assertRemovalForcedTwicePasses(types.StatePass)
+	s.assertRemovalForcedTwicePasses(jobtypes.StatePass)
 }
 
 func (s *FinishedWorkerWorktreeSuite) TestRemovalForcedTwicePassesForAFailedJob() {
-	s.assertRemovalForcedTwicePasses(types.StateFail)
+	s.assertRemovalForcedTwicePasses(jobtypes.StateFail)
 }
 
 func (s *FinishedWorkerWorktreeSuite) TestAPlainRemovalIsServedTheForcedTwiceLine() {
@@ -304,7 +308,7 @@ func (s *FinishedWorkerWorktreeSuite) TestAPlainRemovalIsServedTheForcedTwiceLin
 		Why:  "every condition but the lock holds, and the lock is your own finished worker's",
 	}
 	for _, command := range []string{"git worktree remove " + s.wt, "git worktree remove -f " + s.wt} {
-		v := r.judgeWith(deps, r.main, command, workerRow(types.StatePass, s.wt))
+		v := r.judgeWith(deps, r.main, command, workerRow(jobtypes.StatePass, s.wt))
 		assertRemovalDenied(s.T(), v, "locked over the worker your session spawned for job w1")
 		s.Equal([]types.NextStep{want}, v.Next, "%q", command)
 	}
@@ -341,13 +345,13 @@ func (s *UnprovenWorkerLockSuite) SetupTest() { s.repo = s.repo.of(s.T()) }
 
 func (s *UnprovenWorkerLockSuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
 
-func (s *UnprovenWorkerLockSuite) removeForcedTwice(deps Dependencies, wt string, rows ...types.Job) ShellVerdict {
+func (s *UnprovenWorkerLockSuite) removeForcedTwice(deps Dependencies, wt string, rows ...jobtypes.Job) ShellVerdict {
 	return s.repo.judgeWith(deps, s.repo.main, "git worktree remove -f -f "+wt, rows...)
 }
 
 // assertRefusedOverTheLock judges the clean worker's -f -f, its row in state.
-func (s *UnprovenWorkerLockSuite) assertRefusedOverTheLock(deps Dependencies, state types.JobState, rows ...types.Job) ShellVerdict {
-	v := s.removeForcedTwice(deps, s.worker, append([]types.Job{workerRow(state, s.worker)}, rows...)...)
+func (s *UnprovenWorkerLockSuite) assertRefusedOverTheLock(deps Dependencies, state jobtypes.State, rows ...jobtypes.Job) ShellVerdict {
+	v := s.removeForcedTwice(deps, s.worker, append([]jobtypes.Job{workerRow(state, s.worker)}, rows...)...)
 	assertRemovalDenied(s.T(), v, "it is locked (claude agent")
 	return v
 }
@@ -355,39 +359,39 @@ func (s *UnprovenWorkerLockSuite) assertRefusedOverTheLock(deps Dependencies, st
 func (s *UnprovenWorkerLockSuite) TestASubagentCallerIsRefused() {
 	deps := rootSession(s.T(), spawnedW1)
 	deps.caller.Agent = "agent-other"
-	s.assertRefusedOverTheLock(deps, types.StatePass)
+	s.assertRefusedOverTheLock(deps, jobtypes.StatePass)
 }
 
 func (s *UnprovenWorkerLockSuite) TestAnIdentityLessCallerIsRefused() {
 	deps := rootSession(s.T(), spawnedW1)
 	deps.caller = job.Caller{}
-	s.assertRefusedOverTheLock(deps, types.StatePass)
+	s.assertRefusedOverTheLock(deps, jobtypes.StatePass)
 }
 
 func (s *UnprovenWorkerLockSuite) TestACallerActingUnderAForkedLeaseIsRefused() {
 	deps := rootSession(s.T(), spawnedW1)
 	deps.lease = "root/child"
-	child := types.Job{ID: "root/child", Parent: "root", State: types.StateRunning}
-	s.assertRefusedOverTheLock(deps, types.StatePass, child)
+	child := jobtypes.Job{ID: "root/child", Parent: "root", State: jobtypes.StateRunning}
+	s.assertRefusedOverTheLock(deps, jobtypes.StatePass, child)
 }
 
 func (s *UnprovenWorkerLockSuite) TestAnotherSessionsSpawnRecordIsRefused() {
 	deps := rootSession(s.T(), nil)
 	writeSpawnedAgent(hint.NewGate(deps.facts.CacheDir(), FactsKey("claude", "s2")), "agent-a1b2c3", spawnedW1["agent-a1b2c3"])
-	s.assertRefusedOverTheLock(deps, types.StatePass)
+	s.assertRefusedOverTheLock(deps, jobtypes.StatePass)
 }
 
 func (s *UnprovenWorkerLockSuite) TestAnUntrustedSpawnRecordIsRefused() {
 	deps := rootSession(s.T(), map[string]spawnedAgent{"agent-a1b2c3": {Description: "root/worker w1", UntrustedJob: "w1"}})
-	s.assertRefusedOverTheLock(deps, types.StatePass)
+	s.assertRefusedOverTheLock(deps, jobtypes.StatePass)
 }
 
 func (s *UnprovenWorkerLockSuite) TestAJobThatNeverReturnedIsRefused() {
-	s.assertRefusedOverTheLock(rootSession(s.T(), spawnedW1), types.StateNoReturn)
+	s.assertRefusedOverTheLock(rootSession(s.T(), spawnedW1), jobtypes.StateNoReturn)
 }
 
 func (s *UnprovenWorkerLockSuite) TestAnExitedJobIsSentToFileItsResult() {
-	v := s.assertRefusedOverTheLock(rootSession(s.T(), spawnedW1), types.StateExited)
+	v := s.assertRefusedOverTheLock(rootSession(s.T(), spawnedW1), jobtypes.StateExited)
 	s.Contains(v.Lead, "job w1 exited without filing a result")
 	s.Require().Len(v.Next, 1)
 	s.Equal(hint.JobExit.Argv("w1"), v.Next[0].Argv)
@@ -395,22 +399,22 @@ func (s *UnprovenWorkerLockSuite) TestAnExitedJobIsSentToFileItsResult() {
 
 func (s *UnprovenWorkerLockSuite) TestAnExitedJobWithAFiledResultWaitsForItsGrade() {
 	r := s.repo
-	r.tries = []types.Attempt{filedTry("w1")}
-	v := r.judgeWith(rootSession(s.T(), spawnedW1), r.main, "git worktree remove -f -f "+s.worker, workerRow(types.StateExited, s.worker))
+	r.tries = []jobtypes.Attempt{filedTry("w1")}
+	v := r.judgeWith(rootSession(s.T(), spawnedW1), r.main, "git worktree remove -f -f "+s.worker, workerRow(jobtypes.StateExited, s.worker))
 	assertRemovalDenied(s.T(), v, "job w1 (exited) was taken in it", "it is locked (claude agent")
 	s.Require().Len(v.Next, 1)
 	s.Equal(hint.JobWait.Argv("w1"), v.Next[0].Argv)
 }
 
 func (s *UnprovenWorkerLockSuite) TestAMagusCheckoutLockIsRefused() {
-	v := s.removeForcedTwice(rootSession(s.T(), spawnedW1), s.checkout, workerRow(types.StatePass, s.checkout))
+	v := s.removeForcedTwice(rootSession(s.T(), spawnedW1), s.checkout, workerRow(jobtypes.StatePass, s.checkout))
 	assertRemovalDenied(s.T(), v, "it is locked (magus checkout)")
 }
 
 func (s *UnprovenWorkerLockSuite) TestADirtyWorktreeIsRefused() {
 	r := s.repo
 	deps := rootSession(s.T(), spawnedW1)
-	row := workerRow(types.StatePass, s.dirty)
+	row := workerRow(jobtypes.StatePass, s.dirty)
 	assertRemovalDenied(s.T(), s.removeForcedTwice(deps, s.dirty, row), "first wip.txt")
 	v := r.judgeWith(deps, r.main, "git worktree remove "+s.dirty, row)
 	assertRemovalDenied(s.T(), v, "first wip.txt", "locked over the worker")
@@ -418,7 +422,7 @@ func (s *UnprovenWorkerLockSuite) TestADirtyWorktreeIsRefused() {
 }
 
 func (s *UnprovenWorkerLockSuite) TestCommitsYourCheckoutDoesNotHoldAreRefused() {
-	v := s.removeForcedTwice(rootSession(s.T(), spawnedW1), s.ahead, workerRow(types.StatePass, s.ahead))
+	v := s.removeForcedTwice(rootSession(s.T(), spawnedW1), s.ahead, workerRow(jobtypes.StatePass, s.ahead))
 	assertRemovalDenied(s.T(), v, "1 commit(s) on it", "first ahead.txt")
 }
 
@@ -426,7 +430,7 @@ func (s *UnprovenWorkerLockSuite) TestCommitsYourCheckoutDoesNotHoldAreRefused()
 // its own.
 func TestWorktreeRemoveRefusesAPathYourCheckoutChangedAfterThePick(t *testing.T) {
 	r := newWorktreeRepository(t)
-	wt, row := r.workerWorktree(types.StatePass)
+	wt, row := r.workerWorktree(jobtypes.StatePass)
 	picked := r.commitFiles(wt, map[string]string{"a.txt": "worker\n"})
 	r.git(r.main, "cherry-pick", "--no-commit", picked)
 	r.commitFiles(r.main, map[string]string{"extra.txt": "root\n"})
@@ -444,7 +448,7 @@ func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
 	r := newWorktreeRepository(t)
 	wt := r.add("owned")
 	r.git(r.main, "worktree", "lock", "--reason", vcs.CheckoutLockReason, wt)
-	row := types.Job{ID: "w1", State: types.StatePass, CheckoutRoot: wt, Worktree: &types.JobWorktree{Root: wt, Source: r.main}}
+	row := jobtypes.Job{ID: "w1", State: jobtypes.StatePass, CheckoutRoot: wt, Worktree: &jobtypes.Worktree{Root: wt, Source: r.main}}
 	remove := "git worktree remove -f -f " + wt
 
 	root := Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}
@@ -455,22 +459,22 @@ func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
 		assert.Equal(t, hint.JobWait.Argv("w1"), v.Next[0].Argv, "an ended job's checkout goes through its waiter: %q", line)
 	}
 	declared := row
-	declared.State, declared.CheckoutRoot = types.StateDeclared, ""
+	declared.State, declared.CheckoutRoot = jobtypes.StateDeclared, ""
 	v := r.judgeWith(root, r.main, remove, declared)
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, hint.JobExit.Argv("w1"), v.Next[0].Argv, "a job not ended yet is ended through exit")
 
 	foreign := Dependencies{caller: job.Caller{Host: "claude", Session: "s1", Agent: "agent-x"}, lease: "other"}
-	other := types.Job{ID: "other", State: types.StateRunning}
+	other := jobtypes.Job{ID: "other", State: jobtypes.StateRunning}
 	assertRemovalDenied(t, r.judgeWith(foreign, r.main, remove, row, other), "job w1's fork made it")
 }
 
 func TestOwnsCheckoutIsTheHoldersAndTheRoots(t *testing.T) {
 	r := newWorktreeRepository(t)
 	wt := r.add("owned")
-	row := types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: wt, Worktree: &types.JobWorktree{Root: wt, Source: r.main}}
-	other := types.Job{ID: "other", State: types.StateRunning}
-	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row, other}})
+	row := jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: wt, Worktree: &jobtypes.Worktree{Root: wt, Source: r.main}}
+	other := jobtypes.Job{ID: "other", State: jobtypes.StateRunning}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []jobtypes.Job{row, other}})
 	at := location{cacheDir: t.TempDir(), workspace: r.main}
 	caller := job.Caller{Host: "claude", Session: "s1", Agent: "agent-a1b2c3"}
 
@@ -488,7 +492,7 @@ func TestOwnsCheckoutIsTheHoldersAndTheRoots(t *testing.T) {
 
 func TestWorktreeRemovePassesCommitsYourCheckoutHoldsUnderNewHashes(t *testing.T) {
 	r := newWorktreeRepository(t)
-	wt, row := r.workerWorktree(types.StatePass)
+	wt, row := r.workerWorktree(jobtypes.StatePass)
 	picked := r.commitFiles(wt, map[string]string{"a.txt": "worker\n", "x.txt": "x\n"})
 	r.git(r.main, "cherry-pick", "--no-commit", picked)
 	r.commitFiles(r.main, map[string]string{"extra.txt": "root\n"})
@@ -522,7 +526,7 @@ func TestWorktreeUnlockIsJudgedLikeRemove(t *testing.T) {
 	assert.NotContains(t, v.Why, "it is locked")
 
 	held := lock("held")
-	assertRemovalDenied(t, r.judge("git worktree unlock "+held, types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: held}), "job w1 (running)")
+	assertRemovalDenied(t, r.judge("git worktree unlock "+held, jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: held}), "job w1 (running)")
 
 	ahead := lock("ahead")
 	r.commit(ahead)
@@ -602,7 +606,7 @@ func TestWorktreeRemoveLeavesPruneAndHelpAlone(t *testing.T) {
 	r := newWorktreeRepository(t)
 	for _, command := range []string{"git worktree prune", "git worktree list", "git worktree remove --help", "git worktree remove -h", "git help worktree remove"} {
 		assert.Equal(t, ShellVerdict{}, r.judge(command), "%q", command)
-		assert.Empty(t, Evaluate(testDependencies(), command).Deny, "%q", command)
+		assert.Empty(t, Evaluate(t.Context(), testDependencies(), command).Deny, "%q", command)
 	}
 	wt := r.add("gone")
 	require.NoError(t, os.RemoveAll(wt))
@@ -619,7 +623,7 @@ func TestJudgeWorktreeRemove(t *testing.T) {
 	clean, dirty := r.add("clean"), r.add("wip")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty, "wip.txt"), nil, 0o644))
 
-	assert.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
+	assert.NotEqual(t, verdict.Deny, Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
 	v := Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + dirty})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorktreeRemove)), unworded(v))
 }

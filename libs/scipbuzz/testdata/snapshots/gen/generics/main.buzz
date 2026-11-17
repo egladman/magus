@@ -58,7 +58,7 @@
 //         kind Function
 //         display_name wrap
 //         signature_documentation
-//         > fun wrap(t: T, apply: fun::<T>(x:T)>T) > Box
+//         > fun wrap(t: T, apply: fun::<T>(x:T)>T) > Box::<T>
 //         ^ definition local 3
 //           kind Parameter
 //           display_name t

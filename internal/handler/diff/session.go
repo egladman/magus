@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	difftypes "github.com/egladman/magus/types/diff"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,13 +20,15 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
 )
 
 // patchSource is the narrow consumer contract the diff handler needs from the console
@@ -570,7 +571,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	handler.LimitRequestBody(w, r)
 	var req reviewSessionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := codec.NewDecoder(r.Body).Decode(&req); err != nil {
 		handler.Refuse(w, r, rpcerr.Invalid("the request body is not the JSON a review op takes: "+err.Error()))
 		return
 	}
@@ -604,7 +605,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		sess = h.Sessions.AddComment(h.Root, difftypes.Comment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
 			Anchor: h.Sessions.Anchor(h.Root, req.Path, req.Line),
-			Origin: trail.StampOrigin(r.Context(), types.Origin{}),
+			Origin: trail.StampOrigin(r.Context(), job.Origin{}),
 		}, difftypes.AuthorUnattributed)
 		if h.Telemetry != nil {
 			h.Telemetry.RecordReviewRemark(r.Context(), string(difftypes.AuthorUnattributed))

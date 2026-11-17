@@ -12,7 +12,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 )
 
@@ -147,7 +147,7 @@ func readIndexJSON(path string) (ocispec.Index, error) {
 		return ocispec.Index{}, err
 	}
 	var m ocispec.ImageLayout
-	if err := json.Unmarshal(marker, &m); err != nil {
+	if err := codec.Unmarshal(marker, &m); err != nil {
 		return ocispec.Index{}, fmt.Errorf("%s: oci-layout: %w", path, err)
 	}
 	if m.Version != layoutVersion {
@@ -158,7 +158,7 @@ func readIndexJSON(path string) (ocispec.Index, error) {
 		return ocispec.Index{}, err
 	}
 	var idx ocispec.Index
-	if err := json.Unmarshal(raw, &idx); err != nil {
+	if err := codec.Unmarshal(raw, &idx); err != nil {
 		return ocispec.Index{}, fmt.Errorf("%s: index.json: %w", path, err)
 	}
 	return idx, nil
@@ -174,7 +174,7 @@ func (l Layout) subject(ctx context.Context, d ocispec.Descriptor) (digest.Diges
 	var m struct {
 		Subject *ocispec.Descriptor `json:"subject"`
 	}
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := codec.Unmarshal(data, &m); err != nil {
 		return "", fmt.Errorf("%s: manifest %s: %w", l.Path, d.Digest, err)
 	}
 	if m.Subject == nil {
@@ -232,7 +232,7 @@ func (l Layout) index(ctx context.Context, d ocispec.Descriptor) (ocispec.Index,
 		return ocispec.Index{}, err
 	}
 	var idx ocispec.Index
-	if err := json.Unmarshal(data, &idx); err != nil {
+	if err := codec.Unmarshal(data, &idx); err != nil {
 		return ocispec.Index{}, fmt.Errorf("%s: index %s: %w", l.Path, d.Digest, err)
 	}
 	return idx, nil
@@ -316,7 +316,7 @@ func (l Layout) imageManifest(ctx context.Context, desc ocispec.Descriptor) (oci
 		return ocispec.Manifest{}, err
 	}
 	var man ocispec.Manifest
-	if err := json.Unmarshal(data, &man); err != nil {
+	if err := codec.Unmarshal(data, &man); err != nil {
 		return ocispec.Manifest{}, fmt.Errorf("%s: manifest %s: %w", l.Path, desc.Digest, err)
 	}
 	if !isImageConfig(man.Config.MediaType) {
@@ -333,7 +333,7 @@ func (l Layout) config(ctx context.Context, desc ocispec.Descriptor) (ocispec.Im
 		return ocispec.Image{}, nil, err
 	}
 	var cfg ocispec.Image
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := codec.Unmarshal(data, &cfg); err != nil {
 		return ocispec.Image{}, nil, fmt.Errorf("%s: config %s: %w", l.Path, desc.Digest, err)
 	}
 	return cfg, data, nil
@@ -386,7 +386,7 @@ func (l Layout) walk(ctx context.Context, visit func(d ocispec.Descriptor, manif
 				return err
 			}
 			var man ocispec.Manifest
-			if err := json.Unmarshal(data, &man); err != nil {
+			if err := codec.Unmarshal(data, &man); err != nil {
 				return fmt.Errorf("manifest %s: %w", d.Digest, err)
 			}
 			for _, b := range slices.Concat([]ocispec.Descriptor{man.Config}, man.Layers) {

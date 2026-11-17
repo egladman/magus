@@ -533,6 +533,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_INVOCATION_ANCESTORS**
 : The comma-separated invocations a nested magus runs underneath
 
+**MAGUS_BROKER_SPAWN_TRAP**
+: Set by unit tests to a file: SpawnBroker appends a line to it and fails instead of starting a broker
+
 **MAGUS_BOOTSTRAP_EXEC_DONE**
 : Set when magus replaces itself with a workspace-local ./magus, so the replacement never hops again
 

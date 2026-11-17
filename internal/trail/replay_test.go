@@ -2,13 +2,18 @@ package trail
 
 import (
 	"context"
-	"github.com/egladman/magus/types/diff"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -20,6 +25,48 @@ func record(t *testing.T, base string, c AgentCommand) {
 	AppendAgentCommand(context.Background(), base, c)
 }
 
+// replayed is replayTrail over a store whose every blob decodes.
+func replayed(t *testing.T, root, base string, paths []string, limit int) map[string][]diff.Touch {
+	t.Helper()
+	got, err := replayTrail(t.Context(), root, base, paths, limit)
+	require.NoError(t, err)
+	return got
+}
+
+// recordUndecodable writes an agent command whose request blob is not JSON.
+func recordUndecodable(t *testing.T, base string) string {
+	t.Helper()
+	ref, _ := WriteBlob(t.Context(), base, "agent", []byte("not json"))
+	Append(t.Context(), base, trailtypes.Event{Ts: 1, Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Action: toolShell, RequestRef: ref})
+	return ref
+}
+
+// A blob that does not decode is named, and the touches the rest give are still returned.
+func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolWrite, Path: "magus.go"})
+	ref := recordUndecodable(t, base)
+
+	got, err := replayTrail(t.Context(), "", base, []string{"magus.go"}, 100)
+
+	var undecodable *blobUndecodableError
+	require.ErrorAs(t, err, &undecodable)
+	assert.Equal(t, ref, undecodable.Ref)
+	assert.Len(t, got["magus.go"], 1)
+}
+
+func TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts(t *testing.T) {
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "a.go"})
+	recordUndecodable(t, base)
+
+	reads, writes, shell, err := ObservedCounts(t.Context(), base, 100)
+
+	var undecodable *blobUndecodableError
+	require.ErrorAs(t, err, &undecodable)
+	assert.Equal(t, [3]int{1, 0, 0}, [3]int{reads, writes, shell})
+}
+
 func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: toolRead, Path: "internal/cache/output.go"})
@@ -27,7 +74,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolShell, Command: "go test ./internal/cache/"})
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: toolWrite, Path: "magus.go"})
 
-	got := replayTrail("", base, []string{"magus.go"}, 100)
+	got := replayed(t, "", base, []string{"magus.go"}, 100)
 	touches := got["magus.go"]
 	require.Len(t, touches, 1)
 
@@ -54,7 +101,7 @@ func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "/usr/local/bin/psql --password=hunter2"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "magus.go"})
 
-	touches := replayTrail("", base, []string{"magus.go"}, 100)["magus.go"]
+	touches := replayed(t, "", base, []string{"magus.go"}, 100)["magus.go"]
 	require.Len(t, touches, 1)
 
 	// Most recent first, and each reduced to its program: the leading VAR=value assignment is
@@ -92,7 +139,7 @@ func TestReplayIgnoresReadsThatCameAfterTheWrite(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "after.go"})
 
-	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, []string{"before.go"}, touches[0].Read)
 	assert.NotContains(t, touches[0].Read, "after.go")
@@ -106,7 +153,7 @@ func TestReplayDropsTheWrittenFileFromItsOwnReadList(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "context.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 
-	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, []string{"context.go"}, touches[0].Read)
 }
@@ -119,7 +166,7 @@ func TestReplayKeepsOneTouchPerSession(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "second.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 
-	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1, "one session is one story")
 	// The LAST write wins, so its read list is the one current at that moment.
 	assert.Contains(t, touches[0].Read, "second.go")
@@ -132,7 +179,7 @@ func TestReplaySeparatesSessions(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s2", Host: "codex", Tool: toolRead, Path: "b.go"})
 	record(t, base, AgentCommand{Session: "s2", Host: "codex", Tool: toolWrite, Path: "target.go"})
 
-	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 2)
 	hosts := []string{touches[0].Host, touches[1].Host}
 	assert.ElementsMatch(t, []string{"claude-code", "codex"}, hosts)
@@ -152,7 +199,7 @@ func TestReplaySkipsEventsWithNoSession(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Tool: toolRead, Path: "a.go"})
 	record(t, base, AgentCommand{Tool: toolWrite, Path: "target.go"})
-	assert.Empty(t, replayTrail("", base, []string{"target.go"}, 100))
+	assert.Empty(t, replayed(t, "", base, []string{"target.go"}, 100))
 }
 
 func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
@@ -160,7 +207,7 @@ func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "wanted.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "unwanted.go"})
 
-	got := replayTrail("", base, []string{"wanted.go"}, 100)
+	got := replayed(t, "", base, []string{"wanted.go"}, 100)
 	assert.Len(t, got, 1)
 	assert.Contains(t, got, "wanted.go")
 }
@@ -174,7 +221,7 @@ func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "other.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 
-	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, []string{"other.go", "same.go"}, touches[0].Read)
 }
@@ -182,22 +229,22 @@ func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 // A workspace whose agents have no guard hook wired is the normal case, and a review has to
 // open anyway.
 func TestReplayOnAnEmptyTrailIsEmptyNotAnError(t *testing.T) {
-	assert.Empty(t, replayTrail("", t.TempDir(), []string{"anything.go"}, 100))
+	assert.Empty(t, replayed(t, "", t.TempDir(), []string{"anything.go"}, 100))
 }
 
 // replayLoaded answers the same question from a loaded transcript: the reads and programs
 // that preceded a write, ordered by the host's clock rather than by arrival.
 func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	dir := t.TempDir()
-	_, err := sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{
+	_, err := session.LoadEvents(t.Context(), dir, []session.LoadEvent{
 		// Handed out of order: the host clock is what sequences them.
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
-	}, sessions.InvocationStart{})
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
+	}, session.InvocationStart{})
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	touches := replayLoaded(fold, []string{"magus.go"})["magus.go"]
@@ -222,15 +269,15 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
-		{Session: "s2", Event: sessions.AgentEvent{Host: "codex", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
-	}, sessions.InvocationStart{})
+	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
+		{Session: "s2", Event: session.AgentEvent{Host: "codex", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
+	}, session.InvocationStart{})
 	require.NoError(t, err)
 
 	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}, {Path: "untouched.go"}}}
-	AttachTouches(&rev, root, base)
+	require.NoError(t, AttachTouches(t.Context(), &rev, root, base))
 
 	got := rev.Files[0].Touches
 	require.Len(t, got, 2, "one entry per session, whichever store saw it")
@@ -243,7 +290,7 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 	testkit.Isolate(t)
 	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}}}
-	AttachTouches(&rev, t.TempDir(), t.TempDir())
+	require.NoError(t, AttachTouches(t.Context(), &rev, t.TempDir(), t.TempDir()))
 	assert.Nil(t, rev.Files[0].Touches)
 }
 
@@ -251,12 +298,13 @@ func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 // in this checkout, under which lease, and whom it handed work to.
 func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "ls", Decision: "pass", Lease: "fleet/w1"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "git commit -m x", Decision: "deny", Lease: "fleet/w1"})
-	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "rm -rf", Decision: "deny"})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "git commit -m x", Decision: verdict.Deny, Lease: "fleet/w1"})
+	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "rm -rf", Decision: verdict.Deny})
 	AppendAgentSpawn(context.Background(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
 
-	got := ForSession(base, "s1", 100)
+	got, err := ForSession(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
 	require.Len(t, got.Spawns, 1)
 	require.Len(t, got.Calls, 2)
 	assert.Equal(t, SessionTrail{
@@ -265,18 +313,35 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 		Leases:   []string{"fleet/w1", "fleet/w1-child"},
 		Spawns:   []SessionSpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
 		Calls: []SessionCall{
-			{At: got.Calls[0].At, Decision: "pass", Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
-			{At: got.Calls[1].At, Decision: "deny", Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+			{At: got.Calls[0].At, Decision: verdict.Defer, Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+			{At: got.Calls[1].At, Decision: verdict.Deny, Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
 		},
 	}, got)
 
-	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
-	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
+	none, err := ForSession(t.Context(), base, "", 100)
+	require.NoError(t, err)
+	assert.Zero(t, none.Commands, "no session id joins nothing")
+	absent, err := ForSession(t.Context(), t.TempDir(), "s1", 100)
+	require.NoError(t, err)
+	assert.Zero(t, absent.Commands, "an absent store is empty, not an error")
+}
+
+// A response blob written before the defer rename holds "pass", and the read refuses it
+// with the store to clear rather than count the call as undecided.
+func TestForSessionRefusesARetiredDecision(t *testing.T) {
+	base := t.TempDir()
+	ref, _ := WriteBlob(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
+	Append(t.Context(), base, trailtypes.Event{Ts: 1, Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}, Action: toolShell, ResponseRef: ref})
+
+	_, err := ForSession(t.Context(), base, "s1", 100)
+	var retired *retiredDecisionError
+	require.ErrorAs(t, err, &retired)
+	assert.Equal(t, retiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: "pass"}, *retired)
 }
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
 	base := t.TempDir()
-	shadow := map[types.GuardProfile]types.GuardDecision{types.GuardProfileStandard: types.GuardAdvise}
+	shadow := map[types.GuardProfile]verdict.Decision{types.GuardProfileStandard: verdict.Advise}
 	advised := types.AgentFacts{
 		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 300_000, ContextModel: "claude-opus-5-5",
 		Billing: types.AgentBillingMetered, Shadow: shadow,
@@ -284,16 +349,17 @@ func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
 	chars := 5000
 	passed := types.AgentFacts{Thread: types.AgentThreadMain, DelegableClass: types.DelegableSearch, ResultChars: &chars}
 	record(t, base, AgentCommand{
-		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "advise", Rule: "root-heavy-command", AgentFacts: advised,
+		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: verdict.Advise, Rule: "root-heavy-command", AgentFacts: advised,
 	})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "pass", AgentFacts: passed})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: verdict.Defer, AgentFacts: passed})
 	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
 	AppendAgentSpawn(t.Context(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
 
-	got := ForSession(base, "s1", 100)
+	got, err := ForSession(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
 	require.Len(t, got.Calls, 2, "another session's calls are not this one's")
-	assert.Equal(t, SessionCall{At: got.Calls[0].At, Decision: "advise", Rule: "root-heavy-command", Action: toolShell, AgentFacts: advised}, got.Calls[0])
-	assert.Equal(t, SessionCall{At: got.Calls[1].At, Decision: "pass", Action: toolShell, AgentFacts: passed}, got.Calls[1])
+	assert.Equal(t, SessionCall{At: got.Calls[0].At, Decision: verdict.Advise, Rule: "root-heavy-command", Action: toolShell, AgentFacts: advised}, got.Calls[0])
+	assert.Equal(t, SessionCall{At: got.Calls[1].At, Decision: verdict.Defer, Action: toolShell, AgentFacts: passed}, got.Calls[1])
 	require.Len(t, got.Spawns, 1)
 	assert.Equal(t, SessionSpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
 }
@@ -371,7 +437,8 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	record(s.T(), base, AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 5,
 		AgentFacts: types.AgentFacts{CallDigest: "c", Unobserved: []string{"result"}}})
 
-	got := ForSession(base, "s1", 100)
+	got, err := ForSession(s.T().Context(), base, "s1", 100)
+	s.Require().NoError(err)
 	s.Require().Len(got.Calls, 3)
 	s.Equal("w1", got.Calls[0].Worker)
 	s.Equal([]string{"result"}, got.Calls[2].Unobserved)
@@ -405,7 +472,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
 	for range 200 {
-		Append(t.Context(), base, Event{Kind: KindJob, Ts: time.Now().UnixMilli()})
+		Append(t.Context(), base, trailtypes.Event{Kind: trailtypes.KindJob, Ts: time.Now().UnixMilli()})
 	}
 
 	got, ok := LastAgentActivity(base)
@@ -413,7 +480,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
-	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Origin: types.Origin{Session: "s1"}})
+	Append(t.Context(), stamped, trailtypes.Event{Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}})
 	_, ok = LastAgentActivity(stamped)
 	assert.False(t, ok, "an observation with no timestamp has no age to report")
 }

@@ -5,14 +5,16 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	trailrecord "github.com/egladman/magus/types/trail"
 )
 
 // FeedbackWindow selects one session's observations: the events inside [Since, Until]
@@ -56,15 +58,16 @@ func FeedbackBases(checkouts []string, cacheRel string, since time.Time) []strin
 
 // ReadFeedback folds the trails at bases into one session's guard record. A trail that
 // cannot be read contributes nothing; an event whose blobs are gone is skipped, since the
-// trail rotates blobs out with the events that cite them.
+// trail rotates blobs out with the events that cite them. A request blob that is there and
+// does not decode is the error.
 //
 // Checkouts on the result names the bases that held at least one event of the session.
-func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
+func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 	since, until := w.Since.UnixMilli(), w.Until.UnixMilli()
-	out := trailtypes.Trail{Start: since, End: until, Session: w.Session}
+	out := trailrecord.Trail{Start: since, End: until, Session: w.Session}
 	type sourced struct {
 		base string
-		e    Event
+		e    trailtypes.Event
 	}
 	var events []sourced
 	var newest int64
@@ -74,7 +77,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 			return out, err
 		}
 		for _, e := range read {
-			if e.Kind != KindAgentCommand && e.Kind != KindAgentSpawn {
+			if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn {
 				continue
 			}
 			events = append(events, sourced{base, e})
@@ -100,18 +103,22 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 			out.Checkouts = append(out.Checkouts, filepath.Dir(s.base))
 		}
 		switch e.Kind {
-		case KindAgentCommand:
-			if obs, ok := feedbackObservation(s.base, e); ok {
+		case trailtypes.KindAgentCommand:
+			obs, ok, err := feedbackObservation(s.base, e)
+			if err != nil {
+				return out, err
+			}
+			if ok {
 				out.Observations = append(out.Observations, obs)
 			}
-		case KindAgentSpawn:
+		case trailtypes.KindAgentSpawn:
 			if e.Action == ActionAgentContinue {
 				continue
 			}
-			sp := trailtypes.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
-			if raw, err := ReadBlob(s.base, e.RequestRef); err == nil {
+			sp := trailrecord.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
+			if raw, err := trailtypes.ReadBlob(s.base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
-				if json.Unmarshal(raw, &req) == nil {
+				if codec.Unmarshal(raw, &req) == nil {
 					sp.Model = req.DeclaredModel
 				}
 			}
@@ -122,35 +129,51 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 	return out, nil
 }
 
-func feedbackObservation(base string, e Event) (trailtypes.Observation, bool) {
+// feedbackObservation reads one agent-command event's blobs. It reports false for an event
+// that recorded no request blob or whose blob is gone. A request blob that cannot be read or decoded is its error: a
+// [*blobUndecodableError], or a [*retiredDecisionError] for one holding a retired guard
+// decision.
+func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool, error) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
-	raw, err := ReadBlob(base, e.RequestRef)
-	if err != nil || json.Unmarshal(raw, &req) != nil {
-		return trailtypes.Observation{}, false
+	var retired *retiredDecisionError
+	if e.RequestRef == "" {
+		return trailrecord.Observation{}, false, nil
+	}
+	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
+	if errors.Is(err, fs.ErrNotExist) {
+		return trailrecord.Observation{}, false, nil
+	}
+	if err != nil {
+		return trailrecord.Observation{}, false, err
+	}
+	if err := decodeAgentBlob(base, e.RequestRef, raw, &req); err != nil {
+		return trailrecord.Observation{}, false, err
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {
-		if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
-			_ = json.Unmarshal(raw, &resp)
+		if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
+			if err := decodeAgentBlob(base, e.ResponseRef, raw, &resp); errors.As(err, &retired) {
+				return trailrecord.Observation{}, false, err
+			}
 		}
 	}
-	obs := trailtypes.Observation{
+	obs := trailrecord.Observation{
 		At: e.Ts, Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
-		Decision: resp.Decision, Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,
+		Decision: string(resp.Decision), Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,
 		Nexts: servedNexts(fmt.Sprintf("%s\n%s", resp.Reason, resp.Context)),
 	}
 	if req.Command != "" {
 		obs.Shape = CommandShape(req.Command)
 		obs.Shapes = CommandShapes(req.Command)
 	}
-	return obs, true
+	return obs, true, nil
 }
 
 // eventsInWindow decodes the events of the trail at base whose Ts falls in [since, until],
 // oldest first. A missing trail is no events.
-func eventsInWindow(base string, since, until int64) ([]Event, error) {
+func eventsInWindow(base string, since, until int64) ([]trailtypes.Event, error) {
 	f, err := os.Open(eventsPath(base))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -159,7 +182,7 @@ func eventsInWindow(base string, since, until int64) ([]Event, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var out []Event
+	var out []trailtypes.Event
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -167,8 +190,8 @@ func eventsInWindow(base string, since, until int64) ([]Event, error) {
 		if len(line) == 0 {
 			continue
 		}
-		var e Event
-		if json.Unmarshal(line, &e) != nil || e.Ts < since || e.Ts > until {
+		var e trailtypes.Event
+		if codec.Unmarshal(line, &e) != nil || e.Ts < since || e.Ts > until {
 			continue
 		}
 		out = append(out, e)

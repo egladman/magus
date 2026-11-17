@@ -60,6 +60,12 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             why: "the apiVersion, kind and conditions envelope records carry; no figure passes through it")
         .except([magus\graph().dir("libs/proofread")],
             why: "the prose judge; a figure's text is not judged by it")
+        .except([magus\graph().dir("libs/codec")],
+            why: "the JSON encoding records carry on the type; no figure passes through it")
+        .except([magus\graph().dir("libs/safetyscissors")],
+            why: "the job, lease and sandbox SDK; the job plan figure draws through internal/job")
+        .except([magus\graph().dir("libs/secrets")],
+            why: "the secret store; no figure passes through it")
         .except([magus\graph().dir("libs/xdg")],
             why: "the user config, state and cache directories; no figure passes through them")
         .except([magus\graph().dir("libs/embed")],

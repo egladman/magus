@@ -304,7 +304,7 @@ func configMCPConnectorCreate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
-	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: types.GrantConnector, TTL: ttl}, false)
+	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: auth.AccessConnector(), TTL: ttl}, false)
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
@@ -410,7 +410,7 @@ func tokenRevoke(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	removed, err := store.Revoke(types.GrantOperator, rest[0])
+	removed, err := store.Revoke(auth.AccessOperator(), rest[0])
 	if err != nil {
 		return fmt.Errorf("magus %s: %w", cmd, err)
 	}
@@ -442,11 +442,11 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 	if code {
 		mint, action = store.MintCode, "link.code"
 	}
-	secret, rec, err := mint(types.GrantOperator, req)
+	secret, rec, err := mint(auth.AccessOperator(), req)
 	if err != nil {
 		return "", auth.Token{}, err
 	}
-	operator := types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}
+	operator := auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}
 	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
 	// Revealed here because every caller prints it to stdout: that is the hand-out.
 	return secret.Reveal(), rec, nil
@@ -823,7 +823,7 @@ func configTokenGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
-	operator := types.Credential{Kind: types.KindOperator, ID: auth.SecretID(tok), Grant: types.GrantOperator}
+	operator := auth.Credential{Kind: auth.KindOperator, ID: auth.SecretID(tok), Grant: auth.AccessOperator()}
 	auditMint("cli.generate", trail.MintRecord{Minted: operator, Minter: operator})
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
@@ -935,7 +935,7 @@ func configTokenStatus(args []string) error {
 // trades it for a console=write token living console.LinkTokenLifetime, so neither the
 // operator secret nor a token ever reaches a browser's argv.
 func mintConsoleLinkCode() (string, error) {
-	code, _, err := mintToken(auth.MintRequest{Grant: types.GrantConsole, TTL: console.LinkTokenLifetime}, true)
+	code, _, err := mintToken(auth.MintRequest{Grant: auth.AccessConsole(), TTL: console.LinkTokenLifetime}, true)
 	return code, err
 }
 
@@ -1036,9 +1036,9 @@ func configConsoleTokenCreate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus config console token create: %w", err)
 	}
-	grant := types.GrantConsole
+	grant := auth.AccessConsole()
 	if cf.Viewer {
-		grant = types.GrantViewer
+		grant = auth.AccessViewer()
 	}
 	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: grant, TTL: ttl}, cf.Code)
 	if err != nil {
@@ -1052,7 +1052,7 @@ func configConsoleTokenCreate(args []string) error {
 		return nil
 	}
 	printMinted("magus config console token create", secret, rec)
-	if grant == types.GrantViewer {
+	if grant == auth.AccessViewer() {
 		slog.Info("Grant console=read: it can READ the console and cannot submit jobs, edit memory,\nor open a share. It is refused at /mcp.", attr.Notice(""))
 	} else {
 		slog.Info("Grant console=write: it reaches every console app and is refused at /mcp.", attr.Notice(""))

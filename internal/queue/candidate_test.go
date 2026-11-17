@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -245,7 +246,7 @@ func TestMergeInAutoResolvesALowRiskSourceFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"gen/a.go"}, settled)
 	assert.Equal(t, []settledSource{{path: "CHANGELOG.md", verdict: chVerdict, res: magustypes.MergeResolution{Content: []byte("a\np\nq\nz\n"),
-		Regions: []magustypes.MergeRegion{{Locations: []magustypes.Location{{Path: "CHANGELOG.md", Declaration: magustypes.Preamble}}, Kind: magustypes.MergeBothAdded}}}}}, resolved)
+		Regions: []magustypes.MergeRegion{{Locations: []job.Location{{Path: "CHANGELOG.md", Declaration: job.Preamble}}, Kind: magustypes.MergeBothAdded}}}}}, resolved)
 	assert.Equal(t, chNote, resolvedNote(resolved))
 	written, err := os.ReadFile(filepath.Join(dir, "CHANGELOG.md"))
 	require.NoError(t, err)

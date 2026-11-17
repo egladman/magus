@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -95,14 +96,14 @@ func (s *FailedProvisionSuite) SetupTest() {
 }
 
 // failed bootstraps wt, which fails: the forker declares no hook.
-func (s *FailedProvisionSuite) failed(wt types.JobWorktree, made bool) error {
+func (s *FailedProvisionSuite) failed(wt job.Worktree, made bool) error {
 	return FailedProvision(s.T().Context(), s.store, wt, made, bootstrapCheckout(s.T().Context(), lowDisk, "false", s.repo.Root(), wt.Root))
 }
 
 func (s *FailedProvisionSuite) TestAnAdoptedCheckoutStaysAndTheErrorSaysSo() {
 	dir := s.repo.AddWorktree("adopted").Root()
 
-	err := s.failed(types.JobWorktree{Root: dir, Source: s.repo.Root(), Base: s.repo.Head()}, false)
+	err := s.failed(job.Worktree{Root: dir, Source: s.repo.Root(), Base: s.repo.Head()}, false)
 
 	s.Require().ErrorContains(err, NoCheckoutHook)
 	s.NotContains(err.Error(), "removed")

@@ -8,36 +8,36 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/figure"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 type PlanFigureSuite struct{ suite.Suite }
 
 func TestPlanFigureSuite(t *testing.T) { suite.Run(t, new(PlanFigureSuite)) }
 
-func planRow(id string, created int64, state types.JobState) types.Job {
-	return types.Job{ID: id, Created: created, State: state}
+func planRow(id string, created int64, state job.State) job.Job {
+	return job.Job{ID: id, Created: created, State: state}
 }
 
 // planOfSixteen is shaped like a real wave: an integrator merging ten
 // jobs, a forked pair, a dependency and three loners.
-func planOfSixteen() []types.Job {
-	var rows []types.Job
-	merge := planRow("integrate-wave", 100, types.StateRunning)
+func planOfSixteen() []job.Job {
+	var rows []job.Job
+	merge := planRow("integrate-wave", 100, job.StateRunning)
 	for i := range 10 {
 		id := fmt.Sprintf("wave-%02d", i)
 		merge.Integrates = append(merge.Integrates, id)
-		rows = append(rows, planRow(id, int64(i+1), types.StateExited))
+		rows = append(rows, planRow(id, int64(i+1), job.StateExited))
 	}
 	rows = append(rows, merge)
-	lead := planRow("lead", 20, types.StateRunning)
-	scout := planRow("lead/scout", 21, types.StateExited)
+	lead := planRow("lead", 20, job.StateRunning)
+	scout := planRow("lead/scout", 21, job.StateExited)
 	scout.Parent = "lead"
-	after := planRow("after-lead", 22, types.StateDeclared)
+	after := planRow("after-lead", 22, job.StateDeclared)
 	after.DependsOn = []string{"lead"}
 	rows = append(rows, lead, scout, after)
 	for i := range 2 {
-		rows = append(rows, planRow(fmt.Sprintf("loner-%d", i), int64(30+i), types.StateExited))
+		rows = append(rows, planRow(fmt.Sprintf("loner-%d", i), int64(30+i), job.StateExited))
 	}
 	return rows
 }
@@ -56,14 +56,14 @@ func drawnJobs(figs []*PlanFigure) map[string]int {
 }
 
 func (s *PlanFigureSuite) TestASmallPlanIsOneFigureWithEveryEdgeKind() {
-	lead := planRow("lead", 1, types.StateRunning)
-	child := planRow("child", 2, types.StateDeclared)
+	lead := planRow("lead", 1, job.StateRunning)
+	child := planRow("child", 2, job.StateDeclared)
 	child.Parent = "lead"
-	merge := planRow("merge", 3, types.StateDeclared)
+	merge := planRow("merge", 3, job.StateDeclared)
 	merge.Integrates = []string{"child"}
 	merge.DependsOn = []string{"lead"}
 
-	figs := NewPlan([]types.Job{merge, child, lead}).Figures()
+	figs := NewPlan([]job.Job{merge, child, lead}).Figures()
 
 	s.Require().Len(figs, 1)
 	s.Equal(&PlanFigure{
@@ -95,7 +95,7 @@ func (s *PlanFigureSuite) TestAnIntegratorGroupsTheJobsItMerges() {
 func (s *PlanFigureSuite) TestEveryFigureFitsTheBudgetsAndDrawsEachJobOnce() {
 	rows := planOfSixteen()
 	for i := range 70 {
-		rows = append(rows, planRow(fmt.Sprintf("solo-%02d", i), int64(200+i), types.StatePass))
+		rows = append(rows, planRow(fmt.Sprintf("solo-%02d", i), int64(200+i), job.StatePass))
 	}
 
 	figs := NewPlan(rows).Figures()
@@ -138,12 +138,12 @@ func (s *PlanFigureSuite) TestTheSplitIgnoresRowOrder() {
 }
 
 func (s *PlanFigureSuite) TestAMergeCycleStillEndsInATree() {
-	a := planRow("a", 1, types.StateRunning)
+	a := planRow("a", 1, job.StateRunning)
 	a.Integrates = []string{"b"}
-	b := planRow("b", 2, types.StateRunning)
+	b := planRow("b", 2, job.StateRunning)
 	b.Integrates = []string{"a"}
 
-	p := NewPlan([]types.Job{a, b})
+	p := NewPlan([]job.Job{a, b})
 
 	s.Equal([]string{"a", "b"}, p.subtree("a"))
 	s.Equal([]planEdge{{Src: "a", Dst: "b", Kind: planMerges}, {Src: "b", Dst: "a", Kind: planMerges}}, p.edges)
@@ -151,7 +151,7 @@ func (s *PlanFigureSuite) TestAMergeCycleStillEndsInATree() {
 
 func (s *PlanFigureSuite) TestTheRecordLinksAGroupAndDashesAnEdgeOfAfter() {
 	figs := NewPlan(planOfSixteen()).Figures()
-	holder := func(types.Job) string { return "me" }
+	holder := func(job.Job) string { return "me" }
 
 	rec := NewPlan(planOfSixteen()).FigureRecord(figs[0], holder)
 

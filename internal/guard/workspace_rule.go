@@ -15,16 +15,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-)
-
-// The decisions a GuardJudgment carries. A workspace rule answers advise or deny, spelled by
-// types; pass and ask exist only on the wire.
-const (
-	decisionPass   = "pass"
-	decisionAsk    = "ask"
-	decisionAdvise = string(types.GuardAdvise)
-	decisionDeny   = string(types.GuardDeny)
 )
 
 // The sides a verdict can be decided by, recorded on the trail so a deny links to the
@@ -42,7 +34,7 @@ const (
 const decidedByJoin = "+"
 
 // ruleCall is one side's workspace rule bound to the request it judges.
-type ruleCall func(ctx context.Context) (types.GuardVerdict, error)
+type ruleCall func(ctx context.Context) (verdict.Verdict, error)
 
 // functionSeam names one function-valued workspace rule for what the guard tells a reader.
 type functionSeam string
@@ -57,7 +49,7 @@ func (s functionSeam) member() string { return `magus\guard.` + string(s) }
 
 // rulesAnswer is what a workspace's function rule said about one call.
 type rulesAnswer struct {
-	answer types.GuardVerdict
+	answer verdict.Verdict
 	// by is the side whose answer stands, "" when none tightened anything.
 	by string
 	// answered are the sides whose rule ran and answered, in the order asked.
@@ -137,7 +129,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	ask := func(by, phase string, rule ruleCall) {
 		log.begin(phase)
 		budget, bounded := untilReserve(ctx)
-		if out.answer.Decision == types.GuardDeny {
+		if out.answer.Decision == verdict.Deny {
 			return
 		}
 		lapse := ruleLapse{side: by, budget: budget, said: lapseWording{"the " + sideName(seam, by), "answer"}, failed: lapseWording{"the rule", "answer"}}
@@ -162,7 +154,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 			return
 		}
 		out.answered = append(out.answered, by)
-		merged := types.StricterGuardVerdict(out.answer, got)
+		merged := verdict.Stricter(out.answer, got)
 		if merged.Decision != out.answer.Decision {
 			out.by = by
 		}
@@ -248,14 +240,14 @@ func (a *rulesAnswer) denyShort(ctx context.Context, call func() judgedCall, at 
 // verb or a commit, the calls that land a change, and reports whether it denied. Any other
 // call, a spawn or a write included, stands on what answered, with the note naming the raise.
 func denyRaised(asked *rulesAnswer, call judgedCall) bool {
-	if len(asked.raised) == 0 || asked.answer.Decision == types.GuardDeny || call.seam != seamCommand {
+	if len(asked.raised) == 0 || asked.answer.Decision == verdict.Deny || call.seam != seamCommand {
 		return false
 	}
 	verb := cmp.Or(call.verb, commitVerb(call.command, call.dialect))
 	if verb == "" {
 		return false
 	}
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: raisedDenial(verb, call.seam, asked.raised).full()}
+	asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: raisedDenial(verb, call.seam, asked.raised).full()}
 	asked.rule, asked.by = denyRulePolicyUnloaded, decidedByBuiltin
 	return true
 }
@@ -300,10 +292,10 @@ func raisedDenial(verb string, seam functionSeam, raised []trail.RuleFailure) de
 // call changes state, and reports whether it denied. A call that only reads stands on what
 // did answer, with the failure note naming the phase that ran out.
 func denyLapse(asked *rulesAnswer, call judgedCall) bool {
-	if asked.lapse == nil || !call.changes || asked.answer.Decision == types.GuardDeny {
+	if asked.lapse == nil || !call.changes || asked.answer.Decision == verdict.Deny {
 		return false
 	}
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseReason(call, *asked.lapse, asked.dryRun)}
+	asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: lapseReason(call, *asked.lapse, asked.dryRun)}
 	asked.by = asked.lapse.side
 	asked.log.markLapseDenied()
 	return true
@@ -354,7 +346,7 @@ type judgedCall struct {
 // on record. A gated verb gets unloadedDenial and the rest brokenPolicyDenial.
 // An edit of a policy source passes, as that is the fix.
 func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at location) bool {
-	if !asked.unloaded || asked.answer.Decision == types.GuardDeny {
+	if !asked.unloaded || asked.answer.Decision == verdict.Deny {
 		return false
 	}
 	own := ownSourceRoot(at.workspace)
@@ -366,7 +358,7 @@ func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at l
 	broken := guarded && cause == unloadNone && !call.guardSource
 	if holds || broken {
 		if why := loadRestore(call, asked.loadFailure, at); why != "" {
-			asked.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: why}
+			asked.answer = verdict.Verdict{Decision: verdict.Advise, Reason: why}
 			asked.rule, asked.by = denyRuleStaleBinary, decidedByBuiltin
 			return false
 		}
@@ -384,7 +376,7 @@ func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at l
 		return false
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
+	asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: d.full()}
 	if !broken {
 		asked.next = binaryRemedy(own, at.workspace, call.lease, call.builds).next(asked.rule)
 	}
@@ -469,15 +461,16 @@ func gatedCalls(seam functionSeam) string {
 }
 
 // applyWorkspaceAnswer merges a workspace rule's answer into the built-in verdict, which
-// decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
-// fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
-// on a built-in ask is dropped, as every notice is on an ask. A deny denyUnloaded made is
+// decided names the side of. Strengthen only: a deny replaces whatever stood, an ask
+// replaces anything short of a deny, an advise fills a defer or is added to a built-in
+// advice, and a defer changes nothing. An advise on a built-in ask is dropped, as every
+// notice is on an ask. A deny denyUnloaded made is
 // filed under its own built-in rule, with its next left unserved for the caller's shapeDeny
 // to grade.
 //
 // seamRule is what an unnamed answer reports under; a named one reports as
 // workspace:<name>, the id magus\guard.shell rules already carry.
-func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rulesAnswer, seamRule string) (types.GuardJudgment, string) {
+func applyWorkspaceAnswer(judged verdict.Judgment, decided string, asked rulesAnswer, seamRule string) (verdict.Judgment, string) {
 	answer := asked.answer
 	rule := seamRule
 	switch {
@@ -487,31 +480,33 @@ func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rul
 		rule = workspaceShellPrefix + answer.Rule
 	}
 	switch {
-	case answer.Decision == types.GuardDeny:
-		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, NextSteps: asked.next}, asked.by
-	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionPass:
-		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
-	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:
+	case answer.Decision == verdict.Deny:
+		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Deny, Reason: answer.Reason, Rule: rule, Lease: judged.Lease, NextSteps: remedies(asked.next)}, asked.by
+	case answer.Decision == verdict.Ask && judged.Decision != verdict.Deny:
+		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Ask, Reason: answer.Reason, Rule: rule, Lease: judged.Lease}, asked.by
+	case answer.Decision == verdict.Advise && judged.Decision == verdict.Defer:
+		return verdict.Judgment{APIVersion: judged.APIVersion, Decision: verdict.Advise, Context: answer.Reason, Rule: rule, Lease: judged.Lease}, asked.by
+	case answer.Decision == verdict.Advise && judged.Decision == verdict.Advise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
-		verdict.Context += "\n\n" + answer.Reason
-		return verdict, fmt.Sprintf("%s%s%s", decided, decidedByJoin, asked.by)
+		judged.Context += "\n\n" + answer.Reason
+		return judged, fmt.Sprintf("%s%s%s", decided, decidedByJoin, asked.by)
 	}
-	return verdict, decided
+	return judged, decided
 }
 
 // applyRuleFailureNote adds the note that a workspace rule judged nothing to every
 // verdict: a deny or an ask reached with a rule missing must say it was judged short.
-func applyRuleFailureNote(verdict types.GuardJudgment, note string, kind hint.MarkerKind) types.GuardJudgment {
+func applyRuleFailureNote(judged verdict.Judgment, note string, kind hint.MarkerKind) verdict.Judgment {
 	switch {
 	case note == "":
-	case verdict.Decision == decisionDeny || verdict.Decision == decisionAsk:
-		verdict.Reason += "\n\n" + note
-	case verdict.Decision == decisionAdvise:
-		verdict.Context += "\n\n" + note
+	case judged.Decision == verdict.Deny || judged.Decision == verdict.Ask:
+		judged.Reason += "\n\n" + note
+	case judged.Decision == verdict.Advise:
+		judged.Context += "\n\n" + note
 	default:
-		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, note, string(kind)
+		judged.Decision, judged.Context, judged.Rule = verdict.Advise, note, string(kind)
 	}
-	return verdict
+	return judged
 }
 
 // sideName words one side of a seam for a reader.

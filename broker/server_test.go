@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"io"
 	"os"
@@ -17,11 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
 )
 
 // holderEnv makes the test binary a claim holder: it dials the broker at the address
@@ -51,7 +51,7 @@ func holdUntilKilled(addr string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	v, err := c.Request(context.Background(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900, Slots: 1})
+	v, err := c.Request(context.Background(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900, Slots: 1})
 	if err != nil || !v.Granted {
 		fmt.Fprintln(os.Stderr, "claim not granted", err)
 		return 2
@@ -99,7 +99,7 @@ func dial(t *testing.T, addr string) *Client {
 	return c
 }
 
-func holders(t *testing.T, addr string) []types.MachineClaimant {
+func holders(t *testing.T, addr string) []budget.Claimant {
 	t.Helper()
 	st, err := QueryStatus(t.Context(), addr)
 	require.NoError(t, err)
@@ -111,7 +111,7 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 	serve(t, addr, WithCapacity(1000, 4), WithVersion("v-test"))
 	c := dial(t, addr)
 
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900, Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900, Slots: 1})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -133,7 +133,7 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 	assert.NotEmpty(t, h.Command, "and to the command that opened it")
 
 	other := dial(t, addr)
-	refused, err := other.Request(t.Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900, PID: 1})
+	refused, err := other.Request(t.Context(), budget.Claim{Project: "x", Target: "build", MemoryMB: 900, PID: 1})
 	require.NoError(t, err)
 	assert.False(t, refused.Granted, "the host is full")
 	assert.True(t, refused.Fits)
@@ -153,12 +153,12 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	stranger := leasedClient(t, addr, "other", "other", 0)
 	holder.hello.PID, waiter.hello.PID, stranger.hello.PID = 101, 102, 103
 
-	v, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 900, Invocation: "101:a"})
+	v, err := holder.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", MemoryMB: 900, Invocation: "101:a"})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
-	parked := claimAsync(t, t.Context(), addr, waiter, types.MachineClaim{Project: ".", Target: "lint", Invocation: "102:b"})
+	parked := claimAsync(t, t.Context(), addr, waiter, budget.Claim{Project: ".", Target: "lint", Invocation: "102:b"})
 	requirePending(t, parked)
-	v, err = stranger.Request(t.Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900})
+	v, err = stranger.Request(t.Context(), budget.Claim{Project: "x", Target: "build", MemoryMB: 900})
 	require.NoError(t, err)
 	require.False(t, v.Granted)
 	require.False(t, v.OwnRun, "nothing of its own keeps it out, so the client refuses it with MGS3009")
@@ -170,8 +170,8 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	assert.Equal(t, "plan/a", c.Holders[0].Owner)
 	require.Len(t, c.Waiting, 1)
 	w := c.Waiting[0]
-	assert.Equal(t, types.MachineWaiter{PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
-		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMS: w.WaitedMS}, w)
+	assert.Equal(t, budget.Waiter{PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
+		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMs: w.WaitedMs}, w)
 	require.Len(t, c.Refused, 1)
 	r := c.Refused[0]
 	assert.Equal(t, 103, r.PID)
@@ -181,7 +181,7 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	require.Len(t, r.Holders, 1)
 	assert.Equal(t, "plan/a", r.Holders[0].Owner, "a refusal keeps the holders as they were")
 
-	b, err := json.Marshal(st)
+	b, err := codec.Marshal(st)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"waiting":[{"project":".","target":"lint","pid":102`)
 	assert.Contains(t, string(b), `"refused":[{"at":`)
@@ -195,15 +195,15 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 
 // curvedClaim is a claim over a 100s run holding early for its first half and late for
 // its second, claiming its peak.
-func curvedClaim(target string, pid int, early, late uint32) types.MachineClaim {
-	p := types.MemoryProfile{D10Ms: 100_000, D90Ms: 100_000, Runs: 3}
+func curvedClaim(target string, pid int, early, late uint32) budget.Claim {
+	p := budget.Profile{D10Ms: 100_000, D90Ms: 100_000, Runs: 3}
 	for i := range p.Curve {
 		p.Curve[i] = early
-		if i >= types.MemoryCurveBuckets/2 {
+		if i >= budget.CurveBuckets/2 {
 			p.Curve[i] = late
 		}
 	}
-	return types.MachineClaim{Project: ".", Target: target, MemoryMB: p.Curve.PeakMB(), Profile: p, Slots: 1, PID: pid}
+	return budget.Claim{Project: ".", Target: target, MemoryMB: p.Curve.PeakMB(), Profile: p, Slots: 1, PID: pid}
 }
 
 func TestOverrunFrameChargesThePeak(t *testing.T) {
@@ -242,9 +242,9 @@ func TestClosingTheConnectionReleasesItsClaims(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	_, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "a", MemoryMB: 400})
+	_, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "a", MemoryMB: 400})
 	require.NoError(t, err)
-	_, err = c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "b", MemoryMB: 400})
+	_, err = c.Request(t.Context(), budget.Claim{Project: ".", Target: "b", MemoryMB: 400})
 	require.NoError(t, err)
 	require.Len(t, holders(t, addr), 2)
 
@@ -290,7 +290,7 @@ func TestHoldersReassertOnANewBroker(t *testing.T) {
 	addr := testAddr(t)
 	stopFirst, _ := serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -303,7 +303,7 @@ func TestHoldersReassertOnANewBroker(t *testing.T) {
 	}, 3*time.Second, 20*time.Millisecond, "the holder re-asserts its claim on the new broker without being asked")
 
 	stranger := dial(t, addr)
-	refused, err := stranger.Request(t.Context(), types.MachineClaim{Project: "x", Target: "b", MemoryMB: 900, PID: 1})
+	refused, err := stranger.Request(t.Context(), budget.Claim{Project: "x", Target: "b", MemoryMB: 900, PID: 1})
 	require.NoError(t, err)
 	assert.False(t, refused.Granted, "the new broker counts the re-asserted claim")
 
@@ -418,7 +418,7 @@ func TestAReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 	stopFirst, _ := serve(t, addr, WithCapacity(1000, 4))
 	gate := newReplyGate(t, addr)
 	c := dial(t, gate.addr)
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -443,7 +443,7 @@ func TestIdleExitWaitsForWhatIsHeld(t *testing.T) {
 	addr := testAddr(t)
 	_, done := serve(t, addr, WithIdleExit(150*time.Millisecond))
 	c := dial(t, addr)
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test"})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test"})
 	require.NoError(t, err)
 
 	select {
@@ -647,7 +647,7 @@ func TestNoBrokerIsUnavailable(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnavailable)
 
 	c := NewClient(addr)
-	_, err = c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test"})
+	_, err = c.Request(t.Context(), budget.Claim{Project: ".", Target: "test"})
 	require.ErrorIs(t, err, ErrUnavailable, "a lazy client reports the same when its first request finds nothing")
 }
 
@@ -807,7 +807,7 @@ func TestDrainSeatsNothingNewAndStopsWhenTheLastHolderLeaves(t *testing.T) {
 	host := &refCountingHost{}
 	_, done := serve(t, addr, WithCapacity(4000, 4), WithServices(host), WithDrain(drain, time.Hour))
 	holder := dial(t, addr)
-	v, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	v, err := holder.Request(t.Context(), budget.Claim{Project: ".", Target: "test", Slots: 1})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -815,7 +815,7 @@ func TestDrainSeatsNothingNewAndStopsWhenTheLastHolderLeaves(t *testing.T) {
 	awaitDrain(t, addr)
 
 	late := dial(t, addr)
-	_, err = late.Request(t.Context(), types.MachineClaim{Project: "api", Target: "build", Slots: 1})
+	_, err = late.Request(t.Context(), budget.Claim{Project: "api", Target: "build", Slots: 1})
 	var be *Error
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, CodeDraining, be.Code)
@@ -835,7 +835,7 @@ func TestDrainGivesUpAfterItsGrace(t *testing.T) {
 	addr := testAddr(t)
 	drain := make(chan struct{})
 	_, done := serve(t, addr, WithCapacity(4000, 4), WithDrain(drain, 10*time.Millisecond))
-	v, err := dial(t, addr).Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	v, err := dial(t, addr).Request(t.Context(), budget.Claim{Project: ".", Target: "test", Slots: 1})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -859,7 +859,7 @@ func TestDrainStillRecordsAReassertion(t *testing.T) {
 	drain := make(chan struct{})
 	serve(t, addr, WithCapacity(4000, 4), WithDrain(drain, time.Hour))
 	holder := dial(t, addr)
-	_, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	_, err := holder.Request(t.Context(), budget.Claim{Project: ".", Target: "test", Slots: 1})
 	require.NoError(t, err)
 	close(drain)
 	awaitDrain(t, addr)
@@ -869,7 +869,7 @@ func TestDrainStillRecordsAReassertion(t *testing.T) {
 	require.NoError(t, err)
 	var reply claimReply
 	require.NoError(t, cn.roundTrip(t.Context(), rejoined.next(), typeClaim,
-		claimRequest{Claim: types.MachineClaim{Project: "api", Target: "build", Slots: 1}, Reassert: true},
+		claimRequest{Claim: budget.Claim{Project: "api", Target: "build", Slots: 1}, Reassert: true},
 		typeClaimReply, &reply, nil))
 	assert.True(t, reply.Verdict.Granted)
 	assert.Len(t, holders(t, addr), 2)

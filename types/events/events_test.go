@@ -1,7 +1,7 @@
 package events
 
 import (
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,7 +26,7 @@ func TestStreamEventMarshalsFlat(t *testing.T) {
 			Error:      "exit 1",
 		},
 	}
-	got, err := json.Marshal(e)
+	got, err := codec.Marshal(e)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"schema":1,"type":"target.result","ts":1756312800000,
@@ -53,7 +53,7 @@ func TestStreamEventRoundTrips(t *testing.T) {
 
 		t.Run(string(typ), func(t *testing.T) {
 			want := Event{Ts: 1756312800000, Workspace: "/repo", Inv: "inv1", Body: body}
-			line, err := json.Marshal(want)
+			line, err := codec.Marshal(want)
 			require.NoError(t, err)
 
 			got, err := DecodeStreamEvent(line)
@@ -69,12 +69,12 @@ func TestStreamEventRoundTrips(t *testing.T) {
 // it can still be diagnosed.
 func TestStreamEventRejectsUnusableBody(t *testing.T) {
 	t.Run("nil body", func(t *testing.T) {
-		_, err := json.Marshal(Event{Ts: 1})
+		_, err := codec.Marshal(Event{Ts: 1})
 		assert.ErrorContains(t, err, "no body")
 	})
 
 	t.Run("body that is not an object", func(t *testing.T) {
-		_, err := json.Marshal(Event{Ts: 1, Body: scalarBody{}})
+		_, err := codec.Marshal(Event{Ts: 1, Body: scalarBody{}})
 		assert.ErrorContains(t, err, "want a JSON object")
 	})
 }
@@ -147,18 +147,18 @@ func TestParseStreamEventTypeRejectsTypos(t *testing.T) {
 // (null, "", [], {}) and NOT zero numbers, so the intuitive tag silently ships
 // the zero. These fields carry `omitzero` for that reason.
 func TestStreamEventOmitsInapplicableNumbers(t *testing.T) {
-	cached, err := json.Marshal(Event{Ts: 1, Body: Target{
+	cached, err := codec.Marshal(Event{Ts: 1, Body: Target{
 		Project: "api", Target: "build", Status: "ok", CacheHit: true, Ref: "out_1",
 	}})
 	require.NoError(t, err)
 	assert.NotContains(t, string(cached), "duration_ms", "a replay has no duration to report")
 
-	started, err := json.Marshal(Event{Ts: 1, Body: Run{Phase: "started"}})
+	started, err := codec.Marshal(Event{Ts: 1, Body: Run{Phase: "started"}})
 	require.NoError(t, err)
 	assert.NotContains(t, string(started), "duration_ms", "a run that just started has no duration")
 
 	// Present when it genuinely applies, so the omission above is not just "never emitted".
-	ran, err := json.Marshal(Event{Ts: 1, Body: Target{Status: "ok", DurationMs: 1200}})
+	ran, err := codec.Marshal(Event{Ts: 1, Body: Target{Status: "ok", DurationMs: 1200}})
 	require.NoError(t, err)
 	assert.Contains(t, string(ran), `"duration_ms":1200`)
 }

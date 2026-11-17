@@ -15,7 +15,8 @@ import (
 
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/secret"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -33,9 +34,9 @@ import (
 //
 // Both variants run here because Quiet is the one that leaves zero other coverage.
 func TestExecRedactsSecretsFromEveryCapturedPath(t *testing.T) {
-	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_LEAK_TOKEN", "ghp_never_capture_me")
-	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LEAK_TOKEN")
+	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LEAK_TOKEN")
 	require.NoError(t, err)
 
 	for _, quiet := range []bool{false, true} {
@@ -70,7 +71,7 @@ func TestExecCapturesOutputWithNoTrailingNewline(t *testing.T) {
 	for _, withResolver := range []bool{false, true} {
 		ctx := t.Context()
 		if withResolver {
-			ctx = secret.ContextWithResolver(ctx, secret.New())
+			ctx = secrets.WithResolver(ctx, secrets.NewResolver())
 		}
 		res, err := Exec(ctx, "printf", []string{"v1.2.3"},
 			ExecOptions{Dir: ".", Capture: true, Quiet: true})
@@ -234,7 +235,7 @@ func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
 		return sandbox.WithPolicy(t.Context(), p)
 	}
 	opts := ExecOptions{Dir: ws, Capture: true, Quiet: true}
-	abi, abiErr := sandbox.ABI()
+	abi, abiErr := scissors.ABI()
 
 	res, err := Exec(policy(types.SandboxModeBestEffort), "cat", []string{secretFile}, opts)
 	if abiErr == nil && abi >= 1 {
@@ -246,7 +247,7 @@ func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
 	}
 
 	res, err = Exec(policy(types.SandboxModeRequired), "cat", []string{secretFile}, opts)
-	if abiErr != nil || abi < sandbox.RequiredABI {
+	if abiErr != nil || abi < scissors.RequiredABI {
 		require.ErrorIs(t, err, types.SandboxRequired)
 		assert.False(t, res.Started, "nothing starts unconfined")
 	} else {

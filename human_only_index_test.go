@@ -13,7 +13,8 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -46,7 +47,7 @@ func syncedHumanOnlyWorkspace(tb testing.TB) *testkit.Workspace {
 	w := testkit.NewWorkspace(tb)
 	w.Magusfile(humanOnlyMagusfile)
 	ctx := context.Background()
-	ws, err := Inspect(ctx, w.Root(), WithSpawnRule(TierCeiling))
+	ws, err := Inspect(ctx, w.Root(), WithSpawnRule(tier.Ceiling))
 	require.NoError(tb, err)
 	_, err = workspacegraph.Build(ctx, ws, w.Root(), config.Config{}, false, slog.New(slog.DiscardHandler))
 	require.NoError(tb, err)
@@ -110,7 +111,7 @@ func TestAnOpenRecordsWhatNoSyncDid(t *testing.T) {
 	require.False(t, ok, "no sync and no open has recorded anything")
 
 	opened := NewLazyWorkspace(root, func(ctx context.Context) (*Magus, error) {
-		ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+		ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 		if err != nil {
 			return nil, err
 		}
@@ -148,13 +149,13 @@ func TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt(t *testing.T) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var man map[string]any
-	require.NoError(t, json.Unmarshal(b, &man))
+	require.NoError(t, codec.Unmarshal(b, &man))
 	require.Equal(t, true, man["target_policies_known"], "the sync recorded it")
 	// What a magus from before the target-policy record wrote: the human_only keys alone.
 	man["human_only"], man["human_only_known"] = man["target_policies"], true
 	delete(man, "target_policies")
 	delete(man, "target_policies_known")
-	b, err = json.Marshal(man)
+	b, err = codec.Marshal(man)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 
@@ -180,7 +181,7 @@ func BenchmarkHumanOnlyRead(b *testing.B) {
 	})
 	b.Run("inspect", func(b *testing.B) {
 		for b.Loop() {
-			ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+			ws, err := Inspect(ctx, root, WithSpawnRule(tier.Ceiling))
 			if err != nil {
 				b.Fatal(err)
 			}

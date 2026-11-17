@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -34,7 +36,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	judge := func(host, transport, input string) string {
 		v := Judge(ctx, strict(testDependencies()), Request{Input: input, Host: host, Form: transport})
-		require.Equal(t, "deny", v.Decision, "%s/%s", host, transport)
+		require.Equal(t, verdict.Deny, v.Decision, "%s/%s", host, transport)
 		return v.Reason
 	}
 	short := func(reason string) bool { return strings.HasPrefix(reason, "denied again [whole-tree]: ") }
@@ -67,13 +69,13 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 		session + `.jsonl","cwd":"/Users/dev/repo","permission_mode":"default","hook_event_name":"PreToolUse",`
 	skill := fmt.Sprintf("%s\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"%s\"},\"tool_use_id\":\"toolu_01\"}", head, multiAgentSkill.String())
 	spawn := fmt.Sprintf("%s\"tool_name\":\"Task\",\"tool_input\":{\"description\":\"Audit the store\",\"prompt\":\"Audit internal/job\",\"subagent_type\":\"general-purpose\"},\"tool_use_id\":\"toolu_02\"}", head)
-	judge := func(transport, event string) types.GuardJudgment {
+	judge := func(transport, event string) verdict.Judgment {
 		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
 	}
 
-	require.Equal(t, "deny", judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")
-	require.Equal(t, "pass", judge("buzz", skill).Decision)
-	assert.NotEqual(t, "deny", judge("sh", spawn).Decision, "the load reported by the Buzz form clears the sh form's spawn")
+	require.Equal(t, verdict.Deny, judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")
+	require.Equal(t, verdict.Defer, judge("buzz", skill).Decision)
+	assert.NotEqual(t, verdict.Deny, judge("sh", spawn).Decision, "the load reported by the Buzz form clears the sh form's spawn")
 
 	codex := hookAttribution{Host: "codex", Form: "sh", Session: session}
 	assert.NotEqual(t, hookAttribution{Host: "claude-code", Session: session}.factsKey(), codex.factsKey(),
@@ -241,7 +243,7 @@ func TestWholeTreeStoresTheBackendsScratchCheckout(t *testing.T) {
 		"jj abandon":       "a throwaway clone",
 		"git reset --hard": "a throwaway `git worktree add`",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		require.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
 		cacheDir := t.TempDir()
 		shown, _, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), v.RuleName(), v.Deny, v.Why, "", nil, false)
@@ -321,12 +323,12 @@ func (s *DenialRouteSuite) TestALongLeaseNamesItsNearestPathsAndCountsTheRest() 
 	for i := range 40 {
 		paths = append(paths, fmt.Sprintf("libs/x/f%d.go", i))
 	}
-	got := nearestWritePaths(types.Job{ID: "big", Paths: types.JobPaths{Write: paths}}, "internal/job/exit.go")
+	got := nearestWritePaths(job.Job{ID: "big", Paths: job.Paths{Write: paths}}, "internal/job/exit.go")
 	s.Equal("internal/job/fork.go, internal/job/fork_test.go, internal/job/wait.go and 42 more; `magus describe job big` lists them", got)
 }
 
 func (s *DenialRouteSuite) TestAShortLeaseIsNamedWhole() {
-	s.Equal("a.go, b.go", nearestWritePaths(types.Job{ID: "small", Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}}, "c.go"))
+	s.Equal("a.go, b.go", nearestWritePaths(job.Job{ID: "small", Paths: job.Paths{Write: []string{"a.go", "b.go"}}}, "c.go"))
 }
 
 func (s *DenialRouteSuite) TestAContractPickNamesTheForkThatLandsIt() {

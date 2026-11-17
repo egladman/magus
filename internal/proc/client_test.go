@@ -17,9 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +33,7 @@ func TestForwardRoundTrip(t *testing.T) {
 	var gotArgs atomic.Value // stores []string
 
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error {
 			gotArgs.Store(args)
 			called.Store(true)
@@ -59,8 +62,9 @@ func TestForwardRoundTrip(t *testing.T) {
 func TestForwardCarriesTheLease(t *testing.T) {
 	got := make(chan string, 1)
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(ctx context.Context, _ []string) error {
-			got <- types.JobLeaseFromContext(ctx)
+			got <- job.LeaseFromContext(ctx)
 			return nil
 		},
 	})
@@ -79,6 +83,7 @@ func TestForwardCarriesTheLease(t *testing.T) {
 
 func TestForwardHandlerError(t *testing.T) {
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error {
 			return errors.New("build failed")
 		},
@@ -108,7 +113,7 @@ func TestForwardCycleDetection(t *testing.T) {
 	started := make(chan struct{})
 
 	srv, err := New(t.Context(), Options{
-		Concurrency: 4,
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error {
 			close(started)
 			<-block
@@ -144,7 +149,7 @@ func TestQueryStatus(t *testing.T) {
 	started := make(chan struct{}, 1)
 
 	srv, err := New(t.Context(), Options{
-		Concurrency: 4,
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error {
 			started <- struct{}{}
 			<-block
@@ -182,9 +187,9 @@ func TestQueryStatus(t *testing.T) {
 
 func TestRunChildSyncSlotLending(t *testing.T) {
 	t.Parallel()
-	lim := cache.NewLimiter(2)
+	lim := budget.NewLimiter(2)
 	// The caller holds a slot, so RunChildSync lends it for the child's duration.
-	ctx := cache.WithSlotHeld(context.Background())
+	ctx := budget.WithSlotHeld(context.Background())
 
 	// Acquire both slots so the limiter is saturated.
 	require.NoError(t, lim.Acquire(ctx))
@@ -214,7 +219,7 @@ func TestRunChildSyncSlotLending(t *testing.T) {
 // acquired, which would over-release the shared semaphore.
 func TestRunChildSyncNoLendWithoutSlot(t *testing.T) {
 	t.Parallel()
-	lim := cache.NewLimiter(2)
+	lim := budget.NewLimiter(2)
 	ctx := context.Background() // no SlotHeld marker
 	require.NoError(t, lim.Acquire(ctx))
 	var runningDuringFn int
@@ -243,9 +248,16 @@ func TestNewAlreadyAdopted(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "/some/path")
 
 	_, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	assert.ErrorIs(t, err, ErrAlreadyAdopted)
+}
+
+// A server without a limiter would size one from a default nobody chose, so it refuses.
+func TestNewRefusesANilLimiter(t *testing.T) {
+	_, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
+	require.ErrorContains(t, err, "Options.Limiter is nil")
 }
 
 // TestRunRequestArgsCapEnforced verifies that an RPC call carrying more than
@@ -253,6 +265,7 @@ func TestNewAlreadyAdopted(t *testing.T) {
 // allocating unbounded memory.
 func TestRunRequestArgsCapEnforced(t *testing.T) {
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	require.NoError(t, err)
@@ -366,6 +379,7 @@ func TestAClientMeetingAnOldServerIsToldToRestartIt(t *testing.T) {
 func TestAnOldLineClientRunsNothing(t *testing.T) {
 	var called atomic.Bool
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
@@ -433,6 +447,7 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 	const cycles = 5
 	for i := 0; i < cycles; i++ {
 		srv, err := New(t.Context(), Options{
+			Limiter: budget.NewLimiter(4),
 			Handler: func(_ context.Context, args []string) error { return nil },
 		})
 		require.NoError(t, err, "cycle %d: New", i)
@@ -455,6 +470,7 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 // close, and that the server's socket file is removed afterward.
 func TestShutdownRPC(t *testing.T) {
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	require.NoError(t, err)
@@ -481,6 +497,7 @@ func TestShutdownRPC(t *testing.T) {
 func TestSubmitJobRoundTrip(t *testing.T) {
 	got := make(chan []string, 1)
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(ctx context.Context, args []string) error {
 			if IsJob(ctx) {
 				got <- args
@@ -505,6 +522,7 @@ func TestSubmitJobRoundTrip(t *testing.T) {
 
 func TestReloadConfigRoundTrip(t *testing.T) {
 	srv, err := New(t.Context(), Options{
+		Limiter:        budget.NewLimiter(4),
 		Handler:        func(context.Context, []string) error { return nil },
 		ConfigReloader: func() (int, int) { return 3, 1 },
 	})
@@ -526,6 +544,7 @@ func TestReloadConfigRoundTrip(t *testing.T) {
 func TestProcRoutesRequireTheToken(t *testing.T) {
 	var called atomic.Bool
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
@@ -566,7 +585,7 @@ func TestProcRoutesRequireTheToken(t *testing.T) {
 // TestMountedRoutesRequireTheToken: an MCP tool call runs magus too, so the
 // mounted paths refuse the confined child exactly as /proc/v1/run does.
 func TestMountedRoutesRequireTheToken(t *testing.T) {
-	srv, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := New(t.Context(), Options{Limiter: budget.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer srv.Close()
 	if !srv.peerChecked {
@@ -597,7 +616,7 @@ func TestMountedRoutesRequireTheToken(t *testing.T) {
 // TestTokenFileIsPrivateAndGoesWithTheServer pins the discovery half: a client that found
 // the socket reads the token beside it, the file is this user's alone, and Close removes it.
 func TestTokenFileIsPrivateAndGoesWithTheServer(t *testing.T) {
-	srv, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := New(t.Context(), Options{Limiter: budget.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(t.Context()))
 	ep, err := endpoint.Parse(srv.Addr())
@@ -620,6 +639,7 @@ func TestTokenFileIsPrivateAndGoesWithTheServer(t *testing.T) {
 func TestSocketRoutes(t *testing.T) {
 	var called atomic.Bool
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
@@ -650,7 +670,7 @@ func TestSocketRoutes(t *testing.T) {
 		return
 	}
 	unmount, err := srv.Mount(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if trail.CredentialFromContext(r.Context()) != types.CredentialSocketPeer {
+		if trail.CredentialFromContext(r.Context()) != auth.CredentialSocketPeer() {
 			w.WriteHeader(http.StatusTeapot)
 		}
 	}))
@@ -666,6 +686,7 @@ func TestForwardArgsWithNewline(t *testing.T) {
 	var gotArgs atomic.Value
 
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Handler: func(_ context.Context, args []string) error {
 			gotArgs.Store(args)
 			return nil
@@ -701,8 +722,8 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 func newBenchServer(b *testing.B) string {
 	b.Helper()
 	srv, err := New(b.Context(), Options{
-		Concurrency: runtime.GOMAXPROCS(0),
-		Handler:     func(_ context.Context, _ []string) error { return nil },
+		Limiter: budget.NewLimiter(runtime.GOMAXPROCS(0)),
+		Handler: func(_ context.Context, _ []string) error { return nil },
 	})
 	if err != nil {
 		b.Fatalf("New: %v", err)
@@ -776,7 +797,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	ready := make(chan struct{}, inflightN)
 
 	srv, err := New(b.Context(), Options{
-		Concurrency: inflightN,
+		Limiter: budget.NewLimiter(inflightN),
 		Handler: func(_ context.Context, _ []string) error {
 			ready <- struct{}{}
 			<-block

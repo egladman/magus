@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -272,7 +273,7 @@ func (m *Magus) CacheDiskBytes() int64 {
 // of what to go after, and magus does not store secrets in the first place: it reads them
 // through a provider. Which provider is loaded is configuration a reader should be able to
 // see; what it can reach is not magus's to publish.
-func (m *Magus) SecretProvider() string { return m.resolver.ProviderName() }
+func (m *Magus) SecretProvider() string { return m.choices.SecretProvider }
 
 // MetricsSnapshot returns this workspace's current metrics as standard OTLP protobuf (an
 // ExportMetricsServiceRequest), or (nil, nil) when metrics collection was not enabled at Open
@@ -360,12 +361,12 @@ func (m *Magus) FileDiskAttention(ctx context.Context, message string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = sessions.OpenRequest(dir, diskAttentionSource, sessions.AttentionOpen{
+	_, _, err = sessions.OpenRequest(ctx, dir, diskAttentionSource, sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeDiagnostic),
 		Severity: string(types.SeverityWarning),
 		Source:   diskAttentionSource,
 		Message:  message,
-	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: m.ws.Root})
+	}, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: m.ws.Root})
 	return err
 }
 

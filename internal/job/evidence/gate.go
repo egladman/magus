@@ -12,6 +12,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -29,7 +31,7 @@ import (
 // A COMPOSITE reaching the gate is refused too. Naming the pipeline indirectly buys the
 // same seven concurrent runs, and it is the likelier mistake once this refuses the obvious
 // spelling.
-func RefusesTheGate(ctx context.Context, root string, row types.Job, env Env) error {
+func RefusesTheGate(ctx context.Context, root string, row jobtypes.Job, env Env) error {
 	// The holder of a row forked with --checkout gates in that checkout, as the guard lets it.
 	if row.State.Live() && row.Worktree.Standing() {
 		return nil
@@ -116,9 +118,9 @@ func gateWalk(name string, deps map[string][]string, seen map[string]bool) []str
 	return nil
 }
 
-func gatesOnCI(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool {
-		return g.Kind == types.GoalKindCheck && g.Check.Target == types.TargetCI
+func gatesOnCI(row jobtypes.Job) bool {
+	return slices.ContainsFunc(row.EffectiveGoals(), func(g jobtypes.Goal) bool {
+		return g.Kind == jobtypes.GoalKindCheck && g.Check.Target == types.TargetCI
 	})
 }
 
@@ -142,12 +144,12 @@ func latestGreenGate(ctx context.Context, root string, env Env) job.GreenGate {
 	if err != nil {
 		return job.GreenGate{}
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return job.GreenGate{}
 	}
 	rec, ok := sessions.LatestGate(fold, meta.Ref, types.TargetCI)
-	if !ok || rec.Outcome != sessions.OutcomePass || rec.Commit == "" {
+	if !ok || rec.Outcome != session.OutcomePass || rec.Commit == "" {
 		return job.GreenGate{}
 	}
 	if meta.ID != rec.Commit {
@@ -165,13 +167,13 @@ func latestGreenGate(ctx context.Context, root string, env Env) job.GreenGate {
 
 // GradesSymbols reports whether grading id reads the symbol graph: a symbol gate of its
 // own, or one inherited from an ancestor.
-func GradesSymbols(rows []types.Job, id string) bool {
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+func GradesSymbols(rows []jobtypes.Job, id string) bool {
+	i := slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == id })
 	if i < 0 {
 		return false
 	}
-	for _, r := range append([]types.Job{rows[i]}, types.JobAncestors(rows, id)...) {
-		if slices.ContainsFunc(r.Goals, func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindSymbol }) {
+	for _, r := range append([]jobtypes.Job{rows[i]}, jobtypes.Ancestors(rows, id)...) {
+		if slices.ContainsFunc(r.Goals, func(g jobtypes.Goal) bool { return g.Resolve().Kind == jobtypes.GoalKindSymbol }) {
 			return true
 		}
 	}

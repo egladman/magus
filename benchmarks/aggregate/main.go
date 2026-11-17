@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // hyperfineOutput is the JSON schema emitted by hyperfine --export-json.
@@ -112,7 +112,7 @@ func loadResult(path string) (*benchResult, error) {
 	defer f.Close()
 
 	var out hyperfineOutput
-	if err := json.NewDecoder(f).Decode(&out); err != nil {
+	if err := codec.NewDecoder(f).Decode(&out); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if len(out.Results) == 0 {
@@ -227,7 +227,7 @@ func capture(bin string, args ...string) string {
 	// version that was means spawning it. `MAKE_BIN=gmake` is how a macOS run measures
 	// GNU Make 4.x rather than Apple's 3.81; reporting the bare name would record the
 	// wrong one.
-	out, err := exec.Command(bin, args...).Output() //nolint:gosec // G702: the tool under measurement, named by the operator
+	out, err := exec.Command(bin, args...).Output()
 	if err != nil {
 		return unknown
 	}

@@ -45,7 +45,7 @@ export fun decideCadence(programs: [helpers\Program], caller: Caller, checkout: 
             return magus\guard.deny(denial);
         }
     }
-    return magus\guard.allow();
+    return magus\guard.defer();
 }
 
 // mayGate: a person or the orchestrator (no lease, no spawn title), or the checkout's
@@ -251,22 +251,22 @@ test "a worker whose role is not integrate may not run the gate" {
 
 test "the orchestrator, a person, an integrate worker and the plan form may gate" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
-    std\assert(judged(gate, caller: person(), checkout: null).decision == magus\GuardDecision.allow, message: "an unattributed caller");
+    std\assert(judged(gate, caller: person(), checkout: null).decision == magus\GuardDecision.defer, message: "an unattributed caller");
     final integrator = Caller{ role = magus\AgentRole.integrator, title = "orchestrator/integrate local-command-policy" };
-    std\assert(judged(gate, caller: integrator, checkout: null).decision == magus\GuardDecision.allow, message: "the checkout's integrator");
+    std\assert(judged(gate, caller: integrator, checkout: null).decision == magus\GuardDecision.defer, message: "the checkout's integrator");
     final elsewhere = Caller{ role = magus\AgentRole.worker, title = "orchestrator/integrate local-command-policy" };
     std\assert(judged(gate, caller: elsewhere, checkout: null).decision == magus\GuardDecision.deny, message: "an integrate title outside the checkout its row was taken in");
     final worker = Caller{ role = magus\AgentRole.worker, title = "orchestrator/feat guard-command" };
     final plan = helpers\request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
-    std\assert(judged(plan, caller: worker, checkout: null).decision == magus\GuardDecision.allow, message: "the plan runs nothing");
+    std\assert(judged(plan, caller: worker, checkout: null).decision == magus\GuardDecision.defer, message: "the plan runs nothing");
     final narrow = helpers\request([["magus", "run", "go-test", ".", "--", "-run", "Guard"]]);
-    std\assert(judged(narrow, caller: worker, checkout: null).decision == magus\GuardDecision.allow, message: "narrow validation");
+    std\assert(judged(narrow, caller: worker, checkout: null).decision == magus\GuardDecision.defer, message: "narrow validation");
 }
 
 test "the holder of a checkout row may gate whatever its title" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
     final holder = Caller{ role = magus\AgentRole.worker, title = "orchestrator/feat guard-command", holdsCheckout = true };
-    std\assert(judged(gate, caller: holder, checkout: null).decision == magus\GuardDecision.allow, message: "a --checkout holder");
+    std\assert(judged(gate, caller: holder, checkout: null).decision == magus\GuardDecision.defer, message: "a --checkout holder");
 }
 
 test "a row is held in its checkout only when live, with a worktree, and run from its root" {
@@ -316,10 +316,10 @@ test "a push the remote can place stays silent" {
         ["git", "push", "origin", "HEAD:refs/heads/x"],
         ["git", "push", "origin", "main"],
     ]) {
-        std\assert(judged(helpers\request([argv]), caller: person(), checkout: detached).decision == magus\GuardDecision.allow, message: argv.join(" "));
+        std\assert(judged(helpers\request([argv]), caller: person(), checkout: detached).decision == magus\GuardDecision.defer, message: argv.join(" "));
     }
     final onBranch = Checkout{ detached = false, remoteBranches = [<str>] };
-    std\assert(judged(helpers\request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch).decision == magus\GuardDecision.allow, message: "HEAD names a branch");
+    std\assert(judged(helpers\request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch).decision == magus\GuardDecision.defer, message: "HEAD names a branch");
 }
 
 test "no policy example runs the go spell's op in place of the go-test target" {

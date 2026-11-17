@@ -13,8 +13,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -317,13 +317,13 @@ type noticeWire struct {
 
 // MarshalJSON writes Level by name.
 func (n Notice) MarshalJSON() ([]byte, error) {
-	return json.Marshal(noticeWire{Level: levelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
+	return codec.Marshal(noticeWire{Level: levelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
 }
 
 // UnmarshalJSON reads a line [Notice.MarshalJSON] wrote.
 func (n *Notice) UnmarshalJSON(b []byte) error {
 	var w noticeWire
-	if err := json.Unmarshal(b, &w); err != nil {
+	if err := codec.Unmarshal(b, &w); err != nil {
 		return err
 	}
 	var l slog.Level
@@ -427,13 +427,13 @@ type NextServer func(next []types.NextStep) []types.NextStep
 // it unjournaled would give the most-served breadcrumb in the tree a denominator of
 // zero in `magus session hints`, and leave it the one suggestion the guard cannot
 // pre-authorize.
-func ServedIn(loc job.Location) NextServer {
+func ServedIn(ctx context.Context, loc job.Location) NextServer {
 	cacheDir := loc.CacheDir
 	return func(next []types.NextStep) []types.NextStep {
 		role, writePaths := hint.RoleUnbound, []string(nil)
 		if id, _ := job.ActingLease(loc, trail.LeaseFromEnv()); id != "" {
 			role = hint.RoleWorker
-			if rows, err := job.NewStore(loc).List(); err == nil {
+			if rows, err := job.NewStore(loc).List(ctx); err == nil {
 				role, writePaths = hint.LeaseRole(rows, id)
 			}
 		}

@@ -28,6 +28,9 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
@@ -87,7 +90,7 @@ func serverUsage() {
 }
 
 func serverStart(ctx context.Context, args []string) error {
-	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
+	ctx = trail.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
 	var sf *flaggen.ServerStartFlags
 	_, err := commandParse("server start", args, func(fs *flag.FlagSet) {
 		sf = flaggen.BindServerStart(fs)
@@ -839,13 +842,13 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
 	// The watermark is the READER's; see DiffReview.SeenComments for why it cannot be the job's.
 	if unseen := (diff.Review{SeenComments: seen}).UnseenComments(comments); len(unseen) > 0 {
-		trail.Append(ctx, m.CacheDir(), trail.Event{
+		trail.Append(ctx, m.CacheDir(), trailtypes.Event{
 			Ts:        time.Now().UnixMilli(),
-			Kind:      trail.KindJob,
-			Origin:    types.Origin{EntryPoint: types.EntryPointServer},
+			Kind:      trailtypes.KindJob,
+			Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 			Workspace: m.Root(),
 			Action:    "review.said",
-			Outcome:   trail.OutcomeOK,
+			Outcome:   trailtypes.OutcomeOK,
 			// The ids ride along so the console can key its notification on exactly this set: the
 			// job running again before the reader looks must not say the same thing twice.
 			Preview: fmt.Sprintf("%s: %d: %s", at.Repo, len(unseen), strings.Join(unseen, ",")),
@@ -872,13 +875,13 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	}
 	// Recorded before the mark is cleared: a crash between the two repeats the event on the next
 	// tick, where clearing first would lose it for good.
-	trail.Append(ctx, m.CacheDir(), trail.Event{
+	trail.Append(ctx, m.CacheDir(), trailtypes.Event{
 		Ts:        time.Now().UnixMilli(),
-		Kind:      trail.KindJob,
-		Origin:    types.Origin{EntryPoint: types.EntryPointServer},
+		Kind:      trailtypes.KindJob,
+		Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 		Workspace: m.Root(),
 		Action:    "review.merged",
-		Outcome:   trail.OutcomeOK,
+		Outcome:   trailtypes.OutcomeOK,
 		Preview:   preview,
 	})
 	if !underReader {
@@ -961,7 +964,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 }
 
 // openWorkspace opens root the way every registry workspace is opened.
-func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
+func openWorkspace(root string, lim *budget.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
 	cfg, err := server.LoadWorkspaceConfig(root)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)
