@@ -69,6 +69,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -1105,4 +1106,21 @@ func workspaceSandboxMode(ctx context.Context, root string) (types.SandboxMode, 
 		return "", err
 	}
 	return m.SandboxMode(), nil
+}
+
+// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
+// in, whose magus cannot start for root, since a host runs a failed hook's call.
+func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
+	if sub == "shell" {
+		return mapExitCode(shellCommand(guard.WithStaleConfig(ctx, cause), subArgs)), true
+	}
+	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
+	if sub != "buzz" || termkit.StdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
+		return 0, false
+	}
+	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
+	if reason != "" {
+		fmt.Fprintln(os.Stderr, reason)
+	}
+	return answer.ExitCode(), true
 }
