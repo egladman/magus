@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
 
@@ -123,6 +124,35 @@ func (s *pathsNestedSuite) TestTheHeaderLineIsKept() {
 
 	s.Require().NoError(err)
 	s.NotContains(got, "spec")
+}
+
+// headerlessStoreSuite pins a store with no header line, which replays every migration
+// from 0 over rows a later magus already wrote.
+type headerlessStoreSuite struct {
+	suite.Suite
+}
+
+func TestHeaderlessStoreSuite(t *testing.T) { suite.Run(t, new(headerlessStoreSuite)) }
+
+func (s *headerlessStoreSuite) TestAnEnvelopedRowLoadsAndIsKept() {
+	st := tempStore(s.T(), s.T().TempDir())
+	row := types.Job{ID: "a", State: types.StateRunning, Created: 1, Updated: 1, Paths: types.JobPaths{Write: []string{"a.go"}}}
+	line, err := json.Marshal(recordJob(row, nil))
+	s.Require().NoError(err)
+	path := plantRaw(s.T(), st, string(line))
+	current := tempStore(s.T(), s.T().TempDir())
+	plantRaw(s.T(), current, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":%d}\n%s", RecordAPIVersion, len(jobMigrations), line))
+	want, err := current.List()
+	s.Require().NoError(err)
+	s.Require().Len(want, 1)
+
+	rows, err := st.List()
+
+	s.Require().NoError(err)
+	s.Equal(want, rows, "the row reads as it does under a current header")
+	stored := storedLines(s.T(), path)
+	s.Require().Len(stored, 2, "the header the migration wrote, then the row")
+	s.Equal(string(RecordAPIVersion), stored[1]["apiVersion"])
 }
 
 // rootlessMigrationSuite pins the migration refusal for a store opened with

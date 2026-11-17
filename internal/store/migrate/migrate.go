@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
@@ -34,8 +35,8 @@ type Store struct {
 	Name string
 	Path string
 	// Header reports whether a line is the store's header, the one line that records its
-	// version. The last header line is the header, as a store reads it. Every other line is
-	// an entry.
+	// version. [Store.Apply] refuses a file with more than one. Every other line is an
+	// entry.
 	Header func(Entry) bool
 	// Migrations are the store's migrations in order: the i-th takes version i to i+1.
 	Migrations []Migration
@@ -133,9 +134,11 @@ func (s Store) Apply() (result, error) {
 }
 
 // split decodes lines into the store's header, empty when it has none, and its entries in
-// file order.
+// file order. More than one header line is refused: a reader that takes entries for headers
+// sees several, and the rewrite would keep only the last.
 func (s Store) split(lines []file.Line) (header Entry, entries []Entry, err error) {
 	header = Entry{}
+	var at []string
 	for _, line := range lines {
 		var e Entry
 		if err := json.Unmarshal(line.Text, &e); err != nil {
@@ -143,9 +146,14 @@ func (s Store) split(lines []file.Line) (header Entry, entries []Entry, err erro
 		}
 		if s.Header(e) {
 			header = e
+			at = append(at, strconv.Itoa(line.N))
 			continue
 		}
 		entries = append(entries, e)
+	}
+	if len(at) > 1 {
+		return nil, nil, fmt.Errorf("%s: %s: lines %s are each a header line, and a store has one:"+
+			" rewriting it would keep the last and drop the rest, so nothing was migrated", s.Name, s.Path, strings.Join(at, ", "))
 	}
 	return header, entries, nil
 }

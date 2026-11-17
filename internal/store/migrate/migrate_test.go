@@ -168,6 +168,19 @@ func (s *migrateSuite) TestAMalformedLineNamesItsLine() {
 	s.Require().ErrorContains(err, fmt.Sprintf("thing store: %s:2: ", st.Path))
 }
 
+// A reader that takes entries for headers would rewrite the store as its last one, so a
+// second header is refused before anything is written.
+func (s *migrateSuite) TestASecondHeaderLineIsRefusedAndTheFileKept() {
+	body := "{\"plan\":\"p\"}\n{\"id\":\"a\",\"attempt\":1}\n{\"plan\":\"q\"}\n"
+	st := s.store(body, renameMember("attempt", "run"))
+
+	_, err := st.Apply()
+
+	s.Require().EqualError(err, fmt.Sprintf("thing store: %s: lines 1, 3 are each a header line, and a store has one:"+
+		" rewriting it would keep the last and drop the rest, so nothing was migrated", st.Path))
+	s.Equal(body, s.contents(st), "not a byte moved")
+}
+
 func (s *migrateSuite) TestAnUnfinishedLastLineIsDroppedAndSaid() {
 	st := s.store("{\"id\":\"a\",\"attempt\":1}\n{\"id\":\"b\",\"att", renameMember("attempt", "run"))
 
