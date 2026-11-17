@@ -104,7 +104,7 @@ func TestOutputImportRoundTripPrintsTheSameBytes(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(jsonl, "\n"), "-o jsonl writes one record per line")
 
 	var stdout, stderr bytes.Buffer
-	require.NoError(t, printOutputRecords(strings.NewReader(jsonl), &stdout, &stderr))
+	require.NoError(t, cache.PrintOutputRecords(strings.NewReader(jsonl), &stdout, &stderr))
 	assert.Equal(t, local, stdout.String())
 	assert.Contains(t, stderr.String(), ref+" from stdin: not run here, not stored, never a cache hit")
 	assert.Contains(t, stderr.String(), "(this machine: "+runtime.GOOS+"/"+runtime.GOARCH+")")
@@ -169,7 +169,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 
 	t.Run("imported record", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		require.NoError(t, printOutputRecords(strings.NewReader(exportJSONL(t, ctx, ref)), &stdout, &stderr))
+		require.NoError(t, cache.PrintOutputRecords(strings.NewReader(exportJSONL(t, ctx, ref)), &stdout, &stderr))
 		assert.Contains(t, stderr.String(), want)
 		assert.Contains(t, stderr.String(), "lint-go")
 	})
@@ -227,31 +227,6 @@ magus\project({"targets": {
 		assert.Equal(t, "lint-go", member.Target)
 		assert.Empty(t, member.FailedNeedTarget, "the throwing member composes nothing")
 	}
-}
-
-func TestOutputImportNamesOnlyAShapedFailedNeedRef(t *testing.T) {
-	key := strings.Repeat("ab", 32)
-	rec := func(ref string) []byte {
-		b, err := jsonMarshalLine(types.StoredOutput{
-			Schema: types.Schema{Version: types.StoredOutputAPIVersion},
-			OutputDescriptor: types.OutputDescriptor{
-				Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
-				FailedNeedTarget: "lint-go\x1b[2J", FailedNeedRef: ref,
-			},
-		})
-		require.NoError(t, err)
-		return b
-	}
-
-	var stdout, stderr bytes.Buffer
-	require.NoError(t, printOutputRecords(bytes.NewReader(rec("out0123456789ab")), &stdout, &stderr))
-	assert.Contains(t, stderr.String(), "magus query output out0123456789ab")
-	assert.NotContains(t, stderr.String(), "\x1b", "the member's target is neutralized like the error")
-
-	stderr.Reset()
-	require.NoError(t, printOutputRecords(bytes.NewReader(rec("x; rm -rf ~")), &stdout, &stderr))
-	assert.NotContains(t, stderr.String(), "rm -rf", "a ref no magus mints is never echoed as a command")
-	assert.NotContains(t, stderr.String(), "failed:")
 }
 
 func TestQueryOutputTextPrintsNoErrorForAPassingRun(t *testing.T) {
@@ -314,38 +289,9 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 	assert.Error(t, queryCommand(context.Background(), "", []string{"output", "--stdin"}), "-o json with --stdin")
 }
 
-func TestOutputImportNeutralizesWhatItPrints(t *testing.T) {
-	key := strings.Repeat("ab", 32)
-	rec := types.StoredOutput{
-		Schema: types.Schema{Version: types.StoredOutputAPIVersion},
-		OutputDescriptor: types.OutputDescriptor{
-			Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
-			ErrMsg:   "exit 1\x1b]52;c;cm0gLXJmIH4=\x07\nrun: magus x out000000000000",
-			Platform: "linux/amd64", Revision: strings.Repeat("c", 40), MagusVersion: "v9.9.9",
-			Spell: "go::go-build", ExtraArgs: []string{"-run", "X"},
-		},
-		ClassDigests: []types.ClassDigest{{Class: "src", Digest: "0123456789ab", Count: 2}},
-		Output:       "line\x1b]0;owned\x07\x1b[2J\x1b[31mred\x1b[0m\n",
-	}
-	b, err := jsonMarshalLine(rec)
-	require.NoError(t, err)
-
-	var stdout, stderr bytes.Buffer
-	require.NoError(t, printOutputRecords(bytes.NewReader(b), &stdout, &stderr))
-	assert.Equal(t, "line<U+001B>]0;owned<U+0007><U+001B>[2J\x1b[31mred\x1b[0m\n", stdout.String())
-	assert.NotContains(t, stderr.String(), "\x1b", "no escape reaches stderr")
-	assert.Contains(t, stderr.String(), "<U+001B>]52;c;")
-	assert.Contains(t, stderr.String(), "3 terminal control(s)")
-	assert.Contains(t, stderr.String(), "platform: linux/amd64 (this machine: ")
-	assert.Contains(t, stderr.String(), "magus:    v9.9.9")
-	assert.Contains(t, stderr.String(), "src 0123456789ab")
-	assert.NotContains(t, stderr.String(), "magus x "+rec.Ref, "no reproduce command for a record from elsewhere")
-	assert.NotContains(t, stderr.String(), "go::go-build", "spell and args are never echoed as a command")
-}
-
 func jsonMarshalLine(v any) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := renderJSONL(&buf, []any{v}); err != nil {
+	if err := writeFormatted(&buf, output.Options{Format: outputJSONL}, []any{v}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

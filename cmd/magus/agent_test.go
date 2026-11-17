@@ -2,16 +2,13 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
-	"cmp"
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -19,13 +16,15 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/script"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
+	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -144,38 +143,6 @@ func plantSkillDirs(t *testing.T, dir, dest string) (retired, handAuthored, empt
 	empty = filepath.Join(dir, dest, "magus-empty")
 	require.NoError(t, os.MkdirAll(empty, 0o755))
 	return retired, handAuthored, empty
-}
-
-func TestInstallSkillTreePrunesOnlyWhatMagusStamped(t *testing.T) {
-	dir := t.TempDir()
-	const dest = ".claude/skills"
-	retired, handAuthored, empty := plantSkillDirs(t, dir, dest)
-
-	written, changed, removed, err := installSkillTree(dir, dest, true, false, types.SkillFormFull)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
-	assert.NotEmpty(t, written)
-	assert.Equal(t, written, changed, "a fresh tree is all changes")
-	assert.NoDirExists(t, retired)
-	assert.DirExists(t, handAuthored, "a skill without the stamp is not magus's to delete")
-	assert.DirExists(t, empty, "an empty directory proves nothing about who wrote it")
-	assert.FileExists(t, filepath.Join(dir, dest, "magus-query", "SKILL.md"))
-}
-
-func TestInstallSkillTreeDryRunRemovesNothing(t *testing.T) {
-	dir := t.TempDir()
-	const dest = ".claude/skills"
-	retired, _, _ := plantSkillDirs(t, dir, dest)
-
-	written, changed, removed, err := installSkillTree(dir, dest, true, true, types.SkillFormFull)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
-	assert.NotEmpty(t, written)
-	assert.Empty(t, changed)
-	assert.DirExists(t, retired)
-	assert.NoDirExists(t, filepath.Join(dir, dest, "magus-query"), "a dry run writes nothing")
 }
 
 // TestAgentInstallReportsEachRemovalOnStdout: install prunes without a flag, so the
@@ -553,42 +520,6 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 	}
 }
 
-// TestInstallTargetHonorsGlobal pins the fix for a flag that never worked:
-// --global documents "allow absolute destination paths", the command let one
-// past its own guard, and Catalog.WriteSkillTree then refused it
-// unconditionally, so the error told the caller to pass the flag they had just
-// passed.
-//
-// The split is what makes it work without weakening the catalog: an absolute
-// destination becomes the directory it names plus the leaf inside it, so the
-// catalog's containment check still has something real to check.
-func TestInstallTargetHonorsGlobal(t *testing.T) {
-	base, leaf := installTarget(".", "/tmp/skills", true)
-	assert.Equal(t, filepath.Dir("/tmp/skills"), base, "an absolute dest supplies its own base")
-	assert.Equal(t, "skills", leaf)
-	assert.Equal(t, filepath.Clean("/tmp/skills"), filepath.Join(base, leaf),
-		"the split must rejoin to the path the caller asked for")
-}
-
-// TestInstallTargetLeavesRelativeAlone: without --global, and for a relative
-// destination with it, the pair is unchanged: the catalog keeps enforcing
-// containment against the repo dir.
-func TestInstallTargetLeavesRelativeAlone(t *testing.T) {
-	base, leaf := installTarget("repo", ".claude/skills", false)
-	assert.Equal(t, "repo", base)
-	assert.Equal(t, ".claude/skills", leaf)
-
-	base, leaf = installTarget("repo", ".claude/skills", true)
-	assert.Equal(t, "repo", base, "--global does not relocate a relative destination")
-	assert.Equal(t, ".claude/skills", leaf)
-
-	// A traversal is left intact so the catalog still refuses it; --global must
-	// not become a way to escape the tree.
-	base, leaf = installTarget("repo", "../../outside", true)
-	assert.Equal(t, "repo", base)
-	assert.Equal(t, "../../outside", leaf)
-}
-
 // extractTar reads a tar archive at src and writes its entries under dst,
 // creating parent directories. Mirrors the user-facing `tar -xf - -C <dst>`
 // pipe that the tar output mode is designed for.
@@ -619,92 +550,273 @@ func extractTar(t *testing.T, src, dst string) {
 	}
 }
 
-func TestAgentStarterDocPlainASCIISelfContained(t *testing.T) {
-	doc := agentStarterDoc(false)
-	assert.Contains(t, doc, "# AGENTS.md")
-	assert.Contains(t, doc, "## Project")  // a project placeholder to fill in
-	assert.Contains(t, doc, "## magus")    // the reproduced magus block
-	assert.Contains(t, doc, vcsSafetyRule) // the shared safety rule
-	for _, r := range doc {
-		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
+// TestHarnessInstallRefusesABoundJobFromEitherSource pins that a harness skill install is
+// refused under the checkout's binding as well as under the claim the process was launched
+// with. Only the claim used to count, so a worker `magus job exec` bound, with no BAGGAGE,
+// could rewrite the skills that steer it.
+func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	globalCfg = config.Config{}
+	t.Setenv(trail.EnvBaggage, "")
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+
+	acting := func(ctx context.Context) string {
+		lease, _, err := guard.CheckoutLease(ctx, root, jobPlace)
+		require.NoError(t, err)
+		return lease
 	}
+	assert.Empty(t, acting(context.Background()), "an unbound caller installs its own skills")
+
+	claimed := types.WithJobLease(context.Background(), "fleet/claimed")
+	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/env")
+	assert.Equal(t, "fleet/env", acting(context.Background()), "BAGGAGE, with no forwarded lease")
+	assert.Equal(t, "fleet/claimed", acting(claimed), "a forwarded lease over BAGGAGE")
+	t.Setenv(trail.EnvBaggage, "")
+
+	bindCheckout(t, cacheDir, "fleet/bound")
+	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")
+	assert.Equal(t, "fleet/bound", acting(claimed), "the binding over a different claim")
+
+	err = agentHarnessInstallCommand(context.Background(), root, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 }
 
-// agentEvalEnv is read at package initialization because TestMain replaces the
-// environment with an isolated one before any test runs. The claude credentials and
-// CLAUDE_CODE_EXECPATH are the only variables the agent gets from the caller's
-// environment.
-var agentEvalEnv = func() map[string]string {
-	env := map[string]string{}
-	for _, name := range []string{
-		"MAGUS_AGENT_EVAL",
-		"MAGUS_AGENT_EVAL_VARIANTS",
-		"MAGUS_AGENT_EVAL_REPS",
-		"MAGUS_AGENT_EVAL_RESULTS",
-		"CLAUDE_CODE_OAUTH_TOKEN",
-		"ANTHROPIC_API_KEY",
-		"CLAUDE_CODE_EXECPATH",
-	} {
-		if v, ok := os.LookupEnv(name); ok {
-			env[name] = v
-		}
-	}
-	return env
-}()
-
-// TestAgentEval runs every testdata/agenteval task with a real claude, once per skill
-// variant and repetition, and appends one row per run to MAGUS_AGENT_EVAL_RESULTS, an
-// absolute path (default magus-agenteval.jsonl in the temp dir). It spends tokens, so it
-// skips unless MAGUS_AGENT_EVAL=1.
-//
-// MAGUS_AGENT_EVAL_VARIANTS is a comma-separated list of skill forms or absolute skills
-// directories (default full,short); MAGUS_AGENT_EVAL_REPS is the runs per variant
-// (default 1). The test runs in cmd/magus, so it refuses a relative path rather than
-// resolve it there.
-func TestAgentEval(t *testing.T) {
-	if agentEvalEnv["MAGUS_AGENT_EVAL"] != "1" {
-		t.Skip("MAGUS_AGENT_EVAL=1 runs the agent eval, which spends tokens")
-	}
-	var variants []string
-	for _, v := range strings.Split(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_VARIANTS"], "full,short"), ",") {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		if strings.ContainsRune(v, filepath.Separator) && !filepath.IsAbs(v) {
-			t.Fatalf("MAGUS_AGENT_EVAL_VARIANTS: %q: a skills directory must be an absolute path", v)
-		}
-		variants = append(variants, v)
-	}
-	require.NotEmpty(t, variants, "MAGUS_AGENT_EVAL_VARIANTS names no variant")
-	reps, err := strconv.Atoi(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_REPS"], "1"))
-	require.NoError(t, err, "MAGUS_AGENT_EVAL_REPS")
-	if reps <= 0 {
-		t.Fatalf("MAGUS_AGENT_EVAL_REPS: %d: want at least 1", reps)
-	}
-	results := cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_RESULTS"], filepath.Join(os.TempDir(), "magus-agenteval.jsonl"))
-	if !filepath.IsAbs(results) {
-		t.Fatalf("MAGUS_AGENT_EVAL_RESULTS: %q: want an absolute path", results)
-	}
-	t.Logf("results: %s", results)
-
-	passEnv := script.WithSetup(func(e *script.Env) error {
-		for _, name := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_EXECPATH"} {
-			if v := agentEvalEnv[name]; v != "" {
-				e.Setenv(name, v)
-			}
-		}
-		return nil
+// TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
+// this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
+// and never a stale binary found on disk. The command is copied from the text output the
+// way a person copies it and must match want-merge.sh byte for byte, so an escaped > fails
+// here. Afterwards nothing is left to merge, the person's own entries and an integer past
+// 2^53 survive, a retired entry is gone, and a second run on the current plan changes nothing.
+func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "describe_harness_merge.txtar")
+	require.NoError(t, os.WriteFile(script, []byte(describeHarnessMergeTxtar), 0o644))
+	testscript.Run(t, testscript.Params{
+		Files: []string{script},
+		Setup: func(e *testscript.Env) error {
+			e.Setenv("MAGUS_SERVER_ENABLED", "false")
+			e.Setenv("MAGUS_BROKER", "off")
+			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The merge's fs writes are judged, which opens the workspace.
+			e.Setenv("XDG_CACHE_HOME", filepath.Join(e.WorkDir, ".cache"))
+			return nil
+		},
 	})
-	for _, variant := range variants {
-		for rep := 1; rep <= reps; rep++ {
-			t.Run(fmt.Sprintf("%s/%d", filepath.Base(variant), rep), func(t *testing.T) {
-				script.Run(t, filepath.Join("testdata", "agenteval"),
-					passEnv,
-					script.WithSetup(script.Skills(variant)),
-					script.WithAgent(script.Recorder{Variant: variant, Repetition: rep, File: results}))
-			})
-		}
+}
+
+const describeHarnessMergeTxtar = `exec sh -c 'magus describe harness script-host | sed -n "s/^  \(magus describe harness .*\)/\1/p" > printed.sh'
+cmp printed.sh want-merge.sh
+exec sh printed.sh
+cmp hooks.json want.json
+exec sh printed.sh
+cmp hooks.json want.json
+exec magus describe harness script-host
+stdout '^script-host harness: current$'
+stdout '^wired in hooks.json hooks.before:$'
+stdout '^  run: magus buzz -s magus-command.buzz$'
+exec magus describe harness script-host -o 'template={{range .wired}}{{.file}} {{.key}}{{range .entries}} {{.match}}{{end}}{{end}}'
+stdout '^hooks.json hooks.before run$'
+
+-- magusfile.buzz --
+import "magus";
+import "spells/script-host" as scripthost;
+magus\harness.provider(scripthost);
+-- spells/script-host/spell.buzz --
+import "magus/spell";
+
+export fun mgs_getName() > str { return "script-host"; }
+
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = "hooks.json"}, guard = "hooks"};
+}
+
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{form = SkillForm.short};
+}
+
+export fun mgs_listEntries() > [ManagedEntries] {
+    return [ManagedEntries{path = ["hooks", "before"], entries = [{"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]}]}];
+}
+
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
+-- hooks.json --
+{
+  "large": 9007199254740993,
+  "hooks": {
+    "before": [
+      {"match": "run", "commands": [{"type": "command", "command": "magus buzz -s old/magus-command.buzz"}]},
+      {"match": "run", "commands": [{"type": "command", "command": "my-own-hook"}]}
+    ],
+    "after": [{"command": "theirs"}]
+  }
+}
+-- want-merge.sh --
+magus describe harness script-host -o json | magus buzz -e 'import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); if (plan["files"] == null) { return; } foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }'
+-- want.json --
+{
+  "hooks": {
+    "after": [
+      {
+        "command": "theirs"
+      }
+    ],
+    "before": [
+      {
+        "commands": [
+          {
+            "command": "my-own-hook",
+            "type": "command"
+          }
+        ],
+        "match": "run"
+      },
+      {
+        "commands": [
+          {
+            "command": "magus buzz -s magus-command.buzz",
+            "type": "command"
+          }
+        ],
+        "match": "run"
+      }
+    ]
+  },
+  "large": 9007199254740993
+}
+`
+
+// TestShippedHarnessEntriesRetireWhenRewritten holds every entry a shipped harness spell
+// renders to being one a later merge recognizes as magus's. It merges each host's config,
+// rewrites every command the way a new spell version would, and merges again: an entry the
+// planner did not recognize stays beside its replacement, which is how Claude Code's session
+// PATH entry came to be wired twice while describe called the file current. Each config starts
+// with a hand-written reply check that no merge may add a second copy of, retire or rewrite.
+func TestShippedHarnessEntriesRetireWhenRewritten(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "shipped_harness_retire.txtar")
+	require.NoError(t, os.WriteFile(script, []byte(shippedHarnessRetireTxtar), 0o644))
+	testscript.Run(t, testscript.Params{
+		Files: []string{script},
+		Setup: func(e *testscript.Env) error {
+			e.Setenv("MAGUS_SERVER_ENABLED", "false")
+			e.Setenv("MAGUS_BROKER", "off")
+			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The merge's fs writes are judged, which opens the workspace.
+			e.Setenv("XDG_CACHE_HOME", filepath.Join(e.WorkDir, ".cache"))
+			for _, id := range []string{"claude-code", "codex", "cursor"} {
+				spell := filepath.Join("spells", "harness", id, "spell.buzz")
+				body, err := os.ReadFile(filepath.Join("..", "..", spell))
+				if err != nil {
+					return err
+				}
+				if err := os.MkdirAll(filepath.Join(e.WorkDir, filepath.Dir(spell)), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(e.WorkDir, spell), body, 0o644); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	})
+}
+
+const shippedHarnessRetireTxtar = `exec sh merge.sh
+grep 'magus-command.buzz' .claude/settings.json
+grep 'CLAUDE_ENV_FILE' .claude/settings.json
+grep 'magus-command.buzz' .codex/hooks.json
+grep 'cursor-hook.buzz' .cursor/hooks.json
+grep '"matcher": "spawn_agent\|collaborationspawn_agent\|Agent"' .codex/hooks.json
+grep '"PostToolUse"' .codex/hooks.json
+grep '"SubagentStart"' .codex/hooks.json
+grep '"SubagentStop"' .codex/hooks.json
+! grep '"matcher": "Read"' .codex/hooks.json
+grep '"UserPromptSubmit"' .codex/hooks.json
+grep '"beforeSubmitPrompt"' .cursor/hooks.json
+! grep 'sandbox_mode' .codex/agents/magus-scout.toml
+grep -count=1 'proofread-reply.buzz' .claude/settings.json
+grep -count=1 'proofread-reply.buzz' .codex/hooks.json
+grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
+exec sh rewrite.sh
+grep 'stale-rendering' .claude/settings.json
+exec sh merge.sh
+! grep 'stale-rendering' .claude/settings.json
+! grep 'stale-rendering' .codex/hooks.json
+! grep 'stale-rendering' .cursor/hooks.json
+grep -count=1 'proofread-reply.buzz' .claude/settings.json
+grep -count=1 'proofread-reply.buzz' .codex/hooks.json
+grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
+grep -count=1 'collaborationspawn_agent' .codex/hooks.json
+grep -count=3 'magus-rehydrate.buzz' .codex/hooks.json
+exec magus describe harness claude-code
+stdout '^claude-code harness: current$'
+exec magus describe harness codex
+stdout '^codex harness: current$'
+exec magus describe harness cursor
+stdout '^cursor harness: current$'
+
+-- magusfile.buzz --
+import "magus";
+import "spells/harness/claude-code" as claude;
+import "spells/harness/codex";
+import "spells/harness/cursor";
+magus\harness.provider(claude);
+magus\harness.provider(codex);
+magus\harness.provider(cursor);
+-- .claude/settings.json --
+{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code"}]}]}}
+-- .codex/hooks.json --
+{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"}]}]}}
+-- .cursor/hooks.json --
+{"version": 1, "hooks": {"stop": [{"command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name cursor", "loop_limit": 1}]}}
+-- merge.sh --
+set -e
+for id in claude-code codex cursor; do
+  magus describe harness "$id" -o 'template={{.merge}}' > "merge-$id.sh"
+  sh "merge-$id.sh"
+done
+-- rewrite.sh --
+set -e
+for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
+  sed '/proofread-reply/!s/"command": "/"command": ": stale-rendering; /g' "$f" > rewritten
+  mv rewritten "$f"
+done
+`
+
+// The checkpoint's spawn ancestry is read from the environment, so its lease must be the
+// environment's claim too: a hook process forwards none, and guard.CheckoutLease has to agree with
+// job.ActingLease over trail.SpawnFromEnv for every source.
+func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testing.T) {
+	for name, tc := range map[string]struct{ claim, bound string }{
+		"nothing":                 {},
+		"the claim alone":         {claim: "fleet/f3"},
+		"the binding alone":       {bound: "fleet/bound"},
+		"the binding and a claim": {claim: "fleet/f3", bound: "fleet/bound"},
+		"an invalid claim":        {claim: "not a lease id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := attentionTestRoot(t)
+			cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+			require.NoError(t, err)
+			if tc.bound != "" {
+				bindCheckout(t, cacheDir, tc.bound)
+			}
+			t.Setenv(trail.EnvBaggage, "")
+			if tc.claim != "" {
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+			}
+
+			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)
+			lease, from, err := guard.CheckoutLease(context.Background(), root, jobPlace)
+			require.NoError(t, err)
+			assert.Equal(t, wantLease, lease)
+			assert.Equal(t, wantFrom, from)
+		})
 	}
 }
 
@@ -733,16 +845,68 @@ func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
 	assert.NoError(t, err, "stdin remains unread while the checkout is bound")
 }
 
-func TestPointAtConsoleNamesTheServerStartOnlyWhenAsked(t *testing.T) {
-	testkit.Isolate(t)
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+// TestAgentAdoptionCmdCommandsFile exercises the command end to end through the
+// generated --commands binder: a file of shell commands becomes the input, and
+// the whole rendered report is compared so input that arrived truncated or
+// empty cannot pass.
+func TestAgentAdoptionCmdCommandsFile(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		commands string
+		want     string
+	}{
+		{
+			name:     "commands",
+			commands: "grep -rn HandleFoo internal/\ncat foo.go\nmagus query kind=spell\n",
+			want: `agent adoption over 3 commands:
 
-	pointAtConsole(t.Context(), "some-job", false)
-	assert.Empty(t, buf.String(), "nobody asked for the server")
+  graph verbs (query/refs/explain/path/graph)          1
+  text searches (grep/rg/ag)                           1
+  graph : search ratio                             1 : 1
 
-	pointAtConsole(t.Context(), "some-job", true)
-	assert.Contains(t, buf.String(), "the console is not running")
+  repo-wide search over source (refs/query)            1
+  search over prose .md (docsection)                   0
+  file reads via shell (cat/head/tail/sed)             1
+
+top repo-wide patterns that look like symbols, with the graph query to try:
+       1  HandleFoo  ->  magus refs HandleFoo
+`,
+		},
+		{
+			name:     "empty file",
+			commands: "",
+			want: `agent adoption over 0 commands:
+
+  graph verbs (query/refs/explain/path/graph)          0
+  text searches (grep/rg/ag)                           0
+  graph : search ratio                               n/a
+
+  repo-wide search over source (refs/query)            0
+  search over prose .md (docsection)                   0
+  file reads via shell (cat/head/tail/sed)             0
+`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			// bindDisplayFlags seeds -o from the ambient global, so a format left
+			// behind by another test would decide this one's rendering.
+			prev := global.output
+			t.Cleanup(func() { global.output = prev })
+			global.output = ""
+
+			path := filepath.Join(t.TempDir(), "commands.txt")
+			require.NoError(t, os.WriteFile(path, []byte(tt.commands), 0o644))
+
+			var err error
+			out := captureStdout(t, func() { err = agentAdoptionCommand([]string{"--commands", path}) })
+			require.NoError(t, err)
+			require.Equal(t, tt.want, out)
+		})
+	}
+}
+
+func TestAgentAdoptionCmdMissingCommandsFile(t *testing.T) {
+	err := agentAdoptionCommand([]string{"--commands", filepath.Join(t.TempDir(), "absent.txt")})
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	assert.Contains(t, err.Error(), "agent adoption: ")
 }

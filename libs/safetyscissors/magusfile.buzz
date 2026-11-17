@@ -40,8 +40,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// ci runs lint, then test.
+// ci regenerates the mark, then runs lint and test.
 export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
     ctx.needs(lint);
     ctx.needs(test);
 }

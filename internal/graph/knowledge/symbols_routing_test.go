@@ -59,6 +59,32 @@ func TestMergeSymbolShardsByIDTargetsRoutedShards(t *testing.T) {
 	assert.False(t, hasEdgeIn(g2, "file:pkg/b/b.go", "symbol:S1"), "pkg/b's shard was not loaded")
 }
 
+// A symbol's by-reference graph skips the shard of a symbol that never mentions it, and the
+// all-symbols graph answers refs for it as that graph does.
+func TestRefsOnEverySymbolEqualsRefsOnARefScope(t *testing.T) {
+	cacheDir, in := symsFixture(t)
+	in.Graph.Projects = append(in.Graph.Projects, types.TargetGraphProject{Path: "pkg/c", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}})
+	in.Symbols["pkg/c"] = []types.KnowledgeSymbol{{Key: "S3", Label: "S3", Source: "pkg/c/c.go:1", Defs: []string{"pkg/c/c.go"}}}
+	build(t, cacheDir, BuildOptions{}, in)
+	store := NewStore(cacheDir, false, 0, nil, nil)
+
+	byRef := NewGraph()
+	require.NoError(t, store.MergeSymbolShardsByID(context.Background(), byRef, []string{"symbol:S1"}))
+	_, loaded := byRef.node("symbol:S3")
+	require.False(t, loaded, "the by-reference graph skips pkg/c")
+	want, ok := byRef.Refs("symbol:S1")
+	require.True(t, ok)
+	require.Equal(t, 1, want.FileCount)
+
+	all := NewGraph()
+	require.NoError(t, store.MergeSymbolShards(context.Background(), all))
+	_, loaded = all.node("symbol:S3")
+	require.True(t, loaded, "the all-symbols graph holds pkg/c")
+	got, ok := all.Refs("symbol:S1")
+	require.True(t, ok)
+	assert.Equal(t, want, got)
+}
+
 func TestMergeSymbolShardsByIDFallsBackWithoutRouting(t *testing.T) {
 	cacheDir, in := symsFixture(t)
 	build(t, cacheDir, BuildOptions{}, in)

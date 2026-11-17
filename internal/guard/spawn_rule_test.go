@@ -1187,7 +1187,7 @@ func TestRevisionIsReadOncePerJudgment(t *testing.T) {
 	reads := 0
 	deps := Dependencies{
 		Revision:  func(context.Context, string, string) string { reads++; return "9c0ffee" },
-		revisions: &revisionMemo{current: map[string]string{}},
+		revisions: &checkoutRevisions{current: map[string]string{}},
 	}
 	for range 3 {
 		assert.Equal(t, "9c0ffee", deps.revision(t.Context(), "/w", ""))

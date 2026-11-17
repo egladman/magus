@@ -303,20 +303,20 @@ func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
 		"pruning a dir that holds matching source must change the key (prune is effective)")
 }
 
-// TestStepKeyMemoReusesSourceExpansion is SourceMemo's own contract, asserted
+// TestStepKeyReusesSourceExpansionFromOneHolder is SourceOnce's own contract, asserted
 // directly rather than through IdentifyRef's end-to-end tests: a repeated
 // (WorkspaceRoot, Sources, Outputs, IgnoreDirs) tuple is expanded and hashed
-// ONCE, and a second StepKeyMemo call with the same memo reuses that result
+// ONCE, and a second StepKeyWithSources call with the same holder reuses that result
 // instead of re-walking and re-hashing. Reuse is proved, not just equal
 // output: if the second call actually re-walked, it would either find src.go
 // gone (WalkDir enumerates nothing under that glob, so the key would drop the
 // "src:" line and change) or fail outright, since the file is removed between
-// calls. A memo that silently stopped reusing would still produce a first key
+// calls. A holder that silently stopped reusing would still produce a first key
 // equal to a comparison of two independently-computed identical steps, so an
-// assertion that only compared keys would pass with SourceMemo deleted;
+// assertion that only compared keys would pass with SourceOnce deleted;
 // deleting the source file between calls is what makes the second call's
 // result trustworthy evidence of reuse rather than a coincidence.
-func TestStepKeyMemoReusesSourceExpansion(t *testing.T) {
+func TestStepKeyReusesSourceExpansionFromOneHolder(t *testing.T) {
 	c := newBareCache(t)
 	ctx := context.Background()
 
@@ -330,27 +330,27 @@ func TestStepKeyMemoReusesSourceExpansion(t *testing.T) {
 		Sources:       types.MustParseGlobs("**/*.go"),
 	}
 
-	memo := NewSourceMemo()
-	key1, lines1, err := c.StepKeyMemo(ctx, step, memo)
-	require.NoError(t, err, "StepKeyMemo (first call)")
+	once := NewSourceOnce()
+	key1, lines1, err := c.StepKeyWithSources(ctx, step, once)
+	require.NoError(t, err, "StepKeyWithSources (first call)")
 	require.Contains(t, lines1, fmt.Sprintf("src:src.go:%s:0", mustHashFile(t, src)),
 		"test setup: the first call must have actually hashed src.go")
 
-	// The tuple this memo entry is keyed on never changes between calls, so a
-	// real memo hit does not care that the file backing it is now gone.
+	// The tuple this entry is keyed on never changes between calls, so a
+	// real hit does not care that the file backing it is now gone.
 	require.NoError(t, os.Remove(src))
 
-	key2, lines2, err := c.StepKeyMemo(ctx, step, memo)
-	require.NoError(t, err, "StepKeyMemo (second call, memo hit)")
-	assert.Equal(t, key1, key2, "a memo hit must reuse the first call's expansion, not re-walk a tree that no longer has the file")
-	assert.Equal(t, lines1, lines2, "a memo hit must reuse the first call's key lines verbatim")
+	key2, lines2, err := c.StepKeyWithSources(ctx, step, once)
+	require.NoError(t, err, "StepKeyWithSources (second call, second call reuses)")
+	assert.Equal(t, key1, key2, "a reuse must reuse the first call's expansion, not re-walk a tree that no longer has the file")
+	assert.Equal(t, lines1, lines2, "a reuse must reuse the first call's key lines verbatim")
 
-	// Control: without a memo, the same step now hashes to something else,
+	// Control: without a holder, the same step now hashes to something else,
 	// proving the disk state really did change and the equality above is not
 	// an accident of an unaffected key.
-	keyNoMemo, _, err := c.StepKeyMemo(ctx, step, nil)
-	require.NoError(t, err, "StepKeyMemo (no memo, post-removal)")
-	assert.NotEqual(t, key1, keyNoMemo, "test setup: removing src.go must change the key when nothing memoizes the expansion")
+	keyWithoutHolder, _, err := c.StepKeyWithSources(ctx, step, nil)
+	require.NoError(t, err, "StepKeyWithSources (no holder, post-removal)")
+	assert.NotEqual(t, key1, keyWithoutHolder, "test setup: removing src.go must change the key when nothing keeps the expansion")
 }
 
 // mustHashFile is a small helper for pinning a "src:" key line's expected
@@ -971,7 +971,7 @@ func (s *WorkspaceSourcesSuite) step(globs ...string) *Step {
 }
 
 func (s *WorkspaceSourcesSuite) key(st *Step) (string, []string) {
-	key, lines, err := s.cache.StepKeyMemo(context.Background(), st, nil)
+	key, lines, err := s.cache.StepKeyWithSources(context.Background(), st, nil)
 	s.Require().NoError(err)
 	return key, lines
 }
@@ -1003,33 +1003,33 @@ func (s *WorkspaceSourcesSuite) TestTheKeyIsTheSameFromAnotherCheckoutOfTheOther
 }
 
 func (s *WorkspaceSourcesSuite) TestAWorkspaceNotConnectedRefusesWithMGS1059() {
-	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step(".magus/workspaces/other/x.yml"), nil)
+	_, _, err := s.cache.StepKeyWithSources(context.Background(), s.step(".magus/workspaces/other/x.yml"), nil)
 	s.Require().ErrorIs(err, types.WorkspaceNotConnected)
 	s.Contains(err.Error(), "b:lint reads .magus/workspaces/other, not connected here")
 	s.Contains(err.Error(), "knowledge.workspaces")
 }
 
 func (s *WorkspaceSourcesSuite) TestEscapingTheRootByDotDotIsRefusedNotDropped() {
-	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step("../other/*.go"), nil)
+	_, _, err := s.cache.StepKeyWithSources(context.Background(), s.step("../other/*.go"), nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "reaches outside the workspace root")
 }
 
 func (s *WorkspaceSourcesSuite) TestAnAbsoluteGlobIsRefusedNotDropped() {
-	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step("/abs/*.go"), nil)
+	_, _, err := s.cache.StepKeyWithSources(context.Background(), s.step("/abs/*.go"), nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "reaches outside the workspace root")
 }
 
-func (s *WorkspaceSourcesSuite) TestTheMemoTellsTargetsApart() {
-	memo := NewSourceMemo()
+func (s *WorkspaceSourcesSuite) TestOneHolderTellsTargetsApart() {
+	once := NewSourceOnce()
 	st := s.step(".magus/workspaces/magus/.golangci.yml")
-	first, _, err := s.cache.StepKeyMemo(context.Background(), st, memo)
+	first, _, err := s.cache.StepKeyWithSources(context.Background(), st, once)
 	s.Require().NoError(err)
 	other := s.T().TempDir()
 	s.write(other, ".golangci.yml", "version: 3")
 	s.connect(other)
-	second, _, err := s.cache.StepKeyMemo(context.Background(), st, memo)
+	second, _, err := s.cache.StepKeyWithSources(context.Background(), st, once)
 	s.Require().NoError(err)
 	s.NotEqual(first, second)
 }

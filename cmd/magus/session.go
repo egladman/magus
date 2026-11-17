@@ -1,37 +1,29 @@
 package main
 
 import (
-	"bufio"
-	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
-	"sync"
-	"text/tabwriter"
 	"time"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/sessions/brief"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // sessionsDefaultLimit bounds the default listing to a session or two of scrollback.
@@ -56,7 +48,7 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	}
 	switch verb {
 	case "help":
-		sessionUsage()
+		commands.WriteSessionUsage(os.Stderr)
 		return nil
 	case "ls":
 		return invocationList(ctx, root, rest)
@@ -92,37 +84,6 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	}
 }
 
-func sessionUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--all] [--limit <n>] [--since <when>]")
-	fmt.Fprintln(os.Stderr, "       magus session --brief             # this checkout's state, for a session that lost its history")
-	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
-	fmt.Fprintln(os.Stderr, "       magus session hints               # uptake per hint id, over the loaded sessions")
-	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
-	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
-	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
-	fmt.Fprintln(os.Stderr, "       magus session advise <text> [--expect <command prefix>]")
-	fmt.Fprintln(os.Stderr, "       magus session advisories [--all]")
-	fmt.Fprintln(os.Stderr, "       magus session retract <id>")
-	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
-	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent magus")
-	fmt.Fprintln(os.Stderr, "invocations did in this checkout (--all: every checkout of this repository),")
-	fmt.Fprintln(os.Stderr, "each with the host session it ran in when a host delivered one; `session show` reports one host")
-	fmt.Fprintln(os.Stderr, "session in full, `session attention` lists the blocks agents raised, and")
-	fmt.Fprintln(os.Stderr, "`session dispose` closes one - nothing closes a request automatically.")
-	fmt.Fprintln(os.Stderr, "Humans write it too: `session checkpoint` records where work stands before")
-	fmt.Fprintln(os.Stderr, "you put it down. Agent hosts write it from hooks, through `session notify`,")
-	fmt.Fprintln(os.Stderr, "and `session load` takes a normalized event stream extracted from a host's")
-	fmt.Fprintln(os.Stderr, "own transcript.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "`session --brief` answers the same question the listing opens with, for a")
-	fmt.Fprintln(os.Stderr, "session rather than a person: where this checkout stands, read off disk, for")
-	fmt.Fprintln(os.Stderr, "a model whose history a host replaced with a summary.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
-}
-
 // invocationList shows what recent magus invocations did in this checkout, or in every
 // checkout of the repository with --all.
 func invocationList(ctx context.Context, root string, args []string) error {
@@ -147,7 +108,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	if limit < 0 {
 		return exit.Usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
 	}
-	cutoff, err := parseSince(since)
+	cutoff, err := sessions.ParseSince(since)
 	if err != nil {
 		return err
 	}
@@ -166,9 +127,9 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	}
 	summaries := sessions.Summarize(fold)
 	if !all {
-		summaries = invocationsInCheckout(summaries, root)
+		summaries = sessions.InvocationsInCheckout(summaries, root)
 	}
-	summaries = invocationsSince(summaries, cutoff)
+	summaries = sessions.InvocationsSince(summaries, cutoff)
 	if limit > 0 && len(summaries) > limit {
 		summaries = summaries[:limit]
 	}
@@ -179,7 +140,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputText:
-		return renderInvocationsText(ctx, root, summaries, fold, dir, !cutoff.IsZero())
+		return sessions.RenderInvocations(ctx, root, os.Stdout, summaries, fold, dir, !cutoff.IsZero(), promptCacheForCheckout(root, time.Now()))
 	case outputName:
 		names := make([]string, 0, len(summaries))
 		for _, s := range summaries {
@@ -203,395 +164,10 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	return emitFormatted(opts, out)
 }
 
-// filtered says a --since cutoff was applied, which is what separates an empty store
-// from a store whose invocations are all older than the window. Reporting the second as
-// the first sends a person looking for a broken producer.
-//
-// INVOCATION is magus's own id for the process; SESSION is the host's conversation it
-// ran in, a dash when no host delivered one.
-func renderInvocationsText(ctx context.Context, root string, summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
-	renderCheckpoints(ctx, root, os.Stdout, sessions.LatestCheckpoints(fold))
-	if len(summaries) == 0 {
-		if filtered {
-			fmt.Fprintf(os.Stdout, "no invocations in that window; %s holds %d invocation file(s)\n", dir, fold.Invocations)
-			fmt.Fprintln(os.Stdout, "widen --since, or drop it to list every invocation")
-			return nil
-		}
-		// An empty store is the normal state before any run, so this says how facts
-		// get there rather than reporting a fault.
-		fmt.Fprintf(os.Stdout, "no invocations recorded yet in %s\n", dir)
-		fmt.Fprintf(os.Stdout, "magus records one as soon as a `%s` finishes a target in any checkout of this repository\n", hint.Run.String())
-		return nil
-	}
-
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	bySpan := make(map[string]string, len(summaries))
-	for _, s := range summaries {
-		if s.SpanID != "" {
-			bySpan[s.SpanID] = s.Invocation
-		}
-	}
-	fmt.Fprintln(tw, "INVOCATION\tLAST\tSESSION\tUSER\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tEVENTS\tTARGETS")
-	for _, s := range summaries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
-			s.Invocation,
-			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
-			orDash(s.Session),
-			orDash(s.User),
-			orDash(s.Host),
-			orDash(s.Lease),
-			orDash(s.Spawner),
-			orDash(invocationParent(bySpan, s.ParentSpanID)),
-			s.Facts,
-			// A dash rather than a zero: no loaded events is the ordinary state, and a
-			// column of zeros reads as a producer that broke.
-			orDash(strconv.Itoa(s.Events)),
-			orDash(summarizeTargets(s.Targets)))
-	}
-	if err := tw.Flush(); err != nil {
-		return err
-	}
-
-	now := time.Now()
-	renderPromptCache(os.Stdout, promptCacheForCheckout(root, now), now)
-
-	if open := len(sessions.AttentionQueue(fold)); open > 0 {
-		// A reader of the history is often looking for what needs them; one line
-		// points at the other view of the same store.
-		fmt.Fprintf(os.Stdout, "\n%d attention request(s) open; `%s` lists them\n", open, hint.SessionAttention)
-	}
-
-	if fold.Skipped > 0 {
-		// Surfaced rather than swallowed: a skipped line is a fact that happened and
-		// cannot be shown, which is exactly the thing a silent reader would misreport
-		// as "nothing happened".
-		fmt.Fprintf(os.Stdout, "\n%d unreadable line(s) skipped (an invocation killed mid-write leaves a partial line; the rest of its records still read)\n", fold.Skipped)
-	}
-	if fold.Legacy > 0 {
-		fmt.Fprintf(os.Stdout, "\n%d line(s) not shown: written before magus called a per-process id an invocation, in a shape this build does not read; their files are kept\n", fold.Legacy)
-	}
-	return nil
-}
-
-// checkpointsShown bounds the block. A checkpoint from three weeks ago is still where that
-// work sits, so the list is bounded by count rather than by age, and the tail is pointed at
-// rather than dropped silently.
-//
-// It is NOT unbounded in time, whatever this comment used to say: sessions.Prune drops a
-// whole session file 30 days after its newest record, with an exemption for open attention
-// requests and none for checkpoints. A line of work parked for a month loses every
-// checkpoint it had, silently. Either that exemption is owed or this block should say so.
-const checkpointsShown = 3
-
-// renderCheckpoints prints unfinished work above the history, because "where was I" is
-// the question a person opens this listing with, and the history answers a different one.
-//
-// It is deliberately not filtered by --since. That flag bounds what RAN recently; a
-// checkpoint records what has not finished, and hiding an old one would hide the case
-// this exists for.
-func renderCheckpoints(ctx context.Context, root string, w io.Writer, checkpoints []sessions.CheckpointRecord) {
-	if len(checkpoints) == 0 {
-		return
-	}
-	fmt.Fprintln(w, "Checkpoints, most recent first:")
-	for _, r := range checkpoints[:min(len(checkpoints), checkpointsShown)] {
-		fmt.Fprintf(w, "  %s  %s\n", r.At.Format("2006-01-02 15:04:05"), checkpointWhere(r.Checkpoint))
-		if r.Note != "" {
-			fmt.Fprintf(w, "    %s\n", r.Note)
-		}
-		if r.HostSession != "" {
-			fmt.Fprintf(w, "    session %s\n", r.HostSession)
-		}
-		if r.Transcript != "" {
-			fmt.Fprintf(w, "    transcript %s\n", r.Transcript)
-		}
-	}
-	if extra := len(checkpoints) - checkpointsShown; extra > 0 {
-		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.Session.With("-o", "json"))
-	}
-	printCheckpointInspect(ctx, root, w, checkpoints[0].Checkpoint)
-	fmt.Fprintln(w)
-}
-
-// printCheckpointInspect prints the command that shows what changed since the newest
-// checkpoint, already substituted, for THIS repository's backend.
-//
-// Composed by the DRIVER, never here. magus drives git, Mercurial, Sapling and Jujutsu,
-// and each spells this differently; a reader who assembles one from memory is guessing
-// which of the four they are in, and the same guess is what a skill hardcoding `git
-// diff` teaches them to make. DiffCommands is the one method that already knows, and
-// until now it had a single caller.
-//
-// Best-effort and silent on failure: a revisionless checkpoint has no base to diff from,
-// and a listing that refuses to print because a VCS probe failed would be worse than one
-// that prints what it has. Only for the newest, because that is the one a reader acts on
-// and each call costs a subprocess.
-func printCheckpointInspect(ctx context.Context, root string, w io.Writer, c sessions.Checkpoint) {
-	if root == "" || c.Tree.Revision == "" {
-		return
-	}
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return
-	}
-	hints, err := res.VCS.DiffCommands(ctx, root, c.Tree.Revision)
-	if err != nil {
-		return
-	}
-	fmt.Fprintf(w, "  what changed since the newest:\n    %s\n", hints.CLI)
-	if hints.GUI != "" {
-		fmt.Fprintf(w, "    %s\n", hints.GUI)
-	}
-}
-
-// checkpointWhere reads one back as a phrase. The revision leads because it is the fact
-// a reader acts on: a checkout that cannot resolve it is looking at work that was never
-// pushed, which no branch name would have revealed.
-//
-// A checkpoint with no revision is not a broken record. A tree before its first commit,
-// or under no VCS at all, still has a location worth naming, and the workspace is it.
-func checkpointWhere(c sessions.Checkpoint) string {
-	var b strings.Builder
-	if c.Host != "" {
-		fmt.Fprintf(&b, "%s ", c.Host)
-	}
-	if c.Tree.Revision == "" {
-		b.WriteString(c.Workspace)
-		return b.String()
-	}
-	b.WriteString(shortRev(c.Tree.Revision))
-	if c.Tree.Branch != "" {
-		fmt.Fprintf(&b, " on %s", c.Tree.Branch)
-	}
-	if c.Tree.Dirty {
-		b.WriteString(", uncommitted changes")
-	}
-	return b.String()
-}
-
-// invocationParent names the invocation a span id belongs to, falling back to the raw id when
-// this store holds no record of it. The id is the honest answer rather than a blank: the parent may
-// have run in a repository this store does not cover, or before the retention window, and
-// "unknown to magus" is a different fact from "spawned by nobody".
-//
-// Resolved for the TEXT view only. -o json carries the ids, because a consumer joining
-// invocations wants the identity rather than this reader's guess at a name for it.
-func invocationParent(bySpan map[string]string, parentSpanID string) string {
-	if invocation, ok := bySpan[parentSpanID]; ok {
-		return invocation
-	}
-	return parentSpanID
-}
-
-// summarizeTargets renders a session's targets as "<target> <project> (<outcome>)",
-// collapsing a repeated target so a session that ran one target over forty projects
-// does not render forty times.
-func summarizeTargets(targets []sessions.TargetResult) string {
-	seen := map[string]bool{}
-	var out []string
-	for _, t := range targets {
-		label := t.Target
-		if t.Project != "" {
-			label += " " + t.Project
-		}
-		label += " (" + t.Outcome
-		if t.DiagnosticCode != "" {
-			label += ", " + t.DiagnosticCode
-		}
-		if t.Replayed {
-			label += ", cached"
-		}
-		if t.Permitted {
-			label += ", permitted"
-		}
-		label += ")"
-		if seen[label] {
-			continue
-		}
-		seen[label] = true
-		out = append(out, label)
-	}
-	return strings.Join(out, ", ")
-}
-
 // localOrigin is this process's OS account, entering through e, for a verb with no ctx to
 // read the entry point from.
 func localOrigin(e types.EntryPoint) types.Origin {
 	return trail.StampOrigin(context.Background(), types.Origin{EntryPoint: e})
-}
-
-// orDash renders an empty or zero column as a dash, so a table reads "nothing here"
-// rather than "a producer wrote nothing".
-func orDash(s string) string {
-	if strings.TrimSpace(s) == "" || s == "0" {
-		return "-"
-	}
-	return s
-}
-
-// parseSince turns a --since value into the earliest last-fact time worth listing. An
-// empty value returns the zero time, which admits everything.
-//
-// Two spellings, because the question has two shapes: "what has happened lately" is a
-// duration back from now, and "what happened since the incident" is an instant. A bare
-// duration is accepted as written rather than requiring a leading "-": the flag already
-// says "since", and a caller who wrote --since -2h would be asking for the future.
-func parseSince(raw string) (time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}, nil
-	}
-	if d, err := time.ParseDuration(raw); err == nil {
-		if d < 0 {
-			d = -d
-		}
-		return time.Now().Add(-d), nil
-	}
-	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
-		return ts, nil
-	}
-	return time.Time{}, exit.Usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
-}
-
-// invocationsInCheckout keeps the invocations that ran in the checkout at root. The store
-// is keyed by repository, so every checkout writes to it.
-func invocationsInCheckout(summaries []sessions.Summary, root string) []sessions.Summary {
-	want := resolvedPath(root)
-	resolved := map[string]string{}
-	out := make([]sessions.Summary, 0, len(summaries))
-	for _, s := range summaries {
-		// compat(until: no stored invocation lacks a Workspace): one recorded before the
-		// field existed stays, because dropping it would hide history rather than scope it.
-		if s.Workspace == "" {
-			out = append(out, s)
-			continue
-		}
-		got, ok := resolved[s.Workspace]
-		if !ok {
-			got = resolvedPath(s.Workspace)
-			resolved[s.Workspace] = got
-		}
-		if got == want {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// resolvedPath is p with symlinks resolved, so a checkout reached through /tmp and through
-// /private/tmp compares equal. A path that no longer exists keeps its cleaned spelling.
-func resolvedPath(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	return filepath.Clean(p)
-}
-
-// invocationsSince drops the invocations whose last fact predates cutoff.
-//
-// It filters on LastMs rather than StartedMs so a long-lived invocation that is still
-// working stays listed. The alternative hides exactly the one a person asking "what is
-// happening lately" most wants: one that began before the window and has not stopped.
-func invocationsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Summary {
-	if cutoff.IsZero() {
-		return summaries
-	}
-	ms := cutoff.UnixMilli()
-	out := make([]sessions.Summary, 0, len(summaries))
-	for _, s := range summaries {
-		if s.LastMs >= ms {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// `magus session load` and `magus session show`: the read and write sides of a
-// host transcript loaded into the session store.
-//
-// The guard's trail records what the hook SAW. A transcript records what actually
-// ran, including the commands no hook was wired for, the skills a session loaded,
-// and what the hook printed back. Neither store answers "did this session comply"
-// alone, and the join is what makes the question answerable at all.
-//
-// Extraction is not here and never will be: a per-host adapter the reader owns
-// turns a transcript into the stream below, exactly as `magus agent adoption`
-// takes input rather than reading a host's logs. magus takes normalized events
-// in its own vocabulary, so a host renaming a tool costs its reader one config
-// line instead of costing magus a release.
-
-// loadEvent is one line of the stream. The field names are the guard envelope's
-// where they overlap, since an adapter author is already reading that contract.
-type loadEvent struct {
-	Host       string `json:"host"`
-	Session    string `json:"session"`
-	Ts         int64  `json:"ts"`
-	Cwd        string `json:"cwd"`
-	Kind       string `json:"kind"`
-	Ref        string `json:"ref"`
-	Text       string `json:"text"`
-	Transcript string `json:"transcript"`
-	// Agent is the adapter-supplied model/host-version pair, absent (or null,
-	// which decodes the same as absent) when an adapter's host does not carry
-	// either; see sessions.Agent.
-	Agent   sessions.Agent `json:"agent,omitzero"`
-	Outcome struct {
-		Exit        int  `json:"exit"`
-		Denied      bool `json:"denied"`
-		Interrupted bool `json:"interrupted"`
-	} `json:"outcome"`
-}
-
-// loadMaxLineBytes bounds one event. A hook's output is the largest thing a line
-// legitimately carries and it is prose, so a line past this was produced by a
-// adapter piping something else entirely.
-const loadMaxLineBytes = 1 << 20
-
-// loadHookTextCap bounds what a hook.output event stores. The text is magus's own
-// prose, so the head of it identifies which advisory or denial fired; the rest is
-// the same paragraph every session already has.
-const loadHookTextCap = 2000
-
-// loadRejectsShown bounds the diagnostics a failed load prints. An adapter that
-// emits one bad line emits thousands, and the first few say which field is wrong.
-const loadRejectsShown = 5
-
-// sessionLoadSummary is what a load reports, and the JSON shape `-o json` emits. The
-// events themselves ride on it between the read and the store write, and stay out of
-// the report: a load prints what it did, never the stream back.
-type sessionLoadSummary struct {
-	Loaded  int `json:"loaded"`
-	Deduped int `json:"deduped"`
-	Dropped int `json:"dropped_other_repo"`
-	// Rejects is one line per input line that was not loaded, with the reason.
-	Rejects []string             `json:"rejects,omitempty"`
-	ByKind  map[string]int       `json:"by_kind,omitempty"`
-	Store   string               `json:"store"`
-	Events  []sessions.LoadEvent `json:"-"`
-	// commands holds each event's shell command text, positionally, for the served-next
-	// join and nothing else. Unexported and never stored: the text dies with this
-	// struct, which is the whole point of storedEvent dropping it.
-	commands []string
-}
-
-func sessionLoadUsage(fs *flag.FlagSet) func() {
-	return func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus session load [--file <path>]   # the event stream arrives on stdin")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Load a normalized agent-session event stream into this repository's session")
-		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
-		fmt.Fprintf(os.Stderr, "Every line needs host, session, kind and ref; kind is one of %s.\n", strings.Join(sessions.EventKinds, ", "))
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running an adapter over the same")
-		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
-		fmt.Fprintln(os.Stderr, "are dropped; worktrees of this one are kept.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "A shell command's text is never stored. It is re-judged against today's guard")
-		fmt.Fprintln(os.Stderr, "rules and kept as its program, the verdict, the rule behind it, and a digest.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-		printOwnDefaults(fs)
-	}
 }
 
 // sessionLoad implements `magus session load`.
@@ -599,7 +175,9 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	var file string
 	rest, err := commandParse("session load", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "file", "", "Read the event stream from this file instead of stdin")
-		fs.Usage = sessionLoadUsage(fs)
+		fs.Usage = func() {
+			commands.WriteSessionLoadUsage(os.Stderr, sessions.EventKinds, func() { printOwnDefaults(fs) })
+		}
 	})
 	if err != nil {
 		return err
@@ -626,12 +204,12 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 		in = f
 	}
 
-	summary, err := readLoadStream(in, dir, newRejudge(ctx, root))
+	summary, err := sessions.ReadLoadStream(in, dir, guard.NewRejudge(ctx, root, loadWorkspaceShellRules))
 	if err != nil {
 		return err
 	}
 	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
+	guard.JoinServedNext(summary.Events, summary.Commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
@@ -649,280 +227,16 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if opts.Format == outputText {
-		renderLoadSummary(os.Stdout, summary)
+		sessions.RenderLoadSummary(os.Stdout, summary)
 	} else if err := emitRecord(opts, summary, []string{summary.Store}); err != nil {
 		return err
 	}
 	if len(summary.Rejects) > 0 {
 		return fmt.Errorf("magus session load: %d line(s) rejected and not loaded: %s",
-			len(summary.Rejects), strings.Join(summary.Rejects[:min(len(summary.Rejects), loadRejectsShown)], ", "))
+			len(summary.Rejects), strings.Join(summary.Rejects[:min(len(summary.Rejects), sessions.LoadRejectsShown)], ", "))
 	}
 	return nil
 }
-
-// readLoadStream decodes the stream, judges what it must, and returns the events
-// worth storing on the summary, with the counts and the per-line diagnostics.
-//
-// A rejected line does not stop the read, and neither does an overlong one. An adapter
-// emitting one bad shape emits it for a whole transcript, and loading the rest is what
-// lets the reader fix the adapter and re-run without losing what already worked.
-func readLoadStream(in io.Reader, dir string, rejudge rejudgeFunc) (sessionLoadSummary, error) {
-	var summary sessionLoadSummary
-	reject := func(line int, format string, args ...any) {
-		summary.Rejects = append(summary.Rejects, fmt.Sprintf("line %d: ", line)+fmt.Sprintf(format, args...))
-	}
-
-	sameRepo := repositoryScope(dir)
-	// ReadSlice over a buffer one byte wider than the cap is what bounds memory: ReadString
-	// would grow without limit on a line that never ends, and the overlong case has to be
-	// reported and skipped, not read to completion.
-	r := bufio.NewReaderSize(in, loadMaxLineBytes+1)
-	for line := 1; ; line++ {
-		raw, err := r.ReadSlice('\n')
-		overlong := errors.Is(err, bufio.ErrBufferFull)
-		for errors.Is(err, bufio.ErrBufferFull) {
-			_, err = r.ReadSlice('\n')
-		}
-		if err != nil && !errors.Is(err, io.EOF) {
-			return summary, fmt.Errorf("magus session load: read stream: %w", err)
-		}
-		last := errors.Is(err, io.EOF)
-		switch text := strings.TrimSpace(string(raw)); {
-		case overlong:
-			reject(line, "longer than any event (%d bytes)", loadMaxLineBytes)
-		case text == "":
-		default:
-			if ev, command, reason := decodeLoadEvent(text, sameRepo, rejudge); reason != "" {
-				reject(line, "%s", reason)
-			} else if ev != nil {
-				summary.Events = append(summary.Events, *ev)
-				summary.commands = append(summary.commands, command)
-			} else {
-				summary.Dropped++
-			}
-		}
-		if last {
-			return summary, nil
-		}
-	}
-}
-
-// decodeLoadEvent turns one line into the event to store, and returns the shell
-// command text beside it for the served-next join, "" for every other kind. A line
-// that fails validation returns the reason; a well-formed line from another
-// repository returns neither an event nor a reason, which is the dropped case.
-func decodeLoadEvent(raw string, sameRepo func(string) bool, rejudge rejudgeFunc) (*sessions.LoadEvent, string, string) {
-	var ev loadEvent
-	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-		return nil, "", fmt.Sprintf("not a JSON object: %v", err)
-	}
-	if reason := validateLoadEvent(ev); reason != "" {
-		return nil, "", reason
-	}
-	if ev.Cwd != "" && !sameRepo(ev.Cwd) {
-		return nil, "", ""
-	}
-	// A host names files by absolute path; graph file nodes are keyed by the path
-	// inside the checkout, and every worktree of one repository shares that layout.
-	// Storing the checkout-relative path is what lets the @session shard land the
-	// event on a node.
-	if ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite {
-		ev.Text = vcs.CheckoutRelative(ev.Text)
-	}
-	command := ""
-	if ev.Kind == sessions.EventShellCommand {
-		command = ev.Text
-	}
-	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev, rejudge)}, command, ""
-}
-
-func validateLoadEvent(ev loadEvent) string {
-	switch {
-	case ev.Host == "":
-		return "no host"
-	case ev.Session == "":
-		return "no session"
-	case ev.Ref == "":
-		return "no ref, so the event cannot be deduplicated"
-	case !sessions.ValidEventKind(ev.Kind):
-		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(sessions.EventKinds, ", "))
-	}
-	if !sessions.ValidFileID(ev.Session) {
-		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
-	}
-	return ""
-}
-
-// storedEvent is what a wire event becomes on disk. A shell command loses its text
-// here and nowhere else, so this is the one function to read when asking whether a
-// command line can reach the store.
-func storedEvent(ev loadEvent, rejudge rejudgeFunc) sessions.AgentEvent {
-	out := sessions.AgentEvent{
-		Host:        ev.Host,
-		Agent:       ev.Agent,
-		Kind:        ev.Kind,
-		Ref:         ev.Ref,
-		AtMs:        ev.Ts,
-		Transcript:  ev.Transcript,
-		Exit:        ev.Outcome.Exit,
-		Denied:      ev.Outcome.Denied,
-		Interrupted: ev.Outcome.Interrupted,
-	}
-	switch ev.Kind {
-	case sessions.EventShellCommand:
-		sum := sha256.Sum256([]byte(ev.Text))
-		out.Digest = hex.EncodeToString(sum[:])
-		out.Program, out.Verdict, out.Rule = rejudge(ev.Text)
-	case sessions.EventHookOutput:
-		out.Text = ev.Text
-		if len(out.Text) > loadHookTextCap {
-			out.Text = out.Text[:loadHookTextCap]
-		}
-	default:
-		out.Text = ev.Text
-	}
-	return out
-}
-
-// rejudgeFunc runs a past command through today's rules and reports what they would say
-// now: the program, the verdict, and the rule or advisory behind it.
-type rejudgeFunc func(text string) (program, verdict, rule string)
-
-// newRejudge judges by the built-in catalog and the shell rules of the workspace found from
-// root, loaded once, on the first command.
-//
-// It calls the pure rule set rather than the hook, so no subprocess runs and no
-// live workspace state is read. The rules that DO read the filesystem (the sibling
-// checkout, the stale binary notice) are deliberately skipped: they describe the
-// machine at the moment of the call, and applying today's machine to a command
-// from three weeks ago would be inventing a verdict nobody ever saw.
-//
-// The rule's argument is dropped along with the text: it renders the resolved
-// argv, which is the content this whole path exists to keep out of the store.
-func newRejudge(ctx context.Context, root string) rejudgeFunc {
-	// Same catalog + workspace bash rules the live hook uses; Inspect and cache
-	// facts are unused on this pure command path.
-	deps := sync.OnceValue(func() guard.Dependencies {
-		shellRules, shellDialect := loadWorkspaceShellRules(ctx, root)
-		return guard.Dependencies{
-			Spells:       project.DefaultSpellRegistry().All,
-			ShellRules:   shellRules,
-			ShellDialect: shellDialect,
-			Builtins:     guard.BuiltinSettings(ctx, nil, root),
-		}
-	})
-	return func(text string) (program, verdict, rule string) {
-		program = commandProgram(text)
-		v := guard.Evaluate(deps(), text)
-		switch {
-		case v.Deny != "":
-			return program, sessions.VerdictDeny, v.RuleName()
-		case v.Context != "":
-			return program, sessions.VerdictAdvise, v.AdvisoryKind()
-		}
-		return program, sessions.VerdictPass, ""
-	}
-}
-
-// commandProgram names the program a line runs, wrappers already peeled. A line the
-// shell parser cannot read falls back to the trail's reducer, which skips the VAR=value
-// prefix a credential is likeliest to sit in rather than storing it as the program.
-func commandProgram(text string) string {
-	if cmds, parsed := guard.ParseCommands(text); parsed && len(cmds) > 0 {
-		return cmds[0].Name
-	}
-	return trail.CommandProgram(text)
-}
-
-// repositoryScope reports whether a cwd belongs to the repository whose store is dir,
-// memoized because a stream names a handful of checkouts across thousands of
-// events and each answer costs a config read.
-//
-// A checkout that no longer exists identifies as its own path, so events from a
-// DELETED worktree are dropped as another repository's. That is the largest known
-// hole in a load: the phase 0 measurement found 45% of commands were run in
-// worktrees that had since been removed. Closing it needs an identity the deleted
-// path can still be resolved through, which nothing records today.
-func repositoryScope(dir string) func(string) bool {
-	seen := map[string]bool{}
-	return func(cwd string) bool {
-		if match, ok := seen[cwd]; ok {
-			return match
-		}
-		other, err := sessions.Dir(cwd)
-		match := err == nil && other == dir
-		seen[cwd] = match
-		return match
-	}
-}
-
-func renderLoadSummary(w io.Writer, s sessionLoadSummary) {
-	fmt.Fprintf(w, "loaded %d, deduped %d, dropped %d (another repository), rejected %d\n",
-		s.Loaded, s.Deduped, s.Dropped, len(s.Rejects))
-	for _, kind := range sessions.EventKinds {
-		if n := s.ByKind[kind]; n > 0 {
-			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
-		}
-	}
-	fmt.Fprintf(w, "store: %s\n", s.Store)
-	if s.Loaded > 0 {
-		fmt.Fprintf(w, "read one back with `%s`\n", hint.SessionShow.With("<session>"))
-	}
-}
-
-// countedName is one repeated thing and how often it appeared.
-type countedName struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
-}
-
-// commandGroup is one program a session ran, with what today's rules say about
-// the commands it ran under that name.
-//
-// WouldDeny counts what the rules WOULD refuse now; HostDenied counts what the host
-// recorded as actually refused. The gap between them is the audit: a command the
-// rules deny that ran anyway was never judged, because the guard was not wired,
-// was too old to judge, or the rule arrived after the command did.
-type commandGroup struct {
-	Program    string   `json:"program"`
-	Count      int      `json:"count"`
-	Pass       int      `json:"pass"`
-	Advise     int      `json:"advise"`
-	WouldDeny  int      `json:"would_deny"`
-	HostDenied int      `json:"host_denied"`
-	Rules      []string `json:"rules,omitempty"`
-}
-
-type sessionShowOutput struct {
-	Session string `json:"session"`
-	Host    string `json:"host,omitempty"`
-	// Agent is the pair off the newest event that named one: what this session
-	// ended on, which is what today's guard rules would be checked against. Zero
-	// when no loaded event named either.
-	Agent        sessions.Agent `json:"agent,omitzero"`
-	Events       int            `json:"events"`
-	FirstMs      int64          `json:"first_ms,omitempty"`
-	LastMs       int64          `json:"last_ms,omitempty"`
-	ByKind       map[string]int `json:"by_kind,omitempty"`
-	Commands     []commandGroup `json:"commands,omitempty"`
-	Skills       []countedName  `json:"skills,omitempty"`
-	FilesRead    []countedName  `json:"files_read,omitempty"`
-	FilesWritten []countedName  `json:"files_written,omitempty"`
-	HookOutputs  int            `json:"hook_outputs"`
-	Transcript   string         `json:"transcript,omitempty"`
-	// Trail is what THIS checkout's guard trail recorded for the session: the join
-	// between the host's transcript and the observations magus made while it ran. Absent
-	// when the trail here holds nothing for it, which is the case for a session that ran
-	// in another worktree.
-	Trail *trail.SessionTrail `json:"trail,omitempty"`
-	// Cost is what the session's context and spawns cost. The sections the trail could not
-	// measure are named in its not_measured map rather than left out or zeroed.
-	Cost *sessionCost `json:"cost,omitempty"`
-}
-
-// sessionTrailEvents bounds the trail walk behind the join: recent work is what a reader
-// asking about a session is asking about.
-const sessionTrailEvents = 5000
 
 // sessionShow implements `magus session show <id>`.
 func sessionShow(root string, args []string) error {
@@ -966,9 +280,9 @@ func sessionShow(root string, args []string) error {
 			rest[0], dir, hint.SessionLoad.String())
 	}
 
-	out := summarizeSession(rest[0], events)
+	out := sessionShowOutput{ShowSummary: sessions.SummarizeSession(rest[0], events)}
 	out.Trail = sessionTrailHere(root, rest[0])
-	out.Cost = summarizeCost(out.Trail, sessionModelTable(root))
+	out.Cost = trail.SummarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -986,244 +300,10 @@ func sessionShow(root string, args []string) error {
 // the report. The workspace is opened apart from the process's shared handle, which a
 // session read never needs.
 func sessionModelTable(root string) model.Table {
-	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+	rows := guard.HarnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 		return magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	})
 	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
-}
-
-// sessionTrailHere folds this checkout's trail for the session, or nil when it holds
-// nothing: no cache dir, no trail, or a session that ran elsewhere all read the same.
-func sessionTrailHere(root, session string) *trail.SessionTrail {
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return nil
-	}
-	tr := trail.ForSession(cacheDir, session, sessionTrailEvents)
-	if tr.Commands == 0 && len(tr.Spawns) == 0 {
-		return nil
-	}
-	return &tr
-}
-
-func summarizeSession(session string, events []sessions.AgentEvent) sessionShowOutput {
-	out := sessionShowOutput{Session: session, Events: len(events), ByKind: map[string]int{}}
-	byProgram := map[string]*commandGroup{}
-	skills, read, written := map[string]int{}, map[string]int{}, map[string]int{}
-
-	var pairAtMs int64
-	for _, ev := range events {
-		out.ByKind[ev.Kind]++
-		if out.Host == "" {
-			out.Host = ev.Host
-		}
-		if out.Transcript == "" {
-			out.Transcript = ev.Transcript
-		}
-		if ev.AtMs > 0 {
-			if out.FirstMs == 0 || ev.AtMs < out.FirstMs {
-				out.FirstMs = ev.AtMs
-			}
-			if ev.AtMs > out.LastMs {
-				out.LastMs = ev.AtMs
-			}
-		}
-		if ev.Agent != (sessions.Agent{}) && ev.AtMs >= pairAtMs {
-			out.Agent, pairAtMs = ev.Agent, ev.AtMs
-		}
-		switch ev.Kind {
-		case sessions.EventShellCommand:
-			g := byProgram[ev.Program]
-			if g == nil {
-				g = &commandGroup{Program: ev.Program}
-				byProgram[ev.Program] = g
-			}
-			g.Count++
-			switch ev.Verdict {
-			case sessions.VerdictDeny:
-				g.WouldDeny++
-			case sessions.VerdictAdvise:
-				g.Advise++
-			default:
-				g.Pass++
-			}
-			if ev.Denied {
-				g.HostDenied++
-			}
-			if ev.Rule != "" && !slices.Contains(g.Rules, ev.Rule) {
-				g.Rules = append(g.Rules, ev.Rule)
-			}
-		case sessions.EventSkillLoad:
-			skills[ev.Text]++
-		case sessions.EventFileRead:
-			read[ev.Text]++
-		case sessions.EventFileWrite:
-			written[ev.Text]++
-		case sessions.EventHookOutput:
-			out.HookOutputs++
-		}
-	}
-
-	for _, g := range byProgram {
-		slices.Sort(g.Rules)
-		out.Commands = append(out.Commands, *g)
-	}
-	slices.SortFunc(out.Commands, func(a, b commandGroup) int {
-		if c := cmp.Compare(b.Count, a.Count); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Program, b.Program)
-	})
-	out.Skills, out.FilesRead, out.FilesWritten = counted(skills), counted(read), counted(written)
-	return out
-}
-
-// counted renders a tally most-frequent first, ties broken by name so two runs
-// over one session render identically.
-func counted(tally map[string]int) []countedName {
-	out := make([]countedName, 0, len(tally))
-	for name, n := range tally {
-		out = append(out, countedName{Name: name, Count: n})
-	}
-	slices.SortFunc(out, func(a, b countedName) int {
-		if c := cmp.Compare(b.Count, a.Count); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Name, b.Name)
-	})
-	return out
-}
-
-// showListCap bounds the file and skill lists in the text view. The tail is a
-// session's whole reach, which is a different question with an answer of its own.
-const showListCap = 10
-
-func renderSessionShow(w io.Writer, s sessionShowOutput) {
-	fmt.Fprintf(w, "%s  host %s  %d event(s)\n", s.Session, orDash(s.Host), s.Events)
-	if s.Agent != (sessions.Agent{}) {
-		fmt.Fprintf(w, "model %s  host version %s\n", orDash(s.Agent.Model), orDash(s.Agent.HostVersion))
-	}
-	if s.FirstMs > 0 {
-		fmt.Fprintf(w, "%s to %s\n",
-			time.UnixMilli(s.FirstMs).Format("2006-01-02 15:04:05"),
-			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"))
-	}
-	if s.Transcript != "" {
-		fmt.Fprintf(w, "transcript %s\n", s.Transcript)
-	}
-	fmt.Fprintln(w)
-	for _, kind := range sessions.EventKinds {
-		if n := s.ByKind[kind]; n > 0 {
-			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
-		}
-	}
-	if len(s.Commands) > 0 {
-		fmt.Fprintln(w, "\nCommands by program, judged against today's rules:")
-		for _, g := range s.Commands {
-			fmt.Fprintf(w, "  %-12s %4d  pass %d  advise %d  deny %d  (host recorded %d denied)",
-				orDash(g.Program), g.Count, g.Pass, g.Advise, g.WouldDeny, g.HostDenied)
-			if len(g.Rules) > 0 {
-				fmt.Fprintf(w, "  %s", strings.Join(g.Rules, ", "))
-			}
-			fmt.Fprintln(w)
-		}
-	}
-	renderCounted(w, "Skills loaded", s.Skills)
-	renderCounted(w, "Files read", s.FilesRead)
-	renderCounted(w, "Files written", s.FilesWritten)
-	fmt.Fprintf(w, "\nhook outputs: %d\n", s.HookOutputs)
-	if s.Trail != nil {
-		fmt.Fprintf(w, "\nGuard trail in this checkout: %d command(s) observed, %d denied", s.Trail.Commands, s.Trail.Denied)
-		if len(s.Trail.Leases) > 0 {
-			fmt.Fprintf(w, ", under lease %s", strings.Join(s.Trail.Leases, ", "))
-		}
-		fmt.Fprintln(w)
-		for _, sp := range s.Trail.Spawns {
-			fmt.Fprintf(w, "  spawned %s", sp.Child)
-			if sp.Lease != "" {
-				fmt.Fprintf(w, " (lease %s)", sp.Lease)
-			}
-			// "none declared" reads as a fact about the spawn; a blank field here
-			// would read as a producer that forgot to fill it in.
-			model := sp.DeclaredModel
-			if model == "" {
-				model = "none declared"
-			}
-			fmt.Fprintf(w, "  model %s", model)
-			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
-		}
-	}
-	if s.Cost != nil {
-		renderCost(w, s.Cost)
-	}
-}
-
-func renderCounted(w io.Writer, title string, items []countedName) {
-	if len(items) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "\n%s:\n", title)
-	for _, item := range items[:min(len(items), showListCap)] {
-		fmt.Fprintf(w, "  %4d  %s\n", item.Count, item.Name)
-	}
-	if extra := len(items) - showListCap; extra > 0 {
-		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.SessionShow.With("<session>", "-o", "json"))
-	}
-}
-
-// promptCacheForCheckout resolves the prompt-cache clock from the newest guard
-// observation in THIS checkout's trail, which is where a hook wired here wrote.
-//
-// The checkout rather than the repository, unlike everything else the session listing
-// reads: a session's tool calls land in the cache dir of the tree they ran against,
-// and the question this answers is about the agent sitting in front of you.
-//
-// An empty clock for a checkout whose trail holds nothing: no cache dir, no hook
-// wired, or a tree nobody has run an agent against. Nothing is printed then, because
-// the alternative is a clock counting up from an activity magus never saw.
-func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return sessions.PromptCacheClock{}
-	}
-	act, ok := trail.LastAgentActivity(cacheDir)
-	if !ok {
-		return sessions.PromptCacheClock{}
-	}
-	return sessions.PromptCacheAt(act.Session, act.At, now)
-}
-
-// renderPromptCache prints how long since the last tool call ran past the guard here,
-// and when each published window closes for it.
-//
-// Every provider, never one: which provider a session is talking to and which window
-// it bought are both invisible from here, so picking a row for the reader would be a
-// guess stated as a fact.
-func renderPromptCache(w io.Writer, clock sessions.PromptCacheClock, now time.Time) {
-	if len(clock.Providers) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "\nPrompt cache: last tool call here %s ago", clock.SinceText())
-	if clock.Session != "" {
-		fmt.Fprintf(w, ", session %s", clock.Session)
-	}
-	fmt.Fprintln(w)
-
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	for _, p := range clock.Providers {
-		for _, win := range p.Windows {
-			fmt.Fprintf(tw, "  %s\t%s\t%s\n", p.Provider, win.Window, win.Describe(now))
-		}
-	}
-	if err := tw.Flush(); err != nil {
-		return
-	}
-	for _, p := range clock.Providers {
-		if len(p.Windows) == 0 {
-			fmt.Fprintf(w, "  %s: %s\n", p.Provider, p.Note)
-		}
-	}
-	fmt.Fprintln(w, "  resuming past a closed window re-pays the prompt; which window a host bought is not visible here")
 }
 
 // directiveStore opens the advisories store of the repository root names.
@@ -1295,14 +375,8 @@ func emitDirective(a sessions.Directive, verb string) error {
 	if opts.Format != outputText {
 		return emitRecord(opts, a, []string{a.ID})
 	}
-	fmt.Fprintf(os.Stdout, "%s %s\n  %s\n", verb, a.ID, attentionOneLine(a.Text))
+	fmt.Fprintf(os.Stdout, "%s %s\n  %s\n", verb, a.ID, sessions.OneLine(a.Text))
 	return nil
-}
-
-// advisoriesOutput is the JSON form of `session advisories`.
-type advisoriesOutput struct {
-	Advisories []sessions.Directive `json:"advisories"`
-	Store      string               `json:"store"`
 }
 
 func advisoriesCommand(root string, args []string) error {
@@ -1338,7 +412,7 @@ func advisoriesCommand(root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputText:
-		renderAdvisoriesText(shown, dir)
+		sessions.RenderAdvisoriesText(os.Stdout, shown, dir)
 		return nil
 	case outputName:
 		names := make([]string, 0, len(shown))
@@ -1347,28 +421,199 @@ func advisoriesCommand(root string, args []string) error {
 		}
 		return emitNames(os.Stdout, names)
 	}
-	return emitFormatted(opts, advisoriesOutput{Advisories: shown, Store: dir})
+	return emitFormatted(opts, sessions.AdvisoriesOutput{Advisories: shown, Store: dir})
 }
 
-func renderAdvisoriesText(shown []sessions.Directive, dir string) {
-	if len(shown) == 0 {
-		fmt.Fprintf(os.Stdout, "no open advisories in %s\n", dir)
-		return
+// sessionShowOutput is the JSON shape of `session show`: the loaded events of the session
+// beside what this checkout's trail and the cost model add to them.
+type sessionShowOutput struct {
+	sessions.ShowSummary
+	// Trail is what THIS checkout's guard trail recorded for the session: the join
+	// between the host's transcript and the observations magus made while it ran. Absent
+	// when the trail here holds nothing for it, which is the case for a session that ran
+	// in another worktree.
+	Trail *trail.SessionTrail `json:"trail,omitempty"`
+	// Cost is what the session's context and spawns cost. The sections the trail could not
+	// measure are named in its not_measured map rather than left out or zeroed.
+	Cost *trail.SessionCost `json:"cost,omitempty"`
+}
+
+func renderSessionShow(w io.Writer, s sessionShowOutput) {
+	sessions.RenderShow(w, s.ShowSummary)
+	if s.Trail != nil {
+		trail.RenderSessionTrail(w, s.Trail)
 	}
-	for _, a := range shown {
-		state := "open"
-		if !a.Open() {
-			state = "retracted"
+	if s.Cost != nil {
+		trail.RenderCost(w, s.Cost)
+	}
+}
+
+// checkoutCacheDir is the cache dir of the checkout at root, or "" when it cannot be resolved.
+func checkoutCacheDir(root string) string {
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return ""
+	}
+	return cacheDir
+}
+
+func sessionTrailHere(root, session string) *trail.SessionTrail {
+	cacheDir := checkoutCacheDir(root)
+	if cacheDir == "" {
+		return nil
+	}
+	return trail.SessionTrailHere(cacheDir, session)
+}
+
+func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
+	cacheDir := checkoutCacheDir(root)
+	if cacheDir == "" {
+		return sessions.PromptCacheClock{}
+	}
+	return trail.PromptCacheForCheckout(cacheDir, now)
+}
+
+// The helpers below keep the names that cmd files outside this one still call.
+
+func orDash(s string) string { return sessions.OrDash(s) }
+
+// sessionHints implements `magus session hints`.
+func sessionHints(root string, args []string) error {
+	rest, err := commandParse("session hints", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			commands.WriteSessionHintsUsage(os.Stderr, sessions.NextLookahead, func() { printOwnDefaults(fs) })
 		}
-		fmt.Fprintf(os.Stdout, "%s  %s  posted %s ago by %s  shown to %d  %s\n", a.ID, state,
-			orDash(formatDur(time.Since(time.UnixMilli(a.PostedMs)))), orDash(a.By), len(a.Delivered), actedLine(a))
-		fmt.Fprintf(os.Stdout, "  %s\n", attentionOneLine(a.Text))
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return exit.Usagef("magus session hints: takes no arguments (got %q)", rest[0])
+	}
+
+	root = resolveRootOrEmpty(root)
+	if root == "" {
+		return errors.New("magus session hints: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+	}
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return err
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return err
+	}
+
+	report := sessions.HintUptakeReport{
+		Definition: sessions.HintUptakeDefinition,
+		Floor:      sessions.HintFloor,
+		Lookahead:  sessions.NextLookahead,
+		Hints:      sessions.HintUptake(fold),
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format == outputText {
+		return sessions.RenderHintUptake(os.Stdout, report)
+	}
+	names := make([]string, len(report.Hints))
+	for i, h := range report.Hints {
+		names[i] = h.ID
+	}
+	return emitRecord(opts, report, names)
+}
+
+// briefMemoryMB is the host-capacity claim session --brief takes while it Inspects
+// the workspace. Measured 2026-10-03 on this repository: a nested brief peaked near
+// 280MB RSS (~64MB heap inuse). Concurrent Inspect samples in panic reports ran
+// higher; the declaration seats one brief without inviting a stack of them onto a
+// laptop that already holds a go-build and a VM.
+const briefMemoryMB = 512
+
+// sessionBriefCommand implements `magus session --brief`.
+func sessionBriefCommand(ctx context.Context, root string) error {
+	root = resolveRootOrEmpty(root)
+	if root == "" {
+		return fmt.Errorf("magus session --brief: no workspace here: the brief is read out of a checkout, so run from inside one or pass --root <path>")
+	}
+	// Claim the host budget before Inspect: the load is what panics measured stacking
+	// across parallel hooks. A full budget refuses (exit 75) so a sessionStart hook
+	// keeps env-only rather than outspending the machine next to a go-build.
+	release, err := admitSessionBrief(ctx, processBrokerClient(), root)
+	if err != nil {
+		return err
+	}
+	defer release()
+	// The magusfile is optional here for the reason `session checkpoint` makes it
+	// optional: the states where it will not load are exactly the ones where a
+	// reader most needs to be told where the work stands.
+	var ws types.WorkspaceRepository
+	if loaded, err := inspectWorkspace(ctx, root); err == nil {
+		ws, root = loaded, loaded.Root()
+	}
+	payload := brief.Gather(ctx, root, ws, briefReaders())
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputText:
+		fmt.Print(payload.Text())
+		return nil
+	case outputName:
+		// The revision, matching `magus session checkpoint -o name`: the one value
+		// that identifies the state this brief describes. A tree with no revision to
+		// report prints nothing rather than a blank line, which a caller reading
+		// names line by line would take for an entry.
+		if payload.Revision == "" {
+			return nil
+		}
+		return emitNames(os.Stdout, []string{payload.Revision})
+	}
+	return emitFormatted(opts, payload)
+}
+
+// admitSessionBrief takes the host-capacity claim for the workspace Inspect that
+// follows. broker: off skips; best-effort admits unarbitrated when no broker answers;
+// required refuses (MGS3022).
+func admitSessionBrief(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
+	if globalCfg.Broker.Resolved() == types.BrokerOff {
+		return func() {}, nil
+	}
+	required := globalCfg.Broker.Resolved() == types.BrokerRequired
+	return cache.AdmitMachine(ctx, admit, types.MachineClaim{
+		Project:  ".",
+		Target:   "session-brief",
+		MemoryMB: briefMemoryMB,
+		Dir:      root,
+	}, required, globalCfg.BudgetWait)
+}
+
+// briefReaders is how the brief reads the job store and the process's configuration.
+func briefReaders() brief.Readers {
+	return brief.Readers{
+		OpenJobs: func(ctx context.Context, root string) (*job.Store, error) { return openJobs(ctx, root, jobOpen{}) },
+		ActingLease: func(ctx context.Context, root string) string {
+			lease, _, _ := guard.CheckoutLease(ctx, root, jobPlace)
+			return lease
+		},
+		PromptCache: promptCacheForCheckout,
+		CacheDir: func(root string) (string, error) {
+			return magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+		},
+		ResolveRoot: resolveRootOrEmpty,
+		ConsoleURL:  consoleRootURL,
+		InCheckout:  sessions.InvocationsInCheckout,
 	}
 }
 
-func actedLine(a sessions.Directive) string {
-	if a.Expect == "" {
-		return "acted: not measured (no --expect)"
+// readJobRows lists the repository's job store once for both the leases and the tree.
+func readJobRows(ctx context.Context, root string) ([]types.Job, error) {
+	store, err := openJobs(ctx, root, jobOpen{})
+	if err != nil {
+		return nil, err
 	}
-	return fmt.Sprintf("acted %d of %d (%q)", len(a.Acted), len(a.Delivered), a.Expect)
+	return store.List()
 }

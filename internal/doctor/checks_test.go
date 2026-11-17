@@ -816,7 +816,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		got := r.checkAgentSkills(t.Context())
 
 		// Misconfiguration is a failure, not a warning, and a reinstall changes nothing here,
-		// so --fix has nothing to run.
+		// so there is no remedy command to print.
 		assert.Equal(t, check.Check{
 			Name:    "agent-skills",
 			Status:  check.Fail,
@@ -1173,7 +1173,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 
 	t.Run("unreachable server", func(t *testing.T) {
 		r := &runner{opts: options{serverInfo: &ServerInfo{
-			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
+			Workspaces: []loadedWorkspace{{Root: "/repo", LastAccess: loaded}},
 		}}}
 		assert.Equal(t, "no loaded workspaces in server", r.checkWorkspaceRegistration().Message)
 	})
@@ -1181,7 +1181,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 	t.Run("registered", func(t *testing.T) {
 		r := &runner{root: "/repo", opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
-			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}, {Root: "/other", LastAccess: loaded}},
+			Workspaces: []loadedWorkspace{{Root: "/repo", LastAccess: loaded}, {Root: "/other", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
 		assert.Equal(t, check.OK, got.Status)
@@ -1197,7 +1197,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 	t.Run("not registered", func(t *testing.T) {
 		r := &runner{root: "/repo", opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
-			Workspaces: []LoadedWorkspace{{Root: "/elsewhere", LastAccess: loaded}},
+			Workspaces: []loadedWorkspace{{Root: "/elsewhere", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
 		assert.Equal(t, check.OK, got.Status)
@@ -1208,7 +1208,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 	t.Run("root comes from the workspace when set", func(t *testing.T) {
 		r := &runner{ws: rootedWorkspace{root: "/repo"}, opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
-			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
+			Workspaces: []loadedWorkspace{{Root: "/repo", LastAccess: loaded}},
 		}}}
 		assert.Contains(t, r.checkWorkspaceRegistration().Message, "loaded in server")
 	})

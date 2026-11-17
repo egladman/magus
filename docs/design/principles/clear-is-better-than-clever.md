@@ -33,7 +33,7 @@ measurement and the trade-off written beside the code.
 ## Enforced by
 
 - The `benchbeside` analyzer in [`libs/conventions`](https://github.com/egladman/magus/tree/main/libs/conventions) fails an `// optimization:`
-  comment, or a `Cache` or `Memo` type, in a package whose tests hold no
+  comment, or a `Cache`, `Once` or `Memo` type, in a package whose tests hold no
   benchmark.
 - The `// optimization:` comment carries the measurement and the trade-off, so
   the clever line names its price.

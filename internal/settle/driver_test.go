@@ -442,3 +442,23 @@ func snapshotTree(t *testing.T, root string) map[string]string {
 	}))
 	return out
 }
+
+// TestDriverRelPath covers both callers' path conventions: git passes a repo-relative
+// path, hg an absolute one.
+func TestDriverRelPath(t *testing.T) {
+	t.Run("git passes a repo-relative path through", func(t *testing.T) {
+		got, err := DriverRelPath(t.TempDir(), filepath.Join("gen", "catalog.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "gen/catalog.md", got, "must be normalized to a slash path")
+	})
+
+	t.Run("hg passes an absolute path, made workspace-relative", func(t *testing.T) {
+		w := testkit.NewWorkspace(t)
+		w.Magusfile("magus.project({})\n")
+		root := w.Root()
+
+		got, err := DriverRelPath(root, filepath.Join(root, "gen", "catalog.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "gen/catalog.md", got)
+	})
+}

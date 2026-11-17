@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,15 +18,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -156,11 +151,11 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 	built := strings.TrimSpace(runSpell(t, repo, "build", dir, "--out", layerPath))
 	require.NoError(t, digest.Digest(built).Validate(), "build prints a manifest digest: %q", built)
 
-	var res spellBuildResult
+	var res remotespell.BuildResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
 	layer, err := os.ReadFile(layerPath)
 	require.NoError(t, err)
-	assert.Equal(t, spellBuildResult{
+	assert.Equal(t, remotespell.BuildResult{
 		Digest: digest.Digest(built),
 		Layer:  digest.FromBytes(layer),
 		Size:   int64(len(layer)),
@@ -199,29 +194,6 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 	assert.Equal(t, []string{"lib/util.buzz", "spell.buzz"}, got, "only tracked files were published")
 }
 
-// A registry credential is a secret reference resolved through the workspace's
-// provider, so the value is registered for redaction like any magus\secret.read.
-func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
-	spells := config.SpellsConfig{Registries: []config.SpellRegistry{
-		{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_TOKEN"},
-	}}
-	r := secret.New()
-	t.Setenv("SPELL_REGISTRY_TOKEN", "ghp_abcdef123456")
-
-	user, pass, err := registryCredential(t.Context(), spells, "ghcr.io", r)
-	require.NoError(t, err)
-	assert.Equal(t, "ci", user)
-	assert.Equal(t, "ghp_abcdef123456", pass.Reveal())
-	assert.Equal(t, "token=***", r.RedactString("token=ghp_abcdef123456"))
-
-	_, _, err = registryCredential(t.Context(), spells, "docker.io", r)
-	require.ErrorContains(t, err, "no entry for docker.io")
-
-	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_UNSET"}}}
-	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secret.New())
-	require.ErrorContains(t, err, "$SPELL_REGISTRY_UNSET is not set")
-}
-
 // The lock walkthrough: a declared spell with no pin fails the frozen check, --update
 // resolves the tag and writes magus.lock, the check then passes, and a pull by the bare
 // import path lands the locked bytes.
@@ -250,7 +222,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 
 	var res spellLockResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "lock", "-o", "json")), &res))
-	assert.Equal(t, spellLockResult{Spells: []spellLockEntry{{Path: path, Tag: "v1", Digest: d}}}, res)
+	assert.Equal(t, spellLockResult{Spells: []remotespell.LockSummary{{Path: path, Tag: "v1", Digest: d}}}, res)
 
 	pulled := strings.Split(strings.TrimSpace(runSpell(t, repo, "pull", path)), "\n")
 	require.Len(t, pulled, 2)
@@ -259,9 +231,8 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 }
 
 // Pulling a spell magus ships prints what a registry pull of its published artifact
-// prints, and that artifact is what `spell build` makes of a checkout of the same
-// directory: the same layer bytes, and the same manifest once the provenance is the
-// shipped one, which carries no revision or creation time.
+// prints, and `spell build` of a checkout of the same directory packs that artifact's
+// layer. remote's tests pin the whole manifest.
 func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	r := testkit.NewRepository(t, map[string]string{"magus.yaml": ""})
 	repo := r.Root()
@@ -278,17 +249,13 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	assert.Equal(t, "ghcr.io/egladman/magus/spells/go", fmt.Sprintf("%s/%s", ref.Registry, ref.Repository))
 	assert.Equal(t, dst, pulled[1])
 
-	driver, err := spellVCS(t.Context(), repo, dir)
+	_, shipped, err := remotespell.BuildShipped("go")
 	require.NoError(t, err)
-	built, err := remotespell.Build(t.Context(), dir, driver, remotespell.ShippedProvenance("golang"))
-	require.NoError(t, err)
-	m, err := built.Manifest()
-	require.NoError(t, err)
-	assert.Equal(t, m.Digest, ref.Digest, "the stamped digest is the manifest a build of the checkout makes")
+	assert.Equal(t, shipped.Digest, ref.Digest, "the stamped digest is the artifact a release publishes")
 
-	var res spellBuildResult
+	var res remotespell.BuildResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
-	assert.Equal(t, digest.FromBytes(built.Blobs[0].Data), res.Layer, "`spell build` packs the same layer")
+	assert.Equal(t, shipped.Layer, res.Layer, "`spell build` packs the same layer")
 
 	spellBuzz, err := os.ReadFile(filepath.Join(dst, "spell.buzz"))
 	require.NoError(t, err)
@@ -296,10 +263,10 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	assert.Equal(t, "// magus:origin "+pulled[0], stamp)
 	require.NoError(t, bindings.CheckSpellFile(t.Context(), filepath.Join(dst, "spell.buzz")), "the copy loads as a workspace spell")
 
-	var pullRes spellPullResult
+	var pullRes remotespell.PullResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "pull", "magus/spell/go", t.TempDir(), "-o", "json")), &pullRes))
-	assert.Equal(t, spellOverride{Import: "magus/spell/go", Path: filepath.ToSlash(pullRes.Dir)}, pullRes.Override,
-		"a copy outside the workspace is declared by its absolute path")
+	assert.Equal(t, "magus/spell/go", pullRes.Override.Import)
+	assert.Equal(t, filepath.ToSlash(pullRes.Dir), pullRes.Override.Path, "a copy outside the workspace is declared by its absolute path")
 	assert.Equal(t, ref.Digest, pullRes.Digest)
 }
 
@@ -307,7 +274,7 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 // override, and the copy loads with the host modules it imports.
 func TestSpellPullSourceOnlySpell(t *testing.T) {
 	dst := filepath.Join(t.TempDir(), "endoflife-date")
-	var res spellPullResult
+	var res remotespell.PullResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, t.TempDir(), "pull", "magus/spell/endoflife-date", dst, "-o", "json")), &res))
 	assert.Equal(t, "ghcr.io/egladman/magus/spells/endoflife-date@"+res.Digest.String(), res.Reference)
 	assert.Zero(t, res.Override)
@@ -363,40 +330,15 @@ func TestSpellPushShipped(t *testing.T) {
 	}
 }
 
-// `spell ls magus/spell` is the list spell-publish reads: every directory of the
-// embedded spells holding a spell.buzz, under the name magus/spell/<name> takes, pinned
-// to the digest a push of it writes.
+// `spell ls magus/spell` is the list spell-publish reads; the text form is one pinned
+// reference per line, the same references the json form carries.
 func TestSpellLsShipped(t *testing.T) {
-	var dirs []string
-	require.NoError(t, fs.WalkDir(spells.Shipped(), ".", func(p string, _ fs.DirEntry, err error) error {
-		if dir, ok := strings.CutSuffix(p, "/spell.buzz"); ok && err == nil {
-			dirs = append(dirs, dir)
-		}
-		return err
-	}))
-
 	var res shippedSpellsResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, t.TempDir(), "ls", "magus/spell", "-o", "json")), &res))
-	var listed, names, refs []string
+	require.NotEmpty(t, res.Spells)
+	var refs []string
 	for _, s := range res.Spells {
-		listed = append(listed, s.Dir)
-		names = append(names, s.Name)
 		refs = append(refs, s.Reference)
-		_, builtIn := spell.Builtins()[s.Name]
-		assert.Equal(t, builtIn, s.BuiltIn, s.Name)
-		if !builtIn {
-			assert.Equal(t, s.Dir, s.Name, "a source-only spell is named by its directory")
-		}
-		ref, _, err := remotespell.Shipped(s.Name, s.Dir)
-		require.NoError(t, err)
-		assert.Equal(t, ref.String(), s.Reference, s.Name)
-		assert.Equal(t, ref.Digest, s.Digest, s.Name)
 	}
-	assert.ElementsMatch(t, dirs, listed, "every shipped spell, once")
-	assert.True(t, slices.IsSorted(names), "sorted by name: %v", names)
-	assert.Subset(t, names, []string{"go", "endoflife-date", "harness/claude-code", "harness/codex", "harness/cursor",
-		"harness/opencode", "aws/s3-cache", "github/actions", "github/review", "gitlab/ci"})
-	assert.NotContains(t, names, "golang")
-
 	assert.Equal(t, strings.Join(refs, "\n")+"\n", runSpell(t, t.TempDir(), "ls", "magus/spell"))
 }

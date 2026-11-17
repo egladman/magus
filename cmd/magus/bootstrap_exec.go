@@ -6,6 +6,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 )
@@ -35,13 +38,13 @@ func maybeBootstrapExec(argv []string) {
 	if testing.Testing() {
 		return
 	}
-	self, err := runningBinaryPath()
+	self, err := selfupdate.RunningBinary()
 	// The bootstrap builds ./magus with `go run`, so that build is the fresh
 	// one and the placed ./magus the stale one.
 	if err != nil || ward.GoRunBinary(self) {
 		return
 	}
-	target, ok := workspace.BootstrapExecTarget(extractRootFlag(argv[1:]), self)
+	target, ok := workspace.BootstrapExecTarget(commands.ExtractRootFlag(argv[1:]), self)
 	if !ok {
 		return
 	}
@@ -60,7 +63,7 @@ func maybeBootstrapExec(argv []string) {
 // only a binary a live job row pins takes over, as for the hook's hand-off.
 // An installed binary defers anywhere.
 func bootstrapExecRefusal(target, self string) string {
-	session := binaryCheckout(self)
+	session := guard.BinaryCheckout(self)
 	if session == "" {
 		return ""
 	}

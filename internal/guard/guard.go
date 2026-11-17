@@ -46,7 +46,7 @@ import (
 type Dependencies struct {
 	// Inspect opens the workspace at root. An empty root means the caller's own: the one
 	// the hook process runs in, or the one a verb loaded with --root, which the caller may
-	// answer from a memoized load.
+	// answer from a load that ran once.
 	Inspect func(ctx context.Context, root string) (types.WorkspaceRepository, error)
 	// CacheDir resolves a workspace's cache directory. An empty root means the caller's
 	// own workspace, whose config the caller has already loaded; a named root reads its
@@ -232,8 +232,8 @@ type Dependencies struct {
 	// worker is whether lease acts as a worker's for the caller, which decides what a remedy
 	// may serve: a worker waits for a seat only in the call that spends it. Judge fills it.
 	worker bool
-	// revisions memoizes revision for one judgment; Judge fills it, nil reads every time.
-	revisions *revisionMemo
+	// revisions keeps revision for one judgment; Judge fills it, nil reads every time.
+	revisions *checkoutRevisions
 	// opens keeps each root's open; Judge fills it, nil opens every time.
 	opens *workspaceOpens
 	// Opens keeps the workspaces a judgment opened for the judgments after it, for a
@@ -414,8 +414,8 @@ func (d Dependencies) revision(ctx context.Context, dir, rev string) string {
 	return got
 }
 
-// revisionMemo holds the current revision of each checkout one judgment read.
-type revisionMemo struct {
+// checkoutRevisions holds the current revision of each checkout one judgment read.
+type checkoutRevisions struct {
 	mu      sync.Mutex
 	current map[string]string
 }
@@ -778,7 +778,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	defer cancel()
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	judgmentPhases(ctx).settle(deps)
-	deps.revisions = &revisionMemo{current: map[string]string{}}
+	deps.revisions = &checkoutRevisions{current: map[string]string{}}
 	deps.opens = newWorkspaceOpens(deps.Opens)
 	input := req.Input
 	hasInput := input != ""

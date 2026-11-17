@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/embed"
@@ -24,7 +25,7 @@ import (
 
 // replayer answers judgments from two graphs loaded once: domain, the default graph,
 // and symbols, the default graph with every symbol shard merged, which is what
-// searchGraph, explainNode and loadRefsGraph load per call for a read that seeds the
+// Reads.SearchGraph, Reads.ExplainNode and loadRefsGraph load per call for a read that seeds the
 // symbol layer. coverage measures the symbol indexes once rather than per read, which
 // walks the tree. known maps each node id of symbols to its Source: a Go file's file:
 // and dir: nodes, which most gold names, exist only in the symbol shards. Safe for
@@ -34,7 +35,7 @@ type replayer struct {
 	m        *magus.Magus
 	cfg      config.Config
 	next     nextGate
-	coverage coverageFunc
+	coverage workspacegraph.CoverageFunc
 	domain   *knowledge.Graph
 	symbols  *knowledge.Graph
 	known    map[string]string
@@ -52,7 +53,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 	})
 	run := rankeval.Run{Judgment: j, Dropped: dropped}
 
-	read := graphRead{Input: j.Query}
+	read := knowledge.GraphRead{Input: j.Query}
 	sources := map[string]string{}
 	var hits []string
 	var answer types.KnowledgeAnswer
@@ -62,7 +63,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 	switch j.Verb {
 	case readQuery:
 		read.Nearest = true
-		res := searchLoaded(ctx, r.loadedGraph(read.Input), read, r.table, r.coverage)
+		res := workspacegraph.SearchLoaded(ctx, r.loadedGraph(read.Input), read, r.table, r.coverage)
 		run.Latency = time.Since(start)
 		for _, n := range res.Out.Nodes {
 			sources[n.ID] = n.Source
@@ -73,7 +74,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 		answer = res.Out.Answer
 		err = writeQueryText(ctx, &printed, r.next, r.next.served(hint.NextForQuery(res.Out)), res)
 	case readExplain:
-		res := explainLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
+		res := graphReads.ExplainLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
 		run.Latency = time.Since(start)
 		answer = res.Answer
 		// A miss prints to stderr only.
@@ -98,7 +99,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 			answer = res.Out.Answer
 			out := res.Out
 			out.Answer = withIndexCause(ctx, r.root, out.Answer)
-			err = writeRefsText(&printed, out)
+			err = knowledge.WriteRefsText(&printed, refsEnv(ctx, r.root), out)
 		}
 	default:
 		return run, fmt.Errorf("no replay for verb %q", j.Verb)

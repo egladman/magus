@@ -1,18 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/types"
 )
 
 // selfCommand is the dispatcher for `magus self <subcommand>`.
@@ -91,30 +87,18 @@ func selfPlaceCommand(ctx context.Context, args []string) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("magus self place: want one binary to place, got %d arguments", fs.NArg())
 	}
-	source := fs.Arg(0)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-
-	repl, err := readPlaceStamp(ctx, source)
+	placed, err := selfupdate.Place(ctx, fs.Arg(0))
 	if err != nil {
 		return err
-	}
-	if err := types.MagusBuildFromContext(ctx).AcceptsReplacement(repl); err != nil {
-		return fmt.Errorf("magus self place: %w", err)
-	}
-	target, err := runningBinaryPath()
-	if err != nil {
-		return err
-	}
-	if err := placeInto(source, target); err != nil {
-		return fmt.Errorf("magus self place: %w", err)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, selfPlaceOutput{Commit: repl.Commit, BuildDate: repl.BuildDate, Path: target}, []string{target})
+		return emitRecord(opts, selfPlaceOutput{Commit: placed.Commit, BuildDate: placed.BuildDate, Path: placed.Path}, []string{placed.Path})
 	}
-	fmt.Printf("Placed %s (built %s) at %s\n", repl.Commit, repl.BuildDate, target)
+	fmt.Printf("Placed %s (built %s) at %s\n", placed.Commit, placed.BuildDate, placed.Path)
 	return nil
 }
 
@@ -122,28 +106,6 @@ type selfPlaceOutput struct {
 	Commit    string `json:"commit"`
 	BuildDate string `json:"build_date"`
 	Path      string `json:"path"`
-}
-
-func readPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error) {
-	var stamp types.BuildStamp
-	var out bytes.Buffer
-	cmd := exec.CommandContext(ctx, source, "version", "-o", "json") //nolint:gosec // exe is the running magus binary or its own placed copy
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return stamp, fmt.Errorf("magus self place: %s did not report its version: %w", source, err)
-	}
-	if err := json.Unmarshal(out.Bytes(), &stamp); err != nil {
-		return stamp, fmt.Errorf("magus self place: %s reported a version this magus cannot read: %w", source, err)
-	}
-	return stamp, nil
-}
-
-func placeInto(source, target string) error {
-	body, err := os.ReadFile(source)
-	if err != nil {
-		return err
-	}
-	return file.WriteFileAtomic(target, body, 0o755)
 }
 
 func selfPlaceUsage() {

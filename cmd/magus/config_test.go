@@ -2,32 +2,27 @@ package main
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/egladman/magus/internal/commands"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/clikit/exit"
 )
-
-func TestRunConfigView_Text(t *testing.T) {
-	cfg := config.Defaults()
-	require.NoError(t, runConfigView(cfg, nil))
-}
-
-func TestRunConfigView_JSON(t *testing.T) {
-	cfg := config.Defaults()
-	require.NoError(t, runConfigView(cfg, []string{"-o", "json"}))
-}
 
 type configViewSuite struct {
 	suite.Suite
@@ -53,37 +48,6 @@ func (s *configViewSuite) TestJSONCarriesTheReadingList() {
 		"verdict": "follow", "why": "the reference", "contradicts": "https://blog.example/go"}}, view.Sources)
 }
 
-func TestRunConfigView_YAML(t *testing.T) {
-	cfg := config.Defaults()
-	require.NoError(t, runConfigView(cfg, []string{"-o", "yaml"}))
-}
-
-func TestRunConfigView_Name(t *testing.T) {
-	cfg := config.Defaults()
-
-	// Capture stdout by redirecting within the test is complex; instead just
-	// verify no error and that KnownKeys() is populated.
-	_ = cfg
-	keys := config.KnownKeys()
-	assert.NotEmpty(t, keys)
-	require.NoError(t, runConfigView(cfg, []string{"-o", "name"}))
-}
-
-func TestRunConfigSet_Local(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	require.NoError(t, runConfigSet(t.Context(), []string{"key=cache.dir,value=/tmp/mycache"}))
-
-	path := filepath.Join(dir, config.Filename)
-	_, err := os.Stat(path)
-	require.NoError(t, err, "expected %s to exist", path)
-
-	cfg, err := config.Load(path)
-	require.NoError(t, err)
-	assert.Equal(t, "/tmp/mycache", cfg.Cache.Dir)
-}
-
 func TestRunConfigSet_Global(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -99,27 +63,12 @@ func TestRunConfigSet_Global(t *testing.T) {
 	assert.Equal(t, "json", cfg.Log.Format)
 }
 
-func TestRunConfigSet_UnknownKey(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	err := runConfigSet(t.Context(), []string{"key=not.a.real.key,value=v"})
-	assert.Error(t, err, "expected error for unknown key")
-}
-
 func TestRunConfigSet_BadInt(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
 	err := runConfigSet(t.Context(), []string{"key=parallel,value=notanumber"})
 	assert.Error(t, err, "expected error for bad int")
-}
-
-func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
-	cfg := config.Defaults()
-	err := configCommand(context.Background(), "", cfg, []string{"frobnicate"})
-	require.Error(t, err, "expected error for unknown subcommand")
-	assert.Contains(t, err.Error(), "frobnicate", "error should mention subcommand name")
 }
 
 // TestRunConfigCmd_NoArgs pins that a missing subcommand is a USAGE ERROR, not a
@@ -134,148 +83,146 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 	assert.Equal(t, exit.Usage, mapExitCode(err))
 }
 
-// TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
-// is a satisfied request (0), a misuse is 2, and a genuine runtime failure stays 1.
-func TestUsageErrorsExitTwo(t *testing.T) {
-	assert.Equal(t, 0, mapExitCode(nil), "success")
-	assert.Equal(t, 0, mapExitCode(flag.ErrHelp), "an explicit -h is a request that was satisfied")
-	assert.Equal(t, exit.Usage, mapExitCode(exit.Usagef("bad invocation")), "misuse")
-	assert.Equal(t, 1, mapExitCode(errors.New("the work failed")), "runtime failure")
-}
-
-// selfStatusErr is any failure that names its own process status, the shape a contended
-// workspace lock arrives in. Declared here rather than imported because the package that
-// returns it keeps the type unexported; what mapExitCode reads is the method.
-type selfStatusErr struct{ code int }
-
-func (selfStatusErr) Error() string   { return "the machine is busy" }
-func (e selfStatusErr) ExitCode() int { return e.code }
-
-// TestSelfDescribedExitStatusSurvives pins that a failure carrying its own status keeps
-// it locally, matching what the server already forwards for an adopted run. A contended
-// lock exits 75 (EX_TEMPFAIL); collapsing it to 1 is what made a busy machine read as a
-// broken build.
-func TestSelfDescribedExitStatusSurvives(t *testing.T) {
-	assert.Equal(t, 75, mapExitCode(selfStatusErr{code: 75}))
-	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", selfStatusErr{code: 75})), "survives wrapping")
-}
-
-// runOnlyFlags lists flags that intentionally exist on `magus run` but not
-// `magus affected`. Each entry must cite the reason; the corresponding
-// declaration in run.go carries a matching "run-only:" comment.
-var runOnlyFlags = map[string]string{
-	"shard":            "CI matrix sharding targets an explicit project set; affected's scope is already minimal",
-	"n-shards":         "pairs with --shard",
-	"stdin":            "reads a saved shard plan; affected's --stdin reads changed paths, so the two share the input idiom and not a meaning",
-	"volatility-retry": "consumed by `magus ci bisect` which dispatches through run, not affected",
-	"skip":             "subtracts from a selection the caller named; affected's set is derived from the diff, and dropping a project the diff put there un-gates exactly what affected exists to gate",
-}
-
-// affectedOnlyFlags lists flags that intentionally exist on `magus affected`
-// but not `magus run`. Each entry must cite the reason; the corresponding
-// declaration in affected.go carries a matching "affected-only:" comment.
-var affectedOnlyFlags = map[string]string{
-	"base":  "VCS diff base ref; `magus run` has no diff",
-	"b":     "short for --base",
-	"stdin": "reads changed paths from a pipe (watch loop); `magus run` takes explicit project paths",
-	"null":  "pairs with --stdin",
-
-	// The sub-modes. These select a different command path rather than configure
-	// the run, and each is documented on affected's page because that is where a
-	// reader meets it. They were absent from this map while the comparison read
-	// run.go and affected.go as SOURCE: the scan looked only inside the affected
-	// function, so everything bound by affectedPlan, affectedImpact and bisect was
-	// invisible to it. Comparing the documented flags instead makes them visible,
-	// which is the point: they are exceptions, not omissions.
-	"explain":             "mode selector: reports why a project is in the set instead of running",
-	"plan":                "mode selector: emits a CI shard plan for the affected set",
-	"max-shards":          "pairs with --plan",
-	"max-parallel-budget": "pairs with --plan",
-	"detail":              "pairs with --plan",
-	"bisect":              "mode selector: drives VCS bisect over the diff, which `magus run` has no notion of",
-	"good":                "pairs with --bisect",
-	"target":              "pairs with --bisect",
-
-	"impact": "mode selector: reports the changeset's blast radius instead of running",
-}
-
-// TestRunAffectedFlagParity ensures that `magus run` and `magus affected`
-// expose the same flags, minus the documented exceptions above. When a new
-// flag lands on one subcommand it must either also land on the other, or be
-// added to the appropriate exception map here with a one-line rationale.
-//
-// To debug a failure:
-//
-//	go test ./cmd/magus/ -run TestRunAffectedFlagParity -v
-func TestRunAffectedFlagParity(t *testing.T) {
-	// This file's own name, so the error messages below can point back to it
-	// without runtime.Caller, which returns a module path under -trimpath.
-	const thisFile = "config_test.go"
-
-	runFlags := registryFlagNames(t, "run")
-	affectedFlags := registryFlagNames(t, "affected")
-
-	// Stale exception check: every entry in an exception map must correspond
-	// to a flag that actually exists in the owning file.
-	for name := range runOnlyFlags {
-		assert.Contains(t, runFlags, name,
-			"runOnlyFlags entry %q no longer exists in run.go — remove it from the exception map", name)
+func TestMintTokenNamesAndRefusesAReusedName(t *testing.T) {
+	outsideAnyWorkspace(t)
+	mint := func(name string, g types.Grant) (auth.Token, error) {
+		_, rec, err := mintToken(auth.MintRequest{Name: name, Grant: g, TTL: time.Hour}, false)
+		return rec, err
 	}
-	for name := range affectedOnlyFlags {
-		assert.Contains(t, affectedFlags, name,
-			"affectedOnlyFlags entry %q no longer exists in affected.go — remove it from the exception map", name)
+	for _, c := range []struct {
+		grant types.Grant
+		want  string
+	}{{types.GrantConnector, "connector-1"}, {types.GrantConnector, "connector-2"}, {types.GrantViewer, "console-1"}} {
+		rec, err := mint("", c.grant)
+		require.NoError(t, err)
+		assert.Equal(t, c.want, rec.Name)
 	}
-
-	runShared := subtract(runFlags, runOnlyFlags)
-	affectedShared := subtract(affectedFlags, affectedOnlyFlags)
-
-	for name := range runShared {
-		assert.Contains(t, affectedShared, name,
-			"flag --%s exists in `magus run` (run.go) but not `magus affected` (affected.go)\n"+
-				"\tAdd it to affected.go, or add an entry to affectedOnlyFlags in %s",
-			name, thisFile)
-	}
-	for name := range affectedShared {
-		assert.Contains(t, runShared, name,
-			"flag --%s exists in `magus affected` (affected.go) but not `magus run` (run.go)\n"+
-				"\tAdd it to run.go, or add an entry to runOnlyFlags in %s",
-			name, thisFile)
-	}
+	_, err := mint("connector-1", types.GrantConsole)
+	assert.ErrorIs(t, err, types.TokenNameExists)
 }
 
-// registryFlagNames returns the flags one command declares, as a set.
-//
-// Read from the command registry rather than parsed out of the Go source. The
-// source scan this replaced walked run.go and affected.go for fs.Bool-style calls,
-// which was the only way to ask "what does this command bind" while each command
-// bound its own list by hand. Both now bind from the registry via a generated
-// binder, so there is nothing to scrape, and a scan would find zero and pass
-// vacuously if it were not for its own emptiness check.
-func registryFlagNames(t *testing.T, command string) map[string]struct{} {
+// A console link's code that has expired is gone after the next mint: every `open` line mints
+// one, and they must not pile up in tokens.d.
+func TestExpiredConsoleLinkCodeDisappearsOnTheNextMint(t *testing.T) {
+	outsideAnyWorkspace(t)
+	first, err := mintConsoleLinkCode()
+	require.NoError(t, err)
+	store, err := openTokenStore()
+	require.NoError(t, err)
+	toks, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, toks, 1)
+	old := toks[0]
+
+	// Time passes: rewrite the record into the past.
+	dir, err := auth.StoreDir()
+	require.NoError(t, err)
+	path := filepath.Join(dir, old.Name+".json")
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	expired := time.Now().Add(-time.Second).UTC()
+	stale := strings.Replace(string(raw), old.Expires.Format(time.RFC3339Nano), expired.Format(time.RFC3339Nano), 1)
+	stale = strings.Replace(stale, old.Created.Format(time.RFC3339Nano), expired.Add(-auth.ExchangeCodeTTL).Format(time.RFC3339Nano), 1)
+	require.NotEqual(t, string(raw), stale, "the fixture must actually move the expiry")
+	require.NoError(t, os.WriteFile(path, []byte(stale), 0o600))
+	later := time.Now().Add(time.Second)
+	require.NoError(t, os.Chtimes(path, later, later))
+
+	_, err = mintConsoleLinkCode()
+	require.NoError(t, err)
+	toks, err = store.List()
+	require.NoError(t, err)
+	require.Len(t, toks, 1, "the expired code is removed, the new one kept")
+	assert.NotEqual(t, old.ID, toks[0].ID)
+	_, _, err = store.Redeem(first)
+	assert.ErrorIs(t, err, auth.ErrTokenNotFound)
+	files, err := filepath.Glob(filepath.Join(dir, "*"))
+	require.NoError(t, err)
+	assert.Len(t, files, 1, "exactly one file left on disk")
+}
+
+// outsideAnyWorkspace moves the test to a directory no magusfile governs, so a CLI mint's
+// audit has no workspace trail to land in and writes none into this repository's.
+func outsideAnyWorkspace(t *testing.T) {
 	t.Helper()
-	for _, c := range commands.Root.Spec.Children {
-		if c.Name != command {
-			continue
-		}
-		require.NotEmpty(t, c.Flags, "command %q declares no flags", command)
-		out := make(map[string]struct{}, len(c.Flags))
-		for _, f := range c.Flags {
-			out[f.Name] = struct{}{}
-		}
-		return out
-	}
-	t.Fatalf("command %q is not in the man-page registry", command)
-	return nil
+	testkit.Isolate(t)
+	t.Chdir(t.TempDir())
 }
 
-// subtract returns a copy of flags with all keys in exceptions removed.
-func subtract(flags map[string]struct{}, exceptions map[string]string) map[string]struct{} {
-	out := make(map[string]struct{}, len(flags))
-	for k, v := range flags {
-		out[k] = v
+// A console link carries a one-time code rather than a token: the code verifies nowhere, and
+// traded once it yields a console=write token living console.LinkTokenLifetime.
+func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
+	outsideAnyWorkspace(t)
+	code, err := mintConsoleLinkCode()
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(code, "mgx_"), code)
+	_, ok := auth.Verify(code)
+	assert.False(t, ok, "a code is no bearer")
+
+	store, err := openTokenStore()
+	require.NoError(t, err)
+	secret, tok, err := store.Redeem(code)
+	require.NoError(t, err)
+	cred, ok := auth.Verify(secret.Reveal())
+	require.True(t, ok)
+	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: tok.ID, Name: tok.Name, Grant: types.GrantConsole}, cred)
+	assert.WithinDuration(t, time.Now().Add(console.LinkTokenLifetime), tok.Expires, time.Minute)
+	_, _, err = store.Redeem(code)
+	assert.ErrorIs(t, err, auth.ErrTokenNotFound, "spent on first use")
+}
+
+// Every CLI mint writes one trail event naming what was minted, by class, id and grant, and
+// by whom, and none carries the secret.
+func TestCLIMintsAreAudited(t *testing.T) {
+	testkit.Isolate(t)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	t.Chdir(root)
+
+	secret, rec, err := mintToken(auth.MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour}, false)
+	require.NoError(t, err)
+	code, codeRec, err := mintToken(auth.MintRequest{Grant: types.GrantViewer, TTL: time.Hour}, true)
+	require.NoError(t, err)
+
+	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	events, err := trail.ReadRecent(base, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	want := map[string]auth.Token{"cli.mint": rec, "link.code": codeRec}
+	for _, e := range events {
+		minted, ok := want[e.Action]
+		require.True(t, ok, e.Action)
+		assert.Equal(t, trail.KindTokenLifecycle, e.Kind)
+		assert.Contains(t, e.Preview, minted.ID)
+		assert.Contains(t, e.Preview, minted.Grant.String())
+		blob, err := trail.ReadBlob(base, e.RequestRef)
+		require.NoError(t, err)
+		for _, s := range []string{secret, code} {
+			assert.NotContains(t, string(blob), s)
+			assert.NotContains(t, e.Preview, s)
+		}
+		assert.Contains(t, string(blob), fmt.Sprintf("\"class\":\"%s\"", string(minted.Kind)))
+		assert.Contains(t, string(blob), `"class":"operator"`, "the minter is named")
 	}
-	for k := range exceptions {
-		delete(out, k)
-	}
-	return out
+}
+
+// Both token commands list the whole store, so neither hides a token the other minted, and
+// revoke by an exact id or an exact name only.
+func TestTokenCommandsShareOneStore(t *testing.T) {
+	outsideAnyWorkspace(t)
+	_, conn, err := mintToken(auth.MintRequest{Grant: types.GrantConnector, TTL: time.Hour}, false)
+	require.NoError(t, err)
+	_, _, err = mintToken(auth.MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour}, false)
+	require.NoError(t, err)
+
+	require.Error(t, tokenRevoke("config console token revoke", []string{conn.ID[:4]}), "no prefix")
+	require.NoError(t, tokenRevoke("config console token revoke", []string{conn.ID}), "a console command revokes a connector by id")
+	require.NoError(t, tokenRevoke("config mcp connector revoke", []string{"laptop"}), "and the reverse by name")
+	store, err := openTokenStore()
+	require.NoError(t, err)
+	left, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, left)
 }

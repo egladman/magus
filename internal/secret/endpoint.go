@@ -166,7 +166,7 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 	//
 	// Gated on the run id rather than on ctx.Done() == nil, which was the first attempt
 	// and does not work: cmd/magus/main.go builds the root context from
-	// watchInterrupts(context.Background()), so preload (where a magusfile's TOP LEVEL
+	// cache.WatchInterrupts(context.Background()), so preload (where a magusfile's TOP LEVEL
 	// is evaluated, and which `magus ls`, `describe` and `graph` all reach) has a
 	// perfectly good Done channel and sailed straight through. It would have bound a
 	// credential-forwarding listener with a stable token for the whole process life,

@@ -4,20 +4,21 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/cache/remotetest"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // cacheShard is a Go workspace wired the way a ci.yaml shard is: spells/github/actions
@@ -45,14 +46,14 @@ func (s *ConfigCacheImportRecordSuite) SetupTest() {
 	s.shard.sign(s.T())
 }
 
-func (s *ConfigCacheImportRecordSuite) importRecord() configCacheImportOutput {
+func (s *ConfigCacheImportRecordSuite) importRecord() cache.SpellImportRecord {
 	s.shard.output = "json"
 	var err error
 	stdout := captureStdout(s.T(), func() {
 		_, err = s.shard.run(s.T(), "import", "--remote")
 	})
 	s.Require().NoError(err)
-	var rec configCacheImportOutput
+	var rec cache.SpellImportRecord
 	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
 	return rec
 }
@@ -62,12 +63,12 @@ func (s *ConfigCacheImportRecordSuite) TestAMissRestoresNothing() {
 	rec := s.importRecord()
 	s.False(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
-	s.Equal(spellCacheCold, rec.Spells[0].Outcome)
+	s.Equal(cache.SpellOutcome("cold"), rec.Spells[0].Outcome)
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAnInactiveBackendRestoresNothing() {
 	row := newSpellCacheRow(magus.SpellCache{Spell: "go", Inactive: true})
-	s.Equal(spellCacheInactive, row.Outcome)
+	s.Equal(cache.SpellOutcome("inactive"), row.Outcome)
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
@@ -80,7 +81,7 @@ func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
 		_, err = s.shard.run(s.T(), "import", "--remote")
 	})
 	s.Require().ErrorContains(err, "no remote backend configured")
-	var rec configCacheImportOutput
+	var rec cache.SpellImportRecord
 	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
 	s.False(rec.Restored)
 	s.Len(rec.Spells, 1)
@@ -95,7 +96,7 @@ func (s *ConfigCacheImportRecordSuite) TestAnUntrustedBundleIsNamed() {
 	rec := s.importRecord()
 	s.False(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
-	s.Equal(spellCacheCold, rec.Spells[0].Outcome)
+	s.Equal(cache.SpellOutcome("cold"), rec.Spells[0].Outcome)
 	s.NotEmpty(rec.Spells[0].Refused)
 }
 
@@ -108,7 +109,7 @@ func (s *ConfigCacheImportRecordSuite) TestARestoreSaysWhatItRestored() {
 	s.True(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
 	row := rec.Spells[0]
-	s.Equal(spellCacheRestored, row.Outcome)
+	s.Equal(cache.SpellOutcome("restored"), row.Outcome)
 	s.True(row.Exact)
 	s.NotEmpty(row.Dirs)
 	s.Positive(row.Transferred)
@@ -147,7 +148,7 @@ func (s *cacheShard) sign(t *testing.T) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	t.Setenv(signingKeyEnv, base64.StdEncoding.EncodeToString(priv.Seed()))
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", base64.StdEncoding.EncodeToString(priv.Seed()))
 	s.trusted = base64.StdEncoding.EncodeToString(pub)
 }
 
@@ -265,7 +266,7 @@ func TestConfigCacheRemoteRefusesAnUntrustedBundle(t *testing.T) {
 // bundle to refuse later, since none is stored.
 func TestConfigCacheRemoteExportNeedsTheSigningKey(t *testing.T) {
 	s := newCacheShard(t)
-	t.Setenv(signingKeyEnv, "")
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", "")
 	goCaches(t, map[string]string{"GOCACHE:0a/0abc-a": "compiled"})
 
 	out, err := s.run(t, "export", "--remote")
@@ -288,4 +289,105 @@ func TestConfigCacheExportAndImportTakeNoCacheSelector(t *testing.T) {
 	require.ErrorContains(t, err, "--remote and --to are exclusive")
 	_, err = s.run(t, "import", "--remote", "x")
 	require.ErrorContains(t, err, "--remote reads no file")
+}
+
+// withOutputFlags sets the package-level display flags for one test and restores
+// them, since every command reads them off `global` rather than taking them as
+// arguments.
+func withOutputFlags(t *testing.T, format, tee string) {
+	t.Helper()
+	prevOut, prevTee := global.output, global.tee.Path
+	global.output, global.tee.Path = format, tee
+	t.Cleanup(func() { global.output, global.tee.Path = prevOut, prevTee })
+}
+
+// The seed goes to a secret store over a pipe, so stdout must carry the seed and
+// NOTHING else: no prose, and no trailing newline. `gh secret set` stores stdin
+// verbatim, so one stray byte becomes part of the secret and the base64 decode on
+// the other end fails at signing time, a long way from the cause.
+func TestCacheKeyGenerateTemplateEmitsOnlyTheSeed(t *testing.T) {
+	withOutputFlags(t, "template={{.seed}}", "")
+
+	var err error
+	out := captureStdout(t, func() {
+		_ = notices(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
+	})
+	require.NoError(t, err)
+
+	assert.NotContains(t, out, "\n", "stdout must be the bare seed; a newline would be stored as part of the secret")
+	assert.NotContains(t, out, "SECRET", "the warning banner belongs on stderr, not in the piped value")
+	raw, decErr := base64.StdEncoding.DecodeString(out)
+	require.NoError(t, decErr, "stdout must decode as the base64 seed exactly as emitted")
+	assert.Len(t, raw, 32, "an Ed25519 seed is 32 bytes")
+}
+
+// The keyid and public key still have to reach a human who is piping the seed
+// away unseen (they are what you paste into magus.yaml), so they move to stderr
+// rather than being suppressed.
+func TestCacheKeyGenerateTemplateKeepsPublicHalfOnStderr(t *testing.T) {
+	withOutputFlags(t, "template={{.keyid}}", "")
+
+	var err error
+	errOut := notices(t, func() {
+		_ = captureStdout(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, errOut, "keyid:")
+	assert.Contains(t, errOut, "trusted_keys")
+}
+
+// --tee mirrors structured output into a FILE. Every other command wants that;
+// here it would write a signing key to disk, which is the one thing this command
+// is built never to do. Refused rather than ignored, so nobody believes they have
+// a backup copy they do not have.
+func TestCacheKeyGenerateRefusesTee(t *testing.T) {
+	withOutputFlags(t, "json", "keys.json")
+
+	err := configCacheKeyGenerate(t.Context(), nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not come to rest on disk")
+}
+
+// seedOf pulls the base64 seed back out of the rendered banner: it is the one line
+// that decodes to 32 bytes.
+func findSeed(t *testing.T, out string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if raw, err := base64.StdEncoding.DecodeString(line); err == nil && len(raw) == 32 {
+			return line
+		}
+	}
+	t.Fatal("no 32-byte base64 line in the output; the seed is not on a line of its own")
+	return ""
+}
+
+// The default is a human who will read the seed once and paste it into a password
+// manager, so the prose banner stays. Every assertion here is a property someone
+// copying from a terminal depends on, not a spelling.
+func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
+	withOutputFlags(t, "", "")
+
+	var err error
+	out := captureStdout(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "keyid  ")
+	// The seed sits BARE on its own line, not after "VAR=", which is awkward to
+	// select and invites pasting it into an export, straight into shell history.
+	assert.Contains(t, out, fmt.Sprintf(`
+
+%s
+
+`, findSeed(t, out)), "the seed must be alone on its line")
+	assert.NotContains(t, out, "MAGUS_CACHE_SIGNING_KEY=", "the seed must not be rendered as an assignment")
+	// Column zero, or the snippet does not paste into magus.yaml.
+	assert.Contains(t, out, "\ncache:\n  remote:\n    trusted_keys:\n")
+	assert.Contains(t, out, "gh secret set MAGUS_CACHE_SIGNING_KEY", "the next command is spelled out")
+	// Plain ASCII: the old layout drew a box, which this repo's own rule forbids in
+	// user-facing strings and which renders badly in a plain terminal.
+	for _, r := range out {
+		assert.Less(t, r, rune(128), "user-facing output must be ASCII, found %q", r)
+	}
 }

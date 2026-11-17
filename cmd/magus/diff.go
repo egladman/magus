@@ -1,55 +1,55 @@
 package main
 
 import (
-	"bytes"
-	"cmp"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
-	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"log/slog"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
-	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/job/evidence"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/marker"
 	"github.com/egladman/magus/internal/review"
+	reviewimpact "github.com/egladman/magus/internal/review/impact"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/impact"
-	typesvcs "github.com/egladman/magus/types/vcs"
-	"github.com/egladman/magus/vcs"
+	difftypes "github.com/egladman/magus/types/diff"
 )
+
+// cliTokens is the shell's token store as the review routes use it.
+type cliTokens struct{}
+
+func (cliTokens) Mint(req auth.MintRequest) (string, auth.Token, error) { return mintToken(req, false) }
+
+func (cliTokens) Revoke(id string) error {
+	store, err := openTokenStore()
+	if err != nil {
+		return err
+	}
+	_, err = store.Revoke(types.GrantOperator, id)
+	return err
+}
 
 // diffCommand implements `magus diff`: the working tree's changes, annotated and ordered by
 // what they can break.
@@ -89,15 +89,15 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 	// IDE), and magus has no business requiring its own viewer to record that it happened. It
 	// no longer needs to claim anything: the paths mean the same thing to the ack and to the
 	// view, which is why the ack can now narrow a range review too.
-	scopePaths, err := scopeFromArgs(rest)
+	scopePaths, err := review.ScopeFromArgs(rest)
 	if err != nil {
 		return err
 	}
-	src, err := diffSourceFromFlags(rf)
+	src, err := review.SourceFromFlags(rf.Patch, rf.Rev)
 	if err != nil {
 		return err
 	}
-	if len(scopePaths) > 0 && !src.addressable() {
+	if len(scopePaths) > 0 && !src.Addressable() {
 		// Narrowing happens at the SOURCE, through the backend's own pathspec, so everything
 		// downstream is already scoped. A patch somebody handed over has no source to ask, and
 		// re-emitting a filtered patch is a different feature from reading one. Refused rather
@@ -105,21 +105,21 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 		// how a reader concludes they have seen a file they have not.
 		return exit.Usagef("magus diff: %s is already the changeset somebody chose, so it cannot be narrowed to %s. "+
 			"Narrow it before handing it over, or read the working tree or a range instead",
-			src.label, strings.Join(scopePaths, ", "))
+			src.Label, strings.Join(scopePaths, ", "))
 	}
-	if rf.Watch && src.kind != inputWorkingTree {
+	if rf.Watch && src.Kind != review.SourceWorkingTree {
 		// stdin is consumed once and a patch file is a snapshot someone handed us; re-reading
 		// either on every tree change would re-render identical output forever.
-		return exit.Usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
+		return exit.Usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.Label)
 	}
-	if rf.Ack && !src.addressable() {
+	if rf.Ack && !src.Addressable() {
 		// A receipt fingerprints content magus can name, and a patch describes files that may
 		// not be here at all. Accepting one would record receipts against whatever the working
 		// tree happens to hold: an acknowledgement of something nobody read.
 		//
 		// A revision range IS nameable, so it is admitted: its receipts fingerprint the file at
 		// that revision, never the reader's own checkout.
-		return exit.Usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.label)
+		return exit.Usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.Label)
 	}
 	if rf.Ack && rf.Watch {
 		return exit.Usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
@@ -140,8 +140,8 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	term := diffTUITerm{
-		Reads:  isInteractiveTTY(),
+	term := review.TUITerm{
+		Reads:  interactive.IsInteractiveTTY(),
 		Paints: termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe),
 	}
 
@@ -149,7 +149,10 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	tui := wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
+	tui := review.WantsTUI(review.TUIGate{
+		Tui: rf.Tui, Enabled: m.DiffTUIEnabled(), Ack: rf.Ack, Impact: rf.Impact, Watch: rf.Watch,
+		Baseline: rf.Baseline, Text: opts.Format == outputText,
+	}, src, term)
 
 	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
 		// The viewer can join a server's review, which ran with the server's gates, so the
@@ -167,7 +170,7 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 // interactive terminal. The guard denies it to an agent but fails open where
 // unwired. Exit 2: the flags are fine, the caller is not a person.
 func requirePerson(ctx context.Context, records string) error {
-	if isInteractiveTTY() {
+	if interactive.IsInteractiveTTY() {
 		return nil
 	}
 	slog.ErrorContext(ctx, records+", so it needs an interactive terminal",
@@ -175,235 +178,13 @@ func requirePerson(ctx context.Context, records string) error {
 	return exit.Reported(exit.Usage)
 }
 
-// diffInputKind is where the patch comes from.
-type diffInputKind int
-
-const (
-	inputWorkingTree diffInputKind = iota
-	inputStdin
-	inputFile
-	inputRevRange
-)
-
-// diffInput names a patch source and how to describe it to the reader.
-type diffInput struct {
-	kind  diffInputKind
-	path  string // for inputFile
-	base  string // for inputRevRange
-	head  string // for inputRevRange
-	label string
-}
-
-// addressable reports whether magus can name what this source contains well enough to record a
-// reading of it.
-//
-// The working tree and a revision range are both tree states magus can re-derive and re-digest; a
-// patch on stdin and a patch in a file are bytes somebody handed over, describing files that may
-// not exist here at all. That is the line --ack has always drawn; it was just spelled "is this the
-// working tree" back when the working tree was the only addressable source.
-func (in diffInput) addressable() bool {
-	return in.kind == inputWorkingTree || in.kind == inputRevRange
-}
-
-// riskBase is the revision this input's files are tiered against: HEAD for the
-// working tree, the base of a range. A patch from stdin or a file has none.
-func (in diffInput) riskBase() string {
-	switch in.kind {
-	case inputWorkingTree:
-		return "HEAD"
-	case inputRevRange:
-		return in.base
-	default:
-		return ""
-	}
-}
-
-// revRangeFromFlag resolves --rev, which is written base...head the way git and the branch-overlap
-// reader already spell a symmetric difference.
-//
-// Two dots are REFUSED rather than quietly accepted as three. They are a different question (what
-// head has that base has, including everything base gained meanwhile), and a reviewer who typed the
-// git spelling out of habit would get a diff padded with commits the branch author never wrote.
-func revRangeFromFlag(rev string) (diffInput, error) {
-	base, head, ok := strings.Cut(rev, "...")
-	if !ok {
-		if b, _, two := strings.Cut(rev, ".."); two {
-			return diffInput{}, exit.Usagef("magus diff: --rev takes base...head with three dots, got %q. "+
-				"Three dots is what head added since it diverged; two dots would also count everything "+
-				"%s gained meanwhile, which the branch author did not write", rev, b)
-		}
-		return diffInput{}, exit.Usagef("magus diff: --rev takes a range written base...head, got %q", rev)
-	}
-	if base == "" || head == "" {
-		return diffInput{}, exit.Usagef("magus diff: --rev needs both ends, got %q. "+
-			"magus does not fill in a default: which branch you are comparing against is the "+
-			"question, not a detail", rev)
-	}
-	return diffInput{kind: inputRevRange, base: base, head: head, label: "the range " + rev}, nil
-}
-
-// scopeFromArgs reads the positionals as repo-relative paths that narrow the changeset.
-//
-// A bare `-` is still stdin and not a path, because a file actually named "-" does not happen and
-// every pipe already types it. Anything else is taken at face value: magus does NOT check the path
-// exists, because a path that exists in the changeset and not in the working tree is exactly the
-// case a range review is for.
-func scopeFromArgs(rest []string) ([]string, error) {
-	// Checked FIRST, because git hands an external differ seven positionals and every one of
-	// them is path-shaped. Once positionals are paths this no longer dead-ends on an arity
-	// error, so without this the integration would silently narrow the changeset to git's
-	// temp-file arguments and render nothing, which reads as "no changes" rather than as a
-	// misconfiguration.
-	if err := gitExternalDiffRefusal(rest); err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(rest))
-	for _, a := range rest {
-		if a == "-" {
-			return nil, exit.Usagef("magus diff: `-` reads a patch on stdin, so it is a source rather than a path. " +
-				"Write it as `--patch -`, and keep the positionals for the paths you want to narrow to")
-		}
-		if strings.HasPrefix(a, "-") {
-			return nil, exit.Usagef("magus diff: %q looks like a flag magus does not have. "+
-				"Positionals are paths that narrow the changeset; the changeset itself is named by "+
-				"--rev, --patch, or the working tree by default", a)
-		}
-		out = append(out, a)
-	}
-	return out, nil
-}
-
-// diffSourceFromFlags decides which changeset is being read. Exactly one flag may name it.
-//
-// A ref used to be refused here with a message teaching the pipe, because swallowing one printed a
-// plausible list of the reader's OWN uncommitted edits under exit 0: the worst possible failure,
-// since the output looks exactly like an answer to the question they asked. --rev is that message's
-// successor: the ref has a door now, so the refusal became a feature.
-func diffSourceFromFlags(rf *flaggen.DiffFlags) (diffInput, error) {
-	patch, rev := strings.TrimSpace(rf.Patch), strings.TrimSpace(rf.Rev)
-	switch {
-	case patch != "" && rev != "":
-		return diffInput{}, exit.Usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
-	case rev != "":
-		return revRangeFromFlag(rev)
-	case patch == "-":
-		return diffInput{kind: inputStdin, label: "a patch on stdin"}, nil
-	case patch != "":
-		return diffInput{kind: inputFile, path: patch, label: "the patch in " + patch}, nil
-	default:
-		return diffInput{kind: inputWorkingTree, label: "the working tree"}, nil
-	}
-}
-
-// gitExternalDiffRefusal names the mistake when magus has been wired as GIT_EXTERNAL_DIFF or
-// diff.external, and points at the git-native setting that does work.
-//
-// git calls an external diff once PER FILE with seven arguments, because the contract is for a
-// program that renders one file's diff. Almost everything magus has to say is a property of the
-// whole changeset (which projects rebuild, who owns them, what it costs, what to read first),
-// so honoring that contract would mean printing the report once per file or not at all.
-//
-// git's pager is the same integration without the mismatch: it hands over the entire diff on
-// stdin, exactly once, which is an input `magus diff -` already takes. So this refuses, and
-// says which line to put in the config instead. Landing here means someone tried, which makes
-// it the one moment they will read the answer.
-//
-// GIT_DIFF_PATH_TOTAL is the signal rather than the argument count alone: git sets it on every
-// external-diff call, and seven positionals are otherwise just a typo.
-func gitExternalDiffRefusal(rest []string) error {
-	if len(rest) != 7 || os.Getenv("GIT_DIFF_PATH_TOTAL") == "" {
-		return nil
-	}
-	return exit.Usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
-		"magus reports on a whole changeset, so it cannot answer per file. "+
-		"Use git's pager instead, which hands over the entire diff at once: "+
-		"`git config pager.diff '%s'` - then plain `git diff` renders through magus, "+
-		"and `git --no-pager diff` still gets you the raw patch", rest[0], hint.Diff.With("--patch", "-"))
-}
-
-// diffTUITerm is the terminal the viewer was handed, split by descriptor, because the viewer
-// uses two of them and one probe does not answer for both.
-type diffTUITerm struct {
-	// Reads is the shared interactive gate every stepping view asks for: stdin and stderr
-	// are both terminals.
-	Reads bool
-	// Paints is stdout, which the viewer draws the changeset on. It is a separate condition
-	// because `magus diff > file` leaves stdin a keyboard, so Reads alone would let the viewer
-	// try to draw into a file.
-	Paints bool
-}
-
-// ok reports whether the viewer can have this terminal.
-func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
-
-// wantsTUI decides whether this invocation opens the viewer.
-//
-// The viewer is the DEFAULT at a terminal, so every condition below is a quiet FALLBACK rather
-// than a refusal. Nobody asked for the viewer: a script running `magus diff -o json`, a patch
-// file, a watch loop are all ordinary invocations, and erroring at them would punish a caller
-// for a default they never chose. The report prints and nothing is said.
-//
-// --no-tui is the one explicit answer, and it wins over the config the way a flag always does.
-//
-// It takes the terminal as an ARGUMENT rather than probing it, which is what makes this
-// testable without a pty.
-func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format output.Format, term diffTUITerm, enabled bool) bool {
-	switch {
-	case !rf.Tui, !enabled:
-		return false
-	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
-	// bump. They are requests for an answer rather than for somewhere to read.
-	case rf.Ack, rf.Impact, rf.Baseline != "":
-		return false
-	// A patch somebody handed us is bytes about files that may not be here, and a watch loop
-	// drives the terminal itself. A revision range is neither: it is a tree state magus can
-	// address, which is the whole reason the viewer opens over one.
-	case !src.addressable(), rf.Watch:
-		return false
-	case format != outputText:
-		return false
-	default:
-		return term.ok()
-	}
-}
-
-// readPatch returns the unified patch for this input.
-func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []string) (string, string, error) {
-	switch in.kind {
-	case inputStdin:
-		b, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return "", "", fmt.Errorf("magus diff: read stdin: %w", err)
-		}
-		return string(b), "stdin", nil
-	case inputFile:
-		b, err := os.ReadFile(in.path)
-		if err != nil {
-			return "", "", fmt.Errorf("magus diff: %w", err)
-		}
-		return string(b), in.path, nil
-	case inputRevRange:
-		// The BASE side, because every reader of types.Diff.Base labels it "compared against".
-		// Returning the head made the prompt say a branch was compared against itself, which is
-		// not a wrong-looking value a reader would question; it is a sentence that parses.
-		p, err := m.RangeDiff(ctx, in.base, in.head, paths)
-		if err != nil {
-			return "", "", fmt.Errorf("magus diff: %w", err)
-		}
-		return p, in.base, nil
-	default:
-		p, err := m.WorkingDiff(ctx, paths)
-		return p, "working", err
-	}
-}
-
 // renderDiff reads one patch and emits it in the requested format.
 //
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.Options, rf *flaggen.DiffFlags, gates difftypes.Options, rootOverride string, tui, impact bool, scopePaths []string) error {
-	patch, base, err := src.readPatch(ctx, m, scopePaths)
+func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts output.Options, rf *flaggen.DiffFlags, gates difftypes.Options, rootOverride string, tui, impact bool, scopePaths []string) error {
+	patch, base, err := src.ReadPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
 	}
@@ -416,7 +197,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 				// The record never reads the reading order, and ranking the whole changeset is not cheap.
 				g := gates
 				g.Patch, g.SkipOrder = patch, true
-				return annotateDiff(ctx, m, readReviewedContent(ctx, m, src), paths, base, rf.Baseline, g)
+				return annotateDiff(ctx, m, review.ReadContent(ctx, m, src), paths, base, rf.Baseline, g)
 			},
 			anchors: func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
 				return impactAnchors(ctx, rootOverride, rev)
@@ -428,17 +209,17 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		// a failure to find anything. The sentence differs by source: a clean tree is good
 		// news, an empty patch file is probably a mistake.
 		if opts.Format == outputText {
-			if src.kind == inputWorkingTree {
+			if src.Kind == review.SourceWorkingTree {
 				fmt.Println("clean: every change is committed")
 			} else {
-				fmt.Printf("empty: %s carries no changes\n", src.label)
+				fmt.Printf("empty: %s carries no changes\n", src.Label)
 			}
 			return nil
 		}
 		return emitFormatted(opts, difftypes.Diff{Base: base})
 	}
 
-	paths := changedPathsFromPatch(patch)
+	paths := review.ChangedPathsFromPatch(patch)
 	// Bytes went in and no file came out, so this is not an empty changeset; it is a patch
 	// magus could not read, and the two must never print the same thing. Reporting "0 files to
 	// read" at exit 0 is the worst available answer: a reader checking whether they had
@@ -448,27 +229,27 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 	// come from whichever VCS adapter is active, and refusing there would turn "a backend spells
 	// its headers a third way" into a hard failure of the whole command: a worse bug than the
 	// one being fixed.
-	if len(paths) == 0 && !src.addressable() {
+	if len(paths) == 0 && !src.Addressable() {
 		if strings.Contains(patch, "\x1b[") {
 			return fmt.Errorf("magus diff: %s is colorized, so its headers carry escape sequences "+
 				"and no longer begin a line, which is what a VCS emits when it thinks it is writing "+
 				"to a terminal, exactly the case when magus is its pager, so turn color off "+
 				"for the diff it hands over: `hg --config color.mode=off`, `jj --config ui.color=never`, "+
-				"or `--color=never` on any of them", src.label)
+				"or `--color=never` on any of them", src.Label)
 		}
 		return fmt.Errorf("magus diff: %s has content but no file headers magus can read, "+
-			"it expects a unified diff (`diff --git a/x b/x`, or a `--- a/x` / `+++ b/x` pair)", src.label)
+			"it expects a unified diff (`diff --git a/x b/x`, or a `--- a/x` / `+++ b/x` pair)", src.Label)
 	}
 	// Resolved once: every receipt this command mints or reports on must agree about which
 	// tree it is talking about, and a second resolve is a second chance to disagree.
-	content := readReviewedContent(ctx, m, src)
+	content := review.ReadContent(ctx, m, src)
 	if tui {
 		return runDiffTUI(ctx, m, content, diffTUIRequest{
-			patch: patch, base: base, riskBase: src.riskBase(), paths: paths, label: src.label,
+			patch: patch, base: base, riskBase: src.RiskBase(), paths: paths, label: src.Label,
 			showGenerated: rf.Generated, unread: rf.Unread, thread: rf.Thread,
 		})
 	}
-	gates.Patch, gates.RiskBase = patch, src.riskBase()
+	gates.Patch, gates.RiskBase = patch, src.RiskBase()
 	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline, gates)
 	if err != nil {
 		return err
@@ -477,14 +258,14 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
-			warnUnreadUnknown(ctx, *rev.Unread, src.label, verr)
+			warnUnreadUnknown(ctx, *rev.Unread, src.Label, verr)
 		}
 	}
 	// The threads are named on the report so a person can find the id --thread takes. A patch
 	// somebody handed over belongs to no review this branch has open. Only a running server's
 	// session names them: a plain report never reaches the network.
-	if src.addressable() && opts.Format != outputName {
-		if comments, _, served := serverReviewComments(ctx); served {
+	if src.Addressable() && opts.Format != outputName {
+		if comments, _, served := review.ServerReviewComments(ctx, reviewServerGet); served {
 			review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
 		} else {
 			slog.InfoContext(ctx, "review threads are listed only while the server runs",
@@ -493,11 +274,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 	}
 	if rf.Ack {
 		reason := strings.TrimSpace(rf.Reason)
-		scoped, err := scopeAck(rev, scopePaths)
+		scoped, err := review.ScopeAck(rev, scopePaths)
 		if err != nil {
 			return err
 		}
-		n, err := ackChangeset(content, m.CacheDir(), scoped, reason, time.Now())
+		n, err := review.AckChangeset(content, m.CacheDir(), scoped, reason, time.Now())
 		if err != nil {
 			return err
 		}
@@ -509,9 +290,9 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		return nil
 	}
 
-	var pre *diffImpact
+	var pre *reviewimpact.Report
 	if impact {
-		p, err := collectImpact(ctx, m, rootOverride, rev, patch, src.kind == inputWorkingTree)
+		p, err := reviewimpact.Collect(ctx, m, impactSources(m, rootOverride), rev, patch, src.Kind == review.SourceWorkingTree)
 		if err != nil {
 			return fmt.Errorf("magus diff: %w", err)
 		}
@@ -549,42 +330,27 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
 			return nil
 		}
-		fmt.Println(review.UnreadLine(*rev.Unread, src.label))
+		fmt.Println(review.UnreadLine(*rev.Unread, src.Label))
 		if rev.Unread.Unread == 0 {
 			return nil
 		}
 		fmt.Println()
 	}
-	hintSinceLastReview(ctx, rev, src)
-	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
-}
-
-// hintSinceLastReview tells a reader who has been here before what they can skip.
-//
-// The exhausting part of a second pass is not the reading, it is that nothing separates what moved
-// from what you already weighed, so you re-read the whole change, find the same things, and learn
-// to rubber-stamp the next one. Every review tool that solved this did it the same way, by naming
-// the revision you last got through and diffing from there; the one everybody uses did not, which
-// is why the habit of re-reading everything feels normal.
-//
-// It NAMES the command rather than narrowing the changeset itself. Silently showing a subset of
-// what was asked for would be the one failure this report cannot afford: a reader who was shown
-// less than they asked for, and not told, concludes they have seen a file they have not.
-//
-// Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
-// working-tree review that names no revision, or an earlier pass at the revision already in front
-// of them all print nothing.
-func hintSinceLastReview(ctx context.Context, rev difftypes.Diff, src diffInput) {
-	if !interactive.HintsEnabled() || src.kind != inputRevRange {
-		return
+	review.HintSinceLastReview(ctx, rev, src)
+	var impactLines []string
+	if pre != nil {
+		impactLines = reviewimpact.Lines(*pre)
 	}
-	at, covered := rev.Reviewed.At, rev.Reviewed.Files
-	if covered == 0 || at.Revision == src.base {
-		return
-	}
-	interactive.Hint(ctx, fmt.Sprintf(
-		"you last reviewed %d of these %d files at %s: `%s` shows only what changed since",
-		covered, len(rev.Files), short(at.Revision), hint.Diff.With("--rev", fmt.Sprintf("%s...%s", at.Revision, src.head))))
+	return review.PrintText(os.Stdout, rev, review.TextOptions{
+		ShowGenerated: rf.Generated, Link: review.PathLinker(m.Root()), Impact: impactLines,
+		Console: func() (string, string) {
+			u := consoleDiffURL()
+			if u == "" {
+				return "", ""
+			}
+			return u, console.AuthHint(u)
+		},
+	})
 }
 
 // warnUnreadUnknown tells the person the read marks could not be loaded, with the load error as
@@ -592,14 +358,6 @@ func hintSinceLastReview(ctx context.Context, rev difftypes.Diff, src diffInput)
 func warnUnreadUnknown(ctx context.Context, u difftypes.Unread, source string, loadErr error) {
 	slog.WarnContext(ctx, review.UnreadLine(u, source),
 		attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(loadErr))
-}
-
-// short abbreviates a revision for a message a person reads, keeping the full one for the command.
-func short(rev string) string {
-	if len(rev) <= 12 {
-		return rev
-	}
-	return rev[:12]
 }
 
 // threadPrint is what printThread reads one thread from. The patch, the changeset annotation
@@ -619,7 +377,7 @@ type threadPrint struct {
 // An empty patch is not a refusal: a review outlives the tree it was written on, and the record
 // then carries the thread and the host's own copy of the hunk.
 func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
-	comments, reason := reviewComments(ctx, m)
+	comments, reason := review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    t.patch,
 		Comments: comments,
@@ -631,7 +389,7 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 	}
 	rec, err := review.ReadThread(in, t.id)
 	if err != nil {
-		return fmt.Errorf("magus diff: %w", threadLookupError(err, reason, len(comments)))
+		return fmt.Errorf("magus diff: %w", review.ThreadLookupError(err, reason, len(comments)))
 	}
 	if reason != "" {
 		slog.WarnContext(ctx, "part of the review could not be read", attr.Notice(""), attr.Component("magus"), attr.Why(reason))
@@ -657,18 +415,6 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 	return nil
 }
 
-// threadLookupError says why an id named no thread when the review itself explains it: it was
-// only partly read, or nothing was read at all.
-func threadLookupError(err error, reason string, comments int) error {
-	switch {
-	case reason != "":
-		return fmt.Errorf("the review was only partly read: %s: %w", reason, err)
-	case comments == 0:
-		return fmt.Errorf("no comments were found: %w", err)
-	}
-	return err
-}
-
 // annotateDiff computes the annotated changeset for a set of changed paths.
 //
 // One definition, because the TUI and the one-shot renderer must show the same facts: two
@@ -678,7 +424,7 @@ func threadLookupError(err error, reason string, comments int) error {
 // baselinePath, when set, is a `graph export --symbols -o json` the changed symbols are
 // compared against for the API delta. opts carries the changeset's patch and the conformance
 // gates.
-func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base, baselinePath string, opts difftypes.Options) (difftypes.Diff, error) {
+func annotateDiff(ctx context.Context, m *magus.Magus, content review.Content, paths []string, base, baselinePath string, opts difftypes.Options) (difftypes.Diff, error) {
 	if baselinePath != "" {
 		var baseline types.KnowledgeGraphOutput
 		raw, rerr := os.ReadFile(baselinePath)
@@ -716,7 +462,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.
-	if states, serr := review.ReadStates(m.CacheDir(), paths, content.digest); serr == nil {
+	if states, serr := review.ReadStates(m.CacheDir(), paths, content.Digest); serr == nil {
 		rev.AttachReadState(states)
 	}
 	// Where the reader left off. Attached HERE rather than computed at the point it is rendered,
@@ -742,7 +488,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *difftypes.Diff, opts
 			added[f.Path] = true
 		}
 	}
-	if !opensDir(m.Root(), added) {
+	if !review.OpensDir(m.Root(), added) {
 		return
 	}
 	fail := func(err error) {
@@ -784,27 +530,6 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *difftypes.Diff, opts
 			rev.Files[i].Layout = checks
 		}
 	}
-}
-
-// opensDir reports whether some added file sits in a directory holding no file the change did
-// not add. Subdirectories are left to the graph, which knows which of their files are new.
-func opensDir(root string, added map[string]bool) bool {
-	for file := range added {
-		dir := path.Dir(file)
-		if dir == "." {
-			continue
-		}
-		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
-		if err != nil {
-			continue
-		}
-		if !slices.ContainsFunc(entries, func(e os.DirEntry) bool {
-			return !e.IsDir() && !added[path.Join(dir, e.Name())]
-		}) {
-			return true
-		}
-	}
-	return false
 }
 
 // watchDiff re-renders whenever the working tree changes, until interrupted.
@@ -866,30 +591,6 @@ func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
 	}
 }
 
-// pathLinker returns a function that makes a workspace-relative path clickable, or the
-// identity when the terminal cannot use one.
-//
-// A path printed as bare text is a path the reader has to retype or hand to an editor
-// themselves, and this report prints nothing BUT paths. delta has had OSC 8 links for years
-// and they are the cheapest legibility win available here.
-//
-// The gate is tty.WantsHyperlinks, which already refuses a pipe, TERM=screen, and (the
-// subtle one) an SSH session, where a file:// URL names a path on the remote machine that
-// the local terminal would resolve against the wrong filesystem. Keeping that decision in one
-// place is what preserves the property that piped output carries no escape sequences at all.
-func pathLinker(root string) func(string) string {
-	if !termkit.WantsHyperlinks(os.Stdout, termkit.SystemProbe) {
-		return func(p string) string { return p }
-	}
-	return func(p string) string {
-		abs := p
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(root, p)
-		}
-		return termkit.Hyperlink(p, (&url.URL{Scheme: "file", Path: abs}).String())
-	}
-}
-
 // diffTUIRequest is what one viewer session opens on.
 type diffTUIRequest struct {
 	patch, base string
@@ -905,38 +606,13 @@ type diffTUIRequest struct {
 	thread string
 }
 
-// keepFilteredHunks drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered
-// changeset shows only what the filter kept.
-func keepFilteredHunks(rev difftypes.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
-	kept := map[string]bool{}
-	for _, f := range rev.Files {
-		for _, h := range f.Hunks {
-			kept[difftypes.HunkRef{Path: f.Path, Index: h.Index}.Key()] = true
-		}
-	}
-	out := make([]changeset.FileHunks, 0, len(parsed))
-	for _, f := range parsed {
-		var hunks []changeset.Hunk
-		for _, h := range f.Hunks {
-			if kept[difftypes.HunkRef{Path: f.Path, Index: h.Index}.Key()] {
-				hunks = append(hunks, h)
-			}
-		}
-		if len(hunks) > 0 {
-			f.Hunks = hunks
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
 // runDiffTUI opens the interactive reader over the working tree's changeset.
 //
 // This is what makes "three clients, one session" true for a terminal. `magus diff` already
 // shared the COMPUTATION with the console and the MCP tools; what it did not share was the
 // coordination: where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
-func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, req diffTUIRequest) error {
+func runDiffTUI(ctx context.Context, m *magus.Magus, content review.Content, req diffTUIRequest) error {
 	patch := req.patch
 	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, req.base, req.riskBase, req.paths)
 	if err != nil {
@@ -948,38 +624,38 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
 			warnUnreadUnknown(ctx, *rev.Unread, req.label, verr)
-			sync.close()
+			sync.Close()
 			return nil
 		}
 		if rev.Unread.Unread == 0 {
 			fmt.Println(review.UnreadLine(*rev.Unread, req.label))
-			sync.close()
+			sync.Close()
 			return nil
 		}
-		parsed = keepFilteredHunks(rev, parsed)
+		parsed = review.KeepFilteredHunks(rev, parsed)
 	}
-	files := diffOrderTUIFiles(rev, parsed)
+	files := difftui.OrderedFiles(rev, parsed)
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
-	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
+	earned := difftui.NewEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
 	sync = earned
 	// Closed here rather than inside the viewer: how a Sync gets its writes out (inline, or over a
 	// goroutine that has to be drained) is this file's business, and the viewer stays ignorant
 	// of it. Deferred before Run, so it also runs on the interrupts Run RETURNS from: `q`,
 	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
 	// loses the queue along with the restored terminal.
-	defer sync.close()
+	defer sync.Close()
 	// Re-placed against THIS patch. A thread arrives placed against the working tree or not
 	// placed at all, and neither is what the viewer is showing when the patch came from a file;
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	comments, reason := reviewComments(ctx, m)
+	comments, reason := review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
 	comments = changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
 	start := difftypes.Cursor{Hunk: -1}
 	if req.thread != "" {
 		thread, terr := changeset.FindThread(comments, req.thread)
 		if terr != nil {
-			return fmt.Errorf("magus diff: %w", threadLookupError(terr, reason, len(comments)))
+			return fmt.Errorf("magus diff: %w", review.ThreadLookupError(terr, reason, len(comments)))
 		}
 		if !slices.ContainsFunc(files, func(f difftui.File) bool { return f.Path == thread.Head.Path }) {
 			return fmt.Errorf("magus diff: thread %s sits on %s, which %s does not change: `%s` prints it",
@@ -1002,7 +678,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 			// immediately; `magus notes capture` keeps it, where a reader can still see it.
 			ReviewComments: comments,
 			Unfolded:       req.showGenerated,
-			Link:           pathLinker(m.Root()),
+			Link:           review.PathLinker(m.Root()),
 			Start:          start,
 		},
 		Sync: sync,
@@ -1014,8 +690,8 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 		// arrived later with no referent: the reader had done the work and never been told
 		// it counted. Said at quit, once, naming where to see it.
 		Summary: func(unfolded bool) string {
-			line := diffCountsLine(rev, unfolded)
-			if n := earned.pending(); n > 0 {
+			line := review.CountsLine(rev, unfolded)
+			if n := earned.Pending(); n > 0 {
 				line += fmt.Sprintf("; %d file(s) now carry a read receipt (%s)", n, hint.Diff.With("--impact"))
 			}
 			return line
@@ -1029,10 +705,11 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the server's own store would have written.
-func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base, riskBase string, paths []string) (difftypes.Diff, *difftypes.Review, diffSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
+func attachDiffReview(ctx context.Context, m *magus.Magus, content review.Content, patch, base, riskBase string, paths []string) (difftypes.Diff, *difftypes.Review, difftui.ClosingSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	asOf := changeset.PatchDigest(patch)
-	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
-		return b.session.Diff, b.session, b, nil
+	if b := difftui.DialBridge(ctx, cliTokens{}, mcpAddrString(), paths, asOf); b != nil {
+		sess := b.Session()
+		return sess.Diff, sess, b, nil
 	}
 	rev, err := annotateDiff(ctx, m, content, paths, base, "", difftypes.Options{Patch: patch, RiskBase: riskBase})
 	if err != nil {
@@ -1044,455 +721,7 @@ func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedConte
 	// session left AND what makes MarkViewed below have a session to write to.
 	store := changeset.NewStore(m.CacheDir())
 	sess := store.Attach(m.Root(), base, rev, asOf)
-	return rev, sess, diffStoreSync{store: store, root: m.Root()}, nil
-}
-
-// diffTUIFiles joins the annotations to the patch: one is ordered by consequence, the other
-// by whatever the VCS emitted, and the reader wants the first order with the second's text.
-//
-// The annotation order is authoritative and is never recomputed here: types.Diff.
-// SortForReading is the single definition of review order.
-func diffTUIFiles(rev difftypes.Diff, parsed []changeset.FileHunks) []difftui.File {
-	byPath := make(map[string][]changeset.Hunk, len(parsed))
-	for _, f := range parsed {
-		byPath[f.Path] = f.Hunks
-	}
-	out := make([]difftui.File, 0, len(rev.Files))
-	for _, f := range rev.Files {
-		// Settled is READ-AND-UNMOVED, never merely read: DiffReadStale means a receipt exists at
-		// DIFFERENT content, which is the file that most needs a second look rather than the least.
-		file := difftui.File{
-			Path:      f.Path,
-			Settled:   f.ReadState == difftypes.ReadRead,
-			Generated: f.Generated(),
-			Facts:     diffFileFacts(f),
-		}
-		for _, h := range byPath[f.Path] {
-			file.Hunks = append(file.Hunks, difftui.Hunk{
-				// Display when the parser found something a renderer would obey, Lines
-				// otherwise. The viewer never sees the raw form of a deceptive line.
-				Index: h.Index, Header: h.Header, Lines: displayOr(h), Digest: h.Digest,
-				NewStart: h.NewStart, Declaration: h.Declaration,
-				Emph: changeset.RawLineEmphasis(h),
-			})
-		}
-		out = append(out, file)
-	}
-	return out
-}
-
-// displayOr is a hunk's render-safe lines, falling back to its real ones.
-//
-// The fallback is the common case: displayLines returns nil unless a line carried a character a
-// renderer obeys but a reader cannot see, so an honest patch reaches the viewer untouched.
-func displayOr(h changeset.Hunk) []string {
-	if h.Display != nil {
-		return h.Display
-	}
-	return h.Lines
-}
-
-// diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out
-// differently (one to a local file, one over a goroutine that has to be drained), and the
-// viewer must not have to know which it was handed.
-type diffSync interface {
-	difftui.Sync
-	close()
-}
-
-// diffStoreSync persists the reader's progress with no server in the picture. There is no
-// cursor to publish: nobody is listening.
-type diffStoreSync struct {
-	store *changeset.Store
-	root  string
-}
-
-func (diffStoreSync) SetCursor(difftypes.Cursor) {}
-
-// SetViewed stays SYNCHRONOUS, unlike the bridge's: this is memory and a file under the cache
-// dir, so it costs a keypress nothing that a queue would win back.
-func (s diffStoreSync) SetViewed(digest string, on bool) {
-	s.store.MarkViewed(s.root, digest, on)
-}
-
-// SetThreadsSeen advances the watermark through the same store call the console's session route
-// makes, so a terminal-only reader leaves the same record a browser one does.
-func (s diffStoreSync) SetThreadsSeen(ids []string) {
-	s.store.MarkCommentsSeen(s.root, ids)
-}
-
-func (diffStoreSync) close() {}
-
-// diffBridge is the running server's session, reached over the same loopback routes the
-// console uses. The session it attached to travels with it, because a transport that could
-// hand back a session it had not attached would be a client of nothing.
-//
-// Writes leave on sends rather than on the caller's stack: every one of them is provoked by a
-// KEYPRESS (a cursor move, a read mark), and an inline post would put a network round trip
-// between the key and the screen moving, up to the full diffBridgeWrite deadline against a
-// server that has stopped answering.
-//
-// The two kinds of write get two queues, because they fail in opposite directions. A cursor is
-// idempotent by REPLACEMENT (the newest one says where the reader is and everything behind it
-// says where they no longer are), so that queue evicts to stay current. A read mark is
-// replaceable by nothing: the bridge is the only writer of it on this path, so a dropped
-// `viewed` is a hunk the reader read that no client will ever be told about. Its queue is deep,
-// waited on, and drained in full at close.
-type diffBridge struct {
-	addr    string
-	token   types.Secret
-	tokenID string // revoked at close; empty when the bridge minted no record
-	session *difftypes.Review
-
-	cursors chan diffSessionOp
-	marks   chan diffSessionOp
-	// stop is closed in place of the op channels, so a send racing close cannot panic.
-	stop chan struct{}
-	// done closes when deliver has returned, which is the only proof the sender is gone.
-	done chan struct{}
-	// cancel aborts the post on the wire once close has spent its budget.
-	cancel context.CancelFunc
-}
-
-// setBearer is where a review's console token leaves for the server's API.
-func setBearer(req *http.Request, token types.Secret) {
-	req.Header.Set("Authorization", "Bearer "+token.Reveal())
-}
-
-// diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route
-// (symbol shards and a reverse closure), so this is generous; the alternative on a slow answer
-// is not a faster one, it is computing the same thing locally.
-const diffBridgeAttach = 10 * time.Second
-
-// diffBridgeWrite bounds a coordination write. Short, because a wedged server must not hold
-// the sender long enough for the queue behind it to overflow, and because it is also how long
-// quitting waits for the last mark to leave.
-const diffBridgeWrite = time.Second
-
-// diffBridgeQueue bounds the CURSOR writes waiting to leave. Small on purpose: a backlog means
-// the server has stopped keeping up, and at that point the newest cursor is the only one worth
-// having: the ones behind it describe somewhere the reader no longer is.
-const diffBridgeQueue = 8
-
-// diffBridgeMarks bounds the read marks waiting to leave. Deep rather than small, because
-// nothing here may be evicted and the volume is bounded by a human pressing `v`: reaching the
-// end of it takes a server that has stopped answering AND a minute of uninterrupted marking.
-const diffBridgeMarks = 64
-
-// diffBridgeClose caps how long quitting waits for the queue to empty. The budget is one write
-// deadline per queued op, and this is the ceiling on it: a wedged server costs the shell a few
-// seconds rather than the whole queue's worth of deadlines.
-const diffBridgeClose = 3 * time.Second
-
-// dialDiffBridge attaches to the server's session, or returns nil when there is nothing to
-// join. A refused connection stays silent: no server was started.
-// Every other miss warns, so a server that is up is never read as absent.
-//
-// asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
-// the server computed its changeset from the same bytes. Without that check a server serving
-// a different workspace (the main checkout while this is a worktree) answers confidently
-// about a tree the reader is not looking at, and the coordinate every comment and every
-// viewed mark is keyed by would silently mean something else.
-func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridge {
-	warn := func(msg string, why ...any) {
-		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
-	}
-	addr := mcpAddrString()
-	token, tokenID, ok := mintReviewToken(ctx, addr, reviewBridgeTokenTTL)
-	if !ok {
-		return nil
-	}
-	joined := false
-	defer func() {
-		if !joined {
-			revokeReviewToken(ctx, tokenID)
-		}
-	}()
-	q := url.Values{}
-	for _, p := range paths {
-		q.Add("path", p)
-	}
-	b := &diffBridge{addr: addr, token: token, tokenID: tokenID}
-	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff?%s", b.addr, q.Encode()), nil)
-	if err != nil {
-		return nil
-	}
-	setBearer(req, token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		if !errors.Is(err, syscall.ECONNREFUSED) {
-			warn("the review is not shared with the server: it did not answer", attr.Error(err))
-		}
-		return nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		warn("the review is not shared with the server: it refused the session", attr.Why(resp.Status))
-		return nil
-	}
-	var sess difftypes.Review
-	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
-		warn("the review is not shared with the server: its session did not decode", attr.Error(err))
-		return nil
-	}
-	if sess.AsOf != asOf {
-		warn("the review is not shared with the server: it computed its changeset from a different patch", attr.Why(fmt.Sprintf("as-of %s, this patch is %s", sess.AsOf, asOf)))
-		return nil
-	}
-	b.session = &sess
-	b.start()
-	joined = true
-	return b
-}
-
-// reviewBridgeTokenTTL covers a reader who leaves a review open. A crash
-// leaves the record until then, and its secret died with the process.
-const reviewBridgeTokenTTL = 7 * 24 * time.Hour
-
-// reviewCallTokenTTL covers one request to a review route.
-const reviewCallTokenTTL = time.Minute
-
-// mintReviewToken mints the console token a CLI call to the review routes
-// carries: they refuse the operator token. ok is false with no server at
-// addr, which writes no record, or on a failed mint.
-// The caller revokes tokenID.
-func mintReviewToken(ctx context.Context, addr string, ttl time.Duration) (token types.Secret, tokenID string, ok bool) {
-	warn := func(msg string, why ...any) {
-		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
-	}
-	probe := net.Dialer{Timeout: diffBridgeWrite}
-	conn, err := probe.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		if !errors.Is(err, syscall.ECONNREFUSED) {
-			warn("the review is not shared with the server: it did not answer", attr.Error(err))
-		}
-		return types.Secret{}, "", false
-	}
-	_ = conn.Close()
-	secret, rec, err := mintToken(auth.MintRequest{Grant: types.GrantConsole, TTL: ttl}, false)
-	if err != nil {
-		warn("the review is not shared with the server: its console token could not be minted", attr.Error(err))
-		return types.Secret{}, "", false
-	}
-	return types.NewSecret(secret), rec.ID, true
-}
-
-// revokeReviewToken deletes the record mintReviewToken wrote.
-// A record already gone, expired or revoked by hand, is what it wanted.
-func revokeReviewToken(ctx context.Context, tokenID string) {
-	store, err := openTokenStore()
-	if err == nil {
-		_, err = store.Revoke(types.GrantOperator, tokenID)
-	}
-	if err != nil && !errors.Is(err, auth.ErrTokenNotFound) {
-		slog.WarnContext(ctx, "a review's console token was not revoked; it expires on its own",
-			attr.Notice(""), attr.Component("magus"), attr.Why(tokenID), attr.Error(err))
-	}
-}
-
-// start wires the sender. Split from dialDiffBridge so the queue can be driven against a stub
-// server without a server, a token, or the attach round trip.
-func (b *diffBridge) start() {
-	b.cursors = make(chan diffSessionOp, diffBridgeQueue)
-	b.marks = make(chan diffSessionOp, diffBridgeMarks)
-	b.stop = make(chan struct{})
-	b.done = make(chan struct{})
-	// Not the caller's context and not the session's: a cancelled read must not turn the last
-	// read mark into a lost one. close owns this cancel and nothing else does.
-	ctx, cancel := context.WithCancel(context.Background())
-	b.cancel = cancel
-	go b.deliver(ctx)
-}
-
-// diffSessionOp is one mutation of the shared session, the wire shape the server's
-// /api/v1/diff/session route takes.
-type diffSessionOp struct {
-	Op     string `json:"op"`
-	Path   string `json:"path,omitempty"`
-	Hunk   int    `json:"hunk,omitempty"`
-	Digest string `json:"digest,omitempty"`
-	On     bool   `json:"on,omitempty"`
-	// IDs are the host thread ids of a `seen` op, the only op that carries a set rather than
-	// one coordinate, because the watermark advances by what a frame showed.
-	IDs []string `json:"ids,omitempty"`
-}
-
-// SetCursor publishes where the reader is looking. The reply is discarded on purpose: it
-// carries the session's own cursor, and applying that would let another client move this
-// reader's viewport, which is the one thing the paired-review design forbids.
-func (b *diffBridge) SetCursor(c difftypes.Cursor) {
-	b.queueCursor(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
-}
-
-// SetViewed publishes a read mark, which the server persists for every client at once.
-func (b *diffBridge) SetViewed(digest string, on bool) {
-	b.queueMark(diffSessionOp{Op: "viewed", Digest: digest, On: on})
-}
-
-// SetThreadsSeen publishes the watermark on the MARK queue, not the cursor one: like a read
-// mark it is replaceable by nothing, and the viewer sends each thread once, so a dropped op is
-// a remark the reader saw that no client will ever be told about.
-func (b *diffBridge) SetThreadsSeen(ids []string) {
-	b.queueMark(diffSessionOp{Op: "seen", IDs: ids})
-}
-
-// queueCursor hands the newest cursor to the sender, evicting the OLDEST when the queue is
-// full. It never blocks: the key loop is what calls it, and difftui.Sync promises best-effort
-// delivery precisely so a slow server costs the reader nothing.
-//
-// A plain non-blocking send drops the ARRIVING op instead, which keeps exactly the positions
-// the reader has already walked past and throws away the only one still true.
-//
-// Evicting and sending are two steps, and deliver can take the head between them, which is why
-// this retries rather than assuming the receive made room. Each iteration ends with a slot free
-// whichever way that race went, and stop short-circuits both selects once close has run.
-func (b *diffBridge) queueCursor(op diffSessionOp) {
-	for {
-		select {
-		case b.cursors <- op:
-			return
-		case <-b.stop:
-			return
-		default:
-		}
-		select {
-		case <-b.cursors:
-		case <-b.stop:
-			return
-		default:
-		}
-	}
-}
-
-// queueMark hands a read mark to the sender. It never evicts, because there is nothing to
-// replace a mark with; see diffBridge.
-//
-// A full queue is waited on rather than dropped, and the wait is bounded at diffBridgeWrite
-// because an unbounded one would DEADLOCK the quit path: close runs after the key loop returns,
-// so a key loop parked in here is one that can never reach the drain that would empty the queue.
-//
-// Past that wait the mark is lost and there is no honest floor below it on this path: the server
-// owns the session file, so writing the local store instead would be a second writer persisting
-// its own idea of the whole set, and stderr belongs to the viewport until the reader quits.
-func (b *diffBridge) queueMark(op diffSessionOp) {
-	select {
-	case b.marks <- op:
-		return
-	default:
-	}
-	t := time.NewTimer(diffBridgeWrite)
-	defer t.Stop()
-	select {
-	case b.marks <- op:
-	case <-b.stop:
-	case <-t.C:
-	}
-}
-
-// deliver posts queued mutations one at a time, in order, until close stops it, then drains
-// what is left behind. It is the only receiver on either queue and it returns on every path: the
-// loop leaves on stop, and the drain is bounded by the depth it measured on entry.
-func (b *diffBridge) deliver(ctx context.Context) {
-	defer close(b.done)
-	for {
-		select {
-		case op := <-b.marks:
-			b.post(ctx, op)
-		case op := <-b.cursors:
-			b.post(ctx, op)
-		case <-b.stop:
-			b.drain(ctx)
-			return
-		}
-	}
-}
-
-// drain posts what was waiting when close ran, marks first because those are the writes that
-// cannot be reconstructed, and never more than were queued at that moment: a send racing close
-// is not worth extending the shell's exit for.
-func (b *diffBridge) drain(ctx context.Context) {
-	for n := len(b.marks) + len(b.cursors); n > 0; n-- {
-		select {
-		case op := <-b.marks:
-			b.post(ctx, op)
-			continue
-		default:
-		}
-		select {
-		case op := <-b.cursors:
-			b.post(ctx, op)
-		default:
-			return
-		}
-	}
-}
-
-// close stops the sender and gives what is already queued a bounded chance to leave: a mark
-// made on the last keypress should not be lost to the process exiting, and a server that has
-// stopped answering should not hold the shell either.
-//
-// Spending the budget CANCELS the sender rather than just abandoning it, which is what aborts
-// the post already on the wire. Left uncancelled, the goroutine went on talking to the server
-// about a session the reader had walked away from, with nothing left to receive the answer.
-func (b *diffBridge) close() {
-	defer func() {
-		if b.tokenID != "" {
-			revokeReviewToken(context.Background(), b.tokenID)
-		}
-	}()
-	defer b.cancel() // the drain finished inside its budget; nothing is on the wire to abort
-	close(b.stop)
-	select {
-	case <-b.done:
-		return
-	case <-time.After(b.drainBudget()):
-	}
-	b.cancel()
-	select {
-	case <-b.done:
-	case <-time.After(diffBridgeWrite):
-	}
-}
-
-// drainBudget is how long close waits for the queue: one write deadline per op, since they leave
-// one at a time, plus one for whatever is already on the wire, capped at diffBridgeClose.
-func (b *diffBridge) drainBudget() time.Duration {
-	d := time.Duration(len(b.marks)+len(b.cursors)+1) * diffBridgeWrite
-	if d > diffBridgeClose {
-		return diffBridgeClose
-	}
-	return d
-}
-
-// post sends one mutation, best-effort. A coordination write that fails is a pairing that
-// went quiet, not a review that has to stop, and there is nothing useful to say about it to
-// somebody in the middle of reading a diff.
-//
-// ctx is the SENDER's, never the session's: a cancelled read must not turn the last write into a
-// lost mark. close cancels it once the drain budget is spent, so a post outlives the process's
-// interest in it by nothing.
-func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
-	body, err := json.Marshal(op)
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, diffBridgeWrite)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/diff/session", b.addr), bytes.NewReader(body))
-	if err != nil {
-		return
-	}
-	setBearer(req, b.token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	// Drained so the connection can be reused for the next keypress rather than torn down.
-	_, _ = io.Copy(io.Discard, resp.Body)
+	return rev, sess, difftui.NewStoreSync(store, m.Root()), nil
 }
 
 func diffUsage(w io.Writer) {
@@ -1581,331 +810,11 @@ func diffUsage(w io.Writer) {
 		"Both apply to the printed report, not the viewer.")
 }
 
-// diagnosticLine renders a Diagnostic the way a coded error prints: "[CODE] message (url)".
-func diagnosticLine(d types.Diagnostic) string {
-	line := d.Message
-	if d.Code != "" {
-		line = fmt.Sprintf("[%s] %s", d.Code, line)
-	}
-	if d.URL != "" {
-		line += fmt.Sprintf(" (%s)", d.URL)
-	}
-	return line
-}
-
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
 // server's insight scan uses, so the CLI and the console rank the same files the same way:
 // two different windows would report two different "hottest file" answers for one tree.
 const diffHistoryCommits = 500
 
-// diffCountsLine is the headline every rendering of a changeset opens with: how much there
-// is to read before any of it is shown.
-//
-// The interactive reader leaves this same line behind when it quits, which is why it is a
-// string rather than a print: a session that erased its viewport and printed nothing would
-// leave the scrollback with no record that a review happened at all.
-// The fold state is threaded rather than assumed: under --generated every generated file is
-// printed right below this line, so calling them folded would contradict the page it introduces.
-func diffCountsLine(rev difftypes.Diff, showGenerated bool) string {
-	gen := rev.GeneratedCount()
-	line := fmt.Sprintf("%d files to read", len(rev.Files)-gen)
-	if gen > 0 {
-		state := "folded"
-		if showGenerated {
-			state = "shown"
-		}
-		line += fmt.Sprintf(", %d generated %s", gen, state)
-	}
-	if n := len(rev.SeedProjects); n > 0 {
-		// Both halves name the noun: a bare "N rebuild" leaves the reader guessing what is
-		// being counted.
-		line += fmt.Sprintf("; %d projects edited, %d projects rebuild", n, len(rev.AffectedProjects))
-	}
-	return line
-}
-
-// printDiffText renders the diff in the house style: counts before lists, the evidence
-// beside the claim, plain ASCII.
-//
-// pre is nil unless --impact was passed, and nil prints nothing at all: the report above
-// it must not change shape because a second one was appended.
-func printDiffText(rev difftypes.Diff, showGenerated bool, link func(string) string, pre *diffImpact) error {
-	var primary, generated []difftypes.File
-	for _, f := range rev.Files {
-		if f.Generated() {
-			generated = append(generated, f)
-		} else {
-			primary = append(primary, f)
-		}
-	}
-
-	fmt.Println(diffCountsLine(rev, showGenerated))
-	fmt.Println()
-	if lines := diffAPILines(rev.API); len(lines) > 0 {
-		for _, line := range lines {
-			fmt.Println(line)
-		}
-		fmt.Println()
-	}
-
-	// The ordering caveat prints BEFORE the list, and only this placement works. As a trailing
-	// note it arrived after the reader had already read the first entry as the most dangerous
-	// one, and it named the missing overlays rather than the missing order, so three separate
-	// readers concluded the ranking had considered churn and rejected it. Say the one thing
-	// that changes how the next twelve lines should be read, first.
-	if !rev.Ranked() && len(primary) > 1 {
-		fmt.Println("UNRANKED: no symbol index, so there is no consequence to rank by.")
-		fmt.Println("What follows is path order, not a ranking. Build the index with")
-		fmt.Printf("`%s` to order these by what they can break.\n", hint.GraphBuild.String())
-		fmt.Println()
-	}
-
-	for _, f := range primary {
-		printDiffFile(f, link)
-	}
-
-	if len(generated) > 0 {
-		fmt.Println()
-		// Both branches name `magus describe file`, because "why is this folded" is the one
-		// question the fold provokes and the answer was a hop out of reach: the folded list
-		// said THAT a target rewrites these and never WHICH, so a reader who suspected a
-		// mis-declared glob had nowhere to go.
-		if showGenerated {
-			fmt.Printf("generated (%d) - a target rewrites these; the source edit is what to read\n", len(generated))
-			for _, f := range generated {
-				printDiffFile(f, link)
-			}
-			fmt.Printf("      why is one of these folded? `%s` names the project that declares it\n", hint.DescribeFile.With("<path>"))
-		} else {
-			fmt.Printf("%d generated files folded. They are declared target outputs: reading one is\n", len(generated))
-			fmt.Println("reading a machine's restatement of a change made elsewhere. Show them with --generated,")
-			fmt.Printf("or ask why one is folded with `%s`.\n", hint.DescribeFile.With("<path>"))
-		}
-	}
-
-	printDiffOrder(os.Stdout, rev, showGenerated)
-
-	if e := rev.ConformanceError; e != nil {
-		fmt.Printf("\nerror: conformance could not check this change: %s\n", diagnosticLine(*e))
-	}
-	for _, u := range rev.Uncovered {
-		fmt.Printf("\nconformance did not check %s: %s\n", u.Project, u.Reason.Sentence())
-	}
-	// Notes name what could NOT be measured. Surfaced rather than swallowed, so an empty
-	// column reads as "nothing was measured" rather than as "nothing depends on this".
-	for _, n := range rev.Notes {
-		fmt.Printf("\nnote: %s\n", n)
-	}
-
-	// Above the console link rather than below it: the link is a trailing pointer somewhere
-	// else, and burying it under forty lines of report would cost it every reader it has.
-	if pre != nil {
-		fmt.Println()
-		for _, line := range impactLines(*pre) {
-			fmt.Println(line)
-		}
-	}
-
-	// What to do next, and where to see the same changeset. Both are for a person: the console
-	// link carries no token (see printJobWatchHint), so the terminal check is an invitation
-	// rather than a secrecy measure, and it keeps `magus diff > file` as data.
-	if termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe) {
-		for _, line := range diffNextStepLines(len(primary)) {
-			fmt.Println(line)
-		}
-		if u := consoleDiffURL(); u != "" {
-			fmt.Printf("open in console: %s\n%s\n", u, authHint(u))
-		}
-	}
-	return nil
-}
-
-// diffNextStepLines names what a reader can do with the changeset they were just shown.
-//
-// This output is where most people meet magus's review workflow, so `--tui` and `--impact` are
-// named here rather than only in `-h` prose and the man page.
-//
-// Nothing when nothing was listed: a clean tree or an all-generated changeset has no reading
-// to offer, and a suggestion there is a suggestion to do nothing.
-func diffNextStepLines(readable int) []string {
-	if readable == 0 {
-		return nil
-	}
-	// At a terminal the viewer has already opened, so what is left to teach is the two ways out
-	// of it: this report, and the impact question the viewer has nowhere to put.
-	return []string{
-		"",
-		"the blast radius:  " + hint.Diff.With("--impact"),
-		"just the report:   " + hint.Diff.With("--no-tui"),
-	}
-}
-
-func printDiffFile(f difftypes.File, link func(string) string) {
-	fmt.Printf("  %s\n", link(f.Path))
-	for _, fact := range diffFileFacts(f) {
-		fmt.Printf("      %s\n", fact)
-	}
-	for _, t := range f.Threads {
-		at := "not on a hunk of this changeset"
-		for _, h := range f.Hunks {
-			if h.Index == t.Hunk {
-				at = "on " + changeset.NewRange(f.Path, h.NewStart, h.NewCount)
-			}
-		}
-		fmt.Printf("      %s, %s\n", review.ThreadRefLine(t), at)
-	}
-	// Agent touches come last: they are the deepest context and the least urgent, and a reader
-	// scanning for risk should meet reach and coverage first.
-	for _, t := range f.Touches {
-		who := t.Host
-		if who == "" {
-			who = "an agent"
-		}
-		fmt.Printf("      written by %s", who)
-		if len(t.Read) > 0 {
-			fmt.Printf(", after reading %s", strings.Join(capSlice(t.Read, 4), ", "))
-		}
-		fmt.Println()
-		if t.Transcript != "" {
-			fmt.Printf("        transcript: %s\n", t.Transcript)
-		}
-	}
-}
-
-// diffAPILines states the semver bump a baseline comparison proved, or nothing without one.
-//
-// The floor leads because it is the only claim magus can prove; the likely bump follows with
-// the count that raised it, so a reader who knows the signature change is compatible can see
-// exactly what they are overruling.
-func diffAPILines(api *difftypes.API) []string {
-	if api == nil {
-		return nil
-	}
-	head := "API: at least " + api.Floor
-	if api.Likely != api.Floor {
-		head += fmt.Sprintf(", likely %s (%d public signature(s) changed)", api.Likely, api.Signature)
-	}
-	lines := []string{
-		fmt.Sprintf("%s against %s", head, api.Base),
-		fmt.Sprintf("  public symbols: %d added, %d removed, %d re-signed, %d changed in body only",
-			api.Added, api.Removed, api.Signature, api.Body),
-	}
-	if api.Stage.Known() {
-		stage := "  newest release " + api.Stage.Tag
-		if api.Stage.Major == 0 {
-			stage += ": below 1.0 a major floor ships as a minor release"
-		}
-		lines = append(lines, stage)
-	}
-	return append(lines, "  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely")
-}
-
-// diffFileFacts is what magus knows about one changed file, one claim per line.
-//
-// One definition for the printer and the interactive reader, so both show the SAME sentences:
-// two renderings of "12 files reference its widest changed symbol" would drift, and the drift
-// would be invisible until somebody compared two views side by side.
-func diffFileFacts(f difftypes.File) []string {
-	var facts []string
-	if f.Visibility == difftypes.VisibilityPublic {
-		var api []string
-		var across []string
-		seen := map[string]bool{}
-		for _, s := range f.Symbols {
-			if s.PublicBeyondWorkspace && s.Label != "" {
-				api = append(api, s.Label)
-			}
-			for _, p := range s.PublicTo {
-				if !seen[p] {
-					seen[p] = true
-					across = append(across, p)
-				}
-			}
-		}
-		switch {
-		case len(api) > 0:
-			facts = append(facts, "EXPORTED API: exports "+strings.Join(capSlice(api, 6), ", "))
-		case len(across) > 0:
-			facts = append(facts, "EXPORTED API: used by "+strings.Join(across, ", "))
-		default:
-			facts = append(facts, "EXPORTED API")
-		}
-		// Only the changes a consumer can see. A private helper listed here would sit beside
-		// the bump it did not move, and read as the reason for it.
-		for _, s := range f.Symbols {
-			if !s.PublicBeyondWorkspace && len(s.PublicTo) == 0 {
-				continue
-			}
-			switch s.Change {
-			case difftypes.ChangeRemoved:
-				facts = append(facts, "REMOVED "+s.Qualified)
-			case difftypes.ChangeAdded:
-				facts = append(facts, "ADDED "+s.Qualified)
-			case difftypes.ChangeSignature:
-				facts = append(facts, fmt.Sprintf("SIGNATURE %s: `%s` -> `%s`", s.Qualified, s.BaseSignature, s.Signature))
-			}
-		}
-	}
-	for _, s := range f.Symbols {
-		for _, c := range s.Checks {
-			facts = append(facts, "CONFORMANCE "+c.Message)
-		}
-	}
-	for _, c := range f.Layout {
-		facts = append(facts, "LAYOUT "+c.Message)
-	}
-	if n := f.ReachOr(0); f.Reach != nil && n > 0 {
-		noun := "files"
-		if n == 1 {
-			noun = "file"
-		}
-		facts = append(facts, fmt.Sprintf("%d %s reference its widest changed symbol", n, noun))
-	}
-	if c := f.Coverage; c != nil && c.Total > 0 {
-		facts = append(facts, fmt.Sprintf("%d%% covered", int(c.Ratio*100+0.5)))
-	}
-	// Said plainly, because an empty annotation row otherwise reads as "quiet file" when it
-	// means "magus has never seen this file before".
-	if f.NoHistory {
-		facts = append(facts, "NO HISTORY - nothing has exercised this yet")
-	}
-	if ch := f.Churn; ch != nil && ch.Commits > 0 {
-		noun := "commits"
-		if ch.Commits == 1 {
-			noun = "commit"
-		}
-		churn := fmt.Sprintf("changed in %d %s", ch.Commits, noun)
-		if ch.Authors > 1 {
-			churn += fmt.Sprintf(" by %d people", ch.Authors)
-		}
-		if ch.NotableRank() {
-			churn += fmt.Sprintf(", hotspot #%d", ch.Rank)
-		}
-		if ch.Rising() {
-			churn += " AND RISING - worth asking why it keeps changing"
-		}
-		facts = append(facts, churn)
-	}
-	if f.Project != "" {
-		facts = append(facts, "in "+f.Project)
-	}
-	return facts
-}
-
-// capSlice bounds a list for display, reporting the remainder rather than truncating in
-// silence: a list that stops without saying so reads as the whole answer.
-func capSlice(xs []string, n int) []string {
-	if len(xs) <= n {
-		return xs
-	}
-	return append(xs[:n:n], fmt.Sprintf("and %d more", len(xs)-n))
-}
-
-// changedPathsFromPatch reads the `diff --git` headers out of a unified patch.
-//
-// The paths come from the PATCH rather than from a second VCS call on purpose: a re-derived
-// set would race an edit made since the patch was read, and annotate a file the reader is not
-// looking at. The console makes the same choice for the same reason.
 // diffReport is the changeset plus its impact, the document --impact serves on the
 // structured path.
 //
@@ -1913,511 +822,40 @@ func capSlice(xs []string, n int) []string {
 // before, so nothing reading `magus diff -o json` today meets a key it has never seen.
 type diffReport struct {
 	difftypes.Diff `yaml:",inline"`
-	Impact         *diffImpact `json:"impact,omitempty" yaml:"impact,omitempty"`
+	Impact         *reviewimpact.Report `json:"impact,omitempty" yaml:"impact,omitempty"`
 }
 
-// diffImpact is what a disposer should know before landing: the consequences a file list
-// structurally cannot show.
+// impactSources hands the impact report the lenses whose readers live in this package.
 //
-// Every field distinguishes "nothing" from "nobody measured", the same refusal diff.File
-// makes with its pointers. An absent cost is a workspace with no run history, and rendering it
-// as zero would tell a reader the build is free.
-type diffImpact struct {
-	Reach     *impactReach    `json:"reach,omitempty"     yaml:"reach,omitempty"`
-	Ownership []impactOwner   `json:"ownership,omitempty" yaml:"ownership,omitempty"`
-	Cost      *impactCost     `json:"cost,omitempty"      yaml:"cost,omitempty"`
-	Advisors  []adviceSection `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
-	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
-	// an empty advisor list reads as "they all passed" only when it is one.
-	AdvisorNotes []string `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
-	// AdvisorBase qualifies everything the advisors said. nil when the backend cannot date a
-	// revision, which is a different fact from a base that is merely old.
-	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
-	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
-	LeftBehind  *impactLeftBehind  `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
-	// Evidence is what this changeset's authors asked magus before writing it. It is the
-	// reasoning half of the record diff.Touch carries: that one names the files an agent
-	// had READ, this one the questions it put to the graph.
-	Evidence []trail.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
-	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
-	// tell an unresearched change from a record kept in another checkout.
-	EvidenceGap trail.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
-	Review      *impactReview    `json:"review,omitempty"       yaml:"review,omitempty"`
-}
-
-// impactAdvisorBase is the revision the advisors compared against, and how current this
-// clone's copy of it is.
-//
-// It is stated ONCE for the whole set rather than per section: a local run never fetches, so
-// the caveat is identical under every advisor, and repeating it ten times is how a reader
-// learns to skip it.
-type impactAdvisorBase struct {
-	// Ref is the revision as the advisors spell it, so a reader can run the same comparison
-	// by hand.
-	Ref string `json:"ref" yaml:"ref"`
-	// Tip is when Ref's commit was authored, RFC3339, and empty when Ref names nothing in
-	// this clone. The AGE a reader sees is derived from this at render rather than stored:
-	// a report teed to a file and read tomorrow must not still claim today's number.
-	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
-}
-
-// impactReach is the blast radius: what was edited, and what rebuilds because of it.
-type impactReach struct {
-	Seeds    int             `json:"seeds"              yaml:"seeds"`
-	Rebuilds int             `json:"rebuilds"           yaml:"rebuilds"`
-	Projects []impactProject `json:"projects,omitempty" yaml:"projects,omitempty"`
-}
-
-type impactProject struct {
-	Path  string `json:"path"            yaml:"path"`
-	Seed  bool   `json:"seed"            yaml:"seed"`
-	Files int    `json:"files,omitempty" yaml:"files,omitempty"`
-}
-
-// impactOwner is one project in reach and who has been changing it.
-type impactOwner struct {
-	Project      string `json:"project"                yaml:"project"`
-	Primary      string `json:"primary"                yaml:"primary"`
-	PrimaryShare int    `json:"primary_share"          yaml:"primary_share"` // percent
-	Authors      int    `json:"authors"                yaml:"authors"`
-	BusFactor1   bool   `json:"bus_factor_1,omitempty" yaml:"bus_factor_1,omitempty"`
-}
-
-// impactCost is the estimated cost of rebuilding the reach, from recorded run durations.
-type impactCost struct {
-	TotalMs  int64               `json:"total_ms"           yaml:"total_ms"`
-	Projects []impactCostProject `json:"projects,omitempty" yaml:"projects,omitempty"`
-}
-
-type impactCostProject struct {
-	Project string `json:"project" yaml:"project"`
-	Target  string `json:"target"  yaml:"target"`
-	Ms      int64  `json:"ms"      yaml:"ms"`
-	// Samples is how many runs the estimate rests on, carried so a reader can weigh it. An
-	// estimate from three runs and one from three hundred print the same duration otherwise.
-	Samples int     `json:"samples"           yaml:"samples"`
-	HitRate float64 `json:"hit_rate,omitempty" yaml:"hit_rate,omitempty"`
-}
-
-// impactCostTargets is the target a project's rebuild is estimated by, most representative
-// first. ci is the whole gate; test is the bulk of it where no ci target is declared.
-var impactCostTargets = []string{"ci", "test"}
-
-// impactMinSamples mirrors the tier-3 gate inside forecast.resolvePrediction: below it the
-// prediction is the workspace fallback rather than a measurement of this project, and printing
-// that as an estimate would be inventing a number.
-const impactMinSamples = 3
-
-// impactListCap bounds each section's list. A reach of sixty projects is a real answer and
-// an unreadable one; the remainder is reported rather than truncated in silence.
-const impactListCap = 10
-
-// collectImpact joins the lenses the report needs onto an already-annotated changeset.
-//
-// Every lens is best-effort and every failure degrades to that lens's empty form. A impact
-// that refuses to print because the symbol index is cold or no server is running is a
-// impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev difftypes.Diff, patch string, working bool) (diffImpact, error) {
-	p := diffImpact{Reach: computeImpactReach(rev)}
-
-	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
-	// sections of one report cannot describe two different windows of history.
-	if own, err := m.Ownership(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits}); err == nil {
-		p.Ownership = listImpactOwners(own, rev.AffectedProjects)
+// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on the
+// override they were first handed, so each graph or workspace load must spell the root
+// exactly as diffCommand's own load did.
+func impactSources(m *magus.Magus, rootOverride string) reviewimpact.Sources {
+	return reviewimpact.Sources{
+		OwnershipCommits: diffHistoryCommits,
+		HistoryPath:      globalCfg.HistoryPath,
+		Advisors: func(ctx context.Context, base string, rev difftypes.Diff) ([]review.AdviceSection, []string, error) {
+			return runLocalAdvisors(ctx, m, base, rev)
+		},
+		Anchors: func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
+			return impactAnchors(ctx, rootOverride, rev)
+		},
+		LoadGraph: func(ctx context.Context) (*knowledge.Graph, error) {
+			return loadKnowledgeGraph(ctx, rootOverride, false, false, true)
+		},
+		UnusedSymbols: func(ctx context.Context, g *knowledge.Graph, driver types.RevisionReader, head string, changed []string) ([]string, bool) {
+			delta, ok := evidence.ReadSymbolDelta(ctx, m.Root(), g, driver, head, changed)
+			return delta.Left, ok
+		},
+		RequiredIn: func(ctx context.Context) func(string) bool {
+			ws, err := inspectWorkspace(ctx, rootOverride)
+			if err != nil {
+				return nil
+			}
+			return review.RequiredMatcher(ws)
+		},
+		BulkReasons: review.BulkReasons,
 	}
-
-	if path := globalCfg.HistoryPath; path != "" {
-		var h forecast.History
-		if err := h.Load(ctx, path); err == nil {
-			p.Cost = estimateImpactCost(&h, rev.AffectedProjects)
-		}
-	}
-
-	// The configured VCS base ref, never rev.Base: the working diff's base is a STATE
-	// label ("working"), and the advisors compare git revisions (`origin/<base>`), so the
-	// label would send them fetching a branch that does not exist. Their section
-	// therefore describes committed state against the base branch, the most a rev-based
-	// advisor can measure, per the documented limit on runLocalAdvisors.
-	base := m.VCSOptions().BaseRef
-	if base == "" {
-		base = "main"
-	}
-	sections, failed, err := runLocalAdvisors(ctx, m, base, rev)
-	p.Advisors, p.AdvisorNotes = sections, failed
-	if err != nil {
-		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
-	}
-	p.AdvisorBase = resolveImpactAdvisorBase(ctx, m, base)
-
-	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
-	// the override they were first handed, so the anchors' graph load must spell the root
-	// exactly as diffCommand's own load did.
-	anchors, aerr := impactAnchors(ctx, rootOverride, rev)
-	if aerr != nil {
-		// Not a lens that degrades: a misdeclared notes store is a fault in the workspace's own
-		// config, and an anchors section that went missing would read as a clean tree.
-		return diffImpact{}, aerr
-	}
-	p.Anchors = anchors
-	p.LeftBehind = collectLeftBehind(ctx, m, rootOverride, rev, patch, working)
-	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
-	// questions the authors asked rather than the files they opened.
-	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
-	var requiredIn func(string) bool
-	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
-		requiredIn = reviewRequiredMatcher(ws)
-	}
-	p.Review = collectReview(rev, requiredIn, bulkReasons(m.CacheDir(), rev))
-	return p, nil
-}
-
-// computeImpactReach renders what types.Diff has carried since the impact join landed and
-// nothing has ever printed: which projects were edited, and which merely rebuild.
-//
-// nil when the closure is empty, which is a real state: a change entirely outside every
-// project directory seeds nothing.
-func computeImpactReach(rev difftypes.Diff) *impactReach {
-	if len(rev.AffectedProjects) == 0 {
-		return nil
-	}
-	r := &impactReach{Seeds: len(rev.SeedProjects), Rebuilds: len(rev.AffectedProjects)}
-	for _, p := range rev.AffectedProjects {
-		r.Projects = append(r.Projects, impactProject{Path: p.Path, Seed: p.Seed, Files: len(p.Files)})
-	}
-	return r
-}
-
-// listImpactOwners joins the ownership lens onto the reach, in reach order.
-//
-// Projects the lens has nothing to say about are DROPPED rather than listed with an empty
-// author: a project with no commits in the window has no owner to name, and a blank name
-// beside a path reads as a lookup that failed.
-func listImpactOwners(own types.Ownership, affected []impact.Project) []impactOwner {
-	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
-	for _, e := range own.Projects {
-		byPath[e.Path] = e
-	}
-	var out []impactOwner
-	for _, p := range affected {
-		e, ok := byPath[p.Path]
-		if !ok || e.Primary == "" {
-			continue
-		}
-		out = append(out, impactOwner{
-			Project:      p.Path,
-			Primary:      e.Primary,
-			PrimaryShare: e.PrimaryShare,
-			Authors:      e.Authors,
-			BusFactor1:   e.BusFactor1,
-		})
-	}
-	return out
-}
-
-// estimateImpactCost sums the recorded history's per-project prediction over the reach.
-//
-// nil when the history has nothing to say about ANY project in reach. That case matters more
-// than the happy one: forecast falls back to a workspace-wide default and then to a compiled-in
-// constant, so a total is always computable and a total computed from those is a fabrication
-// wearing a duration. Only projects with enough samples for forecast's own project tier are
-// counted, and a reach whose projects all fall short reports no history at all.
-func estimateImpactCost(h *forecast.History, affected []impact.Project) *impactCost {
-	c := &impactCost{}
-	for _, p := range affected {
-		target, stats, ok := impactCostTarget(h, p)
-		if !ok {
-			continue
-		}
-		// Tags are derived from the changed files inside the project, which is what selects
-		// forecast's per-subdirectory bucket over the project-wide percentile. A transitively
-		// affected project has none, and Tags answers "transitive" for it.
-		d := h.PredictDuration(p.Path, target, forecast.Tags(p.Path, p.Files))
-		c.TotalMs += d.Milliseconds()
-		c.Projects = append(c.Projects, impactCostProject{
-			Project: p.Path,
-			Target:  target,
-			Ms:      d.Milliseconds(),
-			Samples: stats.Samples,
-			HitRate: stats.HitRate,
-		})
-	}
-	if len(c.Projects) == 0 {
-		return nil
-	}
-	return c
-}
-
-// impactCostTarget picks the target a project's rebuild is estimated by, and reports false
-// when the history has no measurement of this project worth quoting.
-func impactCostTarget(h *forecast.History, p impact.Project) (string, forecast.Stats, bool) {
-	targets, ok := h.Projects[p.Path]
-	if !ok {
-		return "", forecast.Stats{}, false
-	}
-	for _, name := range impactCostTargets {
-		s, timed := targets[name]
-		if timed && s.Samples >= impactMinSamples && s.P75Ms > 0 {
-			return name, s, true
-		}
-	}
-	return "", forecast.Stats{}, false
-}
-
-// impactLines renders the report, one claim per line, in the same count-then-list shape
-// the file list above it uses.
-//
-// Lines rather than prints, so every empty form is testable without a terminal, and the empty
-// forms are the half that matters. Each one says what was not measured and what would measure
-// it, because a silent section reads as a clean bill of health.
-func impactLines(p diffImpact) []string {
-	out := []string{"IMPACT - the blast radius of landing this", ""}
-	sections := [][]string{
-		impactReachLines(p.Reach),
-		impactOwnershipLines(p.Ownership),
-		impactCostLines(p.Cost),
-		impactAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
-		impactAnchorLines(p.Anchors),
-		impactLeftBehindLines(p.LeftBehind),
-		impactEvidenceLines(p.Evidence, p.EvidenceGap),
-		impactReviewLines(p.Review),
-	}
-	for _, s := range sections {
-		// A section may render nothing: REVIEW says nothing about a small change nobody
-		// has disturbed. Skipping it here rather than emitting its blank separator is what
-		// keeps that silence from reading as a section that broke.
-		if len(s) == 0 {
-			continue
-		}
-		if len(out) > 2 {
-			out = append(out, "")
-		}
-		out = append(out, s...)
-	}
-	return out
-}
-
-func impactReachLines(r *impactReach) []string {
-	if r == nil {
-		return []string{"REACH: no project contains a changed file, so nothing rebuilds"}
-	}
-	out := []string{fmt.Sprintf("REACH: %d project%s edited, %d project%s rebuild",
-		r.Seeds, plural.Word(r.Seeds, "", "s"), r.Rebuilds, plural.Word(r.Rebuilds, "", "s"))}
-	for _, p := range impactCap(r.Projects) {
-		if p.Seed {
-			out = append(out, fmt.Sprintf("      %s - edited, %d file%s", p.Path, p.Files, plural.Word(p.Files, "", "s")))
-			continue
-		}
-		out = append(out, fmt.Sprintf("      %s - rebuilds because it depends on one that was", p.Path))
-	}
-	return append(out, impactMoreLine(len(r.Projects))...)
-}
-
-func impactOwnershipLines(owners []impactOwner) []string {
-	if len(owners) == 0 {
-		return []string{"OWNERSHIP: no commit history in the window, so no owner is named"}
-	}
-	out := []string{"OWNERSHIP: who has been changing the projects in reach"}
-	for _, o := range impactCap(owners) {
-		line := fmt.Sprintf("      %s mostly %s (%d%%), %d author%s",
-			o.Project, o.Primary, o.PrimaryShare, o.Authors, plural.Word(o.Authors, "", "s"))
-		if o.BusFactor1 {
-			// The bus factor is the whole point of the lens, so it is stated rather than left
-			// to be inferred from "1 author".
-			line += " - BUS FACTOR 1"
-		}
-		out = append(out, line)
-	}
-	return append(out, impactMoreLine(len(owners))...)
-}
-
-func impactCostLines(c *impactCost) []string {
-	if c == nil {
-		return []string{
-			"COST: no run history yet, so there is nothing to estimate from",
-			fmt.Sprintf("      Run `%s` once and the next impact can price this.", hint.Affected.With("ci")),
-		}
-	}
-	out := []string{fmt.Sprintf(
-		"COST: ~%s to rebuild the reach (history-based estimate: the p75 of past runs, discounted by the cache hit rate they recorded)",
-		impactDuration(c.TotalMs))}
-	for _, p := range impactCap(c.Projects) {
-		line := fmt.Sprintf("      %s %s ~%s (%d run%s)",
-			p.Project, p.Target, impactDuration(p.Ms), p.Samples, plural.Word(p.Samples, "", "s"))
-		if p.HitRate > 0 {
-			line += fmt.Sprintf(", %d%% cache hits", int(p.HitRate*100+0.5))
-		}
-		out = append(out, line)
-	}
-	return append(out, impactMoreLine(len(c.Projects))...)
-}
-
-// resolveImpactAdvisorBase dates this clone's copy of the ref the advisors compared against.
-//
-// nil whenever the answer would be a guess: no VCS, or a backend that cannot date a
-// revision. A ref the clone does not HAVE is not that case; it resolves to a
-// impactAdvisorBase with no Tip, because "you have never fetched this" is the single most
-// useful thing the report can say about why nine advisors went quiet.
-func resolveImpactAdvisorBase(ctx context.Context, m *magus.Magus, base string) *impactAdvisorBase {
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil || res.VCS == nil {
-		return nil
-	}
-	// "origin/" + base is the spelling the advisors themselves use, not a normalization of
-	// it: the line exists so a reader can run the same comparison by hand, and a ref that
-	// reads differently here than in advice.buzz would send them at the wrong one.
-	ref := "origin/" + base
-	tip, found, err := res.VCS.RevTime(ctx, m.Root(), ref)
-	if err != nil {
-		return nil
-	}
-	if !found {
-		return &impactAdvisorBase{Ref: ref}
-	}
-	return &impactAdvisorBase{Ref: ref, Tip: tip.Format(time.RFC3339)}
-}
-
-// impactAdvisorBaseLine states what the advisors measured against, and how old it is.
-//
-// The age is computed here rather than carried, so it describes when the report is READ.
-// An unparsable Tip degrades to naming the ref: the ref alone is still true, and a
-// malformed date is not worth losing the rest of the line over.
-func impactAdvisorBaseLine(b *impactAdvisorBase) string {
-	if b == nil {
-		return ""
-	}
-	refresh := fmt.Sprintf("`git fetch origin %s` brings it forward", strings.TrimPrefix(b.Ref, "origin/"))
-	if b.Tip == "" {
-		return fmt.Sprintf("BASE: %s is not in this clone, so the advisors below had nothing to "+
-			"compare against; %s", b.Ref, refresh)
-	}
-	tip, err := time.Parse(time.RFC3339, b.Tip)
-	if err != nil {
-		return fmt.Sprintf("BASE: %s, as this clone has it - a local run stays off the network; %s", b.Ref, refresh)
-	}
-	return fmt.Sprintf("BASE: %s, tip %s old - a local run stays off the network, so anything "+
-		"merged since is outside what the advisors saw; %s",
-		b.Ref, impactAge(time.Since(tip)), refresh)
-}
-
-// impactAge renders a duration at one unit of precision. A reader deciding whether to
-// fetch needs the order of magnitude ("3 days"), and "3 days 4 hours 11 minutes" buries it.
-func impactAge(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return "seconds"
-	case d < time.Hour:
-		return fmt.Sprintf("%d minute%s", int(d.Minutes()), plural.Word(int(d.Minutes()), "", "s"))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d hour%s", int(d.Hours()), plural.Word(int(d.Hours()), "", "s"))
-	default:
-		days := int(d.Hours() / 24)
-		return fmt.Sprintf("%d day%s", days, plural.Word(days, "", "s"))
-	}
-}
-
-func impactAdvisorLines(sections []adviceSection, failed []string, base *impactAdvisorBase) []string {
-	// Prepended to whichever headline follows, including "nothing to report": a clean set
-	// measured against a ref from last week is the case where the caveat matters MOST, and
-	// hanging it off a finding count would drop it exactly there.
-	var out []string
-	if line := impactAdvisorBaseLine(base); line != "" {
-		out = append(out, line)
-	}
-	if len(sections) == 0 && len(failed) == 0 {
-		return append(out, "ADVISORS: nothing to report")
-	}
-	// An empty Body is a RETRACTION (that advisor ran and found nothing), so it is not a
-	// finding, and counting sections rather than findings reported ten of them where there
-	// was one, each rendered as a title with nothing underneath. A reader who learns the
-	// headline overstates by an order of magnitude stops reading the section.
-	var found []adviceSection
-	var clear []string
-	for _, s := range sections {
-		if strings.TrimRight(s.Body, "\n") == "" {
-			clear = append(clear, s.Name)
-			continue
-		}
-		found = append(found, s)
-	}
-	out = append(out, fmt.Sprintf("ADVISORS: %d finding%s", len(found), plural.Word(len(found), "", "s")))
-	for _, s := range found {
-		out = append(out, "      "+s.Title)
-		for _, line := range strings.Split(strings.TrimRight(s.Body, "\n"), "\n") {
-			out = append(out, "        "+line)
-		}
-	}
-	// Named, not just counted, and kept apart from the notes below: "ran and found nothing"
-	// and "could not run" are the two ways a section goes quiet, and only one of them is
-	// news about the change.
-	if len(clear) > 0 {
-		out = append(out, fmt.Sprintf("      %d ran and found nothing: %s",
-			len(clear), strings.Join(clear, ", ")))
-	}
-	// Named rather than counted: which advisor went quiet is what a reader needs to decide
-	// whether the silence above it means anything. Printed verbatim: each note already
-	// says whether it is a warning or a "could not run" failure, and only collectAdvice
-	// can tell the two apart.
-	for _, f := range failed {
-		out = append(out, "      "+f)
-	}
-	return out
-}
-
-func impactAnchorLines(hits []review.AnchorHit) []string {
-	if len(hits) == 0 {
-		return []string{"ANCHORS: no note anchors a changed file or symbol"}
-	}
-	out := []string{fmt.Sprintf("ANCHORS: %d note%s anchored to what you changed",
-		len(hits), plural.Word(len(hits), "", "s"))}
-	for _, h := range impactCap(hits) {
-		out = append(out, "      "+h.Line())
-	}
-	return append(out, impactMoreLine(len(hits))...)
-}
-
-// impactCap bounds one section's list; impactMoreLine reports what it left off. They
-// are separate because the remainder is a line in the section's own indentation, not an entry
-// in the list it describes.
-func impactCap[T any](xs []T) []T {
-	if len(xs) <= impactListCap {
-		return xs
-	}
-	return xs[:impactListCap]
-}
-
-func impactMoreLine(n int) []string {
-	if n <= impactListCap {
-		return nil
-	}
-	return []string{fmt.Sprintf("      and %d more", n-impactListCap)}
-}
-
-// impactDuration renders an estimate at the precision it deserves. Seconds is the floor:
-// this is a p75 of past runs, and a millisecond figure would claim an accuracy it has not got.
-func impactDuration(ms int64) string {
-	d := (time.Duration(ms) * time.Millisecond).Round(time.Second)
-	if d < time.Second {
-		return "<1s"
-	}
-	return d.String()
-}
-
-// changedPathsFromPatch lists the files a patch touches, in patch order.
-//
-// It defers to the session parser rather than reading headers itself. This file used to carry
-// its own copy, and the copy is how a GNU `diff -u` patch (no `diff --git` line anywhere)
-// reported zero changed files and exited 0. Two readers of the same bytes will drift, and when
-// they do the annotations describe different files than the hunks a reader is marking.
-func changedPathsFromPatch(patch string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, f := range changeset.ParseHunks(patch) {
-		if f.Path != "" && !seen[f.Path] {
-			seen[f.Path] = true
-			out = append(out, f.Path)
-		}
-	}
-	return out
 }
 
 // impactAnchors joins the declared notes stores against the changeset. root is the override
@@ -2430,945 +868,9 @@ func impactAnchors(ctx context.Context, root string, rev difftypes.Diff) ([]revi
 	}, rev)
 }
 
-// earnedSync watches a viewer session and turns finished files into read receipts.
-//
-// This is the receipt worth trusting. `--ack` is a claim made about files in bulk and pays
-// for that with a reason on the record; this one is minted from what the reader actually
-// did: every hunk of the file marked read, one keypress at a time, in a viewer only a
-// person can drive. Nothing is inferred: the marks were already explicit, and all this adds
-// is that they now outlive the session.
-//
-// It wraps rather than replaces the underlying sync, because publishing the reader's
-// progress to the server and recording a durable receipt are different jobs with different
-// lifetimes, and the viewer must keep knowing about neither.
-type earnedSync struct {
-	diffSync
-	// content is where a receipt's bytes come from, and what its Source records.
-	content        reviewedContent
-	root, cacheDir string
-	// fileOf maps a hunk digest to the file it belongs to, and hunksOf counts how many a
-	// file has. A receipt is per FILE, so a file is earned only once every hunk it
-	// contributes is marked; reading four hunks of six is not reading the file.
-	fileOf map[string]string
-	// hunksOf counts DISTINCT hunk digests per file, for the reason changeset.Store.TrackHunks
-	// gives: counting occurrences sets a total the marked set can never reach.
-	hunksOf map[string]int
-	// digestAt is each file's content fingerprint as it was when the reader started, taken
-	// once here rather than at mint time.
-	//
-	// A receipt must attest to the bytes somebody SAW; fingerprinting at close would stamp
-	// whatever the file holds by then, and the next report would not call it stale. See
-	// changeset.Store.ContentAt.
-	digestAt map[string]string
-	viewed   map[string]bool
-	// live are the hunks marked in THIS session, as opposed to seeded from the store.
-	//
-	// A file earns a receipt only if at least one of its hunks was marked here. The stored
-	// viewed set is a plain unauthenticated JSON file whose hunk digests are computable
-	// from `magus diff` output, so anything with write access can forge a complete reading;
-	// without this, opening the viewer once would launder that forgery into durable
-	// receipts. Requiring a live mark keeps the seed doing its real job (resuming a
-	// reading across sittings) while making it worth nothing on its own.
-	live map[string]bool
-	now  func() time.Time
-}
-
-// newEarnedSync wraps sync with receipt minting, seeded with the marks the session already
-// carried so a reader who finishes a file across two sittings still earns it.
-func newEarnedSync(inner diffSync, content reviewedContent, cacheDir string, files []difftui.File, seen []string) *earnedSync {
-	e := &earnedSync{
-		diffSync: inner,
-		content:  content,
-		root:     content.root,
-		cacheDir: cacheDir,
-		fileOf:   map[string]string{},
-		hunksOf:  map[string]int{},
-		digestAt: map[string]string{},
-		viewed:   map[string]bool{},
-		live:     map[string]bool{},
-		now:      time.Now,
-	}
-	for _, f := range files {
-		// Generated files are excluded for the reason they are folded away by default:
-		// reading a machine's restatement of an edit made elsewhere is not the review.
-		if f.Generated {
-			continue
-		}
-		for _, h := range f.Hunks {
-			if _, seen := e.fileOf[h.Digest]; seen {
-				continue // an identical hunk repeated in one file is one mark, not two
-			}
-			e.fileOf[h.Digest] = f.Path
-			e.hunksOf[f.Path]++
-		}
-		if _, ok := e.digestAt[f.Path]; !ok {
-			e.digestAt[f.Path] = content.digest(f.Path)
-		}
-	}
-	for _, d := range seen {
-		e.viewed[d] = true
-	}
-	return e
-}
-
-// SetViewed records the mark and forwards it, so the server and the console still see the
-// reader's progress exactly as before.
-func (e *earnedSync) SetViewed(digest string, on bool) {
-	e.viewed[digest] = on
-	// Comma-ok rather than a bare lookup: an untracked digest would otherwise record a live
-	// mark against the empty path, which no file can ever match but which leaves a map
-	// entry that reads as a bug to whoever finds it next.
-	if path, ok := e.fileOf[digest]; ok && on {
-		e.live[path] = true
-	}
-	e.diffSync.SetViewed(digest, on)
-}
-
-// close mints a receipt for every file whose hunks were all marked read, then shuts the
-// wrapped sync down.
-//
-// At close rather than per mark, because a file is not read until its last hunk is, and a
-// reader who marks a hunk and then unmarks it has not read anything. Failures are silent:
-// this is a side effect of reading, and a reader who reached the end of a changeset should
-// not meet an error about bookkeeping.
-func (e *earnedSync) close() {
-	defer e.diffSync.close()
-	if add := e.finished(); len(add) > 0 {
-		_ = review.Record(e.cacheDir, add)
-	}
-}
-
-// pending is how many files the reader has finished but not yet had recorded, for the line
-// the viewer prints on the way out. Reading it before close is the point: a reader is told
-// what their session earned at the moment they finish it, not the next time they happen to
-// run a report.
-func (e *earnedSync) pending() int { return len(e.finished()) }
-
-// finished is every file whose hunks were all marked read in a session that touched it.
-func (e *earnedSync) finished() []review.Receipt {
-	var add []review.Receipt
-	for path, total := range e.hunksOf {
-		if !e.live[path] {
-			continue
-		}
-		marked := 0
-		for digest, file := range e.fileOf {
-			if file == path && e.viewed[digest] {
-				marked++
-			}
-		}
-		if marked < total {
-			continue
-		}
-		// The content as it was when the reading STARTED, not as it is now. See digestAt.
-		content := e.digestAt[path]
-		if content == "" {
-			continue
-		}
-		add = append(add, review.Receipt{Path: path, Digest: content, At: e.now(), Source: e.content.at})
-	}
-	return add
-}
-
-// impactLeftBehind is what a change keeps alive or leaves unused: the markers it added
-// (compat(until:) and Deprecated:), and the symbols that lost their last use in it and are
-// still defined. Facts, not reasons: a marker says how long code stays, never whether it
-// should.
-type impactLeftBehind struct {
-	Markers []leftMarker `json:"markers,omitempty" yaml:"markers,omitempty"`
-	// Unreferenced is readSymbolDelta's Left, known only when UnreferencedKnown is;
-	// UnreferencedReason says why it is not.
-	Unreferenced       []string `json:"unreferenced,omitempty" yaml:"unreferenced,omitempty"`
-	UnreferencedKnown  bool     `json:"unreferenced_known" yaml:"unreferenced_known"`
-	UnreferencedReason string   `json:"unreferenced_reason,omitempty" yaml:"unreferenced_reason,omitempty"`
-}
-
-// leftMarker is one marker an added line carries.
-type leftMarker struct {
-	Path string `json:"path" yaml:"path"`
-	Line int    `json:"line" yaml:"line"`
-	// Marker and Text are marker.Found's.
-	Marker string `json:"marker" yaml:"marker"`
-	Text   string `json:"text" yaml:"text"`
-}
-
-// collectLeftBehind reads the markers from the patch's added lines, in any file the change
-// did not generate, and the symbols it left unused from the graph. Only a working-tree diff
-// reads symbols: the graph describes the tree on disk, which is the head of no other diff.
-func collectLeftBehind(ctx context.Context, m *magus.Magus, rootOverride string, rev difftypes.Diff, patch string, working bool) *impactLeftBehind {
-	generated := map[string]bool{}
-	for _, f := range rev.Files {
-		generated[f.Path] = f.Generated()
-	}
-	l := &impactLeftBehind{Markers: addedMarkers(patch, generated)}
-	if !working {
-		l.UnreferencedReason = "read only for the working tree, the tree the symbol graph describes"
-		return l
-	}
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
-		l.UnreferencedReason = "no version control answered here"
-		return l
-	}
-	head, err := res.VCS.FindCommit(ctx, m.Root(), "")
-	if err != nil || head.ID == "" {
-		l.UnreferencedReason = "the checkout has no HEAD to compare with"
-		return l
-	}
-	g, err := loadKnowledgeGraph(ctx, rootOverride, false, false, true)
-	if err != nil {
-		l.UnreferencedReason = fmt.Sprintf("the symbol graph could not be read: %v", err)
-		return l
-	}
-	delta, ok := readSymbolDelta(ctx, m.Root(), g, res.VCS, head.ID, review.ChangedPaths(rev))
-	if !ok {
-		l.UnreferencedReason = fmt.Sprintf("the symbol index does not cover the changed files; `%s` builds it", hint.GraphBuild)
-		return l
-	}
-	l.Unreferenced, l.UnreferencedKnown = delta.Left, true
-	return l
-}
-
-// addedMarkers are the markers on the added lines of patch, in a comment, outside the paths
-// generated marks.
-func addedMarkers(patch string, generated map[string]bool) []leftMarker {
-	var out []leftMarker
-	for _, f := range changeset.ParseHunks(patch) {
-		if generated[f.Path] {
-			continue
-		}
-		for _, h := range f.Hunks {
-			line := h.NewStart
-			for _, raw := range h.Lines {
-				switch {
-				case strings.HasPrefix(raw, "+"):
-					if mk, ok := marker.Parse(raw[1:]); ok {
-						out = append(out, leftMarker{Path: f.Path, Line: line, Marker: mk.Marker, Text: mk.Text})
-					}
-					line++
-				case strings.HasPrefix(raw, "-"), strings.HasPrefix(raw, `\`):
-				default:
-					line++
-				}
-			}
-		}
-	}
-	return out
-}
-
-// impactLeftBehindLines renders the section, including its empty forms.
-func impactLeftBehindLines(l *impactLeftBehind) []string {
-	if l == nil {
-		return []string{"LEFT BEHIND: not measured"}
-	}
-	var out []string
-	if len(l.Markers) == 0 {
-		out = append(out, "LEFT BEHIND: no compat(until:) or Deprecated: marker added")
-	} else {
-		out = append(out, fmt.Sprintf("LEFT BEHIND: %d compat(until:) or Deprecated: marker%s added",
-			len(l.Markers), plural.Word(len(l.Markers), "", "s")))
-		for _, mk := range impactCap(l.Markers) {
-			out = append(out, fmt.Sprintf("      %s:%d %s %s", mk.Path, mk.Line, mk.Marker, mk.Text))
-		}
-		out = append(out, impactMoreLine(len(l.Markers))...)
-	}
-	switch {
-	case !l.UnreferencedKnown:
-		out = append(out, "      symbols left unused: not measured, "+cmp.Or(l.UnreferencedReason, "nothing read them"))
-	case len(l.Unreferenced) == 0:
-		out = append(out, "      no symbol it stopped using is still defined")
-	default:
-		out = append(out, fmt.Sprintf("      %d symbol%s lost the last use here and %s still defined",
-			len(l.Unreferenced), plural.Word(len(l.Unreferenced), "", "s"), plural.Word(len(l.Unreferenced), "is", "are")))
-		for _, name := range impactCap(l.Unreferenced) {
-			out = append(out, "        "+name)
-		}
-		out = append(out, impactMoreLine(len(l.Unreferenced))...)
-	}
-	return out
-}
-
-// impactEvidenceLines names the questions this changeset's authors put to magus, so a reviewer
-// can audit the reasoning behind it and not just its result.
-//
-// One line per distinct subject, carrying no answer text. The section sits beside a diff someone
-// is in the middle of reading, and a transcript of what each answer said would cost more
-// attention than the whole report repays. A reader who wants an answer back re-asks the question.
-func impactEvidenceLines(hits []trail.Consultation, gap trail.ConsultGap) []string {
-	if len(hits) == 0 {
-		return impactEvidenceGapLines(gap)
-	}
-	out := []string{fmt.Sprintf("EVIDENCE: %d question%s the authors asked magus while writing this",
-		len(hits), plural.Word(len(hits), "", "s"))}
-	for _, h := range impactCap(hits) {
-		// A trailing space on a subjectless verb reads as a truncated line.
-		line := "      " + h.Verb
-		if h.Subject != "" {
-			line += " " + h.Subject
-		}
-		if h.Count > 1 {
-			line += fmt.Sprintf(" (x%d)", h.Count)
-		}
-		out = append(out, line)
-	}
-	return append(out, impactMoreLine(len(hits))...)
-}
-
-// impactEvidenceGapLines says which silence an empty section is. [trail.ConsultGap] carries why
-// the four have to read differently; this is the sentence each one earns.
-func impactEvidenceGapLines(gap trail.ConsultGap) []string {
-	switch gap {
-	case trail.ConsultGapNoQuestions:
-		return []string{"EVIDENCE: the authors of this changeset ran no magus read verb"}
-	case trail.ConsultGapUnleased:
-		return []string{
-			"EVIDENCE: the agent activity recorded here carries no lease, so no question joins this change",
-			"      Set BAGGAGE magus.lease on the agent and its questions join its writes.",
-		}
-	case trail.ConsultGapUnmatched:
-		return []string{
-			"EVIDENCE: no lease recorded here wrote these files, so their questions sit elsewhere",
-			"      The work was done in another checkout, or it has aged out of the trail.",
-		}
-	default:
-		return []string{
-			"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
-			fmt.Sprintf("      This record is per checkout, and wiring it is `%s`.", hint.AgentInstall.String()),
-		}
-	}
-}
-
-// adviceSection is one advisor's finding: the section it owns in the pull-request
-// comment, rendered for a local reader instead. An EMPTY Body is a retraction (the
-// advisor ran and found nothing) and is a section like any other, not an absence.
-type adviceSection struct {
-	Name  string `json:"name"  yaml:"name"`
-	Title string `json:"title" yaml:"title"`
-	Body  string `json:"body"  yaml:"body"`
-}
-
-// adviceDirRel is where this repository keeps the advisors. They are checked in as a
-// composite action because CI is where they run first, not because the pull request is
-// the only place their answers are useful.
-var adviceDirRel = filepath.Join(".github", "actions", "advice")
-
-// localAdvisors is every advisor a local run may execute, in the order the action's entry
-// script (advise.buzz) runs them. advise.buzz is the source of truth for that set; this
-// list restates it.
-//
-// Restating it rather than reading the directory is deliberate: the directory also holds
-// `advice.buzz` and `advise.buzz`, the shared library and the entry script, neither an
-// advisor, and filename order is not the order advise.buzz chose.
-//
-// first-contribution.buzz, merge-queue.buzz and trusted-script-moved.buzz are the read-only
-// advisors deliberately left out: each asks the forge about the pull request through its
-// own `gh` call, and none has a local meaning. adviceLocalExclusions in the test records why.
-//
-// Restating is not the same as drifting, and TestLocalAdvisorsMatchAdviseBuzz is what keeps
-// the two apart: it reads the lists back out of advise.buzz and fails naming any advisor
-// that is in one list and not the other. Adding a read-only advisor to CI without adding
-// it here is the failure that gate exists for.
-var localAdvisors = []string{
-	"merge-conflict.buzz",
-	"doctor.buzz",
-	"version-floor.buzz",
-	"unclaimed.buzz",
-	"blast-radius.buzz",
-	"skip-cache.buzz",
-	"conformance.buzz",
-	"missing-target.buzz",
-	"exported-api.buzz",
-	"change-risk.buzz",
-}
-
-// runLocalAdvisors runs the read-only PR advisors against the local tree and returns
-// their sections in localAdvisors order, plus a note per advisor that failed.
-//
-// base is a BRANCH name, not a rev: the advisors compare against `origin/<base>`, the
-// same way they use the pull request's base branch in CI.
-//
-// An advisor that raises produces a note and never an error: one broken advisor must not
-// take the other nine down, because the caller is showing a reader what magus knows and
-// nine tenths of that is still worth showing. The error return is for a failure that
-// makes the whole set meaningless.
-//
-// Not safe for concurrent use: the advisors read their inputs with os\env, so the two
-// local-mode variables are set process-wide for the duration of the call.
-//
-// rev is the review this run already computed. It is handed to the advisors that read one
-// (advice.buzz's review, through adviceReviewEnv), so none of them diffs the tree again.
-func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev difftypes.Diff) ([]adviceSection, []string, error) {
-	dir := filepath.Join(m.Root(), adviceDirRel)
-	if _, err := os.Stat(dir); err != nil {
-		return nil, []string{fmt.Sprintf("no advisors in this workspace: %s is not readable (%v)", dir, err)}, nil
-	}
-	restore, err := shareReview(rev)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer restore()
-
-	// The advisors read the workspace off the context, as `magus buzz` does.
-	// It is attached, not loaded again: loadMagus panics on a second root.
-	if m != nil {
-		ctx = types.WithWorkspace(ctx, viewInternals(m))
-	}
-	return collectAdvice(ctx, dir, localAdvisors, base)
-}
-
-// collectAdvice is runLocalAdvisors without the workspace and directory resolution, so a
-// test can drive it against stub advisors.
-func collectAdvice(ctx context.Context, dir string, files []string, base string) ([]adviceSection, []string, error) {
-	restore, err := setAdviceEnv(base)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer restore()
-
-	var sections []adviceSection
-	var notes []string
-	for _, file := range files {
-		out, warnings, err := runAdvisor(ctx, dir, file)
-		// Sections printed before the failure are kept: an advisor that publishes and
-		// then dies has already said something true, and dropping it would report the
-		// finding as absent rather than as partial.
-		sections = append(sections, parseAdviceSections(out)...)
-		if err != nil {
-			// Warnings first, then the failure: that is the order they happened in, and a
-			// BZZ3001 above a crash is usually the explanation for it.
-			//
-			// ONLY when it crashed. These are lint diagnostics about the advisor's own
-			// source (magus's shipped scripts, not the reader's change), so printing them
-			// unconditionally buries a one-line docs fix under tens of lines about magus's
-			// own files, which reads as "you broke something". That lint belongs in magus's
-			// own lint run.
-			for _, w := range warnings {
-				notes = append(notes, fmt.Sprintf("%s: %s", file, w))
-			}
-			// Stamped here, not at render time: warnings and failures share one ordered
-			// stream, and only this frame knows which is which.
-			notes = append(notes, fmt.Sprintf("could not run: %s: %v", file, err))
-		}
-	}
-	return sections, notes, nil
-}
-
-// The contract between this driver and advice.buzz. The names are read there with os\env;
-// there is no per-session environment to hand a Buzz script, so they are set on the
-// process.
-//
-// MAGUS_INTERNAL_ says what these are: the handshake between two halves of one feature,
-// not a knob. Setting either by hand puts the advisors into local mode with no driver
-// reading their stdout, and both names may change with this file in one commit. advice.buzz
-// pins the same three strings in a test block of its own, because nothing at runtime
-// couples its copy to this one; rename one side alone and every advisor fails with
-// "nowhere to publish" instead of saying anything.
-const (
-	adviceModeEnv       = "MAGUS_INTERNAL_ADVICE_MODE"
-	adviceModeLocal     = "local"
-	adviceBaseBranchEnv = "MAGUS_INTERNAL_ADVICE_BASE_BRANCH"
-)
-
-// setAdviceEnv puts the local-mode variables on the process and returns the restore.
-// It restores an absent variable to absent rather than to empty, because advice.buzz
-// distinguishes the two.
-func setAdviceEnv(base string) (func(), error) {
-	saved := map[string]*string{}
-	for name, want := range map[string]string{adviceModeEnv: adviceModeLocal, adviceBaseBranchEnv: base} {
-		if had, ok := os.LookupEnv(name); ok {
-			saved[name] = &had
-		} else {
-			saved[name] = nil
-		}
-		if err := os.Setenv(name, want); err != nil {
-			return func() {}, fmt.Errorf("magus diff: set %s: %w", name, err)
-		}
-	}
-	return func() {
-		for name, was := range saved {
-			if was == nil {
-				_ = os.Unsetenv(name)
-				continue
-			}
-			_ = os.Setenv(name, *was)
-		}
-	}, nil
-}
-
-// adviceReviewEnv names the file holding the run's one review.
-// advice.buzz's review reads it in place of a fresh magus\change().diff.
-// The action's review step sets the same name on the forge.
-const adviceReviewEnv = "ADVICE_REVIEW"
-
-// shareReview writes rev where the advisors read it and returns the restore, which removes
-// the file and puts the variable back as it was.
-func shareReview(rev difftypes.Diff) (func(), error) {
-	f, err := os.CreateTemp("", "magus-advice-review-*.json")
-	if err != nil {
-		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", err)
-	}
-	werr := json.NewEncoder(f).Encode(rev)
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		_ = os.Remove(f.Name())
-		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", werr)
-	}
-	had, set := os.LookupEnv(adviceReviewEnv)
-	if err := os.Setenv(adviceReviewEnv, f.Name()); err != nil {
-		_ = os.Remove(f.Name())
-		return func() {}, fmt.Errorf("magus diff: set %s: %w", adviceReviewEnv, err)
-	}
-	return func() {
-		if set {
-			_ = os.Setenv(adviceReviewEnv, had)
-		} else {
-			_ = os.Unsetenv(adviceReviewEnv)
-		}
-		_ = os.Remove(f.Name())
-	}, nil
-}
-
-// runAdvisor evaluates one advisor in-process and returns what it printed, the warnings
-// its compilation raised, and the error that ended it. Nothing here writes or exits: all
-// three are the caller's to report.
-//
-// The session is built as `magus buzz <file>` builds one (same modules, same
-// strict parse mode, warnings drained at the same point, `fun main() > int` read rather
-// than discarded), so an advisor cannot behave one way in CI and another way here. Two
-// differences remain, both deliberate:
-//
-//   - std.print goes to a buffer, not stdout. That IS the transport: a section is a line
-//     the advisor printed, and parseAdviceSections reads them back.
-//   - the include path is set on the session rather than through BUZZ_INCLUDE_PATH, for
-//     the reason at the call site below.
-//
-// Where those two observations LAND differs as well, and has to. `magus buzz` prints
-// warnings to stderr and exits with main's value; ten advisors run here, and the ninth
-// failing is not a verdict on `magus diff`. Both become notes instead.
-func runAdvisor(ctx context.Context, dir, file string) (string, []string, error) {
-	src, err := os.ReadFile(filepath.Join(dir, file))
-	if err != nil {
-		return "", nil, err
-	}
-	sess := buzz.NewSession(ctx)
-	defer func() { _ = sess.Close() }()
-	// `import "advice"` resolves against this list. The composite action gets the same
-	// effect from BUZZ_INCLUDE_PATH; setting it directly keeps the advisor's view of the
-	// filesystem out of the process environment.
-	sess.SetIncludeDirs([]string{dir})
-
-	var out bytes.Buffer
-	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(&out))
-	bindings.RegisterMagusNamespace(ctx, sess)
-	if err := bindings.RegisterSpellSourceModules(sess); err != nil {
-		return "", nil, err
-	}
-
-	if err := sess.Exec(ctx, string(src)); err != nil {
-		return out.String(), nil, err
-	}
-	// Drained where `magus buzz` drains them: after Exec, before main. These are parse and
-	// check diagnostics (BZZ3001 unused import, and the rest), so Exec is where all of them
-	// are produced, and it never fails on one, which is exactly why they need collecting
-	// rather than trusting a green run. An advisor whose imports have rotted is the kind of
-	// thing a reader wants told, not left to read as an advisor with nothing to say.
-	var warnings []string
-	for _, w := range sess.Warnings() {
-		w.File = file
-		warnings = append(warnings, w.String())
-	}
-
-	mainFn := sess.GetGlobal("main")
-	if !mainFn.IsFun() {
-		return out.String(), warnings, fmt.Errorf("no main() to run (an advisor must define `fun main() > void` or `fun main() > int`)")
-	}
-	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
-	if err != nil {
-		return out.String(), warnings, err
-	}
-	// `fun main() > int` is upstream's exit-status convention, and the checker permits it,
-	// so an advisor may report failure by returning rather than by throwing. Discarding the
-	// value read that advisor as having succeeded.
-	if ret.IsInt() && ret.AsInt() != 0 {
-		return out.String(), warnings, fmt.Errorf("main() returned %d (non-zero means the advisor failed)", ret.AsInt())
-	}
-	return out.String(), warnings, nil
-}
-
-// parseAdviceSections picks the section objects out of one advisor's output. An advisor
-// also prints a progress line for a human ("unclaimed: advised on ..."), so the two are
-// told apart by decoding rather than by position: a line that is not a section object is
-// the advisor talking, and is dropped.
-func parseAdviceSections(out string) []adviceSection {
-	var got []adviceSection
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") {
-			continue
-		}
-		var s adviceSection
-		if err := json.Unmarshal([]byte(line), &s); err != nil || s.Name == "" {
-			continue
-		}
-		got = append(got, s)
-	}
-	return got
-}
-
-// impactReview is where a reader left off in this change.
-//
-// It is a BOOKMARK, not a score, and the difference decides the whole design. An earlier
-// version led with "N of M files carry a read receipt", which is a completion metric: it
-// has a target, and the cheapest way to reach the target is to stamp everything without
-// reading it. A count that can be satisfied by typing is worse than no count, because it
-// trains the reader to type something they do not mean.
-//
-// So no ratio is reported. What is reported is the two things a reader cannot produce
-// without reading: which files moved after they read them, and which they have not opened.
-// Both are answers to "where was I", and the test any addition here has to pass is whether
-// somebody would still want it if nobody else ever saw the result.
-type impactReview struct {
-	Files int `json:"files" yaml:"files"`
-	Read  int `json:"read"  yaml:"read"`
-	// Stale are files read and then edited. They lead the section: the signal is derived from
-	// CONTENT rather than from a claim, so inattention cannot fake it. See diff.ReadStale
-	// for why it outranks unread.
-	Stale  []string `json:"stale,omitempty"  yaml:"stale,omitempty"`
-	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
-	// Required are unread files inside a project's declared review_required globs. Listed
-	// separately and in FULL rather than capped: the workspace said an unread change costs
-	// something here, so this is the half of the section that is not just a count.
-	Required []string `json:"required,omitempty" yaml:"required,omitempty"`
-	// Reasons are the distinct bulk-ack justifications covering files in this changeset,
-	// so "somebody read it" and "somebody assumed it was fine, here is why" do not
-	// collapse into one number.
-	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
-}
-
-// unreadShown bounds the never-opened list, which is context rather than the finding.
-const unreadShown = 10
-
-// reviewMinFiles is the changeset size below which the section says nothing at all.
-//
-// A four-file change needs no reading plan, and printing one there is how a reader learns
-// to skip this section before ever meeting a change big enough to need it. Nothing stale is
-// part of the condition: a small change where a file moved after you read it is exactly
-// when the section earns its line.
-const reviewMinFiles = 5
-
-// reviewRequiredMatcher reports whether a workspace-relative path sits inside any project's
-// declared review_required globs.
-//
-// Globs are matched against the path relative to the DECLARING project, so a project names
-// its own files the same way its sources and outputs do rather than having to spell the
-// workspace prefix that its magusfile already sits under.
-//
-// nil when no project declares any, which the caller treats as "single nothing out" rather
-// than as "everything matters".
-func reviewRequiredMatcher(ws types.WorkspaceReader) func(string) bool {
-	type scope struct {
-		dir   string
-		globs []string
-	}
-	var scopes []scope
-	for _, p := range ws.All() {
-		if len(p.ReviewRequired) > 0 {
-			scopes = append(scopes, scope{dir: p.Path, globs: p.ReviewRequired})
-		}
-	}
-	if len(scopes) == 0 {
-		return nil
-	}
-	return func(path string) bool {
-		for _, s := range scopes {
-			rel := path
-			if s.dir != "" && s.dir != "." {
-				if !strings.HasPrefix(path, s.dir+"/") {
-					continue
-				}
-				rel = strings.TrimPrefix(path, s.dir+"/")
-			}
-			for _, g := range s.globs {
-				if ok, err := doublestar.Match(g, rel); err == nil && ok {
-					return true
-				}
-			}
-		}
-		return false
-	}
-}
-
-// bulkReasons is every distinct reason a bulk ack recorded against a file in this
-// changeset, in first-seen order.
-func bulkReasons(cacheDir string, rev difftypes.Diff) []string {
-	store, err := review.Load(cacheDir)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	seen := map[string]bool{}
-	for _, f := range rev.Files {
-		r, ok := store[f.Path]
-		if !ok || r.Reason == "" || seen[r.Reason] {
-			continue
-		}
-		seen[r.Reason] = true
-		out = append(out, r.Reason)
-	}
-	return out
-}
-
-// collectReview tallies the read state already folded onto the changeset by annotateDiff.
-//
-// It reads DiffFile.ReadState rather than consulting the store a second time, so the
-// terminal report and the console's review app cannot disagree about which files
-// somebody has read: they are looking at one join.
-//
-// nil when no file carries a state at all, which the renderer states as unmeasured rather
-// than as unread. Those are opposite claims and only one of them accuses.
-//
-// Generated files are excluded: reading a machine's restatement of an edit made elsewhere
-// is not the review, the same reason the file list folds them away by default.
-func collectReview(rev difftypes.Diff, required func(string) bool, reasons []string) *impactReview {
-	out := &impactReview{Reasons: reasons}
-	measured := false
-	for _, f := range rev.Files {
-		if f.Generated() {
-			continue
-		}
-		out.Files++
-		switch f.ReadState {
-		case difftypes.ReadRead:
-			measured = true
-			out.Read++
-			continue
-		case difftypes.ReadStale:
-			measured = true
-			out.Stale = append(out.Stale, f.Path)
-			// Not also Required: the section already names it under "changed after you
-			// read them", and listing it again as "unopened" would both contradict itself
-			// and print one path as two findings.
-			continue
-		case difftypes.ReadUnread:
-			measured = true
-			out.Unread = append(out.Unread, f.Path)
-		default:
-			continue
-		}
-		if required != nil && required(f.Path) {
-			out.Required = append(out.Required, f.Path)
-		}
-	}
-	if !measured && out.Files > 0 {
-		return nil
-	}
-	return out
-}
-
-// scopeAck narrows a changeset to the paths the caller named, so a reader can record the
-// three files they just read in their editor without claiming the other thirty.
-//
-// An unnamed path is an ERROR rather than a silent no-op. The whole value of a receipt is
-// that it names something real; a typo that quietly acknowledged nothing would leave the
-// reader believing they had recorded work they had not.
-func scopeAck(rev difftypes.Diff, paths []string) (difftypes.Diff, error) {
-	if len(paths) == 0 {
-		return rev, nil
-	}
-	inChange := make(map[string]bool, len(rev.Files))
-	for _, f := range rev.Files {
-		inChange[f.Path] = true
-	}
-	want := make(map[string]bool, len(paths))
-	for _, p := range paths {
-		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
-		if !inChange[clean] {
-			return difftypes.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `%s` lists them", p, hint.Diff.With("-o", "name"))
-		}
-		want[clean] = true
-	}
-	out := difftypes.Diff{Base: rev.Base}
-	for _, f := range rev.Files {
-		if want[f.Path] {
-			out.Files = append(out.Files, f)
-		}
-	}
-	return out, nil
-}
-
-// reviewedContent resolves the bytes a receipt attests to, for whichever changeset source is
-// being read.
-//
-// It exists because getting this wrong is silent and severe. Every receipt was minted from the
-// WORKING TREE, which is correct for a working-tree review and a lie for a range one: it would
-// stamp a colleague's file as read at the content of your own checkout, and Covers would then
-// agree forever. Making the source an explicit value means a new minting site has to say which
-// tree it means rather than inheriting the wrong default.
-type reviewedContent struct {
-	root string
-	// at is zero for the working tree, and otherwise the revision the content is read from.
-	at   typesvcs.Checkpoint
-	read func(rev, path string) (string, error)
-}
-
-// digest fingerprints one path, or returns "" where there is nothing to attest to.
-//
-// "" is the answer for a file that is absent: deleted in the working tree, or not present at the
-// revision. Recording a receipt against it would satisfy Covers for every unreadable file forever.
-func (c reviewedContent) digest(path string) string {
-	if c.at.Revision == "" {
-		return review.DigestFile(filepath.Join(c.root, filepath.FromSlash(path)))
-	}
-	body, err := c.read(c.at.Revision, path)
-	if err != nil {
-		return ""
-	}
-	return review.Digest([]byte(body))
-}
-
-// readReviewedContent says which tree a receipt minted for this source should attest to.
-//
-// A source magus cannot address yields the working tree, which is what every caller did before
-// this existed. That is safe only because the two gates that mint receipts (--ack and the viewer)
-// both refuse an unaddressable source outright, so the fallback is unreachable rather than
-// merely unlikely. If either ever accepts a patch on stdin, this has to refuse instead.
-func readReviewedContent(ctx context.Context, m *magus.Magus, src diffInput) reviewedContent {
-	c := reviewedContent{
-		root: m.Root(),
-		read: func(rev, path string) (string, error) { return m.FileAt(ctx, rev, path) },
-	}
-	if src.kind != inputRevRange {
-		return c
-	}
-	// A range magus cannot resolve leaves at zero, and the caller then digests the working tree
-	// for a review of somebody else's branch. Refused rather than degraded: --ack has already
-	// checked the range resolves, so reaching here means the repository moved mid-command.
-	at, err := m.RevisionCheckpoint(ctx, src.head)
-	if err != nil {
-		return c
-	}
-	c.at = at
-	return c
-}
-
-// ackChangeset records a receipt for every non-generated changed file at the content the reader
-// was shown, carrying the reason the caller gave for covering them all at once.
-func ackChangeset(content reviewedContent, cacheDir string, rev difftypes.Diff, reason string, now time.Time) (int, error) {
-	var add []review.Receipt
-	for _, f := range rev.Files {
-		if f.Generated() {
-			continue
-		}
-		digest := content.digest(f.Path)
-		if digest == "" {
-			continue
-		}
-		add = append(add, review.Receipt{
-			Path: f.Path, Digest: digest, At: now, Source: content.at, Reason: reason,
-		})
-	}
-	if len(add) == 0 {
-		return 0, nil
-	}
-	return len(add), review.Record(cacheDir, add)
-}
-
-// impactReviewLines renders the section, or nothing at all.
-//
-// Nil is a real answer here and the common one. A section that always prints is a section
-// people stop reading, and this one has nothing to say about a small change nobody has
-// disturbed since reading.
-//
-// It belongs in the impact report rather than the viewer because the viewer counts hunks read
-// and has no notion of STALE. "This changed after you read it" is the half worth having, and
-// this is the only place it is said.
-//
-// TODO: teach the viewer stale state, so a reader stepping through sees which files moved
-// under them. That is additive; it is not a reason to drop the only telling of it here.
-func impactReviewLines(r *impactReview) []string {
-	if r == nil {
-		return []string{fmt.Sprintf("REVIEW: read receipts unavailable; step a file through in `%s` to earn one", hint.Diff.String())}
-	}
-	// Silence, not a reassurance. "Everything here has been read" would be a claim the
-	// reader can produce by stamping rather than by reading, which is the sentence this
-	// section was rebuilt to stop printing.
-	if r.Files == 0 || (len(r.Stale) == 0 && (r.Files < reviewMinFiles || len(r.Unread) == 0)) {
-		return nil
-	}
-
-	var out []string
-	// Stale leads, always, whatever else is in the section. It is the one finding here
-	// that no amount of stamping produces: the file moved after somebody read it.
-	if len(r.Stale) > 0 {
-		out = append(out, fmt.Sprintf("REVIEW: %d file(s) changed after you read them", len(r.Stale)))
-		for _, p := range r.Stale {
-			out = append(out, "      "+p)
-		}
-	}
-	// Then what the workspace itself said was worth reading, uncapped.
-	if len(r.Required) > 0 {
-		head := fmt.Sprintf("%d unopened in review_required paths:", len(r.Required))
-		if len(out) == 0 {
-			out = append(out, "REVIEW: "+head)
-		} else {
-			out = append(out, "      "+head)
-		}
-		for _, p := range r.Required {
-			out = append(out, "        "+p)
-		}
-	}
-	// Then the rest, as context and capped, in the order the reader would take them.
-	if rest := unreadRest(r); len(rest) > 0 {
-		head := fmt.Sprintf("%d file(s) you have not opened, widest blast radius first", len(rest))
-		if len(out) == 0 {
-			out = append(out, "REVIEW: "+head)
-		} else {
-			out = append(out, "      "+head)
-		}
-		shown := rest
-		if len(shown) > unreadShown {
-			shown = shown[:unreadShown]
-		}
-		for _, p := range shown {
-			out = append(out, "        "+p)
-		}
-		if len(rest) > len(shown) {
-			out = append(out, fmt.Sprintf("        and %d more", len(rest)-len(shown)))
-		}
-	}
-	for _, reason := range r.Reasons {
-		// Echoed so a file covered by one keystroke does not read as one somebody sat
-		// down with. It is a note the reader left themselves, not a toll they paid.
-		out = append(out, fmt.Sprintf("      some were covered in bulk: %q", reason))
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	// Both doors, because the reader's editor is not magus's business: naming only the
-	// viewer told anyone who reviews in vim or magit that their only option was the
-	// blanket ack.
-	return append(out,
-		"      record what you read, wherever you read it: "+hint.Diff.With("--ack", "<path>..."),
-		"      or step through them here: "+hint.Diff.String())
-}
-
-// unreadRest is the never-opened files the section has not already named under
-// review_required, so no path appears twice.
-func unreadRest(r *impactReview) []string {
-	if len(r.Required) == 0 {
-		return r.Unread
-	}
-	named := make(map[string]bool, len(r.Required))
-	for _, p := range r.Required {
-		named[p] = true
-	}
-	var out []string
-	for _, p := range r.Unread {
-		if !named[p] {
-			out = append(out, p)
-		}
-	}
-	return out
+// runLocalAdvisors runs the read-only PR advisors against the local tree, with the workspace on
+// the context the way `magus buzz` has it. The workspace is attached, not loaded again:
+// loadMagus panics on a second root.
+func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev difftypes.Diff) ([]review.AdviceSection, []string, error) {
+	return review.LocalAdvice(types.WithWorkspace(ctx, viewInternals(m)), m.Root(), base, rev)
 }

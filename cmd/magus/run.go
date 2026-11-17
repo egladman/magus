@@ -5,33 +5,33 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/file"
+	internalci "github.com/egladman/magus/internal/ci"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/race"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
-
-	"github.com/bmatcuk/doublestar/v4"
 )
 
 // runTarget dispatches `magus run <target> [projects...]`.
@@ -47,14 +47,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	var skips skipFlag
 	prescanRun := func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
 	// Read first: a plan run may name no target, leaving the plan to supply it.
-	var saved *planOutput
+	var saved *internalci.PlanOutput
 	if runReadsPlan(args) {
 		// A read from a terminal would wait for input nobody knows to type.
 		if termkit.StdinIsTerminal() {
-			return refusePlan("--stdin reads a saved plan, and stdin is a terminal; pipe one in (`%s | magus run --stdin`) or redirect a file (< plan.json)",
+			return internalci.RefusePlan("--stdin reads a saved plan, and stdin is a terminal; pipe one in (`%s | magus run --stdin`) or redirect a file (< plan.json)",
 				hint.Affected.With("ci", "--plan"))
 		}
-		p, err := readSavedPlan(os.Stdin)
+		p, err := internalci.ReadSavedPlan(os.Stdin)
 		// A stage upstream that failed printed no plan, so its failure is the one to report.
 		if werr := awaitPipeline(ctx, root); werr != nil {
 			return werr
@@ -66,7 +66,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	rawTarget, rest, ok := splitTargetFromArgs(args, prescanRun)
 	if !ok && saved != nil {
-		args = append([]string{savedTargetRef(*saved)}, args...)
+		args = append([]string{internalci.SavedTargetRef(*saved)}, args...)
 		rawTarget, rest, ok = splitTargetFromArgs(args, prescanRun)
 	}
 	if !ok {
@@ -83,7 +83,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	startedAt := time.Now()
 
-	flagArgs, extraArgs := splitOnDashDash(rest)
+	flagArgs, extraArgs := commands.SplitOnDashDash(rest)
 
 	// Bound from the command registry, not declared here: the man page's copy of
 	// this list and this one used to be written separately and reconciled by a test.
@@ -129,7 +129,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if shardEnvErr != nil {
 		return exit.Usagef("magus run: %v", shardEnvErr)
 	}
-	var planShards []planShard
+	var planShards []internalci.PlanShard
 	if saved != nil {
 		switch {
 		case rf.Detach:
@@ -141,13 +141,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		case len(skips.refs) > 0:
 			return exit.Usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
 		case !slices.Equal(extraArgs, saved.Args):
-			return refusePlan("the plan was evaluated with args %q, not %q; plan again with the args the shard runs",
+			return internalci.RefusePlan("the plan was evaluated with args %q, not %q; plan again with the args the shard runs",
 				strings.Join(saved.Args, " "), strings.Join(extraArgs, " "))
-		case !sameCharms(parsedTarget.Charms, saved.Charms):
-			return refusePlan("the plan was evaluated under charms %q, not %q; plan again under the charms the shard runs",
+		case !internalci.SameCharms(parsedTarget.Charms, saved.Charms):
+			return internalci.RefusePlan("the plan was evaluated under charms %q, not %q; plan again under the charms the shard runs",
 				strings.Join(saved.Charms, ","), strings.Join(parsedTarget.Charms, ","))
 		}
-		shards, err := selectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
+		shards, err := internalci.SelectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
 		if err != nil {
 			return err
 		}
@@ -156,17 +156,17 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// Both halves of the shard label now come from the plan, and a run of every
 		// shard is not partial.
 		rf.NShards = 0
-		if rf.Shard == allPlanShards {
+		if rf.Shard == internalci.AllPlanShards {
 			rf.Shard = ""
 		}
 		if rf.Shard != "" {
-			rf.NShards = len(planStage(*saved, rf.Shard))
+			rf.NShards = len(internalci.PlanStage(*saved, rf.Shard))
 		}
 		if globalCfg.DryRun {
 			return emitSavedPlanDryRun(ctx, *saved, rawTarget, shards)
 		}
 		planShards = shards
-		projectArgs = planProjects(shards)
+		projectArgs = internalci.PlanProjects(shards)
 		if len(projectArgs) == 0 {
 			slog.InfoContext(ctx, "magus run --stdin: the plan has no shards, so nothing runs", slog.String("target", targetName))
 			return nil
@@ -185,7 +185,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if rf.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
+		ctx, cancel = proc.WithTimeout(ctx, rf.Timeout, "run:"+targetName)
 		defer cancel()
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
@@ -198,7 +198,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// measured 48KB across four agent sessions that could not act on any of it.
 	// A structured invocation never gets this: -o jsonl on a TTY is rare, and the
 	// one free-text line it would add is not worth a special-cased typed event.
-	if global.silent && isInteractiveTTY() && global.output != string(outputJSONL) {
+	if global.silent && interactive.IsInteractiveTTY() && global.output != string(outputJSONL) {
 		// Says what arrives and when, rather than sending the reader to poll a
 		// dashboard in another terminal. This run BLOCKS: waiting for it is the
 		// normal thing to do, and every target that runs prints an output ref
@@ -209,13 +209,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			hint.QueryOutput.With("<ref>")))
 	}
 
-	if rf.Step && !isInteractiveTTY() {
+	if rf.Step && !interactive.IsInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return exit.Reported(exit.Usage)
 	}
 
 	if rf.Step {
-		ctx = withStepGate(ctx)
+		ctx = interp.WithStepGate(ctx, workspaceReplCandidates)
 	}
 
 	if spellFilter != "" && targetName == "ci" {
@@ -242,11 +242,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return err
 		}
 		listTarget := types.Target{Path: parsedTarget.Path, Name: "ls"}
-		targets, source, err := resolveTargets(ctx, ws, listTarget, runSelection{projects: projectArgs, skips: skips.refs, cwd: clientCurrentWorkingDirectory(ctx)})
+		targets, source, err := interactive.ResolveTargets(ctx, ws, listTarget, interactive.RunSelection{Projects: projectArgs, Skips: skips.refs, Cwd: clientCurrentWorkingDirectory(ctx)})
 		if err != nil {
 			return err
 		}
-		listTargets("run:ls", targets, source)
+		describe.ListTargets("run:ls", targets, source)
 		return nil
 	}
 
@@ -275,17 +275,17 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// ctx, not the server's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCurrentWorkingDirectory(ctx)
-	sel := runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd}
+	sel := interactive.RunSelection{Projects: projectArgs, Skips: skips.refs, Cwd: cwd}
 	if saved != nil {
 		// A plan's paths are workspace-relative; anchored at the caller's cwd, "." in a
 		// subdirectory would name the wrong project.
-		sel.cwd = m.Root()
+		sel.Cwd = m.Root()
 	}
 	inherited := false
 	// Projects flow forward: named projects win, and a run naming none takes what the
 	// record stage upstream of it ran on, the way xargs takes its arguments.
 	if len(projectArgs) == 0 && parsedTarget.Path == "" {
-		projects, upstream, ok, err := inheritedProjects(ctx)
+		projects, upstream, ok, err := pipe.InheritedProjects(ctx)
 		if err != nil {
 			return err
 		}
@@ -296,10 +296,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		}
 		if ok {
 			// Workspace paths, so anchored at the root rather than the caller's cwd.
-			sel.projects, sel.cwd, inherited = projects, m.Root(), true
+			sel.Projects, sel.Cwd, inherited = projects, m.Root(), true
 		}
 	}
-	targets, source, err := resolveTargets(ctx, m, parsedTarget, sel)
+	targets, source, err := interactive.ResolveTargets(ctx, m, parsedTarget, sel)
 	if err != nil {
 		return err
 	}
@@ -307,14 +307,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		source = "pipe"
 	}
 	if saved != nil {
-		targets, source = planTargets(planShards), "plan"
+		targets, source = internalci.PlanTargets(planShards), "plan"
 	}
 	// Fault tolerance by design: a target only some projects serve should skip (not
 	// error) the projects that lack it when the scope is the workspace or several
 	// projects, but a single project that does not serve it (or a name no project serves
 	// at all) is an error. This is the run counterpart to affected's tolerance.
 	if len(targets) > 0 && saved == nil {
-		targets, err = filterServedTargets(ctx, m, targets, targetName)
+		targets, err = interactive.FilterServedTargets(ctx, m, targets, targetName)
 		if err != nil {
 			return err
 		}
@@ -325,7 +325,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	sink.EmitScope(ctx, scopeLabel, source, scopePaths(targets))
+	sink.EmitScope(ctx, scopeLabel, source, pipe.ScopePaths(targets))
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
@@ -355,7 +355,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// is idle. Inert off the ci target and when nothing is on record.
 	partial := rf.Shard != "" || rf.NShards > 0
 	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
-	if gateErr := gate.evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
+	if gateErr := gate.Evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 
@@ -370,14 +370,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		runOpts = append(runOpts, magus.WithCharms(carried...))
 	}
 	runOpts = append(runOpts, magus.WithVolatilityRetry(rf.VolatilityRetry))
-	race, err := resolveRace(rf.Race)
+	raceOpts, err := race.Resolve(rf.Race)
 	if err != nil {
 		return err
 	}
 	switch {
-	case race.Replay:
+	case raceOpts.Replay:
 		runOpts = append(runOpts, magus.WithRaceReplay())
-	case race.Enabled:
+	case raceOpts.Enabled:
 		runOpts = append(runOpts, magus.WithRace())
 	}
 	if rf.Step {
@@ -406,8 +406,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Durable invocation facts ride the same fan-out: one fact per target result, into a
 	// store every worktree of this repo shares (`magus session` reads it back).
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
-	refs := &resultRefs{}
-	statuses := newResultStatuses(targetName)
+	refs := &report.ResultRefs{}
+	statuses := report.NewResultStatuses(targetName)
 	failed := &failedResults{}
 	captureHandlers = append(captureHandlers, refs, statuses, failed)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
@@ -424,7 +424,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		err = m.Run(invCtx, targets, runOpts...)
 	}
 	// See affected.go: the cut-short question is read here, not inside record.
-	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
+	gate.Record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}
@@ -453,7 +453,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 	if global.silent && opts.Format == outputText {
-		if line := refLine(refs.list()); line != "" {
+		if line := report.RefLine(refs.List()); line != "" {
 			slog.InfoContext(ctx, line, attr.Notice(""), attr.Result())
 		}
 	}
@@ -469,90 +469,16 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	return nil
 }
 
-// resultRefs collects the output ref of every target result the invocation's journal
-// records, in the order the results arrive.
-type resultRefs struct {
-	mu   sync.Mutex
-	refs []string
+// runSelection is interactive.RunSelection under the lowercase field names clean and list
+// still spell.
+type runSelection struct {
+	projects []string
+	skips    []string
+	cwd      string
 }
 
-func (c *resultRefs) Enabled(context.Context, slog.Level) bool { return true }
-
-func (c *resultRefs) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Ref == "" {
-		return nil
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !slices.Contains(c.refs, e.Ref) {
-		c.refs = append(c.refs, e.Ref)
-	}
-	return nil
-}
-
-func (c *resultRefs) WithAttrs([]slog.Attr) slog.Handler { return c }
-func (c *resultRefs) WithGroup(string) slog.Handler      { return c }
-
-func (c *resultRefs) list() []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return slices.Clone(c.refs)
-}
-
-// resultStatuses collects the journal status of the asked target's result,
-// by project. A dependency's result is left out.
-type resultStatuses struct {
-	target string
-	mu     sync.Mutex
-	status map[string]string
-}
-
-func newResultStatuses(target string) *resultStatuses {
-	return &resultStatuses{target: target, status: map[string]string{}}
-}
-
-func (c *resultStatuses) Enabled(context.Context, slog.Level) bool { return true }
-
-func (c *resultStatuses) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Status == "" {
-		return nil
-	}
-	// The journal names a charmed step "target:charm,...".
-	if name, _, _ := strings.Cut(e.Target, ":"); name != c.target {
-		return nil
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.status[e.Project] = e.Status
-	return nil
-}
-
-func (c *resultStatuses) WithAttrs([]slog.Attr) slog.Handler { return c }
-func (c *resultStatuses) WithGroup(string) slog.Handler      { return c }
-
-func (c *resultStatuses) of(project string) string {
-	if c == nil {
-		return ""
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.status[project]
-}
-
-// refLine is the one line a successful `-s` run prints: every other line of a pass is
-// dropped, and without the ref a caller reruns without -s just to learn it. It mirrors the
-// "ref  <id>" line a default run prints under each target; "" when no target left a ref.
-func refLine(refs []string) string {
-	switch len(refs) {
-	case 0:
-		return ""
-	case 1:
-		return "ref  " + refs[0]
-	default:
-		return "refs  " + strings.Join(refs, " ")
-	}
+func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, sel runSelection) ([]types.Target, string, error) {
+	return interactive.ResolveTargets(ctx, ws, t, interactive.RunSelection{Projects: sel.projects, Skips: sel.skips, Cwd: sel.cwd})
 }
 
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per
@@ -565,84 +491,6 @@ func emitProjectNames(m *magus.Magus, selection []types.Target) error {
 		names[i] = p.Path
 	}
 	return emitNames(os.Stdout, names)
-}
-
-// runSelection is how one run's project selection is named on the command line: the
-// positionals, the --skip refs subtracted from them, and the directory they anchor
-// against. A struct rather than three parameters because the first two are same-typed
-// and adjacent, and transposing them is SILENT: the run would then cover exactly the
-// projects the caller asked to exclude.
-type runSelection struct {
-	// projects are the positional project args, empty when the caller named none.
-	projects []string
-	// skips are the --skip refs, subtracted after the selection resolves.
-	skips []string
-	// cwd is the caller's working directory (the client's, for an adopted run; see
-	// clientCurrentWorkingDirectory); it anchors relative project args and the cwd-scope lookup. Resolving
-	// cwd-scope against the server's own os.Getwd() is exactly the mix-up that let a
-	// server adopt a run for an unrelated workspace and pass it vacuously, so the cwd is
-	// threaded in rather than read here.
-	cwd string
-}
-
-// resolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all,
-// then subtracts the projects sel.skips names.
-//
-// The subtraction happens here, at the one place the selection is finalized, so the run
-// header, --dry-run and the fan-out all describe the same set.
-func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, sel runSelection) ([]types.Target, string, error) {
-	anchor := currentWorkingDirectoryAnchor(ws.Root(), sel.cwd)
-
-	// The four ways a selection is named, in precedence order.
-	var (
-		targets []types.Target
-		source  string
-		err     error
-	)
-	switch {
-	case t.Path != "":
-		resolved, rerr := file.ResolveProject(ctx, t.Path, anchor)
-		if rerr != nil {
-			return nil, "", rerr
-		}
-		t.Path = resolved
-		targets, err = ws.ExpandPath(t)
-	case len(sel.projects) > 0:
-		for _, arg := range sel.projects {
-			resolved, rerr := file.ResolveProject(ctx, arg, anchor)
-			if rerr != nil {
-				return nil, "", rerr
-			}
-			expanded, eerr := ws.ExpandPath(types.Target{Path: resolved, Name: t.Name})
-			if eerr != nil {
-				return nil, "", eerr
-			}
-			targets = append(targets, expanded...)
-		}
-	default:
-		// cwd-scope: run only the project containing the caller's cwd, when it is inside
-		// one. Keyed on the explicit cwd, never this process's working directory.
-		if sel.cwd != "" {
-			if p, ok := ws.Where(sel.cwd); ok {
-				targets, source = []types.Target{{Path: p.Path, Name: t.Name}}, "cwd"
-				break
-			}
-		}
-		targets, err = ws.ExpandPath(t)
-	}
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Named on the command line, rather than inferred from the cwd or fanned out over
-	// the workspace. That is what makes skipping one of these projects a contradiction
-	// instead of a preference, so the value is named rather than computed in the call.
-	explicit := t.Path != "" || len(sel.projects) > 0
-	targets, err = subtractSkipped(ctx, ws, t.Name, targets, sel.skips, anchor, explicit)
-	if err != nil {
-		return nil, "", err
-	}
-	return targets, source, nil
 }
 
 // bindRunFlags registers `magus run`'s flags: the generated set from the command
@@ -670,7 +518,7 @@ func runReadsPlan(args []string) bool {
 	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	bindRunFlags(fs, nil)
-	flags, _ := partitionFlags(fs, args)
+	flags, _ := commands.PartitionFlags(fs, args)
 	stdin := false
 	for i := 0; i < len(flags); i++ {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(flags[i], "-"), "=")
@@ -682,180 +530,17 @@ func runReadsPlan(args []string) bool {
 			if hasValue {
 				stdin, _ = strconv.ParseBool(value)
 			}
-		case !flagIsBool(f) && !hasValue:
+		case !commands.FlagIsBool(f) && !hasValue:
 			i++ // partitionFlags kept the flag's value beside it
 		}
 	}
 	return stdin
 }
 
-// planRefusal is an MGS3029 refusal. It exits 2, the misuse status: nothing was attempted.
-type planRefusal struct{ error }
-
-func (planRefusal) ExitCode() int { return exit.Usage }
-
-func (e planRefusal) Unwrap() error { return e.error }
-
-func refusePlan(format string, args ...any) error {
-	return planRefusal{types.DiagnosticErrorf(types.SavedPlanRefused, format, args...)}
-}
-
-// readSavedPlan reads a `magus affected --plan` document from r and checks that its
-// shards can run as written.
-func readSavedPlan(r io.Reader) (planOutput, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return planOutput{}, fmt.Errorf("magus run --stdin: %w", err)
-	}
-	return decodeSavedPlan(data)
-}
-
-// decodeSavedPlan decodes a plan document and refuses one whose shards could not be run
-// as written. Keys it does not know are ignored, so a plan from a newer magus still runs.
-func decodeSavedPlan(data []byte) (planOutput, error) {
-	var p planOutput
-	if err := json.Unmarshal(data, &p); err != nil {
-		return planOutput{}, refusePlan("the plan on stdin is not a shard plan: %v", err)
-	}
-	if p.Target == "" {
-		return planOutput{}, refusePlan("the plan on stdin names no target; print it again with `%s`",
-			hint.Affected.With("<target>", "--plan"))
-	}
-	if p.Count != len(p.Matrix) {
-		return planOutput{}, refusePlan("the plan on stdin states %d shard(s) but lists %d", p.Count, len(p.Matrix))
-	}
-	every := slices.Concat(p.Matrix, p.StageZero)
-	seen := make(map[string]bool, len(every))
-	for _, s := range every {
-		switch {
-		case s.Shard == "":
-			return planOutput{}, refusePlan("the plan on stdin has a shard with no id")
-		case seen[s.Shard]:
-			return planOutput{}, refusePlan("the plan on stdin lists shard %s twice", s.Shard)
-		case len(strings.Fields(s.Projects)) == 0:
-			return planOutput{}, refusePlan("the plan on stdin: shard %s has no projects", s.Shard)
-		case len(s.Units) == 0:
-			return planOutput{}, refusePlan("the plan on stdin: shard %s lists no units; print it again with `%s`",
-				s.Shard, hint.Affected.With(p.Target, "--plan"))
-		}
-		if listed, ran := strings.Join(strings.Fields(s.Projects), " "), strings.Join(types.UnitProjects(s.Units), " "); listed != ran {
-			return planOutput{}, refusePlan("the plan on stdin: shard %s lists projects %q, but its units run in %q",
-				s.Shard, listed, ran)
-		}
-		if want := types.UnitsDigest(s.Units); s.Digest != want {
-			return planOutput{}, refusePlan("the plan on stdin: shard %s has digest %q, but its units digest to %q",
-				s.Shard, s.Digest, want)
-		}
-		seen[s.Shard] = true
-	}
-	return p, nil
-}
-
-// savedTargetRef is the plan's target with the charms it was evaluated under.
-func savedTargetRef(p planOutput) string {
-	if len(p.Charms) == 0 {
-		return p.Target
-	}
-	return fmt.Sprintf("%s:%s", p.Target, strings.Join(p.Charms, ","))
-}
-
-// allPlanShards is the --shard value that runs every shard of a saved plan.
-const allPlanShards = "all"
-
-// selectPlanShards returns the shards a `run --stdin` invocation runs: the one
-// named by shard, of either stage, or every shard for allPlanShards, stage
-// zero first. An empty shard selects only a plan of one shard, so no caller
-// runs a whole plan by omission. target must agree with the plan, and
-// nShards with the size of the named shard's stage.
-func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planShard, error) {
-	if target != p.Target {
-		return nil, refusePlan("the plan is for %s, not %s; drop the target, or give %s with charms (%s:<charm>)",
-			p.Target, target, p.Target, p.Target)
-	}
-	if stage := planStage(p, shard); nShards > 0 && nShards != len(stage) {
-		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, len(stage))
-	}
-	every := slices.Concat(p.StageZero, p.Matrix)
-	if shard == allPlanShards {
-		return every, nil
-	}
-	if shard == "" {
-		if len(every) > 1 {
-			ids := make([]string, len(every))
-			for i, s := range every {
-				ids[i] = s.Shard
-			}
-			return nil, refusePlan("the plan has %d shards and no --shard selects one: pass --shard <id> (%s), or --shard %s to run every shard here",
-				len(every), strings.Join(ids, ", "), allPlanShards)
-		}
-		return every, nil
-	}
-	ids := make([]string, len(every))
-	for i, s := range every {
-		if s.Shard == shard {
-			return []planShard{s}, nil
-		}
-		ids[i] = s.Shard
-	}
-	if len(ids) == 0 {
-		return nil, refusePlan("--shard %s: the plan has no shards, so there is nothing to select", shard)
-	}
-	return nil, refusePlan("--shard %s: the plan has no such shard (it has %s)", shard, strings.Join(ids, ", "))
-}
-
-// planStage is the stage holding the shard named id: stage zero when one of
-// its shards has that ID, else the matrix.
-func planStage(p planOutput, id string) []planShard {
-	if slices.ContainsFunc(p.StageZero, func(s planShard) bool { return s.Shard == id }) {
-		return p.StageZero
-	}
-	return p.Matrix
-}
-
-// planProjects is the projects shards run, in plan order, each once.
-func planProjects(shards []planShard) []string {
-	projects := make([]string, 0, len(shards))
-	seen := map[string]bool{}
-	for _, s := range shards {
-		for _, p := range strings.Fields(s.Projects) {
-			if !seen[p] {
-				seen[p] = true
-				projects = append(projects, p)
-			}
-		}
-	}
-	return projects
-}
-
-// planTargets is the units shards run, in plan order, each once.
-func planTargets(shards []planShard) []types.Target {
-	var targets []types.Target
-	seen := map[types.Unit]bool{}
-	for _, s := range shards {
-		for _, u := range s.Units {
-			if !seen[u] {
-				seen[u] = true
-				targets = append(targets, types.Target{Path: u.Project, Name: u.Target})
-			}
-		}
-	}
-	return targets
-}
-
-// planUnitList is units as space-separated project:target.
-func planUnitList(units []types.Unit) string {
-	return strings.Join(types.UnitNames(units), " ")
-}
-
-// sameCharms reports whether a and b hold the same charms in any order.
-func sameCharms(a, b []string) bool {
-	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
-}
-
 // emitSavedPlanDryRun answers `run --stdin --dry-run`, which runs nothing. Structured -o
 // renders the plan document as read, which is how a saved plan renders again without
 // being computed again; text names each shard's command.
-func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shards []planShard) error {
+func emitSavedPlanDryRun(ctx context.Context, p internalci.PlanOutput, target string, shards []internalci.PlanShard) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -866,14 +551,14 @@ func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shard
 			slog.InfoContext(ctx, "[dry] the plan has no shards; nothing would run", attr.Notice(""))
 		}
 		for _, s := range shards {
-			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: %s runs %s", s.Shard, target, planUnitList(s.Units)), attr.Notice(""))
+			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: %s runs %s", s.Shard, target, internalci.PlanUnitList(s.Units)), attr.Notice(""))
 		}
 		return nil
 	case outputName:
-		return emitNames(os.Stdout, planProjects(shards))
+		return emitNames(os.Stdout, internalci.PlanProjects(shards))
 	default:
 		if opts.Format == outputTemplate {
-			p.Summary = planSummaryMarkdown(p)
+			p.Summary = internalci.PlanSummaryMarkdown(p)
 		}
 		return emitFormatted(opts, p)
 	}
@@ -898,184 +583,6 @@ func (f *skipFlag) Set(value string) error {
 		f.refs = append(f.refs, ref)
 	}
 	return nil
-}
-
-// subtractSkipped removes the projects skips names from an already-resolved selection.
-// A skip reference goes through the same resolver a positional does, so the two spellings
-// cannot drift apart. explicit reports whether the selection was named on the command line
-// rather than inferred from the cwd or fanned out over the workspace.
-//
-// Every refusal here exists because the flag's job is to GATE a set, and a skip that
-// quietly matches nothing un-gates a project with no one the wiser. A reference no project
-// matches is a typo, and a reference the caller also named explicitly is a contradiction
-// rather than a preference. Emptying the selection would otherwise surface downstream as
-// "workspace has no projects to run target".
-func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetName string, targets []types.Target, skips []string, anchor string, explicit bool) ([]types.Target, error) {
-	if len(skips) == 0 {
-		return targets, nil
-	}
-	skip := make(map[string]bool, len(skips))
-	for _, arg := range skips {
-		// A glob subtracts every workspace project it matches, in the same doublestar
-		// dialect declared sources use. It matches workspace-relative project paths
-		// directly (never anchored to the cwd, because "libs/*" should mean the same
-		// thing from anywhere), and a glob matching zero projects is the same typo an
-		// unknown exact ref is.
-		if strings.ContainsAny(arg, "*?[") {
-			matched := false
-			for _, p := range ws.All() {
-				if ok, err := doublestar.Match(arg, p.Path); err != nil {
-					return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
-				} else if ok {
-					skip[p.Path] = true
-					matched = true
-				}
-			}
-			if !matched {
-				return nil, fmt.Errorf("run: --skip %s: no project matches the glob", arg)
-			}
-			continue
-		}
-		resolved, err := file.ResolveProject(ctx, arg, anchor)
-		if err != nil {
-			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
-		}
-		if resolved == "" || resolved == "/" {
-			return nil, fmt.Errorf("run: --skip %s: name one project, there is no all-projects skip", arg)
-		}
-		// ExpandPath is the existence check, and the same one a positional gets:
-		// an unknown project errors here with its did-you-mean.
-		if _, err := ws.ExpandPath(types.Target{Path: resolved, Name: targetName}); err != nil {
-			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
-		}
-		skip[resolved] = true
-	}
-	kept := make([]types.Target, 0, len(targets))
-	for _, t := range targets {
-		if !skip[t.Path] {
-			kept = append(kept, t)
-			continue
-		}
-		if explicit {
-			return nil, fmt.Errorf("run: --skip %s contradicts naming it on the command line", t.Path)
-		}
-	}
-	if len(targets) > 0 && len(kept) == 0 {
-		return nil, errors.New("run: --skip removed every selected project, nothing would run")
-	}
-	return kept, nil
-}
-
-// filterServedTargets keeps only the (project, target) pairs whose project actually
-// defines the target, so a fan-out never runs (or misreports "[pass]" for) a project
-// that lacks it. It errors when nothing serves the target: a single project in scope
-// names that project (you asked for it explicitly), otherwise it reads as an unknown
-// target across the selection. When some projects serve it and others don't, the ones
-// that don't are dropped with a warning: the tolerant multi-project behavior.
-func filterServedTargets(ctx context.Context, m *magus.Magus, targets []types.Target, targetName string) ([]types.Target, error) {
-	return applyTargetFilter(targets, targetName, buildDefinesTarget(ctx, m), func(path string) string { return projectLabel(m, path) })
-}
-
-// applyTargetFilter is the pure policy behind filterServedTargets: partition targets by
-// whether their project defines the target, error when none do (single project named vs
-// unknown-across-selection), otherwise drop the undefined ones with a warning. Split out
-// so the fault-tolerance matrix is testable without a live workspace.
-func applyTargetFilter(targets []types.Target, targetName string, defines func(path, target string) bool, label func(path string) string) ([]types.Target, error) {
-	var served, skipped []types.Target
-	for _, t := range targets {
-		if defines(t.Path, t.Name) {
-			served = append(served, t)
-		} else {
-			skipped = append(skipped, t)
-		}
-	}
-	if len(served) == 0 {
-		if len(targets) == 1 {
-			return nil, fmt.Errorf("run: target %q is not defined in project %s", targetName, label(targets[0].Path))
-		}
-		return nil, fmt.Errorf("run: target %q is not defined in any of the %d selected projects", targetName, len(targets))
-	}
-	if len(skipped) > 0 {
-		names := make([]string, 0, len(skipped))
-		for _, t := range skipped {
-			names = append(names, label(t.Path))
-		}
-		slog.With(attr.Component("run")).Warn("target not defined in some selected projects; skipping them",
-			slog.String("target", targetName), slog.String("skipped", strings.Join(names, ", ")))
-	}
-	return served, nil
-}
-
-// buildDefinesTarget returns a predicate reporting whether a project defines a target,
-// covering BOTH sources of runnable targets: magusfile-declared targets (the target
-// graph's nodes) and spell ops (each bound spell's Targets). Neither set alone is
-// complete: the magusfile spell exposes no ops, and spell ops are not graph nodes.
-func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target string) bool {
-	byProject := map[string]map[string]bool{}
-	add := func(path, name string) {
-		set := byProject[path]
-		if set == nil {
-			set = map[string]bool{}
-			byProject[path] = set
-		}
-		set[name] = true
-	}
-	// buildDefinesTarget returns a bare predicate closure with no error path of its
-	// own; a cancelled ctx here just drops the graph-derived entries from the
-	// predicate (the spell-derived ones added below still make it usable), rather
-	// than failing a caller that never signed up to handle this.
-	if graph, err := m.TargetGraph(ctx); err == nil {
-		for _, p := range graph.Projects {
-			for _, n := range p.Nodes {
-				add(p.Path, n.Name)
-			}
-		}
-	}
-	for _, p := range m.All() {
-		for _, sp := range p.ResolvedSpells {
-			for _, t := range sp.Targets() {
-				add(p.Path, t)
-			}
-		}
-	}
-	return func(path, target string) bool { return byProject[path][target] }
-}
-
-// projectLabel renders a project's human name (never a bare ".") from its path.
-func projectLabel(m *magus.Magus, path string) string {
-	if p := m.Get(path); p != nil {
-		return types.ProjectLabel(p.Path, p.Dir)
-	}
-	return types.ProjectLabel(path, "")
-}
-
-// currentWorkingDirectoryAnchor returns cwd as a slash path relative to root, the anchor for
-// resolving relative project args. It falls back to "." (the workspace root)
-// when cwd is empty, cannot be made relative to root, or lies OUTSIDE it.
-//
-// That last case is what `--root <path>` selects: the caller is standing
-// somewhere else, and filepath.Rel happily hands back a "../.."-prefixed path,
-// which every relative project ref then inherits and fails the escape check on.
-// `magus --root <ws> run build .` reported `project path "." escapes workspace
-// root from "../<dir>"` for exactly that reason. A relative ref is measured from
-// the workspace the caller NAMED, so an outside cwd contributes nothing to it.
-// A cwd inside the workspace is untouched, which is every invocation without --root.
-func currentWorkingDirectoryAnchor(root, cwd string) string {
-	if cwd == "" {
-		return "."
-	}
-	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
-		cwd = resolved
-	}
-	rel, err := filepath.Rel(root, cwd)
-	if err != nil {
-		return "."
-	}
-	rel = filepath.ToSlash(rel)
-	if rel == ".." || strings.HasPrefix(rel, "../") {
-		return "."
-	}
-	return rel
 }
 
 // clientCurrentWorkingDirectory returns the working directory that scopes this invocation. An adopted
@@ -1134,48 +641,6 @@ type runConfig struct {
 	watchIgnores []types.IgnorePattern
 }
 
-// runArtifact is one file the run produced, with the classification `magus describe
-// file` would give it. Role rides along because "where did the build put it" and "is
-// this thing generated" are the two questions an agent asks in sequence, and
-// answering only the first leaves it to guess the second.
-type runArtifact struct {
-	Path string `json:"path"           yaml:"path"`
-	Glob string `json:"glob"           yaml:"glob"`
-	Role string `json:"role,omitempty" yaml:"role,omitempty"`
-}
-
-// runProject is one project's slice of the run. Artifacts and Value are per
-// project because a run fans out: a single flat list could not say which project
-// produced which file, and a single value would be meaningless for a multi-project
-// run.
-type runProject struct {
-	Path string `json:"path" yaml:"path"`
-	// Status is the journal's result: pass, cached or permitted.
-	// Permitted passed only by a deviation ledger. A dry run has none.
-	Status string `json:"status,omitempty" yaml:"status,omitempty"`
-	// Value is what the target returned (str or [str]), absent for a `> void`
-	// target. Replayed from the cache entry on a hit, so it is present whether or
-	// not this invocation actually executed the target.
-	Value     any           `json:"value,omitempty"     yaml:"value,omitempty"`
-	Artifacts []runArtifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
-}
-
-// runOutput is the structured result of `magus run <target>`.
-type runOutput struct {
-	Target   string       `json:"target"           yaml:"target"`
-	Charms   []string     `json:"charms,omitempty" yaml:"charms,omitempty"`
-	DryRun   bool         `json:"dry_run"          yaml:"dry_run"`
-	Count    int          `json:"count"            yaml:"count"`
-	Projects []runProject `json:"projects"         yaml:"projects"`
-	// Permitted counts targets that passed only by a deviation ledger.
-	Permitted int `json:"permitted,omitempty" yaml:"permitted,omitempty"`
-	// UndeclaredSeeds names the projects an affected run selected ONLY through changed
-	// files no project declares (MGS1028): targets whose answer could not have moved.
-	// Absent rather than empty when there are none, so a consumer counting the debt can
-	// tell "none" from "not reported".
-	UndeclaredSeeds []string `json:"undeclared_seeds,omitempty" yaml:"undeclared_seeds,omitempty"`
-}
-
 // emitRunResult renders what a run produced. It is deliberately NOT a second
 // progress stream: -o jsonl already streams events, and this answers the different
 // question of what exists on disk now that the run is done.
@@ -1185,14 +650,14 @@ type runOutput struct {
 // produced it. It DOES report the return value, because a dry run evaluates the
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, statuses *resultStatuses, undeclaredSeeds []string) error {
-	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, Permitted: m.CacheStats().Permitted, UndeclaredSeeds: undeclaredSeeds}
+func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, statuses *report.ResultStatuses, undeclaredSeeds []string) error {
+	out := report.RunOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, Permitted: m.CacheStats().Permitted, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
 
 	// Artifacts are resolved once for the whole set, then bucketed by owning
 	// project, so the expansion walks each project's globs exactly once.
-	byProject := map[string][]runArtifact{}
+	byProject := map[string][]report.RunArtifact{}
 	if !out.DryRun {
 		artifacts, err := m.ResolveTargetOutputs(ctx, projects, target)
 		if err != nil {
@@ -1218,14 +683,14 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, tar
 		// in an N-project result. The declaring project is already on the artifact and
 		// cannot come back nil.
 		for _, a := range artifacts {
-			byProject[a.ProjectPath] = append(byProject[a.ProjectPath], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
+			byProject[a.ProjectPath] = append(byProject[a.ProjectPath], report.RunArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
 		}
 	}
 
 	for _, p := range projects {
-		out.Projects = append(out.Projects, runProject{
+		out.Projects = append(out.Projects, report.RunProject{
 			Path:      p.Path,
-			Status:    statuses.of(p.Path),
+			Status:    statuses.Of(p.Path),
 			Artifacts: byProject[p.Path],
 			Value:     returns[p.Path],
 		})

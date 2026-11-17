@@ -24,6 +24,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/embed/rankeval"
@@ -81,9 +82,9 @@ func TestRetrievalEval(t *testing.T) {
 	ctx = withMagus(ctx, m)
 
 	r := replayer{root: root, m: m, cfg: cfg, next: newNextGate(root), coverage: memoCoverage(ctx, m, cfg)}
-	r.domain, err = loadWorkspaceGraph(ctx, m, cfg, false, false, false)
+	r.domain, err = graphReads.LoadGraph(ctx, m, cfg, false, false, false)
 	require.NoError(t, err)
-	r.symbols, err = loadWorkspaceGraph(ctx, m, cfg, false, false, true)
+	r.symbols, err = graphReads.LoadGraph(ctx, m, cfg, false, false, true)
 	require.NoError(t, err)
 	r.known = make(map[string]string)
 	indexed := false
@@ -327,7 +328,7 @@ func TestDefinitionLookupSeedsTheSymbolLayer(t *testing.T) {
 	probed := func(_ string, seeded bool) knowledge.Coverage {
 		return knowledge.Coverage{Seeded: seeded, Probed: true}
 	}
-	res := searchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), graphRead{Input: lookup[0].Query, Nearest: true}, nil, probed)
+	res := workspacegraph.SearchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), knowledge.GraphRead{Input: lookup[0].Query, Nearest: true}, nil, probed)
 	require.Equal(t, types.VerdictFound, res.Out.Answer.Verdict)
 	require.Equal(t, "symbol:readIndex", res.Out.Matches[0].ID)
 }

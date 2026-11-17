@@ -6,57 +6,27 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"sync"
 	"testing"
-	"text/template"
 	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
-
-// TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean drives the actual `magus buzz`
-// code path (buzzCommand, the same function main.go dispatches to) end-to-end: a script
-// with an unused import must print the BZZ3001 warning to stderr and still exit
-// clean (nil error, which main.go turns into exit 0): the whole point of a warning
-// is that it never fails the run.
-func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "unused.buzz")
-	require.NoError(t, os.WriteFile(path, []byte("import \"fs\";\nvar x = 1;\n"), 0o644))
-
-	useTextLogger(t)
-
-	var runErr error
-	stderr := captureStderr(t, func() {
-		stdout := captureStdout(t, func() {
-			runErr = buzzCommand(context.Background(), "", []string{path})
-		})
-		assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
-	})
-
-	require.NoError(t, runErr, "a warning must never fail the run")
-	assert.Contains(t, stderr, "BZZ3001")
-	assert.Contains(t, stderr, "fs")
-	assert.Contains(t, stderr, "warning:")
-}
 
 // TestBuzzCmd_SilentSuppressesUnusedImportWarning verifies -s/--silent, the flag
 // this command's own progress/error output already respects, also gates the new
@@ -123,48 +93,6 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	assert.Equal(t, trail.KindSandboxDenial, events[0].Kind)
 }
 
-// TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox: a workspace that fails to load
-// has no policy to apply, and the script used to run anyway, under none. Breaking the
-// magusfile was a way out of the sandbox.
-func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
-	saved := globalCfg
-	t.Cleanup(func() { globalCfg = saved })
-	opens := countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) {
-		return nil, errors.New("magusfile.buzz:1: broken on purpose")
-	})
-
-	globalCfg.Sandbox.Mode = types.SandboxModeBestEffort
-	_, err := buzzScriptContext(t.Context(), t.TempDir())
-	require.ErrorIs(t, err, types.WorkspaceLoadFailed)
-	assert.ErrorContains(t, err, "broken on purpose")
-	assert.Equal(t, 1, *opens)
-
-	// Adopted, so the open is attempted with the sandbox off too.
-	globalCfg.Sandbox.Mode = types.SandboxModeOff
-	_, err = buzzScriptContext(withMagus(t.Context(), nil), t.TempDir())
-	require.NoError(t, err, "with the sandbox off a failed load still only warns")
-	assert.Equal(t, 2, *opens)
-}
-
-// A script run carries one evaluation memo, which std's graph members read.
-// So two magus\graph().refs calls in one script build the symbol graph once.
-func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
-	ctx, err := buzzRunContext(t.Context(), t.TempDir())
-	require.NoError(t, err)
-	memo := types.EvalMemoFromContext(ctx)
-	require.NotNil(t, memo, "graph reads in a script would each rebuild the graph")
-
-	builds := 0
-	for range 2 {
-		_, err := memo.Do("graph+symbols", func() (any, error) {
-			builds++
-			return nil, nil
-		})
-		require.NoError(t, err)
-	}
-	assert.Equal(t, 1, builds)
-}
-
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.
@@ -205,20 +133,6 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	w.Write("magus.yaml", "sandbox:\n  mode: off\n")
 	return w.Root(), w.Write("script.buzz", script)
-}
-
-func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
-	root, script := buzzLazyWorkspace(t, buzzVanillaScript)
-	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-		return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
-	})
-
-	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
-
-	require.NoError(t, runErr)
-	assert.Equal(t, "hi\n", stdout)
-	assert.Equal(t, 0, *opens, "a script that reads no workspace member must not pay for opening one")
 }
 
 func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
@@ -378,61 +292,6 @@ func TestGuardGlueImportsNoWorkspaceReader(t *testing.T) {
 	}
 }
 
-// TestBuzzCmd_OutsideAWorkspace pins both halves outside any workspace: a script that
-// never reads one is not warned about it, and a workspace member still raises MGS1022
-// with the reason it could not attach.
-func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
-	// buzzCommand's flag parse rebuilds the default logger on whatever os.Stderr is then,
-	// which is the only reason captureStderr sees the warning. The text handler writes
-	// synchronously; the pretty one owns a terminal region.
-	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
-	prevQuiet, prevSilent := global.quiet, global.silent
-	globalCfg.Log.Format, globalCfg.Log.Level = "text", "info"
-	global.quiet, global.silent = false, false
-	t.Cleanup(func() {
-		slog.SetDefault(prevLog)
-		globalCfg.Log.Format, globalCfg.Log.Level = prevFormat, prevLevel
-		global.quiet, global.silent = prevQuiet, prevSilent
-	})
-	noWorkspace := errors.New("no magus workspace found")
-	opens := countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) { return nil, noWorkspace })
-	dir := t.TempDir()
-	vanilla := filepath.Join(dir, "vanilla.buzz")
-	require.NoError(t, os.WriteFile(vanilla, []byte(buzzVanillaScript), 0o644))
-	member := filepath.Join(dir, "member.buzz")
-	require.NoError(t, os.WriteFile(member, []byte(buzzMemberScript), 0o644))
-
-	var runErr error
-	stderr := captureStderr(t, func() {
-		captureStdout(t, func() { runErr = buzzCommand(t.Context(), dir, []string{vanilla}) })
-	})
-	require.NoError(t, runErr)
-	assert.Equal(t, 0, *opens)
-	assert.NotContains(t, stderr, "workspace not attached", "a script that never asked for a workspace is not warned about one")
-
-	stderr = captureStderr(t, func() { runErr = buzzCommand(t.Context(), dir, []string{member}) })
-	require.Error(t, runErr)
-	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
-	assert.Contains(t, stderr, "workspace not attached")
-	assert.Contains(t, stderr, noWorkspace.Error())
-}
-
-func TestBuzzCmd_ScriptImportsResolveBesideTheFile(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(
-		"export fun answer() > str { return \"ok\"; }\n"), 0o644))
-	script := filepath.Join(dir, "main.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(answer()); }\n"), 0o644))
-
-	var runErr error
-	stdout := captureStdout(t, func() {
-		runErr = buzzCommand(context.Background(), "", []string{script})
-	})
-	require.NoError(t, runErr)
-	assert.Contains(t, stdout, "ok")
-}
-
 // A hook runs in whatever directory the session is in, so its command names the root
 // with -C and the script by a root-relative path.
 func TestBuzzCmd_WorkDirResolvesRootRelativeScripts(t *testing.T) {
@@ -473,80 +332,25 @@ func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
 	}
 }
 
-// The SessionStart entry runs from the root with -C, and that root is what goes on PATH.
-func TestSessionGlueAppendsTheWorkDirToTheEnvFile(t *testing.T) {
-	repo, err := filepath.Abs(filepath.Join("..", ".."))
-	require.NoError(t, err)
-	t.Chdir(t.TempDir())
-	envFile := filepath.Join(t.TempDir(), "env")
-	require.NoError(t, os.WriteFile(envFile, []byte("export A=1\n"), 0o644))
-
-	glue := []string{"-C", repo, "-s", "docs/guides/integrations/agents/magus-session.buzz", "--"}
-	require.NoError(t, buzzCommand(t.Context(), "", append(glue, "--env-file", envFile)))
-	require.NoError(t, buzzCommand(t.Context(), "", append(glue, "--env-file", "")), "no env file is nothing to do")
-
-	body, err := os.ReadFile(envFile)
-	require.NoError(t, err)
-	assert.Equal(t, fmt.Sprintf("export A=1\nexport PATH=\"%s:$PATH\"\n", repo), string(body))
-}
-
 func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
 	assert.False(t, buzzScriptStage([]string{"-C", "/x", "lsp"}), "lsp is no pipe stage")
 	assert.True(t, buzzScriptStage([]string{"-C", "/x", "hooks/main.buzz"}), "a script is")
-}
-
-// --root names the checkout a script's vcs calls read. The process cwd here is the
-// magus checkout this test runs in, a different repository on a different ref.
-func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
-	r := testkit.NewRepository(t, nil)
-	r.Git("switch", "-q", "-c", "split-target")
-	repo := r.Root()
-	script := filepath.Join(t.TempDir(), "ref.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n"), 0o644))
-
-	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), repo, []string{"-s", script}) })
-
-	require.NoError(t, runErr)
-	assert.Equal(t, "split-target\n", stdout)
-}
-
-// Strict mode refuses a raising call at the top level, and the refusal names the form
-// that runs one, which an -e snippet takes as well as a file does.
-func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
-	// -s sets the process-global silent flag, which later tests in the package read.
-	saved := global
-	t.Cleanup(func() { global = saved })
-	var runErr error
-	captureStdout(t, func() {
-		runErr = buzzCommand(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})
-	})
-	require.ErrorContains(t, runErr, string(buzz.UnhandledRaise))
-	assert.ErrorContains(t, runErr, "fun main(args: [str]) > void !> any")
-
-	stdout := captureStdout(t, func() {
-		runErr = buzzCommand(t.Context(), "", []string{"-s", "-e",
-			`import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print("root {vcs\root() != ""}"); }`})
-	})
-	require.NoError(t, runErr)
-	assert.Equal(t, "root true\n", stdout)
 }
 
 // buzzTrace runs buzzCommand under an enabled startup trace wired the way main does it,
 // with the trace's profile on ctx.
 func buzzTrace(t *testing.T, args []string) (stdout, trace string) {
 	t.Helper()
-	tr := newStartupTracer(true)
-	ctx := buzz.WithProfile(withTrace(context.Background(), tr), tr.profile)
+	tr := observability.NewStartupTracer(true)
+	ctx := buzz.WithProfile(observability.WithTrace(context.Background(), tr), tr.Profile())
 	var runErr error
 	stdout = captureStdout(t, func() {
 		runErr = buzzCommand(ctx, "", args)
 	})
 	require.NoError(t, runErr)
 	var buf bytes.Buffer
-	tr.w = &buf
-	tr.done()
+	tr.SetWriter(&buf)
+	tr.Done()
 	return stdout, buf.String()
 }
 
@@ -557,754 +361,6 @@ func TestBuzzCmd_TraceRecordsEachCompilePhaseOnce(t *testing.T) {
 	assert.NotContains(t, trace, "buzz.parse", "a second copy on the startup trace doubles every phase")
 }
 
-func TestBuzzCmd_TraceProfilesAClosedScriptWithoutTheNamespace(t *testing.T) {
-	_, trace := buzzTrace(t, []string{"-s", "-e", `import "std"; fun main() > void { std\print("ok"); }`})
-	assert.Contains(t, trace, "buzz.register_modules")
-	assert.Contains(t, trace, "buzz.register_decls")
-	assert.Contains(t, trace, "buzz.exec")
-	assert.Contains(t, trace, "buzz.main")
-	assert.NotContains(t, trace, "buzz.register_namespace")
-}
-
-func TestBuzzCmd_TraceProfilesTheNamespaceWhenTheScriptImportsMagus(t *testing.T) {
-	stdout, trace := buzzTrace(t, []string{"-s", "-e",
-		`import "std"; import "magus"; fun main() > void { std\print(magus\canonicalName("HTTPServer")); }`})
-	assert.Contains(t, trace, "buzz.register_namespace")
-	assert.Contains(t, stdout, "http-server")
-}
-
-func TestBuzzCmd_NestedMagusImportResolvesWithoutAnEntryImport(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(
-		"import \"magus\";\nexport fun name() > str { return magus\\canonicalName(\"HTTPServer\"); }\n"), 0o644))
-	script := filepath.Join(dir, "main.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(name()); }\n"), 0o644))
-
-	stdout, trace := buzzTrace(t, []string{"-s", script})
-	assert.Contains(t, stdout, "http-server")
-	assert.Contains(t, trace, "buzz.register_namespace")
-}
-
-// An aliased import checks against the types declared when it starts, so a file that
-// reaches magus only through one needs the mirrors declared up front.
-func TestBuzzCmd_AliasedImportReachingMagusSeesTheMirrors(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`import "magus";
-export fun language() > str {
-    final opts: magus\DirsOptions = magus\DirsOptions{ language = "go" };
-    return opts.language;
-}
-`), 0o644))
-	script := filepath.Join(dir, "main.buzz")
-	require.NoError(t, os.WriteFile(script, []byte(
-		"import \"std\";\nimport \"lib\" as lib;\nfun main() > void { std\\print(lib\\language()); }\n"), 0o644))
-
-	stdout, trace := buzzTrace(t, []string{"-s", script})
-	assert.Contains(t, stdout, "go")
-	assert.Contains(t, trace, "buzz.register_namespace")
-}
-
-// The entry's `import "magus"` puts the magus types in the session, and a module it
-// imports still names them only through an import of its own. A failure there is
-// reported in the module's file.
-func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
-	for _, tc := range []struct {
-		name, lib string
-		wantErr   bool
-	}{
-		{name: "lib does not import magus", lib: "export fun f(o: magus\\DirsOptions?) > void {}\n", wantErr: true},
-		{name: "lib imports magus", lib: "import \"magus\";\nexport fun f(o: magus\\DirsOptions?) > void {}\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			lib := filepath.Join(dir, "lib.buzz")
-			require.NoError(t, os.WriteFile(lib, []byte(tc.lib), 0o644))
-			script := filepath.Join(dir, "main.buzz")
-			require.NoError(t, os.WriteFile(script, []byte("import \"magus\";\nimport \"lib\";\nfun g(o: magus\\DirsOptions?) > void { f(o); }\n"), 0o644))
-
-			diags, err := buzzCheckFile(t.Context(), script, false)
-			require.NoError(t, err)
-			if !tc.wantErr {
-				assert.Empty(t, diags)
-				return
-			}
-			require.Len(t, diags, 1)
-			got := diags[0]
-			assert.Contains(t, got.Msg, "no import binds magus")
-			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
-		})
-	}
-}
-
-// A magusfile's spell import resolves under --check, which reads the file by the
-// loader's embedded rules without --embedded. A misspelled one still fails BZZ2001,
-// naming the handle so the note can list the spells that resolve.
-func TestBuzzCheckFile_SpellImports(t *testing.T) {
-	dir := t.TempDir()
-	known := filepath.Join(dir, "known.buzz")
-	require.NoError(t, os.WriteFile(known, []byte("import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n"), 0o644))
-	typo := filepath.Join(dir, "typo.buzz")
-	require.NoError(t, os.WriteFile(typo, []byte("import \"magus/spell/gooo\";\n"), 0o644))
-
-	diags, err := buzzCheckFile(t.Context(), known, false)
-	require.NoError(t, err)
-	assert.Empty(t, diags)
-
-	diags, err = buzzCheckFile(t.Context(), typo, false)
-	require.NoError(t, err)
-	require.Len(t, diags, 1)
-	assert.Contains(t, diags[0].String(), buzzUnresolvedImport)
-	handle, ok := buzzUnresolvedSpellHandle(diags[0])
-	require.True(t, ok, diags[0].String())
-	assert.Equal(t, "gooo", handle)
-
-	note := interp.CheckSpellImports([]string{handle})
-	require.Error(t, note)
-	assert.Contains(t, note.Error(), `did you mean "go"`)
-	assert.Contains(t, note.Error(), "built-in spells:")
-	require.Error(t, buzzCheck(t.Context(), []string{typo}, false))
-}
-
-func TestBuzzCheck_WarningFails(t *testing.T) {
-	dir := t.TempDir()
-	clean := filepath.Join(dir, "clean.buzz")
-	require.NoError(t, os.WriteFile(clean, []byte("fun main() > void {}\n"), 0o644))
-	warned := filepath.Join(dir, "warned.buzz")
-	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = p + s; } }\n"), 0o644))
-
-	diags, err := buzzCheckFile(t.Context(), warned, false)
-	require.NoError(t, err)
-	require.NotEmpty(t, diags)
-	for _, d := range diags {
-		require.Equal(t, buzz.SeverityWarning, d.Severity, d.String())
-	}
-
-	require.NoError(t, buzzCheck(t.Context(), []string{clean}, false))
-	require.Error(t, buzzCheck(t.Context(), []string{warned}, false))
-}
-
-func TestBuzzReachesMagus(t *testing.T) {
-	w := testkit.NewWorkspace(t)
-	dir, write := w.Root(), w.Write
-	write("plain.buzz", `import "std";`)
-	write("direct.buzz", `import "magus";`)
-	write("lib/deep.buzz", `import "magus/spell";`)
-	write("lib/mid.buzz", `import "deep" as deep;`)
-	write("cycle.buzz", `import "cycle";`)
-	write("commented.buzz", "// import \"magus\";\nimport \"std\";")
-
-	sess := buzz.NewSession(t.Context())
-	t.Cleanup(func() { _ = sess.Close() })
-	sess.SetIncludeDirs([]string{dir})
-	bindings.RegisterModules(t.Context(), sess)
-
-	for code, want := range map[string]bool{
-		`import "std"; import "fs";`:                  false,
-		`import "plain" as p;`:                        false,
-		`import "missing";`:                           false,
-		`import "cycle";`:                             false,
-		`import "magus" as m;`:                        true,
-		`import print from "buzz:magus";`:             true,
-		`import "std"; import "direct";`:              true,
-		`import "lib/mid" as mid;`:                    true,
-		`import "spells/hello";`:                      true,
-		"import \"std\";\nimport \"magus/figure\";\n": true,
-		"// import \"magus\";\nimport \"std\";":       false,
-		"import \"std\"; // import \"magus\";":        false,
-		"final s = \"import \\\"magus\\\";\";":        false,
-		`import "commented";`:                         false,
-	} {
-		assert.Equal(t, want, buzzReachesMagus(sess, code), code)
-	}
-}
-
-// TestBuzzCmd_ScriptArgvReachesMain pins the three shapes a caller has for handing a
-// script its own argv, which is what lets one file serve several callers without an
-// environment variable a shell has to set. The `--` form is the one that matters:
-// commandParse reorders flags ahead of positionals, so a bare `script.buzz --raw` is
-// magus's flag to parse and fails, and the separator is what hands it to the script.
-func TestBuzzCmd_ScriptArgvReachesMain(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "argv.buzz")
-	require.NoError(t, os.WriteFile(path, []byte(
-		"import \"std\";\nexport fun main(args: [str]) > void { std\\print(\"argv={args}\"); }\n"), 0o644))
-
-	for name, tc := range map[string]struct {
-		args []string
-		want string
-	}{
-		"after a separator":   {[]string{path, "--", "--raw", "-x"}, "argv=[--raw, -x]"},
-		"bare words":          {[]string{path, "one", "two"}, "argv=[one, two]"},
-		"none":                {[]string{path}, "argv=[]"},
-		"separator with none": {[]string{path, "--"}, "argv=[]"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			var runErr error
-			stdout := captureStdout(t, func() {
-				runErr = buzzCommand(context.Background(), "", tc.args)
-			})
-			require.NoError(t, runErr)
-			assert.Contains(t, stdout, tc.want)
-		})
-	}
-}
-
-// glueHostSchemaDir holds the host schemas the glue's replies are graded against;
-// testdata/hosts/SOURCES.md says which a host published and which magus wrote.
-// Absolute, and resolved when the package loads, because runGlue changes directory.
-var glueHostSchemaDir = glueAbs("../../testdata/hosts")
-
-// glueTemplateDir is the shipped glue, resolved the same way.
-var glueTemplateDir = glueAbs("../../docs/guides/integrations/agents")
-
-func glueAbs(rel string) string {
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		panic(err)
-	}
-	return abs
-}
-
-// glueHostOutputSchema names the schema each host's hook stdout is graded against.
-var glueHostOutputSchema = map[string]string{
-	"claude-code": "claude-code/hook-output.schema.json",
-	"codex":       "codex/pre-tool-use.command.output.schema.json",
-}
-
-// glueRawObject matches a JSON object a glue file holds as a raw string constant. Those
-// with a template action or a placeholder the glue splices a value into are not replies
-// yet; the rest are printed as they stand.
-var glueRawObject = regexp.MustCompile("= `(\\{\"[^`]*)`;")
-
-// The reply to Codex's approval request answers its own event, with its own schema.
-const (
-	gluePermissionRequestEvent  = `"hookEventName":"PermissionRequest"`
-	gluePermissionRequestSchema = "codex/permission-request.command.output.schema.json"
-)
-
-// glueCoverageHost reads the host out of a glue file's `magus-guard-coverage:` marker, so
-// a glue that learns a new host demands that host's schema on the next run.
-var glueCoverageHost = regexp.MustCompile(`magus-guard-coverage:.*\bhost=(\S+)`)
-
-// glueVerdicts are the decisions `magus shell` renders, plus one it never does. The values
-// are fixed here rather than taken from a run so the rendered bytes belong to the test, and
-// the reason carries the characters a naive template would break on. The unknown decision
-// stands in for a contract that grew after a copy was installed: it must never render as
-// an allow.
-var glueVerdicts = []map[string]any{
-	{"decision": "deny", "reason": `git stash is denied here: "quoted" & <angled>`},
-	{"decision": "advise", "context": "magus workspace: `magus refs <sym>` for code"},
-	{"decision": "pass"},
-	{"decision": "ask", "reason": `pushing abc1234, which no passing gate covers: "quoted" & <angled>`},
-	{"decision": "maybe", "reason": "a decision no template knows"},
-}
-
-// glueArrangement is one way a host reaches the shared glue: the host its wiring names,
-// the environment it sets, the event it sends, and whether a Codex prompt rule sits in
-// the project.
-type glueArrangement struct {
-	label string
-	// host is the name the wiring passes as --agent-name, the only place the glue reads
-	// one. Every arrangement names one: glue given none never assembles a reply for magus
-	// to render, because magus refuses it (MGS3024), which the transport cases pin.
-	host  string
-	env   map[string]string
-	event string
-	rules bool
-	// codex marks an arrangement whose PreToolUse reply must never carry permissionDecision
-	// "ask": Codex parses it, reports the hook failed, and runs the call anyway.
-	codex bool
-	// ownResponse is a reader-written HOST_RESPONSE, which cannot claim --renders-ask.
-	ownResponse bool
-	// wantsAsk marks an arrangement whose ask must render as the host's own prompt.
-	wantsAsk bool
-	// stub is the script standing in for magus; empty means glueTemplateEcho.
-	stub string
-}
-
-var glueArrangements = []glueArrangement{
-	{label: "claude-code", host: "claude-code", event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "claude-code without the advise arm", host: "claude-code", env: map[string]string{"__MAGUS_NO_ADVISE": "1"}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex with no prompt rule", host: "codex", codex: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex with its prompt rule", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex in a mode that never prompts", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex approval request for a push", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push origin HEAD"}}`},
-	{label: "codex approval request for anything else", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`},
-	{label: "codex with a human-only run's prompt rule", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"magus run agent-bench-run .","file_path":"README.md"}}`},
-	{label: "codex approval request for a human-only run", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"magus run agent-bench-run ."}}`},
-	// The payload never overrides the name: an event carrying Codex's turn_id, under a
-	// wiring that names claude-code, gets Claude Code's ask.
-	{label: "claude-code named, Codex-shaped event", host: "claude-code", wantsAsk: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "a reader's own HOST_RESPONSE", host: "claude-code", ownResponse: true, env: map[string]string{"HOST_RESPONSE": `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}`}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-}
-
-// glueTemplateEcho stands in for magus: it prints the template it was handed and nothing
-// else, so what the glue ASSEMBLES for a host is read from the glue running. It records
-// whether the call claimed --renders-ask in the file $RENDERS_ASK_RECORD names.
-const glueTemplateEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\n" +
-	"while [ $# -gt 0 ]; do\n  if [ \"$1\" = -o ]; then printf '%s' \"${2#template=}\"; exit 0; fi\n  shift\ndone\nexit 1\n"
-
-// glueVerdictEcho stands in for magus on a glue that asks for `-o json` and renders the
-// reply itself: it prints the verdict named by $GLUE_VERDICT and nothing else.
-const glueVerdictEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n"
-
-func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir, rel))
-	require.NoError(t, err, "read the vendored schema %s", rel)
-	var schema jsonschema.Schema
-	require.NoError(t, json.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
-	// nil loader on purpose: a schema that grew a remote $ref would fail here rather
-	// than turn every run of this test into an HTTP request.
-	resolved, err := schema.Resolve(nil)
-	require.NoError(t, err, "%s must resolve with no loader", rel)
-	return resolved
-}
-
-func glueDecode(t *testing.T, label, body string) any {
-	t.Helper()
-	var doc any
-	require.NoError(t, json.Unmarshal([]byte(body), &doc), "%s must be valid JSON: %s", label, body)
-	return doc
-}
-
-// runGlue runs one shipped glue file under `magus buzz`, as a host config wires it,
-// against event, with magus replaced by the arrangement's stub. It returns what the glue
-// printed and whether its call to magus claimed --renders-ask. Call it from a subtest:
-// it sets the environment and working directory for the rest of the test it runs in.
-func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
-	t.Helper()
-	if _, err := exec.LookPath("sh"); err != nil {
-		t.Skip("the stand-in for magus is a POSIX sh script, and sh is not installed")
-	}
-	dir := t.TempDir()
-	if a.rules {
-		rules := filepath.Join(dir, ".codex", "rules", "magus.rules")
-		require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
-		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"+
-			"prefix_rule(pattern = [\"magus\", \"run\", \"agent-bench-run\"], decision = \"prompt\")\n"), 0o644))
-	}
-	stub := a.stub
-	if stub == "" {
-		stub = glueTemplateEcho
-	}
-	bin := testkit.NewWorkspace(t).WriteExecutable("magus", stub)
-	record := filepath.Join(dir, "renders-ask")
-	t.Setenv("__MAGUS_BIN", bin)
-	t.Setenv("RENDERS_ASK_RECORD", record)
-	t.Setenv("TMPDIR", t.TempDir())
-	for k, v := range a.env {
-		t.Setenv(k, v)
-	}
-	t.Chdir(dir)
-
-	script := filepath.Join(glueTemplateDir, name)
-	var runErr error
-	var reply string
-	withStdin(t, a.event, func() {
-		reply = captureStdout(t, func() {
-			runErr = buzzCommand(t.Context(), dir, []string{"-s", script, "--", "--agent-name", a.host})
-		})
-	})
-	require.NoError(t, runErr, "%s (%s) must never fail: its host reads a non-zero exit as an error", name, a.label)
-	claim, err := os.ReadFile(record)
-	require.NoError(t, err, "%s (%s) never called magus", name, a.label)
-	return reply, string(claim) == "yes"
-}
-
-// TestGlueRepliesValidateAgainstTheirHostSchema grades the bytes a host actually receives
-// from the shared glue: the template each glue file assembles for an arrangement, rendered
-// on every verdict, validated against the schema the host's stdout answers to.
-//
-// Rendered from the glue running rather than from a copy pasted here, so an edit to a
-// glue file is graded on the next run instead of drifting away from a fixture nobody
-// updates.
-func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
-	funcs := templateFuncs()
-	for _, name := range []string{"magus-command.buzz", "magus-path.buzz"} {
-		raw, err := os.ReadFile(filepath.Join(glueTemplateDir, name))
-		require.NoError(t, err)
-		hosts := map[string]bool{}
-		for _, match := range glueCoverageHost.FindAllStringSubmatch(string(raw), -1) {
-			hosts[match[1]] = true
-		}
-		require.NotEmpty(t, hosts, "%s declares no magus-guard-coverage host, so nothing says whose schema grades it", name)
-
-		// The replies the glue prints without asking magus at all: the unreadable-event
-		// deny and the approval reply that leaves the prompt to the person.
-		for _, match := range glueRawObject.FindAllStringSubmatch(string(raw), -1) {
-			literal := match[1]
-			if strings.Contains(literal, "{{") || strings.Contains(literal, "__MAGUS_") {
-				continue
-			}
-			for host := range hosts {
-				schemaFile := glueHostOutputSchema[host]
-				if strings.Contains(literal, gluePermissionRequestEvent) {
-					if host != "codex" {
-						continue
-					}
-					schemaFile = gluePermissionRequestSchema
-				}
-				require.NoError(t, glueLoadSchema(t, schemaFile).Validate(glueDecode(t, name, literal)),
-					"%s prints %s, which %s would not accept, per %s", name, literal, host, schemaFile)
-			}
-		}
-
-		for _, a := range glueArrangements {
-			// A glue answers only the hosts it declares; which hosts wire it is the harness
-			// spells' to say, and their own tests hold it.
-			if !hosts[a.host] {
-				continue
-			}
-			t.Run(fmt.Sprintf("%s/%s", name, a.label), func(t *testing.T) {
-				body, rendersAsk := runGlue(t, name, a)
-				require.NotEmpty(t, body, "%s (%s) handed magus no template", name, a.label)
-				// The claim is what lets magus return an ask at all, so it must track exactly
-				// the replies that render one: every reply the glue assembles, and none a
-				// reader wrote.
-				assert.Equal(t, !a.ownResponse, rendersAsk,
-					"%s (%s): --renders-ask claimed=%v; the glue's own reply must claim it and a reader's must not", name, a.label, rendersAsk)
-				tmpl, err := template.New(name).Funcs(funcs).Parse(body)
-				require.NoError(t, err, "%s (%s) renders its verdict through this template, so it must parse", name, a.label)
-
-				for _, verdict := range glueVerdicts {
-					var rendered strings.Builder
-					require.NoError(t, tmpl.Execute(&rendered, verdict), "%s (%s) on a %s", name, a.label, verdict["decision"])
-					text := rendered.String()
-					// A reader's own reply is theirs to get right; magus sends it no ask.
-					decision := verdict["decision"]
-					if a.ownResponse {
-						decision = ""
-					}
-					switch decision {
-					case "maybe":
-						assert.Contains(t, text, "deny", "%s (%s) must refuse a decision it does not know, never allow it", name, a.label)
-					case "ask":
-						assert.NotEmpty(t, text, "%s (%s) renders an ask as nothing, which the host takes as allow", name, a.label)
-						if a.codex {
-							assert.NotContains(t, text, `"permissionDecision":"ask"`,
-								"%s (%s): Codex parses a hook ask, marks the hook failed, and runs the call", name, a.label)
-						}
-						if a.wantsAsk {
-							assert.Contains(t, text, `"permissionDecision":"ask"`,
-								"%s (%s): the wiring's host decides the arm, never the event's shape", name, a.label)
-						}
-					}
-					if !strings.HasPrefix(text, "{") {
-						continue
-					}
-					if strings.Contains(text, gluePermissionRequestEvent) {
-						require.True(t, hosts["codex"], "%s answers a PermissionRequest but declares no codex coverage", name)
-						require.NoError(t, glueLoadSchema(t, gluePermissionRequestSchema).Validate(glueDecode(t, name, text)),
-							"%s prints %s, which codex would not accept, per %s", name, text, gluePermissionRequestSchema)
-						continue
-					}
-					schemaFile, ok := glueHostOutputSchema[a.host]
-					require.True(t, ok, "%s answers %s and no schema grades that host's stdout", name, a.host)
-					require.True(t, hosts[a.host], "%s is wired for %s but declares no coverage for it", name, a.host)
-					require.NoError(t, glueLoadSchema(t, schemaFile).Validate(glueDecode(t, name, text)),
-						"%s prints %s, which %s would not accept, per %s", name, text, a.host, schemaFile)
-				}
-			})
-		}
-	}
-}
-
-// TestGlueLeavesAHumanOnlyRunToCodexsPrompt pins that a plain run of a target the rules file
-// prompts for reaches the person through Codex's own prompt, as a push does: PreToolUse
-// carries the ask as context rather than refusing it, and the approval request leaves the
-// prompt standing. A run no rule matches is refused, naming the person's terminal.
-func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
-	render := func(t *testing.T, command, event, decision string) string {
-		t.Helper()
-		body, _ := runGlue(t, "magus-command.buzz", glueArrangement{host: "codex", codex: true, rules: true,
-			event: fmt.Sprintf(`{"hook_event_name":"%s","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"%s"}}`, event, command)})
-		tmpl, err := template.New("glue").Funcs(templateFuncs()).Parse(body)
-		require.NoError(t, err)
-		var out strings.Builder
-		require.NoError(t, tmpl.Execute(&out, map[string]string{"decision": decision, "reason": "a person runs this"}))
-		return out.String()
-	}
-	t.Run("prompted run", func(t *testing.T) {
-		got := render(t, "magus run agent-bench-run .", "PreToolUse", "ask")
-		assert.NotContains(t, got, `"permissionDecision":"deny"`)
-		assert.Contains(t, got, "a person runs this")
-	})
-	t.Run("approval request for a prompted run", func(t *testing.T) {
-		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "ask"))
-		assert.Contains(t, render(t, "magus run agent-bench-run .", "PermissionRequest", "pass"), `"behavior":"allow"`)
-	})
-	t.Run("run no rule prompts for", func(t *testing.T) {
-		got := render(t, "magus run lint .", "PreToolUse", "ask")
-		assert.Contains(t, got, `"permissionDecision":"deny"`)
-		assert.Contains(t, got, "own terminal")
-		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "pass"), "allow",
-			"a pass is not consent to a prompt magus did not configure")
-	})
-}
-
-// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a pass renders
-// nothing and an advise renders its context alone, whatever the host or the tool. Claude
-// Code and Cursor already give a shell command a closed stdin, Codex never did, and a
-// rewrite would take a command out of reach of the person's own permission rules.
-func TestGlueNeverRewritesTheCommand(t *testing.T) {
-	funcs := templateFuncs()
-	const input = `{"command":"git push","description":"push it","timeout":60000,"run_in_background":true}`
-	for _, tc := range []struct{ label, host, event string }{
-		{"claude-code", "claude-code", fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":%s}`, input)},
-		{"codex", "codex", fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":%s}`, input)},
-		{"a restated read", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`},
-	} {
-		t.Run(tc.label, func(t *testing.T) {
-			body, _ := runGlue(t, "magus-command.buzz", glueArrangement{label: tc.label, host: tc.host, event: tc.event, codex: tc.host == "codex"})
-			tmpl, err := template.New(tc.label).Funcs(funcs).Option("missingkey=error").Parse(body)
-			require.NoError(t, err)
-
-			var pass strings.Builder
-			require.NoError(t, tmpl.Execute(&pass, map[string]any{"decision": "pass"}))
-			assert.Empty(t, pass.String(), "a pass renders nothing")
-
-			var advise strings.Builder
-			require.NoError(t, tmpl.Execute(&advise, map[string]any{"decision": "advise", "context": "said once"}))
-			assert.JSONEq(t, `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`, advise.String())
-			assert.NotContains(t, advise.String(), "updatedInput")
-			require.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, advise.String())))
-		})
-	}
-}
-
-// glueCursorEvents are the two Cursor events that read a reply the guard renders, and
-// the schema each one's stdout answers to. Cursor validates each event's stdout with a
-// different function, and its gating events carry no advisory channel, so the guard
-// answers two events with two shapes.
-var glueCursorEvents = map[string]struct {
-	event, schema string
-}{
-	"gate":   {`{"hook_event_name":"beforeShellExecution","conversation_id":"c","command":"git push","cwd":"."}`, "cursor/hook-output.schema.json"},
-	"advise": {`{"hook_event_name":"postToolUse","conversation_id":"c","tool_name":"Shell","tool_input":{"command":"git push"}}`, "cursor/post-tool-use.output.schema.json"},
-}
-
-// glueSchemaPropertyNames reads the field names a vendored schema declares, out of the
-// raw JSON: the question is what the host NAMES, and jsonschema-go validates rather than
-// introspects.
-func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir, rel))
-	require.NoError(t, err, "read the vendored schema %s", rel)
-	var schema struct {
-		Properties map[string]any `json:"properties"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &schema))
-	require.NotEmpty(t, schema.Properties, "%s must name the fields it grades", rel)
-	return schema.Properties
-}
-
-func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
-	for _, event := range []string{"preToolUse", "postToolUse"} {
-		t.Run(event, func(t *testing.T) {
-			input := map[string]any{
-				"pattern": "func HandleRequest", "path": "internal/api/handler.go",
-				"glob": "*.go", "type": "go", "output_mode": "content",
-				"-A": 20, "-B": 2, "-C": 3, "-i": true, "multiline": true,
-			}
-			raw, err := json.Marshal(map[string]any{
-				"hook_event_name": event, "conversation_id": "grep-session",
-				"tool_name": "Grep", "tool_input": input, "cwd": ".",
-			})
-			require.NoError(t, err)
-			record := filepath.Join(t.TempDir(), "guard-input")
-			out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
-				label: event, host: "cursor", event: string(raw),
-				stub: "#!/bin/sh\ncat > \"$GREP_INPUT_RECORD\"\nprintf no > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n",
-				env: map[string]string{
-					"GREP_INPUT_RECORD":     record,
-					"GLUE_VERDICT":          `{"decision":"advise","context":"use magus refs HandleRequest --source"}`,
-					"CURSOR_HOOK_STATE_DIR": t.TempDir(),
-				},
-			})
-			judged, err := os.ReadFile(record)
-			require.NoError(t, err)
-			var payload struct {
-				ToolName  string          `json:"tool_name"`
-				Input     json.RawMessage `json:"tool_input"`
-				SessionID string          `json:"session_id"`
-				Cwd       string          `json:"cwd"`
-			}
-			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
-			want, err := json.Marshal(input)
-			require.NoError(t, err)
-			gotInput := payload.Input
-			payload.Input = nil
-			assert.Equal(t, struct {
-				ToolName  string          `json:"tool_name"`
-				Input     json.RawMessage `json:"tool_input"`
-				SessionID string          `json:"session_id"`
-				Cwd       string          `json:"cwd"`
-			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
-			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
-			if event == "preToolUse" {
-				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
-			} else {
-				assert.Contains(t, out, "use magus refs HandleRequest --source")
-			}
-		})
-	}
-}
-
-// cursorReadingListSuite runs cursor-hook.buzz on a WebSearch with a stand-in
-// magus that answers config view with a reading list and the link query with
-// citations.
-type cursorReadingListSuite struct {
-	suite.Suite
-}
-
-func TestCursorReadingListSuite(t *testing.T) {
-	suite.Run(t, new(cursorReadingListSuite))
-}
-
-const cursorReadingListStub = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\n" +
-	"case \"$1\" in\n  config) [ -n \"$CONFIG_FAILS\" ] && exit 2; printf '%s' \"$SOURCES_JSON\" ;;\n" +
-	"  query) printf '%s' \"$LINKS\" ;;\nesac\n"
-
-// hint is the additional_context the hook returns for a search of terms.
-func (s *cursorReadingListSuite) hint(terms string, env map[string]string) string {
-	event, err := json.Marshal(map[string]any{
-		"hook_event_name": "postToolUse", "conversation_id": "c",
-		"tool_name": "WebSearch", "tool_input": map[string]any{"search_term": terms},
-	})
-	s.Require().NoError(err)
-	env["CURSOR_HOOK_STATE_DIR"] = s.T().TempDir()
-	out, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{
-		label: terms, host: "cursor", event: string(event), stub: cursorReadingListStub, env: env,
-	})
-	var reply struct {
-		Context string `json:"additional_context"`
-	}
-	s.Require().NoError(json.Unmarshal([]byte(out), &reply), out)
-	return reply.Context
-}
-
-const cursorReadingList = `{"sources":[
-{"url":"https://blog.example/go","topic":"go modules","verdict":"caveat","why":"predates workspaces"},
-{"url":"https://spam.example/","topic":"go modules","verdict":"skip","why":"SEO"},
-{"url":"https://go.dev/ref/mod","topic":"go modules","verdict":"follow","why":"the reference"},
-{"url":"https://react.dev/","topic":"react hooks","verdict":"follow","why":""}]}`
-
-func (s *cursorReadingListSuite) TestRanksFollowBeforeCaveatAndDropsSkip() {
-	got := s.hint("go modules vendoring", map[string]string{"SOURCES_JSON": cursorReadingList})
-	s.Equal("Your reading list (sources in the user magus.yaml) covers this search. "+
-		"Prefer follow; read a caveat with its why in mind:\n"+
-		"  - follow https://go.dev/ref/mod\n"+
-		"  - caveat https://blog.example/go: predates workspaces", got)
-}
-
-func (s *cursorReadingListSuite) TestDropsACitationUnderASkipEntry() {
-	got := s.hint("go modules", map[string]string{
-		"SOURCES_JSON": cursorReadingList,
-		"LINKS":        "link:https://spam.example/go-modules\nlink:https://pkg.go.dev/cmd/go\n",
-	})
-	s.Contains(got, "  - https://pkg.go.dev/cmd/go")
-	s.NotContains(got, "spam.example")
-}
-
-func (s *cursorReadingListSuite) TestNamesNothingForAnUnrelatedSearch() {
-	s.Empty(s.hint("rust lifetimes", map[string]string{"SOURCES_JSON": cursorReadingList}))
-}
-
-func (s *cursorReadingListSuite) TestAWordInsideALongerWordNamesNothing() {
-	s.Empty(s.hint("mongo modules", map[string]string{"SOURCES_JSON": cursorReadingList}))
-}
-
-func (s *cursorReadingListSuite) TestSaysSoWhenConfigViewFails() {
-	got := s.hint("go modules", map[string]string{"CONFIG_FAILS": "1"})
-	s.Equal("Your reading list (sources in the user magus.yaml) was not applied: magus config view exited 2.", got)
-}
-
-// TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem grades what cursor-hook.buzz
-// answers, per event.
-//
-// Both halves of the check matter and only one of them is a schema. Validating catches a
-// field whose TYPE moved. The subset assertion catches a field Cursor RENAMED, which
-// validating cannot: Cursor's stdout validators read the fields they know and ignore the
-// rest, so a reply naming additional_context_v2 is accepted, ignored, and carries no
-// advisory at all.
-func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
-	for name, ev := range glueCursorEvents {
-		schema := glueLoadSchema(t, ev.schema)
-		named := glueSchemaPropertyNames(t, ev.schema)
-		for i, verdict := range glueVerdicts {
-			t.Run(fmt.Sprintf("%s/%d-%s", name, i, verdict["decision"]), func(t *testing.T) {
-				verdictJSON, err := json.Marshal(verdict)
-				require.NoError(t, err)
-				out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
-					label: name, host: "cursor", event: ev.event, stub: glueVerdictEcho,
-					env: map[string]string{
-						"GLUE_VERDICT":          string(verdictJSON),
-						"CURSOR_HOOK_STATE_DIR": t.TempDir(),
-					},
-				})
-				reply, isObject := glueDecode(t, name, out).(map[string]any)
-				require.True(t, isObject, "the %s reply must be a JSON object: %s", name, out)
-				switch name {
-				case "gate":
-					switch verdict["decision"] {
-					case "ask":
-						assert.Equal(t, "ask", reply["permission"], "an ask is Cursor's own approval prompt")
-					case "pass", "advise":
-						assert.Equal(t, "allow", reply["permission"])
-					default:
-						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
-					}
-				case "advise":
-					if verdict["decision"] == "advise" {
-						assert.Equal(t, verdict["context"], reply["additional_context"], "the advice must reach the model")
-					} else {
-						assert.NotContains(t, reply, "additional_context", "only an advise carries context")
-					}
-				}
-				require.NoError(t, schema.Validate(reply),
-					"the %s reply is %s, which Cursor would not accept, per %s", name, out, ev.schema)
-				for field := range reply {
-					assert.Contains(t, named, field,
-						"the %s reply names %q, which %s does not. Cursor ignores a field it has never\n"+
-							"heard of rather than rejecting it, so a rename costs the verdict in silence.",
-						name, field, ev.schema)
-				}
-			})
-		}
-	}
-}
-
-// The guard hook's `magus buzz` forks `magus shell`, which inherits MAGUS_PPROF. Each
-// process profiles to its own file, so neither overwrites the profile the other is
-// still writing.
-func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
-	for spec, want := range map[string]string{
-		"cpu:/tmp/c":               "cpu:/tmp/c.%p",
-		"cpu:/tmp/c,mem:/tmp/m":    "cpu:/tmp/c.%p,mem:/tmp/m.%p",
-		"cpu: /tmp/c ":             "cpu:/tmp/c.%p",
-		"trace:/tmp/t.%p":          "trace:/tmp/t.%p",
-		"cpu:/tmp/c.%p,mem:/tmp/m": "cpu:/tmp/c.%p,mem:/tmp/m.%p",
-		"cpu":                      "cpu",
-		"cpu:":                     "cpu:",
-	} {
-		assert.Equal(t, want, pprofDescendantSpec(spec), spec)
-	}
-
-	dir := t.TempDir()
-	t.Setenv(pprofEnv, fmt.Sprintf("cpu:%s,mem:%s", filepath.Join(dir, "top.pprof"), filepath.Join(dir, "own.%p")))
-	stop := startProfiling()
-	inherited := os.Getenv(pprofEnv)
-	stop()
-	assert.Equal(t, fmt.Sprintf("cpu:%s,mem:%s", filepath.Join(dir, "top.pprof.%p"), filepath.Join(dir, "own.%p")), inherited)
-	for _, name := range []string{"top.pprof", fmt.Sprintf("own.%d", os.Getpid())} {
-		data, err := os.ReadFile(filepath.Join(dir, name))
-		require.NoError(t, err)
-		assert.True(t, bytes.HasPrefix(data, []byte{0x1f, 0x8b}), "%s is a gzipped profile", name)
-	}
-}
-
 func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil))
@@ -1312,18 +368,18 @@ func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
 	store := cache.NewOutputStore(dir)
-	lease, _, err := checkoutLease(t.Context(), root)
+	lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
 	require.NoError(t, err)
-	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", lease, []string{"--x"}))
+	ref := cache.PortableRef(interp.ScriptRunKey("probe.buzz", "code", lease, []string{"--x"}))
 	out, d, err := store.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", string(out))
 	assert.Equal(t, "buzz probe.buzz", d.Target)
 	assert.False(t, d.Failed)
 
-	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", lease, nil), buzzRunKey("probe.buzz", "code", lease, []string{"--x"}),
+	assert.NotEqual(t, interp.ScriptRunKey("probe.buzz", "code", lease, nil), interp.ScriptRunKey("probe.buzz", "code", lease, []string{"--x"}),
 		"different arguments are a different probe")
-	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", "job-a", nil), buzzRunKey("probe.buzz", "code", "job-b", nil),
+	assert.NotEqual(t, interp.ScriptRunKey("probe.buzz", "code", "job-a", nil), interp.ScriptRunKey("probe.buzz", "code", "job-b", nil),
 		"another job's run is another ref")
 }
 
@@ -1342,9 +398,9 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 
 	dir, err := magus.ResolveCacheDir(s.root)
 	s.Require().NoError(err)
-	lease, _, err := checkoutLease(s.T().Context(), s.root)
+	lease, _, err := guard.CheckoutLease(s.T().Context(), s.root, jobPlace)
 	s.Require().NoError(err)
-	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(buzzRunKey("p.buzz", "code", lease, args)))
+	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(interp.ScriptRunKey("p.buzz", "code", lease, args)))
 	s.Require().NoError(err)
 	d.Ref, d.TimestampMs, d.DurationMs, d.PersistedNs, d.Attempt, d.Key, d.KeyVersion, d.Inv = "", 0, 0, 0, "", "", 0, ""
 	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
@@ -1452,9 +508,9 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-t", script}) })
 			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
 
-			lease, _, err := checkoutLease(t.Context(), root)
+			lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
 			require.NoError(t, err)
-			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, lease, []string{"-t"})))
+			out, d, err := store.ByRef(cache.PortableRef(interp.ScriptRunKey(script, code, lease, []string{"-t"})))
 			require.NoError(t, err)
 			assert.Equal(t, cache.OutputDescriptor{Target: "buzz -t " + script, Failed: tc.failed}, cache.OutputDescriptor{Target: d.Target, Failed: d.Failed})
 			for _, line := range tc.lines {
@@ -1493,35 +549,6 @@ func (s *BuzzTestManyScriptsSuite) run(args ...string) (string, error) {
 	return out, err
 }
 
-func (s *BuzzTestManyScriptsSuite) TestEveryScriptRunsItsTests() {
-	out, err := s.run("-t", s.script("a.buzz", "true"), s.script("a_test.buzz", "true"))
-	s.Require().NoError(err)
-	s.Contains(out, `ok    test "a.buzz"`)
-	s.Contains(out, `ok    test "a_test.buzz"`)
-}
-
-func (s *BuzzTestManyScriptsSuite) TestAFailingSecondScriptFailsTheRun() {
-	out, err := s.run("-t", s.script("a.buzz", "true"), s.script("a_test.buzz", "false"))
-	s.Require().Error(err)
-	s.Contains(out, `FAIL  test "a_test.buzz"`)
-}
-
-func (s *BuzzTestManyScriptsSuite) TestAFailingFirstScriptStillRunsTheNext() {
-	out, err := s.run("-t", s.script("a.buzz", "false"), s.script("a_test.buzz", "true"))
-	s.Require().Error(err)
-	s.Contains(out, `ok    test "a_test.buzz"`)
-}
-
-func (s *BuzzTestManyScriptsSuite) TestOneCoverprofileCoversEveryScript() {
-	profile := filepath.Join(s.dir, "lcov.info")
-	_, err := s.run("-t", "--coverprofile", profile, s.script("a.buzz", "true"), s.script("b.buzz", "true"))
-	s.Require().NoError(err)
-	data, err := os.ReadFile(profile)
-	s.Require().NoError(err)
-	s.Contains(string(data), "a.buzz")
-	s.Contains(string(data), "b.buzz")
-}
-
 func (s *BuzzTestManyScriptsSuite) TestForwardedArgsNeedASingleScript() {
 	_, err := s.run("-t", s.script("a.buzz", "true"), s.script("b.buzz", "true"), "--", "x")
 	s.Require().Error(err)
@@ -1555,4 +582,473 @@ func (s *BuzzTestManyScriptsSuite) TestPipedStdinStillRunsAsTheScript() {
 	})
 	s.Require().NoError(err)
 	s.Contains(out, `ok    test "piped"`)
+}
+
+// scriptRunnerOver is the CLI's own runner, wired as buzzCommand wires it, over an opener
+// that finds no workspace.
+func scriptRunnerOver(o *scriptOpens) *interp.ScriptRunner {
+	r := newBuzzRunner(context.Background())
+	r.Open = o.open
+	r.Adopted = func(context.Context) bool { return false }
+	r.Sandbox, r.Quiet = false, false
+	return r
+}
+
+// scriptOpens is an opener that finds no workspace and counts how often it was asked.
+type scriptOpens struct {
+	mu  sync.Mutex
+	n   int
+	err error
+}
+
+func (o *scriptOpens) open(context.Context, string) (*interp.ScriptWorkspace, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.n++
+	return nil, o.err
+}
+
+func (o *scriptOpens) count() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.n
+}
+
+// scriptPhases records the startup phases a runner times.
+type scriptPhases struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (p *scriptPhases) time(name string) func() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.seen = append(p.seen, name)
+	return func() {}
+}
+
+func (p *scriptPhases) names() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.seen...)
+}
+
+func writeBuzz(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+	return path
+}
+
+func runBuzzFile(t *testing.T, r *interp.ScriptRunner, root string, o interp.ScriptOptions, rest ...string) (string, error) {
+	t.Helper()
+	var err error
+	out := testkit.CaptureStdout(t, func() { err = r.Run(t.Context(), root, o, "", rest, nil, false) })
+	return out, err
+}
+
+func runBuzzInline(t *testing.T, code string) (string, error) {
+	t.Helper()
+	var err error
+	out := testkit.CaptureStdout(t, func() {
+		err = scriptRunnerOver(&scriptOpens{}).Run(t.Context(), "", interp.ScriptOptions{Inline: true}, code, nil, nil, false)
+	})
+	return out, err
+}
+
+func TestBuzzRunner_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
+	path := writeBuzz(t, t.TempDir(), "unused.buzz", "import \"fs\";\nvar x = 1;\n")
+
+	var stdout string
+	var runErr error
+	stderr := captureStderr(t, func() {
+		stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path)
+	})
+
+	require.NoError(t, runErr, "a warning must never fail the run")
+	assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
+	assert.Contains(t, stderr, "BZZ3001")
+	assert.Contains(t, stderr, "warning:")
+
+	quiet := scriptRunnerOver(&scriptOpens{})
+	quiet.Quiet = true
+	stderr = captureStderr(t, func() { _, runErr = runBuzzFile(t, quiet, "", interp.ScriptOptions{}, path) })
+	require.NoError(t, runErr)
+	assert.NotContains(t, stderr, "BZZ3001", "a quiet run stays quiet")
+}
+
+// A script's child sees the script's own process in MAGUS_INVOCATION_ANCESTORS, so a
+// magus it spawns can tell its parent's claim from a stranger's instead of refusing
+// MGS3009 as blind to its ancestry.
+func TestBuzzRunner_ChildSeesTheScriptProcessAsAnAncestor(t *testing.T) {
+	path := writeBuzz(t, t.TempDir(), "ancestry.buzz", `import "std";
+import "proc";
+
+fun main(args: [str]) > void !> any {
+    final ancestors = proc\exec("sh", args: ["-c", "echo $MAGUS_INVOCATION_ANCESTORS"], opts: proc\ExecOptions{ quiet = true }).stdout.trim();
+    final parent = proc\exec("sh", args: ["-c", "echo $PPID"], opts: proc\ExecOptions{ quiet = true }).stdout.trim();
+    std\print("ancestors={ancestors} parent={parent}");
+    std\assert(ancestors != "", message: "no MAGUS_INVOCATION_ANCESTORS in the child");
+    std\assert(ancestors.indexOf("{parent}:") != null, message: "ancestry {ancestors} lacks the script process {parent}");
+}
+`)
+	_, err := runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path)
+	require.NoError(t, err)
+}
+
+func TestBuzzRunner_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
+	o := &scriptOpens{}
+	path := writeBuzz(t, t.TempDir(), "vanilla.buzz", buzzVanillaScript)
+
+	stdout, err := runBuzzFile(t, scriptRunnerOver(o), t.TempDir(), interp.ScriptOptions{}, path)
+
+	require.NoError(t, err)
+	assert.Equal(t, "hi\n", stdout)
+	assert.Equal(t, 0, o.count(), "a script that reads no workspace member must not pay for opening one")
+}
+
+// Outside any workspace a script that never reads one is not warned about it, and a
+// workspace member still raises MGS1022 with the reason it could not attach.
+func TestBuzzRunner_OutsideAWorkspace(t *testing.T) {
+	noWorkspace := errors.New("no magus workspace found")
+	o := &scriptOpens{err: noWorkspace}
+	dir := t.TempDir()
+	vanilla := writeBuzz(t, dir, "vanilla.buzz", buzzVanillaScript)
+	member := writeBuzz(t, dir, "member.buzz", buzzMemberScript)
+
+	var runErr error
+	stderr := captureStderr(t, func() { _, runErr = runBuzzFile(t, scriptRunnerOver(o), dir, interp.ScriptOptions{}, vanilla) })
+	require.NoError(t, runErr)
+	assert.Equal(t, 0, o.count())
+	assert.NotContains(t, stderr, "workspace not attached", "a script that never asked for a workspace is not warned about one")
+
+	stderr = captureStderr(t, func() { _, runErr = runBuzzFile(t, scriptRunnerOver(o), dir, interp.ScriptOptions{}, member) })
+	require.Error(t, runErr)
+	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
+	assert.Contains(t, stderr, "workspace not attached")
+	assert.Contains(t, stderr, noWorkspace.Error())
+	assert.Equal(t, 1, o.count())
+}
+
+func TestBuzzRunner_ImportsResolveBesideTheFile(t *testing.T) {
+	dir := t.TempDir()
+	writeBuzz(t, dir, "lib.buzz", "export fun answer() > str { return \"ok\"; }\n")
+	script := writeBuzz(t, dir, "main.buzz", "import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(answer()); }\n")
+
+	stdout, err := runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, script)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "ok")
+}
+
+// --root names the checkout a script's vcs calls read. The process cwd here is the
+// magus checkout this test runs in, a different repository on a different ref.
+func TestBuzzRunner_RootSelectsTheVCS(t *testing.T) {
+	r := testkit.NewRepository(t, nil)
+	r.Git("switch", "-q", "-c", "split-target")
+	script := writeBuzz(t, t.TempDir(), "ref.buzz",
+		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n")
+
+	stdout, err := runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), r.Root(), interp.ScriptOptions{}, script)
+
+	require.NoError(t, err)
+	assert.Equal(t, "split-target\n", stdout)
+}
+
+// Strict mode refuses a raising call at the top level, and the refusal names the form
+// that runs one, which an -e snippet takes as well as a file does.
+func TestBuzzRunner_TopLevelRaiseNamesTheMainForm(t *testing.T) {
+	_, err := runBuzzInline(t, `import "vcs"; final r = vcs\root();`)
+	require.ErrorContains(t, err, string(buzz.UnhandledRaise))
+	assert.ErrorContains(t, err, "fun main(args: [str]) > void !> any")
+
+	stdout, err := runBuzzInline(t,
+		`import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print("root {vcs\root() != ""}"); }`)
+	require.NoError(t, err)
+	assert.Equal(t, "root true\n", stdout)
+}
+
+// -e is the one-off exception: statements and imports run with no `fun main`,
+// while files and stdin stay strict.
+func TestBuzzRunner_InlineTakesTheEmbeddedRulesAndFilesStayStrict(t *testing.T) {
+	stdout, err := runBuzzInline(t, `import "std"; std\print("hi");`)
+	require.NoError(t, err)
+	assert.Equal(t, "hi\n", stdout)
+
+	stdout, err = runBuzzInline(t, `import "std"; import "fs"; std\print(fs\basename("a/b.txt"));`)
+	require.NoError(t, err)
+	assert.Equal(t, "b.txt\n", stdout, "imports run beside the statements")
+
+	stdout, err = runBuzzInline(t, `import "std"; fun main(args: [str]) > void { std\print("from main"); }`)
+	require.NoError(t, err)
+	assert.Equal(t, "from main\n", stdout, "a body that declares main still has it called")
+
+	_, err = runBuzzInline(t, `import "std"; std\print(nope);`)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "line 1:25: undefined: nope", "an error position points at the user's own line")
+
+	bare := writeBuzz(t, t.TempDir(), "bare.buzz", "import \"std\";\nif (true) { std\\print(\"bare\"); }\n")
+	_, err = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, bare)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not allowed at the top level")
+}
+
+func scriptRunnerTraced(p *scriptPhases) *interp.ScriptRunner {
+	r := scriptRunnerOver(&scriptOpens{})
+	r.Phase = p.time
+	return r
+}
+
+func scriptTracedRun(t *testing.T, r *interp.ScriptRunner, rest ...string) (stdout, profile string) {
+	t.Helper()
+	p := buzz.NewProfile()
+	ctx := buzz.WithProfile(t.Context(), p)
+	var err error
+	stdout = testkit.CaptureStdout(t, func() { err = r.Run(ctx, "", interp.ScriptOptions{}, "", rest, nil, false) })
+	require.NoError(t, err)
+	return stdout, p.Report()
+}
+
+func TestBuzzRunner_TraceProfilesAClosedScriptWithoutTheNamespace(t *testing.T) {
+	ph := &scriptPhases{}
+	script := writeBuzz(t, t.TempDir(), "closed.buzz", "import \"std\"; fun main() > void { std\\print(\"ok\"); }\n")
+
+	_, profile := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Equal(t, []string{"buzz.register_modules", "buzz.register_decls", "buzz.exec", "buzz.main"}, ph.names())
+	assert.Regexp(t, `(?m)^ +\S+ +parse$`, profile, "the profile carries the compile phases")
+}
+
+func TestBuzzRunner_TraceProfilesTheNamespaceWhenTheScriptImportsMagus(t *testing.T) {
+	ph := &scriptPhases{}
+	script := writeBuzz(t, t.TempDir(), "magus.buzz",
+		"import \"std\"; import \"magus\"; fun main() > void { std\\print(magus\\canonicalName(\"HTTPServer\")); }\n")
+
+	stdout, _ := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Contains(t, ph.names(), "buzz.register_namespace")
+	assert.Contains(t, stdout, "http-server")
+}
+
+func TestBuzzRunner_NestedMagusImportResolvesWithoutAnEntryImport(t *testing.T) {
+	ph := &scriptPhases{}
+	dir := t.TempDir()
+	writeBuzz(t, dir, "lib.buzz", "import \"magus\";\nexport fun name() > str { return magus\\canonicalName(\"HTTPServer\"); }\n")
+	script := writeBuzz(t, dir, "main.buzz", "import \"std\";\nimport \"lib\";\nfun main() > void { std\\print(name()); }\n")
+
+	stdout, _ := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Contains(t, stdout, "http-server")
+	assert.Contains(t, ph.names(), "buzz.register_namespace")
+}
+
+// An aliased import checks against the types declared when it starts, so a file that
+// reaches magus only through one needs the mirrors declared up front.
+func TestBuzzRunner_AliasedImportReachingMagusSeesTheMirrors(t *testing.T) {
+	ph := &scriptPhases{}
+	dir := t.TempDir()
+	writeBuzz(t, dir, "lib.buzz", `import "magus";
+export fun language() > str {
+    final opts: magus\DirsOptions = magus\DirsOptions{ language = "go" };
+    return opts.language;
+}
+`)
+	script := writeBuzz(t, dir, "main.buzz", "import \"std\";\nimport \"lib\" as lib;\nfun main() > void { std\\print(lib\\language()); }\n")
+
+	stdout, _ := scriptTracedRun(t, scriptRunnerTraced(ph), script)
+
+	assert.Contains(t, stdout, "go")
+	assert.Contains(t, ph.names(), "buzz.register_namespace")
+}
+
+// The entry's `import "magus"` puts the magus types in the session, and a module it
+// imports still names them only through an import of its own. A failure there is
+// reported in the module's file.
+func TestBuzzRunner_CheckFileMagusTypesNeedTheModulesOwnImport(t *testing.T) {
+	for _, tc := range []struct {
+		name, lib string
+		wantErr   bool
+	}{
+		{name: "lib does not import magus", lib: "export fun f(o: magus\\DirsOptions?) > void {}\n", wantErr: true},
+		{name: "lib imports magus", lib: "import \"magus\";\nexport fun f(o: magus\\DirsOptions?) > void {}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			lib := writeBuzz(t, dir, "lib.buzz", tc.lib)
+			script := writeBuzz(t, dir, "main.buzz", "import \"magus\";\nimport \"lib\";\nfun g(o: magus\\DirsOptions?) > void { f(o); }\n")
+
+			diags, err := scriptRunnerOver(&scriptOpens{}).CheckFile(t.Context(), script, false)
+			require.NoError(t, err)
+			if !tc.wantErr {
+				assert.Empty(t, diags)
+				return
+			}
+			require.Len(t, diags, 1)
+			got := diags[0]
+			assert.Contains(t, got.Msg, "no import binds magus")
+			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
+		})
+	}
+}
+
+// A magusfile's spell import resolves under --check, which reads the file by the
+// loader's embedded rules without --embedded. A misspelled one still fails BZZ2001.
+func TestBuzzRunner_CheckFileResolvesSpellImports(t *testing.T) {
+	dir := t.TempDir()
+	known := writeBuzz(t, dir, "known.buzz", "import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n")
+	typo := writeBuzz(t, dir, "typo.buzz", "import \"magus/spell/gooo\";\n")
+	r := scriptRunnerOver(&scriptOpens{})
+
+	diags, err := r.CheckFile(t.Context(), known, false)
+	require.NoError(t, err)
+	assert.Empty(t, diags)
+
+	diags, err = r.CheckFile(t.Context(), typo, false)
+	require.NoError(t, err)
+	require.Len(t, diags, 1)
+	assert.Contains(t, diags[0].String(), "BZZ2001")
+	assert.Contains(t, diags[0].String(), "magus/spell/gooo")
+	require.Error(t, r.Check(t.Context(), []string{typo}, false))
+}
+
+func TestBuzzRunner_CheckFailsOnAWarning(t *testing.T) {
+	dir := t.TempDir()
+	clean := writeBuzz(t, dir, "clean.buzz", "fun main() > void {}\n")
+	warned := writeBuzz(t, dir, "warned.buzz", "fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = p + s; } }\n")
+	r := scriptRunnerOver(&scriptOpens{})
+
+	diags, err := r.CheckFile(t.Context(), warned, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, diags)
+	for _, d := range diags {
+		require.Equal(t, buzz.SeverityWarning, d.Severity, d.String())
+	}
+
+	require.NoError(t, r.Check(t.Context(), []string{clean}, false))
+	require.Error(t, r.Check(t.Context(), []string{warned}, false))
+}
+
+// The three shapes a caller has for handing a script its own argv, which is what lets
+// one file serve several callers without an environment variable a shell has to set.
+func TestBuzzRunner_ArgvReachesMain(t *testing.T) {
+	path := writeBuzz(t, t.TempDir(), "argv.buzz",
+		"import \"std\";\nexport fun main(args: [str]) > void { std\\print(\"argv={args}\"); }\n")
+
+	for name, tc := range map[string]struct {
+		rest, forwarded []string
+		sep             bool
+		want            string
+	}{
+		"after a separator":   {[]string{path}, []string{"--raw", "-x"}, true, "argv=[--raw, -x]"},
+		"bare words":          {[]string{path, "one", "two"}, nil, false, "argv=[one, two]"},
+		"none":                {[]string{path}, nil, false, "argv=[]"},
+		"separator with none": {[]string{path}, nil, true, "argv=[]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var err error
+			stdout := testkit.CaptureStdout(t, func() {
+				err = scriptRunnerOver(&scriptOpens{}).Run(t.Context(), "", interp.ScriptOptions{}, "", tc.rest, tc.forwarded, tc.sep)
+			})
+			require.NoError(t, err)
+			assert.Contains(t, stdout, tc.want)
+		})
+	}
+}
+
+// BuzzRunnerTestSuite pins that every path after -t is a script to test, so a spell's test
+// scope runs a file and its _test.buzz sibling, and that a test run is always recorded.
+type BuzzRunnerTestSuite struct {
+	suite.Suite
+	dir     string
+	records []interp.ScriptRecord
+}
+
+func TestBuzzRunnerTestSuite(t *testing.T) { suite.Run(t, new(BuzzRunnerTestSuite)) }
+
+func (s *BuzzRunnerTestSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+	s.records = nil
+}
+
+func (s *BuzzRunnerTestSuite) script(name, assertion string) string {
+	return writeBuzz(s.T(), s.dir, name, fmt.Sprintf(`import "std";
+
+test "%[1]s" {
+    std\assert(%[2]s, message: "%[1]s");
+}
+`, name, assertion))
+}
+
+func (s *BuzzRunnerTestSuite) test(profile string, paths ...string) (string, error) {
+	r := scriptRunnerOver(&scriptOpens{})
+	r.Record = func(_ context.Context, _ string, rec interp.ScriptRecord) error {
+		s.records = append(s.records, rec)
+		return nil
+	}
+	var err error
+	out := testkit.CaptureStdout(s.T(), func() { err = r.Test(s.T().Context(), s.dir, interp.ScriptOptions{}, profile, "", paths, nil) })
+	return out, err
+}
+
+func (s *BuzzRunnerTestSuite) TestEveryScriptRunsItsTests() {
+	out, err := s.test("", s.script("a.buzz", "true"), s.script("a_test.buzz", "true"))
+	s.Require().NoError(err)
+	s.Contains(out, `ok    test "a.buzz"`)
+	s.Contains(out, `ok    test "a_test.buzz"`)
+}
+
+func (s *BuzzRunnerTestSuite) TestAFailingSecondScriptFailsTheRun() {
+	out, err := s.test("", s.script("a.buzz", "true"), s.script("a_test.buzz", "false"))
+	s.Require().Error(err)
+	s.Contains(out, `FAIL  test "a_test.buzz"`)
+}
+
+func (s *BuzzRunnerTestSuite) TestAFailingFirstScriptStillRunsTheNext() {
+	out, err := s.test("", s.script("a.buzz", "false"), s.script("a_test.buzz", "true"))
+	s.Require().Error(err)
+	s.Contains(out, `ok    test "a_test.buzz"`)
+}
+
+func (s *BuzzRunnerTestSuite) TestOneCoverprofileCoversEveryScript() {
+	profile := filepath.Join(s.dir, "lcov.info")
+	_, err := s.test(profile, s.script("a.buzz", "true"), s.script("b.buzz", "true"))
+	s.Require().NoError(err)
+	data, err := os.ReadFile(profile)
+	s.Require().NoError(err)
+	s.Contains(string(data), "a.buzz")
+	s.Contains(string(data), "b.buzz")
+}
+
+func (s *BuzzRunnerTestSuite) TestForwardedArgsNeedASingleScript() {
+	r := scriptRunnerOver(&scriptOpens{})
+	err := r.Test(s.T().Context(), s.dir, interp.ScriptOptions{}, "", "", []string{s.script("a.buzz", "true"), s.script("b.buzz", "true")}, []string{"x"})
+	s.Require().Error(err)
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *BuzzRunnerTestSuite) TestATestRunIsRecordedWithItsTestLines() {
+	a := s.script("a.buzz", "true")
+	b := s.script("b.buzz", "false")
+	_, err := s.test("", a, b)
+	s.Require().Error(err)
+
+	s.Require().Len(s.records, 2)
+	s.True(s.records[0].Test)
+	s.Require().NoError(s.records[0].Err)
+	s.Contains(string(s.records[0].Out), `ok    test "a.buzz"`)
+	s.Contains(string(s.records[0].Out), "1 passed, 0 failed, 0 skipped")
+	s.Require().Error(s.records[1].Err)
+	s.Contains(string(s.records[1].Out), `FAIL  test "b.buzz"`)
+	s.Contains(string(s.records[1].Out), "0 passed, 1 failed, 0 skipped")
+}
+
+func (s *BuzzRunnerTestSuite) TestARecordedRunWithNoRecorderFails() {
+	path := writeBuzz(s.T(), s.dir, "p.buzz", buzzVanillaScript)
+	r := scriptRunnerOver(&scriptOpens{})
+	r.Record = nil
+	var err error
+	testkit.CaptureStdout(s.T(), func() {
+		err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false)
+	})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "--record")
 }

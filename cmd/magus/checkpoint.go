@@ -8,14 +8,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -37,7 +38,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 	bindDisplayFlags(fset)
 	cf := flaggen.BindSessionCheckpoint(fset)
 	fset.Usage = func() { checkpointUsage(os.Stderr) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -65,7 +66,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		return errors.New("magus session checkpoint: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 
-	hostSession, transcript := readCheckpointEnvelope(in)
+	hostSession, transcript := guard.ReadCheckpointEnvelope(in, termkit.StdinIsTerminal())
 	c := sessions.Checkpoint{
 		Workspace:   wsRoot,
 		Note:        cf.Note,
@@ -90,7 +91,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	lease, leaseFrom, err := checkoutLease(ctx, wsRoot)
+	lease, leaseFrom, err := guard.CheckoutLease(ctx, wsRoot, jobPlace)
 	if err != nil {
 		return fmt.Errorf("magus session checkpoint: %w", err)
 	}
@@ -112,7 +113,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 
 	switch opts.Format {
 	case outputText:
-		fmt.Fprintln(out, checkpointRecordedLine(stored, recorded))
+		fmt.Fprintln(out, sessions.CheckpointRecordedLine(stored, recorded))
 		return nil
 	case outputName:
 		return emitNames(os.Stdout, []string{stored.Tree.Revision})
@@ -123,74 +124,6 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		sessions.Checkpoint
 		Recorded bool `json:"recorded"`
 	}{Checkpoint: stored, Recorded: recorded})
-}
-
-// checkpointEnvelopeWait bounds how long a host's payload may take to arrive.
-//
-// stdin is this command's optional enrichment, not its input, so waiting on it forever
-// trades two pointers for the record it was meant to write. A hook writes its event and
-// closes; anything that has sent nothing by now is a shell that inherited an idle pipe,
-// which no amount of further waiting improves.
-const checkpointEnvelopeWait = 2 * time.Second
-
-// checkpointEnvelopeMax bounds how much of it is read, matching the cap the adoption
-// command puts on the same class of input.
-const checkpointEnvelopeMax = 4 << 20
-
-// readCheckpointEnvelope decodes a host's hook payload from in for the two pointers only
-// a host knows: its session id and its transcript path. A payload that is absent,
-// unparsable, or slow to arrive yields the zero envelope, which contributes nothing.
-//
-// Nothing in the payload becomes the note. A host's closing message is the model's
-// prose, and copying it in would make the record indistinguishable from a sentence a
-// person wrote, in a store a person reads. A wrapper that wants the model's words passes
-// --note and owns that decision.
-//
-// The read is bounded rather than skipped when --note is set. Gating it on the flag also
-// kept the pointers out of the record for any wrapper that passed a note, which is the
-// shape the docs invite, and it left the actual hazard open: a caller with no --note and
-// an idle inherited pipe still waited forever.
-func readCheckpointEnvelope(in io.Reader) (session, transcript string) {
-	if stdinIsTerminal() {
-		return "", ""
-	}
-	type read struct {
-		body []byte
-		err  error
-	}
-	done := make(chan read, 1)
-	go func() {
-		body, err := io.ReadAll(io.LimitReader(in, checkpointEnvelopeMax))
-		done <- read{body: body, err: err}
-	}()
-
-	select {
-	case r := <-done:
-		if r.err != nil {
-			return "", ""
-		}
-		return guard.HostAttribution(string(r.body))
-	case <-time.After(checkpointEnvelopeWait):
-		return "", ""
-	}
-}
-
-// checkpointRecordedLine is the terminal reading of one write: where the work sits, and
-// whether this call changed anything. The location is rendered by the same function the
-// listing uses, so recording a checkpoint and reading one back describe it identically.
-//
-// Distinct from vcs.go's checkpointLine, which renders the VCS triple alone in fixed
-// columns for `magus vcs checkpoint`. Same noun, two audiences.
-func checkpointRecordedLine(c sessions.Checkpoint, recorded bool) string {
-	verb := "checkpoint at"
-	if !recorded {
-		verb = "unchanged since the last checkpoint at"
-	}
-	line := fmt.Sprintf("%s %s", verb, checkpointWhere(c))
-	if c.Note != "" {
-		line += ": " + c.Note
-	}
-	return line
 }
 
 func checkpointUsage(w io.Writer) {

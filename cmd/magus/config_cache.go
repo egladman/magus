@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -136,9 +137,9 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		return emitRecord(opts, configCachePruneOutput{DryRun: pf.DryRun, Entries: n, FreedBytes: freed}, []string{"local"})
 	}
 	if pf.DryRun {
-		cacheNotice(ctx, "prune", fmt.Sprintf("would remove %d entries (%s)", n, fmtBytes(freed)))
+		cacheNotice(ctx, "prune", fmt.Sprintf("would remove %d entries (%s)", n, cache.FormatBytes(int(freed))))
 	} else {
-		cacheNotice(ctx, "prune", fmt.Sprintf("removed %d entries (%s freed)", n, fmtBytes(freed)))
+		cacheNotice(ctx, "prune", fmt.Sprintf("removed %d entries (%s freed)", n, cache.FormatBytes(int(freed))))
 	}
 	return nil
 }
@@ -150,44 +151,9 @@ type configCachePruneOutput struct {
 	FreedBytes int64 `json:"freed_bytes"`
 }
 
-type configCacheImportOutput struct {
-	Remote   bool                  `json:"remote"`
-	Restored bool                  `json:"restored"`
-	Spells   []configCacheSpellRow `json:"spells"`
-}
-
-type configCacheSpellRow struct {
-	Spell       string            `json:"spell,omitempty"`
-	Outcome     spellCacheOutcome `json:"outcome"`
-	Key         string            `json:"key"`
-	Exact       bool              `json:"exact"`
-	Files       int               `json:"files"`
-	Bytes       int64             `json:"bytes"`
-	Transferred int64             `json:"transferred"`
-	Skipped     int               `json:"skipped"`
-	Refused     []string          `json:"refused,omitempty"`
-	Dirs        []string          `json:"dirs,omitempty"`
-}
-
-// spellCacheOutcome is what a remote import did for one spell.
-type spellCacheOutcome string
-
-const (
-	spellCacheRestored spellCacheOutcome = "restored"
-	spellCacheCold     spellCacheOutcome = "cold"
-	spellCacheInactive spellCacheOutcome = "inactive"
-)
-
-func newSpellCacheRow(s magus.SpellCache) configCacheSpellRow {
-	outcome := spellCacheRestored
-	switch {
-	case s.Inactive:
-		outcome = spellCacheInactive
-	case s.Key == "":
-		outcome = spellCacheCold
-	}
-	return configCacheSpellRow{
-		Spell: s.Spell, Outcome: outcome, Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
+func newSpellCacheRow(s magus.SpellCache) cache.SpellRow {
+	return cache.SpellRow{
+		Spell: s.Spell, Outcome: cache.RestoreOutcome(s.Inactive, s.Key), Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
 		Transferred: s.Transferred, Skipped: s.Skipped, Refused: s.Refused, Dirs: s.Dirs,
 	}
 }
@@ -307,7 +273,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("config cache import: %w", err)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, configCacheImportOutput{Restored: true, Spells: []configCacheSpellRow{}}, []string{"local"})
+		return emitRecord(opts, cache.SpellImportRecord{Restored: true, Spells: []cache.SpellRow{}}, []string{"local"})
 	}
 	cacheNotice(ctx, "import", "restored cache")
 	return nil
@@ -318,13 +284,11 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 func configCacheImportRemote(ctx context.Context, m *magus.Magus, opts output.Options) error {
 	restored, err := m.RestoreSpellCaches(ctx)
 	if opts.Format != outputText {
-		rec := configCacheImportOutput{Remote: true, Spells: []configCacheSpellRow{}}
+		rec := cache.SpellImportRecord{Remote: true, Spells: []cache.SpellRow{}}
 		names := make([]string, 0, len(restored))
 		for _, s := range restored {
-			row := newSpellCacheRow(s)
-			rec.Spells = append(rec.Spells, row)
+			rec.Add(newSpellCacheRow(s))
 			names = append(names, s.Spell)
-			rec.Restored = rec.Restored || row.Outcome == spellCacheRestored
 		}
 		if emitErr := emitRecord(opts, rec, names); emitErr != nil {
 			return errors.Join(emitErr, err)
@@ -346,7 +310,7 @@ func configCacheImportRemote(ctx context.Context, m *magus.Magus, opts output.Op
 				match = "other lockfiles, same tools"
 			}
 			cacheNotice(ctx, "import", fmt.Sprintf("restored %s (%s): %d files, %s, %s downloaded, %d already present; %s",
-				s.Key, match, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
+				s.Key, match, s.Files, cache.FormatBytes(int(s.Bytes)), cache.FormatBytes(int(s.Transferred)), s.Skipped, strings.Join(s.Dirs, " ")))
 		}
 	}
 	if err != nil {
@@ -367,7 +331,7 @@ func configCacheExportRemote(ctx context.Context, m *magus.Magus) error {
 			cacheNotice(ctx, "export", fmt.Sprintf("%s is already stored; nothing to do", s.Key))
 		case s.Key != "":
 			cacheNotice(ctx, "export", fmt.Sprintf("stored %s: %d files, %s, %s uploaded, %d unused entries left out; %s",
-				s.Key, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
+				s.Key, s.Files, cache.FormatBytes(int(s.Bytes)), cache.FormatBytes(int(s.Transferred)), s.Skipped, strings.Join(s.Dirs, " ")))
 		}
 	}
 	if err != nil {
@@ -379,15 +343,168 @@ func configCacheExportRemote(ctx context.Context, m *magus.Magus) error {
 	return nil
 }
 
-func fmtBytes(b int64) string {
-	switch {
-	case b >= 1<<30:
-		return fmt.Sprintf("%.1f GiB", float64(b)/(1<<30))
-	case b >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(b)/(1<<20))
-	case b >= 1<<10:
-		return fmt.Sprintf("%.1f KiB", float64(b)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", b)
+func configCacheKey(ctx context.Context, _ string, args []string) error {
+	fs := flag.NewFlagSet("config cache key", flag.ContinueOnError)
+	bindDisplayFlags(fs)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus config cache key <subcommand>")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Manage Ed25519 keys for remote-cache signing.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Subcommands:")
+		fmt.Fprintln(os.Stderr, "  generate   mint a new keypair (alias: gen)")
+		fmt.Fprintln(os.Stderr, "  id         show the keyid + pubkey for a key (for cache.remote.trusted_keys)")
 	}
+	if err := command.Parse(fs, args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) == 0 {
+		fs.Usage()
+		return nil
+	}
+	sub, subArgs := rest[0], rest[1:]
+	switch sub {
+	case "generate", "gen":
+		return configCacheKeyGenerate(ctx, subArgs)
+	case "id":
+		return configCacheKeyID(subArgs)
+	case "-h", "--help", "help":
+		fs.Usage()
+		return nil
+	default:
+		fs.Usage()
+		return exit.Usagef("magus config cache key: unknown subcommand %q", sub)
+	}
+}
+
+// configCacheKeyGenerate mints a keypair and prints it once. The secret seed is
+// never written to disk — a signing key must not come to rest on a developer
+// machine; copy it straight into a CI secret store.
+//
+// The default output is for a human who will paste the seed into a password
+// manager, so it stays prose. `-o template='{{.seed}}'` is for the other custody
+// model: pipe the seed into a secret store and never see it at all. In that mode
+// the warnings go to stderr, because a pipe reader wants exactly the secret and
+// nothing else on stdout.
+func configCacheKeyGenerate(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("config cache key generate", flag.ContinueOnError)
+	bindDisplayFlags(fs)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus config cache key generate [-o template='{{.seed}}']")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Mint a new Ed25519 keypair for remote-cache signing. Prints the secret")
+		fmt.Fprintln(os.Stderr, "seed, the public key, the derived keyid, and a ready-to-paste")
+		fmt.Fprintln(os.Stderr, "trusted_keys snippet for magus.yaml. The secret is shown ONCE, never to disk.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "With -o json|yaml|template the record is {keyid, seed, pubkey} and every")
+		fmt.Fprintln(os.Stderr, "warning moves to stderr, so stdout carries only what you asked for:")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "  magus config cache key generate -o template='{{.seed}}' \\")
+		fmt.Fprintln(os.Stderr, "    | gh secret set MAGUS_CACHE_SIGNING_KEY")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "--tee is refused here: it writes structured output to a FILE, and a signing")
+		fmt.Fprintln(os.Stderr, "key must not come to rest on disk.")
+	}
+	if err := command.Parse(fs, args); err != nil {
+		return err
+	}
+	// --tee mirrors structured output into a file. Every other command wants that;
+	// this one must never have it, or `-o json --tee keys.json` quietly does the one
+	// thing the whole key-handling design forbids. Refused rather than ignored: a
+	// silently-dropped --tee would leave you believing you had a copy.
+	if global.tee.Path != "" {
+		return exit.Usagef("magus config cache key generate: --tee writes to a file and a signing key must not come to rest on disk; drop it, or pipe -o template='{{.seed}}' straight into your secret store")
+	}
+
+	km, err := cache.GenerateSigningKey()
+	if err != nil {
+		return fmt.Errorf("magus config cache key generate: %w", err)
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	// A key's identity is its keyid, and the keyid ALONE: the seed is the one value that
+	// must never be what a bare token means. That makes -o name a lossy form here rather
+	// than a broken one (the key exists, and only its identity was asked for), so it says
+	// on stderr that the seed went nowhere, since it cannot be recovered afterwards.
+	if opts.Format == outputName {
+		slog.WarnContext(ctx, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.", attr.Notice(""))
+		return emitNames(os.Stdout, []string{km.KeyID})
+	}
+	if opts.Format != outputText {
+		// Warnings to stderr so a pipe gets only the requested field. Printed BEFORE
+		// the value: on a terminal the caller should read them, and on a pipe they
+		// are out of the way either way.
+		slog.WarnContext(ctx, km.KeyID, attr.Notice("keyid"))
+		slog.WarnContext(ctx, "public key (not secret; add to cache.remote.trusted_keys in magus.yaml):\n  "+km.PubB64, attr.Notice(""))
+		slog.WarnContext(ctx, "the seed is on stdout and is shown ONCE; it is not written to disk.", attr.Notice(""))
+		return emitFormatted(opts, cache.NewSigningKeyRecord(km))
+	}
+
+	// Same rule the run output follows: a value you must copy goes LAST on its own
+	// line, unprefixed, so a double-click selects it and nothing else. The old layout
+	// put the seed after "MAGUS_CACHE_SIGNING_KEY=" inside a drawn box, which made it
+	// awkward to select and invited pasting it into an `export`, straight into shell
+	// history, which is the one place it must not land.
+	fmt.Printf("keyid  %s\n\n", km.KeyID)
+
+	fmt.Println("SECRET. Anyone holding this can publish cache artifacts that every")
+	fmt.Println("consumer will trust. It is shown once and is never written to disk.")
+	fmt.Println("Store it as the MAGUS_CACHE_SIGNING_KEY secret, on trusted pushes only.")
+	fmt.Println("Do not commit it and do not save it to a file.")
+	fmt.Println()
+	fmt.Println(km.SeedB64)
+	fmt.Println()
+
+	// Column zero: magus.yaml wants `cache:` at the left margin, so indenting the
+	// snippet for looks would hand you something that does not paste.
+	fmt.Println("Public key, not secret. Add it under cache.remote.trusted_keys in magus.yaml:")
+	fmt.Println()
+	fmt.Println("cache:")
+	fmt.Println("  remote:")
+	fmt.Println("    trusted_keys:")
+	fmt.Printf("      - \"%s\"\n", km.PubB64)
+	fmt.Println()
+
+	fmt.Println("Then store both, secret first - the variable is what turns the cache on:")
+	fmt.Println()
+	fmt.Println("  gh secret set MAGUS_CACHE_SIGNING_KEY")
+	fmt.Printf("  gh variable set MAGUS_CACHE_PUBLIC_KEY --body %q\n", km.PubB64)
+
+	return nil
+}
+
+// configCacheKeyID prints the keyid and pubkey for a key: from a public
+// key argument, or from MAGUS_CACHE_SIGNING_KEY (a seed) when none is given —
+// never echoing the seed.
+func configCacheKeyID(args []string) error {
+	fs := flag.NewFlagSet("config cache key id", flag.ContinueOnError)
+	bindDisplayFlags(fs)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus config cache key id [<base64-public-key>]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Show the derived keyid and pubkey for a public key. With no")
+		fmt.Fprintln(os.Stderr, "argument, reads MAGUS_CACHE_SIGNING_KEY (a seed) and derives its public")
+		fmt.Fprintln(os.Stderr, "identity - useful to confirm which key CI signs with. The seed is never")
+		fmt.Fprintln(os.Stderr, "printed.")
+	}
+	if err := command.Parse(fs, args); err != nil {
+		return err
+	}
+
+	info, err := cache.ResolveKeyInfo(fs.Args(), os.Getenv)
+	if errors.Is(err, cache.ErrNoKeyGiven) {
+		fs.Usage()
+	}
+	if err != nil {
+		return fmt.Errorf("magus config cache key id: %w", err)
+	}
+
+	fmt.Printf("keyid:   %s\n", info.KeyID)
+	fmt.Printf("pubkey:  %s\n", info.PubB64)
+	fmt.Println("(add the pubkey under cache.remote.trusted_keys in magus.yaml)")
+	return nil
 }

@@ -6,11 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
+	"text/tabwriter"
 	"time"
 	"unicode/utf8"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -459,4 +462,104 @@ func DisposeRequest(dir, ref, reason string, start InvocationStart) (AttentionRe
 		req = all[i]
 	}
 	return req, nil
+}
+
+// RenderAttentionText prints the open queue, oldest first.
+func RenderAttentionText(w io.Writer, requests []AttentionRequest, dir string) error {
+	if len(requests) == 0 {
+		// An empty queue is the good state, so this says how a request would get here
+		// rather than reporting a fault.
+		fmt.Fprintf(w, "no open attention requests in %s\n", dir)
+		fmt.Fprintf(w, "requests arrive through `%s`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `%s`\n", hint.SessionNotify.String(), hint.SessionDispose.With("<id>"))
+		return nil
+	}
+
+	now := time.Now()
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tLEASE\tWHERE\tFILES\tMESSAGE")
+	for _, req := range requests {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			req.ID,
+			OrDash(FormatDur(now.Sub(time.UnixMilli(req.OpenedMs)))),
+			OrDash(req.Outcome),
+			OrDash(req.Source),
+			OrDash(req.Lease),
+			OrDash(req.Where),
+			OrDash(attentionFileList(req.Files)),
+			OneLine(req.Message))
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "\n%d open request(s); close one with `%s`. Nothing here closes on its own.\n", len(requests), hint.SessionDispose.With("<id>", "-reason", "<text>"))
+	return nil
+}
+
+// OneLine flattens a message onto the row it belongs to. An agent writes
+// whatever it likes, newlines included, and one row per request is what makes the
+// queue scannable; -o json carries the message verbatim.
+func OneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// attentionFileList is the paths a row leads with. Empty when the event named
+// none, and the message stays the only line. Paths stay comma-separated inside
+// one cell so a tabwriter does not split them into columns. [AttentionFiles]
+// already dropped empty values before the row was stored.
+func attentionFileList(files []types.FileRef) string {
+	if len(files) == 0 {
+		return ""
+	}
+	paths := make([]string, 0, len(files))
+	for _, f := range files {
+		path := f.Value
+		if f.IsDir && !strings.HasSuffix(path, "/") {
+			path += "/"
+		}
+		paths = append(paths, path)
+	}
+	return strings.Join(paths, ", ")
+}
+
+// DisposeError gives each refusal from [DisposeRequest] its next step. The
+// store decides WHICH refusal applies (that is the identity contract), and this decides
+// what a person does about it, which is why the store path and the listing command are
+// added here rather than baked into the sentinel.
+func DisposeError(err error, ref, dir string) error {
+	var (
+		ambiguous *AmbiguousRequestError
+		disposed  *DisposedError
+	)
+	switch {
+	case errors.Is(err, ErrNoRequest):
+		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s, run `%s` to list the open ids", ref, dir, hint.SessionAttention.String())
+	case errors.As(err, &ambiguous):
+		return fmt.Errorf("magus session dispose, name one of them or add enough characters to tell them apart: %w", ambiguous)
+	case errors.As(err, &disposed):
+		return fmt.Errorf("magus session dispose, a request closes once and stays closed so run `%s` to see what is still open: %w", hint.SessionAttention.String(), disposed)
+	}
+	return err
+}
+
+// AttentionFiles is the paths the event named, dropped by [AttentionWhere] because
+// where is the checkout and the paths are the subject. Empty values are omitted.
+// A nil where, the ordinary case for a prose notification, names none.
+func AttentionFiles(where *types.EventLocation) []types.FileRef {
+	if where == nil {
+		return nil
+	}
+	return slices.DeleteFunc(slices.Clone(where.Files), func(f types.FileRef) bool { return f.Value == "" })
+}
+
+// AttentionWhere renders where a person has to go to act. The workspace is always
+// part of it: two worktrees of one repo share this store, and a block raised in one
+// checkout is not the same block as the identical one raised in another.
+func AttentionWhere(where *types.EventLocation) string {
+	if where == nil {
+		return ""
+	}
+	if where.Project != nil && where.Project.Path != "" && where.Project.Path != "." {
+		return fmt.Sprintf("%s [%s]", where.Workspace.Value, where.Project.Path)
+	}
+	return where.Workspace.Value
 }

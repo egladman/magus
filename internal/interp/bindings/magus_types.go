@@ -9,7 +9,7 @@ import (
 // DeclareMagusTypes declares every magus\ type into sess, externs included, and binds
 // the records' runtime definitions (spell.DeclareMagusTypes). Call it after the magus
 // namespace is registered, or magus\ enum cases do not resolve at run time. See
-// RegisterSpellSourceModules.
+// registerSpellSourceModules.
 func DeclareMagusTypes(sess *buzz.Session) error {
 	return spell.DeclareMagusTypes(sess, nil)
 }

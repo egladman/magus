@@ -4,21 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
-	"github.com/opencontainers/go-digest"
-
-	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -26,7 +20,6 @@ import (
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // spellCommand is the home of a spell as an artifact: what a workspace publishes so another
@@ -65,18 +58,7 @@ func spellUsage() {
 
 // registryHTTP is the transport every spell verb uses. A variable so a test can point it
 // at a TLS fixture whose certificate the default transport does not trust.
-var registryHTTP = func() *http.Client { return &http.Client{Timeout: graphRegistryTimeout} }
-
-// spellBuildResult is what build and push report. Digest is the manifest digest, the
-// one value a pinned reference names; the rest describe the bytes behind it.
-type spellBuildResult struct {
-	Digest      digest.Digest     `json:"digest"`
-	Reference   string            `json:"reference,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
-	Layer       digest.Digest     `json:"layer"`
-	Size        int64             `json:"size"`
-	Annotations map[string]string `json:"annotations"`
-}
+var registryHTTP = func() *http.Client { return &http.Client{Timeout: knowledge.RegistryTimeout} }
 
 func spellBuild(ctx context.Context, root string, args []string) error {
 	var out, source string
@@ -104,7 +86,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	content, res, err := buildSpell(ctx, root, pos[0], source)
+	content, res, err := remotespell.BuildDir(ctx, spellVCSOptions(ctx, root), pos[0], source)
 	if err != nil {
 		return fmt.Errorf("spell build: %w", err)
 	}
@@ -118,73 +100,6 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 	}
 	return emitFormatted(opts, res)
 }
-
-// buildSpell packs dir with the provenance of the revision holding it. build and push
-// share it so the digest build prints is the one push writes.
-func buildSpell(ctx context.Context, root, dir, source string) (oci.Artifact, spellBuildResult, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return oci.Artifact{}, spellBuildResult{}, err
-	}
-	driver, err := spellVCS(ctx, root, abs)
-	if err != nil {
-		return oci.Artifact{}, spellBuildResult{}, err
-	}
-	prov, err := remotespell.ReadProvenance(ctx, driver, abs)
-	if err != nil {
-		return oci.Artifact{}, spellBuildResult{}, err
-	}
-	if source != "" {
-		prov.Source = source
-	}
-	content, err := remotespell.Build(ctx, abs, driver, prov)
-	if err != nil {
-		return oci.Artifact{}, spellBuildResult{}, err
-	}
-	res, err := describeSpellContent(content)
-	return content, res, err
-}
-
-// buildShippedSpell is the artifact a release publishes for the spell magus ships as
-// name, exactly as remotespell.Shipped packs it, so a push writes the digest eject stamps.
-func buildShippedSpell(name string) (oci.Artifact, spellBuildResult, error) {
-	dir, err := shippedSpellDir(name)
-	if err != nil {
-		return oci.Artifact{}, spellBuildResult{}, err
-	}
-	_, content, err := remotespell.Shipped(name, dir)
-	if err != nil {
-		return oci.Artifact{}, spellBuildResult{}, err
-	}
-	res, err := describeSpellContent(content)
-	return content, res, err
-}
-
-func describeSpellContent(content oci.Artifact) (spellBuildResult, error) {
-	m, err := content.Manifest()
-	if err != nil {
-		return spellBuildResult{}, err
-	}
-	layer := content.Blobs[0].Data
-	return spellBuildResult{
-		Digest:      m.Digest,
-		Layer:       digest.FromBytes(layer),
-		Size:        int64(len(layer)),
-		Annotations: content.Annotations,
-	}, nil
-}
-
-func shippedSpellDir(name string) (string, error) {
-	dir, ok := spell.ShippedDir(name)
-	if !ok {
-		return "", fmt.Errorf("magus ships no spell %q, `magus spell ls %s` lists them", name, shippedSpellsPath)
-	}
-	return dir, nil
-}
-
-// shippedSpellsPath is what `spell ls` takes to list the spells magus ships: the
-// magus/spell/<name> import form with no name.
-var shippedSpellsPath = strings.TrimSuffix(spells.ModulePrefix, "/")
 
 func spellPush(ctx context.Context, root string, args []string) error {
 	var user, source string
@@ -232,14 +147,14 @@ func spellPush(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus spell push: %s must name a tag and no digest", pos[1])
 	}
 	var content oci.Artifact
-	var res spellBuildResult
+	var res remotespell.BuildResult
 	if name, ok := strings.CutPrefix(pos[0], spells.ModulePrefix); ok {
 		if source != "" {
 			return exit.Usagef("magus spell push %s: --source does not apply; a spell magus ships records %s", pos[0], remotespell.ShippedProvenance(name).Source)
 		}
-		content, res, err = buildShippedSpell(name)
+		content, res, err = remotespell.BuildShipped(name)
 	} else {
-		content, res, err = buildSpell(ctx, root, pos[0], source)
+		content, res, err = remotespell.BuildDir(ctx, spellVCSOptions(ctx, root), pos[0], source)
 	}
 	if err != nil {
 		return fmt.Errorf("spell push: %w", err)
@@ -248,7 +163,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell push: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, knowledge.RegistryTimeout)
 	defer cancel()
 	repo := oci.Reference{Registry: dest.Registry, Repository: dest.Repository}
 	d, err := client.PushArtifact(ctx, repo, content, append([]string{dest.Tag}, tags...)...)
@@ -263,24 +178,6 @@ func spellPush(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{res.Reference})
 	}
 	return emitFormatted(opts, res)
-}
-
-// spellPullResult is what pull reports: the pinned reference it verified, and where the
-// verified files are.
-type spellPullResult struct {
-	Reference string        `json:"reference"`
-	Digest    digest.Digest `json:"digest"`
-	Dir       string        `json:"dir"`
-	// Override is the magus.yaml entry that makes a copy of a built-in replace it, set
-	// only when pulling one (magus/spell/<name>). Pull never writes magus.yaml: the
-	// declaration is the acknowledgment.
-	Override spellOverride `json:"override,omitzero"`
-}
-
-// spellOverride is one `spells: {<import>: {path: <path>}}` entry.
-type spellOverride struct {
-	Import string `json:"import"`
-	Path   string `json:"path"`
 }
 
 func spellPull(ctx context.Context, root string, args []string) error {
@@ -321,7 +218,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 		if len(pos) != 2 {
 			return exit.Usagef("magus spell pull %s: want the <dir> to write the copy into", pos[0])
 		}
-		res, next, err := ejectSpell(root, name, pos[1])
+		res, next, err := remotespell.EjectShipped(resolveRootOrEmpty(root), name, pos[1])
 		if err != nil {
 			return fmt.Errorf("spell pull: %w", err)
 		}
@@ -331,7 +228,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 		slog.InfoContext(ctx, strings.TrimSuffix(next, "\n"), attr.Notice(""))
 		return nil
 	}
-	ref, err := pullReference(root, pos[0])
+	ref, err := remotespell.PullReference(resolveRootOrEmpty(root), pos[0])
 	if err != nil {
 		return err
 	}
@@ -345,45 +242,14 @@ func spellPull(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("spell pull: %w", err)
 		}
 	}
-	res, err := pullSpell(ctx, client, ref, "", dst)
+	res, err := remotespell.PullSpell(ctx, client, knowledge.RegistryTimeout, ref, "", dst)
 	if err != nil {
 		return fmt.Errorf("spell pull: %w", err)
 	}
 	return emitPull(opts, res)
 }
 
-// ejectSpell copies the spell magus ships as name into dst for the workspace at root to
-// own. next says how the workspace puts the copy to use.
-func ejectSpell(root, name, dst string) (res spellPullResult, next string, err error) {
-	dir, err := shippedSpellDir(name)
-	if err != nil {
-		return spellPullResult{}, "", err
-	}
-	abs, err := filepath.Abs(dst)
-	if err != nil {
-		return spellPullResult{}, "", err
-	}
-	ref, err := remotespell.Eject(name, dir, abs)
-	if err != nil {
-		return spellPullResult{}, "", err
-	}
-	res = spellPullResult{Reference: ref.String(), Digest: ref.Digest, Dir: abs}
-	rel := abs
-	if ws := resolveRootOrEmpty(root); ws != "" {
-		if r, err := filepath.Rel(ws, abs); err == nil && filepath.IsLocal(r) {
-			rel = filepath.ToSlash(r)
-		}
-	}
-	if _, builtin := spell.Builtins()[name]; !builtin {
-		return res, fmt.Sprintf("%s ships as source only: it imports a host module, so there is no built-in to replace. Import the copy by its path: import %q;\n",
-			spells.ModulePath(name), rel), nil
-	}
-	res.Override = spellOverride{Import: spells.ModulePath(name), Path: rel}
-	return res, fmt.Sprintf("to run this copy in place of the built-in, declare it in magus.yaml:\n\nspells:\n  %s:\n    path: %s\n",
-		res.Override.Import, res.Override.Path), nil
-}
-
-func emitPull(opts output.Options, res spellPullResult) error {
+func emitPull(opts output.Options, res remotespell.PullResult) error {
 	switch opts.Format {
 	case outputText:
 		return emitNames(os.Stdout, []string{res.Reference, res.Dir})
@@ -394,64 +260,9 @@ func emitPull(opts output.Options, res spellPullResult) error {
 	}
 }
 
-// pullReference reads pull's argument: a reference naming a tag or a digest, or the
-// bare registry path a magusfile imports, which pulls the digest magus.lock pins for it
-// so what lands is exactly what a workspace load would run.
-func pullReference(root, arg string) (oci.Reference, error) {
-	ref, err := oci.ParseReference(arg)
-	if err == nil {
-		return ref, nil
-	}
-	if _, rerr := oci.ParseRepository(arg); rerr != nil {
-		return oci.Reference{}, err
-	}
-	wsRoot, cfg, err := workspaceSpells(root)
-	if err != nil {
-		return oci.Reference{}, err
-	}
-	decl := cfg.Imports[arg]
-	if decl.Tag == "" {
-		return oci.Reference{}, exit.Usagef("magus spell pull: %s names no tag or digest, and magus.yaml declares no remote spell by that path", arg)
-	}
-	lock, err := remotespell.ReadLock(wsRoot)
-	if err != nil {
-		return oci.Reference{}, err
-	}
-	e, ok := lock.Spells[arg]
-	if !ok || e.Tag != decl.Tag {
-		return oci.Reference{}, types.DiagnosticErrorf(types.RemoteSpellLockStale,
-			"spell %s: %s pins no digest for tag %q; %s", arg, remotespell.LockFile, decl.Tag, remotespell.UpdateHint)
-	}
-	pinned, err := remotespell.Pinned(arg, e.Digest)
-	if err != nil {
-		return oci.Reference{}, err
-	}
-	return pinned.OCI, nil
-}
-
-// workspaceSpells reads the spell declarations beside the workspace's magus.lock,
-// without loading the workspace: a load resolves the very pins lock exists to repair.
-func workspaceSpells(root string) (string, config.SpellsConfig, error) {
-	wsRoot := resolveRootOrEmpty(root)
-	if wsRoot == "" {
-		return "", config.SpellsConfig{}, fmt.Errorf("no workspace here to read magus.yaml from, pass --root")
-	}
-	cfg, err := config.LoadWithRoot("", wsRoot)
-	if err != nil {
-		return "", config.SpellsConfig{}, err
-	}
-	return wsRoot, cfg.Spells, nil
-}
-
 // spellLockResult is the -o json shape of lock: every pin magus.lock now holds.
 type spellLockResult struct {
-	Spells []spellLockEntry `json:"spells" jsonl:"primary"`
-}
-
-type spellLockEntry struct {
-	Path   string        `json:"path"`
-	Tag    string        `json:"tag"`
-	Digest digest.Digest `json:"digest"`
+	Spells []remotespell.LockSummary `json:"spells" jsonl:"primary"`
 }
 
 func spellLock(ctx context.Context, root string, args []string) error {
@@ -485,17 +296,17 @@ func spellLock(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	wsRoot, spells, err := workspaceSpells(root)
+	wsRoot, spells, err := remotespell.WorkspaceSpells(resolveRootOrEmpty(root))
 	if err != nil {
 		return fmt.Errorf("spell lock: %w", err)
 	}
-	loadOpts := remotespell.LoadOptions{Client: lockRegistryClient(spells)}
+	loadOpts := remotespell.LoadOptions{Client: remotespell.LockClient(registryHTTP, spells)}
 	if update {
 		err = remotespell.UpdateLock(ctx, wsRoot, func(remotespell.Lock) (remotespell.Lock, error) {
 			return remotespell.Relock(ctx, spells, loadOpts)
 		})
 	} else {
-		err = verifyLock(ctx, wsRoot, spells, loadOpts)
+		err = remotespell.VerifyLock(ctx, wsRoot, spells, loadOpts)
 	}
 	if err != nil {
 		return fmt.Errorf("spell lock: %w", err)
@@ -504,84 +315,11 @@ func spellLock(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell lock: %w", err)
 	}
-	res := spellLockResult{Spells: []spellLockEntry{}}
-	for _, path := range slices.Sorted(maps.Keys(lock.Spells)) {
-		e := lock.Spells[path]
-		res.Spells = append(res.Spells, spellLockEntry{Path: path, Tag: e.Tag, Digest: e.Digest})
-	}
+	res := spellLockResult{Spells: remotespell.Summarize(lock)}
 	if opts.Format == outputText || opts.Format == outputName {
-		return emitItemNames(os.Stdout, res.Spells, func(e spellLockEntry) string { return fmt.Sprintf("%s@%s", e.Path, e.Digest.String()) })
+		return emitItemNames(os.Stdout, res.Spells, func(e remotespell.LockSummary) string { return fmt.Sprintf("%s@%s", e.Path, e.Digest.String()) })
 	}
 	return emitFormatted(opts, res)
-}
-
-// verifyLock is lock without --update: every declared remote spell is pinned for its
-// tag and its digest serves verified bytes, and the lock names nothing magus.yaml no
-// longer declares, so the committed record matches what imports can reach.
-func verifyLock(ctx context.Context, wsRoot string, spells config.SpellsConfig, opts remotespell.LoadOptions) error {
-	im, err := remotespell.LoadImports(ctx, wsRoot, spells, opts)
-	if err != nil {
-		return err
-	}
-	if err := im.Error(); err != nil {
-		return err
-	}
-	lock, err := remotespell.ReadLock(wsRoot)
-	if err != nil {
-		return err
-	}
-	if stale := remotespell.Unlocked(spells, lock); len(stale) > 0 {
-		return types.DiagnosticErrorf(types.RemoteSpellLockStale,
-			"%s pins %s, which magus.yaml no longer declares as a remote spell; %s",
-			remotespell.LockFile, strings.Join(stale, ", "), remotespell.UpdateHint)
-	}
-	return nil
-}
-
-// lockRegistryClient authenticates lock's registry calls from spells.registries without
-// loading the workspace, so a reference resolves through the built-in environment
-// provider rather than one a magusfile would select.
-func lockRegistryClient(spells config.SpellsConfig) func(context.Context, string) (*oci.Client, error) {
-	r := secret.New()
-	return func(ctx context.Context, host string) (*oci.Client, error) {
-		c := &oci.Client{HTTP: registryHTTP()}
-		if _, ok := spells.Registry(host); !ok {
-			return c, nil
-		}
-		user, pass, err := registryCredential(ctx, spells, host, r)
-		if err != nil {
-			return nil, err
-		}
-		c.Credentials = oci.Credentials{Username: user, Password: pass}
-		return c, nil
-	}
-}
-
-// pullSpell pins ref, resolves it through the verified cache under cacheRoot ("" for the
-// user cache), and unpacks it into dst when one is given.
-func pullSpell(ctx context.Context, client *oci.Client, ref oci.Reference, cacheRoot, dst string) (spellPullResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
-	defer cancel()
-	pinned, err := remotespell.Pin(ctx, client, ref)
-	if err != nil {
-		return spellPullResult{}, err
-	}
-	pinned.Tag = ""
-	dir, err := remotespell.Resolve(ctx, remotespell.Ref{Import: pinned.String(), OCI: pinned}, remotespell.Options{
-		CacheRoot:   cacheRoot,
-		Client:      client.HTTP,
-		Credentials: client.Credentials,
-	})
-	if err != nil {
-		return spellPullResult{}, err
-	}
-	if dst != "" {
-		if err := remotespell.Unpack(dir, dst); err != nil {
-			return spellPullResult{}, err
-		}
-		dir = dst
-	}
-	return spellPullResult{Reference: pinned.String(), Digest: pinned.Digest, Dir: dir}, nil
 }
 
 // spellLsResult is the -o json shape of ls.
@@ -613,19 +351,19 @@ func spellLs(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return exit.Usagef("magus spell ls: want <registry>/<repository> or %s, got %d argument(s)", shippedSpellsPath, len(pos))
+		return exit.Usagef("magus spell ls: want <registry>/<repository> or magus/spell, got %d argument(s)", len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSuffix(pos[0], "/") == shippedSpellsPath {
-		shipped, err := shippedSpells()
+	if remotespell.ListsShipped(pos[0]) {
+		shipped, err := remotespell.ListShipped()
 		if err != nil {
 			return fmt.Errorf("spell ls: %w", err)
 		}
 		if opts.Format == outputText || opts.Format == outputName {
-			return emitItemNames(os.Stdout, shipped, func(s shippedSpell) string { return s.Reference })
+			return emitItemNames(os.Stdout, shipped, func(s remotespell.ShippedSpell) string { return s.Reference })
 		}
 		return emitFormatted(opts, shippedSpellsResult{Spells: shipped})
 	}
@@ -637,7 +375,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell ls: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, knowledge.RegistryTimeout)
 	defer cancel()
 	tags, err := client.Tags(ctx, repo)
 	if err != nil {
@@ -653,109 +391,29 @@ func spellLs(ctx context.Context, root string, args []string) error {
 
 // shippedSpellsResult is the -o json shape of `spell ls magus/spell`.
 type shippedSpellsResult struct {
-	Spells []shippedSpell `json:"spells" jsonl:"primary"`
+	Spells []remotespell.ShippedSpell `json:"spells" jsonl:"primary"`
 }
 
-// shippedSpell is one spell magus ships. Name is what magus/spell/<name> takes: a
-// built-in's registered name, else its directory. Reference pins the artifact a release
-// publishes for it.
-type shippedSpell struct {
-	Name      string        `json:"name"`
-	Dir       string        `json:"dir"`
-	BuiltIn   bool          `json:"built_in"`
-	Reference string        `json:"reference"`
-	Digest    digest.Digest `json:"digest"`
-}
-
-// shippedSpells lists every directory of spells.Shipped() holding a spell.buzz, sorted
-// by name.
-func shippedSpells() ([]shippedSpell, error) {
-	builtins := map[string]string{} // dir -> registered name
-	for name := range spell.Builtins() {
-		if dir, ok := spell.ShippedDir(name); ok {
-			builtins[dir] = name
-		}
-	}
-	var out []shippedSpell
-	err := fs.WalkDir(spells.Shipped(), ".", func(p string, d fs.DirEntry, err error) error {
-		dir, ok := strings.CutSuffix(p, "/spell.buzz")
-		if err != nil || d.IsDir() || !ok {
-			return err
-		}
-		name, builtIn := builtins[dir]
-		if !builtIn {
-			name = dir
-		}
-		ref, _, err := remotespell.Shipped(name, dir)
-		if err != nil {
-			return err
-		}
-		out = append(out, shippedSpell{Name: name, Dir: dir, BuiltIn: builtIn, Reference: ref.String(), Digest: ref.Digest})
-		return nil
-	})
-	slices.SortFunc(out, func(a, b shippedSpell) int { return strings.Compare(a.Name, b.Name) })
-	return out, err
-}
-
-// registryClient builds the client for one registry host. --username wins, with the
-// password read from stdin; otherwise the spells.registries entry for host supplies a
-// username and a secret reference; with neither the client is anonymous.
+// registryClient builds the client for one registry host from the process's config,
+// stdin and workspace.
 func registryClient(ctx context.Context, root, host, username string) (*oci.Client, error) {
-	c := &oci.Client{HTTP: registryHTTP()}
-	if username != "" {
-		pass, err := readToken(ctx)
-		if err != nil {
-			return nil, err
-		}
-		c.Credentials = oci.Credentials{Username: username, Password: pass}
-		return c, nil
-	}
-	if _, ok := globalCfg.Spells.Registry(host); !ok {
-		return c, nil
-	}
-	// The workspace is loaded only when a credential is needed: its magusfile is what
-	// selects the secret provider the reference resolves through.
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return nil, fmt.Errorf("spells.registries %s: load the workspace to reach its secret provider: %w", host, err)
-	}
-	ctx = m.ContextWithSecrets(ctx)
-	user, pass, err := registryCredential(ctx, globalCfg.Spells, host, secret.ResolverFromContext(ctx))
-	if err != nil {
-		return nil, err
-	}
-	c.Credentials = oci.Credentials{Username: user, Password: pass}
-	return c, nil
+	return remotespell.NewClient(ctx, registryHTTP(), globalCfg.Spells, host, username, remotespell.Login{
+		ReadToken: knowledge.ReadToken,
+		Secrets: func(ctx context.Context) (context.Context, *secret.Resolver, error) {
+			m, err := loadMagus(ctx, root)
+			if err != nil {
+				return ctx, nil, err
+			}
+			ctx = m.ContextWithSecrets(ctx)
+			return ctx, secret.ResolverFromContext(ctx), nil
+		},
+	})
 }
 
-// registryCredential resolves host's spells.registries entry through r, which registers
-// the value for redaction before returning it.
-func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, types.Secret, error) {
-	entry, ok := spells.Registry(host)
-	if !ok {
-		return "", types.Secret{}, fmt.Errorf("spells.registries has no entry for %s", host)
-	}
-	pass, err := r.Read(ctx, entry.PasswordRef)
-	if err != nil {
-		return "", types.Secret{}, fmt.Errorf("spells.registries %s: %w", host, err)
-	}
-	return entry.Username, pass, nil
-}
-
-// spellVCS resolves the VCS that holds dir, with the workspace's VCS options when a
-// workspace loads. A tree no VCS answers for is an error: packing every file on disk
-// would make the digest depend on the machine.
-func spellVCS(ctx context.Context, root, dir string) (types.VCSDriver, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
-	opts := types.VCSOptions{}
+// spellVCSOptions is the workspace's VCS options when a workspace loads, else none.
+func spellVCSOptions(ctx context.Context, root string) types.VCSOptions {
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
-		opts = ws.VCSOptions()
+		return ws.VCSOptions()
 	}
-	res, err := vcs.Resolve(ctx, dir, "", opts)
-	if err != nil {
-		return nil, err
-	}
-	if res.VCS == nil {
-		return nil, fmt.Errorf("%s is under no VCS, commit the spell to a repository first", dir)
-	}
-	return res.VCS, nil
+	return types.VCSOptions{}
 }

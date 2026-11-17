@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -10,8 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -19,13 +16,12 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 	typesvcs "github.com/egladman/magus/types/vcs"
@@ -122,7 +118,7 @@ func mergeDriverCommand(ctx context.Context, root string, args []string) error {
 		f.Output = args[5]
 	}
 
-	relPath, err := mergeDriverRelPath(root, args[4])
+	relPath, err := settle.DriverRelPath(root, args[4])
 	if err != nil {
 		return err
 	}
@@ -155,23 +151,6 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "every conflicted path at once, regenerates once, and stages the result -")
 	fmt.Fprintln(os.Stderr, "including the files one side deleted, which no VCS calls a driver for.")
 	return nil
-}
-
-// mergeDriverRelPath normalizes the driver's path argument to a workspace-relative slash
-// path. git passes it repo-relative; hg passes an absolute workspace path.
-func mergeDriverRelPath(root, pathArg string) (string, error) {
-	if !filepath.IsAbs(pathArg) {
-		return filepath.ToSlash(pathArg), nil
-	}
-	wsRoot, err := workspace.FindRoot(root)
-	if err != nil {
-		return "", fmt.Errorf("merge-driver: find workspace root: %w", err)
-	}
-	rel, err := filepath.Rel(wsRoot, pathArg)
-	if err != nil {
-		return "", fmt.Errorf("merge-driver: resolve path %q: %w", pathArg, err)
-	}
-	return filepath.ToSlash(rel), nil
 }
 
 // ---------------------------------------------------------------- vcs resolve
@@ -235,7 +214,7 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 	// human, instead of both waiting.
 	stale := false
 	if err != nil {
-		overlay := committedMagusfiles(ctx, root)
+		overlay := settle.CommittedMagusfiles(ctx, root)
 		if len(overlay) == 0 {
 			return err
 		}
@@ -263,7 +242,7 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 			return fmt.Errorf("vcs resolve: %w", err)
 		}
 		ours = meta.ID
-		undo, err := startMergeAgainst(ctx, m.Root(), res, rf.Against)
+		undo, err := settle.StartMergeAgainst(ctx, m.Root(), res, rf.Against, globalCfg.DryRun)
 		if err != nil {
 			return err
 		}
@@ -283,16 +262,16 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 			fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
 			return nil
 		}
-		return settleOwedByHand(ctx, root, rc, m, res.VCS)
+		return settle.OwedByHand(ctx, os.Stdout, m, res.VCS, interactive.DefinesTarget(ctx, m), settleRun(root, rc))
 	}
 
 	if !globalCfg.DryRun {
-		if conflicts, err = autoResolveConflicts(ctx, m, res.VCS, conflicts); err != nil {
-			return stageFailed(err, "settling by job claims", "planning the rest")
+		if conflicts, err = settle.AutoResolve(ctx, os.Stdout, m, res.VCS, conflicts); err != nil {
+			return settle.StageFailed(err, "settling by job claims", "planning the rest")
 		}
 		if len(conflicts) > 0 && rf.Against != "" {
-			if conflicts, err = settleByClaims(ctx, m, res.VCS, ours, rf.Against, conflicts); err != nil {
-				return stageFailed(err, "planning the rest")
+			if conflicts, err = settle.ByClaims(ctx, os.Stdout, m, res.VCS, jobRows(ctx, m.Root()), ours, rf.Against, conflicts); err != nil {
+				return settle.StageFailed(err, "planning the rest")
 			}
 		}
 		if len(conflicts) == 0 {
@@ -304,452 +283,11 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 	if err != nil {
 		return err
 	}
-	reportResolution(plan, globalCfg.DryRun)
+	settle.Report(os.Stdout, plan, globalCfg.DryRun)
 	if globalCfg.DryRun {
-		return unresolvedError(plan)
+		return settle.UnresolvedError(plan)
 	}
-	return applyResolution(ctx, root, rc, m, res.VCS, plan, stale)
-}
-
-// autoResolveConflicts runs the merge driver over the content conflicts in source files,
-// where the VCS did not already run it during the operation (jj), and returns the
-// conflicts still standing. The driver decides each file (Magus.AutoResolve), so a
-// comment-only edit settles here even though no glob routes it.
-func autoResolveConflicts(ctx context.Context, m *magus.Magus, drv types.VCSDriver, conflicts []types.Conflict) ([]types.Conflict, error) {
-	var eligible []string
-	for _, c := range conflicts {
-		if c.Kind == types.ConflictKindContent && m.FindOutputProducer(filepath.Join(m.Root(), filepath.FromSlash(c.Path))) == nil {
-			eligible = append(eligible, c.Path)
-		}
-	}
-	if len(eligible) == 0 {
-		return conflicts, nil
-	}
-	if err := drv.RunMergeDriver(ctx, m.Root(), eligible); err != nil {
-		return nil, fmt.Errorf("vcs resolve: %w", err)
-	}
-	left, err := drv.Conflicts(ctx, m.Root())
-	if err != nil {
-		return nil, fmt.Errorf("vcs resolve: %w", err)
-	}
-	for _, p := range eligible {
-		if !slices.ContainsFunc(left, func(c types.Conflict) bool { return c.Path == p }) {
-			fmt.Printf("vcs resolve: auto-resolved %s\n", p)
-		}
-	}
-	if len(left) == 0 {
-		fmt.Println("vcs resolve: every conflict is resolved")
-	}
-	return left, nil
-}
-
-// settleByClaims settles the content conflicts that jobs on the two sides of a merge of
-// against into ours reached through disjoint declaration claims, and returns the conflicts
-// still standing. A path settles only when every condition holds:
-//   - a project's merge_low_risk covers it, and a diff driver places its declarations;
-//   - the VCS reports one merge base for the two sides;
-//   - each side carries the work of a job that writes the path, and every such job is
-//     recorded pass by `magus job wait`;
-//   - each of those jobs writes it by declaration claims alone, and the sides' claims are
-//     disjoint;
-//   - risk.MergeByClaims settles every region the two sides' edits meet in.
-//
-// A path some job claims by declaration gets one line saying it settled or which condition
-// failed. A path no job claims is passed over in silence, since claims say nothing about it.
-func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ours, against string, conflicts []types.Conflict) ([]types.Conflict, error) {
-	root := m.Root()
-	store, err := openJobs(ctx, root, jobOpen{})
-	var rows []types.Job
-	if err == nil {
-		rows, err = store.List()
-	}
-	if err != nil {
-		fmt.Printf("vcs resolve: no conflict settles by job claims: the job store: %v\n", err)
-		return conflicts, nil
-	}
-	s := claimSettle{m: m, drv: drv, ours: ours, theirs: against}
-	var left []types.Conflict
-	for _, c := range conflicts {
-		writers, claimed := jobsWriting(rows, c.Path)
-		if c.Kind != types.ConflictKindContent || !claimed || m.FindOutputProducer(filepath.Join(root, filepath.FromSlash(c.Path))) != nil {
-			left = append(left, c)
-			continue
-		}
-		merged, how, err := s.settle(ctx, c.Path, writers)
-		var why unsettledError
-		if errors.As(err, &why) {
-			fmt.Printf("vcs resolve: %s not settled by job claims: %s\n", c.Path, why)
-			left = append(left, c)
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("vcs resolve: %s: %w", c.Path, err)
-		}
-		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(c.Path)), merged, 0o644); err != nil {
-			return nil, fmt.Errorf("vcs resolve: %w", err)
-		}
-		if err := drv.MarkResolved(ctx, root, []string{c.Path}); err != nil {
-			return nil, fmt.Errorf("vcs resolve: %w", err)
-		}
-		fmt.Printf("vcs resolve: settled %s by job claims: %s\n", c.Path, how)
-	}
-	if len(left) == 0 {
-		fmt.Println("vcs resolve: every conflict is resolved")
-	}
-	return left, nil
-}
-
-// jobsWriting returns the rows with a write path on p, and whether any of them claims p by
-// declaration.
-func jobsWriting(rows []types.Job, p string) (writers []types.Job, claimed bool) {
-	for _, row := range rows {
-		writes := false
-		for _, e := range row.Paths.Write {
-			if types.PathsIntersect(e, p) {
-				writes = true
-				claimed = claimed || types.HasClaim(e)
-			}
-		}
-		if writes {
-			writers = append(writers, row)
-		}
-	}
-	return writers, claimed
-}
-
-// claimSettle decides paths for settleByClaims. ours and theirs are the two revisions the
-// merge joins; the merge base between them is looked up once.
-type claimSettle struct {
-	m            *magus.Magus
-	drv          types.VCSDriver
-	ours, theirs string
-
-	looked  bool
-	base    string
-	baseErr error
-}
-
-// unsettledError is the first condition that kept a path from settling by job claims,
-// as opposed to a failure to evaluate them.
-type unsettledError string
-
-func (e unsettledError) Error() string { return string(e) }
-
-func unsettledf(format string, args ...any) error {
-	return unsettledError(fmt.Sprintf(format, args...))
-}
-
-// mergeSide is one of the two revisions a merge joins; it indexes the per-side arrays of
-// settle.
-type mergeSide uint8
-
-const (
-	oursSide mergeSide = iota
-	theirsSide
-)
-
-// settle is the merge of p, or an unsettledError naming the first condition that failed.
-// how names the claims that settled it.
-func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job) (merged []byte, how string, err error) {
-	if _, _, ok := risk.MatchScopes(risk.MergeScopes(s.m.All()), p); !ok {
-		return nil, "", unsettledf("no project's merge_low_risk covers it")
-	}
-	if _, ok := types.MatchDiffDriver(p); !ok {
-		return nil, "", unsettledf("no diff driver places its declarations")
-	}
-	base, err := s.mergeBase(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	var jobs [2][]types.Job
-	for _, row := range writers {
-		if side, ok := s.resolveSide(ctx, row, base); ok {
-			jobs[side] = append(jobs[side], row)
-		}
-	}
-	names := [2]string{oursSide: "ours", theirsSide: s.theirs}
-	var claims, cited [2][]string
-	for side, rows := range jobs {
-		if len(rows) == 0 {
-			return nil, "", unsettledf("no job whose work %s carries writes it", names[side])
-		}
-		for _, row := range rows {
-			if row.State != types.StatePass {
-				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared))
-			}
-			for _, e := range row.Paths.Write {
-				if !types.PathsIntersect(e, p) {
-					continue
-				}
-				_, decl := types.SplitClaim(e)
-				if decl == "" {
-					return nil, "", unsettledf("job %s writes it whole (%s), not by declaration", row.ID, e)
-				}
-				claims[side] = append(claims[side], decl)
-				cited[side] = append(cited[side], fmt.Sprintf("%s (job %s)", e, row.ID))
-			}
-		}
-	}
-	if a, b, ok := risk.OverlappingClaims(claims[0], claims[1]); ok {
-		return nil, "", unsettledf("the claims overlap: %s#%s on %s, %s#%s on %s", p, a, names[oursSide], p, b, names[theirsSide])
-	}
-	var content [3][]byte
-	for i, rev := range []string{base, s.ours, s.theirs} {
-		text, err := s.drv.ReadFileAt(ctx, s.m.Root(), rev, p)
-		if err != nil {
-			return nil, "", unsettledf("it cannot be read at %s: %v", rev, err)
-		}
-		content[i] = []byte(text)
-	}
-	res, err := risk.MergeByClaims(p, content[0],
-		risk.ClaimSide{Content: content[1], Claims: claims[oursSide]},
-		risk.ClaimSide{Content: content[2], Claims: claims[theirsSide]})
-	if err != nil {
-		return nil, "", unsettledError(err.Error())
-	}
-	return res.Content, fmt.Sprintf("%s against %s; every job passed", strings.Join(cited[0], ", "), strings.Join(cited[1], ", ")), nil
-}
-
-// mergeBase is the one merge base of the two sides, an unsettledError when there is not one.
-func (s *claimSettle) mergeBase(ctx context.Context) (string, error) {
-	if !s.looked {
-		s.looked = true
-		var ok bool
-		s.base, ok, s.baseErr = s.drv.MergeBase(ctx, s.m.Root(), s.ours, s.theirs)
-		switch {
-		case errors.Is(s.baseErr, types.ErrVCSUnsupported):
-			s.baseErr = unsettledf("%s reports no merge base, and each side's edits are measured from one", s.drv.Name())
-		case s.baseErr == nil && !ok:
-			s.baseErr = unsettledf("the sides share no one merge base")
-		}
-	}
-	return s.base, s.baseErr
-}
-
-// resolveSide is the side whose history carries row's work, or false for neither: the work is
-// already in the merge base, or no revision here names it. The work is the revision row's
-// checkout has checked out, else a revision named row.ID: the branch-per-job convention
-// hack/dev/merge-job-branches.buzz also reads.
-func (s *claimSettle) resolveSide(ctx context.Context, row types.Job, base string) (mergeSide, bool) {
-	tip := row.ID
-	if info, err := os.Stat(row.CheckoutRoot); err == nil && info.IsDir() {
-		if ref, err := s.drv.Ref(ctx, row.CheckoutRoot); err == nil && ref != "" {
-			tip = ref
-		}
-	}
-	root := s.m.Root()
-	if in, err := s.drv.IsAncestor(ctx, root, tip, base); err != nil || in {
-		return 0, false
-	}
-	for side, rev := range []string{s.ours, s.theirs} {
-		if in, err := s.drv.IsAncestor(ctx, root, tip, rev); err == nil && in {
-			return mergeSide(side), true
-		}
-	}
-	return 0, false
-}
-
-// startMergeAgainst begins the merge that --against settles, and returns the function that
-// backs it out again: a no-op unless this is a dry run, since otherwise the merge is the
-// whole point and stays in progress for the caller to commit.
-//
-// A real merge rather than `git merge-tree`: merge-tree reports conflicted PATHS only,
-// while settle.PlanConflicts decides on the conflict KIND, and a modify/delete is the shape no
-// merge driver is ever invoked for. (The read-only PR advisor uses merge-tree because it
-// needs only the names.)
-//
-// So a dry run merges for real and aborts, which is why a clean tree is required up
-// front: `git merge --abort` does not guarantee uncommitted work survives.
-func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
-	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
-	if err != nil {
-		return nil, fmt.Errorf("vcs resolve: read tree status: %w", err)
-	}
-	if len(dirty) > 0 {
-		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted, commit or stash them first so backing the merge out cannot lose them", len(dirty))
-	}
-	// The person resolving, as the box knows them: the merge is theirs to conclude.
-	if err := res.VCS.StartMerge(ctx, root, ref, types.Person{}); err != nil {
-		return nil, fmt.Errorf("vcs resolve: %w", err)
-	}
-	if !globalCfg.DryRun {
-		// The merge is the point: leave it in progress for the caller to commit.
-		return func() {}, nil
-	}
-	return func() {
-		if err := res.VCS.AbortMerge(ctx, root); err != nil {
-			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
-			// caller told "nothing was touched" would go on to do something else in it.
-			slog.ErrorContext(ctx, "could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort)",
-				attr.Notice(""), attr.Component("vcs resolve"), attr.Error(err))
-		}
-	}, nil
-}
-
-// applyResolution performs the plan: clear markers, record deletions, regenerate once,
-// then record everything the regeneration touched.
-//
-// Every step past the first has already mutated the tree, so failures report how far it
-// got. A half-applied resolve otherwise looks like a fresh conflict with the markers
-// missing, which `git status` alone cannot explain.
-// staleDecls says the declarations came from the committed magusfile because the working
-// copy's is mid-merge. It suppresses the regeneration step and nothing else: clearing
-// markers and recording paths are decisions ABOUT the conflicts, which either side's
-// declarations answer the same way, while regenerating PRODUCES bytes, and a merge that
-// touched a generator would have this produce output matching neither side.
-func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, plan settle.Plan, staleDecls bool) error {
-	if err := driver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.Keep, plan.Rederive)); err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	if err := driver.RemoveConflicts(ctx, m.Root(), plan.Gone); err != nil {
-		return fmt.Errorf("vcs resolve, %s: %w", resolveTreeState(plan, "the conflict markers were already cleared"), err)
-	}
-	if staleDecls {
-		fmt.Printf("vcs resolve: not regenerating - the magusfile is still mid-merge, and a generator it changes would produce bytes matching neither side. Resolve the magusfile, then `%s` to finish.\n", hint.Run.With("generate:rw"))
-	} else if err := runRebuildTargets(func(args []string) error { return runTarget(ctx, root, rc, args) }, plan.Rebuild); err != nil {
-		return fmt.Errorf("vcs resolve, %s: regenerate: %w", resolveTreeState(plan,
-			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"), err)
-	}
-	// The registration is derived from the declared outputs, so a conflict in the file
-	// holding it is settled by re-deriving. First point the file has no markers.
-	settle.EnsureDriver(ctx, m)
-
-	settled, err := plan.Paths(ctx, m, driver)
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	// stagePaths, not MarkResolved directly: one pathspec matching nothing aborts the whole
-	// call before staging anything, so a single conflict involving a RENAME took the other
-	// forty paths down with it: regeneration complete, index untouched, and an error naming
-	// a file the rename had legitimately removed. filterStageable splits those out first.
-	staged, dropped, err := stagePaths(ctx, m.Root(), driver, settled)
-	if err != nil {
-		return fmt.Errorf("vcs resolve, %s: %w", resolveTreeState(plan, "regeneration completed"), err)
-	}
-	fmt.Printf("\nrecorded %d path(s); review before continuing: %s\n", len(staged), driver.ReviewCommand())
-	// Named, never silent: a path magus settled and could not record is one the caller has
-	// to look at, and the count above would otherwise be the only sign it existed.
-	if len(dropped) > 0 {
-		fmt.Printf("not recorded (gone from disk and untracked, so there is nothing to stage): %s\n",
-			strings.Join(dropped, ", "))
-	}
-	return unresolvedError(plan)
-}
-
-// committedMagusfiles returns the COMMITTED content of every conflicted .buzz file, keyed
-// by absolute path, for interp.WithOverlay.
-//
-// The committed side, not either merge stage: it is the one version guaranteed to parse,
-// and the declarations it carries are the ones the tree had before this merge started.
-//
-// No error return, deliberately: every way this can fail (no VCS, a backend that cannot
-// report conflicts or read a revision, a file the VCS will not hand back) means the same
-// thing to the only caller, which is "carry on with the load failure you already have". An
-// error here could only be discarded, and returning one alongside a nil map is the
-// ambiguity `nilnil` exists to catch. Nothing to overlay is an empty map.
-func committedMagusfiles(ctx context.Context, root string) map[string]string {
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return nil
-	}
-	conflicts, err := res.VCS.Conflicts(ctx, root)
-	if err != nil {
-		return nil
-	}
-	overlay := map[string]string{}
-	for _, c := range conflicts {
-		if !strings.HasSuffix(c.Path, ".buzz") {
-			continue
-		}
-		// "" is the committed revision in whichever backend this is; naming HEAD here
-		// would be correct for git alone.
-		content, rerr := res.VCS.ReadFileAt(ctx, root, "", c.Path)
-		if rerr != nil {
-			return nil
-		}
-		overlay[filepath.Join(root, filepath.FromSlash(c.Path))] = content
-	}
-	return overlay
-}
-
-// resolveTreeState describes how far the resolve got, for an error message.
-func resolveTreeState(plan settle.Plan, reached string) string {
-	return fmt.Sprintf("the working tree has been modified (%s), "+
-		"to start over abort the merge (`git rebase --abort` or `git merge --abort`), "+
-		"to inspect it `git status` now shows %d kept and %d removed path(s)",
-		reached, len(plan.Keep)+len(plan.Rederive), len(plan.Gone))
-}
-
-// runRebuildTargets runs each target ONCE over every project that needs it. Grouping by
-// target keeps this a single build: fifty conflicted files still cost one `magus run
-// generate` per distinct target.
-//
-// A failed target does not stop the rest, so one pass names every stale input.
-// The error lists each failed command.
-func runRebuildTargets(run func(args []string) error, rebuild map[string][]string) error {
-	var failed []error
-	for _, target := range slices.Sorted(maps.Keys(rebuild)) {
-		projects := rebuild[target]
-		slices.Sort(projects)
-		command := hint.Run.With(target, strings.Join(projects, " "))
-		fmt.Printf("regenerating: %s\n", command)
-		if err := run(append([]string{target}, projects...)); err != nil {
-			failed = append(failed, fmt.Errorf("%s: %w", command, err))
-		}
-	}
-	if len(failed) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%d of %d target(s) failed: %w", len(failed), len(rebuild), errors.Join(failed...))
-}
-
-// stageFailed names the stages that did not run. Each reads the conflicts the
-// failed one was to settle.
-func stageFailed(err error, notRun ...string) error {
-	return fmt.Errorf("%w: not run because of it: %s", err, strings.Join(notRun, ", "))
-}
-
-func reportResolution(plan settle.Plan, dryRun bool) {
-	verb, goneVerb, rederiveVerb := "resolved", "recorded the deletion of", "re-derived"
-	if dryRun {
-		verb, goneVerb, rederiveVerb = "would resolve", "would record the deletion of", "would re-derive"
-	}
-	if len(plan.Keep) > 0 {
-		fmt.Printf("%s %d generated file(s), then regenerating them:\n", verb, len(plan.Keep))
-		printPaths(plan.Keep)
-	}
-	if len(plan.Gone) > 0 {
-		fmt.Printf("%s %d generated file(s) this workspace no longer tracks:\n", goneVerb, len(plan.Gone))
-		printPaths(plan.Gone)
-	}
-	if len(plan.Rederive) > 0 {
-		// Reported because it is not a merge. The managed section is rebuilt from the
-		// declared outputs; anything outside it comes from the incoming side, so a
-		// hand-written rule only the other side has does not survive.
-		fmt.Printf("%s %d file(s) magus maintains, from the workspace rather than by merging:\n",
-			rederiveVerb, len(plan.Rederive))
-		printPaths(plan.Rederive)
-		fmt.Println("  any hand-written rules in these files are taken from the incoming side")
-	}
-	if len(plan.Manual) > 0 {
-		fmt.Printf("left for you: %d conflict(s) magus cannot settle:\n", len(plan.Manual))
-		printPaths(plan.Manual)
-	}
-}
-
-func printPaths(paths []string) {
-	for _, p := range paths {
-		fmt.Printf("  %s\n", p)
-	}
-}
-
-// unresolvedError exits non-zero when conflicts remain, so `magus vcs resolve && git
-// rebase --continue` cannot skip past one you still have to read.
-func unresolvedError(plan settle.Plan) error {
-	if len(plan.Manual) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%d conflict(s) still need you, resolve them, stage them, and continue", len(plan.Manual))
+	return settle.Apply(ctx, os.Stdout, m, res.VCS, plan, func(args []string) error { return runTarget(ctx, root, rc, args) }, stale)
 }
 
 // settleLockWait bounds how long a settle waits for another magus to release a
@@ -767,22 +305,6 @@ func settleRun(root string, rc runConfig) settle.RunFunc {
 	})
 }
 
-// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It runs, one run per
-// target, the regenerations the merge driver left owed, which `magus doctor` reports,
-// stages the result and clears the record. With nothing owed it says so.
-func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver) error {
-	out, err := settle.Hook(ctx, m, vcs.HookOperation{}, buildDefinesTarget(ctx, m), settleRun(root, rc))
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	if len(out.Ran) == 0 {
-		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
-		return nil
-	}
-	fmt.Printf("vcs resolve: ran %s; staged %d regenerated file(s): %s\n", out.Command(), len(out.Staged), driver.ReviewCommand())
-	return nil
-}
-
 // resolveVCS returns the active VCS resolution for the workspace.
 func resolveVCS(ctx context.Context, root string, m *magus.Magus) (types.VCSResolution, error) {
 	wsRoot := m.Root()
@@ -790,6 +312,17 @@ func resolveVCS(ctx context.Context, root string, m *magus.Magus) (types.VCSReso
 		wsRoot = root
 	}
 	return vcs.Resolve(ctx, wsRoot, "", m.VCSOptions())
+}
+
+// jobRows reads the job store of the workspace at root when asked, for settling by claims.
+func jobRows(ctx context.Context, root string) func() ([]types.Job, error) {
+	return func() ([]types.Job, error) {
+		store, err := openJobs(ctx, root, jobOpen{})
+		if err != nil {
+			return nil, err
+		}
+		return store.List()
+	}
 }
 
 // ------------------------------------------------------------- vcs checkpoint
@@ -887,33 +420,8 @@ func emitCheckpoint(cp typesvcs.Checkpoint) error {
 	case outputName:
 		return emitNames(os.Stdout, []string{cp.Token()})
 	}
-	fmt.Println(checkpointLine(cp))
+	fmt.Println(settle.CheckpointLine(cp))
 	return nil
-}
-
-// checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty
-// <digest>", with " preserved <handle>" appended when --preserve minted one. The field
-// count is fixed through the dirty word, so a branchless revision (a detached head, jj's
-// usual anonymous change) renders "-" rather than collapsing the column and silently
-// shifting everything after it.
-//
-// The handle is on this line because --preserve promises to print one and this is the
-// default rendering. Without it the two spellings of the command produced identical
-// output while one of them left an object in the user's repository, and the only way back
-// to that object was a format flag nobody was told to pass.
-func checkpointLine(cp typesvcs.Checkpoint) string {
-	branch := cp.Branch
-	if branch == "" {
-		branch = "-"
-	}
-	if !cp.Dirty {
-		return fmt.Sprintf("%s %s clean", cp.Revision, branch)
-	}
-	line := fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
-	if cp.Preserved != "" {
-		line += " preserved " + cp.Preserved
-	}
-	return line
 }
 
 // --------------------------------------------------------------- vcs ls-files
@@ -941,148 +449,10 @@ func vcsLsFilesUsage(w io.Writer) {
 	fmt.Fprintln(w, "Stage the listing: magus vcs ls-files -o name | git add --pathspec-from-file=-")
 }
 
-// The groups a dirty path can be left out by, in the order lsFilesGroups reports a path
-// that falls in several.
-const (
-	lsGroupHeld        = "held"
-	lsGroupStaged      = "staged"
-	lsGroupUntracked   = "untracked"
-	lsGroupUnclaimed   = "unclaimed"
-	lsGroupUnexplained = "unexplained"
-	lsGroupGenerated   = "generated"
-)
-
-type lsFilesGroup struct {
-	name string
-	has  func(lsFilesPath) bool
-}
-
-var lsFilesGroups = []lsFilesGroup{
-	{lsGroupHeld, func(p lsFilesPath) bool { return p.Held != "" }},
-	{lsGroupStaged, func(p lsFilesPath) bool { return p.Staged }},
-	{lsGroupUntracked, func(p lsFilesPath) bool { return p.Untracked }},
-	{lsGroupUnclaimed, func(p lsFilesPath) bool { return p.Role != "source" && p.Role != "output" }},
-	{lsGroupUnexplained, func(p lsFilesPath) bool { return p.Role == "output" && p.Unexplained }},
-	{lsGroupGenerated, func(p lsFilesPath) bool { return p.Role == "output" && !p.Unexplained }},
-}
-
-// lsFilesPath is one dirty path with every fact the selection reads.
-type lsFilesPath struct {
-	Path                           string
-	Role                           string // types.FileEntry.Role
-	Project                        string
-	Held                           string // the other live job that writes it
-	Untracked, Staged, Unexplained bool
-}
-
-// lsFilesFilter is what the caller asked for. Patterns and Exclude are write-path
-// patterns already made workspace-relative; Include is keyed by group.
-type lsFilesFilter struct {
-	Patterns, Exclude, Projects []string
-	Include                     map[string]bool
-}
-
-// selectLsFiles narrows paths by the filter, then leaves out every group the filter does
-// not include. unmatched names each pattern and project that covered no dirty path.
-func selectLsFiles(paths []lsFilesPath, f lsFilesFilter) (list types.LsFiles, unmatched []string) {
-	hit := map[string]bool{}
-	var narrowed []lsFilesPath
-	for _, p := range paths {
-		if lsFilesKeeps(p, f, hit) {
-			narrowed = append(narrowed, p)
-		}
-	}
-	for _, want := range slices.Concat(f.Patterns, f.Projects) {
-		if !hit[want] {
-			unmatched = append(unmatched, want)
-		}
-	}
-
-	list.Files = []string{}
-	byGroup := map[string]*types.LsFilesExcluded{}
-	for _, p := range narrowed {
-		i := slices.IndexFunc(lsFilesGroups, func(g lsFilesGroup) bool { return g.has(p) && !f.Include[g.name] })
-		if i < 0 {
-			list.Files = append(list.Files, p.Path)
-			continue
-		}
-		name := lsFilesGroups[i].name
-		e := byGroup[name]
-		if e == nil {
-			e = &types.LsFilesExcluded{Group: name, Flag: "--include-" + name}
-			byGroup[name] = e
-		}
-		e.Paths = append(e.Paths, p.Path)
-		if name == lsGroupHeld {
-			if e.Holders == nil {
-				e.Holders = map[string]string{}
-			}
-			e.Holders[p.Path] = p.Held
-		}
-	}
-	slices.Sort(list.Files)
-	for _, g := range lsFilesGroups {
-		e := byGroup[g.name]
-		if e == nil {
-			continue
-		}
-		slices.Sort(e.Paths)
-		if g.name == lsGroupUnexplained {
-			// No declared input moved, so this is ClassifyDrift's second fork: skew against a
-			// differently-versioned magus, or a non-deterministic generator.
-			code, msg := types.ClassifyDrift(false, version)
-			e.Code, e.Message, e.URL = string(code), msg, types.CodeURL(code)
-		}
-		list.Excluded = append(list.Excluded, *e)
-	}
-	return list, unmatched
-}
-
-// lsFilesKeeps reports whether p passes the filter's patterns, exclusions and projects,
-// marking in hit each pattern and project that covered it.
-func lsFilesKeeps(p lsFilesPath, f lsFilesFilter, hit map[string]bool) bool {
-	covered := len(f.Patterns) == 0
-	for _, pat := range f.Patterns {
-		if job.Covers(pat, p.Path) {
-			hit[pat], covered = true, true
-		}
-	}
-	if !covered || slices.ContainsFunc(f.Exclude, func(pat string) bool { return job.Covers(pat, p.Path) }) {
-		return false
-	}
-	if len(f.Projects) == 0 {
-		return true
-	}
-	owned := false
-	for _, proj := range f.Projects {
-		if path.Clean(proj) == path.Clean(cmp.Or(p.Project, ".")) {
-			hit[proj], owned = true, true
-		}
-	}
-	return owned
-}
-
-// lsFilesRefusal refuses an --include flag for a state the backend does not keep, rather
-// than answering it with nothing.
-func lsFilesRefusal(driver types.VCSDriver, include map[string]bool) error {
-	if _, ok := driver.(types.StagedFileReporter); include[lsGroupStaged] && !ok {
-		return fmt.Errorf("vcs ls-files: --include-staged: %s keeps no staging index, so no path is ever left out as staged", driver.Name())
-	}
-	if include[lsGroupUntracked] && !keepsUntracked(driver) {
-		return fmt.Errorf("vcs ls-files: --include-untracked: %s tracks every file in the working copy, so no path is ever left out as untracked", driver.Name())
-	}
-	return nil
-}
-
-// keepsUntracked reports whether the backend has files present and not tracked. jj
-// snapshots every file into the working-copy commit, and its TrackedFiles answers for
-// the parent commit, which would call each new file untracked.
-func keepsUntracked(driver types.VCSDriver) bool { return driver.Name() != "jj" }
-
 // vcsLsFilesCommand lists the dirty paths a commit of this change wants.
 func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	var lf *flaggen.VCSLsFilesFlags
-	var exclude, projects listFlag
+	var exclude, projects job.ListFlag
 	pos, err := commandParse("vcs ls-files", args, func(fs *flag.FlagSet) {
 		lf = flaggen.BindVCSLsFiles(fs)
 		fs.Var(&exclude, flaggen.FlagVCSLsFilesExclude, "Leave out paths this write-path `pattern` covers; repeatable or comma-separated")
@@ -1093,12 +463,12 @@ func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	include := map[string]bool{
-		lsGroupUntracked:   lf.IncludeUntracked,
-		lsGroupGenerated:   lf.IncludeGenerated,
-		lsGroupUnexplained: lf.IncludeUnexplained,
-		lsGroupUnclaimed:   lf.IncludeUnclaimed,
-		lsGroupHeld:        lf.IncludeHeld,
-		lsGroupStaged:      lf.IncludeStaged,
+		settle.LsGroupUntracked:   lf.IncludeUntracked,
+		settle.LsGroupGenerated:   lf.IncludeGenerated,
+		settle.LsGroupUnexplained: lf.IncludeUnexplained,
+		settle.LsGroupUnclaimed:   lf.IncludeUnclaimed,
+		settle.LsGroupHeld:        lf.IncludeHeld,
+		settle.LsGroupStaged:      lf.IncludeStaged,
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -1110,31 +480,22 @@ func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	if err != nil || res.VCS == nil {
 		return fmt.Errorf("vcs ls-files: no VCS resolved for this workspace")
 	}
-	if err := lsFilesRefusal(res.VCS, include); err != nil {
+	if err := settle.LsFilesRefusal(res.VCS, include); err != nil {
 		return exit.Usagef("%s", err)
 	}
-	patterns, err := workspaceRelPatterns(root, pos)
+	patterns, err := settle.WorkspaceRelPatterns(root, pos)
 	if err != nil {
 		return err
 	}
-	excluded, err := workspaceRelPatterns(root, exclude)
+	excluded, err := settle.WorkspaceRelPatterns(root, exclude)
 	if err != nil {
 		return err
 	}
 
-	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
-	if err != nil {
-		return fmt.Errorf("vcs ls-files: list dirty files: %w", err)
-	}
-	facts, err := lsFilesFacts(ctx, ws, res, root, dirty)
+	list, err := settle.ListFiles(ctx, ws, res, root, settle.LsFilesFilter{Patterns: patterns, Exclude: excluded, Projects: projects, Include: include}, jobPlace, version)
 	if err != nil {
 		return err
 	}
-	list, unmatched := selectLsFiles(facts, lsFilesFilter{Patterns: patterns, Exclude: excluded, Projects: projects, Include: include})
-	for _, u := range unmatched {
-		slog.WarnContext(ctx, u+" matches no dirty path", attr.Notice(""), attr.Component("magus"))
-	}
-	reportExcluded(ctx, list.Excluded)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1146,228 +507,84 @@ func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	return emitRecord(opts, list, list.Files)
 }
 
-// lsFilesFacts gathers what the selection reads about each dirty path.
-func lsFilesFacts(ctx context.Context, ws types.WorkspaceRepository, res types.VCSResolution, root string, dirty []string) ([]lsFilesPath, error) {
-	if len(dirty) == 0 {
-		return nil, nil
-	}
-	files, err := ws.ClassifyFiles(ctx, dirty)
-	if err != nil {
-		return nil, err
-	}
-	_, unexplained := types.SplitExplainedOutputs(files, types.SourcesChangedSinceBase(ctx, ws, res, root))
-	untracked := map[string]bool{}
-	if keepsUntracked(res.VCS) {
-		tracked, err := res.VCS.TrackedFiles(ctx, root, dirty)
-		if err != nil {
-			return nil, fmt.Errorf("vcs ls-files: %w", err)
-		}
-		for _, p := range dirty {
-			untracked[p] = !slices.Contains(tracked, p)
-		}
-	}
-	var staged []string
-	if sr, ok := res.VCS.(types.StagedFileReporter); ok {
-		if staged, err = sr.StagedFiles(ctx, root); err != nil {
-			return nil, fmt.Errorf("vcs ls-files: %w", err)
-		}
-	}
-	held, err := heldForOtherLeases(ctx, root, dirty)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]lsFilesPath, 0, len(files))
-	for _, f := range files {
-		out = append(out, lsFilesPath{
-			Path:        f.Path,
-			Role:        f.Role,
-			Project:     f.Project,
-			Held:        held[f.Path],
-			Untracked:   untracked[f.Path],
-			Staged:      slices.Contains(staged, f.Path),
-			Unexplained: slices.Contains(unexplained, f.Path),
-		})
-	}
-	return out, nil
-}
+// ------------------------------------------------------------- vcs checkout
 
-// reportExcluded names on stderr, in every output format, each group left out and the
-// flag that lists it.
-func reportExcluded(ctx context.Context, groups []types.LsFilesExcluded) {
-	for _, g := range groups {
-		paths := slices.Clone(g.Paths)
-		for i, p := range paths {
-			if lease := g.Holders[p]; lease != "" {
-				paths[i] = fmt.Sprintf("%s (live job %s writes it)", p, lease)
-			}
+// vcsCheckoutCommand implements `magus vcs checkout <rev> [--fetch <ref>]
+// [--no-bootstrap]` and `magus vcs checkout --remove <dir>`.
+func vcsCheckoutCommand(ctx context.Context, root string, args []string) error {
+	var flags *flaggen.VCSCheckoutFlags
+	pos, err := commandParse("vcs checkout", args, func(fs *flag.FlagSet) {
+		flags = flaggen.BindVCSCheckout(fs)
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus vcs checkout <rev> [--fetch <ref>] [--no-bootstrap] | --remove <dir>")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Check out one revision under $XDG_CACHE_HOME/magus/tmp for review, then run")
+			fmt.Fprintln(os.Stderr, "the workspace's declared install, harness install and checkout.bootstrap hook.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags:")
+			printOwnDefaults(fs)
 		}
-		msg := fmt.Sprintf("left out %d %s path(s); %s lists them: %s", len(paths), g.Group, g.Flag, strings.Join(paths, ", "))
-		if g.Code != "" {
-			msg += fmt.Sprintf("; %s: %s %s", g.Code, g.Message, g.URL)
-		}
-		slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus"))
-	}
-}
-
-// workspaceRelPatterns is workspaceRelPaths for write-path patterns: the path half of
-// each (types.SplitClaim) is made workspace-relative, and a literal `#` in it is escaped
-// again so job.Covers reads it as part of the path.
-func workspaceRelPatterns(root string, patterns []string) ([]string, error) {
-	paths := make([]string, len(patterns))
-	decls := make([]string, len(patterns))
-	for i, p := range patterns {
-		paths[i], decls[i] = types.SplitClaim(p)
-	}
-	rel, err := workspaceRelPaths(root, paths)
-	if err != nil {
-		return nil, err
-	}
-	for i, p := range patterns {
-		rel[i] = strings.ReplaceAll(rel[i], "#", `\#`)
-		if types.HasClaim(p) {
-			rel[i] += "#" + decls[i]
-		}
-	}
-	return rel, nil
-}
-
-// workspaceRelPaths turns the paths you typed into workspace-relative ones.
-//
-// ClassifyFiles, the declared-output globs, and the index write are all
-// workspace-relative, but you run this from wherever you are. Passing the typed path
-// through made `magus vcs ls-files foo.go` from a subdirectory miss, or address a different
-// file, with no error: an unmatched path just reports as undeclared.
-func workspaceRelPaths(root string, paths []string) ([]string, error) {
-	if len(paths) == 0 {
-		return nil, nil
-	}
-	// An empty root is a CALLER bug, not a path the user typed wrong. Left to run, it
-	// reports every path as "outside the workspace at " with nothing after "at", which
-	// blames the argument for a mistake it did not make.
-	if root == "" {
-		return nil, fmt.Errorf("no workspace root resolved, cannot place %q", paths[0])
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("resolve working directory: %w", err)
-	}
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		abs := p
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(cwd, p)
-		}
-		rel, err := filepath.Rel(root, abs)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			return nil, fmt.Errorf("%q is outside the workspace at %s", p, root)
-		}
-		out = append(out, filepath.ToSlash(rel))
-	}
-	return out, nil
-}
-
-// stagePaths shells out to git for the index write itself.
-//
-// One pathspec that matches nothing aborts the WHOLE `git add` before staging anything,
-// so a single stale declaration silently loses every other path in the call.
-// filterStageable splits them first: on disk is staged; gone from disk but still tracked
-// is ALSO staged, since that is how a deletion or rename is recorded. Only a path that is
-// neither is dropped, and reported rather than discarded.
-//
-// Paths are passed after `--` so one beginning with a dash is unambiguously a path.
-//
-// It returns what it staged and dropped rather than printing either, so `-o json` gets
-// the same answer the terminal does.
-func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths []string) (staged, dropped []string, err error) {
-	stageable, dropped, err := filterStageable(ctx, root, driver, paths)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(stageable) == 0 {
-		return []string{}, dropped, nil
-	}
-	// MarkResolved batches the pathspecs, which matters here: `vcs resolve` over a whole
-	// dirty tree is the largest path list these commands hand to the VCS.
-	if err := driver.MarkResolved(ctx, root, stageable); err != nil {
-		return nil, nil, fmt.Errorf("stage: %w", err)
-	}
-	return stageable, dropped, nil
-}
-
-// heldForOtherLeases is the subset of paths a whole-tree listing leaves out, each
-// with the live lease it belongs to: the ones another lease's write paths cover in this
-// checkout. Two holders sharing a checkout share its dirty tree, and staging the other's
-// uncommitted sources would land them under this caller's commit.
-func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[string]string, error) {
-	loc, err := jobPlace(root)
-	if err != nil {
-		return nil, fmt.Errorf("place the job store to read which leases share this checkout: %w", err)
-	}
-	rows, err := job.NewStore(loc).List()
-	if err != nil {
-		return nil, fmt.Errorf("read the job store for the paths other leases in this checkout write: %w", err)
-	}
-	lease, _ := job.RunLease(ctx, loc)
-	return otherLeasesPaths(rows, root, lease, paths), nil
-}
-
-// otherLeasesPaths maps each of paths that a live row in the checkout at root, other than
-// lease's own, declares among its write paths to that row's id. Two rows covering one path
-// both name it, unless lease is one of them.
-func otherLeasesPaths(rows []types.Job, root, lease string, paths []string) map[string]string {
-	here := slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool {
-		return r.CheckoutRoot == "" || !sameDir(r.CheckoutRoot, root)
 	})
-	held := map[string]string{}
-	for _, p := range paths {
-		owner, ok := job.AttributeWrite(here, p)
-		switch {
-		case ok && owner.Job != lease:
-			held[p] = owner.Job
-		case !ok && len(owner.Ambiguous) > 0 && !slices.Contains(owner.Ambiguous, lease):
-			held[p] = strings.Join(owner.Ambiguous, " and ")
+	if err != nil {
+		return err
+	}
+	switch {
+	case flags.Remove != "" && len(pos) > 0:
+		return exit.Usagef("vcs checkout: --remove takes no revision (got %q)", pos[0])
+	case flags.Remove == "" && len(pos) != 1:
+		return exit.Usagef("vcs checkout: takes exactly one revision, got %d", len(pos))
+	}
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions())
+	if err != nil {
+		return fmt.Errorf("vcs checkout: %w", err)
+	}
+	if res.VCS == nil {
+		return fmt.Errorf("vcs checkout: no version control answers in %s", ws.Root())
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("vcs checkout: locate the running magus: %w", err)
+	}
+	review, err := settle.NewReviewCheckout(ws.Root(), exe, version, res.VCS)
+	if err != nil {
+		return err
+	}
+	if flags.Remove != "" {
+		if err := settle.PreserveBeforeRemoval(ctx, flags.Remove, res); err != nil {
+			return err
+		}
+		if err := review.Remove(ctx, flags.Remove); err != nil {
+			return err
+		}
+		fmt.Printf("removed %s\n", flags.Remove)
+		return nil
+	}
+	rec, err := review.Checkout(ctx, pos[0], flags.Fetch, !flags.Bootstrap)
+	if rec.Path != "" {
+		if emitErr := emitCheckout(rec); emitErr != nil {
+			return errors.Join(err, emitErr)
 		}
 	}
-	return held
+	return err
 }
 
-// filterStageable separates paths git add can actually act on from ones that
-// would abort the whole `git add` call. See stagePaths for why a missing-but-
-// tracked path (a deletion or the old half of a rename) must still be staged.
-func filterStageable(ctx context.Context, root string, driver types.VCSDriver, paths []string) (stageable, dropped []string, err error) {
-	var maybeGone []string
-	for _, p := range paths {
-		if _, statErr := os.Stat(filepath.Join(root, p)); statErr == nil {
-			stageable = append(stageable, p)
-			continue
-		}
-		maybeGone = append(maybeGone, p)
-	}
-	if len(maybeGone) == 0 {
-		return stageable, nil, nil
-	}
-	// The abort-the-whole-invocation behavior this guards against is git's. Other
-	// backends get the paths passed through rather than probed.
-	if driver.Name() != "git" {
-		return append(stageable, maybeGone...), nil, nil
-	}
-
-	// The tracked listing does not care whether a file is still on disk, so a
-	// tracked-but-deleted path is kept and its deletion gets recorded.
-	known, err := driver.TrackedFiles(ctx, root, maybeGone)
+// emitCheckout renders rec: the structured formats get the record, the
+// terminal its text reading.
+func emitCheckout(rec job.ReviewCheckoutRecord) error {
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
-		return nil, nil, fmt.Errorf("stage: %w", err)
+		return err
 	}
-	tracked := make(map[string]bool, len(known))
-	for _, p := range known {
-		tracked[p] = true
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, rec)
+	case outputName:
+		return emitNames(os.Stdout, []string{rec.Path})
 	}
-	for _, p := range maybeGone {
-		if tracked[p] {
-			stageable = append(stageable, p)
-		} else {
-			dropped = append(dropped, p)
-		}
-	}
-	return stageable, dropped, nil
+	settle.PrintCheckout(os.Stdout, rec)
+	return nil
 }

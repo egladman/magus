@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestBuildRecordsAnUnknownMarkerFamilyAndAnswersAroundIt(t *testing.T) {
@@ -76,4 +77,21 @@ func TestWarmLoadMatchesColdBuild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, len(cold.Nodes()), len(warm.Nodes()))
 	assert.Equal(t, len(cold.Edges()), len(warm.Edges()))
+}
+
+type graphBuildShardSuite struct{ suite.Suite }
+
+func TestGraphBuildShard(t *testing.T) { suite.Run(t, new(graphBuildShardSuite)) }
+
+func (s *graphBuildShardSuite) TestNarrowedCoverageDoesNotFailASymbolRefresh() {
+	s.NoError(GraphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies): run test unnarrowed"}))
+}
+
+func (s *graphBuildShardSuite) TestAnInvalidCoverageProfileStillFails() {
+	s.ErrorContains(GraphBuildShardFailure(s.T().Context(), []string{"@coverage: invalid coverage mode"}), "invalid coverage mode")
+}
+
+func (s *graphBuildShardSuite) TestAnotherShardFailureIsNotHiddenByPartialCoverage() {
+	err := GraphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies)", "@symbols: index unreadable"})
+	s.ErrorContains(err, "@symbols: index unreadable")
 }

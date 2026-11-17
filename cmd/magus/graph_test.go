@@ -2,207 +2,22 @@ package main
 
 import (
 	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/render"
-	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 )
-
-// Which diagnostic this is does not matter; it is an edge endpoint.
-var diagID = "diagnostic:" + string(types.ExecDenied)
-
-// runtimeGraph carries both halves of what --static must drop: observed attrs beside a
-// static one, and a runtime edge beside a static one.
-func runtimeGraph() *knowledge.Graph {
-	g := knowledge.NewGraph()
-	g.AddNode(types.KnowledgeNode{
-		ID: "target:pkg/a:build", Kind: types.KindTarget, Label: "build",
-		Attrs: map[string]string{
-			knowledge.AttrEngine:        "buzz",
-			knowledge.AttrDurationP75Ms: "4200",
-			knowledge.AttrLastOutputRef: "out1a2b3c",
-			knowledge.AttrLastRunOK:     "true",
-		},
-	})
-	g.AddNode(types.KnowledgeNode{ID: diagID, Kind: types.KindDiagnostic, Label: string(types.ExecDenied)})
-	g.AddEdge(types.KnowledgeEdge{
-		Source: "target:pkg/a:build", Target: diagID, Relation: types.RelationDocuments,
-		Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: "magusfile.buzz",
-	})
-	g.AddEdge(types.KnowledgeEdge{
-		Source: "target:pkg/a:build", Target: diagID, Relation: types.RelationEmits,
-		Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: knowledge.ProvenanceRuntime,
-	})
-	return g
-}
-
-// TestStripRuntimeAttrs pins what --static guarantees: the committed export carries no
-// run history. Static attrs and edges survive, NodeCount holds, EdgeCount tracks.
-func TestStripRuntimeAttrs(t *testing.T) {
-	out := runtimeGraph().Output()
-	require.Equal(t, 2, out.EdgeCount, "fixture starts with a static and a runtime edge")
-
-	stripUnreproducible(&out)
-
-	// Every observed attr is stripped and the static one is kept, only the static edge
-	// survives with EdgeCount tracking it, and no node goes (NodeCount holds at 2).
-	want := runtimeGraph().Output()
-	for i := range want.Nodes {
-		if want.Nodes[i].ID == "target:pkg/a:build" {
-			want.Nodes[i].Attrs = map[string]string{knowledge.AttrEngine: "buzz"}
-		}
-	}
-	require.Equal(t, types.RelationDocuments, want.Links[0].Relation, "the links sort the static edge first")
-	want.Links = want.Links[:1]
-	want.EdgeCount = 1
-	assert.Equal(t, want, out)
-}
-
-// TestStripRuntimeAttrsLeavesGraphIntact is why stripRuntimeAttrs copies instead of
-// deleting in place: Output shares Attrs maps with the live graph, which in the server is
-// warm and long-lived, so an in-place delete would blind every later explain.
-func TestStripRuntimeAttrsLeavesGraphIntact(t *testing.T) {
-	g := runtimeGraph()
-	out := g.Output()
-	stripUnreproducible(&out)
-
-	live := g.Output() // re-read the live graph after the strip
-	var build types.KnowledgeNode
-	for _, n := range live.Nodes {
-		if n.ID == "target:pkg/a:build" {
-			build = n
-		}
-	}
-	require.NotEmpty(t, build.ID)
-	assert.Equal(t, "4200", build.Attrs[knowledge.AttrDurationP75Ms], "the live graph keeps its observed attrs")
-	assert.Equal(t, "out1a2b3c", build.Attrs[knowledge.AttrLastOutputRef])
-	assert.Equal(t, 2, live.EdgeCount, "the live graph keeps its runtime edge")
-}
-
-// TestStripUnreproducibleDropsGitHistory is the half that runtime stripping never covered.
-//
-// An observed attr varies by MACHINE; git history varies by COMMIT, which is the sharper
-// problem for a checked-in export: committing anything moves the churn, so the artifact
-// invalidates itself and the drift gate fires on the very commit that regenerated it. This
-// repo's committed graph carried four git attrs on 204 file nodes, churn on 142 dirs, and
-// 345 authored edges, all of it a function of history rather than of the tree.
-func TestStripUnreproducibleDropsGitHistory(t *testing.T) {
-	out := types.KnowledgeGraphOutput{
-		Nodes: []types.KnowledgeNode{
-			{ID: "file:a.buzz", Kind: types.KindFile, Attrs: map[string]string{
-				"language": "buzz", "vcs_last_commit": "cafe", "vcs_last_modified": "2026-08-13",
-				"vcs_last_author": "Ada", "vcs_commits": "7",
-			}},
-			{ID: "dir:pkg", Kind: types.KindDir, Attrs: map[string]string{"dir_files": "3", "dir_commits": "91", "dir_languages": "buzz"}},
-			{ID: "doc:x.md", Kind: types.KindDoc, Attrs: map[string]string{"role": "readme", "staleness": "petrified", "outrun_days": "400"}},
-			{ID: "author:Ada", Kind: types.KindAuthor},
-		},
-		Links: []types.KnowledgeEdge{
-			{Source: "author:Ada", Target: "file:a.buzz", Relation: types.RelationAuthored},
-			{Source: "file:a.buzz", Target: "file:b.buzz", Relation: types.RelationCoChanges},
-			{Source: "doc:x.md", Target: "file:a.buzz", Relation: types.RelationDocuments},
-		},
-	}
-	stripUnreproducible(&out)
-
-	byID := map[string]types.KnowledgeNode{}
-	for _, n := range out.Nodes {
-		byID[n.ID] = n
-	}
-	assert.Equal(t, map[string]string{"language": "buzz"}, byID["file:a.buzz"].Attrs, "every vcs_* attr goes")
-	assert.Equal(t, map[string]string{"dir_files": "3", "dir_languages": "buzz"}, byID["dir:pkg"].Attrs,
-		"churn goes, but the file count and language set are functions of the tree and stay")
-	assert.Equal(t, map[string]string{"role": "readme"}, byID["doc:x.md"].Attrs, "staleness is derived from two commit dates")
-
-	// An author node exists only because history does, so it goes whole rather than
-	// surviving as a bare id with everything stripped off it.
-	_, ok := byID["author:Ada"]
-	assert.False(t, ok)
-	require.Len(t, out.Links, 1, "the authored and co_changes edges go with it")
-	assert.Equal(t, types.RelationDocuments, out.Links[0].Relation)
-	assert.Equal(t, len(out.Nodes), out.NodeCount)
-	assert.Equal(t, len(out.Links), out.EdgeCount)
-}
-
-// ---- graph export --open ----
-
-type ExplorerOriginSuite struct{ suite.Suite }
-
-func TestExplorerOriginSuite(t *testing.T) {
-	suite.Run(t, new(ExplorerOriginSuite))
-}
-
-func (s *ExplorerOriginSuite) TestRefusesTheDefaultExplorerWithAnEmptyList() {
-	err := checkHostedPageOrigin(defaultExploreURL, nil)
-	s.Require().Error(err)
-	s.Contains(err.Error(), "mcp.allowed_origins")
-}
-
-func (s *ExplorerOriginSuite) TestPassesAnOriginTheListNames() {
-	s.NoError(checkHostedPageOrigin(defaultExploreURL, []string{"https://eli.gladman.cc"}))
-}
-
-func (s *ExplorerOriginSuite) TestRefusesAnotherSchemeOfAListedOrigin() {
-	s.Error(checkHostedPageOrigin("http://site.example/graph/", []string{"https://site.example"}))
-}
-
-func (s *ExplorerOriginSuite) TestPassesLocalhost() {
-	s.NoError(checkHostedPageOrigin("http://localhost:9999/graph/", nil))
-}
-
-func (s *ExplorerOriginSuite) TestPassesALoopbackIP() {
-	s.NoError(checkHostedPageOrigin("http://127.0.0.1:9999/graph/", nil))
-}
-
-func (s *ExplorerOriginSuite) TestRefusesANameThatOnlyStartsLikeLoopback() {
-	s.Error(checkHostedPageOrigin("http://localhost.evil.example/graph/", nil))
-}
-
-func (s *ExplorerOriginSuite) TestRefusesARelativeBase() {
-	s.Error(checkHostedPageOrigin("graph/", nil))
-}
-
-// TestOpenViaBrowserEnv exercises the $BROWSER convention parsing: unset falls through
-// (error), a bogus command errors, and a real command (with or without %s) launches.
-func TestOpenViaBrowserEnv(t *testing.T) {
-	t.Setenv("BROWSER", "")
-	assert.Error(t, openViaBrowserEnv("http://x"), "unset BROWSER falls through to the platform opener")
-
-	t.Setenv("BROWSER", "magus-no-such-browser-xyz")
-	assert.Error(t, openViaBrowserEnv("http://x"), "a command that cannot start errors")
-
-	// `true` exists on the PATH of every supported unix; it launches (Start succeeds),
-	// which is all openViaBrowserEnv needs to consider the browser opened.
-	t.Setenv("BROWSER", "true")
-	require.NoError(t, openViaBrowserEnv("http://x"))
-
-	t.Setenv("BROWSER", "true %s")
-	require.NoError(t, openViaBrowserEnv("http://x"), "the URL is substituted for %s")
-
-	// The first launchable entry wins even if an earlier one is missing.
-	t.Setenv("BROWSER", "magus-no-such-browser-xyz:true")
-	require.NoError(t, openViaBrowserEnv("http://x"))
-}
 
 // TestEncodeFragmentDeterminism confirms that render.EncodeFragmentRaw produces
 // byte-for-byte identical output for the same input across two calls. This relies
@@ -221,113 +36,6 @@ func TestEncodeFragmentDeterminism(t *testing.T) {
 	require.NoError(t, err, "second EncodeFragmentRaw")
 
 	assert.Equal(t, first, second, "EncodeFragmentRaw must be deterministic:\n  first:  %s\n  second: %s", first, second)
-}
-
-// TestProbeLiveBridge covers the security-relevant branches of the real HTTP
-// probe used by both graphOpenLive (blocker: never emit a token for an
-// unreachable bridge) and liveBridgeReachable (the zero-arg auto-switch
-// gate): a guarded route (401/403) proves the bridge is up; anything else,
-// including connection refused, must be treated as down.
-func TestProbeLiveBridge(t *testing.T) {
-	t.Run("401 is reachable", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/api/v1/graph", r.URL.Path)
-			w.WriteHeader(http.StatusUnauthorized)
-		}))
-		defer srv.Close()
-		require.NoError(t, probeLiveBridge(context.Background(), strings.TrimPrefix(srv.URL, "http://")))
-	})
-
-	t.Run("403 is reachable", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-		}))
-		defer srv.Close()
-		require.NoError(t, probeLiveBridge(context.Background(), strings.TrimPrefix(srv.URL, "http://")))
-	})
-
-	t.Run("200 is unexpected and treated as unreachable", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer srv.Close()
-		err := probeLiveBridge(context.Background(), strings.TrimPrefix(srv.URL, "http://"))
-		require.Error(t, err)
-	})
-
-	t.Run("connection refused is unreachable", func(t *testing.T) {
-		// Bind and immediately close to get a loopback port nothing listens on.
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		addr := ln.Addr().String()
-		require.NoError(t, ln.Close())
-
-		err = probeLiveBridge(context.Background(), addr)
-		require.Error(t, err)
-	})
-}
-
-// TestLiveBridgeReachable exercises the gate that decides whether the zero-arg
-// `magus graph export --open` default may switch to live mode. It delegates to
-// probeLiveBridge against the configured MCP address.
-func TestLiveBridgeReachable(t *testing.T) {
-	saved := globalCfg
-	t.Cleanup(func() { globalCfg = saved })
-
-	t.Run("reachable bridge", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-		}))
-		defer srv.Close()
-		globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
-		require.True(t, liveBridgeReachable(context.Background()))
-	})
-
-	t.Run("unreachable bridge", func(t *testing.T) {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		addr := ln.Addr().String()
-		require.NoError(t, ln.Close())
-		globalCfg.MCP.Address = addr
-		require.False(t, liveBridgeReachable(context.Background()))
-	})
-}
-
-// graph build exited 0 when the root's reindex was refused by the run it was nested in,
-// and quiet hid the refusal, so the target that ran it read a stale index. A missing
-// indexer must still not fail the build.
-func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
-	refusal := fmt.Errorf("magus: %w", types.DiagnosticErrorf(types.ProjectLockHeldByAncestor,
-		"project . is locked by the magus run this one is nested inside"))
-	missing := errors.New("docs: exit status 127; install scip-typescript")
-
-	require.NoError(t, maintenance.ReindexRefusals(missing), "a missing indexer stays a warning")
-
-	got := maintenance.ReindexRefusals(errors.Join(missing, refusal))
-	require.ErrorIs(t, got, types.ProjectLockHeldByAncestor)
-	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
-
-	require.ErrorIs(t, maintenance.ReindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
-
-	full := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting scip: this machine's build budget is full")
-	got = maintenance.ReindexRefusals(errors.Join(missing, full))
-	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
-	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
-}
-
-type GraphReindexPressureSuite struct {
-	suite.Suite
-}
-
-func TestGraphReindexPressureSuite(t *testing.T) { suite.Run(t, new(GraphReindexPressureSuite)) }
-
-func (s *GraphReindexPressureSuite) TestARefusedReindexExitsTempFail() {
-	short := types.ExitError{Code: exit.TempFail, Err: types.DiagnosticErrorf(types.MemoryPressureHigh, "not starting scip: this machine is short of memory")}
-	missing := errors.New("docs: exit status 127; install scip-typescript")
-	got := maintenance.ReindexRefusals(errors.Join(missing, short))
-	s.Require().ErrorIs(got, types.MemoryPressureHigh)
-	s.NotContains(got.Error(), "scip-typescript", "only the refusal fails the build")
-	s.Equal(exit.TempFail, exit.Code(got))
 }
 
 // GraphExportSCIPSuite pins `magus graph export -o scip`: the symbol index as SCIP, for
@@ -364,84 +72,99 @@ func (s *GraphExportSCIPSuite) TestWritesAnIndexRootedAtTheWorkspace() {
 	s.Empty(idx.Documents, "a workspace no spell indexes exports no documents")
 }
 
-func TestGraphBuildWaitsOnAnotherCheckoutsMachineLock(t *testing.T) {
-	root := holdMachineRefresh(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-
-	_, _, err := acquireGraphBuild(ctx, root)
-
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Contains(t, err.Error(), "stopped waiting for the symbol refresh of /other")
-	store, err := knowledgeStoreDir(root)
-	require.NoError(t, err)
-	_, running := maintenance.RunningGraphBuild(store)
-	assert.False(t, running, "a waiter holds no store, so a read does not take it for a build")
-}
-
-// acquireBehindBuild runs acquireGraphBuild queued behind a holder of the
-// machine lock that wrote store, and returns who it can load from.
-func acquireBehindBuild(t *testing.T, store func(root string) string) *maintenance.GraphBuildHolder {
+// tableCache points the XDG cache at a fresh directory and returns the path the
+// table would occupy in it.
+func tableCache(t *testing.T) string {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	ahead := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: store(root)}
-	lock, _, err := maintenance.AcquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	resetStartupSingletons()
+	t.Cleanup(resetStartupSingletons)
+	path, err := embedtable.Options{}.Path()
+	require.NoError(t, err)
+	return path
+}
+
+func TestGraphTablePullRefusesALayerOtherThanThePin(t *testing.T) {
+	path := tableCache(t)
+	reg := newSpellRegistry(t)
+	pin, err := embed.Pin()
+	require.NoError(t, err)
+	repo := oci.Reference{Registry: reg.host(), Repository: "egladman/magus-embed"}
+	wrong := oci.Artifact{ArtifactType: "application/vnd.magus.embed-table.v1", Blobs: []oci.Blob{
+		{Title: filepath.Base(path), MediaType: "application/vnd.magus.embed-table.layer.v1", Data: []byte("other bytes")},
+	}}
+	_, err = (&oci.Client{HTTP: reg.srv.Client()}).PushArtifact(t.Context(), repo, wrong, pin)
 	require.NoError(t, err)
 
-	type result struct {
-		release  func() error
-		waitedOn *maintenance.GraphBuildHolder
-		err      error
-	}
-	got := make(chan result, 1)
-	go func() {
-		release, waitedOn, err := acquireGraphBuild(t.Context(), root)
-		got <- result{release, waitedOn, err}
-	}()
-	select {
-	case r := <-got:
-		t.Fatalf("it took the machine lock while another held it: %+v", r)
-	case <-time.After(50 * time.Millisecond):
-	}
-	require.NoError(t, lock.Release())
-	r := <-got
-	require.NoError(t, r.err)
-	require.NoError(t, r.release())
-	return r.waitedOn
+	err = graphPull(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed"})
+	require.ErrorContains(t, err, "the pin is sha256:"+pin)
+	_, statErr := os.Stat(path)
+	assert.ErrorIs(t, statErr, os.ErrNotExist, "a refused layer leaves the cache as it was")
 }
 
-func TestGraphBuildLoadsFromTheBuildAheadOnItsOwnStore(t *testing.T) {
-	waitedOn := acquireBehindBuild(t, func(root string) string {
-		store, err := knowledgeStoreDir(root)
-		require.NoError(t, err)
-		return store
+func TestGraphTablePullRefusesOut(t *testing.T) {
+	tableCache(t)
+	err := graphPull(t.Context(), t.TempDir(), []string{"-table", "--out", filepath.Join(t.TempDir(), "x")})
+	require.ErrorContains(t, err, "--out names nothing")
+}
+
+func TestGraphTablePushRefusesATableOffThePin(t *testing.T) {
+	path := tableCache(t)
+	reg := newSpellRegistry(t)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("a table from another conversion"), 0o644))
+
+	var err error
+	withStdin(t, "token", func() {
+		err = graphPush(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
 	})
-
-	require.NotNil(t, waitedOn)
-	assert.Equal(t, "the build ahead", waitedOn.By)
+	require.ErrorContains(t, err, "never published under another tag")
+	assert.Zero(t, reg.uploads)
 }
 
-func TestGraphBuildStillBuildsBehindAnotherCheckout(t *testing.T) {
-	waitedOn := acquireBehindBuild(t, func(string) string { return "/other/knowledge" })
-
-	assert.Nil(t, waitedOn)
+func TestGraphTablePushWithoutATableNamesTheCommand(t *testing.T) {
+	tableCache(t)
+	reg := newSpellRegistry(t)
+	var err error
+	withStdin(t, "token", func() {
+		err = graphPush(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
+	})
+	require.ErrorContains(t, err, "no embedding table in the cache")
+	assert.Contains(t, err.Error(), "magus run table libs/train")
+	assert.Zero(t, reg.uploads)
 }
 
-type graphBuildShardSuite struct{ suite.Suite }
-
-func TestGraphBuildShard(t *testing.T) { suite.Run(t, new(graphBuildShardSuite)) }
-
-func (s *graphBuildShardSuite) TestNarrowedCoverageDoesNotFailASymbolRefresh() {
-	s.NoError(graphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies): run test unnarrowed"}))
+// The printed link must never carry the bearer token. liveExplorerLink used to load it
+// and embed it, which put a live credential in stdout, and so in scrollback, in any
+// captured run log, and in the context of whatever agent ran `magus explain`. This
+// asserts the omission at the seam that actually prints, not just at buildGraphLink,
+// because the regression would be a one-line reintroduction of the auth.Load() call.
+func TestLiveExplorerLinkCarriesNoToken(t *testing.T) {
+	got := liveExplorerLink(console.GraphLinkOpts{View: "blast", Node: "spell:go"})
+	if got == "" {
+		t.Skip("no server address configured here, so there is no link to assert on")
+	}
+	require.NotContains(t, got, "token=",
+		"the deep-link must stay unauthenticated; the token is composed in by console.AuthHint")
 }
 
-func (s *graphBuildShardSuite) TestAnInvalidCoverageProfileStillFails() {
-	s.ErrorContains(graphBuildShardFailure(s.T().Context(), []string{"@coverage: invalid coverage mode"}), "invalid coverage mode")
-}
-
-func (s *graphBuildShardSuite) TestAnotherShardFailureIsNotHiddenByPartialCoverage() {
-	err := graphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies)", "@symbols: index unreadable"})
-	s.ErrorContains(err, "@symbols: index unreadable")
+// TestConsoleLinksCarryNoToken extends TestLiveExplorerLinkCarriesNoToken to the other two
+// console links, which kept embedding the token long after the Graph Explorer stopped.
+//
+// They relied on a terminal check instead: the token only reached an interactive user. That
+// is a weaker property than it sounds: an interactive terminal is still scrollback, a
+// termcast, and a screen share, and this repository has already had to rotate tokens that
+// escaped through exactly those. The gate is gone now because there is no secret left to
+// gate, and this is the assertion that keeps a one-line auth.Load() from bringing it back.
+func TestConsoleLinksCarryNoToken(t *testing.T) {
+	for name, got := range map[string]string{
+		"dashboard": consoleWatchURL(),
+		"diff":      consoleDiffURL(),
+	} {
+		if got == "" {
+			continue // console disabled in this environment
+		}
+		require.NotContains(t, got, "token=",
+			"the %s link must stay unauthenticated; the token is composed in by console.AuthHint", name)
+	}
 }

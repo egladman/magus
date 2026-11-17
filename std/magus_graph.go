@@ -37,37 +37,40 @@ func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, err
 	if !ok {
 		return nil, fmt.Errorf("magus\\%s: this workspace has no knowledge graph", member)
 	}
-	if memo := types.EvalMemoFromContext(ctx); memo != nil {
-		return memoGraphs{g: g, memo: memo}, nil
+	if once := types.EvalOnceFromContext(ctx); once != nil && !once.Ended() {
+		return onceGraphs{g: g, once: once}, nil
 	}
 	return g, nil
 }
 
-// memoGraphs answers every graph read of one evaluation from one build.
+// onceGraphs answers every graph read of one evaluation from one build.
 // So a figure calling magus\graph().dir per box builds the graph once.
-type memoGraphs struct {
+type onceGraphs struct {
 	g    knowledgeGraphs
-	memo *types.EvalMemo
+	once *types.EvalOnce
 }
 
-// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
-func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds. A by-reference
+// scope is built as every symbol: N refs calls share one merge, and a lone one pays a full
+// merge instead of the small one.
+func (m onceGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if req.Refresh {
 		return m.g.KnowledgeGraph(ctx, req)
 	}
 	key := "graph"
 	if req.Symbols.Loaded() {
-		key = "graph+symbols:" + req.Symbols.Ref()
+		req.Symbols = types.AllSymbols
+		key = "graph+symbols:"
 	}
-	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
+	return onceGraph(m.once, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 }
 
-func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
+func (m onceGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	type gaps struct {
 		list   []types.KnowledgeSymbolGap
 		probed bool
 	}
-	v, _ := m.memo.Do("symbol-gaps", func() (any, error) {
+	v, _ := m.once.Do("symbol-gaps", func() (any, error) {
 		list, probed := m.g.SymbolGaps(ctx)
 		return gaps{list, probed}, nil
 	})
@@ -75,8 +78,8 @@ func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap,
 	return got.list, got.probed
 }
 
-func memoGraph(memo *types.EvalMemo, key string, build func() (*knowledge.Graph, error)) (*knowledge.Graph, error) {
-	v, err := memo.Do(key, func() (any, error) { return build() })
+func onceGraph(once *types.EvalOnce, key string, build func() (*knowledge.Graph, error)) (*knowledge.Graph, error) {
+	v, err := once.Do(key, func() (any, error) { return build() })
 	if err != nil {
 		return nil, err
 	}

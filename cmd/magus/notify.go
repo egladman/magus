@@ -5,16 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types"
@@ -39,7 +37,7 @@ func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer
 	bindDisplayFlags(fset)
 	nf := flaggen.BindSessionNotify(fset)
 	fset.Usage = func() { notifyUsage(os.Stderr) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -55,13 +53,13 @@ func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer
 		return fmt.Errorf("magus session notify: read stdin: %w", readError)
 	}
 
-	ev := eventFromStdin(body)
+	ev := sessions.EventFromStdin(ctx, body)
 	if nf.Outcome != "" {
-		ev.Outcome = classifyOutcome(nf.Outcome)
+		ev.Outcome = sessions.ClassifyOutcome(nf.Outcome)
 	} else {
-		ev.Outcome = classifyOutcome(string(ev.Outcome))
+		ev.Outcome = sessions.ClassifyOutcome(string(ev.Outcome))
 	}
-	normalizeEvent(&ev)
+	sessions.NormalizeEvent(&ev)
 
 	held, err := fileAttention(ctx, root, ev)
 	if err != nil {
@@ -75,124 +73,13 @@ func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer
 
 	switch opts.Format {
 	case outputText:
-		title, message := renderNotification(ev)
+		title, message := sessions.RenderNotification(ev)
 		fmt.Fprintf(out, "%s: %s\n", title, message)
 		return nil
 	case outputName:
 		return emitNames(os.Stdout, []string{string(ev.Outcome)})
 	}
 	return writeFormatted(out, opts, ev)
-}
-
-// eventFromStdin accepts only a complete canonical event as structured input.
-// Anything else remains a plain-text message. That strict boundary avoids
-// quietly treating a producer's partial JSON object as a valid wire contract.
-//
-// A body that LOOKS like an envelope and fails is warned about first. The demotion is
-// still the right outcome (the notification fires either way, and a hook must not exit
-// non-zero over metadata), but silence made it undiagnosable: a producer sending a
-// half-built envelope saw a working notification, an empty source, and therefore no
-// attention request, with nothing anywhere saying why.
-func eventFromStdin(body []byte) types.Event {
-	trimmed := strings.TrimSpace(string(body))
-	if len(trimmed) > 0 && trimmed[0] == '{' {
-		var ev types.Event
-		err := json.Unmarshal([]byte(trimmed), &ev)
-		if err == nil && ev.Message != "" && ev.Outcome != "" && ev.Source.Kind != "" {
-			return ev
-		}
-		noteUnusableEnvelope(err, ev)
-	}
-	return types.Event{Message: trimmed}
-}
-
-// noteUnusableEnvelope reports a JSON object that could not be read as an event, and
-// names which half failed: the parse, or the three fields an envelope must carry. A
-// producer debugging this cannot see either from the outside: both paths produce the
-// same working plain-text notification.
-func noteUnusableEnvelope(err error, ev types.Event) {
-	if err != nil {
-		slog.With(attr.Component("session notify")).Warn("stdin looks like a JSON envelope but did not parse, so it was sent as plain text; no attention request can be opened from a prose message",
-			attr.Error(err))
-		return
-	}
-	var missing []string
-	if ev.Message == "" {
-		missing = append(missing, "message")
-	}
-	if ev.Outcome == "" {
-		missing = append(missing, "outcome")
-	}
-	if ev.Source.Kind == "" {
-		missing = append(missing, "source.kind")
-	}
-	slog.With(attr.Component("session notify")).Warn("stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
-		slog.String("missing", strings.Join(missing, ", ")),
-		attr.Why("send message, outcome and source.kind together, and source.id to make the event addressable as a request"))
-}
-
-func normalizeEvent(ev *types.Event) {
-	if ev.APIVersion == "" {
-		ev.APIVersion = types.EventAPIVersion
-	}
-	if ev.Source.Kind == "" {
-		ev.Source.Kind = "magus"
-		ev.Source.Sub = "notify"
-	}
-	if ev.Severity == "" {
-		ev.Severity = severityForOutcome(ev.Outcome)
-	}
-	if ev.Where == nil {
-		if root, err := os.Getwd(); err == nil {
-			ev.Where = &types.EventLocation{Workspace: types.Path{Value: root, IsDir: true}}
-		}
-	}
-}
-
-var outcomeVocabulary = []struct {
-	match   string
-	outcome types.EventOutcome
-}{
-	{"permission", types.OutcomePermission},
-	{"approval", types.OutcomePermission},
-	{"authorize", types.OutcomePermission},
-	{"waiting", types.OutcomeWaiting},
-	{"await", types.OutcomeWaiting},
-	{"idle", types.OutcomeWaiting},
-	{"input", types.OutcomeWaiting},
-	{"prompt", types.OutcomeWaiting},
-	{"notif", types.OutcomeWaiting},
-	{"fail", types.OutcomeFailed},
-	{"error", types.OutcomeFailed},
-	{"stop", types.OutcomeFinished},
-	{"finish", types.OutcomeFinished},
-	{"complete", types.OutcomeFinished},
-	{"done", types.OutcomeFinished},
-	{"diagnos", types.OutcomeDiagnostic},
-	{"update", types.OutcomeUpdate},
-}
-
-func classifyOutcome(raw string) types.EventOutcome {
-	lower := strings.ToLower(strings.TrimSpace(raw))
-	for _, candidate := range outcomeVocabulary {
-		if strings.Contains(lower, candidate.match) {
-			return candidate.outcome
-		}
-	}
-	return types.OutcomeOther
-}
-
-func severityForOutcome(outcome types.EventOutcome) types.EventSeverity {
-	switch outcome {
-	case types.OutcomePermission, types.OutcomeFailed:
-		return types.SeverityCritical
-	case types.OutcomeWaiting, types.OutcomeDiagnostic:
-		return types.SeverityWarning
-	case types.OutcomeFinished:
-		return types.SeverityInfo
-	default:
-		return types.SeverityNotice
-	}
 }
 
 func notifyUsage(w io.Writer) {
@@ -211,35 +98,12 @@ func notifyUsage(w io.Writer) {
 	fmt.Fprintf(w, "  printf '%%s\\n' '{\"outcome\":\"permission\",\"source\":{\"kind\":\"agent\"},\"message\":\"needs approval\"}' | magus session notify --desktop\n")
 }
 
-func renderNotification(ev types.Event) (title, body string) {
-	switch ev.Outcome {
-	case types.OutcomePermission:
-		title = "magus: needs approval"
-	case types.OutcomeWaiting:
-		title = "magus: waiting for you"
-	case types.OutcomeFailed:
-		title = "magus: action failed"
-	case types.OutcomeFinished:
-		title = "magus: finished"
-	default:
-		title = "magus: needs attention"
-	}
-	body = ev.Message
-	if body == "" {
-		body = "no detail supplied"
-	}
-	if ev.Where != nil && ev.Where.Workspace.Value != "" {
-		body += fmt.Sprintf(" (%s)", ev.Where.Workspace.Value)
-	}
-	return title, body
-}
-
 // raiseDesktop posts the OS notification. Tests replace it; production calls
 // [raiseDesktopNotification].
 var raiseDesktop = raiseDesktopNotification
 
 func raiseDesktopNotification(ctx context.Context, ev types.Event) error {
-	title, body := renderNotification(ev)
+	title, body := sessions.RenderNotification(ev)
 	switch runtime.GOOS {
 	case "darwin":
 		//nolint:gosec // fixed program; the event text is an argument, not a shell

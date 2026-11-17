@@ -1,10 +1,14 @@
 package sessions
 
 import (
+	"fmt"
+	"io"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -43,7 +47,7 @@ type PathContact struct {
 // Touched reports whether any loaded session reached this path.
 func (c PathContact) Touched() bool { return c.Sessions > 0 }
 
-// ReadPathContact summarizes what the loaded sessions did to one checkout-relative path,
+// readPathContact summarizes what the loaded sessions did to one checkout-relative path,
 // or the zero value when none of them reached it.
 //
 // The verb is READ because this reads the store, pairing with ReadAll beside it. It was
@@ -55,7 +59,7 @@ func (c PathContact) Touched() bool { return c.Sessions > 0 }
 // record this build cannot decode all report nothing rather than failing the caller. A
 // workspace that has never loaded a transcript is indistinguishable from one whose files
 // no session touched, which is correct: both have nothing to say.
-func ReadPathContact(dir, path string) PathContact {
+func readPathContact(dir, path string) PathContact {
 	var out PathContact
 	if dir == "" || path == "" {
 		return out
@@ -114,4 +118,73 @@ func ReadPathContact(dir, path string) PathContact {
 	}
 	out.Sessions = len(seen)
 	return out
+}
+
+// ContactForNode is what the loaded sessions did to the file a node describes, or nil.
+//
+// ONE resolver behind both output branches. The text view and the JSON view answering
+// from separate lookups is how two renderings of one fact drift, and this one is already
+// delicate: it is eligible for file nodes only, and it reads a store that may not exist.
+// dir is called only for a file node, so a node about no file never pays for resolving
+// the store.
+func ContactForNode(node types.KnowledgeNode, dir func() (string, error)) *PathContact {
+	if node.Kind != types.KindFile {
+		return nil
+	}
+	path := nodeSourcePath(node)
+	if path == "" {
+		return nil
+	}
+	d, err := dir()
+	if err != nil {
+		return nil
+	}
+	c := readPathContact(d, path)
+	if !c.Touched() {
+		return nil
+	}
+	return &c
+}
+
+// PrintContact appends what the loaded agent sessions did to the file a node describes.
+func PrintContact(w io.Writer, c PathContact) {
+	fmt.Fprintf(w, "\nagent sessions: %s over %s\n", countedContact(c), CountNoun(c.Sessions, "session"))
+	fmt.Fprintf(w, "  last touched %s; `magus session show <id>` reads what one did\n", HumanAge(c.Last))
+	if c.Denials > 0 {
+		// "operations", not "writes": Denials counts refused reads too, and naming them
+		// writes would report an edit that was never attempted.
+		fmt.Fprintf(w, "  %s the host refused\n", CountNoun(c.Denials, "operation"))
+	}
+}
+
+// nodeSourcePath is the file a node is about, or "" for a node that is about no file.
+//
+// Source carries `path:line` provenance for a node minted from a position inside a file,
+// so the line is cut: contact is recorded against files, and a symbol's line number would
+// match nothing.
+func nodeSourcePath(node types.KnowledgeNode) string {
+	src := node.Source
+	if src == "" {
+		return ""
+	}
+	if i := strings.LastIndex(src, ":"); i > 0 {
+		if rest := src[i+1:]; rest != "" && strings.IndexFunc(rest, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
+			src = src[:i]
+		}
+	}
+	return src
+}
+
+// countedContact renders the reads and writes, naming only what happened. A file that was
+// read and never written reads differently from one that was edited, and that difference
+// is the whole reason to print the line.
+func countedContact(c PathContact) string {
+	var parts []string
+	if c.Writes > 0 {
+		parts = append(parts, CountNoun(c.Writes, "write"))
+	}
+	if c.Reads > 0 {
+		parts = append(parts, CountNoun(c.Reads, "read"))
+	}
+	return strings.Join(parts, ", ")
 }
