@@ -155,8 +155,19 @@ func headerEntry(e migrate.Entry) bool {
 // envelopeRow rewrites a flat row as its [jobRecord]. A server's row is
 // told by its registration once holder goes. A member types.Job does not
 // declare is kept on the record as it was. The flat row spelled its paths
-// before they nested, so flat reads them.
+// before they nested, so flat reads them. A row already enveloped is kept
+// as it is: a store with no header replays this migration over rows a
+// later magus wrote.
 func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
+	if raw, ok := e["apiVersion"]; ok {
+		var v apiversion.APIVersion
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return nil, fmt.Errorf("reading apiVersion: %w", err)
+		}
+		if v == jobType.APIVersion {
+			return e, nil
+		}
+	}
 	text, err := json.Marshal(e)
 	if err != nil {
 		return nil, err
