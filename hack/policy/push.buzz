@@ -218,7 +218,7 @@ export fun remedy(unread: [str]) > [str] {
         if (dir == ".") {
             where = ".";
         }
-        lines.append("./magus run go::go-test . -s -- -run '<Name>' {where}");
+        lines.append("./magus run go-test . -s -- -run '<Name>' {where}");
     }
     return lines;
 }
@@ -288,7 +288,7 @@ test "a push with an unread file is advised naming it and the commands that read
     verdict\checked(v, label: "an unread file");
     std\assert(v.reason.split("\n")[0] == "pushing 0123456789ab changes 1 file that no passing run has read as committed; this advises for now and will refuse later: run the command on each line before you push", message: v.reason);
     std\assert(v.reason.split("\n")[1] == "  `./magus run lint . -- a.go b.md`", message: v.reason);
-    std\assert(v.reason.split("\n")[2] == "  `./magus run go::go-test . -s -- -run '<Name>' .`", message: v.reason);
+    std\assert(v.reason.split("\n")[2] == "  `./magus run go-test . -s -- -run '<Name>' .`", message: v.reason);
     std\assert(v.reason.indexOf("  unread: a.go") != null, message: v.reason);
     std\assert(v.reason.indexOf("recorded in this checkout (`/w`)") != null, message: v.reason);
     std\assert(v.rule == "push-unverified", message: v.rule);
@@ -356,9 +356,9 @@ test "the remedy lints every unread path in one command" {
 test "the remedy runs each Go package's tests once" {
     final lines = remedy(["internal/guard/a.go", "internal/guard/a_test.go", "std/b.go", "c.go"]);
     std\assert(lines.len() == 4, message: lines.join("\n"));
-    std\assert(lines[1] == "./magus run go::go-test . -s -- -run '<Name>' ./internal/guard", message: lines[1]);
-    std\assert(lines[2] == "./magus run go::go-test . -s -- -run '<Name>' ./std", message: lines[2]);
-    std\assert(lines[3] == "./magus run go::go-test . -s -- -run '<Name>' .", message: lines[3]);
+    std\assert(lines[1] == "./magus run go-test . -s -- -run '<Name>' ./internal/guard", message: lines[1]);
+    std\assert(lines[2] == "./magus run go-test . -s -- -run '<Name>' ./std", message: lines[2]);
+    std\assert(lines[3] == "./magus run go-test . -s -- -run '<Name>' .", message: lines[3]);
 }
 
 test "the remedy names neither a generator nor one command per file" {
