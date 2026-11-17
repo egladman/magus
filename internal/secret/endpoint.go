@@ -146,8 +146,8 @@ func newEndpointKey(invocation string, g types.SecretGrant) endpointKey {
 // over: types.ProjectOrigin already claims that word in a magusfile, and an
 // origin is scheme+host+port by definition while this returns a base URL WITH a path.
 //
-// Memoized per grant, so a magusfile naming the same endpoint in three targets binds
-// one socket. The memo is liveness-checked: the Resolver outlives a single run (it is
+// Kept per grant, so a magusfile naming the same endpoint in three targets binds
+// one socket. The kept endpoint is liveness-checked: the Resolver outlives a single run (it is
 // per workspace Open), so a cached entry whose context has ended would otherwise hand
 // back a dead URL on a RELEASED port, and under a local-attacker model another
 // process that then binds that port receives the child's whole request stream.

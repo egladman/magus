@@ -206,7 +206,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// ERRORS when there is no resolver rather than no-opping. A silently dropped
 		// selection means the run falls back to the built-in environment provider: the
 		// magusfile asked for 1Password and got whatever $VAR happened to hold. That is
-		// the wrong-credential failure memoKey is provider-keyed to prevent, arriving
+		// the wrong-credential failure resolvedKey is provider-keyed to prevent, arriving
 		// through a different door, and it would be invisible.
 		r := secret.ResolverFromContext(runCtx)
 		if r == nil {

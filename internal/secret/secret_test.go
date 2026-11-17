@@ -162,7 +162,7 @@ func TestReadDoesNotWarnForAMaskableValue(t *testing.T) {
 	assert.NotContains(t, sink.String(), string(types.SecretTooShortToMask))
 }
 
-func TestReadMemoizesPerProviderAndReference(t *testing.T) {
+func TestReadKeepsAnAnswerPerProviderAndReference(t *testing.T) {
 	ctx, r := withResolver(t)
 
 	var calls int
@@ -186,7 +186,7 @@ func TestReadMemoizesPerProviderAndReference(t *testing.T) {
 }
 
 // TestReadReReadsWhenTheProviderChanges pins the fix for a silently-wrong-credential bug:
-// memoizing on the reference alone meant a magusfile that read before selecting a
+// keeping answers by reference alone meant a magusfile that read before selecting a
 // provider kept returning the built-in env value under a declared provider.
 func TestReadReReadsWhenTheProviderChanges(t *testing.T) {
 	ctx, r := withResolver(t)
@@ -205,7 +205,7 @@ func TestReadReReadsWhenTheProviderChanges(t *testing.T) {
 
 	v, err = ResolverFromContext(ctx).Read(ctx, "SOME_REF")
 	require.NoError(t, err)
-	assert.Equal(t, "from-vault", v.Reveal(), "the declared provider must win over a memoized fallback")
+	assert.Equal(t, "from-vault", v.Reveal(), "the declared provider must win over a kept fallback")
 }
 
 // TestReadCollapsesConcurrentReadsOfOneReference pins the singleflight. Without it, N
@@ -593,7 +593,7 @@ func TestCanonicalHostFolding(t *testing.T) {
 func (r *Resolver) resolvedCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.memo)
+	return len(r.resolved)
 }
 
 // endpointCount reports how many forwarders the resolver holds, so a test can assert the
