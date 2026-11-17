@@ -550,6 +550,20 @@ decided.
 
 ## Amendments
 
+### 2026-11-17: job stores migrate to the module's groups
+
+- Every job store an earlier magus wrote is `batch.magus/v1alpha1`, so refusing that group
+  would leave every store unreadable after the change. A stored-format migration in
+  `internal/job` (`groupsMoved`) rewrites the rows, the header and attempts.jsonl to
+  `safetyscissors.job/v1alpha1` once, under the store's lock, annotations keyed under the
+  old group included. It is the repository's migration convention, not a shim: no reader
+  keeps the old group, and a line already moved is left as it is.
+- A line in any other group, or a version no migration reaches, is refused as MGS3058,
+  which names the line and says to move the store aside and fork the job again, or start a
+  fresh session. A newer version of the job group is MGS3047. This replaces the earlier
+  refusal of the magus group, which named no job-store code. Decided by the orchestrator,
+  Eli to confirm.
+
 ### 2026-11-17: the job module's surface is trimmed
 
 - The `internal/job` compat forwarders are gone; callers name the module's `Actor`,

@@ -881,6 +881,12 @@ const ModelTiersIncomparable DiagnosticCode = "MGS3056"
 // verify pass regenerated. The verdict belongs to the committed bytes. The
 // run fails, and the next one refuses, until the person commits the change.
 const UncommittedRepair DiagnosticCode = "MGS3057"
+
+// JobStoreRecordForeign is a job store line in an API group or version this magus does
+// not read and no migration of its own reaches. Nothing is read or written: the store
+// holds rows no command here can act on, and the remedy is to fork the job again or
+// start a fresh session.
+const JobStoreRecordForeign DiagnosticCode = "MGS3058"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1236,6 +1242,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ModelTierAboveParent,
 	ModelTiersIncomparable,
 	UncommittedRepair,
+	JobStoreRecordForeign,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
@@ -1323,6 +1330,7 @@ var retryTable = map[DiagnosticCode]job.RetryChange{
 	CheckoutConfigHeld:       job.RetryAfterConfig,
 	StoreRecordsNewer:        job.RetryAfterUpgrade,
 	JobStoreWriterOlder:      job.RetryAfterUpgrade,
+	JobStoreRecordForeign:    job.RetryAfterPerson,
 	BearerRejected:           job.RetryAfterPerson,
 	NoAuthToken:              job.RetryAfterPerson,
 }

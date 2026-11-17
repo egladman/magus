@@ -51,6 +51,38 @@ func (s *Store) envelopeAttempts(ctx context.Context) error {
 	})
 }
 
+// regroupAttempts respells each line of attempts.jsonl stamped with the batch.magus group
+// in the job group ([regroup]). A line already regrouped is kept, so a run cut short runs
+// again to the same file.
+func (s *Store) regroupAttempts(ctx context.Context) error {
+	path, err := s.AttemptsPath()
+	if err != nil {
+		return err
+	}
+	return codec.WithLock(ctx, path+".lock", codec.LockWait, func() error {
+		read, err := codec.ReadLines(path)
+		if err != nil || len(read.Lines) == 0 {
+			return err
+		}
+		lines := make([][]byte, 0, len(read.Lines))
+		for _, line := range read.Lines {
+			var e migrate.Entry
+			if err := codec.Unmarshal(line.Text, &e); err != nil {
+				return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", path, line.N, err)
+			}
+			if e, err = regroup(e); err != nil {
+				return fmt.Errorf("%s:%d: %w", path, line.N, err)
+			}
+			text, err := codec.Marshal(e)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, text)
+		}
+		return codec.RewriteLines(path, lines, 0o600)
+	})
+}
+
 // BoundAttempts is attempts each read at now under its job's deadline in
 // rows. A try whose job rows does not hold is left out.
 func BoundAttempts(rows []job.Job, attempts []job.Attempt, now int64) []job.Attempt {

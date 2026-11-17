@@ -1898,6 +1898,7 @@
 {"group":"dir:libs/scipbuzz/testdata/snapshots/input/imports_relative/lib","path":"libs/scipbuzz/testdata/snapshots/input/imports_relative/lib/util.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/input/imports_unaliased","path":"libs/scipbuzz/testdata/snapshots/input/imports_unaliased/main.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/input/locals","path":"libs/scipbuzz/testdata/snapshots/input/locals/main.buzz"}
+{"group":"file:libs/secrets/MAGUS.md","path":"libs/secrets/MAGUS.md"}
 {"group":"file:libs/termkit/MAGUS.md","path":"libs/termkit/MAGUS.md"}
 {"group":"dir:libs/termkit/progress","path":"libs/termkit/progress/bar.go"}
 {"group":"dir:libs/termkit/progress","path":"libs/termkit/progress/bar_test.go"}
