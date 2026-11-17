@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -146,6 +147,8 @@ func brokerEnv(t *testing.T) (stateDir string) {
 	t.Setenv("XDG_STATE_HOME", stateDir)
 	t.Setenv("MAGUS_BROKER", "")
 	t.Setenv("MAGUS_SHUTDOWN_GRACE", "")
+	// These tests run a real broker, so the TestMain trap that stops one starting is lifted.
+	t.Setenv(server.BrokerSpawnTrapEnv, "")
 	return stateDir
 }
 
