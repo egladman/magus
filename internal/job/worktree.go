@@ -969,7 +969,7 @@ func (s *Store) PinBinary(ctx context.Context, id string) ([]job.Job, error) {
 	}
 	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
-		return nil, fmt.Errorf("%w: %q", ErrUnknownJob, id)
+		return nil, fmt.Errorf("%w: %q", job.ErrUnknownJob, id)
 	}
 	if actor := s.Actor(); actor.Bound() && (actor.Lease != id || len(rows[i].Integrates) == 0) {
 		return nil, refuse(actor, id, "only the root and a row's own integrator pin the binary that judges it, and a worker that pinned its own build would pick its judge")
@@ -1005,13 +1005,11 @@ func (s *Store) RecordWorktree(ctx context.Context, id string, wt job.Worktree) 
 // writeWorktree rewrites the worktree record of row id, the one field no declaration
 // carries: see [job.Job.Worktree].
 func (s *Store) writeWorktree(ctx context.Context, id string, fn func(*job.Worktree)) (job.Job, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var stored job.Job
-	err := s.update(ctx, func(f *jobsFile) error {
+	err := s.Rewrite(ctx, func(f *job.Rows) error {
 		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id })
 		if i < 0 {
-			return fmt.Errorf("%w: %q", ErrUnknownJob, id)
+			return fmt.Errorf("%w: %q", job.ErrUnknownJob, id)
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {
 			return err

@@ -263,7 +263,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 	// An entry changes no declared field, so it travels alone and the store grades it as
 	// an entry; see Store.Enter.
 	if p.Enter != nil {
-		rel, perr := entryPath(*p.Enter)
+		rel, perr := job.EntryPath(*p.Enter)
 		for _, key := range declaredKeys(p) {
 			perr = errors.Join(perr, fmt.Errorf("job: a put carrying enter enters a job and declares nothing, so %s does not belong beside it", key))
 		}

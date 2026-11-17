@@ -276,7 +276,7 @@ func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
 	merge := func(u *job.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 	permit := func(u *job.Job) {
 		merge(u)
-		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: job.ReasonIntegratorRegenerates}}
 	}
 	plan := s.plan(permit, false)
 	s.Require().Empty(plan.Validation.Problems)
@@ -292,7 +292,7 @@ func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
 func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
 	plan := s.plan(func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
-		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: job.ReasonIntegratorRegenerates}}
 	}, false)
 	s.Require().Empty(plan.Validation.Problems)
 	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/registry.go"}}, Check: forkCheck()})
@@ -307,7 +307,7 @@ func (s *forkPlanSuite) TestForkWritesWhenALiveRowOnlyNarrowed() {
 	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/**"}}, Check: forkCheck()})
 	plan := s.plan(func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
-		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: job.ReasonIntegratorRegenerates}}
 	}, false)
 	s.Require().Empty(plan.Validation.Problems)
 	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/rules/guard.md"}}, Check: forkCheck()})
@@ -435,7 +435,7 @@ func TestIntegratorDeviationsAcceptEveryOutputButADeniedOne(t *testing.T) {
 	subjects := make([]string, len(got))
 	for i, w := range got {
 		assert.Equal(t, types.OutputOutsideWritePaths, w.Code)
-		assert.Equal(t, integratorRegenerates, w.Reason)
+		assert.Equal(t, job.ReasonIntegratorRegenerates, w.Reason)
 		subjects[i] = w.Subject
 	}
 	assert.Contains(t, subjects, "docs/manpage/*.md")

@@ -155,7 +155,7 @@ func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
 	s := tempStore(t, execRepository(t).Root())
 	seed(t, s, job.Job{ID: "w", Checkpoint: baseA, State: job.StateNoReturn})
-	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
+	require.NoError(t, s.Rewrite(t.Context(), func(f *job.Rows) error {
 		f.Jobs[0].EndReason = "overdue: its deadline passed 1m0s ago"
 		return nil
 	}))
@@ -168,7 +168,7 @@ func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
 	loc := tempLocation(t, execRepository(t).Root())
 	elsewhere := t.TempDir()
 	seed(t, NewStore(loc), job.Job{ID: "w", Checkpoint: baseA, State: job.StateNoReturn})
-	require.NoError(t, NewStore(loc).update(t.Context(), func(f *jobsFile) error {
+	require.NoError(t, NewStore(loc).Rewrite(t.Context(), func(f *job.Rows) error {
 		f.Jobs[0].EndReason = job.EndReasonSessionEnded + " (claude-code)"
 		f.Jobs[0].CheckoutRoot = elsewhere
 		return nil
@@ -287,7 +287,7 @@ func (s *HolderStoppedSuite) TestOneCallEndsAStampedRow() {
 
 func (s *HolderStoppedSuite) TestTheDeadlineEndsAStampedRow() {
 	s.Require().NoError(s.store.StampHolderStopped(s.T().Context(), s.worker))
-	s.Require().NoError(s.store.update(s.T().Context(), func(f *jobsFile) error {
+	s.Require().NoError(s.store.Rewrite(s.T().Context(), func(f *job.Rows) error {
 		f.Jobs[0].Deadline = f.Jobs[0].Updated + 60
 		return nil
 	}))

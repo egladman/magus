@@ -37,7 +37,7 @@ func UnreferencedInPaths(row job.Job, unreferenced []types.UnreferencedEntry) []
 			continue
 		}
 		file, _, _ := strings.Cut(e.Source, ":")
-		if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, file) }) {
+		if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, file) }) {
 			out = append(out, e)
 		}
 	}
@@ -114,7 +114,7 @@ func ReferencedOutside(root string, row job.Job, projects []*types.Project, refe
 	found := map[string]*ReferencedFile{}
 	add := func(entry string, refs map[string]int) {
 		for file, n := range refs {
-			if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, file) }) || generatedFile(projects, file) {
+			if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, file) }) || generatedFile(projects, file) {
 				continue
 			}
 			f, ok := found[file]

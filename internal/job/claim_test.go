@@ -384,7 +384,7 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 		require.NoError(t, unorderedFileShareProblems(t.Context(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go#C"}}}).Error())
 		holder, err := s.stored("A")
 		require.NoError(t, err)
-		assert.True(t, Narrowed(holder, "run.go"))
+		assert.True(t, job.Narrowed(holder, "run.go"))
 	})
 }
 
@@ -459,7 +459,7 @@ func (s *grantUntouchedSuite) TestATouchedDeclarationIsRefused() {
 	holder, err := s.judge(store, s.checkpoint, "run.go#C", "run.go#A")
 	s.Require().ErrorIs(err, types.WritePathFileShared)
 	s.Contains(err.Error(), "Not granted: A has touched run.go#A")
-	s.False(Narrowed(holder, "run.go"))
+	s.False(job.Narrowed(holder, "run.go"))
 }
 
 func (s *grantUntouchedSuite) TestAWholeFileWantIsRefused() {
@@ -467,7 +467,7 @@ func (s *grantUntouchedSuite) TestAWholeFileWantIsRefused() {
 	holder, err := s.judge(store, s.checkpoint, "run.go")
 	s.Require().ErrorIs(err, types.WritePathFileShared)
 	s.Contains(err.Error(), "Not granted: B wants run.go whole")
-	s.False(Narrowed(holder, "run.go"))
+	s.False(job.Narrowed(holder, "run.go"))
 }
 
 func (s *grantUntouchedSuite) TestAnUnreadableFootprintIsRefused() {
@@ -475,7 +475,7 @@ func (s *grantUntouchedSuite) TestAnUnreadableFootprintIsRefused() {
 	holder, err := s.judge(store, "not-a-revision", "run.go#C")
 	s.Require().ErrorIs(err, types.WritePathFileShared)
 	s.Contains(err.Error(), "Not granted: A's footprint is unknown")
-	s.False(Narrowed(holder, "run.go"))
+	s.False(job.Narrowed(holder, "run.go"))
 }
 
 func (s *grantUntouchedSuite) TestADryRunWritesNothing() {

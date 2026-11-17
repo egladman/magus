@@ -209,7 +209,7 @@ func landedSince(ctx context.Context, driver types.VCSDriver, tree, base string,
 				return nil, false, fmt.Sprintf("the files at %s could not be compared: %v", line, err)
 			}
 			paths = slices.DeleteFunc(paths, func(p string) bool {
-				return !slices.Contains(theirs, p) || !slices.Contains(differ, cleanPath(p))
+				return !slices.Contains(theirs, p) || !slices.Contains(differ, job.CleanPath(p))
 			})
 		}
 		landed = append(landed, paths...)

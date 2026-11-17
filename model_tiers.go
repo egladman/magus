@@ -8,6 +8,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -48,5 +50,26 @@ func (m *Magus) Models(ctx context.Context) func() []model.Row {
 			return nil
 		}
 		return agent.HarnessModelRows(types.WithWorkspace(ctx, m), m.Root(), wired)
+	})
+}
+
+// CheckGrader grades a declared check the way the guard will judge a job's holder running
+// it in the checkout at the root it is handed, against that workspace's rules. A door
+// opening a job store hands it over as job.Location.Grader. Each root's rules load on the
+// first check graded there and are reused until a file they were read from changes.
+func (m *Magus) CheckGrader() job.CheckGrader {
+	return guard.NewCheckGrader(func(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
+		return guard.NewDependencies(ctx, guard.Wiring{
+			Root:          root,
+			Config:        m.cfg,
+			BinaryVersion: m.version,
+			Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+				if m.ownRoot(root) {
+					return m, nil
+				}
+				return Inspect(ctx, root, m.processOptions()...)
+			},
+			CacheDir: m.guardCacheDir,
+		})
 	})
 }

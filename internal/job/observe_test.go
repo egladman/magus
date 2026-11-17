@@ -1223,7 +1223,7 @@ func TestRetentionPrunesFootprintsNoLiveRowNames(t *testing.T) {
 		{ID: "b", State: job.StatePass, Checkpoint: "over", Updated: 1},
 	}
 	// Retained long ago, so this write runs a pass.
-	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error { f.Jobs, f.Retained = rows, 1; return nil }))
+	require.NoError(t, s.Rewrite(t.Context(), func(f *job.Rows) error { f.Jobs, f.Retained = rows, 1; return nil }))
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)

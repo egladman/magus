@@ -933,30 +933,31 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 }
 
-// withJobGrader installs g for the test and restores whatever was installed. The
-// grader is process-wide, so a test that uses it does not run in parallel.
-func withJobGrader(t *testing.T, g job.CheckGrader) {
-	t.Helper()
-	previous := job.SetCheckGrader(g)
-	t.Cleanup(func() { job.SetCheckGrader(previous) })
+// gradedWorkspace is a ledgerWorkspace whose grader judges the checks a put declares, as
+// the root Magus's CheckGrader does.
+type gradedWorkspace struct {
+	*ledgerWorkspace
+	grader job.CheckGrader
 }
+
+func (g *gradedWorkspace) CheckGrader() job.CheckGrader { return g.grader }
 
 // magus\workspace().putJob forks by merge, and the multi-agent skill uses it.
 // So it is held to the guard's verdict on the check, as `magus job fork` is.
-// The installed grader refuses a denied check, with nothing written.
+// The workspace's grader refuses a denied check, with nothing written.
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string
-	withJobGrader(t, func(_ context.Context, root string, row jobtypes.Job) job.CheckVerdict {
+	grader := func(_ context.Context, root string, row jobtypes.Job) job.CheckVerdict {
 		roots = append(roots, root)
 		if row.Check.Target != "go-build" {
 			return job.CheckVerdict{}
 		}
 		return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
-	})
+	}
 
 	root := t.TempDir()
-	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
+	ctx := types.WithWorkspace(t.Context(), &gradedWorkspace{ledgerWorkspace: &ledgerWorkspace{cacheDir: t.TempDir(), root: root}, grader: grader})
 	put := func(check string) error {
 		c, err := jobtypes.ParseLeaseCheck(check)
 		require.NoError(t, err)

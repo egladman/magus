@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -72,13 +71,13 @@ func endedReason(prev job.Job, filed, byHolder bool) string {
 func Exit(ctx context.Context, store *Store, id string, result *job.Result, resolve AttemptResolver) (job.Job, error) {
 	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
 	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
-	rows, err := store.unswept()
+	rows, err := store.Unswept()
 	if err != nil {
 		return job.Job{}, err
 	}
 	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
-		return job.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", ErrUnknownJob, id)
+		return job.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", job.ErrUnknownJob, id)
 	}
 	// An ended row is not ended again: a second end would rewrite how the first one ended.
 	if rows[i].State.Terminal() {
@@ -99,7 +98,7 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 			if row.State == job.StateNoReturn {
 				row.EndReason = endedReason(rows[i], job.NewAttempts(tries).Result(id) != nil, store.endsOwnRow(rows[i]))
 			}
-			store.endDry(row)
+			store.EndDry(row)
 			return row, nil
 		}
 		row, err := store.Update(ctx, id, apply)
@@ -230,7 +229,7 @@ func (e *alreadyEndedError) Error() string {
 // them as its Rejection in the same write, its state left where it was. result=nil uses the
 // result and attempts filed by Exit at the row's generation (see [evidenceAt]), and evidence
 // filed against an earlier spec never passes; a supplied result is resolved in this checkout.
-// A bound store verifies only a row below its own lease (see [Actor.Verifies]).
+// A bound store verifies only a row below its own lease (see [job.Actor.Verifies]).
 //
 // evidence names, per check goal, a run recorded in the waiter's checkout to grade in place
 // of the holder's: the key is the goal id, or [job.PrimaryGoalID] for the job's own
@@ -302,7 +301,7 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 	}
 
 	var status job.Status
-	_, err = store.mutate(ctx, id, asVerdict, func(row *job.Job, exists bool, now int64) error {
+	_, err = store.Mutate(ctx, id, job.AsVerdict, func(row *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
@@ -375,17 +374,6 @@ func reclaimForRework(row *job.Job, filed *job.Result, rows []job.Job) string {
 	return fmt.Sprintf("%s is running again for its rework and gave up what it never touched and another job took: %s", row.ID, strings.Join(gaveUp, "; "))
 }
 
-// Verifies reports whether this actor may verify row id: an unbound actor verifies any
-// row, a bound one only a row below its own lease in rows' parent chain. Its own row, a
-// sibling's and an ancestor's stay refused, since each would be work grading itself or
-// its peers.
-func (a Actor) Verifies(rows []job.Job, id string) bool {
-	if !a.Bound() {
-		return true
-	}
-	return slices.ContainsFunc(job.Ancestors(rows, id), func(r job.Job) bool { return r.ID == a.Lease })
-}
-
 // staleRuns names, by [attemptKey], each of runs that read one of the job's changed paths other
 // than it reads now in tree, with why: the job wrote after the run, so the run graded
 // other files. The changed paths are those observed since the checkpoint and those the
@@ -413,7 +401,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result job.Resul
 func localSources(paths []string, generated func(string) bool) []string {
 	var out []string
 	for _, c := range paths {
-		if p := cleanPath(c); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
+		if p := job.CleanPath(c); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
 			out = append(out, p)
 		}
 	}
@@ -1020,7 +1008,9 @@ func (w *sweeper) checkoutGone(root string) bool {
 // sweep ends every row in f the [sweeper] proves dead, tombstones the binding records
 // whose job's checkout is gone (see [Store.sweepRecords]), and returns the plan as written.
 // A dry-run store ends the rows in the returned plan only.
-func (s *Store) sweep(f jobsFile) (jobsFile, error) {
+//
+// It is the module store's [job.WithSweep], run by every [job.Store.List].
+func (s *Store) sweep(_ context.Context, f job.Rows) (job.Rows, error) {
 	clock := s.clock
 	if clock == nil {
 		clock = time.Now
@@ -1030,14 +1020,14 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	if s.dryRun {
 		dead, err := w.dead(f.Jobs)
 		if err != nil {
-			return jobsFile{}, err
+			return job.Rows{}, err
 		}
 		endRows(f.Jobs, dead, w.now)
 		return f, nil
 	}
 	f, ended, err := s.endDead(w, f)
 	if err != nil {
-		return jobsFile{}, err
+		return job.Rows{}, err
 	}
 	s.sweepRecords(w, f.Jobs, ended)
 	return f, nil
@@ -1047,13 +1037,13 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 // verdict is reached twice: once lock-free, so a plan with nothing to end costs no lock,
 // and again under the file lock against a fresh read, so a row another process revived in
 // between is not ended on a stale view.
-func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
+func (s *Store) endDead(w *sweeper, f job.Rows) (job.Rows, bool, error) {
 	dead, err := w.dead(f.Jobs)
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
 	var ended endings
-	err = s.update(context.Background(), func(cur *jobsFile) error {
+	err = s.Rewrite(context.Background(), func(cur *job.Rows) error {
 		ended = endings{}
 		var err error
 		if dead, err = w.dead(cur.Jobs); err != nil {
@@ -1062,7 +1052,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		endRows(cur.Jobs, dead, w.now)
 		f = *cur
 		if len(dead) == 0 {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		for _, e := range dead {
 			i := slices.IndexFunc(cur.Jobs, func(r job.Job) bool { return r.ID == e.id })
@@ -1077,7 +1067,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		out = os.Stderr
 	}
 	if err != nil {
-		return jobsFile{}, false, err
+		return job.Rows{}, false, err
 	}
 	for _, e := range dead {
 		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)
@@ -1086,7 +1076,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		}
 	}
 	if err := ended.record(context.Background(), w.now*1000); err != nil {
-		return jobsFile{}, false, err
+		return job.Rows{}, false, err
 	}
 	return f, len(dead) > 0, nil
 }
@@ -1151,9 +1141,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	}
 	w := &sweeper{now: clock().Unix(), window: func() (time.Duration, error) { return window, nil }, gone: map[string]bool{}}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	f, err := s.read()
+	f, err := s.Read()
 	if err != nil {
 		return nil, err
 	}
@@ -1178,14 +1166,14 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 
 	var out []Ending
 	var ended endings
-	err = s.update(ctx, func(cur *jobsFile) error {
+	err = s.Rewrite(ctx, func(cur *job.Rows) error {
 		ended = endings{}
 		var err error
 		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil {
 			return err
 		}
 		if opts.DryRun || len(out) == 0 {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		fresh, err := w.treeEndings(cur.Jobs, out, window)
 		if err != nil {

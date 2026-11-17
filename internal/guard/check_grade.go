@@ -20,9 +20,10 @@ import (
 // that declares none pays nothing, and are reused until a file they were read from
 // changes: a grader lives as long as the Store, or the daemon, it was made for, and
 // grading against rules an edit has since replaced would admit or refuse the wrong check.
-// runCLI installs one with job.SetCheckGrader for every door that opens a Store naming
-// none, such as magus\workspace().putJob. `magus job fork` grades with a [ForkGrader]
-// instead, which judges alike and keeps what it opened for the rest of the fork.
+// A door that opens a Store hands one over as job.Location.Grader, and the workspace's
+// own is magus.Magus.CheckGrader, which magus\workspace().putJob grades with. `magus job
+// fork` grades with a [ForkGrader] instead, which judges alike and keeps what it opened
+// for the rest of the fork.
 func NewCheckGrader(load RulesLoader) job.CheckGrader {
 	return newRulesByRoot(load, nil).grade
 }
@@ -40,8 +41,8 @@ type rulesByRoot struct {
 	load   RulesLoader
 	mu     sync.Mutex
 	loaded map[string]gradingRules
-	// opens is handed to every judgment as Dependencies.Opens: nil for the
-	// installed grader, which outlives any one tree, and one fork's memo for a fork's.
+	// opens is handed to every judgment as Dependencies.Opens: nil for a store's
+	// grader, which outlives any one tree, and one fork's memo for a fork's.
 	opens *WorkspaceMemo
 }
 

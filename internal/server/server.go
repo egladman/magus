@@ -221,7 +221,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("server: resolve the user state dir that holds the job store: %w", err)
 		}
-		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), StateBase: stateBase, Root: opts.Magus.Root()})
+		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), StateBase: stateBase, Root: opts.Magus.Root(), Grader: opts.Magus.CheckGrader()})
 	}
 
 	// Build the MCP handler (validates opts and wires session tracking). No

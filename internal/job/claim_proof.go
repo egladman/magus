@@ -20,7 +20,6 @@ import (
 	"unicode"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
@@ -177,7 +176,7 @@ func heldBeside(tree string, row job.Job, asked []string) []string {
 		entries, _ := os.ReadDir(filepath.Join(tree, filepath.FromSlash(dir)))
 		for _, e := range entries {
 			f := path.Join(dir, e.Name())
-			if !e.IsDir() && !types.IsTestPath(f) && slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, f) }) {
+			if !e.IsDir() && !types.IsTestPath(f) && slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, f) }) {
 				out = append(out, f)
 			}
 		}
@@ -190,7 +189,7 @@ func heldBeside(tree string, row job.Job, asked []string) []string {
 func changedInside(row job.Job, seen Observed) []string {
 	var out []string
 	for _, f := range seen.Changed {
-		if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, f) }) {
+		if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, f) }) {
 			out = append(out, path.Clean(f))
 		}
 	}
@@ -493,7 +492,7 @@ func declaredName(decl string) string {
 }
 
 func proveTest(row job.Job, rel, subject string, facts claimFacts) (string, error) {
-	if types.IsTestPath(subject) || !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, subject) }) {
+	if types.IsTestPath(subject) || !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, subject) }) {
 		return "", fmt.Errorf("%s is not a file the job holds or claimed, other than a test", subject)
 	}
 	dir := path.Dir(subject)
@@ -562,7 +561,7 @@ func proveOutput(rel, target string, facts claimFacts) (string, error) {
 
 func proveReleased(row job.Job, rel string) (string, error) {
 	for _, r := range slices.Backward(row.Releases) {
-		if !coversPath(path.Clean(r.Path), rel) || r.ReleasedAt < row.Registered {
+		if !job.CoversPath(path.Clean(r.Path), rel) || r.ReleasedAt < row.Registered {
 			continue
 		}
 		if r.Revoked {
@@ -583,9 +582,9 @@ func checkClaimPath(row job.Job, rel string, rows []job.Job) error {
 // path is the one a dead proof takes.
 func checkClaimPathPast(row job.Job, rel string, rows []job.Job, dead string) error {
 	switch {
-	case slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, rel) }):
+	case slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, rel) }):
 		return fmt.Errorf("%s is already a write path of %s", rel, row.ID)
-	case slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return covers(d, rel) }):
+	case slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return job.Covers(d, rel) }):
 		return fmt.Errorf("%s is a deny path of %s, and only whoever forked the job lifts one", rel, row.ID)
 	}
 	ancestors := job.Ancestors(rows, row.ID)
@@ -593,7 +592,7 @@ func checkClaimPathPast(row job.Job, rel string, rows []job.Job, dead string) er
 		if other.ID == row.ID || other.ID == dead || !Editing(other) || slices.ContainsFunc(ancestors, func(a job.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
-		if slices.ContainsFunc(other.Paths.Write, func(w string) bool { return covers(w, rel) }) {
+		if slices.ContainsFunc(other.Paths.Write, func(w string) bool { return job.Covers(w, rel) }) {
 			return fmt.Errorf("[%s] %s is held by live job %s, and a proof never takes a path another job holds", string(types.WritePathFileShared), rel, other.ID)
 		}
 	}
@@ -648,7 +647,7 @@ func ProposeClaim(row job.Job, rel string, facts claimFacts, rows []job.Job) (jo
 func proposeDeadHolder(row job.Job, rel string, facts claimFacts) (job.ClaimRequest, string, bool) {
 	for _, id := range slices.Sorted(maps.Keys(facts.dead)) {
 		for _, entry := range facts.dead[id].Row.HardPaths() {
-			if !covers(entry, rel) || checkClaimPath(row, entry, nil) != nil {
+			if !job.Covers(entry, rel) || checkClaimPath(row, entry, nil) != nil {
 				continue
 			}
 			if proof, err := proveDeadHolder(entry, id, facts); err == nil {
@@ -688,7 +687,7 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []job.ClaimRequest, f
 		return s.claimFromDeadHolders(ctx, actor, id, reqs, facts, limits, dryRun, by)
 	}
 	if !dryRun {
-		return s.mutate(ctx, id, asClaim, func(cur *job.Job, exists bool, now int64) error {
+		return s.Mutate(ctx, id, job.AsClaim, func(cur *job.Job, exists bool, now int64) error {
 			if !exists {
 				return claimRefusal(actor, id, "nothing declares that job")
 			}
@@ -707,7 +706,7 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []job.ClaimRequest, f
 	if err := grantClaim(actor, &next, reqs, facts, limits, time.Now().Unix(), by); err != nil {
 		return job.Job{}, err
 	}
-	return next, authorizeRow(actor, id, asClaim, rows[i], next, true, rows)
+	return next, authorizeRow(actor, id, job.AsClaim, rows[i], next, true, rows)
 }
 
 func takesFromDeadHolder(req job.ClaimRequest) bool {
@@ -720,10 +719,8 @@ func takesFromDeadHolder(req job.ClaimRequest) bool {
 // recording the release with who took it and why its holder was dead. A holder whose row
 // changed since the guard judged it dead is refused: its holder may be back.
 func (s *Store) claimFromDeadHolders(ctx context.Context, actor Actor, id string, reqs []job.ClaimRequest, facts claimFacts, limits config.Jobs, dryRun bool, by job.Origin) (job.Job, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var out job.Job
-	err := s.update(ctx, func(f *jobsFile) error {
+	err := s.Rewrite(ctx, func(f *job.Rows) error {
 		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id })
 		if i < 0 {
 			return claimRefusal(actor, id, "nothing declares that job")
@@ -758,7 +755,7 @@ func (s *Store) claimFromDeadHolders(ctx context.Context, actor Actor, id string
 		f.Jobs[i] = next
 		out = next.Clone()
 		if dryRun {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		return nil
 	})
@@ -790,7 +787,7 @@ func takeFromDeadHolder(ctx context.Context, s *Store, rows []job.Job, taker, re
 	holder := &rows[j]
 	holder.Paths.Write = slices.DeleteFunc(holder.Paths.Write, func(p string) bool { return p == rel })
 	holder.Releases = append(holder.Releases, job.Release{
-		Path: rel, Digest: s.digest(ctx, rel), ReleasedAt: now, Revoked: true, TakenBy: taker, DeadBecause: d.Why,
+		Path: rel, Digest: s.Digest(ctx, rel), ReleasedAt: now, Revoked: true, TakenBy: taker, DeadBecause: d.Why,
 	})
 	return nil
 }
@@ -842,7 +839,7 @@ func authorizeClaim(actor Actor, id string, prev, next job.Job, exists bool, row
 	case prev.State != job.StateRunning && prev.State != job.StateExited:
 		return claimRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job claims", id, cmp.Or(string(prev.State), "unstated")))
 	}
-	if fields := changedFields(prev, next); !slices.Equal(fields, []string{"paths.write"}) {
+	if fields := job.ChangedFields(prev, next); !slices.Equal(fields, []string{"paths.write"}) {
 		return claimRefusal(actor, id, "a claim adds write paths and changes nothing else, and this one changes "+strings.Join(fields, ", "))
 	}
 	n, w := len(prev.Paths.Write), len(prev.Claims)

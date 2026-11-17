@@ -275,7 +275,7 @@ func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) ty
 			out.Projects = projects
 		}
 	}
-	work, calls := attemptWork(ctx, h.trail, h.row.ID, attemptStart(h.row, h.tries))
+	work, calls := attemptWork(ctx, h.trail, h.row.ID, job.AttemptStart(h.row, h.tries))
 	out.Work = work
 	out.Tokens, out.CostUSD = s.priceAttempt(work, calls)
 	return out
@@ -293,15 +293,6 @@ func (s *Store) priceAttempt(work *types.JobWork, calls []types.AgentFacts) (*in
 		return nil, nil
 	}
 	return &tokens, &usd
-}
-
-// attemptStart is when row's live attempt began, unix seconds: when the last prior attempt
-// ended, else when the row was created.
-func attemptStart(row job.Job, tries job.Attempts) int64 {
-	if prior := tries.Prior(row.ID); len(prior) > 0 {
-		return prior[len(prior)-1].Status.Ended
-	}
-	return row.Created
 }
 
 // assignModelTierWithHistory is [Store.assignModelTier] with the recorded outcomes in the
@@ -349,12 +340,16 @@ func (s *Store) jobHistory(ctx context.Context) ([]types.JobOutcome, error) {
 	return h.Jobs, nil
 }
 
+// errNoSuchJob is how an observation's apply declines a row that is not there without
+// inventing a lease nobody declared.
+var errNoSuchJob = errors.New("job: no such lease")
+
 // RecordRework counts one more rework round on job id: its holder handed back and was sent
 // more work. An observation, like [Store.RecordUnattributedWrite]: the guard noting what a
 // message did is not the row's holder declaring anything. A missing row is not an error,
 // since the job may have been removed between the message and this call.
 func (s *Store) RecordRework(ctx context.Context, id string) error {
-	_, err := s.mutate(ctx, id, asObservation, func(cur *job.Job, exists bool, _ int64) error {
+	_, err := s.Mutate(ctx, id, job.AsObservation, func(cur *job.Job, exists bool, _ int64) error {
 		if !exists {
 			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
 		}

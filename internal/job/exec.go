@@ -13,15 +13,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrUnknownJob reports a registration against an id no row carries, and ErrHeldElsewhere
-// one against a running job another checkout holds. Sentinels rather than bare strings so
-// a door can tell a worker's mistake from a store failure; the wrapped messages carry the
-// id and the next step. ErrHeldElsewhere holds until the row changes, so a caller may stop
-// retrying on it, unlike a cancelled context or lock contention.
-var (
-	ErrUnknownJob    = errors.New("job: unknown lease")
-	ErrHeldElsewhere = errors.New("job: another checkout holds the job")
-)
+// ErrHeldElsewhere reports a registration against a running job another checkout holds,
+// as [job.ErrUnknownJob] reports one against an id no row carries. Sentinels rather than
+// bare strings so a door can tell a worker's mistake from a store failure; the wrapped
+// messages carry the id and the next step. ErrHeldElsewhere holds until the row changes,
+// so a caller may stop retrying on it, unlike a cancelled context or lock contention.
+var ErrHeldElsewhere = errors.New("job: another checkout holds the job")
 
 // heldError is ErrHeldElsewhere with the message that names the holder, which reads
 // whole without the sentinel's own text.
@@ -59,7 +56,7 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 	// Read before the lock, since it runs the VCS. The row is read again there.
 	var row job.Job
-	if f, err := s.read(); err == nil {
+	if f, err := s.Read(); err == nil {
 		if i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 			row = f.Jobs[i]
 		}
@@ -69,11 +66,11 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 		return job.Job{}, err
 	}
 	base, full := facts.base, facts.full
-	return s.mutate(ctx, id, asExec, func(cur *job.Job, exists bool, now int64) error {
+	return s.Mutate(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
 				" check the declared ids with `%s` and exec under the id the"+
-				" orchestrator handed you", ErrUnknownJob, id, hint.LsJobs)
+				" orchestrator handed you", job.ErrUnknownJob, id, hint.LsJobs)
 		}
 		// Relative would be resolved against whichever process sweeps the row later.
 		here := ""
@@ -101,13 +98,6 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 		}
 		return nil
 	})
-}
-
-// rebindsAdopted reports whether row moves prev, which nobody took, from one checkout its
-// fork adopted to another adopted one.
-func rebindsAdopted(prev, row job.Job) bool {
-	return prev.CheckoutRoot == "" && prev.Worktree.Standing() && !prev.Worktree.Made &&
-		row.Worktree.Standing() && !row.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
 }
 
 // execFacts is what taking a job reads from the checkout, ahead of any lock.
@@ -169,7 +159,7 @@ func execRefusal(row *job.Job, here string, facts execFacts) error {
 func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error {
 	config := s.storeConfig
 	config.root = here
-	facts, err := (&Store{storeConfig: config}).readExecFacts(ctx, row.ID, row)
+	facts, err := (&Store{storeConfig: config}).open().readExecFacts(ctx, row.ID, row)
 	if err != nil {
 		return err
 	}

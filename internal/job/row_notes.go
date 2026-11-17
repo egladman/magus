@@ -168,12 +168,13 @@ func (e listedProblems) Error() string { return strings.TrimSuffix(e.list, "\n")
 func (e listedProblems) Unwrap() error { return e.err }
 func (listedProblems) ExitCode() int   { return exit.Failure }
 
-// RowNotesWith is row's notes over the workspace at root and its projects.
-func RowNotesWith(ctx context.Context, root string, projects []*types.Project, row job.Job, foregroundMax func() (time.Duration, bool)) RowNotes {
+// RowNotesWith is row's notes over the workspace at root and its projects, its gates
+// graded by grader (see [UnrunGates]).
+func RowNotesWith(ctx context.Context, root string, projects []*types.Project, row job.Job, foregroundMax func() (time.Duration, bool), grader CheckGrader) RowNotes {
 	regenerated := RegeneratedOutside(root, row, projects, VCSIgnored(ctx, root))
 	return RowNotes{
 		RegeneratedOutside: regenerated,
-		UnrunGates:         UnrunGates(root, row, projects, regenerated),
+		UnrunGates:         UnrunGates(root, row, projects, regenerated, grader),
 		ForegroundOverrun:  CheckOverrun(ctx, root, row, foregroundMax),
 	}
 }

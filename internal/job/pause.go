@@ -51,10 +51,10 @@ func (s *Store) setPaused(ctx context.Context, ids []string, change func(cur *jo
 	}
 	rows := make([]job.Job, 0, len(ids))
 	for _, id := range ids {
-		row, err := s.mutate(ctx, id, asDeclaration, func(cur *job.Job, exists bool, now int64) error {
+		row, err := s.Mutate(ctx, id, job.AsDeclaration, func(cur *job.Job, exists bool, now int64) error {
 			switch {
 			case !exists:
-				return fmt.Errorf("%w: %q, `%s` lists the declared ids", ErrUnknownJob, id, hint.LsJobs)
+				return fmt.Errorf("%w: %q, `%s` lists the declared ids", job.ErrUnknownJob, id, hint.LsJobs)
 			case cur.State.Terminal():
 				return fmt.Errorf("job: %s already ended %s, so there is nothing to pause or resume", id, cur.State)
 			}

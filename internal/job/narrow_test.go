@@ -201,9 +201,9 @@ func (s *narrowHoldSuite) TestALiteralEntryNarrowsAndStays() {
 
 	s.Equal([]string{"notes.buzz#note"}, added)
 	s.Equal([]string{"notes.buzz", "notes.buzz#note"}, got.Paths.Write, "the root's entry stays")
-	s.True(Narrowed(got, "notes.buzz"))
+	s.True(job.Narrowed(got, "notes.buzz"))
 	s.Equal([]string{"note"}, ClaimedDeclarations(got, "notes.buzz"))
-	s.True(releasedReach(got, "notes.buzz", "notes.buzz"))
+	s.True(job.ReleasedReach(got, "notes.buzz", "notes.buzz"))
 }
 
 func (s *narrowHoldSuite) TestANarrowedHoldWithNoClaimHoldsNothingWhole() {
@@ -264,7 +264,7 @@ func (s *narrowHoldSuite) TestARedeclarationKeepsTheNarrowing() {
 
 	applied, err := Apply(s.T().Context(), s.s, []job.Declaration{{ID: "lit", Paths: job.Paths{Write: []string{"notes.buzz", "notes.buzz#note"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
-	s.True(Narrowed(applied[0].Next, "notes.buzz"))
+	s.True(job.Narrowed(applied[0].Next, "notes.buzz"))
 }
 
 func (s *narrowHoldSuite) TestAReforkEndsTheNarrowing() {
@@ -273,7 +273,7 @@ func (s *narrowHoldSuite) TestAReforkEndsTheNarrowing() {
 	next := narrowed.Clone()
 	next.State = job.StateDeclared
 
-	s.Empty(s.s.releases(s.T().Context(), narrowed, next, 2, false))
+	s.Empty(s.s.Releases(s.T().Context(), narrowed, next, 2, false))
 }
 
 func (s *narrowHoldSuite) TestNamingAPatternedFileAgainEndsTheNarrowing() {
@@ -282,7 +282,7 @@ func (s *narrowHoldSuite) TestNamingAPatternedFileAgainEndsTheNarrowing() {
 	next := narrowed.Clone()
 	next.Paths.Write = append(next.Paths.Write, "magusfile.buzz")
 
-	s.Empty(s.s.releases(s.T().Context(), narrowed, next, 2, false))
+	s.Empty(s.s.Releases(s.T().Context(), narrowed, next, 2, false))
 }
 
 // releaseUnderPatternSuite pins a record naming again the glob a narrowing took
@@ -307,21 +307,21 @@ func (s *releaseUnderPatternSuite) applied(write ...string) job.Job {
 func (s *releaseUnderPatternSuite) TestAPatternAloneLeavesTheFileHeldByNothing() {
 	row := s.applied("**/*.buzz")
 
-	s.True(releasedFile(row, "magusfile.buzz"), "a record naming the glob does not take the file back")
-	s.Empty(claimsOnFile(row, "magusfile.buzz"))
+	s.True(job.FileRelease(row, "magusfile.buzz") >= 0, "a record naming the glob does not take the file back")
+	s.Empty(job.ClaimsOnFile(row, "magusfile.buzz"))
 	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `magusfile.buzz#<declaration>`"},
-		ReleasedUnderPattern(row))
+		job.ReleasedUnderPattern(row))
 }
 
 func (s *releaseUnderPatternSuite) TestAKeptClaimIsNamedAsTheHold() {
 	row := s.applied("**/*.buzz", "magusfile.buzz#project.targets.test")
 
 	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it: only its claims do (project.targets.test)"},
-		ReleasedUnderPattern(row))
+		job.ReleasedUnderPattern(row))
 }
 
 func (s *releaseUnderPatternSuite) TestAReleasedFileNoPatternNamesIsNotNoted() {
-	s.Empty(ReleasedUnderPattern(job.Job{Paths: job.Paths{Write: []string{"a.go"}}, Releases: []job.Release{{Path: "b.go"}}}))
+	s.Empty(job.ReleasedUnderPattern(job.Job{Paths: job.Paths{Write: []string{"a.go"}}, Releases: []job.Release{{Path: "b.go"}}}))
 }
 
 // A fork refused over a magusfile another live job holds files one release request per
@@ -425,7 +425,7 @@ func (s *ReleaseRequestRowSuite) TestTheSameIDIsNotFiledTwice() {
 
 func (s *ReleaseRequestRowSuite) TestAnUnknownHolderIsAnError() {
 	_, err := s.store.FileReleaseRequest(s.T().Context(), "nobody", job.ReleaseRequest{ID: "att-2", File: "a.go"})
-	s.ErrorIs(err, ErrUnknownJob)
+	s.ErrorIs(err, job.ErrUnknownJob)
 }
 
 func (s *ReleaseRequestRowSuite) TestAWriteToTheRowKeepsIt() {

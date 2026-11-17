@@ -905,9 +905,9 @@ func TestFourModelTiersMigration(t *testing.T) {
 // file already through the tries move.
 func (s *fourModelTiersSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	st.notices = &bytes.Buffer{}
 	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":3}`, line))
-	f, err := st.read()
+	f, err := st.Read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	return f.Jobs[0], storedSpec(s.T(), path, f.Jobs[0].ID)

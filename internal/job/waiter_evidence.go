@@ -182,7 +182,7 @@ func sameChangedPaths(ctx context.Context, holder, here string, changed []string
 	}
 	var differ, local []string
 	for _, c := range changed {
-		p := cleanPath(c)
+		p := job.CleanPath(c)
 		rel := filepath.FromSlash(p)
 		if !filepath.IsLocal(rel) || holder != here && !sameContent(ctx, filepath.Join(holder, rel), filepath.Join(here, rel)) {
 			differ = append(differ, p)

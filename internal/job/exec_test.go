@@ -277,7 +277,7 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 	seed(t, s, job.Job{ID: "declared", Checkpoint: repo.Head()})
 
 	_, err := s.Exec(ctx, "typo")
-	require.ErrorIs(t, err, ErrUnknownJob)
+	require.ErrorIs(t, err, job.ErrUnknownJob)
 	assert.Contains(t, err.Error(), hint.LsJobs.String(), "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
 

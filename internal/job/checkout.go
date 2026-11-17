@@ -605,7 +605,7 @@ func enclosingProject(root, dir string) string {
 // guard gives a write: a declaration covers the subtree beneath what it names.
 func writePathCovering(paths []string, rel string) (string, bool) {
 	for _, decl := range paths {
-		if covers(decl, rel) {
+		if job.Covers(decl, rel) {
 			return decl, true
 		}
 	}
@@ -640,7 +640,7 @@ func (s *Store) WriteProof(rows []job.Job, row job.Job) job.WriteProof {
 	for _, peer := range peers {
 		for _, mine := range row.HardPaths() {
 			for _, theirs := range peer.HardPaths() {
-				if job.PathsIntersect(mine, theirs) && !releasedReach(peer, theirs, mine) && !releasedReach(row, mine, theirs) {
+				if job.PathsIntersect(mine, theirs) && !job.ReleasedReach(peer, theirs, mine) && !job.ReleasedReach(row, mine, theirs) {
 					return job.WriteProofOverlapping
 				}
 			}
@@ -689,7 +689,7 @@ func HardenWritten(ctx context.Context, store *Store, rows []job.Job) []job.Job 
 		if store.dryRun {
 			continue
 		}
-		_, _ = store.mutate(ctx, row.ID, asObservation, func(cur *job.Job, exists bool, _ int64) error {
+		_, _ = store.Mutate(ctx, row.ID, job.AsObservation, func(cur *job.Job, exists bool, _ int64) error {
 			if exists {
 				cur.Paths.Soft = harden(cur.Paths.Soft)
 			}
@@ -738,7 +738,7 @@ func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branche
 			return nil, "", fmt.Errorf("branch %s: %w", branch, err)
 		}
 		for _, p := range changed {
-			if p = cleanPath(p); p != "." && !seen[p] {
+			if p = job.CleanPath(p); p != "." && !seen[p] {
 				seen[p] = true
 				paths = append(paths, p)
 			}

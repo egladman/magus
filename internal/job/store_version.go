@@ -9,7 +9,6 @@ import (
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -17,12 +16,6 @@ import (
 // path is not known, such as a migration's row function. [Store.migrate]
 // swaps it for the store's own path.
 const storePathToken = "<store>"
-
-// staleStoreFix is how a person gets past the job store at path, which an
-// older magus wrote. A newer magus's lines are kept whole.
-func staleStoreFix(path string) string {
-	return fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", path)
-}
 
 // pathNamed is err with its message naming the store file where it held
 // [storePathToken]. It still unwraps to err.
@@ -42,33 +35,26 @@ func namePath(err error, path string) error {
 	return pathNamed{err: err, msg: strings.ReplaceAll(msg, storePathToken, path)}
 }
 
-// refuseRecord refuses the record at line of the store, got where this
-// magus reads only want. Another version names staleStoreFix or a newer
-// magus. Another kind is a line no magus writes.
-func (s *Store) refuseRecord(want, got apiversion.TypeMeta, line int) error {
-	what := fmt.Sprintf("job: %s:%d", s.path, line)
-	if got.APIVersion != want.APIVersion {
-		return types.RefuseVersion(types.APIVersion(want.APIVersion), types.APIVersion(got.APIVersion), what, staleStoreFix(s.path))
-	}
-	return types.DiagnosticErrorf(types.StoreLineUndecodable, "%s: %v", what, &apiversion.RefusedError{Want: want, Got: got})
-}
-
 // jobMigrations take a jobs.jsonl from each migration to the next, in order; see
 // [Store.migrate]. A migration rewrites stored rows once, so a change to a stored member's
 // name lands here and no reader keeps the old name.
-var jobMigrations = []migrate.Migration{
-	{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
-	{Name: "worker type resume becomes resumed", Up: workerResumed},
-	{Name: triesMoved, Up: dropTries},
-	{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
-	{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
-	{Name: "model tier source Row becomes Job", Up: modelTierSourceJob},
-	{Name: "write, read, deny and soft paths move under spec.paths", Up: pathsNested},
+func jobMigrations() []migrate.Migration {
+	return []migrate.Migration{
+		{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
+		{Name: "worker type resume becomes resumed", Up: workerResumed},
+		{Name: triesMoved, Up: dropTries},
+		{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
+		{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
+		{Name: "model tier source Row becomes Job", Up: modelTierSourceJob},
+		{Name: "write, read, deny and soft paths move under spec.paths", Up: pathsNested},
+	}
 }
 
 // specPathsMoved pairs each flat spec member with its name under spec.paths.
-var specPathsMoved = []struct{ flat, nested string }{
-	{"writePaths", "write"}, {"readPaths", "read"}, {"denyPaths", "deny"}, {"softPaths", "soft"},
+func specPathsMoved() []struct{ flat, nested string } {
+	return []struct{ flat, nested string }{
+		{"writePaths", "write"}, {"readPaths", "read"}, {"denyPaths", "deny"}, {"softPaths", "soft"},
+	}
 }
 
 // pathsNested moves a row's flat spec path members under spec.paths.
@@ -82,7 +68,7 @@ func pathsNested(e migrate.Entry) (migrate.Entry, error) {
 		return nil, fmt.Errorf("reading spec: %w", err)
 	}
 	paths := map[string]codec.RawMessage{}
-	for _, m := range specPathsMoved {
+	for _, m := range specPathsMoved() {
 		if v, ok := spec[m.flat]; ok {
 			paths[m.nested] = v
 			delete(spec, m.flat)
@@ -130,7 +116,8 @@ func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
 		return e, nil
 	}
 	var err error
-	if record["source"], err = codec.Marshal(wireTierSource.wire[tier.SourceJob]); err == nil {
+	// The wire spelling of the source when this migration was written.
+	if record["source"], err = codec.Marshal("Job"); err == nil {
 		if status["modelTier"], err = codec.Marshal(record); err == nil {
 			e["status"], err = codec.Marshal(status)
 		}
@@ -153,7 +140,7 @@ func headerEntry(e migrate.Entry) bool {
 	return !id && !spec
 }
 
-// envelopeRow rewrites a flat row as its [jobRecord]. A server's row is
+// envelopeRow rewrites a flat row as its record ([job.MarshalRecord]). A server's row is
 // told by its registration once holder goes. A member job.Job does not
 // declare is kept on the record as it was. The flat row spelled its paths
 // before they nested, so flat reads them.
@@ -178,24 +165,28 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 		return nil, fmt.Errorf("reading holder: %w", err)
 	}
 	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(job.APIVersion) < 0) {
-		return nil, types.RefuseVersion(job.APIVersion, flat.APIVersion, "job: row "+row.ID, staleStoreFix(storePathToken))
+		return nil, types.RefuseVersion(job.APIVersion, flat.APIVersion, "job: row "+row.ID, job.StaleStoreFix(storePathToken))
 	}
 	holder := flat
 	if holder.Holder == "server" {
 		row.RegisteredBy.EntryPoint = job.EntryPointServer
 	}
 	row.Paths = job.Paths{Write: flat.WritePaths, Read: flat.ReadPaths, Deny: flat.DenyPaths, Soft: flat.SoftPaths}
-	r := recordJob(row, nil)
+	var unknown map[string]codec.RawMessage
 	declared, read := jsonNames(reflect.TypeFor[job.Job]()), jsonNames(reflect.TypeOf(flat))
 	for k, v := range e {
 		if !declared[k] && !read[k] {
-			if r.Unknown == nil {
-				r.Unknown = map[string]codec.RawMessage{}
+			if unknown == nil {
+				unknown = map[string]codec.RawMessage{}
 			}
-			r.Unknown[k] = v
+			unknown[k] = v
 		}
 	}
-	return remarshal(r)
+	line, err := job.MarshalRecord(row, unknown, credentialKinds()...)
+	if err != nil {
+		return nil, err
+	}
+	return entryOf(line)
 }
 
 // envelopeHeader rewrites the flat header as the JobList line, its
@@ -213,7 +204,11 @@ func envelopeHeader(e migrate.Entry) (migrate.Entry, error) {
 	}
 	delete(e, "api_version")
 	delete(e, "requires")
-	next, err := remarshal(jobsFile{TypeMeta: jobListType, Metadata: apiversion.Metadata{}.WithRequires(recordGroup, features)})
+	line, err := job.MarshalHeader(features)
+	if err != nil {
+		return nil, err
+	}
+	next, err := entryOf(line)
 	if err != nil {
 		return nil, err
 	}
@@ -223,12 +218,8 @@ func envelopeHeader(e migrate.Entry) (migrate.Entry, error) {
 	return next, nil
 }
 
-// remarshal is v as an entry.
-func remarshal(v any) (migrate.Entry, error) {
-	text, err := codec.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
+// entryOf is the line text as an entry.
+func entryOf(text []byte) (migrate.Entry, error) {
 	var e migrate.Entry
 	if err := codec.Unmarshal(text, &e); err != nil {
 		return nil, err

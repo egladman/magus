@@ -91,15 +91,15 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (job.Job, bool, error)
 	var ended job.Job
 	var outcomes endings
 	integrating := false
-	err := s.update(ctx, func(f *jobsFile) error {
+	err := s.Rewrite(ctx, func(f *job.Rows) error {
 		outcomes = endings{}
 		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == b.Job })
 		if i >= 0 && len(f.Jobs[i].Integrates) > 0 {
 			integrating = true
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].ServerRun() {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {
 			return err
@@ -138,10 +138,10 @@ func (s *Store) StampHolderStopped(ctx context.Context, c Caller) error {
 		return nil
 	}
 	now := s.now().Unix()
-	return s.update(ctx, func(f *jobsFile) error {
+	return s.Rewrite(ctx, func(f *job.Rows) error {
 		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == b.Job })
 		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].ServerRun() {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {
 			return err
@@ -163,7 +163,7 @@ func (s *Store) ClearHolderStopped(ctx context.Context, c Caller) error {
 	if b.Job == "" || b.Gone {
 		return nil
 	}
-	rows, err := s.read()
+	rows, err := s.Read()
 	if err != nil {
 		return err
 	}
@@ -172,10 +172,10 @@ func (s *Store) ClearHolderStopped(ctx context.Context, c Caller) error {
 		return nil
 	}
 	now := s.now().Unix()
-	return s.update(ctx, func(f *jobsFile) error {
+	return s.Rewrite(ctx, func(f *job.Rows) error {
 		i := slices.IndexFunc(f.Jobs, stamped)
 		if i < 0 {
-			return file.ErrSkipWrite
+			return job.ErrSkipWrite
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {
 			return err
@@ -190,7 +190,7 @@ func (s *Store) ClearHolderStopped(ctx context.Context, c Caller) error {
 // when it has none or no row declares it. It reads the store without sweeping, so it
 // writes nothing and runs no VCS probe.
 func (s *Store) TreeRoot(id string) (string, error) {
-	f, err := s.read()
+	f, err := s.Read()
 	if err != nil {
 		return "", err
 	}

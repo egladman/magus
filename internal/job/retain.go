@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,8 +77,10 @@ func retire(rows []job.Job, now int64, window time.Duration) ([]job.Job, int) {
 // rows (see [retire]) and removes the archives and stray temp files the window has
 // outlived. A file no pass has stamped is stamped and left whole, so the first pass runs
 // an interval after a store is created or first written by this magus. A jobs.retain that
-// does not read fails the write rather than retire rows by a window nobody chose.
-func (s *Store) retainDue(f *jobsFile, now time.Time) error {
+// does not read fails the write rather than retire rows by a window nobody chose. A pass
+// also prunes the footprint cache (see [Store.pruneFootprints]). It is the module store's
+// [job.WithRetention], run inside every rewrite.
+func (s *Store) retainDue(_ context.Context, f *job.Rows, now time.Time) error {
 	if f.Retained == 0 {
 		f.Retained = now.Unix()
 		return nil
@@ -92,6 +95,7 @@ func (s *Store) retainDue(f *jobsFile, now time.Time) error {
 	f.Retained = now.Unix()
 	f.Jobs, _ = retire(f.Jobs, now.Unix(), window)
 	s.dropExpiredFiles(now, window)
+	s.pruneFootprints(f.Jobs)
 	return nil
 }
 

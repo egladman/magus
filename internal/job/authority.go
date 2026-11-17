@@ -4,23 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
-
-// forkAuthority is the Authority a fork by actor records (ADR 0045). The
-// transport named actor, so no declared parent or checkpoint decides it. A
-// worker's child takes its parent's, and an unbound fork the root's head.
-func forkAuthority(actor Actor, rows []job.Job, rootHead func() string) string {
-	if !actor.Bound() {
-		return rootHead()
-	}
-	if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == actor.Lease }); i >= 0 {
-		return rows[i].Authority
-	}
-	return ""
-}
 
 // noteNoAuthority says a fork stored row with no authority. The guard refuses
 // its holder's work, and the forker hears it before the worker does.
@@ -67,7 +53,7 @@ func (s *Store) AdvanceAuthority(ctx context.Context, id string) (job.Job, error
 	if head == "" {
 		return job.Job{}, fmt.Errorf("job: %s's authority cannot advance: the version control at %q names no committed revision", id, s.root)
 	}
-	return s.mutate(ctx, id, asAdvance, func(cur *job.Job, exists bool, _ int64) error {
+	return s.Mutate(ctx, id, job.AsAdvance, func(cur *job.Job, exists bool, _ int64) error {
 		if !exists {
 			return fmt.Errorf("job: %s is not declared, so it has no authority to advance", id)
 		}

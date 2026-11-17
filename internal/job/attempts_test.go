@@ -186,7 +186,7 @@ func (s *AttemptsSuite) TestRefuseAttemptPassesUnderTheCap() {
 
 func (s *AttemptsSuite) TestRefuseAttemptPastTheCap() {
 	err := refuseAttempt("a", 2, job.Job{MaxAttempts: 2})
-	s.Require().ErrorIs(err, ErrMaxAttempts)
+	s.Require().ErrorIs(err, job.ErrMaxAttempts)
 	s.Contains(err.Error(), "a used 2 of its 2 attempt(s)")
 	var nonRetryable *types.NonRetryableError
 	s.Require().True(errors.As(err, &nonRetryable))

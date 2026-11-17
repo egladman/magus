@@ -1020,7 +1020,7 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Parallel()
 
-	deviation := job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "gen/a.go", Reason: integratorRegenerates}
+	deviation := job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "gen/a.go", Reason: job.ReasonIntegratorRegenerates}
 	derived := func(t *testing.T) *Store {
 		t.Helper()
 		root := loadableRepository(t)
@@ -1397,7 +1397,7 @@ func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration"}
 	next := prev.Clone()
 	next.Integrates = []string{"worker"}
-	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
 	s.Equal([]string{"integrates"}, a.Changed)
 	s.Equal([]string{"integrates +worker"}, a.ChangeLines())
 }
@@ -1406,7 +1406,7 @@ func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration", Paths: job.Paths{Soft: []string{"old.go"}}}
 	next := prev.Clone()
 	next.Paths.Soft = []string{"new.go"}
-	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
 	s.Equal([]string{"paths.soft"}, a.Changed)
 	s.Equal([]string{"paths.soft +new.go -old.go"}, a.ChangeLines())
 }
@@ -1474,7 +1474,7 @@ func (s *resolveSymbolGoalsNarrowsSuite) TestAForkNarrowsTheWholeHoldToTheClaim(
 	narrowed, added, err := NarrowHold(s.T().Context(), store, stored.ID, "run.go", []string{"func A"}, "")
 	s.Require().NoError(err)
 	s.Empty(added, "the claim is already held, so the hold only records that it was narrowed")
-	s.True(Narrowed(narrowed, "run.go"))
+	s.True(job.Narrowed(narrowed, "run.go"))
 }
 
 type applyDroppedGoalsSuite struct {

@@ -102,9 +102,6 @@ func runCLI() int {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return 1
 	}
-	// Before the worker branches: a worker runs magus\workspace().putJob.
-	// That opens its own Store inside std and grades the check through this.
-	job.SetCheckGrader(guard.NewCheckGrader(loadGuardDependencies))
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return transform.Serve(context.Background(), os.Stdin, os.Stdout, os.Stderr)

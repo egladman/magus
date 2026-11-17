@@ -76,7 +76,7 @@ func TestGrantEndsWithTheJob(t *testing.T) {
 	assert.False(t, live, "a grant ends at the job's terminal state")
 
 	superseded := job.Attempt{Job: "a", N: 1, Status: job.AttemptStatus{State: job.StateFail}}
-	require.NoError(t, s.appendAttempts(t.Context(), superseded))
+	require.NoError(t, s.AppendAttempts(t.Context(), superseded))
 	_, live, err = s.LiveGrant(row, "hooks-off", now)
 	require.NoError(t, err)
 	assert.False(t, live, "the next attempt is not the one the person approved")
@@ -86,7 +86,7 @@ func TestGrantEndsWithTheJob(t *testing.T) {
 	_, err = s.Grant(t.Context(), "b", "hooks-off", 0)
 	assert.ErrorContains(t, err, "already ended", "an ended job takes no grant")
 	_, err = s.Grant(t.Context(), "nobody", "hooks-off", 0)
-	assert.ErrorIs(t, err, ErrUnknownJob)
+	assert.ErrorIs(t, err, job.ErrUnknownJob)
 }
 
 func TestGrantRevokeIsALine(t *testing.T) {

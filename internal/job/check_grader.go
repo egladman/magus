@@ -38,34 +38,11 @@ type CheckVerdict struct {
 // door opens stores for, so it must be safe for concurrent use.
 type CheckGrader func(ctx context.Context, root string, row job.Job) CheckVerdict
 
-var (
-	installedGraderMu sync.RWMutex
-	installedGrader   CheckGrader
-)
-
-// SetCheckGrader installs the grader a Store whose Location names none grades a declared
-// check with. The composition root installs one, because the grader runs the guard's
-// rules and the guard imports the doors that open stores; with none installed such a
-// Store grades nothing. It returns the grader it replaced, for a test that swaps in its
-// own to put back. Safe for concurrent use: a fork running meanwhile grades with the old
-// grader or the new one.
-func SetCheckGrader(g CheckGrader) (previous CheckGrader) {
-	installedGraderMu.Lock()
-	defer installedGraderMu.Unlock()
-	previous, installedGrader = installedGrader, g
-	return previous
-}
-
-// checkGrader is the store's own grader, else the installed one.
-func (s *Store) checkGrader() CheckGrader {
-	if s.grader != nil {
-		return s.grader
-	}
-	return installedCheckGrader()
-}
+// checkGrader is the store's grader, nil when its Location names none.
+func (s *Store) checkGrader() CheckGrader { return s.grader }
 
 // WithGrader returns a Store over s's file that grades a declared check with g in place of
-// s's own grader or the installed one: a fork wraps the grader it validates with in memos
+// s's own: a fork wraps the grader it validates with in memos
 // that live as long as that fork. The view takes its own mutex, as [Store.As] does.
 func (s *Store) WithGrader(g CheckGrader) *Store {
 	v := s.view()
@@ -117,13 +94,6 @@ func (m *GradeMemo) Judged() int {
 	return m.judged
 }
 
-// installedCheckGrader is the grader [SetCheckGrader] installed, nil when none is.
-func installedCheckGrader() CheckGrader {
-	installedGraderMu.RLock()
-	defer installedGraderMu.RUnlock()
-	return installedGrader
-}
-
 // CompilingCheck is the check a refusal recommends: it compiles the workspace without
 // linking its binary, so a worker the guard keeps from building can still run it. The
 // grader also judges it to tell a deny of the declared check from a deny of every command
@@ -143,8 +113,7 @@ const humanOnlyRule = "human-only"
 // the grader reached no verdict on is one JobUngraded problem, and grading stops there: why
 // no verdict was reached is the workspace's or the binary's, and holds for every check. A
 // deferred grade ends the grading the same way but is no problem: the row is stored. A
-// Store with no grader of its own grades with the one [SetCheckGrader] installed; with
-// neither, and for a job with no check, nothing is found.
+// Store whose Location names no grader, and a job with no check, find nothing.
 func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.JobProblems {
 	if store == nil {
 		return nil

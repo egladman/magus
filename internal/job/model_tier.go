@@ -259,7 +259,7 @@ func resolveModelTier(ctx context.Context, set *tier.Set, models []model.Row, ma
 	}, nil
 }
 
-// assignModelTier is the tier for row, written into plan. It runs under [Store.mutate]'s
+// assignModelTier is the tier for row, written into plan. It runs under [job.Store.Mutate]'s
 // lock with plan as it stood before the write, so the bound is read where it is spent.
 func (s *Store) assignModelTier(ctx context.Context, row job.Job, plan []job.Job) (tier.Assignment, error) {
 	var models []model.Row

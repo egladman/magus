@@ -947,8 +947,6 @@ linters:
         linters: [testpairing]
       - path: ^internal/file/identity_unix\.go$
         linters: [testpairing]
-      - path: ^internal/job/store_unix_test\.go$
-        linters: [testpairing]
       - path: ^internal/proc/spawn/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
         linters: [testpairing]
       - path: ^internal/proc/sockdir/(sockdir_unix|sockdir_unix_test)\.go$
@@ -958,6 +956,8 @@ linters:
       - path: ^internal/sessions/adapter_unix\.go$
         linters: [testpairing]
       - path: ^internal/textindex/mmap_unix\.go$
+        linters: [testpairing]
+      - path: ^libs/safetyscissors/job/store_unix_test\.go$
         linters: [testpairing]
 
       # filenames' backlog: concatenations already in the tree when the rule

@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -13,30 +12,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Actor is the party a job-store write is made by: the lease it is bound to.
-//
-// BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor may write anything; a
-// bound one is a worker acting under one row, and the rules below are what it may do to
-// the book from inside it. Unbound says nothing about who is writing: an orchestrator and
-// an agent nobody bound are both unbound. A process binds through the checkout's record or
-// its BAGGAGE claim. An [Actor.Unstamped] caller counts as bound, to no row. The guard
-// also reads the calling session's and subagent's record, which no process can see, and
-// refuses a bound caller's rebinding writes before they run
+// Actor is the module store's [job.Actor]: the lease a write is made by, bound or
+// unbound. A process binds through the checkout's record or its BAGGAGE claim (see
+// [ActingActor]). The guard also reads the calling session's and subagent's record,
+// which no process can see, and refuses a bound caller's rebinding writes before they run
 // (denyLeaseScopedRebind), so for a hook-identified worker that rule is the enforcement
-// and this store is the backstop for everyone else.
+// and the store is the backstop for everyone else.
 //
-// Who the writer is beyond its lease is not the actor's: a row's registered_by is stamped
-// from the write's context (trail.StampOrigin), where each door put its entry point,
-// credential and host.
-type Actor struct {
-	// Lease is the row this session acts under, empty when it acts under none.
-	Lease string
-	// Unstamped is a caller the transport it arrived on could not name: a shared server
-	// serves callers other than itself, and one that sent no lease may be any of them. It
-	// is held to a worker's boundary with no row of its own: it may read, and every graded
-	// write it makes is refused. The server's own identity is never lent to it.
-	Unstamped bool
-}
+// compat(until: the next release): the callers outside internal/job name job.Actor.
+type Actor = job.Actor
+
+// RefusedError is the module store's [job.RefusedError].
+//
+// compat: see [Actor].
+type RefusedError = job.RefusedError
 
 // EnvStampedLease marks a process whose BAGGAGE lease was stamped by the transport that
 // started it on behalf of a caller, rather than claimed by the process's own spawner: a
@@ -76,10 +65,6 @@ func RunLease(ctx context.Context, loc Location) (string, job.LeaseSource) {
 	return ActingLease(loc, claim)
 }
 
-// Bound reports whether this actor is held to a worker's boundary: a worker acting under a
-// lease, or an [Actor.Unstamped] caller.
-func (a Actor) Bound() bool { return a.Lease != "" || a.Unstamped }
-
 // As returns a Store over s's file that writes as a, for a door serving a caller other
 // than this process: the shared server's job tool acts as whoever called it. The view
 // takes its own mutex; the file lock still serializes it against s and every other writer.
@@ -89,84 +74,15 @@ func (s *Store) As(a Actor) *Store {
 	return v
 }
 
-// grading is what KIND of write reaches [Store.mutate], which decides two things: whether
-// the acting party's boundary applies to it, and which store-owned fields it may set. Both
-// are spelled at every call site rather than defaulted, because a write that reaches the
-// file ungraded, or one that carries its own registration, is the escape the rules exist
-// to close and a silent default is how one gets added.
-type grading int
-
-const (
-	// asDeclaration is a caller's row: the boundary applies and every store-owned field is
-	// carried forward from the stored row.
-	asDeclaration grading = iota
-	// asExec is a worker reporting the base it landed on: graded, and the one
-	// write that sets the registration fields.
-	asExec
-	// asVerdict is `magus job wait` recording the pass it graded from the row's evidence:
-	// graded, and the one write through which a bound holder moves a row to pass.
-	asVerdict
-	// asObservation is the guard recording a write by somebody else: ungraded, since the
-	// row it lands on is by definition not the writer's, and the one write that sets
-	// Unattributed.
-	asObservation
-	// asNarrowing is [NarrowHold] trading a whole-file hold for claims.
-	// Ungraded: the claims sit inside what the entry covered.
-	// It stamps its own release.
-	asNarrowing
-	// asClaim is [Store.Claim] adding proved write paths: graded by
-	// [authorizeClaim], and the one write that appends to Claims.
-	asClaim
-	// asAdvance is [Store.AdvanceAuthority], the one write after a fork that
-	// sets Authority. A bound caller may make it only as [landsRow] says.
-	asAdvance
-)
-
-// graded reports whether the acting party's boundary applies to this write.
-func (g grading) graded() bool { return g != asObservation && g != asNarrowing }
-
-// RefusedError is a write the store would not apply, naming the rule, the actor it
-// applied to, and what the actor should do instead.
-//
-// A typed error rather than a string so a door can tell a refusal (the actor may not do
-// this) from a failure (the file would not open): the first is an answer about the
-// caller and the second is not.
-type RefusedError struct {
-	// Lease is the row the write targeted, and Actor the party that attempted it. The two
-	// differ whenever a worker writes a child, which is why the message names both.
-	Lease string
-	Actor Actor
-	// Rule is the sentence naming what was refused and why.
-	Rule string
-	// Remedy is what the actor does instead, empty when there is nothing to do: a refused
-	// bind wrote nothing, so there is no unresolved risk to report.
-	Remedy string
-}
-
-func (e *RefusedError) Error() string {
-	msg := fmt.Sprintf("job: lease %s is bound to this session and row %s is what this targeted: %s",
-		e.Actor.Lease, e.Lease, e.Rule)
-	switch {
-	case e.Actor.Unstamped && e.Lease == "":
-		msg = "job: this call arrived with no lease stamped on it: " + e.Rule
-	case e.Actor.Unstamped:
-		msg = fmt.Sprintf("job: this call arrived with no lease stamped on it and row %s is what it targeted: %s",
-			e.Lease, e.Rule)
-	}
-	if e.Remedy == "" {
-		return msg
-	}
-	return fmt.Sprintf("%s, %s", msg, e.Remedy)
-}
+// unstampedRemedy is what a refused [job.Actor.Unstamped] caller is told to do, the
+// module store's refusals included (see [diagnose]).
+const unstampedRemedy = "send the lease you act under with the call (a baggage header carrying " + trail.BaggageLease +
+	"), or make the write from your own checkout, where magus reads it for you"
 
 // refuse builds the refusal for actor's attempt to WRITE lease id.
 func refuse(actor Actor, id, rule string) error {
 	if actor.Unstamped {
-		return &RefusedError{
-			Lease: id, Actor: actor, Rule: rule,
-			Remedy: "send the lease you act under with the call (a baggage header carrying " + trail.BaggageLease +
-				"), or make the write from your own checkout, where magus reads it for you",
-		}
+		return &RefusedError{Lease: id, Actor: actor, Rule: rule, Remedy: unstampedRemedy}
 	}
 	return &RefusedError{
 		Lease: id, Actor: actor, Rule: rule,
@@ -174,142 +90,31 @@ func refuse(actor Actor, id, rule string) error {
 	}
 }
 
-// landsRow reports whether actor holds an integration row that lands row id:
-// its own, or a branch its Integrates names.
-func landsRow(actor Actor, id string, rows []job.Job) bool {
-	if actor.Unstamped {
-		return false
-	}
-	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == actor.Lease })
-	if i < 0 || !rows[i].State.Live() || len(rows[i].Integrates) == 0 {
-		return false
-	}
-	return id == actor.Lease || slices.Contains(rows[i].Integrates, id)
-}
-
-// authorizeRow grades whether actor may turn prev into next on the row id, with rows
-// standing for the rest of the book (a child row's boundary is read from the parent's).
-//
-// THE ENFORCEMENT POINT, and it is here rather than in a shell rule because the three
-// write doors (the CLI, the client MCP tool, magus\job) all reach the store and
-// only one of them can be graded by a command pattern. The guard's denial text sends a
-// worker to the tool; this is what makes that mean "ask the orchestrator".
-//
-// An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
-// it landed on (which starts a declared row running, or one its ended session held), SHRINK its write paths (which is how
-// the skill has it release one), and end itself in fail, no_return, or exited. On any other
-// row it may only CREATE a child of itself inside its own boundary, or, as an [asVerdict]
-// write, pass a row below it. Widening a
-// boundary, changing the plan's shape, and grading its own row are the orchestrator's, which
-// is the asymmetry the whole rule exists for: a worker that can widen its own row has no
-// boundary at all. The one claim a holder makes is an [asClaim] write, each path
-// carrying a proof the store re-proved (see [authorizeClaim]).
-func authorizeRow(actor Actor, id string, kind grading, prev, next job.Job, exists bool, rows []job.Job) error {
-	if kind == asClaim {
+// authorizeRow is [job.AuthorizeRow] with magus's rules added: a proved claim graded by
+// [authorizeClaim], and the gate a child may run (see [authorizeGate]).
+func authorizeRow(actor Actor, id string, kind job.Grading, prev, next job.Job, exists bool, rows []job.Job) error {
+	if kind == job.AsClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
 	}
-	if kind == asAdvance {
-		if !actor.Bound() || landsRow(actor, id, rows) {
-			return nil
-		}
-		return refuse(actor, id, "only the root advances a row's authority, or the integrator that lands it, and a worker that moved its own would approve its own work")
+	if err := job.AuthorizeRow(actor, id, kind, prev, next, exists, rows); err != nil {
+		return diagnose(err)
 	}
-	if !actor.Bound() {
+	return authorizeGate(actor, id, next, exists, rows)
+}
+
+// authorizeGate refuses a bound worker a new child whose check is the release gate its own
+// row lacks. cmd/magus/guard_gate.go reads the gate as a capability rather than as a
+// declaration: a row whose check names it may run it, so such a child would be minting
+// the capability its parent was refused.
+func authorizeGate(actor Actor, id string, next job.Job, exists bool, rows []job.Job) error {
+	if !actor.Bound() || actor.Unstamped || exists || id == actor.Lease || next.Parent != actor.Lease {
 		return nil
-	}
-	if actor.Unstamped {
-		return refuse(actor, id, "a caller magus cannot name may be any row's holder or none, so it writes no row")
-	}
-	if kind == asVerdict {
-		return authorizeVerdict(actor, id, prev, next, rows)
-	}
-	if id != actor.Lease {
-		return authorizeChild(actor, id, next, exists, rows)
-	}
-	if !exists {
-		return refuse(actor, id, "nothing declares that row, and a worker does not declare its own lease")
-	}
-	for _, field := range changedFields(prev, next) {
-		switch field {
-		case "paths.write":
-			if !subset(next.Paths.Write, prev.Paths.Write) {
-				return refuse(actor, id, "a worker may only SHRINK paths.write, which is how it releases a path, and this write widens them")
-			}
-		case "state":
-			// Taking a declared job is what starts it, so the exec carries that move.
-			if kind == asExec && next.State == job.StateRunning && (prev.State == job.StateDeclared || prev.EndedWithSession()) {
-				continue
-			}
-			// StatePass stays refused here on purpose: pass is the claim that the work
-			// met its criteria, and that judgment belongs to whoever is waiting on the
-			// row, never to the holder announcing it is done.
-			if next.State != job.StateFail && next.State != job.StateNoReturn && next.State != job.StateExited {
-				return refuse(actor, id, fmt.Sprintf("a worker may only end its own row in %s, %s, or %s, never %s",
-					job.StateFail, job.StateNoReturn, job.StateExited, next.State))
-			}
-		case "reported_base":
-			// The registration, which is what a worker is asked for.
-		default:
-			return refuse(actor, id, fmt.Sprintf("a worker may not change %s on its own row", field))
-		}
-	}
-	return nil
-}
-
-// authorizeVerdict grades a bound holder's verdict: on a row below its own lease (see
-// [Actor.Verifies]), the move to pass and no other change. Wait refuses the rest at its
-// door; this refusal is what holds for any other caller of the verdict write.
-func authorizeVerdict(actor Actor, id string, prev, next job.Job, rows []job.Job) error {
-	if !actor.Verifies(rows, id) {
-		return refuse(actor, id, "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's")
-	}
-	for _, field := range changedFields(prev, next) {
-		if field != "state" || next.State != job.StatePass {
-			return refuse(actor, id, fmt.Sprintf("a verdict moves a row to %s and changes nothing else, and this one changes %s",
-				job.StatePass, field))
-		}
-	}
-	return nil
-}
-
-// authorizeChild grades a bound worker's write to a row that is not its own: a new child
-// of its own lease, inside its own boundary, and nothing else.
-//
-// EVERY BOUNDARY THE GUARD READS IS SUBSETTED, not just the write one. A child's read paths are
-// the READ boundary (cmd/magus/guard_focus.go) and its deny paths are subtracted from the
-// write one, so a worker that could widen either by spawning has no boundary: it binds a
-// session to the child and reads or writes what its own row denies it.
-//
-// The check is otherwise free: which check a child runs is how the parent partitions its
-// own work, and it grades that child's report and nothing else. The ONE exception is the
-// gate, which cmd/magus/guard_gate.go reads as a capability rather than as a declaration:
-// a row whose check names it may run it, so a worker declaring a child with a gate check
-// its own row lacks would be minting the capability it was refused.
-func authorizeChild(actor Actor, id string, next job.Job, exists bool, rows []job.Job) error {
-	if exists {
-		return refuse(actor, id, "a worker writes no row but its own and the children it hands out")
-	}
-	if next.Parent != actor.Lease {
-		return refuse(actor, id, fmt.Sprintf("a row a worker creates must name %s as its parent, and this one names %q", actor.Lease, next.Parent))
 	}
 	own := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == actor.Lease })
 	if own < 0 {
-		return refuse(actor, id, "its own row is not in the job store, so there is no boundary to hand a child")
+		return nil
 	}
-	parent := rows[own]
-	switch {
-	case !subset(next.Paths.Write, parent.Paths.Write):
-		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
-	case !subset(ReadBoundary(next), ReadBoundary(parent)):
-		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
-	case !listedIn(next.Breaks, parent.Breaks):
-		return refuse(actor, id, "a child may only break what its parent may break, and this one's breaks reach further")
-	case !subset(parent.Paths.Deny, next.Paths.Deny):
-		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
-	case next.State != "" && next.State != job.StateDeclared:
-		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
-			job.StateDeclared, next.State))
-	case runsTheGate(next) && !runsTheGate(parent):
+	if parent := rows[own]; runsTheGate(next) && !runsTheGate(parent) {
 		return refuse(actor, id, "only a lease whose parent runs the gate runs the gate, and this parent runs "+checkLine(parent))
 	}
 	return nil
@@ -355,136 +160,32 @@ func checkLine(row job.Job) string {
 	return strings.Join(lines, ", ")
 }
 
-// ReadBoundary is the declarations a row may read: its write paths plus its read paths.
-// The guard's focus-read deny and the store's subset check both use it.
-func ReadBoundary(row job.Job) []string {
-	if len(row.Paths.Read) == 0 {
-		return row.Paths.Write
-	}
-	return append(slices.Clone(row.Paths.Read), row.Paths.Write...)
-}
-
-// authorizeClear grades wiping the book. A worker never does: clear drops rows it did
-// not write, including the one grading it.
-func authorizeClear(actor Actor) error {
-	if !actor.Bound() {
-		return nil
-	}
-	return refuse(actor, actor.Lease, "clearing the job store drops every other lease's row, so it belongs to whoever declared the plan")
-}
-
-// changedFields names the DECLARED fields that differ between two versions of a row, in
-// the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
-// the registration verdict) are not here: nothing a caller sends decides them.
-func changedFields(prev, next job.Job) []string {
-	var out []string
-	add := func(name string, differs bool) {
-		if differs {
-			out = append(out, name)
-		}
-	}
-	add("parent", prev.Parent != next.Parent)
-	out = append(out, changedAgentFields(prev.Agent, next.Agent)...)
-	add("checkpoint", prev.Checkpoint != next.Checkpoint)
-	add("paths.write", !slices.Equal(prev.Paths.Write, next.Paths.Write))
-	add("paths.deny", !slices.Equal(prev.Paths.Deny, next.Paths.Deny))
-	add("paths.read", !slices.Equal(prev.Paths.Read, next.Paths.Read))
-	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
-	add("integrates", !slices.Equal(prev.Integrates, next.Integrates))
-	add("paths.soft", !slices.Equal(prev.Paths.Soft, next.Paths.Soft))
-	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
-	add("follows", prev.Follows != next.Follows)
-	add("brief_format", prev.BriefFormat != next.BriefFormat)
-	add("delivery", prev.Delivery != next.Delivery)
-	add("parent_head", prev.ParentHead != next.ParentHead)
-	add("validation", prev.Validation != next.Validation)
-	add("goals", !goalsEqual(prev.Goals, next.Goals))
-	add("deviations", !slices.Equal(prev.Deviations, next.Deviations))
-	add("state", prev.State != next.State)
-	add("read_only", prev.ReadOnly != next.ReadOnly)
-	add("max_attempts", prev.MaxAttempts != next.MaxAttempts)
-	add("max_claims", prev.MaxClaims != next.MaxClaims)
-	add("weight", prev.Weight != next.Weight)
-	add("reported_base", prev.ReportedBase != next.ReportedBase)
-	// Stamped by the store, yet a worker's put can move it through a timeout, and a holder
-	// that extends its own bound has none.
-	add("deadline", prev.Deadline != next.Deadline)
-	return out
-}
-
-// changedAgentFields names what differs between two agent sections: agent
-// when only one exists, else each member that differs.
-func changedAgentFields(prev, next *job.Agent) []string {
-	switch {
-	case prev == nil && next == nil:
-		return nil
-	case prev == nil || next == nil:
-		return []string{"agent"}
-	}
-	var out []string
-	if prev.Model != next.Model {
-		out = append(out, "agent.model")
-	}
-	if prev.Instructions != next.Instructions {
-		out = append(out, "agent.instructions")
-	}
-	if prev.Worker != next.Worker {
-		out = append(out, "agent.worker")
-	}
-	return out
-}
-
-// goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
-// bound worker mutation, and the model is small, typed, and stable. Every field counts: a
-// holder that could rewrite a goal's kind, expectation or subject could grade itself done.
-func goalsEqual(a, b []job.Goal) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
-			a[i].Kind != b[i].Kind || a[i].Expect != b[i].Expect ||
-			!slices.Equal(a[i].Paths, b[i].Paths) || !slices.Equal(a[i].Symbols, b[i].Symbols) ||
-			a[i].Check.Target != b[i].Check.Target || a[i].Check.Script != b[i].Check.Script || a[i].Check.Project != b[i].Check.Project ||
-			!slices.Equal(a[i].Check.Args, b[i].Check.Args) || !slices.Equal(a[i].DependsOn, b[i].DependsOn) {
-			return false
-		}
-	}
-	return true
-}
-
-// listedIn reports whether every entry of inner is one outer also lists, as exact strings.
-// Breaks entries are free text, so unlike [subset] a `#` in one claims nothing.
-func listedIn(inner, outer []string) bool {
-	return !slices.ContainsFunc(inner, func(p string) bool {
-		return !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) })
-	})
-}
-
-// subset reports whether every declaration in inner is within some entry of outer by
-// [job.PathWithin], so a holder may narrow a glob to the files it matches or a file to
-// one declaration of it. A glob rewritten into a wider one is not within the narrower
-// (`internal/**` is not within `internal/job/*.go`).
-func subset(inner, outer []string) bool {
-	for _, p := range inner {
-		p := strings.TrimSpace(p)
-		if !slices.ContainsFunc(outer, func(o string) bool { return job.PathWithin(p, strings.TrimSpace(o)) }) {
-			return false
-		}
-	}
-	return true
-}
-
-// authorizeDelete refuses a bound holder deleting a row.
+// ReadBoundary is the module store's [job.ReadBoundary].
 //
-// Its OWN row included, and that is the difference from ending one: a holder may end its
-// job (fail, no_return, exited) because that is the report it owes, and the row it leaves
-// is what the orchestrator reads. Deleting it instead removes the evidence that the work
-// was ever handed out, which is the one outcome no holder should be able to produce.
-func authorizeDelete(actor Actor, id string) error {
-	if !actor.Bound() {
-		return nil
-	}
-	return refuse(actor, id, "deleting a row removes the record that the work was handed out, so it belongs to whoever declared the plan;"+
-		" a holder ENDS its job instead")
-}
+// compat: see [Actor].
+func ReadBoundary(row job.Job) []string { return job.ReadBoundary(row) }
+
+// MaxJobEntries is the module store's [job.MaxJobEntries].
+//
+// compat: see [Actor].
+const MaxJobEntries = job.MaxJobEntries
+
+// RecordAPIVersion is the module store's [job.RecordAPIVersion].
+//
+// compat: see [Actor].
+const RecordAPIVersion = job.RecordAPIVersion
+
+// Narrowed is the module store's [job.Narrowed].
+//
+// compat: see [Actor].
+func Narrowed(row job.Job, file string) bool { return job.Narrowed(row, file) }
+
+// Entries is the module store's [job.Entries].
+//
+// compat: see [Actor].
+func Entries(rows []job.Job, id string) []job.Entry { return job.Entries(rows, id) }
+
+// OpenEntry is the module store's [job.OpenEntry].
+//
+// compat: see [Actor].
+func OpenEntry(row job.Job, rel string) (job.Entry, bool) { return job.OpenEntry(row, rel) }

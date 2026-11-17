@@ -651,8 +651,8 @@ func TestWaitRefusesAHolderOutsideItsDescendants(t *testing.T) {
 // plant writes rows exactly as given, timestamps included, which no write door allows.
 func plant(t *testing.T, s *Store, rows ...job.Job) {
 	t.Helper()
-	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
-		*f = jobsFile{Jobs: rows}
+	require.NoError(t, s.Rewrite(t.Context(), func(f *job.Rows) error {
+		*f = job.Rows{Jobs: rows}
 		return nil
 	}))
 }
@@ -1227,7 +1227,7 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 			assert.Empty(t, notices.String(), "prune reports its endings to its caller, not as sweep notices")
 
-			f, err := s.read()
+			f, err := s.Read()
 			require.NoError(t, err)
 			for i, row := range f.Jobs {
 				at := slices.IndexFunc(tt.want, func(e Ending) bool { return e.ID == row.ID })

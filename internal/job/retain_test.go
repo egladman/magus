@@ -90,13 +90,13 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 
 	write := func(rows ...job.Job) {
 		t.Helper()
-		require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
+		require.NoError(t, s.Rewrite(t.Context(), func(f *job.Rows) error {
 			f.Jobs = append(f.Jobs, rows...)
 			return nil
 		}))
 	}
 	write(aged("old", job.StatePass, 8), aged("live", job.StateRunning, 8))
-	rows, err := s.read()
+	rows, err := s.Read()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"old", "live"}, ids(rows.Jobs), "the first write stamps the clock and keeps every row")
 	assert.Equal(t, retainNow, rows.Retained)
@@ -104,13 +104,13 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 
 	now = now.Add(retainEvery - time.Second)
 	write(aged("old-again", job.StatePass, 8))
-	rows, err = s.read()
+	rows, err = s.Read()
 	require.NoError(t, err)
 	assert.True(t, slices.Contains(ids(rows.Jobs), "old"), "no pass inside the interval")
 
 	now = now.Add(time.Second)
 	write()
-	rows, err = s.read()
+	rows, err = s.Read()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"live"}, ids(rows.Jobs), "the first write past the interval runs the pass")
 	assert.Equal(t, now.Unix(), rows.Retained)
@@ -146,7 +146,7 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 			s := tempStore(t, root)
 			s.clock = func() time.Time { return time.Unix(retainNow, 0) }
 			rows := []job.Job{aged("ten-days", job.StatePass, 10), aged("two-days", job.StatePass, 2), aged("live", job.StateRunning, 10)}
-			err := s.update(t.Context(), func(f *jobsFile) error {
+			err := s.Rewrite(t.Context(), func(f *job.Rows) error {
 				f.Jobs, f.Retained = rows, retainNow-int64(retainEvery/time.Second)
 				return nil
 			})
@@ -155,7 +155,7 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			got, err := s.read()
+			got, err := s.Read()
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, ids(got.Jobs))
 		})
@@ -180,7 +180,7 @@ func TestDeleteArchivesOnlyTheDroppedRow(t *testing.T) {
 	require.Len(t, archives, 1)
 	archived := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir()})
 	archived.path = archives[0]
-	f, err := archived.read()
+	f, err := archived.Read()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"drop"}, ids(f.Jobs))
 }

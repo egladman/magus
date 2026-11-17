@@ -85,11 +85,11 @@ const ciTarget = "ci"
 // ancestor's check does not cover it. The ancestor's target gates it too
 // when it spells the path out.
 //
-// Each goal is graded by the installed [CheckGrader] before it is offered: the form a
-// worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
-// project, or one whose root has no ci chain, yields nil.
-func UnrunGates(root string, row job.Job, projects []*types.Project, regenerated []RegeneratedOutput) []UnrunGate {
-	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+// Each goal is graded by grader before it is offered: the form a worker may run, else
+// none, with the gate marked IntegratorGates. A nil grader grades nothing. A workspace with
+// no root project, or one whose root has no ci chain, yields nil.
+func UnrunGates(root string, row job.Job, projects []*types.Project, regenerated []RegeneratedOutput, grader CheckGrader) []UnrunGate {
+	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(grader, root, row))
 	return gates
 }
 

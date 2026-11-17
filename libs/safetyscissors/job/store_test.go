@@ -1,0 +1,263 @@
+package job
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/codec"
+)
+
+type StoreSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestStoreSuite(t *testing.T) { suite.Run(t, new(StoreSuite)) }
+
+func (s *StoreSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+func (s *StoreSuite) open(opts ...StoreOption) *Store {
+	st, err := Open(s.dir, opts...)
+	s.Require().NoError(err)
+	return st
+}
+
+func (s *StoreSuite) TestOpenRefusesNoDirectory() {
+	_, err := Open(" ")
+
+	s.ErrorContains(err, "none was named")
+}
+
+func (s *StoreSuite) TestAnUnopenedStoreFailsEveryOperation() {
+	cause := errors.New("no state dir")
+	st := Unopened(cause)
+
+	_, err := st.List()
+	s.ErrorIs(err, cause)
+	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
+	s.ErrorIs(err, cause, "an unplaceable store never reads as an empty ledger")
+}
+
+func (s *StoreSuite) TestAnAbsentFileIsAnEmptyLedger() {
+	rows, err := s.open().List()
+
+	s.Require().NoError(err)
+	s.Empty(rows)
+}
+
+func (s *StoreSuite) TestUpdateCreatesAndMergesARow() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = []string{"a.go"} })
+	s.Require().NoError(err)
+
+	row, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Parent = "root" })
+
+	s.Require().NoError(err)
+	s.Equal(StateDeclared, row.State, "a declaration naming no state is stored declared")
+	s.Equal([]string{"a.go"}, row.Paths.Write, "a merge keeps what it does not change")
+	s.Equal("root", row.Parent)
+	s.Equal(2, row.Generation, "changing the declared spec moves the generation")
+}
+
+func (s *StoreSuite) TestARowWithNoIDIsRefused() {
+	_, err := s.open().Update(s.T().Context(), " ", func(*Job) {})
+
+	s.ErrorIs(err, ErrNoID)
+}
+
+func (s *StoreSuite) TestTheFileIsStampedWithTheModuleGroup() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+
+	raw, err := os.ReadFile(filepath.Join(s.dir, jobsFileName))
+	s.Require().NoError(err)
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	s.Require().Len(lines, 2)
+	s.Contains(lines[0], `"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList"`)
+	s.Contains(lines[1], `"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job"`)
+}
+
+func (s *StoreSuite) TestALineOfAnotherGroupIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
+		[]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
+
+	_, err := s.open().List()
+
+	var version *RecordVersionError
+	s.Require().ErrorAs(err, &version)
+	s.Equal(1, version.Line)
+}
+
+func (s *StoreSuite) TestAFileAtANewerMigrationIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
+		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":3}`+"\n"), 0o600))
+
+	_, err := s.open(WithMigrations(1, nil)).List()
+
+	var newer *NewerWriterError
+	s.Require().ErrorAs(err, &newer)
+	s.Equal(3, newer.Found)
+	s.Equal(1, newer.Known)
+}
+
+func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
+		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
+	var found []int
+	migrate := func(_ context.Context, path string, from int, _ []codec.Line) error {
+		found = append(found, from)
+		return os.WriteFile(path, []byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
+	}
+
+	_, err := s.open(WithMigrations(1, migrate)).List()
+
+	s.Require().NoError(err)
+	s.Equal([]int{0}, found)
+}
+
+func (s *StoreSuite) TestTheDocumentAnOlderWriterKeptIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, documentFileName), []byte(`{}`), 0o600))
+
+	_, err := s.open().List()
+
+	var legacy *LegacyDocumentError
+	s.Require().ErrorAs(err, &legacy)
+	s.Equal(filepath.Join(s.dir, documentFileName), legacy.Document)
+}
+
+func (s *StoreSuite) TestARowRequiringAnUnknownFeatureIsReadButNotWritten() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+	s.Require().NoError(st.Rewrite(s.T().Context(), func(f *Rows) error {
+		f.Jobs[0].Requires = []string{"never-implemented"}
+		return nil
+	}))
+
+	rows, err := st.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.Parent = "p" })
+
+	var newer *NewerRecordsError
+	s.Require().ErrorAs(err, &newer)
+	s.Equal([]string{"never-implemented"}, newer.Lacks)
+}
+
+func (s *StoreSuite) TestErrorWrapSeesTheStoresOwnRefusals() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, documentFileName), []byte(`{}`), 0o600))
+	coded := errors.New("coded")
+
+	_, err := s.open(WithErrorWrap(func(err error) error { return errors.Join(coded, err) })).List()
+
+	s.ErrorIs(err, coded)
+}
+
+func (s *StoreSuite) TestASkippedRewriteWritesNothing() {
+	st := s.open()
+
+	s.Require().NoError(st.Rewrite(s.T().Context(), func(*Rows) error { return ErrSkipWrite }))
+
+	s.NoFileExists(filepath.Join(s.dir, jobsFileName))
+}
+
+func (s *StoreSuite) TestRetentionRunsInsideEveryRewrite() {
+	var seen int
+	st := s.open(WithRetention(func(_ context.Context, f *Rows, _ time.Time) error {
+		seen = len(f.Jobs)
+		f.Jobs = nil
+		return nil
+	}))
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+
+	rows, err := st.List()
+
+	s.Require().NoError(err)
+	s.Equal(1, seen)
+	s.Empty(rows, "the pass dropped the row before the write")
+}
+
+func (s *StoreSuite) TestClearArchivesWhatItDrops() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+
+	dropped, err := st.Clear(s.T().Context())
+
+	s.Require().NoError(err)
+	s.Equal(1, dropped)
+	archives, err := filepath.Glob(filepath.Join(s.dir, "jobs-*.jsonl"))
+	s.Require().NoError(err)
+	s.Len(archives, 1)
+}
+
+func (s *StoreSuite) TestAnEntryIsRecordedOnceAndConsumed() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = []string{"internal/x"} })
+	s.Require().NoError(err)
+
+	row, err := st.Enter(s.T().Context(), "a", "internal/x/y.go")
+	s.Require().NoError(err)
+	s.Require().Len(row.Entries, 1)
+	_, err = st.Enter(s.T().Context(), "a", "internal/x/y.go")
+	s.ErrorContains(err, "already has an entry")
+
+	s.Require().NoError(st.ConsumeEntry(s.T().Context(), "a", "internal/x/y.go"))
+	rows, err := st.List()
+	s.Require().NoError(err)
+	_, open := OpenEntry(rows[0], "internal/x/y.go")
+	s.False(open, "a consumed entry is no longer open")
+}
+
+func (s *StoreSuite) TestAnUnattributedWriteToNoRowIsDropped() {
+	s.NoError(s.open().RecordUnattributedWrite(s.T().Context(), "nobody", "a.go"))
+}
+
+func (s *StoreSuite) TestAReleaseOfARootlessStoreIsAbsent() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = []string{"a.go"} })
+	s.Require().NoError(err)
+
+	row, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = nil })
+
+	s.Require().NoError(err)
+	s.Require().Len(row.Releases, 1)
+	s.Equal(DigestAbsent, row.Releases[0].Digest)
+}
+
+func (s *StoreSuite) TestAttemptsLiveBesideTheRows() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+
+	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1, Status: AttemptStatus{Started: 3}}))
+	_, err = st.Delete(s.T().Context(), "a", true)
+	s.Require().NoError(err)
+
+	tries, err := st.Attempts()
+	s.Require().NoError(err)
+	s.Empty(tries, "a dropped row's tries end with it")
+	archives, err := filepath.Glob(filepath.Join(s.dir, "jobs-*.attempts.jsonl"))
+	s.Require().NoError(err)
+	s.Len(archives, 1, "the archive keeps the dropped row's tries")
+}
+
+func (s *StoreSuite) TestAnAttemptOfAnotherVersionIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, attemptsFileName),
+		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
+
+	_, err := s.open().Attempts()
+
+	var newer *NewerRecordsError
+	s.Require().ErrorAs(err, &newer)
+	s.Equal("attempt 1 of a", newer.Record)
+}

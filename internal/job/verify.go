@@ -389,7 +389,7 @@ func checkCovers(full, c job.LeaseCheck) bool {
 
 // covering reports whether any observed path is covered by the declared glob.
 func (o Observed) covering(declared string, paths []string) bool {
-	return slices.ContainsFunc(paths, func(p string) bool { return covers(declared, p) })
+	return slices.ContainsFunc(paths, func(p string) bool { return job.Covers(declared, p) })
 }
 
 // VerifyGates checks a holder's result against the job it was given: every changed path
@@ -435,7 +435,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 		// The change is the merge range, and its write paths were computed from it at fork.
 	default:
 		for _, p := range rep.ChangedPaths {
-			if _, ok := matching(row.Paths.Write, p); ok {
+			if _, ok := job.Matching(row.Paths.Write, p); ok {
 				continue
 			}
 			// magus rewrites such a file beside a job's change (the merge driver writes
@@ -681,7 +681,7 @@ func sortedCopy(in []string) []string {
 // unnamedLanded are the paths the branch committed that no claim covers.
 func unnamedLanded(rep job.Result, seen Observed) []string {
 	return slices.DeleteFunc(slices.Clone(seen.Landed), func(p string) bool {
-		return slices.ContainsFunc(rep.ChangedPaths, func(claim string) bool { return covers(claim, p) })
+		return slices.ContainsFunc(rep.ChangedPaths, func(claim string) bool { return job.Covers(claim, p) })
 	})
 }
 
@@ -689,7 +689,7 @@ func unnamedLanded(rep job.Result, seen Observed) []string {
 func landedViolations(row job.Job, unnamed []string, seen Observed) []string {
 	var out []string
 	for _, p := range unnamed {
-		if _, ok := matching(row.Paths.Write, p); ok || types.IsMagusMaintained(p) {
+		if _, ok := job.Matching(row.Paths.Write, p); ok || types.IsMagusMaintained(p) {
 			continue
 		}
 		out = append(out, fmt.Sprintf("the branch committed %q since %s, the result leaves it out, and it is %s (%s): take it off the branch, or ask your orchestrator to widen the row",
@@ -712,11 +712,11 @@ func diffViolations(row job.Job, rep job.Result, seen Observed) []string {
 	}
 	var out []string
 	for _, p := range rep.ChangedPaths {
-		if !slices.ContainsFunc(seen.Changed, func(c string) bool { return covers(p, c) }) {
+		if !slices.ContainsFunc(seen.Changed, func(c string) bool { return job.Covers(p, c) }) {
 			out = append(out, fmt.Sprintf("the result claims %q changed, and the diff since %s does not show it", p, from))
 		}
 	}
-	if !slices.ContainsFunc(seen.Changed, func(c string) bool { _, ok := matching(row.Paths.Write, c); return ok }) {
+	if !slices.ContainsFunc(seen.Changed, func(c string) bool { _, ok := job.Matching(row.Paths.Write, c); return ok }) {
 		out = append(out, fmt.Sprintf("nothing in the diff since %s is inside its write paths (%s)", from, strings.Join(row.Paths.Write, ", ")))
 	}
 	return out
@@ -890,7 +890,7 @@ func fileScoped(c job.LeaseCheck, named map[string]bool, selection testSelection
 func namedFiles(tree string, goals []job.Goal, changed []string) map[string]bool {
 	touched := make(map[string]bool, len(changed))
 	for _, p := range changed {
-		touched[cleanPath(p)] = true
+		touched[job.CleanPath(p)] = true
 	}
 	named := map[string]bool{}
 	for _, g := range goals {
@@ -921,7 +921,7 @@ func onlyFiles(args []string) bool {
 // out, relative to that project. A file outside it is not this goal's.
 func unreadFiles(c job.LeaseCheck, a job.CapturedRun, changed []string) []string {
 	return slices.DeleteFunc(filesIn(path.Clean(c.Project), changed), func(f string) bool {
-		return slices.ContainsFunc(a.ExtraArgs, func(arg string) bool { return coversPath(arg, f) })
+		return slices.ContainsFunc(a.ExtraArgs, func(arg string) bool { return job.CoversPath(arg, f) })
 	})
 }
 
@@ -1126,7 +1126,7 @@ func unclaimedFootprint(row job.Job, regions []job.RegionChange) []string {
 func denyViolations(row job.Job, rep job.Result, seen Observed) []string {
 	var out []string
 	for _, p := range rep.ChangedPaths {
-		if d, ok := matching(WholeFileDenies(row.Paths.Deny, p), p); ok {
+		if d, ok := job.Matching(WholeFileDenies(row.Paths.Deny, p), p); ok {
 			out = append(out, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
 			continue
 		}
@@ -1188,7 +1188,7 @@ func DeniedDeclarations(denyPaths []string, file string) []string {
 // ClaimedDeclarations are the declarations row's write paths claim in file, the
 // repository-relative path of one file, or nil when some entry covers the file whole or none
 // covers it at all. A file whose covering entries all stop short of it
-// (see [releasedReach]) is held by its claims alone. With none, the answer
+// (see [job.ReleasedReach]) is held by its claims alone. With none, the answer
 // is an empty slice: the row holds nothing of the file.
 func ClaimedDeclarations(row job.Job, file string) []string {
 	var decls []string
@@ -1196,8 +1196,8 @@ func ClaimedDeclarations(row job.Job, file string) []string {
 	for _, entry := range row.Paths.Write {
 		p, decl := job.SplitClaim(entry)
 		switch {
-		case decl == "" && coversPath(p, file):
-			if !releasedReach(row, entry, file) {
+		case decl == "" && job.CoversPath(p, file):
+			if !job.ReleasedReach(row, entry, file) {
 				return nil
 			}
 			stopped = true
@@ -1209,61 +1209,6 @@ func ClaimedDeclarations(row job.Job, file string) []string {
 		return []string{}
 	}
 	return decls
-}
-
-// matching is the first declaration in decls that covers p. The declaration comes back
-// rather than a bool because a rejection has to name which one fired.
-func matching(decls []string, p string) (string, bool) {
-	for _, d := range decls {
-		if covers(d, p) {
-			return d, true
-		}
-	}
-	return "", false
-}
-
-// covers decides whether one declared path covers a written one.
-//
-// Two rules, because a declaration means two different things. A declaration holding glob
-// metacharacters is matched AS a glob, through the matcher every other consumer of a
-// declared glob uses. A literal one names a file or a directory, and a directory covers
-// what is under it: `internal/ledger` has to cover `internal/ledger/store.go` or every
-// ordinary lease reads as a boundary violation.
-//
-// The glob arm deliberately does NOT fall back to its literal prefix. That fallback is
-// right for job.LiteralPrefix's caller, which over-reports collisions between two
-// declarations on purpose; here over-reporting means silently ACCEPTING a write the
-// declaration excludes, and the two directions of error are not symmetrical.
-//
-// A declaration claim (`run.go#executeStages`) covers its whole file here: which lines of
-// the file it covers is the footprint's question, see unclaimedFootprint.
-func covers(declared, p string) bool {
-	declared, _ = job.SplitClaim(declared)
-	return coversPath(declared, p)
-}
-
-// coversPath is covers for a declaration job.SplitClaim already cut, which must not be
-// cut again: its path may hold a literal `#`.
-func coversPath(declared, p string) bool {
-	// A blank declaration claims nothing, on job.PathsIntersect's rule: it cleans to
-	// ".", which the whole-tree arm below would read as a claim on everything.
-	if declared == "" || strings.TrimSpace(p) == "" {
-		return false
-	}
-	declared, p = path.Clean(declared), path.Clean(strings.TrimSpace(p))
-	if p == "." {
-		return false
-	}
-	if declared == "." {
-		// The repository root covers every path under it. Refusing "." at declaration
-		// instead would leave a single-lease plan over the whole tree undeclarable, and
-		// the row would read as owning nothing rather than as owning everything.
-		return true
-	}
-	if strings.ContainsAny(declared, globMeta) {
-		return types.Glob{Pattern: declared}.Match(p)
-	}
-	return p == declared || strings.HasPrefix(p, declared+"/")
 }
 
 // globMeta are the characters that make a declared path a glob, as job.LiteralPrefix
@@ -1384,7 +1329,7 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep job.Resul
 			grade.Gates = append(grade.Gates, status)
 		}
 	}
-	stored, err := store.mutate(ctx, id, asObservation, func(cur *job.Job, exists bool, now int64) error {
+	stored, err := store.Mutate(ctx, id, job.AsObservation, func(cur *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}

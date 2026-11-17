@@ -96,7 +96,7 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	var filed map[string]any
 	require.NoError(t, codec.Unmarshal(raw, &filed))
 	line, err := codec.Marshal(map[string]any{
-		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)
@@ -1005,7 +1005,6 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	installCheckGrader(t, gradingWith(nil))
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
 	}
@@ -1194,7 +1193,6 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.Contains(t, verdict.NotGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
-	installCheckGrader(t, gradingWith(nil))
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
 	require.ErrorIs(t, err, types.JobUngraded)
 	assert.NotErrorIs(t, err, types.JobCheckUnrunnable)
@@ -1218,17 +1216,9 @@ func gradingWith(mutate func(*guard.Dependencies)) job.CheckGrader {
 	})
 }
 
-// installCheckGrader installs g as runCLI installs guard.NewCheckGrader, and puts back what was
-// installed. The grader is process-wide, so a test that uses it does not run in parallel.
-func installCheckGrader(t *testing.T, g job.CheckGrader) {
-	t.Helper()
-	previous := job.SetCheckGrader(g)
-	t.Cleanup(func() { job.SetCheckGrader(previous) })
-}
-
-// `magus job fork` grades with a forkGrader of its own, not the installed grader, so its
-// memos live no longer than the fork. The installed one still serves the doors that open
-// a Store naming none: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
+// `magus job fork` grades with a forkGrader of its own, not the store's grader, so its
+// memos live no longer than the fork. The store's grader serves the doors that put a row
+// without forking: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
 func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -1236,16 +1226,10 @@ func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	var graded []string
-	installCheckGrader(t, func(_ context.Context, at string, _ jobtypes.Job) job.CheckVerdict {
-		graded = append(graded, at)
-		return job.CheckVerdict{}
-	})
 
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a worker does not build magus", "the fork's own grader judged the check")
-	assert.Empty(t, graded)
 }
 
 // GradeCheckLapseSuite pins that a guard which ran out of time reached no verdict on

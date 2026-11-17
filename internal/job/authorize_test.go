@@ -505,7 +505,7 @@ func TestChildIsHandedAFileItsParentsGlobMatches(t *testing.T) {
 }
 
 // A child may be handed one declaration of a file its parent owns whole: that is a
-// narrower boundary than the parent's, the same admission [subset] makes for a worker
+// narrower boundary than the parent's, the same admission [job.Subset] makes for a worker
 // shrinking its own row. A child claiming anything beyond what the parent owns is still
 // refused.
 func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
@@ -592,7 +592,7 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 				apply = func(row *job.Job) { row.State = job.StatePass }
 			}
 
-			_, err := boundStore(loc, holder.Lease).mutate(t.Context(), tc.target, asVerdict, func(row *job.Job, _ bool, _ int64) error {
+			_, err := boundStore(loc, holder.Lease).Mutate(t.Context(), tc.target, job.AsVerdict, func(row *job.Job, _ bool, _ int64) error {
 				apply(row)
 				return nil
 			})

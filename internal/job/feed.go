@@ -53,12 +53,12 @@ func AttributeWrite(rows []job.Job, rel string) (Attribution, bool) {
 		if !row.State.Live() {
 			continue
 		}
-		declared, covered := matching(row.Paths.Write, rel)
+		declared, covered := job.Matching(row.Paths.Write, rel)
 		if !covered {
 			continue
 		}
 		// A deny naming one declaration of rel leaves the file in the job's boundary.
-		if _, denied := matching(WholeFileDenies(row.Paths.Deny, rel), rel); denied {
+		if _, denied := job.Matching(WholeFileDenies(row.Paths.Deny, rel), rel); denied {
 			continue
 		}
 		claimants = append(claimants, row.ID)
@@ -78,7 +78,7 @@ func AttributeWrite(rows []job.Job, rel string) (Attribution, bool) {
 // Exported so a reader FILTERING by path asks the same question the guard asks when it
 // grades a write. Two answers to "is this file inside that path" is how a console filter
 // comes to hide the write a deny was about.
-func Covers(declared, p string) bool { return covers(declared, p) }
+func Covers(declared, p string) bool { return job.Covers(declared, p) }
 
 // Feed event kinds. They are the three things a watcher can see a worker do, and each one
 // comes from a different producer: the filesystem, the guard, and the run journal.
@@ -247,7 +247,7 @@ func (f FeedFilter) Match(e FeedEvent) bool {
 		if e.Kind != FeedFile {
 			return false
 		}
-		if _, ok := matching(f.Paths, e.Action); !ok {
+		if _, ok := job.Matching(f.Paths, e.Action); !ok {
 			return false
 		}
 	}

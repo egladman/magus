@@ -102,7 +102,7 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := UnrunGates(t.TempDir(), tc.row, gatesWorkspace(), tc.regenerated)
+			got := UnrunGates(t.TempDir(), tc.row, gatesWorkspace(), tc.regenerated, nil)
 			assert.Equal(t, tc.want, gateTargets(got))
 			for _, g := range got {
 				require.NoError(t, types.ValidateGoal(g.Goal), "the goal to add must be declarable as printed")
@@ -133,7 +133,7 @@ func (s *owningProjectGateSuite) workspace() []*types.Project {
 
 func (s *owningProjectGateSuite) gates(check *job.LeaseCheck, write ...string) []string {
 	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: check}
-	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil))
+	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil, nil))
 }
 
 func (s *owningProjectGateSuite) TestGateNamesTheOwningProject() {
@@ -191,7 +191,7 @@ func (s *owningProjectGateSuite) reachingWorkspace() []*types.Project {
 
 func (s *owningProjectGateSuite) reaching(write ...string) []UnrunGate {
 	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
-	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil)
+	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil, nil)
 }
 
 func (s *owningProjectGateSuite) TestARootTargetSpellingOutThePathKeepsItsGate() {
@@ -249,8 +249,8 @@ func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	t.Parallel()
 
 	r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
-	assert.Empty(t, UnrunGates(t.TempDir(), r, []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}, nil))
-	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil), "no root project")
+	assert.Empty(t, UnrunGates(t.TempDir(), r, []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}, nil, nil))
+	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil, nil), "no root project")
 }
 
 func TestUnrunGoalNamesTheProject(t *testing.T) {
@@ -279,7 +279,7 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 	}
 	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
 
-	got := UnrunGates(t.TempDir(), row, projects, nil)
+	got := UnrunGates(t.TempDir(), row, projects, nil, nil)
 
 	var ids []string
 	for _, g := range got {

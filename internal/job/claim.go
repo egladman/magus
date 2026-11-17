@@ -155,7 +155,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row job.Job
 	if len(ps) == 0 {
 		return nil
 	}
-	if f, err := store.read(); err == nil {
+	if f, err := store.Read(); err == nil {
 		combined := append(slices.DeleteFunc(slices.Clone(f.Jobs), func(r job.Job) bool { return r.ID == row.ID }), row)
 		for _, file := range files {
 			for _, holder := range liveHolders(f.Jobs, row.ID, file) {
@@ -311,7 +311,7 @@ func heldFile(ctx context.Context, store *Store, rows []job.Job, row, holder job
 		if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
 			continue
 		}
-		if !job.PathsIntersect(mine, theirs) || releasedReach(holder, theirs, mine) || mergeLeftAlone(ctx, store, rows, holder, mine) {
+		if !job.PathsIntersect(mine, theirs) || job.ReleasedReach(holder, theirs, mine) || mergeLeftAlone(ctx, store, rows, holder, mine) {
 			continue
 		}
 		apart, unchecked := HeldApart(WorkingCheckout(here, row), holder, store.workspaceProjects, mine, theirs)
@@ -338,7 +338,7 @@ func grantUntouched(ctx context.Context, store *Store, rows []job.Job, row, hold
 	if err != nil {
 		return job.Job{}, false, fmt.Sprintf("%s's footprint is unknown, so nothing of %s can be granted", holder.ID, s.file)
 	}
-	for _, c := range claimsOnFile(row, s.file) {
+	for _, c := range job.ClaimsOnFile(row, s.file) {
 		for _, d := range touched {
 			if c == d || job.NamesDeclaration(c, d) {
 				return job.Job{}, false, fmt.Sprintf("%s has touched %s#%s", holder.ID, s.file, c)
@@ -366,12 +366,12 @@ func grantNotes(rows []job.Job, row job.Job) []string {
 			continue
 		}
 		for _, rel := range holder.Releases {
-			granted := claimsOnFile(row, rel.Path)
+			granted := job.ClaimsOnFile(row, rel.Path)
 			if !rel.Narrowed || rel.TakenBy != row.ID || len(granted) == 0 {
 				continue
 			}
 			held := "no declaration yet"
-			if words := claimsOnFile(holder, rel.Path); len(words) > 0 {
+			if words := job.ClaimsOnFile(holder, rel.Path); len(words) > 0 {
 				held = qualifiedClaims(rel.Path, words)
 			}
 			notes = append(notes, fmt.Sprintf("granted %s: %s had not touched it; %s now holds %s by %s (and grows on write)",
@@ -812,7 +812,7 @@ func unclaimedTouches(ctx context.Context, store *Store, rows []job.Job, row job
 	if err != nil {
 		return fmt.Sprintf("the declarations %s's change touches in %s could not be read (%v), so the claims it lacks there are not listed", row.ID, file, err)
 	}
-	held := claimsOnFile(row, file)
+	held := job.ClaimsOnFile(row, file)
 	var all []string
 	if driver, _ := resolveDriver(ctx, store.root); driver != nil {
 		all, _ = readDeclarations(ctx, driver, store.root, file)

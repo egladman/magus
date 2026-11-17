@@ -367,9 +367,6 @@ func FootprintMayExtend(root string, row job.Job) bool {
 	return false
 }
 
-// integratorRegenerates is the reason a record gives for an output the integrator owns.
-const integratorRegenerates = "the integrator regenerates it"
-
 // integratorRuns is the reason given for a gate an
 // integrating ancestor runs.
 const integratorRuns = "the integrator runs it"
@@ -422,7 +419,7 @@ func IntegratorDeviations(root string, row job.Job, projects []*types.Project, i
 		if accepted || slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return job.PathsIntersect(d, glob) }) {
 			continue
 		}
-		deviations = append(deviations, job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: integratorRegenerates})
+		deviations = append(deviations, job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: job.ReasonIntegratorRegenerates})
 	}
 	return deviations
 }

@@ -119,7 +119,7 @@ func uncommitted(ctx context.Context, root string, row job.Job) ([]string, strin
 		return nil, fmt.Sprintf("the status of %s cannot be read: %s", root, err.Error())
 	}
 	return slices.DeleteFunc(dirty, func(p string) bool {
-		return !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, p) })
+		return !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, p) })
 	}), ""
 }
 
@@ -181,7 +181,7 @@ func joinDescendants(descs []descendant) string {
 // disposes the attention request the refusal names (the guard denies an agent that), and
 // the same call proceeds afterwards.
 func Abandon(ctx context.Context, store *Store, ids []string) ([]job.Job, []error, []error) {
-	rows, err := store.unswept()
+	rows, err := store.Unswept()
 	if err != nil {
 		return nil, nil, []error{err}
 	}
@@ -358,7 +358,7 @@ func (s *Store) EndNamedCheckouts(ctx context.Context, written WrittenPaths, end
 }
 
 func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []string, onlyNamed bool) ([]job.Job, error) {
-	rows, err := s.unswept()
+	rows, err := s.Unswept()
 	if err != nil {
 		return nil, err
 	}

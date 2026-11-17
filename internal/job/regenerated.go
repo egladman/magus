@@ -211,7 +211,7 @@ func outputInside(row job.Job, g types.Glob) bool {
 	}
 	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
 		p, decl := job.SplitClaim(w)
-		return decl == "" && coversPath(p, g.Pattern)
+		return decl == "" && job.CoversPath(p, g.Pattern)
 	})
 }
 
@@ -236,7 +236,7 @@ func writtenFiles(root string, row job.Job) []string {
 			files = []string{p}
 		}
 		for _, f := range files {
-			if _, denied := matching(WholeFileDenies(row.Paths.Deny, f), f); !denied && !slices.Contains(out, f) {
+			if _, denied := job.Matching(WholeFileDenies(row.Paths.Deny, f), f); !denied && !slices.Contains(out, f) {
 				out = append(out, f)
 			}
 		}

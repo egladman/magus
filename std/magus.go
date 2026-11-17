@@ -1582,8 +1582,6 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	// No Grader: the store grades with the one the composition root installed through
-	// job.SetCheckGrader.
 	stateBase, err := xdg.StateDir()
 	if err != nil {
 		return nil, fmt.Errorf("%s: resolve the user state dir that holds the job store: %w", member, err)
@@ -1600,6 +1598,11 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
 		loc.SpawnRule, loc.SpawnCeiling = tiers.CheckSpawn, tiers.SpawnCeiling
+	}
+	// The guard lives above this package, so the workspace supplies the grader a fork
+	// through this door grades its declared check with.
+	if graded, ok := ws.(interface{ CheckGrader() job.CheckGrader }); ok {
+		loc.Grader = graded.CheckGrader()
 	}
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.

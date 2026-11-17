@@ -102,9 +102,9 @@ func (s *attemptStoreSuite) TestAStartNamingNoLiveJobIsRefused() {
 	seed(s.T(), s.store, ended)
 
 	_, err := s.store.StartAttempt(s.T().Context(), "a", s.at(10))
-	s.Require().ErrorIs(err, ErrUnknownJob)
+	s.Require().ErrorIs(err, job.ErrUnknownJob)
 	_, err = s.store.StartAttempt(s.T().Context(), "nobody", s.at(10))
-	s.Require().ErrorIs(err, ErrUnknownJob)
+	s.Require().ErrorIs(err, job.ErrUnknownJob)
 	s.Empty(triesIn(s.T(), s.store))
 }
 
@@ -186,7 +186,7 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 	var line map[string]any
 	s.Require().NoError(codec.Unmarshal([]byte(strings.TrimSpace(string(raw))), &line))
 	s.Equal(map[string]any{
-		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": "a", "n": float64(1)},
 		"status": map[string]any{"ended": float64(30), "end": "Exit", "result": map[string]any{
 			"job": "a", "changedPaths": []any{"a.go"}, "unresolvedRisks": nil,
@@ -199,49 +199,22 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	current, err := codec.Marshal(recordAttempt(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}))
+	current, err := job.MarshalAttempt(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, false)
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(path, []byte(fmt.Sprintf("%s\n%s\n",
 		`{"api_version":"safetyscissors.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`, current)), 0o600))
 
-	s.Require().NoError(s.store.envelopeAttempts())
-	s.Require().NoError(s.store.envelopeAttempts())
+	s.Require().NoError(s.store.envelopeAttempts(s.T().Context()))
+	s.Require().NoError(s.store.envelopeAttempts(s.T().Context()))
 
-	log, err := s.store.attemptsLog()
+	got, err := s.store.Attempts()
 	s.Require().NoError(err)
-	recs, err := log.Load()
-	s.Require().NoError(err)
-	s.Require().Len(recs, 1, "the dropped try reads as gone")
-	got, err := recs[0].attempt()
-	s.Require().NoError(err)
-	s.Equal(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, got)
+	s.Require().Len(got, 1, "the dropped try reads as gone")
+	s.Equal(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, got[0])
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 	s.Contains(string(raw), `"jobState":"NoReturn"`)
 	s.Contains(string(raw), `"dropped":true`)
-}
-
-func (s *attemptStoreSuite) TestAnArchiveKeepsTheTriesOfTheRowsItHolds() {
-	plant(s.T(), s.store, running("a"), running("b"))
-	fileTry(s.T(), s.store, "a", &job.Result{Job: "a"})
-	fileTry(s.T(), s.store, "b", &job.Result{Job: "b"})
-	path := filepath.Join(s.T().TempDir(), "jobs-archive.attempts.jsonl")
-
-	s.Require().NoError(s.store.archiveAttempts(path, []job.Job{running("a")}))
-
-	raw, err := os.ReadFile(path)
-	s.Require().NoError(err)
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	s.Require().Len(lines, 1)
-	s.Contains(lines[0], `"job":"a"`)
-}
-
-func (s *attemptStoreSuite) TestAnArchiveOfRowsWithNoTriesWritesNoFile() {
-	path := filepath.Join(s.T().TempDir(), "jobs-archive.attempts.jsonl")
-
-	s.Require().NoError(s.store.archiveAttempts(path, []job.Job{running("a")}))
-
-	s.NoFileExists(path)
 }
 
 func (s *attemptStoreSuite) TestBoundAttemptsReadsATryPastItsJobsDeadlineAsEnded() {
@@ -293,7 +266,7 @@ func (s *attemptStoreSuite) TestMigrationThreeMovesARowsTriesToAttempts() {
 	s.NotContains(row, "result")
 	s.NotContains(row, "prior")
 	s.NotContains(row, "attempts")
-	s.InDelta(len(jobMigrations), storedLines(s.T(), path)[0]["migration"], 0)
+	s.InDelta(len(jobMigrations()), storedLines(s.T(), path)[0]["migration"], 0)
 }
 
 // A migration cut short runs again, and the lines it appends twice read once.

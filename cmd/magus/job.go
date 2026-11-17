@@ -232,6 +232,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		return nil, err
 	}
 	loc.Outputs, loc.DryRun = outputsIn, o.DryRun
+	loc.Grader = guard.NewCheckGrader(loadGuardDependencies)
 	loc.TrailBase = func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }
 	if root != "" {
 		// Read once, and only when a job ends with a priceable trail, since it loads the
@@ -936,7 +937,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.Worktree == nil {
 			job.PrintLandingBootstrap(ctx, os.Stdout, store, stored)
 		}
-		job.PrintClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)))
+		job.PrintClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), jobtypes.ReleasedUnderPattern(stored)))
 		for _, line := range narrowedLines {
 			fmt.Println(line)
 		}
@@ -965,7 +966,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
-				ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)),
+				ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), jobtypes.ReleasedUnderPattern(stored)),
 			},
 			DerivedClaims: derived,
 		})
@@ -990,7 +991,7 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 	case outputName:
 		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
-		fmt.Println(job.EntryAdvice(stored, rel))
+		fmt.Println(jobtypes.EntryAdvice(stored, rel))
 		pointAtConsole(ctx, stored.ID, false)
 		return nil
 	default:
@@ -2051,7 +2052,7 @@ func applyClaimNotes(ctx context.Context, store *job.Store, applied []job.Applie
 	out := map[string][]string{}
 	for _, a := range applied {
 		notes := job.ForkNotes(ctx, store, rows, a.Next)
-		if notes = append(notes, job.ReleasedUnderPattern(a.Next)...); len(notes) > 0 {
+		if notes = append(notes, jobtypes.ReleasedUnderPattern(a.Next)...); len(notes) > 0 {
 			out[a.Next.ID] = notes
 		}
 	}

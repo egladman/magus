@@ -9,7 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 type modelTierSourceJobSuite struct {
@@ -38,7 +37,7 @@ func (s *modelTierSourceJobSuite) TestAStoredRowBecomesTheJobSpelling() {
 	got, err := modelTierSourceJob(s.entry(`{"spec":{},"status":{"modelTier":{"name":"bounded","source":"Row"}}}`))
 
 	s.Require().NoError(err)
-	s.Equal(wireTierSource.wire[tier.SourceJob], s.source(got))
+	s.Equal("Job", s.source(got))
 }
 
 func (s *modelTierSourceJobSuite) TestAnotherSourceIsKept() {
@@ -141,7 +140,7 @@ func (s *rootlessMigrationSuite) TestAJobCheckoutRefusesAndWritesNothing() {
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 
-	_, err = st.read()
+	_, err = st.Read()
 
 	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
 	after, err := os.ReadFile(path)
@@ -154,7 +153,7 @@ func (s *rootlessMigrationSuite) TestAnotherCheckoutMigrates() {
 	s.T().Chdir(s.T().TempDir())
 	st, path, _ := checkoutStore(s.T(), "", "running", forkCheckout(s.T().TempDir()))
 
-	_, err := st.read()
+	_, err := st.Read()
 
 	s.Require().NoError(err)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)

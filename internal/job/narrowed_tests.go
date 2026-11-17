@@ -426,7 +426,7 @@ func scopedToWritePackages(root string, check job.LeaseCheck, writePaths []strin
 	names := func(pattern, dir string) bool {
 		pattern = path.Clean(pattern)
 		if tree, ok := strings.CutSuffix(pattern, "/..."); ok {
-			return coversPath(tree, dir) || tree == "."
+			return job.CoversPath(tree, dir) || tree == "."
 		}
 		return pattern == dir
 	}

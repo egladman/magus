@@ -28,38 +28,6 @@ var wideningRules = []string{"claimed-declaration", "focus-read", "lease-claim",
 // paths with.
 const outsideWritePaths = "outside the job's write paths"
 
-// nextGeneration is row's Generation once written over prev: 1 for a new row, and one more
-// than prev's for a write that changes the declared spec ([specChanges]). An observation
-// declares nothing, and neither does a write that only widens the write paths: evidence
-// taken under the narrower set still asks what the wider one asks.
-func nextGeneration(prev, row job.Job, exists bool, kind grading) int {
-	if !exists {
-		return 1
-	}
-	generation := max(prev.Generation, 1)
-	if kind != asObservation && changesSpec(prev, row) {
-		generation++
-	}
-	return generation
-}
-
-// changesSpec reports whether row declares anything prev did not, other than write paths
-// that each hold every path prev held.
-func changesSpec(prev, row job.Job) bool {
-	changes := specChanges(prev, row)
-	if len(changes) == 1 && changes[0] == "paths.write" {
-		return !widens(prev.Paths.Write, row.Paths.Write)
-	}
-	return len(changes) > 0
-}
-
-// widens reports whether every path in held lies within some path of next.
-func widens(held, next []string) bool {
-	return !slices.ContainsFunc(held, func(h string) bool {
-		return !slices.ContainsFunc(next, func(n string) bool { return job.PathWithin(h, n) })
-	})
-}
-
 // refuseAttempt refuses a fork of ended row prev, declared again as row, that starts an
 // attempt past row's max_attempts. The cap read is the new record's, so a fork that raises
 // it in the same write passes. used is prev's live attempt.
@@ -68,7 +36,7 @@ func refuseAttempt(id string, used int, row job.Job) error {
 		return nil
 	}
 	err := fmt.Errorf("%w: %s used %d of its %d attempt(s): fork it with a record raising max_attempts (`%s`), or the root does the job itself",
-		ErrMaxAttempts, id, used, row.MaxAttempts, hint.JobFork.With("--stdin"))
+		job.ErrMaxAttempts, id, used, row.MaxAttempts, hint.JobFork.With("--stdin"))
 	return types.NonRetryable(err, job.RetryAfterPerson, "a person raises max_attempts or does the job")
 }
 

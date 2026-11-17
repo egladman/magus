@@ -220,7 +220,7 @@ func TestStorePutRequiresAnID(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	row := job.Job{Agent: job.Instructed("no id")}
 	_, err := s.Update(ctx, row.ID, func(cur *job.Job) { *cur = row })
-	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
+	require.ErrorIs(t, err, job.ErrNoID, "a row with no id could never be updated or referred to again")
 
 	got, err := s.List()
 	require.NoError(t, err)
@@ -351,7 +351,7 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	assert.Equal(t, stamped(job.Job{ID: "fresh", State: job.StateRunning}, stored), stored)
 
 	_, err = s.Update(ctx, "", func(*job.Job) {})
-	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
+	require.ErrorIs(t, err, job.ErrNoID, "a merge with no id has no row to address")
 }
 
 // TestStorePutRecordsReleasedPaths is the early-release rule the skill
@@ -680,7 +680,7 @@ func recordLine(id, condition, reason, spec, status string) string {
 
 // headerLine is the JobList line at this build's migration.
 func headerLine(extra string) string {
-	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, RecordAPIVersion, len(jobMigrations), extra)
+	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, RecordAPIVersion, len(jobMigrations()), extra)
 }
 
 // A row a newer magus wrote is an ordinary row to this one: updating it or any other row
@@ -726,7 +726,7 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	s, notices := sweepStore(t, 10_000, time.Hour)
 	future := strings.Replace(recordLine("future", "Declared", "Declared", "", ""),
-		`"metadata":{"name":"future"}`, `"metadata":{"name":"future","annotations":{"batch.magus/requires":"never-implemented"}}`, 1)
+		`"metadata":{"name":"future"}`, `"metadata":{"name":"future","annotations":{"safetyscissors.job/requires":"never-implemented"}}`, 1)
 	other := strings.ReplaceAll(recordLine("other", "Running", "Running", "", ""), `"created":1,"updated":1`, `"created":9999,"updated":9999`)
 	path := plantRaw(t, s, fmt.Sprintf("%s\n%s\n%s", headerLine(""), future, other))
 	before := storedRow(t, path, "future")
@@ -781,7 +781,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []map[string]any{{
-		"apiVersion": string(RecordAPIVersion), "kind": "JobList", "migration": float64(len(jobMigrations)),
+		"apiVersion": string(RecordAPIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
 		"plan": "p1", "retained": float64(1_700_000_000),
 	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention stamp rides in it")
 }
@@ -1116,7 +1116,7 @@ func TestRecordUnattributedWriteIsBounded(t *testing.T) {
 
 	const over = 5
 	var owned []string
-	for i := range MaxUnattributedWrites + over {
+	for i := range job.MaxUnattributedWrites + over {
 		owned = append(owned, fmt.Sprintf("f%d.go", i))
 	}
 	seed(t, s, job.Job{ID: "worker-1", Paths: job.Paths{Write: owned}})
@@ -1127,10 +1127,10 @@ func TestRecordUnattributedWriteIsBounded(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	kept := rows[0].Unattributed
-	require.Len(t, kept, MaxUnattributedWrites)
+	require.Len(t, kept, job.MaxUnattributedWrites)
 	// Written f0..f(Max+over-1), so trimming to the last Max drops exactly the first `over`.
 	assert.Equal(t, fmt.Sprintf("f%d.go", over), kept[0].Path, "the oldest are dropped")
-	assert.Equal(t, fmt.Sprintf("f%d.go", MaxUnattributedWrites+over-1), kept[len(kept)-1].Path)
+	assert.Equal(t, fmt.Sprintf("f%d.go", job.MaxUnattributedWrites+over-1), kept[len(kept)-1].Path)
 }
 
 // The generation counts declared-spec changes only: a lifecycle move, a deadline and a
@@ -1267,7 +1267,7 @@ func TestStoreRefusesAForkPastMaxAttempts(t *testing.T) {
 	endAttempt(t, s)
 
 	_, err := s.Update(t.Context(), "a", func(u *job.Job) { *u = row })
-	require.ErrorIs(t, err, ErrMaxAttempts)
+	require.ErrorIs(t, err, job.ErrMaxAttempts)
 	assert.ErrorContains(t, err, "a used 2 of its 2 attempt(s)")
 	assert.Equal(t, job.RetryAfterPerson, types.ClassifyRetry(err).Change)
 	rows, err := s.List()
@@ -1412,7 +1412,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		rows := realSizedRows(1100, now, b.TempDir())
 		// A pass long overdue, so this write runs one, as the first write past the
 		// interval does on a store that has grown this large.
-		if err := s.update(b.Context(), func(f *jobsFile) error { f.Jobs, f.Retained = rows, 1; return nil }); err != nil {
+		if err := s.Rewrite(b.Context(), func(f *job.Rows) error { f.Jobs, f.Retained = rows, 1; return nil }); err != nil {
 			b.Fatal(err)
 		}
 		if tc.due {
@@ -1475,7 +1475,8 @@ func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
 func (s *jobSuite) migratingStore(body string, migrations ...migrate.Migration) (*Store, string, *bytes.Buffer) {
 	st := tempStore(s.T(), s.T().TempDir())
 	notices := &bytes.Buffer{}
-	st.notices, st.migrations = notices, migrations
+	st = st.withMigrations(migrations)
+	st.notices = notices
 	return st, plantRaw(s.T(), st, body), notices
 }
 
@@ -1507,14 +1508,14 @@ func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 	st, path, notices := s.migratingStore(unmigrated("goal"), renamed("goal", "parent"))
 	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
-	f, err := st.read()
+	f, err := st.Read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	s.Equal("ship it", f.Jobs[0].Parent, "the row reads under the name the migration gave it")
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0, "the header records the migration")
 	s.Equal(notice, notices.String())
 
-	_, err = st.read()
+	_, err = st.Read()
 	s.Require().NoError(err)
 	s.Equal(notice, notices.String(), "a second read migrates nothing")
 }
@@ -1537,7 +1538,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 		return nil, errors.New("ran")
 	}})
 
-	_, err := st.read()
+	_, err := st.Read()
 	s.Require().NoError(err)
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -1549,7 +1550,7 @@ func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, _ := s.migratingStore(body, renamed("goal", "parent"))
 
-	_, err := st.read()
+	_, err := st.Read()
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder)
 	s.ErrorContains(err, fmt.Sprintf("job store %s is at migration 3, newer than this magus knows (1): update magus", path))
 	_, err = st.Update(s.T().Context(), "b", func(cur *job.Job) { *cur = lease("b") })
@@ -1565,7 +1566,7 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 		return nil, errors.New("disk on fire")
 	}})
 
-	_, err := st.read()
+	_, err := st.Read()
 	s.Require().ErrorContains(err, "migration 2 (fail): disk on fire")
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -1575,7 +1576,7 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 
 func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.migrations = []migrate.Migration{renamed("goal", "parent"), renamed("aim", "parent")}
+	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent"), renamed("aim", "parent")})
 	seed(s.T(), st, lease("a"))
 
 	path, err := st.Path()
@@ -1588,17 +1589,17 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 func checkoutStore(t *testing.T, root, state string, extra map[string]any) (*Store, string, *bytes.Buffer) {
 	t.Helper()
 	st := tempStore(t, root)
-	r := recordJob(job.Job{ID: "a", State: job.State(state), Created: 1, Updated: 1}, nil)
-	r.Spec.Unknown = map[string]codec.RawMessage{"goal": codec.RawMessage(`"ship it"`)}
-	line, err := codec.Marshal(r)
+	line, err := job.MarshalRecord(job.Job{ID: "a", State: job.State(state), Created: 1, Updated: 1}, nil)
 	require.NoError(t, err)
 	var row map[string]any
 	require.NoError(t, codec.Unmarshal(line, &row))
+	row["spec"].(map[string]any)["goal"] = "ship it"
 	maps.Copy(row["status"].(map[string]any), extra)
 	line, err = codec.Marshal(row)
 	require.NoError(t, err)
 	notices := &bytes.Buffer{}
-	st.notices, st.migrations = notices, []migrate.Migration{renamed("goal", "parent")}
+	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent")})
+	st.notices = notices
 	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion, line)), notices
 }
 
@@ -1613,7 +1614,7 @@ func (s *jobSuite) TestAJobCheckoutNeverMigratesTheSharedStore() {
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 
-	_, err = st.read()
+	_, err = st.Read()
 	s.Require().ErrorContains(err, fmt.Sprintf("job store %s is at migration 0, and this magus writes migration 1 from %s, the checkout of live job a", path, root))
 	s.ErrorContains(err, "the root integrates this change and migrates the store once, from its own checkout")
 	_, err = st.Update(s.T().Context(), "b", func(cur *job.Job) { *cur = lease("b") })
@@ -1630,7 +1631,7 @@ func (s *jobSuite) TestADirectoryInsideAJobCheckoutNeverMigratesTheSharedStore()
 	s.Require().NoError(os.Mkdir(nested, 0o755))
 	st, _, _ := checkoutStore(s.T(), nested, "declared", forkCheckout(root))
 
-	_, err := st.read()
+	_, err := st.Read()
 	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
 }
 
@@ -1638,7 +1639,7 @@ func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
 	root := s.T().TempDir()
 	st, path, _ := checkoutStore(s.T(), root, "pass", forkCheckout(root))
 
-	f, err := st.read()
+	f, err := st.Read()
 	s.Require().NoError(err)
 	s.Equal("ship it", f.Jobs[0].Parent)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
@@ -1647,7 +1648,7 @@ func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
 func (s *jobSuite) TestTheRootMigratesWhileAJobHoldsAnotherCheckout() {
 	st, path, _ := checkoutStore(s.T(), s.T().TempDir(), "running", forkCheckout(s.T().TempDir()))
 
-	_, err := st.read()
+	_, err := st.Read()
 	s.Require().NoError(err)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
@@ -1658,7 +1659,7 @@ func (s *jobSuite) TestACheckoutAJobWasOnlyTakenInMigrates() {
 	root := s.T().TempDir()
 	st, path, _ := checkoutStore(s.T(), root, "running", map[string]any{"checkoutRoot": root})
 
-	_, err := st.read()
+	_, err := st.Read()
 	s.Require().NoError(err)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
@@ -1677,9 +1678,9 @@ func TestAgentSectionMigration(t *testing.T) {
 // migrated is the row line after the job store's own migrations ran over it.
 func (s *agentSectionSuite) migrated(line string) job.Job {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	st.notices = &bytes.Buffer{}
 	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1"}`, line))
-	f, err := st.read()
+	f, err := st.Read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	row := storedRow(s.T(), path, f.Jobs[0].ID)
@@ -1741,9 +1742,9 @@ func TestWorkerResumedMigration(t *testing.T) {
 // already through migration 1.
 func (s *workerResumedSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	st.notices = &bytes.Buffer{}
 	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":1}`, line))
-	f, err := st.read()
+	f, err := st.Read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	return f.Jobs[0], storedSpec(s.T(), path, f.Jobs[0].ID)

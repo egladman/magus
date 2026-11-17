@@ -273,13 +273,13 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 			ps = append(ps, droppedGoalProblems(prev, next)...)
 		}
 		actor := store.Actor()
-		if err := authorizeRow(actor, rec.ID, asDeclaration, prev, next, i >= 0, rows); err != nil {
+		if err := authorizeRow(actor, rec.ID, job.AsDeclaration, prev, next, i >= 0, rows); err != nil {
 			return nil, err
 		}
 		v := validateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		problems = append(problems, prefixed(rec.ID, append(ps, v.Problems...))...)
-		next.Releases = store.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
-		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: specChanges(prev, next)})
+		next.Releases = store.Releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
+		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: job.SpecChanges(prev, next)})
 		merges, proofs = append(merges, merge), append(proofs, v.WriteProof)
 		returning = append(returning, redeclares && !ended)
 		if i >= 0 {
@@ -314,7 +314,7 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 // droppedGoalProblems is one problem per goal next lacks, when it also
 // gives up a write path.
 func droppedGoalProblems(prev, next job.Job) types.JobProblems {
-	if subset(prev.Paths.Write, next.Paths.Write) {
+	if job.Subset(prev.Paths.Write, next.Paths.Write) {
 		return nil
 	}
 	var ps types.JobProblems
@@ -353,7 +353,7 @@ func differentCheckout(rec job.Declaration, bound string) (message, fix string) 
 func widensWritePaths(prev job.Job, rec job.Declaration) bool {
 	var next job.Job
 	rec.ApplySpec(&next)
-	return !subset(next.Paths.Write, prev.Paths.Write)
+	return !job.Subset(next.Paths.Write, prev.Paths.Write)
 }
 
 // specMerge is rec's spec as a merge: [job.Declaration.ApplySpec], plus the checkpoint a
@@ -381,14 +381,6 @@ func specMerge(rec job.Declaration, creates bool, checkpoint func() string) func
 			u.Deadline = deadlineAfter(d)
 		}
 	}
-}
-
-// specChanges names the spec fields that differ between prev and next, in the wire
-// spelling; [changedFields] less the ones apply never writes.
-func specChanges(prev, next job.Job) []string {
-	return slices.DeleteFunc(changedFields(prev, next), func(f string) bool {
-		return f == "state" || f == "reported_base" || f == "deadline"
-	})
 }
 
 // prefixed is ps with each message led by the record id it was found on.
@@ -495,7 +487,7 @@ func derivedClaim(row job.Job, expect job.GoalExpect, read bool, fact SymbolFact
 	for _, entry := range row.Paths.Write {
 		p, decl := job.SplitClaim(entry)
 		switch {
-		case decl == "" && coversPath(p, file) && (path.Clean(p) != file || strings.ContainsAny(p, globMeta)):
+		case decl == "" && job.CoversPath(p, file) && (path.Clean(p) != file || strings.ContainsAny(p, globMeta)):
 			return ""
 		case decl != "" && path.Clean(p) == file && decl == word:
 			return ""
@@ -732,7 +724,7 @@ func RenderFiled(out io.Writer, row job.Job) {
 func rewroteOutside(row job.Job, projects []*types.Project, target string, dirty []string) []string {
 	var out []string
 	for _, p := range dirty {
-		if _, held := matching(row.Paths.Write, p); held {
+		if _, held := job.Matching(row.Paths.Write, p); held {
 			continue
 		}
 		for _, project := range projects {
