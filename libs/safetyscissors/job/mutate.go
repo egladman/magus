@@ -229,7 +229,7 @@ func (w *rowWrite) authorize(ctx context.Context) error {
 			return w.s.wrap(err)
 		}
 		e := &w.row.Entries[len(w.row.Entries)-1]
-		e.By, e.At, e.Consumed = w.s.originOf(ctx), w.now, 0
+		e.By, e.At, e.Consumed = w.s.callerOrigin(ctx), w.now, 0
 	case w.kind == AsClaim && w.s.hook != nil:
 		// Only the caller's claim rule grades a claim; see [AsClaim].
 	case w.kind.Graded():
@@ -430,7 +430,7 @@ func (w *rowWrite) place(ctx context.Context) error {
 		row.RegisteredBy = prev.RegisteredBy
 		w.f.Jobs[w.i] = *row
 	} else {
-		row.RegisteredBy = w.s.originOf(ctx)
+		row.RegisteredBy = w.s.callerOrigin(ctx)
 		w.f.Jobs = append(w.f.Jobs, *row)
 	}
 	e := w.event(StagePlaced)

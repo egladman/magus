@@ -74,7 +74,7 @@ func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(Job,
 	if i < 0 {
 		return Grant{}, s.wrap(fmt.Errorf("%w: %q", ErrUnknownJob, id))
 	}
-	g := Grant{Job: id, Rule: rule, By: s.originOf(ctx), At: s.Now().Unix()}
+	g := Grant{Job: id, Rule: rule, By: s.callerOrigin(ctx), At: s.Now().Unix()}
 	if err := fill(rows[i], &g); err != nil {
 		return Grant{}, err
 	}

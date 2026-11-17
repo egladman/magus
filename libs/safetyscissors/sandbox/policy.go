@@ -18,6 +18,7 @@
 package sandbox
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -71,7 +72,7 @@ type Policy struct {
 	// probe reports the host's confinement level; nil asks the host (see defaultProbe).
 	probe func() (int, error)
 	// unconfined hears each BestEffort child Command starts unconfined.
-	unconfined func(error)
+	unconfined func(context.Context, error)
 	// launcher is argv[0] of the launcher Command starts on Linux.
 	launcher string
 }
@@ -87,8 +88,8 @@ func WithMode(m Mode) Option {
 
 // WithUnconfined has fn hear each child a BestEffort Command starts unconfined, with
 // the *UnconfinedError saying why the host could not confine it. fn runs on the
-// goroutine calling Command, before it returns.
-func WithUnconfined(fn func(error)) Option {
+// goroutine calling Command, with Command's ctx, before it returns.
+func WithUnconfined(fn func(context.Context, error)) Option {
 	return func(p *Policy) { p.unconfined = fn }
 }
 

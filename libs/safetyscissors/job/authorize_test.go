@@ -30,7 +30,7 @@ func (s *AuthorizeSuite) TestABoundWorkerShrinksButNeverWidensItsWritePaths() {
 	shrunk.Paths.Write = []string{"a.go"}
 	widened.Paths.Write = []string{"internal/x", "a.go", "b.go"}
 
-	s.NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, shrunk, true, []Job{prev}))
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, shrunk, true, []Job{prev}))
 	var refused *RefusedError
 	s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, widened, true, []Job{prev}), &refused)
 	s.Contains(refused.Rule, "SHRINK")
@@ -42,7 +42,7 @@ func (s *AuthorizeSuite) TestABoundWorkerEndsItsRowButNeverPassesIt() {
 	failed, passed := prev, prev
 	failed.State, passed.State = StateFail, StatePass
 
-	s.NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, failed, true, []Job{prev}))
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, failed, true, []Job{prev}))
 	s.Error(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, passed, true, []Job{prev}))
 }
 
@@ -53,7 +53,7 @@ func (s *AuthorizeSuite) TestAChildStaysInsideItsParentsBoundary() {
 	dropsDeny := Job{ID: "c", Parent: "w", Paths: Paths{Write: []string{"a.go"}}}
 	actor, rows := Actor{Lease: "w"}, []Job{parent}
 
-	s.NoError(AuthorizeRow(actor, "c", AsDeclaration, Job{}, inside, false, rows))
+	s.Require().NoError(AuthorizeRow(actor, "c", AsDeclaration, Job{}, inside, false, rows))
 	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, wider, false, rows))
 	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, dropsDeny, false, rows))
 }
@@ -64,7 +64,7 @@ func (s *AuthorizeSuite) TestAVerdictPassesOnlyARowBelowTheHolder() {
 	passed.State = StatePass
 	rows := []Job{parent, child}
 
-	s.NoError(AuthorizeRow(Actor{Lease: "w"}, "c", AsVerdict, child, passed, true, rows))
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "c", AsVerdict, child, passed, true, rows))
 	s.Error(AuthorizeRow(Actor{Lease: "c"}, "c", AsVerdict, child, passed, true, rows), "a holder never grades its own row")
 }
 

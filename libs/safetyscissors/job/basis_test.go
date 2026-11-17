@@ -23,7 +23,7 @@ func (s *BasisSuite) TestAStoredBasisIsSpelledAndReadBack() {
 
 	s.Equal("Witnessed", wire.spell(BasisWitnessed))
 	s.Equal(BasisReported, wire.read("Reported", &bad))
-	s.NoError(bad.refusal())
+	s.Require().NoError(bad.refusal())
 	wire.read("Trusted", &bad)
 	s.ErrorContains(bad.refusal(), `"Trusted" is not a stored Basis`)
 }

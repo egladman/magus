@@ -41,7 +41,7 @@ func Command(ctx context.Context, p *Policy, name string, args ...string) (*exec
 		if p.mode != BestEffort || !errors.As(err, &unconfined) {
 			return nil, err
 		}
-		p.unconfined(err)
+		p.unconfined(ctx, err)
 		return exec.CommandContext(ctx, name, args...), nil
 	}
 	path := name

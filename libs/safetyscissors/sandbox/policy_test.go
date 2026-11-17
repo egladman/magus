@@ -73,7 +73,7 @@ func (s *PolicySuite) TestCheckRefusesOutsideTheBinds() {
 
 func (s *PolicySuite) TestANilPolicyPermitsEverything() {
 	var p *Policy
-	s.NoError(p.Check(filesystem.Write, "/anywhere"))
+	s.Require().NoError(p.Check(filesystem.Write, "/anywhere"))
 	s.Nil(p.Rules())
 	id, from := p.Lease()
 	s.Empty(id)

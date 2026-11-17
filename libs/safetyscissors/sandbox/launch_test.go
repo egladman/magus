@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestConfinesSuite(t *testing.T) { suite.Run(t, new(ConfinesSuite)) }
 
 // unheard is the WithUnconfined a test gives a BestEffort policy whose unconfined
 // children it does not inspect.
-func unheard(error) {}
+func unheard(context.Context, error) {}
 
 func (s *ConfinesSuite) policy(level int, err error, opts ...Option) *Policy {
 	p, newErr := New(nil, append(opts, WithKernelProbe(func() (int, error) { return level, err }))...)
@@ -92,7 +93,7 @@ func (s *ConfinesSuite) TestCommandRefusesARequiredPolicyItCannotConfine() {
 
 func (s *ConfinesSuite) TestCommandStartsABestEffortChildPlainWithoutASandbox() {
 	var heard []error
-	p := s.policy(0, &UnsupportedError{}, WithMode(BestEffort), WithUnconfined(func(err error) { heard = append(heard, err) }))
+	p := s.policy(0, &UnsupportedError{}, WithMode(BestEffort), WithUnconfined(func(_ context.Context, err error) { heard = append(heard, err) }))
 	cmd, err := Command(s.T().Context(), p, "true", "x")
 	s.Require().NoError(err)
 	s.Equal([]string{"true", "x"}, cmd.Args)

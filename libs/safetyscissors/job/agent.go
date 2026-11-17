@@ -113,4 +113,4 @@ func (a Agent) Validate() error {
 // AgentError is an agent section [Agent.Validate] refuses, and why.
 type AgentError struct{ Reason string }
 
-func (e *AgentError) Error() string { return "agent: " + e.Reason }
+func (e *AgentError) Error() string { return "agent section: " + e.Reason }

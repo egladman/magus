@@ -106,8 +106,8 @@ func newConfinement(p *Policy) (*scissors.Policy, error) {
 }
 
 // warnUnconfined says that a best-effort child runs without the kernel layer, and why.
-func warnUnconfined(err error) {
-	slog.With(attr.Component("magus")).Warn("a best-effort sandbox started a child unconfined", "reason", err.Error())
+func warnUnconfined(ctx context.Context, err error) {
+	slog.With(attr.Component("magus")).WarnContext(ctx, "a best-effort sandbox started a child unconfined", "reason", err.Error())
 }
 
 // bindMode spells r's flags as a bind mode. Every rule magus builds reads; one that

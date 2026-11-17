@@ -42,7 +42,7 @@ func (s *ReportSuite) TestAReportOfAPathsGoalIsRefused() {
 	s.Equal(GoalKindPaths, refused.Kind)
 }
 
-func (s *ReportSuite) TestTheLeasesOwnCheckIsAGoalItAcceptsWitnessedFor() {
+func (s *ReportSuite) TestTheLeasesOwnCheckIsAGoalThatAcceptsOnlyAWitnessedRun() {
 	_, err := s.store.Update(s.T().Context(), "j1", func(j *Job) { c := testCheck(); j.Check = &c })
 	s.Require().NoError(err)
 	ref, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: PrimaryGoalID, Check: testCheck(), By: "worker"})

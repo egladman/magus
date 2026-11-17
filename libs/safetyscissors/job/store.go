@@ -275,7 +275,7 @@ func (s *Store) Now() time.Time {
 	return time.Now()
 }
 
-func (s *Store) originOf(ctx context.Context) Origin {
+func (s *Store) callerOrigin(ctx context.Context) Origin {
 	if s.origin == nil {
 		return Origin{}
 	}

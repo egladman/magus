@@ -20,7 +20,7 @@ func (s *ErrorsSuite) TestADenialReadsAsTheRulesetsRefusal() {
 	s.ErrorIs(err, filesystem.ErrDenied)
 }
 
-func (s *ErrorsSuite) TestADenialWithNoCauseStillWrapsErrDenied() {
+func (s *ErrorsSuite) TestADenialWithNoCauseStillWrapsTheDenialSentinel() {
 	err := &DeniedError{Access: filesystem.Exec, Path: "/bin/x"}
 	s.ErrorIs(err, filesystem.ErrDenied)
 	s.Contains(err.Error(), "exec /bin/x")

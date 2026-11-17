@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -169,14 +170,19 @@ func (s *FoldCacheSuite) TestFoldKindRefusesAnEscapingKindAndWritesItsCachePriva
 func (s *FoldCacheSuite) TestUnderConcurrentReadersAndWriters() {
 	const writers, appends = 4, 25
 	var wg sync.WaitGroup
+	errs := make([]error, writers)
 	for i := range writers {
 		wg.Go(func() {
 			w, err := Open(s.T().Context(), s.dir, fmt.Sprintf("w%d", i), InvocationStart{})
-			if !s.NoError(err) {
+			if err != nil {
+				errs[i] = err
 				return
 			}
 			for j := range appends {
-				s.NoError(w.Append(s.T().Context(), KindAgentEvent, AgentEvent{Host: "h", Kind: EventFileRead, Ref: fmt.Sprint(j), Text: "f.go"}))
+				if err := w.Append(s.T().Context(), KindAgentEvent, AgentEvent{Host: "h", Kind: EventFileRead, Ref: fmt.Sprint(j), Text: "f.go"}); err != nil {
+					errs[i] = err
+					return
+				}
 			}
 		})
 	}
@@ -200,6 +206,7 @@ func (s *FoldCacheSuite) TestUnderConcurrentReadersAndWriters() {
 	wg.Wait()
 	close(stop)
 	readers.Wait()
+	s.Require().NoError(errors.Join(errs...))
 
 	got, err := FoldAgentEvents(s.T().Context(), s.dir)
 	s.Require().NoError(err)

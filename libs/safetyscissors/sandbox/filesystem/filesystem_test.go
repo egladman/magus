@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type FilesystemSuite struct{ suite.Suite }
+type filesystemSuite struct{ suite.Suite }
 
-func TestFilesystem(t *testing.T) { suite.Run(t, new(FilesystemSuite)) }
+func TestFilesystem(t *testing.T) { suite.Run(t, new(filesystemSuite)) }
 
 // allowlist builds a Ruleset over dir with the given grants, normalizing the rule
 // path the way a policy build must. See TestUnnormalizedRulePathMatchesNothing for
@@ -26,7 +26,7 @@ func allowlist(t *testing.T, dir string, read, write, exec bool) Ruleset {
 // requireGrants checks a rule over a fresh directory granting exactly read, write and
 // exec: each access is allowed inside it only when its flag is set, and a path outside
 // every rule is denied whatever the flags say.
-func (s *FilesystemSuite) requireGrants(read, write, exec bool) {
+func (s *filesystemSuite) requireGrants(read, write, exec bool) {
 	t := s.T()
 	dir := t.TempDir()
 	inside := filepath.Join(dir, "file.txt")
@@ -45,15 +45,15 @@ func (s *FilesystemSuite) requireGrants(read, write, exec bool) {
 	}
 }
 
-func (s *FilesystemSuite) TestAReadOnlyRuleGrantsReadAlone() { s.requireGrants(true, false, false) }
+func (s *filesystemSuite) TestAReadOnlyRuleGrantsReadAlone() { s.requireGrants(true, false, false) }
 
-func (s *FilesystemSuite) TestAWriteOnlyRuleGrantsWriteAlone() { s.requireGrants(false, true, false) }
+func (s *filesystemSuite) TestAWriteOnlyRuleGrantsWriteAlone() { s.requireGrants(false, true, false) }
 
-func (s *FilesystemSuite) TestAnExecOnlyRuleGrantsExecAlone() { s.requireGrants(false, false, true) }
+func (s *filesystemSuite) TestAnExecOnlyRuleGrantsExecAlone() { s.requireGrants(false, false, true) }
 
-func (s *FilesystemSuite) TestAReadWriteRuleGrantsNoExec() { s.requireGrants(true, true, false) }
+func (s *filesystemSuite) TestAReadWriteRuleGrantsNoExec() { s.requireGrants(true, true, false) }
 
-func (s *FilesystemSuite) TestARuleGrantingNothingGrantsNothing() {
+func (s *filesystemSuite) TestARuleGrantingNothingGrantsNothing() {
 	s.requireGrants(false, false, false)
 }
 
@@ -61,7 +61,7 @@ func (s *FilesystemSuite) TestARuleGrantingNothingGrantsNothing() {
 // "under" compares strings, so without the separator it appends, a rule on
 // /ws/allowed would also grant /ws/allowed-evil, a sibling directory the policy
 // never mentioned. This is the single most consequential line in the package.
-func (s *FilesystemSuite) TestSiblingSharingAPathPrefixIsNotUnderTheRule() {
+func (s *filesystemSuite) TestSiblingSharingAPathPrefixIsNotUnderTheRule() {
 	t := s.T()
 	root := t.TempDir()
 	allowed := filepath.Join(root, "allowed")
@@ -82,7 +82,7 @@ func (s *FilesystemSuite) TestSiblingSharingAPathPrefixIsNotUnderTheRule() {
 // form compares against a different string and silently matches nothing: the
 // policy looks configured and grants none of what it names. On macOS the temp dir
 // sits under /var, itself a symlink to /private/var, which makes this reproducible.
-func (s *FilesystemSuite) TestUnnormalizedRulePathMatchesNothing() {
+func (s *filesystemSuite) TestUnnormalizedRulePathMatchesNothing() {
 	t := s.T()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file.txt")
@@ -102,7 +102,7 @@ func (s *FilesystemSuite) TestUnnormalizedRulePathMatchesNothing() {
 
 // TestTraversalIsNormalizedBeforeTheAllowlistCheck: the check runs on the resolved
 // path, so ../ cannot be used to leave the allowlist and still match it.
-func (s *FilesystemSuite) TestTraversalIsNormalizedBeforeTheAllowlistCheck() {
+func (s *filesystemSuite) TestTraversalIsNormalizedBeforeTheAllowlistCheck() {
 	t := s.T()
 	root := t.TempDir()
 	allowed := filepath.Join(root, "ws")
@@ -120,7 +120,7 @@ func (s *FilesystemSuite) TestTraversalIsNormalizedBeforeTheAllowlistCheck() {
 
 // A ".." after a symlink climbs out of the link's TARGET, as the kernel walks it.
 // Cleaning first would read /ws/l/../x as /ws/x and admit a file outside the rule.
-func (s *FilesystemSuite) TestDotDotAfterASymlinkClimbsTheTarget() {
+func (s *filesystemSuite) TestDotDotAfterASymlinkClimbsTheTarget() {
 	t := s.T()
 	root := t.TempDir()
 	ws := filepath.Join(root, "ws")
@@ -141,7 +141,7 @@ func (s *FilesystemSuite) TestDotDotAfterASymlinkClimbsTheTarget() {
 
 // A dangling link inside the allowlist names a file outside it. Creating through the
 // link creates the target, so the target is what gets checked.
-func (s *FilesystemSuite) TestWriteThroughADanglingSymlinkChecksItsTarget() {
+func (s *filesystemSuite) TestWriteThroughADanglingSymlinkChecksItsTarget() {
 	t := s.T()
 	root := t.TempDir()
 	ws := filepath.Join(root, "ws")
@@ -158,7 +158,7 @@ func (s *FilesystemSuite) TestWriteThroughADanglingSymlinkChecksItsTarget() {
 }
 
 // A symlink loop is refused rather than walked forever.
-func (s *FilesystemSuite) TestSymlinkLoopIsDenied() {
+func (s *filesystemSuite) TestSymlinkLoopIsDenied() {
 	t := s.T()
 	dir := t.TempDir()
 	require.NoError(t, os.Symlink("b", filepath.Join(dir, "a")))
@@ -175,7 +175,7 @@ func (s *FilesystemSuite) TestSymlinkLoopIsDenied() {
 // that parent was also missing, so a symlink above it went unresolved and could
 // never match a resolved rule path. On macOS every temp dir is under such a symlink
 // (/var -> /private/var), so nested creates were denied outright.
-func (s *FilesystemSuite) TestWriteToANonExistentPathResolvesItsNearestRealAncestor() {
+func (s *filesystemSuite) TestWriteToANonExistentPathResolvesItsNearestRealAncestor() {
 	t := s.T()
 	dir := t.TempDir()
 	rs := allowlist(t, dir, true, true, false)
@@ -190,7 +190,7 @@ func (s *FilesystemSuite) TestWriteToANonExistentPathResolvesItsNearestRealAnces
 
 // TestAnyMatchingRuleGrants: rules are alternatives, not a first-match-wins list,
 // so a narrow read-only rule does not veto a broader one that grants write.
-func (s *FilesystemSuite) TestAnyMatchingRuleGrants() {
+func (s *filesystemSuite) TestAnyMatchingRuleGrants() {
 	t := s.T()
 	root := t.TempDir()
 	nested := filepath.Join(root, "nested")
@@ -206,7 +206,7 @@ func (s *FilesystemSuite) TestAnyMatchingRuleGrants() {
 
 // TestEmptyInputsAreDenied: an empty rule path matches nothing (it would otherwise
 // prefix-match every absolute path), and an empty checked path is rejected outright.
-func (s *FilesystemSuite) TestEmptyInputsAreDenied() {
+func (s *filesystemSuite) TestEmptyInputsAreDenied() {
 	t := s.T()
 	assert.False(t, Under("/anything", ""), "an empty rule path must match nothing")
 
@@ -222,13 +222,13 @@ func (s *FilesystemSuite) TestEmptyInputsAreDenied() {
 // TestResolveRulePathFallsBackToLexicalClean keeps the policy builder total: a path
 // normalizePath rejects still yields something comparable rather than an empty
 // string, which would match nothing and silently drop the rule.
-func (s *FilesystemSuite) TestResolveRulePathFallsBackToLexicalClean() {
+func (s *filesystemSuite) TestResolveRulePathFallsBackToLexicalClean() {
 	t := s.T()
 	assert.Equal(t, ".", ResolveRulePath(""), "the empty path cleans to . rather than staying empty")
 	assert.Equal(t, "/a/b", ResolveRulePath("/a/./b/"), "an existing-path miss still returns a clean form")
 }
 
-func (s *FilesystemSuite) TestAccessString() {
+func (s *filesystemSuite) TestAccessString() {
 	t := s.T()
 	assert.Equal(t, []string{"read", "write", "exec", "access(9)"},
 		[]string{Read.String(), Write.String(), Exec.String(), Access(9).String()})

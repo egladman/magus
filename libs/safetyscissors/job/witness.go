@@ -144,7 +144,7 @@ func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (Ru
 	if err := cmd.Start(); err != nil {
 		return "", refuse(RefusalNotStarted, "", err)
 	}
-	exit, err := exitOf(cmd.Wait())
+	exit, err := waitExitCode(cmd.Wait())
 	if err != nil {
 		return "", refuse(RefusalUnfinished, "", err)
 	}
@@ -175,7 +175,7 @@ func foreignCommand(cmd *exec.Cmd, argv []string, dir string) (WitnessRefusal, s
 	case len(cmd.ExtraFiles) > 0:
 		return RefusalExtraFiles, "", nil
 	}
-	program, err := programOf(argv[0])
+	program, err := resolveProgram(argv[0])
 	if err != nil {
 		return RefusalNotStarted, "", err
 	}
@@ -185,18 +185,18 @@ func foreignCommand(cmd *exec.Cmd, argv []string, dir string) (WitnessRefusal, s
 	return "", "", nil
 }
 
-// programOf is the Path exec.Command gives a command named argv0.
-func programOf(argv0 string) (string, error) {
+// resolveProgram is the Path exec.Command gives a command named argv0.
+func resolveProgram(argv0 string) (string, error) {
 	if filepath.Base(argv0) != argv0 {
 		return argv0, nil
 	}
 	return exec.LookPath(argv0)
 }
 
-// exitOf is the exit code of the wait whose error is err. An *exec.ExitError carries the
+// waitExitCode is the exit code of the wait whose error is err. An *exec.ExitError carries the
 // state its own wait returned, which no write to cmd.ProcessState reaches; any other error
 // is a failed wait or output copy.
-func exitOf(err error) (int, error) {
+func waitExitCode(err error) (int, error) {
 	if err == nil {
 		return 0, nil
 	}

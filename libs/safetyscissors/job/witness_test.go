@@ -55,7 +55,7 @@ func (s *WitnessSuite) output(ref RunRef) string {
 	return runs[ref].output
 }
 
-func digestOf(out string) string {
+func outputDigest(out string) string {
 	sum := sha256.Sum256([]byte(out))
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
@@ -89,7 +89,7 @@ func (s *WitnessSuite) TestTheCallerStillGetsTheOutputAndTheStoreItsDigest() {
 	s.Equal("ok\n", out.String())
 	runs, err := s.store.runs()
 	s.Require().NoError(err)
-	s.Equal(digestOf("ok\n"), runs[ref].output)
+	s.Equal(outputDigest("ok\n"), runs[ref].output)
 	s.Equal(s.argv, runs[ref].argv)
 }
 
@@ -180,7 +180,7 @@ func (s *WitnessSuite) TestARedirectSwappedAndRestoredStillDigestsTheWholeOutput
 	s.Require().NoError(err)
 
 	s.True(w.swapped)
-	s.Equal(digestOf("one\ntwo\n"), s.output(ref))
+	s.Equal(outputDigest("one\ntwo\n"), s.output(ref))
 }
 
 func (s *WitnessSuite) TestACommandAlreadyRunIsRefused() {

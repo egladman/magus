@@ -11,14 +11,14 @@ import (
 )
 
 // A child Command starts runs under sandbox-exec and reaches only what its binds name.
-type SandboxExecSuite struct {
+type sandboxExecSuite struct {
 	suite.Suite
 	inside, outside string
 }
 
-func TestSandboxExecSuite(t *testing.T) { suite.Run(t, new(SandboxExecSuite)) }
+func TestSandboxExecSuite(t *testing.T) { suite.Run(t, new(sandboxExecSuite)) }
 
-func (s *SandboxExecSuite) SetupTest() {
+func (s *sandboxExecSuite) SetupTest() {
 	if _, err := defaultProbe(); err != nil {
 		s.T().Skipf("sandbox-exec unavailable: %v", err)
 	}
@@ -29,45 +29,45 @@ func (s *SandboxExecSuite) SetupTest() {
 	}
 }
 
-func (s *SandboxExecSuite) run(p *Policy, name string, args ...string) error {
+func (s *sandboxExecSuite) run(p *Policy, name string, args ...string) error {
 	cmd, err := Command(s.T().Context(), p, name, args...)
 	s.Require().NoError(err)
 	s.Equal(sandboxExec, cmd.Path)
 	return cmd.Run()
 }
 
-func (s *SandboxExecSuite) policy(binds ...Bind) *Policy {
+func (s *sandboxExecSuite) policy(binds ...Bind) *Policy {
 	p, err := New(append([]Bind{{Path: "/bin", Mode: "rx"}}, binds...))
 	s.Require().NoError(err)
 	return p
 }
 
-func (s *SandboxExecSuite) TestAReadInsideTheBindsSucceeds() {
+func (s *sandboxExecSuite) TestAReadInsideTheBindsSucceeds() {
 	s.NoError(s.run(s.policy(Bind{Path: s.inside}), "/bin/cat", filepath.Join(s.inside, "f")))
 }
 
-func (s *SandboxExecSuite) TestAReadOutsideTheBindsIsDenied() {
+func (s *sandboxExecSuite) TestAReadOutsideTheBindsIsDenied() {
 	s.Error(s.run(s.policy(Bind{Path: s.inside}), "/bin/cat", filepath.Join(s.outside, "f")))
 }
 
-func (s *SandboxExecSuite) TestAWriteNeedsAWriteBind() {
+func (s *sandboxExecSuite) TestAWriteNeedsAWriteBind() {
 	script := "echo y > " + filepath.Join(s.inside, "g")
 	s.Error(s.run(s.policy(Bind{Path: s.inside}), "/bin/sh", "-c", script))
 	s.NoError(s.run(s.policy(Bind{Path: s.inside, Mode: "rw"}), "/bin/sh", "-c", script))
 }
 
-func (s *SandboxExecSuite) TestAnExecOutsideTheBindsIsDenied() {
+func (s *sandboxExecSuite) TestAnExecOutsideTheBindsIsDenied() {
 	s.Error(s.run(s.policy(), "/usr/bin/true"))
 }
 
 // The base profile alone is enough for a process to start: dyld, the shared cache and
 // libSystem's initializers reach only what seatbeltBase grants.
-func (s *SandboxExecSuite) TestTheBaseProfileStartsAProcess() {
+func (s *sandboxExecSuite) TestTheBaseProfileStartsAProcess() {
 	s.NoError(s.run(s.policy(Bind{Path: "/usr/bin/true", Mode: "rx"}), "/usr/bin/true"))
 }
 
 // A link the caller runs execs the file it resolves to, which the rules name.
-func (s *SandboxExecSuite) TestASymlinkedExecTargetRuns() {
+func (s *sandboxExecSuite) TestASymlinkedExecTargetRuns() {
 	link := filepath.Join(filesystem.ResolveRulePath(s.T().TempDir()), "echo")
 	s.Require().NoError(os.Symlink("/bin/echo", link))
 	s.NoError(s.run(s.policy(), link, "ok"))
