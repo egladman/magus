@@ -108,7 +108,8 @@ const (
 // over MCP is never recorded: it reaches a server serving many callers, which stamps no lease for
 // the same reason it records no ancestry (see internal/handler/mcp).
 //
-// A missing store, a missing blob, or an agent whose host wires no hook all contribute less.
+// A missing store, a missing blob, or an agent whose host wires no hook all contribute less;
+// a store that cannot be read is [ConsultGapUnobserved] and its error.
 // A request blob that does not decode is skipped and returned in the joined error, a
 // [*blobUndecodableError] or a [*retiredDecisionError] per blob, beside what the rest gave.
 func Consulted(ctx context.Context, root, base string, paths []string, limit int) ([]Consultation, ConsultGap, error) {
@@ -118,7 +119,7 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 	}
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
-		return nil, ConsultGapUnobserved, nil
+		return nil, ConsultGapUnobserved, err
 	}
 
 	type question struct{ lease, verb, subject string }

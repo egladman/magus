@@ -283,11 +283,13 @@ func sessionShow(ctx context.Context, root string, args []string) error {
 	}
 
 	out := sessionShowOutput{ShowSummary: sessions.SummarizeSession(rest[0], events)}
-	tr, err := sessionTrailHere(ctx, root, rest[0])
+	tr, ok, err := sessionTrailHere(ctx, root, rest[0])
 	if err != nil {
 		return err
 	}
-	out.Trail = tr
+	if ok {
+		out.Trail = &tr
+	}
 	out.Cost = trail.SummarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -463,10 +465,12 @@ func checkoutCacheDir(root string) string {
 	return cacheDir
 }
 
-func sessionTrailHere(ctx context.Context, root, session string) (*trail.SessionTrail, error) {
+// sessionTrailHere is [trail.SessionTrailHere] for the checkout at root, reporting false
+// when root has no cache dir to hold a trail.
+func sessionTrailHere(ctx context.Context, root, session string) (trail.SessionTrail, bool, error) {
 	cacheDir := checkoutCacheDir(root)
 	if cacheDir == "" {
-		return nil, nil
+		return trail.SessionTrail{}, false, nil
 	}
 	return trail.SessionTrailHere(ctx, cacheDir, session)
 }

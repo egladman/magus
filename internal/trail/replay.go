@@ -101,13 +101,14 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 }
 
 // replayTrail reconstructs, for each of paths, which agent sessions the store at base saw
-// write it and what they had read first, reading at most limit recent events. A request
-// blob that does not decode is skipped and returned in the joined error, which is a
-// [*blobUndecodableError] or a [*retiredDecisionError] per blob.
+// write it and what they had read first, reading at most limit recent events. A store that
+// cannot be read is its error. A request blob that does not decode is skipped and returned
+// in the joined error, which is a [*blobUndecodableError] or a [*retiredDecisionError] per
+// blob.
 func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
-	if err != nil || len(events) == 0 {
-		return map[string][]diff.Touch{}, nil
+	if err != nil {
+		return map[string][]diff.Touch{}, err
 	}
 
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
@@ -377,9 +378,10 @@ type SessionSpawn struct {
 }
 
 // ForSession folds the trail at base for one host session, reading at most limit recent
-// events. A trail that cannot be read is an empty result, never an error: the join is context
-// for a transcript that stands on its own. A blob holding a retired guard decision is the
-// one error, a [*retiredDecisionError], since reading around it would miscount the session.
+// events. A missing trail is an empty result; one that cannot be read is its error. A blob
+// that cannot be read is left out, since the join is context for a transcript that stands
+// on its own, except one holding a retired guard decision, a [*retiredDecisionError], since
+// reading around it would miscount the session.
 func ForSession(ctx context.Context, base, session string, limit int) (SessionTrail, error) {
 	var out SessionTrail
 	if session == "" {
@@ -387,7 +389,7 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 	}
 	events, err := readRecent(ctx, base, limit)
 	if err != nil {
-		return out, nil
+		return out, err
 	}
 	var retired *retiredDecisionError
 	for i := len(events) - 1; i >= 0; i-- {
@@ -531,12 +533,13 @@ func relativize(root, p string) string {
 // Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
 // caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
 //
-// A request blob that does not decode is left out of the counts and returned in the
-// joined error, a [*blobUndecodableError] or a [*retiredDecisionError] per blob.
+// A trail that cannot be read is its error. A request blob that does not decode is left out
+// of the counts and returned in the joined error, a [*blobUndecodableError] or a
+// [*retiredDecisionError] per blob.
 func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
-		return 0, 0, 0, nil
+		return 0, 0, 0, err
 	}
 	var errs []error
 	for _, e := range events {

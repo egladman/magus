@@ -60,7 +60,7 @@ func readRecent(ctx context.Context, base string, limit int) ([]trailtypes.Event
 		}
 		return nil, fmt.Errorf("trail: open %s: %w", eventsPath(base), err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() // read only: a failed close loses nothing read
 
 	// A circular buffer over the tail; head marks the oldest slot, so no line is shifted.
 	buf := make([]string, 0, limit)

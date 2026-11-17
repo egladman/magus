@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -57,7 +58,8 @@ func FeedbackBases(checkouts []string, cacheRel string, since time.Time) []strin
 
 // ReadFeedback folds the trails at bases into one session's guard record. A trail that
 // cannot be read contributes nothing; an event whose blobs are gone is skipped, since the
-// trail rotates blobs out with the events that cite them.
+// trail rotates blobs out with the events that cite them. A request blob that is there and
+// does not decode is the error.
 //
 // Checkouts on the result names the bases that held at least one event of the session.
 func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
@@ -128,20 +130,25 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 }
 
 // feedbackObservation reads one agent-command event's blobs. It reports false for an event
-// whose request blob is gone or undecodable, and a [*retiredDecisionError] for a blob
-// holding a retired guard decision.
+// that recorded no request blob or whose blob is gone. A request blob that cannot be read or decoded is its error: a
+// [*blobUndecodableError], or a [*retiredDecisionError] for one holding a retired guard
+// decision.
 func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool, error) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
 	var retired *retiredDecisionError
-	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
-	if err != nil {
+	if e.RequestRef == "" {
 		return trailrecord.Observation{}, false, nil
 	}
-	if err := decodeAgentBlob(base, e.RequestRef, raw, &req); errors.As(err, &retired) {
-		return trailrecord.Observation{}, false, err
-	} else if err != nil {
+	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
+	if errors.Is(err, fs.ErrNotExist) {
 		return trailrecord.Observation{}, false, nil
+	}
+	if err != nil {
+		return trailrecord.Observation{}, false, err
+	}
+	if err := decodeAgentBlob(base, e.RequestRef, raw, &req); err != nil {
+		return trailrecord.Observation{}, false, err
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {

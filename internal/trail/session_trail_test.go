@@ -19,21 +19,21 @@ func TestSessionTrailHereJoinsThisCheckoutsTrail(t *testing.T) {
 	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
 	AppendAgentSpawn(t.Context(), cacheDir, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
 
-	tr, err := SessionTrailHere(t.Context(), cacheDir, "s1")
+	tr, ok, err := SessionTrailHere(t.Context(), cacheDir, "s1")
 	require.NoError(t, err)
-	require.NotNil(t, tr)
+	require.True(t, ok)
 	var out strings.Builder
-	RenderSessionTrail(&out, tr)
+	RenderSessionTrail(&out, &tr)
 
 	assert.Contains(t, out.String(), "Guard trail in this checkout: 2 command(s) observed, 1 denied, under lease fleet/w1, fleet/w1-child")
 	assert.Contains(t, out.String(), "spawned Explore (lease fleet/w1-child)")
 }
 
-func TestSessionTrailHereIsNilForASessionThatRanElsewhere(t *testing.T) {
+func TestSessionTrailHereIsAbsentForASessionThatRanElsewhere(t *testing.T) {
 	cacheDir := t.TempDir()
 	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 
-	missing, err := SessionTrailHere(t.Context(), cacheDir, "s2")
+	_, ok, err := SessionTrailHere(t.Context(), cacheDir, "s2")
 	require.NoError(t, err)
-	assert.Nil(t, missing)
+	assert.False(t, ok)
 }

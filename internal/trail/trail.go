@@ -166,7 +166,7 @@ type retiredDecisionError struct {
 }
 
 func (e *retiredDecisionError) Error() string {
-	return fmt.Sprintf("activity: %s holds the retired guard decision %q in blob %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
+	return fmt.Sprintf("trail: %s holds the retired guard decision %q in blob %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
 }
 
 // blobUndecodableError is an agent-command blob that is there and does not decode. A
@@ -179,7 +179,7 @@ type blobUndecodableError struct {
 }
 
 func (e *blobUndecodableError) Error() string {
-	return fmt.Sprintf("activity: blob %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
+	return fmt.Sprintf("trail: blob %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
 }
 
 func (e *blobUndecodableError) Unwrap() error { return e.Err }
