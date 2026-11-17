@@ -1,9 +1,7 @@
 ### Removed
 
-- **Breaking for SDK callers: `std.RegisterJobGrader` is gone**, with the process-global
-  `internal/job.SetCheckGrader` it wrapped. A job store grades a declared check with the
-  grader its `job.Location.Grader` names; cmd/magus, the server and
-  `magus\workspace().putJob` pass one, the last through `magus.Magus.CheckGrader`. A store
-  whose Location names no grader reaches no verdict on a declared check: the fork reports
-  one MGS3039 problem naming the missing grader, and an offered gate goal is offered
-  ungraded, never as passed.
+- **Breaking for SDK callers: `std.RegisterJobGrader` is gone.** So is the process-global
+  `internal/job.SetCheckGrader` it wrapped. A store grades a declared check with
+  `job.Location.Grader`; `magus\workspace().putJob` passes one through
+  `magus.Magus.CheckGrader`. With none, the fork reports one MGS3039 problem and a gate
+  goal is offered ungraded.

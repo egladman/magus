@@ -2,21 +2,16 @@
 
 - **Breaking for SDK callers: the model tier set lives in `libs/safetyscissors/tier`.**
   `agent.ModelTier`, `ModelTierSet`, `ModelTierDeclaration`, `ModelTierBounds`,
-  `NewModelTierSet`, `JobModelTier`, `ModelTierSource` and its cases, and `SkillVariant`
-  are `tier.Tier`, `Set`, `Declaration`, `Bounds`, `NewSet`, `Assignment`, `Source`
-  (`SourceJob` and so on) and `SkillVariant`. `RenamedModelTier` has no export: the old
-  tier names are read only on a harness spell's model rows, which warn of the rename.
-  `Set.Bounds` and `Set.Skills` return an error beside the value. The tier refusals are typed: `*tier.DeclarationError`, `*UnknownTierError`, `*CompareError`,
-  `*RanksAboveError`, `*ForeignTierError` and `*UnmappedHostError`. `ModelTierState` and
-  its context helpers stay in magus as `model.TierState`, `model.WithTierState` and
-  `model.TierStateFromContext`, and `Tiers` answers `*model.TiersOffError` where it
-  answered a nil set. Prices are primitives in `libs/safetyscissors/budget`:
-  `types.PriceStep` and `USDPerMTok` are `budget.PriceStep` and `budget.USDPerMTok`, a
-  model's rates are `budget.Price` (`PriceMultiplier` is `Price.Multiplier`), and
-  `budget.Pricer` answers them. `types.ModelPricing` is `model.Row`, embedding
-  `budget.Price`; `model.Table`, which is a `budget.Pricer`, and `InEffect` stay in magus,
-  and `InEffect` now overlays an override's tier and alias. The spawn rule `magus.TierCeiling` is gone:
-  pass `magus.WithSpawnRule(tier.Ceiling)`. It refuses with `*tier.AboveParentError` or
-  `*tier.IncomparableError`, and a fork refused through the job store still carries MGS3055
-  or MGS3056. No alias remains; change the import and the name. Buzz names and the JSON
+  `NewModelTierSet`, `JobModelTier` and `ModelTierSource` are `tier.Tier`, `Set`,
+  `Declaration`, `Bounds`, `NewSet`, `Assignment` and `Source`. Buzz names and JSON
   records are unchanged.
+- **Breaking for SDK callers: tier refusals are typed.** `*tier.DeclarationError`,
+  `*UnknownTierError`, `*CompareError`, `*RanksAboveError`, `*ForeignTierError` and
+  `*UnmappedHostError`.
+- **Breaking for SDK callers: the tier state stays in magus as `model.TierState`.**
+  `Tiers` answers `*model.TiersOffError` where it answered a nil set.
+- **Breaking for SDK callers: prices are `libs/safetyscissors/budget` primitives.** A
+  model's rates are `budget.Price`, and `types.ModelPricing` is `model.Row`, embedding it.
+  `InEffect` overlays an override's tier and alias.
+- **Breaking for SDK callers: `magus.TierCeiling` is gone.** Pass
+  `magus.WithSpawnRule(tier.Ceiling)`; a refused fork still carries MGS3055 or MGS3056.
