@@ -140,9 +140,9 @@ tool (
 // a nested module is exercised by the commit that makes it, with no
 // tag-then-bump round trip. Not something to "clean up": without them every
 // in-repo build (go run ./cmd/magus, magus run build) compiles the last tag, not
-// the code beside it. Their one cost downstream is `go install
-// github.com/egladman/magus/cmd/magus@...`, which refuses any module whose go.mod
-// carries a replace directive (see internal/agent/skills/magus-sdk/SKILL.md).
+// the code beside it. `go install github.com/egladman/magus/cmd/magus@...` refuses any
+// module whose go.mod carries a replace directive, so `magus run release` tags a commit
+// that drops them and restores them in the next (docs/guides/releasing.md).
 replace github.com/egladman/magus/libs/apiversion => ./libs/apiversion
 
 replace github.com/egladman/magus/libs/clikit => ./libs/clikit
