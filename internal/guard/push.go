@@ -157,7 +157,11 @@ type gateHistory struct {
 	read bool
 }
 
+// readGateHistory reads the gate verdicts past ctx's deadline: a push step always runs to
+// its answer and the budget only marks the lapse, so a gate found late still covers the
+// push. ctx carries its values in.
 func readGateHistory(ctx context.Context, workspace string) gateHistory {
+	ctx = context.WithoutCancel(ctx)
 	if workspace == "" {
 		return gateHistory{}
 	}

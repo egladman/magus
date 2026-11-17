@@ -1658,9 +1658,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		judgment = applyRuleFailureNote(judgment, unfinishedNote(n), advisoryUnfinished)
 	}
 	// A workspace rule may ask. A wiring that cannot put the ask before the person refuses
-	// the call instead, as the built-in asks do.
+	// the call instead, as the built-in asks do, under the asking rule's name; an unnamed
+	// ask is the human-only refusal the built-in asks report as.
 	if judgment.Decision == verdict.Ask && !req.RendersAsk {
 		judgment.Decision, judgment.Reason = verdict.Deny, judgment.Reason+"\n\n"+askUnrenderedDeny("this call")
+		judgment.Rule = cmp.Or(judgment.Rule, string(denyRuleHumanOnly))
 	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a
 	// full explanation per session. An ask is never shortened: it waits on a person.

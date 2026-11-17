@@ -263,6 +263,11 @@ func (l JSONL[T]) Load() ([]T, error) {
 // when it ends in a line no writer finished, which the rewrite drops and Log and OnDrop
 // are told of. ctx bounds only the wait for the lock.
 func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
+	// The lock file sits beside the store, so its directory takes the store's mode before
+	// WithLock would create it world-searchable.
+	if err := os.MkdirAll(filepath.Dir(l.Path), dirMode(l.perm())); err != nil {
+		return fmt.Errorf("codec: %s: %w", l.Path, err)
+	}
 	return WithLock(ctx, l.Path+".lock", LockWait, func() error {
 		all, partial, err := l.read()
 		if err != nil {
@@ -347,9 +352,13 @@ func (l JSONL[T]) write(to func(string, [][]byte, os.FileMode) error, entries []
 		}
 		lines = append(lines, b)
 	}
-	perm := l.Perm
-	if perm == 0 {
-		perm = 0o644
+	return to(l.Path, lines, l.perm())
+}
+
+// perm is the mode the store's file is written with: Perm, or 0644 when it is unset.
+func (l JSONL[T]) perm() os.FileMode {
+	if l.Perm == 0 {
+		return 0o644
 	}
-	return to(l.Path, lines, perm)
+	return l.Perm
 }

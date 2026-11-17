@@ -87,7 +87,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	if cause := cmp.Or(envRefusal, staleConfig); cause != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		root, _ := e.FindRoot(judgeRoot)
 		answer, reason := UnjudgedEvent(root, input, cause)
-		verdict := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Decision(answer.Decision()), Reason: reason, Rule: answer.Rule()}
+		verdict := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason, Rule: answer.Rule()}
 		if verdict.Decision == "advise" {
 			verdict.Reason, verdict.Context = "", reason
 		}

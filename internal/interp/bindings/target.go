@@ -291,7 +291,9 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		r := secrets.ResolverFromContext(ctx)
+		// The run's resolver and provider selection, as read() takes them; the per-call ctx
+		// carries neither.
+		r := resolver()
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.endpoint: no secret resolver on this run`)
 		}
