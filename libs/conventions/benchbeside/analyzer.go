@@ -139,8 +139,9 @@ func isOptimization(text string) bool {
 	return ok && strings.HasPrefix(strings.TrimSpace(body), "optimization:")
 }
 
+// Memo is dropped here when the last type ending in it is renamed to Once.
 func isCacheName(name string) bool {
-	return strings.HasSuffix(name, "Cache") || strings.HasSuffix(name, "Memo")
+	return strings.HasSuffix(name, "Cache") || strings.HasSuffix(name, "Once") || strings.HasSuffix(name, "Memo")
 }
 
 // receiverName returns the base type name of d's receiver, through a pointer

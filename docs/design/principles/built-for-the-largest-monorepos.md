@@ -30,8 +30,8 @@ shape at any size.
 
 ## Enforced by
 
-- The `benchbeside` analyzer: every `// optimization:` comment and every cache
-  or memo type sits in a package with a benchmark.
+- The `benchbeside` analyzer: every `// optimization:` comment and every `Cache`,
+  `Once` or `Memo` type sits in a package with a benchmark.
 - [Benchmarks](../../benchmarks.md) publishes every run beside the hardware,
   the date and the competing tool versions.
 - Nothing yet commits a scale target (projects, files, a lookup's latency at
