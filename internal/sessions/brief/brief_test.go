@@ -740,6 +740,8 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	require.NoError(t, err)
 	var filed map[string]any
 	require.NoError(t, codec.Unmarshal(raw, &filed))
+	// An attempt stores its result without the result's own api_version, as the store writes it.
+	delete(filed, "api_version")
 	line, err := codec.Marshal(map[string]any{
 		"apiVersion": jobtypes.APIVersion, "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},

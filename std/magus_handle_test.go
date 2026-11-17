@@ -5,6 +5,7 @@ package std
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	typesvcs "github.com/egladman/magus/types/vcs"
@@ -26,7 +27,7 @@ func (s *magusHandleSuite) TestJobResultDecodesThroughTheVersionedDecoder() {
 		"unresolved_risks": []any{},
 	})
 	s.Require().NoError(err)
-	s.Equal(job.ResultAPIVersion, result.Version)
+	s.Equal(apiversion.APIVersion(job.ResultAPIVersion), result.Version)
 	s.Equal("out123", result.Validation.OutputRef)
 }
 

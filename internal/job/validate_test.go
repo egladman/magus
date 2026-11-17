@@ -434,7 +434,7 @@ func TestIntegratorDeviationsAcceptEveryOutputButADeniedOne(t *testing.T) {
 
 	subjects := make([]string, len(got))
 	for i, w := range got {
-		assert.Equal(t, types.OutputOutsideWritePaths, w.Code)
+		assert.Equal(t, job.Code(types.OutputOutsideWritePaths), w.Code)
 		assert.Equal(t, job.ReasonIntegratorRegenerates, w.Reason)
 		subjects[i] = w.Subject
 	}
@@ -888,8 +888,9 @@ func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
 	}, config.Jobs{}, nil, true)
 
 	s.Require().NoError(err)
-	s.Require().Len(plan.Validation.Job.Goals, 1)
-	s.Equal([]job.Basis{job.BasisWitnessed}, plan.Validation.Job.Goals[0].Accept)
+	unit := slices.IndexFunc(plan.Validation.Job.Goals, func(g job.Goal) bool { return g.ID == "unit" })
+	s.Require().GreaterOrEqual(unit, 0)
+	s.Equal([]job.Basis{job.BasisWitnessed}, plan.Validation.Job.Goals[unit].Accept)
 	_, unresolved := s.at(plan.Validation.Problems, "goals[0].accept")
 	s.False(unresolved)
 }

@@ -21,12 +21,12 @@ func TestRejudgeJudgesADeniedCommandByTodaysRules(t *testing.T) {
 	// no workspace built-in settings, so a softer workspace is not reflected here.
 	program, verdict, rule := rejudge("go build ./...")
 	assert.Equal(t, "go", program)
-	assert.Equal(t, "deny", verdict)
+	assert.Equal(t, "deny", string(verdict))
 	assert.Equal(t, "raw-tool", rule)
 
 	program, verdict, rule = rejudge("ls")
 	assert.Equal(t, "ls", program)
-	assert.Equal(t, "pass", verdict)
+	assert.Equal(t, "defer", string(verdict))
 	assert.Empty(t, rule)
 }
 
@@ -45,7 +45,7 @@ func TestRejudgeReadsTheLoadedRootsShellRules(t *testing.T) {
 	_, _, _ = rejudge("frobnicate --later")
 
 	assert.Equal(t, "frobnicate", program)
-	assert.Equal(t, "deny", verdict)
+	assert.Equal(t, "deny", string(verdict))
 	assert.Equal(t, "workspace:no-frobnicate", rule)
 	require.Equal(t, []string{loaded}, askedRoots, "the rules are read once, from the root whose store is written")
 }

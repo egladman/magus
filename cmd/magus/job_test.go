@@ -95,6 +95,8 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	require.NoError(t, err)
 	var filed map[string]any
 	require.NoError(t, codec.Unmarshal(raw, &filed))
+	// An attempt stores its result without the result's own api_version, as the store writes it.
+	delete(filed, "api_version")
 	line, err := codec.Marshal(map[string]any{
 		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
@@ -1068,7 +1070,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 			Lease:      row.ID,
 			PendingRow: &row,
 		})
-		assert.Equal(t, string(guardverdict.Deny), unplaced.Decision)
+		assert.Equal(t, guardverdict.Deny, unplaced.Decision)
 		assert.Contains(t, unplaced.Reason, "judged from the wrong directory")
 	})
 
@@ -1149,7 +1151,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 		taken := held
 		taken.State, taken.CheckoutRoot = jobtypes.StateRunning, own
 		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
-		assert.NotEqual(t, string(guardverdict.Deny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
+		assert.NotEqual(t, guardverdict.Deny, ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
 	t.Run("the forker's checkout", func(t *testing.T) {

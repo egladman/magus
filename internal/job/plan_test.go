@@ -427,11 +427,11 @@ func TestGraphSymbolsResolvesAPackageQualifiedName(t *testing.T) {
 	}
 	read := GraphSymbols(g)
 	for name, want := range map[string][]string{
-		"job.Declare":              {"internal/job/plan.go"},
-		"types.Declare":            {"types/declare.go"},
-		"job.Declaration#Validate": {"types/job.go"},
-		"job.Missing":              nil,
-		"types.Validate":           nil,
+		"job.Declare":                {"internal/job/plan.go"},
+		"types.Declare":              {"types/declare.go"},
+		"types.Declaration#Validate": {"types/job.go"},
+		"job.Missing":                nil,
+		"types.Validate":             nil,
 	} {
 		fact, ok := read(t.Context(), name, "")
 		require.True(t, ok, name)
@@ -1239,7 +1239,7 @@ func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
 
 	rec.graded = rec.graded[:graded]
 	again := paid
-	again.Goals = []job.Goal{{ID: "again", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: lint}}
+	again.Goals = []job.Goal{{ID: "again", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: lint, Accept: []job.Basis{job.BasisWitnessed}}}
 	_, err = Apply(t.Context(), s, []job.Declaration{again}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, graded, "a goal naming a check the row already holds is not graded again")

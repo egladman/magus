@@ -615,7 +615,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 	dir, err := sessions.Dir(repo.Root())
 	require.NoError(t, err)
 	gated = repo.Head()
-	require.NoError(t, sessions.RecordGate(ctx, dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: gated, Outcome: session.OutcomePass, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: repo.Root()}))
 	fixtureGit(t, repo.Root(), "commit", "-q", "--amend", "-m", "reworded")

@@ -153,9 +153,9 @@ func schemaFields(t reflect.Type) (map[string]string, bool) {
 		tag := f.Tag.Get("json")
 		name, opts, _ := strings.Cut(tag, ",")
 		switch {
-		case !f.IsExported(), f.Anonymous, name == "-":
-		case opts == "unknown":
+		case opts == "unknown", f.Tag.Get("codec") == "unknown":
 			hasBag = true
+		case !f.IsExported(), f.Anonymous, name == "-":
 		case name == "":
 			out[f.Name] = f.Type.String()
 		default:

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -436,8 +437,8 @@ func TestStoreRecordsTheParentAttemptProjectsAndWork(t *testing.T) {
 	child := lease("w")
 	child.Agent.Model, child.Parent = job.Model{}, "root"
 	running := endWith(t, s, child, job.StateRunning)
-	call(t, s.cacheDir, "w", "file.read", 10_000, "pass")
-	call(t, s.cacheDir, "w", "file.write", 30_000, "pass")
+	call(t, s.cacheDir, "w", "file.read", 10_000, verdict.Defer)
+	call(t, s.cacheDir, "w", "file.write", 30_000, verdict.Defer)
 
 	endWith(t, s, running, job.StateFail)
 

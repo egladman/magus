@@ -731,7 +731,7 @@ func TestParseLeaseCheck(t *testing.T) {
 func TestScriptCheckNamesOneSubject(t *testing.T) {
 	t.Parallel()
 
-	gate := job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Script: "probes/key.buzz"}}.Resolve()
+	gate := job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Script: "probes/key.buzz"}, Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
 	require.NoError(t, ValidateGoal(gate))
 
 	both := gate

@@ -48,7 +48,7 @@ func (s *APIVersionSuite) TestParseRefusesAnUnnumberedAlpha() {
 }
 
 func (s *APIVersionSuite) TestGroupAndVersionSplitAtTheSlash() {
-	s.Equal("magus.job", APIVersion(job.APIVersion).Group())
+	s.Equal("safetyscissors.job", APIVersion(job.APIVersion).Group())
 	s.Equal("v1alpha1", APIVersion(job.APIVersion).Version())
 }
 

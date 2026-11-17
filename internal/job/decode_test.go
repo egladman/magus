@@ -8,6 +8,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -99,7 +100,7 @@ func TestDecodeReadsItsOwnVersion(t *testing.T) {
 	rep, err := DecodeResult(strings.NewReader(
 		`{"api_version":"safetyscissors.job-result/v1alpha1","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
 	require.NoError(t, err)
-	assert.Equal(t, job.ResultAPIVersion, rep.Version)
+	assert.Equal(t, apiversion.APIVersion(job.ResultAPIVersion), rep.Version)
 
 	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"safetyscissors.job/v1alpha1","id":"adj/store"}`))
 	require.NoError(t, err)
@@ -463,7 +464,9 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			current = append(current, field)
 		}
 	}
-	assert.ElementsMatch(t, current, mergeFields, "the two doors name one current vocabulary")
+	// The fork door reads validation as a legacy spelling (types.LegacySpellings), and a put
+	// names it beside check, so both doors take it.
+	assert.ElementsMatch(t, append(current, "validation"), mergeFields, "the two doors name one current vocabulary")
 	// validation is the rendered spelling of check, which JobPut carries typed.
 	assert.ElementsMatch(t, append(jsonFields(job.Put{}), "validation"), mergeFields,
 		"a JobPut field is named by the key its map spells it with")

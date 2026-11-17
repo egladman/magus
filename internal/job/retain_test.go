@@ -178,9 +178,14 @@ func TestDeleteArchivesOnlyTheDroppedRow(t *testing.T) {
 	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "jobs-*.jsonl"))
 	require.NoError(t, err)
 	require.Len(t, archives, 1)
+	// The module store reads the jobs.jsonl of the directory it opens, so the archive is
+	// read from a copy under that name.
+	archive, err := os.ReadFile(archives[0])
+	require.NoError(t, err)
 	archived := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir()})
-	archived.path = archives[0]
-	f, err := archived.Read(t.Context())
+	archived.path = filepath.Join(t.TempDir(), "jobs.jsonl")
+	require.NoError(t, os.WriteFile(archived.path, archive, 0o600))
+	f, err := archived.open().Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"drop"}, ids(f.Jobs))
 }

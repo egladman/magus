@@ -592,7 +592,7 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 		return []verdict.Decision{decide(rules.CommandRule()), decide(approved)}
 	}
 
-	assert.Equal(t, []verdict.Decision{verdict.Defer, verdict.Deny}, judge("allow()"))
+	assert.Equal(t, []verdict.Decision{verdict.Defer, verdict.Deny}, judge("defer()"))
 
 	moved := 0
 	require.NoError(t, filepath.WalkDir(worktreeStore, func(path string, d fs.DirEntry, err error) error {

@@ -47,6 +47,10 @@ func fixtureAttemptLine(t *testing.T, a jobtypes.Attempt) []byte {
 	require.NoError(t, err)
 	var status map[string]any
 	require.NoError(t, codec.Unmarshal(raw, &status))
+	// An attempt stores its result without the result's own api_version, as the store writes it.
+	if result, ok := status["result"].(map[string]any); ok {
+		delete(result, "api_version")
+	}
 	if state, ok := status["state"]; ok {
 		delete(status, "state")
 		status["job_state"] = state

@@ -1,6 +1,6 @@
 {
   "fields": {
-    "api_version": "types.APIVersion",
+    "api_version": "apiversion.APIVersion",
     "changed_paths": "[]string",
     "descendants": "[]string",
     "follow_ups": "[]string",
@@ -8,8 +8,8 @@
     "observed_generation": "int",
     "requires": "[]string",
     "unresolved_risks": "[]string",
-    "validation": "types.JobResultValidation",
-    "verification_evidence": "[]types.VerificationEvidence"
+    "validation": "job.ResultValidation",
+    "verification_evidence": "[]job.VerificationEvidence"
   },
   "reserved": [
     "gate_evidence",

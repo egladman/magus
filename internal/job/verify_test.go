@@ -673,7 +673,7 @@ func TestCheckOptOutIsARecordField(t *testing.T) {
 	decl.Apply(&row)
 	require.NotNil(t, row.Check)
 	assert.True(t, row.Check.NoDefaultCharms)
-	assert.Equal(t, "magus run generate . --no-default-charms", row.Validation)
+	assert.Equal(t, "magus run generate . --no-default-charms", validationLine(row.Check))
 }
 
 // A rejected run names the check as it resolved, so the reader sees which charm set the
@@ -844,7 +844,7 @@ func jsonFields(v any) []string {
 	var out []string
 	for _, f := range reflect.VisibleFields(reflect.TypeOf(v)) {
 		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if f.Anonymous || opts == "unknown" {
+		if f.Anonymous || name == "-" || opts == "unknown" {
 			continue
 		}
 		out = append(out, name)
@@ -1256,7 +1256,8 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 
 	got := owedGoals(row, []job.Job{worker, paid, elsewhere}, tries, held)
 	want := []job.Goal{
-		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"}},
+		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"},
+			Accept: []job.Basis{job.BasisWitnessed}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
 	assert.Empty(t, owedGoals(job.Job{ID: "w"}, []job.Job{worker}, tries, nil), "a job that integrates nothing owes nothing")

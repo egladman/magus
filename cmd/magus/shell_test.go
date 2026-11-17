@@ -537,7 +537,7 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 		"lib/policy.buzz": fmt.Sprintf(rule, `deny("no")`),
 	})
 	repo.Write("magusfile.buzz", magusfile+"// pending\n")
-	repo.Write("lib/policy.buzz", fmt.Sprintf(rule, "allow()"))
+	repo.Write("lib/policy.buzz", fmt.Sprintf(rule, "defer()"))
 	chunks := func() []string {
 		var out []string
 		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
@@ -609,14 +609,14 @@ func (s *staleConfigSuite) judge(command string) verdict.Judgment {
 
 func (s *staleConfigSuite) TestAStateChangeIsRefusedAsUnjudged() {
 	v := s.judge("touch notes.txt")
-	s.Equal("deny", v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
 	s.Contains(v.Reason, "hack/dev/bootstrap-checkout.buzz -- --here --verify-ready")
 }
 
 func (s *staleConfigSuite) TestAReadIsRefusedToo() {
 	v := s.judge("cat README.md")
-	s.Equal("deny", v.Decision, "no policy loaded to say which reads the workspace guards")
+	s.Equal(verdict.Deny, v.Decision, "no policy loaded to say which reads the workspace guards")
 }
 
 func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
@@ -639,7 +639,7 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	var v verdict.Judgment
 	s.Require().NoError(codec.Unmarshal(body, &v), string(body))
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
-	s.Equal("deny", v.Decision)
+	s.Equal(verdict.Deny, v.Decision)
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
 }
 
