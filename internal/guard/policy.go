@@ -225,7 +225,7 @@ func recordedRule(cacheDir string, seam functionSeam) bool {
 func readPolicyMarker(path string) (policyMarker, bool) {
 	held, err := policyMarkerLog(path).Load()
 	if err != nil {
-		reportGuardMemo(err)
+		reportGuardRecord(err)
 	}
 	if len(held) == 0 {
 		return policyMarker{}, false
@@ -233,12 +233,12 @@ func readPolicyMarker(path string) (policyMarker, bool) {
 	return held[0], true
 }
 
-// reportGuardMemo logs a memo that could not be read or written. The guard goes on without
+// reportGuardRecord logs a guard record that could not be read or written. The guard goes on without
 // it, so the log is how a person learns it was not used.
-func reportGuardMemo(err error) {
-	message := "guard memo"
+func reportGuardRecord(err error) {
+	message := "guard record"
 	if errors.Is(err, file.ErrLegacyStore) {
-		message = "legacy guard memo: state belongs to an older magus"
+		message = "legacy guard record: state belongs to an older magus"
 	}
 	slog.With(attr.Component("magus")).ErrorContext(context.Background(), message, attr.Error(err))
 }

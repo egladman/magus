@@ -214,7 +214,7 @@ func recallSettings(cacheDir string) (map[string]builtin.Setting, error) {
 func recalledSettings(cacheDir string) map[string]builtin.Setting {
 	settings, err := recallSettings(cacheDir)
 	if err != nil {
-		reportGuardMemo(fmt.Errorf("grading by the default settings: %w", err))
+		reportGuardRecord(fmt.Errorf("grading by the default settings: %w", err))
 	}
 	return settings
 }
