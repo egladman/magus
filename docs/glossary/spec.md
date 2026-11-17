@@ -42,7 +42,7 @@ In the code (`magus refs <name>` lists every site):
 
 - `image\Spec` (Buzz host type)
 - `image.Spec` (Go)
-- `agent.Spec` (Go)
+- `step.Spec` (Go)
 - `ast.Spec` (Go)
 
 <!-- END GLOSSARY USAGE -->
