@@ -79,10 +79,9 @@ also replaces each sibling with its directory. `replace` is never transitive, so
 consumer downstream resolves the tags, while every build in this repo compiles the
 code beside it. A release keeps both true:
 
-1. **Cut the tags the requires name.** A `require .../libs/<name> vX.Y.Z` whose tag
-   does not exist yet is cut in the same run, as long as `vX.Y.Z` is a legal next
-   version: `release: cut libs/<name>/vX.Y.Z - a go.mod requires it and the tag does
-   not exist`.
+1. **Name every tag the requires need.** A `require .../libs/<name> vX.Y.Z` whose tag
+   does not exist yet refuses the release, naming each such module in dependency order
+   and the run that adds them. Run it as printed to cut them in this release.
 2. **Commit the pins.** Every `go.mod` that requires a released module points at its
    new version, not only the root's. Each released module's `go.mod` drops its
    in-repo replaces and gains the `go.sum` lines they stood in for, so
@@ -117,8 +116,17 @@ half the modules tagged:
   module means rewriting every import, so the release stops rather than guesses.
 - **A pseudo-version in any in-repo require.** It names a commit rather than a
   tag, so nobody outside the repo can resolve the release it ships in.
-- **A missing tag the run cannot cut.** That is a require of a version that is not a
-  legal next one, or two `go.mod`s requiring different untagged versions of one module.
+- **A tag a require names and nobody cut.** The refusal names the run that releases
+  it too:
+
+  ```text
+  release: FAIL requires - requires name tags that do not exist: libs/apiversion@0.1.0,
+  libs/codec@0.1.0. Release them in this run: `magus run release -- libs/xdg@0.1.1
+  libs/apiversion@0.1.0 libs/codec@0.1.0`
+  ```
+
+  A version that is not a legal next one, or two `go.mod`s requiring different untagged
+  versions of one module, has no such run and refuses on its own line.
 - **A dependency that moved since its tag.** Each in-repo module a released module
   requires must either be released in the same run or have a tag whose tree for its
   directory equals HEAD's. Otherwise a consumer would build other code than this
@@ -191,7 +199,7 @@ where the number gets chosen.
 ### The post-tag state, simulated
 
 The release checks compute the version `release-build` would stamp once these tags
-sit on HEAD, then computes every asset name that version produces, for magus and for
+sit on the commit they go on, the release commit or HEAD when no `go.mod` changes, then computes every asset name that version produces, for magus and for
 `proofread`, and checks each one against the glob `release.yaml` uploads that tool's
 archives with.
 

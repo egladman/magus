@@ -725,22 +725,23 @@ test "pseudo-versions in every form Go mints, and tags that are not" {
     std\assert(!isPseudoVersion("v0.0.0-00010101000000-00000000000z"), message: "a revision that is not hex");
 }
 
-// PinPlan is what a release must do about every in-repo require before it tags: the
-// tags it must cut because a require names one that does not exist (directory to
-// version), and the requires it cannot release past.
+// PinPlan is what stands between a release and its tags in the in-repo requires: the
+// legal versions requires name that nobody tagged and this run does not release
+// (directory to version), and the requires no run can release past.
 export object PinPlan {
-    cut: {str: str},
+    missing: {str: str},
     problems: [str],
 }
 
 // pinPlan checks every in-repo require in gomods (go.mod path to its text) against tags,
 // the tag names that exist, and releasing, each directory this run releases to its new
 // version. A require of a module being released is rewritten to the new version, so it
-// passes. One naming a missing tag is cut in this run when legal(dir, version) says that
-// version is a legal next one. A pseudo-version, an illegal missing version, and two
-// go.mods requiring different missing versions of one module are problems.
+// passes. One naming a missing tag is missing when legal(dir, version) says that version
+// is a legal next one, so naming it in the run would cut it. A pseudo-version, an illegal
+// missing version, and two go.mods requiring different missing versions of one module are
+// problems.
 export fun pinPlan(gomods: {str: str}, tags: [str], releasing: {str: str}, legal: fun (dir: str, version: str) > bool !> any) > PinPlan !> any {
-    final cut = mut {<str: str>};
+    final missing = mut {<str: str>};
     final problems = mut [<str>];
     final paths = gomods.keys().cloneMutable();
     _ = paths.sort(fun (a: str, b: str) > bool => a < b);
@@ -757,7 +758,7 @@ export fun pinPlan(gomods: {str: str}, tags: [str], releasing: {str: str}, legal
             if (releasing[dir] != null) { continue; }
             final tag = tagName(dir, version: version);
             if (tags.indexOf(tag) != null) { continue; }
-            final other = cut[dir];
+            final other = missing[dir];
             if (other -> v) {
                 if (v != version) {
                     problems.append(path + " requires " + module + " " + version + " and another go.mod requires "
@@ -767,29 +768,66 @@ export fun pinPlan(gomods: {str: str}, tags: [str], releasing: {str: str}, legal
             }
             if (!legal(dir, version: version)) {
                 problems.append(path + " requires " + module + " " + version + ", and " + tag
-                    + " does not exist and is not a legal next version to cut");
+                    + " does not exist and is not a legal next version to release");
                 continue;
             }
-            cut[dir] = version;
+            missing[dir] = version;
         }
     }
-    return PinPlan{ cut = cut, problems = problems };
+    return PinPlan{ missing = missing, problems = problems };
 }
 
-test "a release cuts the tags requires name, and refuses a commit or a version it cannot cut" {
+// missingTagsRefusal is the refusal for missing, the untagged versions requires name
+// (directory to version): each as the module@version a run names, in dependency order
+// by gomods, then the release invocation args extended by them, which cuts them all.
+export fun missingTagsRefusal(missing: {str: str}, gomods: {str: str}, args: [str]) > str !> any {
+    final deps = mut {<str: [str]>};
+    foreach (dir, version in missing) {
+        final on = mut [<str>];
+        final gomod = gomods[if (dir == ".") "go.mod" else dir + "/go.mod"];
+        if (gomod -> text) {
+            foreach (req in inRepoRequires(text)) {
+                final dep = moduleDir(req["module"]!);
+                if (missing[dep] != null) { on.append(dep); }
+            }
+        }
+        deps[dir] = on;
+    }
+    final named = mut [<str>];
+    foreach (dir in releaseOrder(missing.keys(), deps: deps)) {
+        final key = if (dir == ".") "magus" else dir;
+        named.append(key + "@" + missing[dir]!.sub(1));
+    }
+    return "requires name tags that do not exist: " + named.join(", ") + ". Release them in this run: `magus run release -- "
+        + (args + named).join(" ") + "`";
+}
+
+test "a release names the untagged requires in dependency order, with the run that adds them" {
+    final gomods = {"libs/safetyscissors/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.1.0
+",
+        "libs/codec/go.mod": "module " + MODULE_ROOT + "/libs/codec
+"};
+    final got = missingTagsRefusal({"libs/safetyscissors": "v0.1.0", "libs/codec": "v0.1.0", "libs/apiversion": "v0.1.0"},
+        gomods: gomods, args: ["magus@0.5.0"]);
+    assert\equal(got, want: "requires name tags that do not exist: libs/apiversion@0.1.0, libs/codec@0.1.0, "
+        + "libs/safetyscissors@0.1.0. Release them in this run: `magus run release -- magus@0.5.0 libs/apiversion@0.1.0 "
+        + "libs/codec@0.1.0 libs/safetyscissors@0.1.0`", message: got);
+}
+
+test "a release finds the untagged requires, and refuses a commit or a version it cannot release" {
     final head = "module " + MODULE_ROOT + "\n\nrequire (\n\t" + MODULE_ROOT + "/libs/codec v0.1.0\n\t"
         + MODULE_ROOT + "/libs/xdg v0.1.0\n\t" + MODULE_ROOT + "/libs/text v0.2.0\n)\n";
     final lib = "module " + MODULE_ROOT + "/libs/safetyscissors\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n";
     final legal = fun (dir: str, version: str) > bool => version == "v0.1.0";
     final plan = pinPlan({"go.mod": head, "libs/safetyscissors/go.mod": lib}, tags: ["libs/xdg/v0.1.0"],
         releasing: {".": "v0.5.0", "libs/text": "v0.2.0"}, legal: legal);
-    assert\equal(plan.cut, want: {"libs/codec": "v0.1.0"}, message: "the untagged codec, once for both go.mods");
+    assert\equal(plan.missing, want: {"libs/codec": "v0.1.0"}, message: "the untagged codec, once for both go.mods");
     assert\equal(plan.problems, want: [<str>], message: "xdg is tagged, text is released in the run");
 
     final pseudo = "require " + MODULE_ROOT + "/libs/embed v0.0.0-00010101000000-000000000000\n";
     final refused = pinPlan({"libs/train/go.mod": pseudo, "go.mod": "require " + MODULE_ROOT + "/libs/codec v0.3.0\n"},
         tags: [<str>], releasing: {<str: str>}, legal: legal);
-    assert\equal(refused.cut, want: {<str: str>}, message: "nothing to cut");
+    assert\equal(refused.missing, want: {<str: str>}, message: "nothing missing to name");
     assert\equal(refused.problems.len(), want: 2, message: "the pseudo-version and the illegal version");
     std\assert(refused.problems[0].startsWith("go.mod requires " + MODULE_ROOT + "/libs/codec v0.3.0"),
         message: "go.mod sorts first: {refused.problems[0]}");
@@ -941,4 +979,50 @@ test "a release subject stays one short line" {
     assert\equal(releaseName(["libs/a/v0.1.0", "libs/b/v0.1.0", "v0.5.0"]), want: "v0.5.0 and 2 module tags", message: "several");
     assert\equal(releaseName(["libs/a/v0.1.0", "libs/b/v0.1.0"]), want: "libs/a/v0.1.0 libs/b/v0.1.0", message: "a few modules");
     assert\equal(releaseName(["libs/a/v1", "libs/b/v1", "libs/c/v1", "libs/d/v1"]), want: "4 module tags", message: "many modules");
+}
+
+// Pinned is what a release commit does to the go.mods: next is each changed go.mod's
+// text on the release commit (path to text), and restored is the text main carries after
+// it for each go.mod whose in-repo replaces the release commit drops.
+export object Pinned {
+    next: {str: str},
+    restored: {str: str},
+}
+
+// pinGomods points every in-repo require of a module in releasing (directory to new
+// version) at that version, and drops the in-repo replaces of each released module's own
+// go.mod, so `go install` accepts it. A go.mod with nothing to change is in neither map.
+export fun pinGomods(gomods: {str: str}, releasing: {str: str}) > Pinned !> any {
+    final next = mut {<str: str>};
+    final restored = mut {<str: str>};
+    foreach (path, text in gomods) {
+        var pinned = text;
+        foreach (req in inRepoRequires(text)) {
+            final version = releasing[moduleDir(req["module"]!)];
+            if (version -> v) { pinned = rewriteRequire(pinned, module: req["module"]!, version: v); }
+        }
+        final dropped = dropInRepoReplaces(pinned);
+        if (releasing[gomodDir(path)] != null and dropped != pinned) {
+            restored[path] = pinned;
+            pinned = dropped;
+        }
+        if (pinned != text) { next[path] = pinned; }
+    }
+    return Pinned{ next = next, restored = restored };
+}
+
+test "a release pins requires everywhere and drops replaces only where it releases" {
+    final lib = "module " + MODULE_ROOT + "/libs/safetyscissors\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final app = "module " + MODULE_ROOT + "/libs/clikit\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final quiet = "module " + MODULE_ROOT + "/libs/xdg\n";
+    final got = pinGomods({"libs/safetyscissors/go.mod": lib, "libs/clikit/go.mod": app, "libs/xdg/go.mod": quiet},
+        releasing: {"libs/safetyscissors": "v0.2.0", "libs/codec": "v0.2.0"});
+    std\assert(got.next["libs/safetyscissors/go.mod"]!.indexOf("libs/codec v0.2.0") != null, message: "pinned");
+    std\assert(got.next["libs/safetyscissors/go.mod"]!.indexOf("=>") == null, message: "a released module drops its replace");
+    std\assert(got.restored["libs/safetyscissors/go.mod"]!.indexOf("libs/codec => ../codec") != null, message: "and gets it back");
+    std\assert(got.next["libs/clikit/go.mod"]!.indexOf("libs/codec => ../codec") != null, message: "an unreleased module keeps its replace");
+    std\assert(got.restored["libs/clikit/go.mod"] == null, message: "so nothing restores it");
+    std\assert(got.next["libs/xdg/go.mod"] == null, message: "an untouched go.mod is not in the commit");
 }

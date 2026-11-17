@@ -1947,11 +1947,11 @@ fun verify_release_workflow() > [Verdict] !> any {
 }
 
 // Every check that must hold before a tag exists: the Go module proxy caches a tag
-// within the hour, so a failed release burns the version. Returns every verdict
-// rather than stopping at the first.
-fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
+// within the hour, so a failed release burns the version. alreadyThere is the tags already
+// on the commit wouldBeTags go on: none on a new release commit, HEAD's when the release
+// tags HEAD. Returns every verdict rather than stopping at the first.
+fun release_checks(wouldBeTags: [str], rootVersion: str, alreadyThere: [str]) > [Verdict] !> any {
     var checks = mut [<Verdict>];
-    final onHead = tag_names_on_head();
     final branches = local_branches();
 
     // (a) A branch named like a tag is noted, never refused: git supports it. A bare
@@ -1981,16 +1981,16 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         checks.append(failed("development-only shims", shims.stderr.trim()));
     }
 
-    // (b) Simulates version() with these tags on HEAD. Gated only on a root tag: a
+    // (b) Simulates version() on the tagged commit. Gated only on a root tag: a
     // library-only release publishes no assets.
-    final root = releases\rootReleaseTag(wouldBeTags + onHead);
+    final root = releases\rootReleaseTag(wouldBeTags + alreadyThere);
     if (root == "") {
         var stamped = "the nearest tag by distance";
-        final near = wouldBeTags + onHead;
+        final near = wouldBeTags + alreadyThere;
         if (near.len() > 0) { stamped = "one of " + near.join(", ") + ", chosen arbitrarily"; }
-        checks.append(passed("asset names", "no root release tag would sit on HEAD, so "
+        checks.append(passed("asset names", "no root release tag would sit on the tagged commit, so "
             + RELEASE_WORKFLOW + " does not run and nothing is published. A local "
-            + "`magus run release-build` on this commit stamps " + stamped
+            + "`magus run release-build` on that commit stamps " + stamped
             + ", and refuses when that carries a separator"));
     } else {
         var offenders = mut [<str>];
@@ -2007,7 +2007,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
             }
         }
         if (offenders.len() > 0) {
-            checks.append(failed("asset names", "HEAD would stamp version `" + root + "`, naming assets "
+            checks.append(failed("asset names", "the tagged commit would stamp version `" + root + "`, naming assets "
                 + "like `" + offenders[0] + "` that its tool's upload glob cannot match. The "
                 + "build would be green and the release would publish nothing. " + "{offenders.len()}"
                 + " of the assets release.yaml builds are affected."));
@@ -2075,9 +2075,9 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
 }
 
 // Cuts versions in Go's multi-module order. Dry run by default; name <module>@<version> to
-// release one, and unnamed modules stay put, except that a require naming an untagged legal
-// version cuts that tag too. A pseudo-version, any other missing tag, or a dependency whose
-// tag no longer holds HEAD's tree refuses. The release commit points every go.mod at the new
+// release one, and unnamed modules stay put. A require naming a tag nobody cut refuses with
+// the run that releases it too; a pseudo-version, an illegal missing version, or a
+// dependency whose tag no longer holds HEAD's tree refuses as well. The release commit points every go.mod at the new
 // versions and drops each released module's in-repo replaces, so `go install` accepts it;
 // the commit after it restores them, so main keeps its replaces. Both are built and the
 // modules installed from a scratch clone first. Nested modules are tagged before the root,
@@ -2159,8 +2159,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    // Every in-repo require names a tag that exists once this run has tagged: a require of
-    // an untagged legal version is cut here, anything else refuses.
+    // Every in-repo require names a tag that exists once this run has tagged. A tag nobody
+    // cut refuses, naming the run that would cut it: a release tags only what it was told to.
     final gomods = in_repo_gomods();
     final tagNames = mut [<str>];
     foreach (t in vcs\tags()) { tagNames.append(t.name); }
@@ -2180,20 +2180,12 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         });
     final pinFailures = mut [<str>];
     foreach (p in plan.problems) { pinFailures.append(p); }
-    foreach (dir, version in plan.cut) {
-        var key = "";
-        foreach (m in modules) {
-            if (m["dir"] == dir) { key = m["key"]; }
+    if (plan.missing.len() > 0) {
+        final named = mut [<str>];
+        foreach (a in args) {
+            if (a != "") { named.append(a); }
         }
-        if (key == "") {
-            pinFailures.append("a require names " + releases\tagName(dir, version: version) + ", which does not "
-                + "exist, and " + dir + " is no project this release can tag");
-            continue;
-        }
-        magus\log.info("release: cut " + releases\tagName(dir, version: version)
-            + " - a go.mod requires it and the tag does not exist");
-        wanted[key] = version.sub(1);
-        releasing[dir] = version;
+        pinFailures.append(releases\missingTagsRefusal(plan.missing, gomods: gomods, args: named));
     }
 
     // A dependency released in an earlier run must be the tree HEAD builds against, or a
@@ -2264,9 +2256,14 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.warn("release: FAIL requires - " + p);
     }
     if (pinFailures.len() == 0) {
-        magus\log.info("release: OK   requires - every in-repo require names a tag that exists or that this run cuts");
+        magus\log.info("release: OK   requires - every in-repo require names a tag that exists or that this run releases");
     }
-    foreach (c in verify_release_workflow() + release_checks(wouldBeTags, rootVersion: rootVersion)) {
+    // The tags go on the release commit when one is made, and on HEAD beside its tags when
+    // no go.mod changes.
+    final pinned = releases\pinGomods(gomods, releasing: releasing);
+    var alreadyThere = [<str>];
+    if (pinned.next.len() == 0) { alreadyThere = tag_names_on_head(); }
+    foreach (c in verify_release_workflow() + release_checks(wouldBeTags, rootVersion: rootVersion, alreadyThere: alreadyThere)) {
         if (c.note) {
             magus\log.warn("release: NOTE " + c.name + " - " + c.detail);
         } else if (c.ok) {
@@ -2287,10 +2284,11 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     foreach (dir in order) {
         if (gomods[gomod_path(dir)] != null) { goReleased = true; }
     }
-    if ((failures == 0 or !deliver) and goReleased) {
+    // A missing tag leaves the scratch install nothing to resolve, so it is not rehearsed.
+    if ((failures == 0 or !deliver) and goReleased and plan.missing.len() == 0) {
         scratch = fs\tempDir("magus-release-");
         try {
-            staged = stage_release(scratch, order: order, releasing: releasing, gomods: gomods);
+            staged = stage_release(scratch, order: order, releasing: releasing, gomods: gomods, pinned: pinned);
         } catch (e) {
             failures = failures + 1;
             magus\log.warn("release: FAIL release commit - {e}");
@@ -2419,7 +2417,7 @@ fun scratch_go(env: [str], args: [str], dir: str) > void !> any {
 // stage_release builds the release commit for the dirs in order in a scratch clone of
 // HEAD, tags them there, and proves each Go module installs from those tags outside this
 // repo. It raises with the step that failed.
-fun stage_release(scratch: str, order: [str], releasing: {str: str}, gomods: {str: str}) > ReleaseStage !> any {
+fun stage_release(scratch: str, order: [str], releasing: {str: str}, gomods: {str: str}, pinned: releases\Pinned) > ReleaseStage !> any {
     final clone = fs\join(scratch, "repo");
     final head = vcs\cmd(["rev-parse", "HEAD"], vcs\CommandOptions{quiet = true}).stdout.trim();
     _ = vcs\cmd(["clone", "--quiet", "--shared", "--no-checkout", vcs\root(), clone], vcs\CommandOptions{quiet = true});
@@ -2435,27 +2433,10 @@ fun stage_release(scratch: str, order: [str], releasing: {str: str}, gomods: {st
     final tagAll = fun () > void !> any {
         foreach (tag in tags) { _ = vcs\cmd(["tag", "--force", tag], inClone); }
     };
-    // A released module's go.mod drops its in-repo replaces, so `go install` accepts it;
-    // restored keeps each such go.mod as main carries it after the release.
-    final restored = mut {<str: str>};
-    var changed = false;
-    foreach (path, text in gomods) {
-        var next = text;
-        foreach (req in releases\inRepoRequires(text)) {
-            final version = releasing[releases\moduleDir(req["module"]!)];
-            if (version -> v) { next = releases\rewriteRequire(next, module: req["module"]!, version: v); }
-        }
-        if (releasing[releases\gomodDir(path)] != null and releases\dropInRepoReplaces(next) != next) {
-            restored[path] = next;
-            next = releases\dropInRepoReplaces(next);
-        }
-        if (next != text) {
-            fs\writeFile(fs\join(clone, path), content: next);
-            changed = true;
-        }
-    }
+    final restored = pinned.restored;
+    foreach (path, text in pinned.next) { fs\writeFile(fs\join(clone, path), content: text); }
     var subject = "";
-    if (changed) {
+    if (pinned.next.len() > 0) {
         subject = "release " + releases\releaseName(tags);
         commitAll(["--message", subject]);
     }
