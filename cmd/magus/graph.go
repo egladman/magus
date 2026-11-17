@@ -76,7 +76,7 @@ func graphCommand(ctx context.Context, root string, args []string) error {
 		// to run this, and "unknown subcommand" routes them nowhere.
 		//
 		// Absent from graphSubs on purpose: suggesting it would teach the name back.
-		return fmt.Errorf("magus graph verify has moved: run `magus doctor` and read its `agent skills` check, which grades the same installs and adds a --fix that reinstalls them")
+		return fmt.Errorf("magus graph verify has moved: run `magus doctor` and read its `agent skills` check, which grades the same installs and names the command that reinstalls them")
 	default:
 		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice("magus graph"))
 		if sug := hint.Nearest(sub, graphSubs); sug != "" {

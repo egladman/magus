@@ -48,7 +48,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "queue":
 		return queueCommand(ctx, root, subArgs)
 	case "doctor":
-		return doctorCommand(ctx, root, rc, subArgs)
+		return doctorCommand(ctx, root, subArgs)
 	case "config":
 		return configCommand(ctx, root, globalCfg, subArgs)
 	case "session":

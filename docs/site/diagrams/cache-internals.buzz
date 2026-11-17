@@ -29,6 +29,7 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
         .box(spawn, label: "Spawner", sub: "runs a miss")
         .group([jobs, journal], label: "Run records", sub: "whose writes, what ran", look: figure\Look.store)
         .box(secret, label: "Signing key", sub: "sign and verify", look: figure\Look.input)
+        .rank(dirs: [jobs, journal, secret])
         .edgesFromGraph()
         .legend(figure\Look.focal, label: "the lookup")
         .legend(figure\Look.input, label: "trusted runs only")

@@ -2496,7 +2496,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 // release's verbs.
 //
 // AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
-// failing a check whose fix magus cannot apply would make --fix a liar.
+// failing a check whose fix magus cannot apply would make its printed remedy a liar.
 func (r *runner) checkAgentSkills(ctx context.Context) check.Check {
 	const name = "agent-skills"
 
@@ -2539,14 +2539,14 @@ func (r *runner) checkAgentSkills(ctx context.Context) check.Check {
 		// that too. What it cannot clear is a leftover directory with no readable
 		// stamp (empty, or a SKILL.md magus cannot read): the Detail names the command
 		// that removes each, and a location with nothing else wrong gets no Fix, since
-		// --fix would rerun a reinstall that changes nothing.
+		// the printed reinstall would change nothing.
 		var leftovers []string
 		var fix []string
 		for _, st := range staleStatuses {
 			leftovers = append(leftovers, st.Leftovers...)
 			if fix == nil && !st.OnlyLeftovers {
-				// One check carries one remedy, so two stale locations need --fix
-				// twice; the message lists them all.
+				// One check carries one remedy, so two stale locations need the
+				// remedy twice; the message lists them all.
 				fix = skillInstallFix(st)
 			}
 		}
@@ -2581,7 +2581,7 @@ func (r *runner) checkAgentSkills(ctx context.Context) check.Check {
 // every location checkAgentSkills grades comes from a harness descriptor (see
 // agent.HarnessSkillLocations), whose ID is validated non-empty at load, so
 // st.ID is always in hand here. It defers to agent.ReinstallCommand so this
-// structured --fix and the free-text Detail strings for the same condition
+// structured Fix and the free-text Detail strings for the same condition
 // read as one command, not two that can drift apart.
 func skillInstallFix(st agent.Status) []string {
 	return agent.ReinstallCommand(st.ID)

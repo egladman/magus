@@ -2,7 +2,6 @@ package types
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -24,54 +23,6 @@ type JobProblem struct {
 	Message string `json:"message"`
 	// Fix is the edit to the record that clears the problem.
 	Fix string `json:"fix"`
-	// Edit is Fix as data, set only where the fix needs no judgment: `--fix` applies it. A
-	// problem without one is the caller's to decide.
-	Edit *JobEdit `json:"edit,omitempty"`
-}
-
-// JobEdit is one mechanical change to a record. Exactly one field is set.
-type JobEdit struct {
-	AddWritePath string     `json:"add_write_path,omitempty"`
-	AddGoal      *Goal      `json:"add_goal,omitempty"`
-	AddDeviation *Deviation `json:"add_deviation,omitempty"`
-}
-
-// Apply makes e on d and reports whether d changed: an entry d already holds, or a goal id
-// it already uses, is left alone.
-func (e JobEdit) Apply(d *Declaration) bool {
-	switch {
-	case e.AddWritePath != "":
-		if slices.Contains(d.Paths.Write, e.AddWritePath) {
-			return false
-		}
-		d.Paths.Write = append(d.Paths.Write, e.AddWritePath)
-	case e.AddGoal != nil:
-		if slices.ContainsFunc(d.Goals, func(g Goal) bool { return g.ID == e.AddGoal.ID }) {
-			return false
-		}
-		d.Goals = append(d.Goals, *e.AddGoal)
-	case e.AddDeviation != nil:
-		if slices.Contains(d.Deviations, *e.AddDeviation) {
-			return false
-		}
-		d.Deviations = append(d.Deviations, *e.AddDeviation)
-	default:
-		return false
-	}
-	return true
-}
-
-// String is e as a person reads it in a list of what `--fix` did.
-func (e JobEdit) String() string {
-	switch {
-	case e.AddWritePath != "":
-		return fmt.Sprintf("added %q to paths.write", e.AddWritePath)
-	case e.AddGoal != nil:
-		return fmt.Sprintf("added the goal %q (%s)", e.AddGoal.ID, e.AddGoal.Check)
-	case e.AddDeviation != nil:
-		return fmt.Sprintf("permitted %s %q (%s)", e.AddDeviation.Code, e.AddDeviation.Subject, e.AddDeviation.Reason)
-	}
-	return "no edit"
 }
 
 // Error renders p as a DiagnosticError, so errors.Is matches its code. The text is the
@@ -86,7 +37,7 @@ func (p JobProblem) Error() *DiagnosticError {
 // JobProblems are the problems of one record, in record order.
 type JobProblems []JobProblem
 
-// Error joins each problem as a [*JobProblemError] in record order, or returns nil when there
+// Error joins each problem as a [*DiagnosticError] in record order, or returns nil when there
 // are none.
 func (ps JobProblems) Error() error {
 	if len(ps) == 0 {
@@ -94,29 +45,9 @@ func (ps JobProblems) Error() error {
 	}
 	errs := make([]error, len(ps))
 	for i, p := range ps {
-		errs[i] = &JobProblemError{Problem: p}
+		errs[i] = p.Error()
 	}
 	return errors.Join(errs...)
-}
-
-// JobProblemError is a problem as an error that keeps the problem, so a caller handed the
-// joined error recovers each one's Edit. It reads and unwraps as [JobProblem.Err].
-type JobProblemError struct {
-	Problem JobProblem
-}
-
-func (e *JobProblemError) Error() string { return e.Problem.Error().Error() }
-func (e *JobProblemError) Unwrap() error { return e.Problem.Error() }
-
-// Fixable counts the problems of ps that carry an Edit.
-func (ps JobProblems) Fixable() int {
-	n := 0
-	for _, p := range ps {
-		if p.Edit != nil {
-			n++
-		}
-	}
-	return n
 }
 
 // Permit splits ps into the problems a deviation in ds matches by code and subject and the
