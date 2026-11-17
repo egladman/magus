@@ -540,7 +540,7 @@ text above is kept as written.
 ### 2026-11-12: `types` imports `types/agent`, not the reverse
 
 "Where the names live" says `types/agent` imports `types` and `types` never imports it.
-The tree says the opposite. `types` imports `types/agent` (`types/job.go`,
+The tree says the opposite. `types` imports `types/agent` (`libs/safetyscissors/job/job.go`,
 `types/harness_contract.go`). `types/agent` imports nothing in magus but
 `internal/json` and `types/enum`, and the compiler refuses the cycle an import of `types`
 would make. So `types/agent` is the leaf, and it cannot name `types.NextStep`,

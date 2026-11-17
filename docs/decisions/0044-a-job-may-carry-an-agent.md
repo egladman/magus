@@ -12,9 +12,9 @@ date: 2026-11-11
 ## Context
 
 Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
-`types/job.go` and `internal/job`:
+`libs/safetyscissors/job/job.go` and `internal/job`:
 
-- `types.Job` (2872 lines in `types/job.go`) carries the agent fields `Model`,
+- `types.Job` (2872 lines in `libs/safetyscissors/job/job.go`) carries the agent fields `Model`,
   `ModelTier`, `FreshReason` and `Criteria` as flat members beside what magus grades.
   `types.JobPut` carries `Model`, `Criteria` and `FreshReason`. `magus refs Job.Model`
   names 30 files, `Job.FreshReason` 8. `Job.ModelTier` and `Job.Criteria` also reach the
@@ -25,7 +25,7 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
   run is a Job with no agent.
 - `jobs.jsonl` stores `types.Job` directly (`jobsFile.Jobs []types.Job`,
   `internal/job/store.go`). `job.Store` already owns a sibling file: `grants.jsonl`
-  through `file.JSONL[types.JobGrant]` (`internal/job/grants.go`).
+  through `file.JSONL[types.JobGrant]` (`libs/safetyscissors/job/store_grants.go`).
 - `types/` already has domain packages (`types/trail`, `types/daemon`, `types/diff`,
   `types/events`, `types/image`). `types/daemon` imports `types`.
 - PR #734 put flat `model` and `criteria` members on the job row, and Eli rejected it on
@@ -86,7 +86,7 @@ maps them. The envelope is an unexported generic in `internal/job` until
 
 | concept | domain type                                                                             | record                                               | file                                 |
 | ------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------ |
-| Job     | `types.Job`, `types/job.go`                                                             | `jobRecord`, `internal/job/store.go`                 | `jobs.jsonl`                         |
+| Job     | `types.Job`, `libs/safetyscissors/job/job.go`                                                             | `jobRecord`, `internal/job/store.go`                 | `jobs.jsonl`                         |
 | agent   | `agent.Spec`, `agent.Status` and the model tier types, `types/agent`; `types.Job.Agent` | `jobRecord.spec.agent`, `attemptRecord.status.agent` | none of its own                      |
 | Attempt | `types.Attempt`, a new file in `types/`                                                 | `attemptRecord`, a new file in `internal/job`        | `attempts.jsonl` beside `jobs.jsonl` |
 

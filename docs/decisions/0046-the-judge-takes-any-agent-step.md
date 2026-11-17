@@ -433,7 +433,7 @@ needs to hold the step itself. Reopen only if that refusal is reopened.
 
 ### 2026-11-12: the Go door is built; the package points the other way
 
-`types` imports `types/agent` (`types/job.go`, `types/harness_contract.go`), so
+`types` imports `types/agent` (`libs/safetyscissors/job/job.go`, `types/harness_contract.go`), so
 `types/agent` is the leaf, not the package above `types` that ADR 0039 assumed. What
 was built follows from that:
 

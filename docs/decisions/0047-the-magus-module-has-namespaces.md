@@ -252,7 +252,7 @@ What the third build found, 2026-11-13:
   namespace derives for it, and it would stay in `magus` until its package sets
   `module`.
 - `VCSCheckpoint` has no owner below `types`. The `vcs` package imports `types`, and
-  `types/job.go` and `types/magus_handle.go` name the checkpoint.
+  `libs/safetyscissors/job/job.go` and `types/magus_handle.go` name the checkpoint.
 - `ReleaseStage` has no owner below `types`. `internal/release` imports `types` and
   the interpreter. `NewestReleaseStage` reads `types.VCSTag`, so it stays in `types`
   unless `VCSTag` moves with it.
