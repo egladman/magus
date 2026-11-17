@@ -381,3 +381,30 @@ func (s *stackedHeadSuite) TestStackedHeadPreservesMetadataFailures() {
 	s.ErrorContains(err, "child is stacked with no pull request base")
 	s.Equal(row, got)
 }
+
+type resolveAcceptSuite struct{ suite.Suite }
+
+func TestResolveAccept(t *testing.T) { suite.Run(t, new(resolveAcceptSuite)) }
+
+func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
+	in := []job.Goal{
+		{ID: "unit", Check: job.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}, Accept: []job.Basis{job.BasisReported}},
+		{ID: "docs", Kind: job.GoalKindPaths, Paths: []string{"docs"}},
+	}
+
+	got := resolveAccept(in)
+
+	s.Equal([]job.Basis{job.BasisWitnessed}, got[0].Accept, "an unnamed kind is a check")
+	s.Equal([]job.Basis{job.BasisReported}, got[1].Accept, "a goal naming its bases keeps them")
+	s.Empty(got[2].Accept, "only a check goal accepts a basis")
+	s.Empty(in[0].Accept, "the caller's goals are not written through")
+}
+
+func (s *resolveAcceptSuite) TestADecodedRecordValidatesWithItsCheckGoalResolved() {
+	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + job.APIVersion + `","id":"w",` +
+		`"goals":[{"id":"unit","check":{"target":"test","project":"."}}]}`))
+
+	s.Require().NoError(err)
+	s.Equal([]job.Basis{job.BasisWitnessed}, row.Goals[0].Accept)
+}

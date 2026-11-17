@@ -117,6 +117,7 @@ func (s *JobSuite) TestEffectiveGoalsLeadWithThePrimaryCheck() {
 	s.Require().Len(goals, 2)
 	s.Equal(PrimaryGoalID, goals[0].ID)
 	s.Equal(ExpectPassed, goals[0].Expect)
+	s.Equal([]Basis{BasisWitnessed}, goals[0].Accept, "the lease's own check is run by its holder's runner")
 	s.Equal(ExpectChanged, goals[1].Expect, "the declared goal comes back resolved")
 	s.Len(Job{}.EffectiveGoals(), 0)
 }
@@ -275,4 +276,42 @@ func (s *JobSuite) TestAResultKeepsUnknownMembersToo() {
 	s.Require().NoError(json.Unmarshal([]byte(`{"api_version":"v","job":"a","changed_paths":[],"unresolved_risks":[],"confidence":"high"}`), &r))
 	s.Equal(map[string]codec.RawMessage{"confidence": codec.RawMessage(`"high"`)}, r.Unknown)
 	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(`{"api_version":"v","confidence":"high"}`), &r), codec.ErrUnknownField)
+}
+
+func (s *JobSuite) acceptFaultsOf(g Goal) []string {
+	var out []string
+	for _, f := range g.Faults() {
+		if strings.HasPrefix(f.Field, "accept") {
+			out = append(out, f.Field+": "+f.Message)
+		}
+	}
+	return out
+}
+
+func (s *JobSuite) TestACheckGoalAcceptingNoBasisIsAFault() {
+	g := Goal{ID: "tests", Check: LeaseCheck{Target: "test", Project: "."}}
+
+	s.Equal([]string{`accept: goal "tests" is a check goal accepting no basis, so no run could grade it`}, s.acceptFaultsOf(g))
+	s.Empty(g.Resolve().Accept, "resolving names no basis on the goal's behalf")
+}
+
+func (s *JobSuite) TestAnUnknownOrRepeatedBasisIsAFault() {
+	g := Goal{ID: "tests", Check: LeaseCheck{Target: "test", Project: "."}, Accept: []Basis{BasisWitnessed, "trusted", BasisWitnessed}}
+
+	s.Equal([]string{
+		`accept[1]: goal "tests" accepts "trusted", which is not a basis`,
+		`accept[2]: goal "tests" accepts "witnessed" twice`,
+	}, s.acceptFaultsOf(g))
+}
+
+func (s *JobSuite) TestACheckGoalNamingItsBasesHasNoAcceptFault() {
+	g := Goal{ID: "tests", Check: LeaseCheck{Target: "test", Project: "."}, Accept: []Basis{BasisWitnessed, BasisReported}}
+
+	s.Empty(s.acceptFaultsOf(g))
+}
+
+func (s *JobSuite) TestOnlyACheckGoalCarriesAccept() {
+	g := Goal{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}, Accept: []Basis{BasisReported}}
+
+	s.Equal([]string{`accept: goal "docs" is a paths goal and carries accept, which only a check goal reads`}, s.acceptFaultsOf(g))
 }

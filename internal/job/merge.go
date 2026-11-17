@@ -216,7 +216,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 		}
 	}
 	if p.Goals != nil {
-		goals := slices.Clone(*p.Goals)
+		goals := resolveAccept(*p.Goals)
 		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Goals: goals})); e != nil {
 			err = errors.Join(err, e)
 		} else {

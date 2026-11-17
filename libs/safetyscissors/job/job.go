@@ -124,6 +124,11 @@ type Goal struct {
 	// form the symbol index renders it. A fork that declares none records the indexed one,
 	// which is how a stub the root wrote becomes the contract. Zero on every other goal.
 	Signature string `json:"signature,omitempty" yaml:"signature,omitempty"`
+	// Accept are the bases a run of a GoalKindCheck goal's check may rest on (see
+	// [Store.Grade]). A check goal names at least one: [Goal.Resolve] fills none in, so
+	// one accepting nothing is a fault, never a goal that takes the strongest or the
+	// weakest. Zero on every other kind.
+	Accept []Basis `json:"accept,omitempty" yaml:"accept,omitempty"`
 }
 
 // Resolve fills a goal's kind and expectation from what it declared, so every stored goal
@@ -250,7 +255,9 @@ var goalAccepts = map[GoalKind][]GoalExpect{
 func (j Job) EffectiveGoals() []Goal {
 	goals := cloneGoals(j.Goals)
 	if j.Check != nil {
-		primary := Goal{ID: PrimaryGoalID, Check: *j.Check}.Resolve()
+		// The lease's own check is run by whoever holds the lease, through the runner that
+		// started it, so its run is witnessed; Check carries no accept list of its own.
+		primary := Goal{ID: PrimaryGoalID, Check: *j.Check, Accept: []Basis{BasisWitnessed}}.Resolve()
 		goals = append([]Goal{primary}, goals...)
 	}
 	return goals
@@ -1573,8 +1580,12 @@ func (g Goal) faults(field string) []Fault {
 			"name one symbol per goal")
 	}
 	if g.Kind != GoalKindCheck {
+		if len(g.Accept) > 0 {
+			bad("accept", fmt.Sprintf("goal %q is a %s goal and carries accept, which only a check goal reads", g.ID, g.Kind), "drop accept")
+		}
 		return ps
 	}
+	acceptFaults(g, bad)
 	if err := g.Check.validScript(); err != nil {
 		bad("check.script", err.Error(), "name a target or a script, and give a script no project or charms")
 	} else if g.Check.Script == "" {
@@ -1583,6 +1594,25 @@ func (g Goal) faults(field string) []Fault {
 		}
 	}
 	return ps
+}
+
+// acceptFaults reports every fault of a check goal's accept list through bad.
+func acceptFaults(g Goal, bad func(sub, message, fix string)) {
+	fix := "accept one or more of " + quoteJoin(Bases(), ", ")
+	if len(g.Accept) == 0 {
+		bad("accept", fmt.Sprintf("goal %q is a check goal accepting no basis, so no run could grade it", g.ID), fix)
+		return
+	}
+	seen := map[Basis]bool{}
+	for i, b := range g.Accept {
+		switch {
+		case b == "" || !b.Valid():
+			bad(fmt.Sprintf("accept[%d]", i), fmt.Sprintf("goal %q accepts %q, which is not a basis", g.ID, b), fix)
+		case seen[b]:
+			bad(fmt.Sprintf("accept[%d]", i), fmt.Sprintf("goal %q accepts %q twice", g.ID, b), "name each basis once")
+		}
+		seen[b] = true
+	}
 }
 
 // validScript refuses a check naming both a script and a target, a script with a
@@ -1804,6 +1834,7 @@ func cloneGoals(in []Goal) []Goal {
 		out[i].Paths = slices.Clone(goal.Paths)
 		out[i].Symbols = slices.Clone(goal.Symbols)
 		out[i].DependsOn = slices.Clone(goal.DependsOn)
+		out[i].Accept = slices.Clone(goal.Accept)
 	}
 	return out
 }

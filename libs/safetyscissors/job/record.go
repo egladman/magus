@@ -527,18 +527,31 @@ type goalRecord struct {
 	Paths       []string         `json:"paths,omitempty"`
 	Symbols     []string         `json:"symbols,omitempty"`
 	Signature   string           `json:"signature,omitempty"`
+	// Accept is written by every build since [AcceptWitnessedMigration], which wrote it
+	// onto each check goal stored before it, so a reader never defaults it.
+	Accept []string `json:"accept,omitempty"`
 }
 
 func recordGoal(g Goal) goalRecord {
-	return goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
+	r := goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
 		Kind: wireGoalKind.spell(g.Kind), Expect: wireGoalExpect.spell(g.Expect), Check: leaseCheckRecord(g.Check),
 		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
+	bases := wireBasis()
+	for _, b := range g.Accept {
+		r.Accept = append(r.Accept, bases.spell(b))
+	}
+	return r
 }
 
 func (r goalRecord) goal(bad *wireReads) Goal {
-	return Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
+	g := Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
 		Kind: wireGoalKind.read(r.Kind, bad), Expect: wireGoalExpect.read(r.Expect, bad), Check: LeaseCheck(r.Check),
 		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
+	bases := wireBasis()
+	for _, w := range r.Accept {
+		g.Accept = append(g.Accept, bases.read(w, bad))
+	}
+	return g
 }
 
 type modelTierRecord struct {

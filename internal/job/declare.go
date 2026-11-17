@@ -145,6 +145,23 @@ func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) job.
 	return d, nil
 }
 
+// resolveAccept is goals with each check goal that names no basis accepting a witnessed
+// run, the run magus's own `magus run` of the check records. The module refuses a check
+// goal accepting nothing, so a declaration magus reads resolves it before it is
+// validated, as the module resolves a goal's expect; a goal naming its bases keeps them.
+func resolveAccept(goals []job.Goal) []job.Goal {
+	if goals == nil {
+		return nil
+	}
+	out := slices.Clone(goals)
+	for i, g := range out {
+		if len(g.Accept) == 0 && g.Resolve().Kind == job.GoalKindCheck {
+			out[i].Accept = []job.Basis{job.BasisWitnessed}
+		}
+	}
+	return out
+}
+
 // CheckpointNames reports whether checkpoint's revision is revision, a full
 // id, or an abbreviation of it.
 func CheckpointNames(checkpoint, revision string) bool {

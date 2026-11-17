@@ -280,9 +280,9 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | done                     |
 | 7    | secrets into their own module, `libs/secrets`, from `internal/secret` and `types/secret.go`                                                     | ~1,300 lines                  | no                                                                                                                                     | done                     |
 | 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | types done; mirrors owed |
-| 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options                                                    | ~8,000-10,000 of 23,431 lines | no: `jobs.jsonl` stays where `vcs.StateDir` puts it, and magus passes that directory (decided 2026-11-16 by the build, Eli to confirm) | planned                  |
+| 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options                                                    | ~8,000-10,000 of 23,431 lines | no: `jobs.jsonl` stays where `vcs.StateDir` puts it, and magus passes that directory (decided 2026-11-16 by the build, Eli to confirm) | done                     |
 | 10   | the guard engine: the step table and settings, with magus's 137 built-ins registered as rules                                                   | the largest                   | yes: `Judge`'s structure changes                                                                                                       | planned                  |
-| 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                                                                     | ~2,800 lines                  | no                                                                                                                                     | planned                  |
+| 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                                                                     | ~2,800 lines                  | no                                                                                                                                     | done                     |
 
 Sizes are estimates from the line counts above, not measured diffs.
 
@@ -529,6 +529,8 @@ decided.
   A goal that accepts no basis is a construction error. A witnessed run still trusts
   the `go` binary on `PATH`, and the prototype's trail is an in-memory hash chain, not
   yet the `.jsonl` store.
+
+  Built on 2026-11-17 in `libs/safetyscissors/job`; see the amendment of that date.
 - Sandbox confinement off Linux. Landlock confines files only, and network is
   unconfined (`internal/sandbox/landlock_linux.go:75-79`). The lean:
   - macOS runs the child under `/usr/bin/sandbox-exec -p` with a profile generated from
@@ -540,11 +542,34 @@ decided.
   - The module's default mode is `required`. A platform with no confinement fails loudly
     and names the opt-out, instead of today's notice and an unconfined child. magus's own
     config default is unchanged; decided 2026-11-16 by the build, Eli to confirm.
+
+  Built on 2026-11-17 in `libs/safetyscissors/sandbox`; see the amendment of that date.
 - The record's new API group. Job rows carry `batch.magus/v1alpha1` today
   (`internal/job/store.go:338`). It stops naming magus everywhere it is written, and the
   string is still to pick.
 
 ## Amendments
+
+### 2026-11-17: steps 9 and 11 and goal grading are built
+
+- 2026-11-17, step 9: the job row store lives in `libs/safetyscissors/job`, opened on
+  the directory the caller names. It holds the row store and its write pipeline, and
+  magus keeps grading from its output store, validation, the sweep and checkouts in an
+  adapter that embeds it, as the 2026-11-16 decisions say. The package table's `job` row
+  now describes what exists.
+- 2026-11-17, step 11: `libs/safetyscissors/sandbox` holds read, write and exec
+  confinement narrowed to a lease, landlock on Linux and `sandbox-exec` on macOS, refused
+  on Windows, and required by default. magus's own modes do not confine a child on
+  macOS yet.
+- 2026-11-17, goal grading: a check goal names the bases it accepts (`accept`), and a
+  check goal accepting none is a fault. `Store.Witness` watches a command the caller
+  runs, `Store.Attest` records a statement the caller's `Verifier` accepts, and
+  `Store.ReportRun` records the caller's word; `Store.Grade` grades each check goal from
+  the run its ref names. Runs and grades are lines of `grades.jsonl` beside the rows, not
+  the prototype's in-memory hash chain. Stored check goals were rewritten once to accept
+  `witnessed` by a migration. The lease's own check accepts `witnessed`, and magus
+  resolves an unnamed accept on a declared check goal to `witnessed`. magus does not call
+  `Witness` yet: its gates still grade from the output store. Eli to confirm.
 
 ### 2026-11-17: what landed against the proposal
 

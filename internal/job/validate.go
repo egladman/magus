@@ -533,10 +533,17 @@ func (r planRead) movedIn(now planRead, id string) string {
 	return ""
 }
 
-// validateFork settles a fork's merge (its checkpoint expanded, its symbol goals resolved)
-// and validates it, returning the merge a fork writes. A merge that cannot be settled is a
-// problem in the same pass, and the rest is judged on the merge as given.
+// validateFork settles a fork's merge (its checkpoint expanded, its check goals' accept
+// resolved, its symbol goals resolved) and validates it, returning the merge a fork
+// writes. A merge that cannot be settled is a problem in the same pass, and the rest is
+// judged on the merge as given. A check goal naming an unknown basis stays as declared,
+// so validation reports it as a JobGoalInvalid problem.
 func validateFork(ctx context.Context, store *Store, rows []job.Job, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) (types.JobValidation, func(*job.Job)) {
+	declared := merge
+	merge = func(u *job.Job) {
+		declared(u)
+		u.Goals = resolveAccept(u.Goals)
+	}
 	merge, ps := store.declaredMerge(ctx, rows, id, merge)
 	if resolved, err := resolveMerge(ctx, store, rows, id, merge, read); err != nil {
 		ps = append(ps, resolveProblem(err))

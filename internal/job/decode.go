@@ -82,6 +82,7 @@ func decodeDeclaration(r io.Reader) (job.Declaration, error) {
 	if err := codec.UnmarshalStrict(raw, &row); err != nil {
 		return job.Declaration{}, memberProblems(raw, err).Error()
 	}
+	row.Goals = resolveAccept(row.Goals)
 	return row, errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
 }
 

@@ -113,3 +113,64 @@ func shellQuote(p string) string {
 	}
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(p, "'", `'\''`))
 }
+
+// AcceptWitnessedMigration names the migration [AcceptWitnessed] makes, for the caller's
+// [WithMigrations] list. A caller adds it after every migration it already applies.
+const AcceptWitnessedMigration = "check goals accept witnessed runs"
+
+// AcceptWitnessed rewrites one stored line of jobs.jsonl, as its JSON members, so every
+// check goal it holds accepts [BasisWitnessed]: the goals a store held before [Goal.Accept]
+// existed were graded only from runs the store's own caller started, which is witnessed.
+// A goal that names an accept list keeps it, and the header and any other line come back
+// unchanged, so the rewrite is the same applied twice.
+//
+// It is a one-time rewrite of the file under the caller's migration, never a default a
+// reader applies: a goal read without accept is a fault.
+func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMessage, error) {
+	raw, ok := line["spec"]
+	if !ok {
+		return line, nil
+	}
+	var spec map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &spec); err != nil {
+		return nil, fmt.Errorf("reading spec: %w", err)
+	}
+	goalsRaw, ok := spec["goals"]
+	if !ok {
+		return line, nil
+	}
+	var goals []map[string]codec.RawMessage
+	if err := codec.Unmarshal(goalsRaw, &goals); err != nil {
+		return nil, fmt.Errorf("reading spec.goals: %w", err)
+	}
+	witnessed, err := codec.Marshal([]string{wireBasis().spell(BasisWitnessed)})
+	if err != nil {
+		return nil, err
+	}
+	check := wireGoalKind.spell(GoalKindCheck)
+	changed := false
+	for i, g := range goals {
+		var kind string
+		if k, ok := g["kind"]; ok {
+			if err := codec.Unmarshal(k, &kind); err != nil {
+				return nil, fmt.Errorf("reading spec.goals[%d].kind: %w", i, err)
+			}
+		}
+		// An empty kind is a check, as [Goal.Resolve] reads it.
+		if _, named := g["accept"]; named || (kind != check && kind != "") {
+			continue
+		}
+		g["accept"] = witnessed
+		changed = true
+	}
+	if !changed {
+		return line, nil
+	}
+	if spec["goals"], err = codec.Marshal(goals); err == nil {
+		line["spec"], err = codec.Marshal(spec)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("writing spec.goals: %w", err)
+	}
+	return line, nil
+}

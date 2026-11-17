@@ -75,3 +75,25 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredGoesBackOut() {
 	s.Require().NoError(err)
 	s.Contains(string(out), `"extra":true`)
 }
+
+func (s *RecordSuite) TestAGoalsBasesRoundTrip() {
+	row := Job{ID: "a", State: StateDeclared, Goals: []Goal{{ID: "tests", Kind: GoalKindCheck, Expect: ExpectPassed,
+		Check: LeaseCheck{Target: "test"}, Accept: []Basis{BasisWitnessed, BasisAttested}}}}
+
+	r := recordJob(row, nil, newWireEnum[CredentialKind]())
+	got, err := r.job(newWireEnum[CredentialKind]())
+
+	s.Require().NoError(err)
+	s.Equal([]string{"Witnessed", "Attested"}, r.Spec.Goals[0].Accept)
+	s.Equal([]Basis{BasisWitnessed, BasisAttested}, got.Goals[0].Accept)
+}
+
+func (s *RecordSuite) TestAStoredBasisNoBuildSpellsIsRefused() {
+	r := recordJob(Job{ID: "a", State: StateDeclared, Goals: []Goal{{ID: "tests", Kind: GoalKindCheck, Check: LeaseCheck{Target: "test"}}}},
+		nil, newWireEnum[CredentialKind]())
+	r.Spec.Goals[0].Accept = []string{"Trusted"}
+
+	_, err := r.job(newWireEnum[CredentialKind]())
+
+	s.ErrorContains(err, `job a: "Trusted" is not a stored Basis`)
+}

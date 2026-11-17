@@ -47,8 +47,13 @@ func jobMigrations() []migrate.Migration {
 		{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
 		{Name: "model tier source Row becomes Job", Up: modelTierSourceJob},
 		{Name: "write, read, deny and soft paths move under spec.paths", Up: pathsNested},
+		{Name: job.AcceptWitnessedMigration, Up: acceptWitnessed},
 	}
 }
+
+// acceptWitnessed writes accept: [witnessed] onto every stored check goal; see
+// [job.AcceptWitnessed].
+func acceptWitnessed(e migrate.Entry) (migrate.Entry, error) { return job.AcceptWitnessed(e) }
 
 // specPathsMoved pairs each flat spec member with its name under spec.paths.
 func specPathsMoved() []struct{ flat, nested string } {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
@@ -1894,4 +1895,25 @@ func (s *authoritySuite) TestALeasedCallerCannotAdvanceItsOwnAuthority() {
 func (s *authoritySuite) TestAdvancingAnUndeclaredRowFails() {
 	_, err := NewStore(s.loc).AdvanceAuthority(s.T().Context(), "nobody")
 	s.ErrorContains(err, "nobody is not declared")
+}
+
+type checkArgvSuite struct{ suite.Suite }
+
+func TestCheckArgv(t *testing.T) { suite.Run(t, new(checkArgvSuite)) }
+
+func (s *checkArgvSuite) TestATargetCheckRunsThroughMagusRun() {
+	got := checkArgv(job.LeaseCheck{Target: "test", Args: []string{"-run", "TestA B"}, NoDefaultCharms: true})
+
+	s.Equal([]string{hint.BinaryName(), "run", "test", ".", "--no-default-charms", "--", "-run", "TestA B"}, got)
+}
+
+func (s *checkArgvSuite) TestAScriptCheckRunsRecordedOrItsTests() {
+	s.Equal([]string{hint.BinaryName(), "buzz", "--record", "probe.buzz"}, checkArgv(job.LeaseCheck{Script: "probe.buzz"}))
+	s.Equal([]string{hint.BinaryName(), "buzz", "-t", "probe.buzz", "--", "x"}, checkArgv(job.LeaseCheck{Script: "probe.buzz", Test: true, Args: []string{"x"}}))
+}
+
+func (s *checkArgvSuite) TestAStoreWithNoCheckoutHasNoCommand() {
+	_, _, err := (&Store{}).checkCommand(job.Job{}, job.Goal{})
+
+	s.ErrorContains(err, "no checkout")
 }

@@ -223,6 +223,8 @@ func (s *Store) open() *Store {
 		job.WithMigrations(len(s.migrations), s.migrate),
 		job.WithCredentialKinds(credentialKinds()...),
 		job.WithErrorWrap(diagnose),
+		job.WithTree(s.CheckoutToken),
+		job.WithCheckCommand(s.checkCommand),
 	)
 	if err != nil {
 		s.Store = job.Unopened(err)
@@ -614,6 +616,34 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string, body []by
 		return job.DigestAbsent
 	}
 	return job.DigestSpans(body, spans)
+}
+
+// checkCommand is the argv a witnessed run of goal's check carries, run in this store's
+// checkout: [CheckCommand]'s line as words, so an argument holding a space stays one.
+func (s *Store) checkCommand(_ job.Job, goal job.Goal) ([]string, string, error) {
+	if s.root == "" {
+		return nil, "", errors.New("this job store has no checkout to run a check in")
+	}
+	return checkArgv(goal.Check), s.root, nil
+}
+
+func checkArgv(c job.LeaseCheck) []string {
+	argv := []string{hint.BinaryName()}
+	switch {
+	case c.Script != "" && c.Test:
+		argv = append(argv, "buzz", "-t", c.Script)
+	case c.Script != "":
+		argv = append(argv, "buzz", "--record", c.Script)
+	default:
+		argv = append(argv, "run", c.Target, cmp.Or(c.Project, "."))
+		if c.NoDefaultCharms {
+			argv = append(argv, "--no-default-charms")
+		}
+	}
+	if len(c.Args) > 0 {
+		argv = append(append(argv, "--"), c.Args...)
+	}
+	return argv
 }
 
 // quoteAll is names each quoted, joined by commas.

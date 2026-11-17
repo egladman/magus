@@ -340,7 +340,7 @@ func unrunGoal(project, target string, taken map[string]bool) job.Goal {
 		id = fmt.Sprintf("%s-%d", base, n)
 	}
 	taken[id] = true
-	return job.Goal{ID: id, Check: job.LeaseCheck{Target: target, Project: project}}.Resolve()
+	return job.Goal{ID: id, Check: job.LeaseCheck{Target: target, Project: project}, Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
 }
 
 const unrunHeading = "not run by the check or any goal, and run by ci over your write paths"

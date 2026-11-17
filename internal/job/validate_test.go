@@ -843,3 +843,53 @@ func (s *declaredGateSuite) TestUnreadableConfigDeclaresNoOwner() {
 
 	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, job.Job{ID: "w"}))
 }
+
+type acceptValidationSuite struct{ suite.Suite }
+
+func TestAcceptValidation(t *testing.T) { suite.Run(t, new(acceptValidationSuite)) }
+
+func (s *acceptValidationSuite) problems(accept ...job.Basis) types.JobProblems {
+	st, _ := validateWorkspace(s.T())
+	return validateMerge(s.T().Context(), st, nil, "w", func(u *job.Job) {
+		u.Paths.Write = []string{"cli/registry.go"}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}, Accept: accept}}
+	}, config.Jobs{}, nil).Problems
+}
+
+func (s *acceptValidationSuite) at(ps types.JobProblems, field string) (types.JobProblem, bool) {
+	i := slices.IndexFunc(ps, func(p types.JobProblem) bool { return p.Field == field })
+	if i < 0 {
+		return types.JobProblem{}, false
+	}
+	return ps[i], true
+}
+
+func (s *acceptValidationSuite) TestAnUnknownBasisIsAGoalProblem() {
+	p, ok := s.at(s.problems(job.BasisWitnessed, "trusted"), "goals[0].accept[1]")
+
+	s.Require().True(ok)
+	s.Equal(types.JobGoalInvalid, p.Code)
+	s.Contains(p.Message, `accepts "trusted", which is not a basis`)
+}
+
+func (s *acceptValidationSuite) TestANamedBasisIsNoProblem() {
+	ps := s.problems(job.BasisWitnessed, job.BasisReported)
+
+	_, ok := s.at(ps, "goals[0].accept")
+	s.False(ok, codes(ps))
+}
+
+func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
+	st, _ := validateWorkspace(s.T())
+
+	plan, err := PlanFork(s.T().Context(), st, "w", func(u *job.Job) {
+		u.Paths.Write = []string{"cli/registry.go"}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}}}
+	}, config.Jobs{}, nil, true)
+
+	s.Require().NoError(err)
+	s.Require().Len(plan.Validation.Job.Goals, 1)
+	s.Equal([]job.Basis{job.BasisWitnessed}, plan.Validation.Job.Goals[0].Accept)
+	_, unresolved := s.at(plan.Validation.Problems, "goals[0].accept")
+	s.False(unresolved)
+}

@@ -42,6 +42,8 @@ const (
 	// grantsFileName sits beside jobsFileName, so a grant lives and dies with the plan it
 	// names.
 	grantsFileName = "grants.jsonl"
+	// gradesFileName holds the runs the store recorded and the grades it gave from them.
+	gradesFileName = "grades.jsonl"
 	// documentFileName is the one JSON document an older writer kept the plan in.
 	documentFileName = "jobs.json"
 )
@@ -98,6 +100,9 @@ type storeConfig struct {
 	migrate  Migrate
 	creds    wireEnum[CredentialKind]
 	wrapErr  func(error) error
+	tree     func(context.Context) (string, error)
+	verifier Verifier
+	command  CheckCommand
 }
 
 // StoreOption sets one of a Store's seams. Each option a caller leaves out has the
@@ -196,8 +201,28 @@ func WithErrorWrap(wrap func(error) error) StoreOption {
 	return func(c *storeConfig) { c.wrapErr = wrap }
 }
 
+// WithTree digests the tree a check reads, the way the caller defines it: a revision plus
+// a digest of the uncommitted changes, a hash of a module, anything stable. The store
+// compares digests and never interprets one. Without it [Store.Witness], [Store.Attest],
+// [Store.ReportRun] and [Store.Grade] refuse with a [*GradingUnconfiguredError], since no
+// grade could tell a run of this tree from a run of an older one.
+func WithTree(tree func(context.Context) (string, error)) StoreOption {
+	return func(c *storeConfig) { c.tree = tree }
+}
+
+// WithVerifier lets [Store.Attest] accept the statements v vouches for. Without it Attest
+// refuses every statement rather than record one unchecked.
+func WithVerifier(v Verifier) StoreOption { return func(c *storeConfig) { c.verifier = v } }
+
+// WithCheckCommand names the command a check goal is run by. A [LeaseCheck] names a target
+// or a script, not an argv, so the store derives none itself. Without it [Store.Witness]
+// refuses.
+func WithCheckCommand(command CheckCommand) StoreOption {
+	return func(c *storeConfig) { c.command = command }
+}
+
 // Open returns the ledger kept in dir, which holds jobs.jsonl, attempts.jsonl,
-// grants.jsonl and the lock. The files are created by the first write. dir is the
+// grants.jsonl, grades.jsonl and the lock. The files are created by the first write. dir is the
 // caller's: Open resolves nothing about a repository.
 func Open(dir string, opts ...StoreOption) (*Store, error) {
 	if strings.TrimSpace(dir) == "" {
