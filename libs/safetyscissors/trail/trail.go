@@ -15,7 +15,6 @@ package trail
 
 import (
 	"bufio"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -150,29 +149,6 @@ type Phase struct {
 	BudgetMs int64 `json:"budget_ms"`
 	// Lapsed reports that the step ran out of its budget before it answered.
 	Lapsed bool `json:"lapsed"`
-}
-
-// UnmarshalJSON decodes an event, reading a duration written under either spelling.
-//
-// compat(until: no trail under <base>/activity still carries "dur_ms"): the duration was
-// spelled `dur_ms` before [Event.DurationMs] was. The trail is append-only and rotates, so
-// observing that dropping this is safe means finding none left:
-//
-//	grep -l '"dur_ms"' <base>/activity/events.jsonl
-//
-// Dropping it early is silent rather than loud: the server's scheduler reads a job's last
-// finish as start plus duration, so every pre-rename row reads as having finished the instant
-// it started, and a job whose interval has not elapsed is rerun anyway.
-func (e *Event) UnmarshalJSON(b []byte) error {
-	type event Event // no method set, so this does not recurse
-	var decoded struct {
-		event
-		LegacyDurationMs int64 `json:"dur_ms"`
-	}
-	err := codec.Unmarshal(b, &decoded)
-	decoded.DurationMs = cmp.Or(decoded.DurationMs, decoded.LegacyDurationMs)
-	*e = Event(decoded.event)
-	return err
 }
 
 func eventsPath(dir string) string { return filepath.Join(dir, activityDir, eventsFile) }

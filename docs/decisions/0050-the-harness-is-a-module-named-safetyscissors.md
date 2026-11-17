@@ -327,8 +327,9 @@ module's `trail.Event`. The writer moves into `libs/safetyscissors/internal` wit
 guard, and until then the module exports no door to write. Reading redacts nothing, so
 the module does not import `libs/secrets` yet. `KindCredentialGrant` is `KindGrantIssued`,
 so the name no longer reads as a credential to gosec, and the value on disk is unchanged.
-A refused ref is a `*trail.InvalidRefError`. The `dur_ms` reader moved with its
-`compat(until:)`. Feedback marks, replay, propagation, consult, mint and origin stay in
+A refused ref is a `*trail.InvalidRefError`. The module's `trail.Event` reads only
+`duration_ms`; magus decodes its own older `dur_ms` events in `internal/trail`, under
+that reader's `compat(until:)`. Feedback marks, replay, propagation, consult, mint and origin stay in
 magus. The Buzz names stay through `.buzzgen.yaml`, and no alias remains.
 
 Step 6 moved the session store's ids, record writer and reader, fold and pruning into

@@ -99,16 +99,6 @@ func (s *ReadSuite) TestEventReadsTheOriginInline() {
 	s.Equal(job.Origin{User: "eli", Host: "claude"}, got[0].Origin)
 }
 
-// A duration written as dur_ms before DurationMs existed still reads.
-func (s *ReadSuite) TestEventReadsTheOlderDurationSpelling() {
-	var e Event
-	s.Require().NoError(codec.Unmarshal([]byte(`{"ts":1,"kind":"job","action":"a","outcome":"ok","dur_ms":42}`), &e))
-	s.Equal(int64(42), e.DurationMs)
-
-	s.Require().NoError(codec.Unmarshal([]byte(`{"ts":1,"kind":"job","action":"a","outcome":"ok","duration_ms":7,"dur_ms":42}`), &e))
-	s.Equal(int64(7), e.DurationMs, "the current spelling wins")
-}
-
 func (s *ReadSuite) TestReadBlobReturnsTheStoredPayload() {
 	ref := "mcp0123456789abcdef"
 	path := filepath.Join(blobsPath(s.dir), ref)

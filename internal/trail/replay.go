@@ -385,7 +385,7 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 	if session == "" {
 		return out, nil
 	}
-	events, err := trailtypes.ReadRecent(ctx, base, limit)
+	events, err := readRecent(ctx, base, limit)
 	if err != nil {
 		return out, nil
 	}
