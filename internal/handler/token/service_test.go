@@ -445,7 +445,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, string(blob), firstSecret)
 		assert.NotContains(t, string(blob), secondSecret)
-		assert.Equal(t, op, e.Credential, "each record names the credential that acted")
+		assert.Equal(t, op.Recorded(), e.Credential, "each record names the credential that acted")
 		subjects = append(subjects, fmt.Sprintf("%s %s", e.Action, e.Preview))
 	}
 	until := " (laptop) console=write until " + exp.UTC().Format("2006-01-02")

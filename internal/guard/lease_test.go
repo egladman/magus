@@ -4042,6 +4042,8 @@ func regeneratingLease(id string) jobtypes.Job {
 	return jobtypes.Job{
 		ID: id, Agent: jobtypes.Instructed("add a flag"), Paths: jobtypes.Paths{Write: []string{"cli/registry.go"}},
 		Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}, State: jobtypes.StateRunning, Registered: 1,
+		// One declaration time, so which lease came first falls to the id.
+		Created: 1,
 	}
 }
 

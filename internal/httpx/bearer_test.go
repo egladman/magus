@@ -196,7 +196,7 @@ func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
 	req.Header.Set("Authorization", "Bearer good")
 	built(BearerGuard(rpcerr.FormatJSON, named, anyNeed, next)).ServeHTTP(httptest.NewRecorder(), req)
-	assert.Equal(t, cred, seen.Credential)
+	assert.Equal(t, cred.Recorded(), seen.Credential)
 	assert.Equal(t, job.EntryPointRPC, seen.EntryPoint)
 	assert.Zero(t, trail.CredentialFromContext(t.Context()), "no guard, no credential")
 }

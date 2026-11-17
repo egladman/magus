@@ -387,6 +387,11 @@ type ledgerWorkspace struct {
 func (f *ledgerWorkspace) CacheDir() string { return f.cacheDir }
 func (f *ledgerWorkspace) Root() string     { return f.root }
 
+// CheckGrader lets every check run, as a workspace whose guard denies nothing would.
+func (f *ledgerWorkspace) CheckGrader() job.CheckGrader {
+	return func(context.Context, string, jobtypes.Job) job.CheckVerdict { return job.CheckVerdict{} }
+}
+
 // Not parallel: the job store resolves the per-repository state directory, and
 // jobStoreFromContext offers no seam to redirect it, so the environment is the only
 // thing keeping these rows out of the developer's own store.
