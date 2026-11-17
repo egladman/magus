@@ -449,7 +449,7 @@ func explainMissAnswer(ctx context.Context, root, input string, ans types.Knowle
 // writeExplainText writes res, the node asked resolved to, as `magus explain` prints it
 // in text form, with next under it, and returns the error that sets the exit status.
 // res must be found.
-func writeExplainText(ctx context.Context, w io.Writer, root, asked string, nx nextGate, next []types.NextStep, res knowledge.ExplainResult) error {
+func writeExplainText(_ context.Context, w io.Writer, root, asked string, nx nextGate, next []types.NextStep, res knowledge.ExplainResult) error {
 	out := res.Out
 	fmt.Fprint(w, knowledge.ResolutionNote(asked, out))
 	fmt.Fprint(w, render.ExplainText(out))

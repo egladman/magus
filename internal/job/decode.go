@@ -84,7 +84,8 @@ func decodeDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) 
 	}
 	var defaulted []string
 	row.Goals, defaulted = resolveAccept(row.Goals)
-	return row, defaultedAccepts(row.ID, defaulted), errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
+	err = errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
+	return row, defaultedAccepts(row.ID, defaulted), err
 }
 
 // splitLegacy is raw without the members [types.LegacySpellings] reads, and those members.

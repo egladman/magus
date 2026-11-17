@@ -265,10 +265,8 @@ func (h *FileHandler) Flush() {
 // It lives here, the lowest package every caller imports, so no caller builds a bare
 // resolver that would keep the MGS2011 notice to itself.
 func NewSecretResolver(opts ...secrets.Option) *secrets.Resolver {
-	base := []secrets.Option{
-		secrets.WithShortSecret(warnUnmasked),
-		secrets.WithLogger(slog.New(defaultHandler{})),
-	}
+	base := make([]secrets.Option, 0, 2+len(opts))
+	base = append(base, secrets.WithShortSecret(warnUnmasked), secrets.WithLogger(slog.New(defaultHandler{})))
 	return secrets.NewResolver(append(base, opts...)...)
 }
 

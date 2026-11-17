@@ -44,7 +44,7 @@ type OccurrenceRead struct {
 
 // WriteRefsText writes out, a resolved symbol's references, as `magus refs` prints them
 // in text form, and returns the error that sets the exit status.
-func WriteRefsText(w io.Writer, env RefsEnv, out types.KnowledgeRefsOutput) error {
+func WriteRefsText(w io.Writer, _ RefsEnv, out types.KnowledgeRefsOutput) error {
 	fmt.Fprintf(w, "symbol: %s", out.Symbol)
 	if out.Label != "" {
 		fmt.Fprintf(w, "  (%s)", out.Label)
