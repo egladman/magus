@@ -95,7 +95,7 @@ magus graph export -o json  # the whole graph
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                            |
-| libs/safetyscissors                                                         |       4 | `magus query project=libs/safetyscissors`             | `ci`, `lint`, `test`                              |
+| libs/safetyscissors                                                         |       4 | `magus query project=libs/safetyscissors`             | `ci`, `generate`, `lint`                          |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                            |
 | libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                            |
 | [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                            |
@@ -222,8 +222,8 @@ magus graph export -o json  # the whole graph
 
 | Target     | What it does                                                        |
 | ---------- | ------------------------------------------------------------------- |
+| `ci`       | ci regenerates the mark, then runs lint and test.                   |
 | `generate` | generate draws the mark into assets/gen/.                           |
-| `ci`       | ci runs lint, then test.                                            |
 | `test`     | test runs the in-file test blocks.                                  |
 | `lint`     | lint type-checks the mark's script and fails on any BZZ diagnostic. |
 
