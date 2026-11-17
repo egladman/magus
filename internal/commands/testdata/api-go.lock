@@ -317,6 +317,7 @@ github.com/egladman/magus.WorkspaceRegistry type struct
 github.com/egladman/magus.WorkspaceRegistry.AddProvider method(ptr) func(spellName string)
 github.com/egladman/magus.WorkspaceRegistry.RegisterProject method(ptr) func(path string, opts ...ProjectOption)
 github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context) *WorkspaceRegistry
+github.com/egladman/magus/libs/testkit.CaptureLog func(tb TB, level log/slog.Leveler, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStderr func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStdout func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.Environ func(root string, keep ...string) ([]string, error)
@@ -660,6 +661,7 @@ github.com/egladman/magus/std.MagusWorkspaceRisk func(ctx context.Context, _ git
 github.com/egladman/magus/std.MagusWorkspaceSkills func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, opts github.com/egladman/magus/types.SkillsOptions) ([]github.com/egladman/magus/types.Skill, error)
 github.com/egladman/magus/std.MagusWorkspaceTierOutcomes func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus/std.MagusWorkspaceUnmerged func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobUnmergedReport, error)
+github.com/egladman/magus/std.MagusWorkspaceUnverified func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace, revision string) (github.com/egladman/magus/types.UnverifiedReport, error)
 github.com/egladman/magus/std.MagusWorkspaceVolatility func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.Volatility, error)
 github.com/egladman/magus/std.Markdown var Module
 github.com/egladman/magus/std.MarkdownFrontmatter func(_ context.Context, source string) (string, error)
@@ -1442,6 +1444,13 @@ github.com/egladman/magus/types.CommandInvocation.Program field string
 github.com/egladman/magus/types.CommandInvocation.Repeats field bool
 github.com/egladman/magus/types.CommandInvocation.VCS field *VCSInvocation
 github.com/egladman/magus/types.CommandOpNeverExits const DiagnosticCode = "MGS5003"
+github.com/egladman/magus/types.CommandPush type struct
+github.com/egladman/magus/types.CommandPush.Dir field string
+github.com/egladman/magus/types.CommandPush.OpensPullRequest field bool
+github.com/egladman/magus/types.CommandPush.Revision field string
+github.com/egladman/magus/types.CommandPush.Source field string
+github.com/egladman/magus/types.CommandPush.Tool field string
+github.com/egladman/magus/types.CommandPush.Unknown field string
 github.com/egladman/magus/types.CommandRequest type struct
 github.com/egladman/magus/types.CommandRequest.Agent field string
 github.com/egladman/magus/types.CommandRequest.Checkout field *CheckoutState
@@ -1454,6 +1463,7 @@ github.com/egladman/magus/types.CommandRequest.Lease field *Job
 github.com/egladman/magus/types.CommandRequest.Orchestration field Orchestration
 github.com/egladman/magus/types.CommandRequest.OwnedCheckouts field []string
 github.com/egladman/magus/types.CommandRequest.Parent field string
+github.com/egladman/magus/types.CommandRequest.Push field *CommandPush
 github.com/egladman/magus/types.CommandRequest.Role field AgentRole
 github.com/egladman/magus/types.CommandRequest.Session field string
 github.com/egladman/magus/types.CommandRequest.Thread field AgentThread
@@ -1984,9 +1994,11 @@ github.com/egladman/magus/types.ErrUnregisteredDep var error
 github.com/egladman/magus/types.ErrVCSUnknown var error
 github.com/egladman/magus/types.ErrVCSUnsupported var error
 github.com/egladman/magus/types.ErrorDiagnosticEvent func(err error, unit string) (DiagnosticEvent, bool)
-github.com/egladman/magus/types.EvalMemo type struct
-github.com/egladman/magus/types.EvalMemo.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
-github.com/egladman/magus/types.EvalMemoFromContext func(ctx context.Context) *EvalMemo
+github.com/egladman/magus/types.EvalOnce type struct
+github.com/egladman/magus/types.EvalOnce.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
+github.com/egladman/magus/types.EvalOnce.End method(ptr) func()
+github.com/egladman/magus/types.EvalOnce.Ended method(ptr) func() bool
+github.com/egladman/magus/types.EvalOnceFromContext func(ctx context.Context) *EvalOnce
 github.com/egladman/magus/types.EvaluatedProject type struct
 github.com/egladman/magus/types.EvaluatedProject.BuzzObject method func() BuzzObject
 github.com/egladman/magus/types.EvaluatedProject.ProjectEntry embedded ProjectEntry
@@ -2770,12 +2782,6 @@ github.com/egladman/magus/types.JobDenial.Rule field string "json:\"rule\"      
 github.com/egladman/magus/types.JobDenial.Ts field int64 "json:\"ts\"                    yaml:\"ts\""
 github.com/egladman/magus/types.JobDenial.VerdictRef field string "json:\"verdict_ref,omitempty\" yaml:\"verdict_ref,omitempty\""
 github.com/egladman/magus/types.JobDescendants func(rows []Job, id string) []Job
-github.com/egladman/magus/types.JobEdit type struct
-github.com/egladman/magus/types.JobEdit.AddDeviation field *Deviation "json:\"add_deviation,omitempty\""
-github.com/egladman/magus/types.JobEdit.AddGoal field *Goal "json:\"add_goal,omitempty\""
-github.com/egladman/magus/types.JobEdit.AddWritePath field string "json:\"add_write_path,omitempty\""
-github.com/egladman/magus/types.JobEdit.Apply method func(d *Declaration) bool
-github.com/egladman/magus/types.JobEdit.String method func() string
 github.com/egladman/magus/types.JobEntry type struct
 github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\""
 github.com/egladman/magus/types.JobEntry.By field Origin "json:\"by\" yaml:\"by\""
@@ -2884,20 +2890,14 @@ github.com/egladman/magus/types.JobPathsPut.Read field *[]string "json:\"read,om
 github.com/egladman/magus/types.JobPathsPut.Write field *[]string "json:\"write,omitempty\""
 github.com/egladman/magus/types.JobProblem type struct
 github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"code\""
-github.com/egladman/magus/types.JobProblem.Edit field *JobEdit "json:\"edit,omitempty\""
 github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
 github.com/egladman/magus/types.JobProblem.Permissible method func() bool
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
-github.com/egladman/magus/types.JobProblemError type struct
-github.com/egladman/magus/types.JobProblemError.Error method(ptr) func() string
-github.com/egladman/magus/types.JobProblemError.Problem field JobProblem
-github.com/egladman/magus/types.JobProblemError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.JobProblems type []JobProblem
 github.com/egladman/magus/types.JobProblems.Error method func() error
-github.com/egladman/magus/types.JobProblems.Fixable method func() int
 github.com/egladman/magus/types.JobProblems.Permit method func(ds []Deviation) (kept JobProblems, permitted JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Agent field *github.com/egladman/magus/types/agent.Spec "json:\"agent,omitempty\""
@@ -4473,6 +4473,16 @@ github.com/egladman/magus/types.RuleDoc.Name field string "json:\"name\""
 github.com/egladman/magus/types.RuleDoc.Verdicts field []GuardDecision "json:\"verdicts\""
 github.com/egladman/magus/types.RuleDoc.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Workspace field string "json:\"workspace,omitempty\""
+github.com/egladman/magus/types.RunEvidence type struct
+github.com/egladman/magus/types.RunEvidence.Cached field bool "json:\"cached,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Claims field []string "json:\"claims,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Dirty field bool "json:\"dirty,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Failed field bool "json:\"failed,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Project field string "json:\"project\""
+github.com/egladman/magus/types.RunEvidence.Reads field []string "json:\"reads,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Ref field string "json:\"ref\""
+github.com/egladman/magus/types.RunEvidence.Revision field string "json:\"revision,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Target field string "json:\"target\""
 github.com/egladman/magus/types.RunsUnderAStep func(ancestors []string) bool
 github.com/egladman/magus/types.SameLeaseCheck func(a *LeaseCheck, b *LeaseCheck) bool
 github.com/egladman/magus/types.SandboxMode type string
@@ -5188,6 +5198,18 @@ github.com/egladman/magus/types.UnregisteredDepError.Is method(ptr) func(target 
 github.com/egladman/magus/types.UnregisteredDepError.Missing field []UnregisteredDep
 github.com/egladman/magus/types.UnresolvableBuzzImport const DiagnosticCode = "MGS7001"
 github.com/egladman/magus/types.Unsupported const BindingStatus = "unsupported"
+github.com/egladman/magus/types.UnverifiedFile type struct
+github.com/egladman/magus/types.UnverifiedFile.Commands field []string "json:\"commands,omitempty\""
+github.com/egladman/magus/types.UnverifiedFile.Declared field bool "json:\"declared,omitempty\""
+github.com/egladman/magus/types.UnverifiedFile.Path field string "json:\"path\""
+github.com/egladman/magus/types.UnverifiedReport type struct
+github.com/egladman/magus/types.UnverifiedReport.Base field string "json:\"base\""
+github.com/egladman/magus/types.UnverifiedReport.Changed field []string "json:\"changed,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.NoWorkspace field bool "json:\"no_workspace,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.Revision field string "json:\"revision\""
+github.com/egladman/magus/types.UnverifiedReport.Runs field []RunEvidence "json:\"runs,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.Unknown field string "json:\"unknown,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.Unverified field []UnverifiedFile "json:\"unverified,omitempty\""
 github.com/egladman/magus/types.UpdateRef type struct
 github.com/egladman/magus/types.UpdateRef.Except field []string "json:\"except,omitempty\" yaml:\"except,omitempty\""
 github.com/egladman/magus/types.UpdateRef.Glob field string "json:\"glob\" yaml:\"glob\""
@@ -5309,7 +5331,7 @@ github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path st
 github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []string) context.Context
 github.com/egladman/magus/types.WithDependencyWait func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithDiagnosticSink func(ctx context.Context, s DiagnosticSink) context.Context
-github.com/egladman/magus/types.WithEvalMemo func(ctx context.Context) context.Context
+github.com/egladman/magus/types.WithEvalOnce func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExecCost func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExitCapture func(ctx context.Context) (context.Context, func() (int, bool))
 github.com/egladman/magus/types.WithGraphObserver func(o Observer) GraphOption
