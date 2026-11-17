@@ -189,12 +189,10 @@ func (r *TargetResult) UnmarshalJSON(b []byte) error {
 		result
 		LegacyDurationMs int64 `json:"dur_ms"`
 	}
-	if err := codec.Unmarshal(b, &decoded); err != nil {
-		return err
-	}
+	err := codec.Unmarshal(b, &decoded)
+	decoded.DurationMs = cmp.Or(decoded.DurationMs, decoded.LegacyDurationMs)
 	*r = TargetResult(decoded.result)
-	r.DurationMs = cmp.Or(r.DurationMs, decoded.LegacyDurationMs)
-	return nil
+	return err
 }
 
 // FileExt ends every invocation file's name, and nothing else in a store: a reader

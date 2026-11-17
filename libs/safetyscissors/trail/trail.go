@@ -169,12 +169,10 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 		event
 		LegacyDurationMs int64 `json:"dur_ms"`
 	}
-	if err := codec.Unmarshal(b, &decoded); err != nil {
-		return err
-	}
+	err := codec.Unmarshal(b, &decoded)
+	decoded.DurationMs = cmp.Or(decoded.DurationMs, decoded.LegacyDurationMs)
 	*e = Event(decoded.event)
-	e.DurationMs = cmp.Or(e.DurationMs, decoded.LegacyDurationMs)
-	return nil
+	return err
 }
 
 func eventsPath(dir string) string { return filepath.Join(dir, activityDir, eventsFile) }
