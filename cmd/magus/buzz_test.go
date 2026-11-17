@@ -146,17 +146,17 @@ func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
 	assert.Equal(t, 2, *opens)
 }
 
-// A script run carries one evaluation memo, which std's graph members read.
+// A script run carries one evaluation holder, which std's graph members read.
 // So two magus\graph().refs calls in one script build the symbol graph once.
-func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
+func TestBuzzRunContextCarriesOneEvaluation(t *testing.T) {
 	ctx, err := buzzRunContext(t.Context(), t.TempDir())
 	require.NoError(t, err)
-	memo := types.EvalMemoFromContext(ctx)
-	require.NotNil(t, memo, "graph reads in a script would each rebuild the graph")
+	once := types.EvalOnceFromContext(ctx)
+	require.NotNil(t, once, "graph reads in a script would each rebuild the graph")
 
 	builds := 0
 	for range 2 {
-		_, err := memo.Do("graph+symbols", func() (any, error) {
+		_, err := once.Do("graph+symbols", func() (any, error) {
 			builds++
 			return nil, nil
 		})

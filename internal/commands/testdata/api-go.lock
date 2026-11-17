@@ -1985,11 +1985,11 @@ github.com/egladman/magus/types.ErrUnregisteredDep var error
 github.com/egladman/magus/types.ErrVCSUnknown var error
 github.com/egladman/magus/types.ErrVCSUnsupported var error
 github.com/egladman/magus/types.ErrorDiagnosticEvent func(err error, unit string) (DiagnosticEvent, bool)
-github.com/egladman/magus/types.EvalMemo type struct
-github.com/egladman/magus/types.EvalMemo.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
-github.com/egladman/magus/types.EvalMemo.End method(ptr) func()
-github.com/egladman/magus/types.EvalMemo.Ended method(ptr) func() bool
-github.com/egladman/magus/types.EvalMemoFromContext func(ctx context.Context) *EvalMemo
+github.com/egladman/magus/types.EvalOnce type struct
+github.com/egladman/magus/types.EvalOnce.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
+github.com/egladman/magus/types.EvalOnce.End method(ptr) func()
+github.com/egladman/magus/types.EvalOnce.Ended method(ptr) func() bool
+github.com/egladman/magus/types.EvalOnceFromContext func(ctx context.Context) *EvalOnce
 github.com/egladman/magus/types.EvaluatedProject type struct
 github.com/egladman/magus/types.EvaluatedProject.BuzzObject method func() BuzzObject
 github.com/egladman/magus/types.EvaluatedProject.ProjectEntry embedded ProjectEntry
@@ -5311,7 +5311,7 @@ github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path st
 github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []string) context.Context
 github.com/egladman/magus/types.WithDependencyWait func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithDiagnosticSink func(ctx context.Context, s DiagnosticSink) context.Context
-github.com/egladman/magus/types.WithEvalMemo func(ctx context.Context) context.Context
+github.com/egladman/magus/types.WithEvalOnce func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExecCost func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExitCapture func(ctx context.Context) (context.Context, func() (int, bool))
 github.com/egladman/magus/types.WithGraphObserver func(o Observer) GraphOption

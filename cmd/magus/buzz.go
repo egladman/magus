@@ -1011,7 +1011,7 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 	return trail.ContextWithBase(sctx, m.CacheDir()), nil
 }
 
-// buzzRunContext is buzzScriptContext's context plus one memo for the run.
+// buzzRunContext is buzzScriptContext's context plus one EvalOnce for the run.
 // So every magus\graph() read answers from one build, as a spell's do.
 // Without it each refs call rebuilt the symbol graph, about 12s apiece here.
 func buzzRunContext(ctx context.Context, root string) (context.Context, error) {
@@ -1019,7 +1019,7 @@ func buzzRunContext(ctx context.Context, root string) (context.Context, error) {
 	if err != nil {
 		return nil, err
 	}
-	return types.WithEvalMemo(ctx), nil
+	return types.WithEvalOnce(ctx), nil
 }
 
 // buzzCheck parses and type-checks each named file WITHOUT running it, printing

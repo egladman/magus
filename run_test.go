@@ -1798,7 +1798,7 @@ func TestToolWindowIgnoresUnconstrainedTools(t *testing.T) {
 }
 
 // probedSpell is tsSpell with the version prober injected, so these tests exercise the
-// real probeTools path without forking anything. The counter is what proves memoization,
+// real probeTools path without forking anything. The counter is what proves each probe runs once,
 // which is the only reason probeTools threads two outputs out of one pass.
 func probedSpell(name, tool string, key spells.VersionKey, out func(dir string) (string, error), calls *int) *spells.Spell {
 	return spells.NewSpell(name,
@@ -1899,7 +1899,7 @@ func TestProbeToolsRefusesAPresentToolThatCannotBeProbed(t *testing.T) {
 	assert.Equal(t, map[string][]string{"console": {"typescript:node:v22.14.0"}}, lines, "a reader keeps every other project")
 	require.Contains(t, failed, "api")
 	assert.ErrorIs(t, failed["api"], types.ToolUnprobeable)
-	assert.Equal(t, 1, calls, "the per-project pass replays the memo instead of probing again")
+	assert.Equal(t, 1, calls, "the per-project pass replays the probes instead of probing again")
 }
 
 // Output carrying no version is the same contract as a failed probe for the gate's
@@ -1916,9 +1916,9 @@ func TestProbeToolsLeavesUnparsableOutputOutOfTheGate(t *testing.T) {
 	assert.Empty(t, full)
 }
 
-// Memoization is on (spell, dir, tool), so two projects in one directory cost one spawn.
+// Probes are kept per (spell, dir, tool), so two projects in one directory cost one spawn.
 // Without it the gate would multiply forks by the number of projects sharing a tree.
-func TestProbeToolsMemoizesAcrossProjectsSharingADir(t *testing.T) {
+func TestProbeToolsRunsOnceAcrossProjectsSharingADir(t *testing.T) {
 	calls := 0
 	sp := probedSpell("go", "go", spells.VersionKey{}, func(string) (string, error) { return "go1.26.5", nil }, &calls)
 	a := &types.Project{Path: "a", Dir: "/tmp/same", ResolvedSpells: []*spells.Spell{sp}}
@@ -2789,7 +2789,7 @@ func TestAttemptEvaluationSuite(t *testing.T) { suite.Run(t, new(attemptEvaluati
 type attemptEvaluationSuite struct {
 	suite.Suite
 	mu      sync.Mutex
-	holders []*types.EvalMemo
+	holders []*types.EvalOnce
 }
 
 func (s *attemptEvaluationSuite) SetupTest() { s.holders = nil }
@@ -2803,7 +2803,7 @@ export fun member(ctx: magus\Context, args: [str]) > void !> any { magus\graph()
 // recordHolder notes the evaluation the context carries. A build outside any evaluation,
 // which the run makes for its own planning, carries none and is not an attempt's.
 func (s *attemptEvaluationSuite) recordHolder(ctx context.Context) {
-	h := types.EvalMemoFromContext(ctx)
+	h := types.EvalOnceFromContext(ctx)
 	if h == nil {
 		return
 	}
@@ -2812,10 +2812,10 @@ func (s *attemptEvaluationSuite) recordHolder(ctx context.Context) {
 	s.holders = append(s.holders, h)
 }
 
-func (s *attemptEvaluationSuite) distinctHolders() []*types.EvalMemo {
+func (s *attemptEvaluationSuite) distinctHolders() []*types.EvalOnce {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []*types.EvalMemo
+	var out []*types.EvalOnce
 	for _, h := range s.holders {
 		if !slices.Contains(out, h) {
 			out = append(out, h)

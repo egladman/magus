@@ -133,10 +133,10 @@ func TestGlobClaims(t *testing.T) {
 	}
 }
 
-func TestEvalMemoComputesOncePerKey(t *testing.T) {
+func TestEvaluationComputesOncePerKey(t *testing.T) {
 	t.Parallel()
-	ctx := WithEvalMemo(context.Background())
-	m := EvalMemoFromContext(ctx)
+	ctx := WithEvalOnce(context.Background())
+	m := EvalOnceFromContext(ctx)
 	calls := 0
 	compute := func() (any, error) { calls++; return calls, nil }
 
@@ -154,9 +154,9 @@ func TestEvalMemoComputesOncePerKey(t *testing.T) {
 	assert.Equal(t, 2, other, "a second key computes its own value")
 }
 
-func TestEvalMemoKeepsNoFailure(t *testing.T) {
+func TestEvaluationKeepsNoFailure(t *testing.T) {
 	t.Parallel()
-	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m := EvalOnceFromContext(WithEvalOnce(context.Background()))
 	_, err := m.Do("graph", func() (any, error) { return nil, context.Canceled })
 	require.ErrorIs(t, err, context.Canceled)
 	v, err := m.Do("graph", func() (any, error) { return "built", nil })
@@ -164,25 +164,25 @@ func TestEvalMemoKeepsNoFailure(t *testing.T) {
 	assert.Equal(t, "built", v, "a failure is recomputed rather than replayed")
 }
 
-func TestEvalMemoScopes(t *testing.T) {
+func TestEvaluationScopes(t *testing.T) {
 	t.Parallel()
-	assert.Nil(t, EvalMemoFromContext(context.Background()))
-	var nilMemo *EvalMemo
+	assert.Nil(t, EvalOnceFromContext(context.Background()))
+	var nilHolder *EvalOnce
 	calls := 0
 	for range 2 {
-		_, err := nilMemo.Do("k", func() (any, error) { calls++; return nil, errors.New("x") })
+		_, err := nilHolder.Do("k", func() (any, error) { calls++; return nil, errors.New("x") })
 		require.Error(t, err)
 	}
-	assert.Equal(t, 2, calls, "a nil memo computes every time")
+	assert.Equal(t, 2, calls, "a nil holder computes every time")
 
-	outer := WithEvalMemo(context.Background())
-	inner := WithEvalMemo(outer)
-	assert.NotSame(t, EvalMemoFromContext(outer), EvalMemoFromContext(inner), "a nested evaluation starts empty")
+	outer := WithEvalOnce(context.Background())
+	inner := WithEvalOnce(outer)
+	assert.NotSame(t, EvalOnceFromContext(outer), EvalOnceFromContext(inner), "a nested evaluation starts empty")
 }
 
 func TestEndedEvaluationKeepsNothing(t *testing.T) {
 	t.Parallel()
-	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m := EvalOnceFromContext(WithEvalOnce(context.Background()))
 	calls := 0
 	compute := func() (any, error) { calls++; return calls, nil }
 	_, err := m.Do("graph", compute)
@@ -197,7 +197,7 @@ func TestEndedEvaluationKeepsNothing(t *testing.T) {
 
 func TestEndedEvaluationComputesEveryTime(t *testing.T) {
 	t.Parallel()
-	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m := EvalOnceFromContext(WithEvalOnce(context.Background()))
 	calls := 0
 	compute := func() (any, error) { calls++; return calls, nil }
 	first, err := m.Do("graph", compute)
@@ -223,7 +223,7 @@ func TestEndedEvaluationSaysSoOnce(t *testing.T) {
 		log.SetFlags(prevFlags)
 	})
 
-	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m := EvalOnceFromContext(WithEvalOnce(context.Background()))
 	m.End()
 	for range 3 {
 		_, err := m.Do("graph+symbols:", func() (any, error) { return nil, nil })
@@ -235,7 +235,7 @@ func TestEndedEvaluationSaysSoOnce(t *testing.T) {
 
 func TestEndedEvaluationKeepsNothingFromAComputeInFlight(t *testing.T) {
 	t.Parallel()
-	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	m := EvalOnceFromContext(WithEvalOnce(context.Background()))
 	started, release := make(chan struct{}), make(chan struct{})
 	type result struct {
 		v   any
@@ -264,9 +264,9 @@ func TestEndedEvaluationKeepsNothingFromAComputeInFlight(t *testing.T) {
 
 func TestEndedReportsWhetherTheEvaluationEnded(t *testing.T) {
 	t.Parallel()
-	var nilMemo *EvalMemo
-	assert.False(t, nilMemo.Ended(), "a nil holder never ended")
-	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	var nilHolder *EvalOnce
+	assert.False(t, nilHolder.Ended(), "a nil holder never ended")
+	m := EvalOnceFromContext(WithEvalOnce(context.Background()))
 	assert.False(t, m.Ended())
 	m.End()
 	assert.True(t, m.Ended())

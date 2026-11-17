@@ -2502,14 +2502,14 @@ func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*kn
 }
 
 // optimization: read the warm graph once per evaluation, not per scope.
-// measured: diagrams-generate memoGraphs.KnowledgeGraph 5.52s to 3.96s.
+// measured: diagrams-generate onceGraphs.KnowledgeGraph 5.52s to 3.96s.
 // trade-off: an evaluation reads the graph as it began.
-// assumes: the digest rebuilds on a fresh memo after its freshen.
+// assumes: the digest rebuilds on a fresh EvalOnce after its freshen.
 func (m *Magus) evaluationKnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
 	if refresh {
 		return m.warmKnowledgeGraph().Get(ctx, true)
 	}
-	v, err := types.EvalMemoFromContext(ctx).Do("magus:knowledge-graph", func() (any, error) {
+	v, err := types.EvalOnceFromContext(ctx).Do("magus:knowledge-graph", func() (any, error) {
 		return m.warmKnowledgeGraph().Get(ctx, false)
 	})
 	if err != nil {

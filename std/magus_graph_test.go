@@ -207,7 +207,7 @@ func (c *countingGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequ
 func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
-	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
+	eval := types.WithEvalOnce(types.WithWorkspace(t.Context(), ws))
 	for range 3 {
 		_, err := MagusDir(eval, "internal/httpx")
 		require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, ws.builds, "four members in one evaluation")
 
-	_, err = MagusDir(types.WithEvalMemo(eval), "internal/httpx")
+	_, err = MagusDir(types.WithEvalOnce(eval), "internal/httpx")
 	require.NoError(t, err)
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
 }
@@ -226,7 +226,7 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 func TestRefsReadsTheEvaluationsSymbolGraph(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
-	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
+	eval := types.WithEvalOnce(types.WithWorkspace(t.Context(), ws))
 	for _, sym := range []string{graphSymbol, "symbol:example.com/x Bar#"} {
 		_, err := MagusRefs(eval, sym, types.KnowledgeRefsOptions{})
 		require.NoError(t, err)
@@ -252,8 +252,8 @@ func TestRefsWithoutAnEvaluationKeepsTheReferenceScope(t *testing.T) {
 func TestRefsAfterTheEvaluationEndedKeepsTheReferenceScope(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
-	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
-	types.EvalMemoFromContext(eval).End()
+	eval := types.WithEvalOnce(types.WithWorkspace(t.Context(), ws))
+	types.EvalOnceFromContext(eval).End()
 	_, err := MagusRefs(eval, graphSymbol, types.KnowledgeRefsOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
