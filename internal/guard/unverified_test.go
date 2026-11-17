@@ -138,7 +138,7 @@ func (s *UnverifiedReaderSuite) TestADirNoCheckoutHoldsIsUnknown() {
 	s.Contains(got.Unknown, "is unread: fatal: not a git repository")
 }
 
-func (s *UnverifiedReaderSuite) TestAnotherRepositoryNamesEachChangedFileAsReadByNoTarget() {
+func (s *UnverifiedReaderSuite) TestAnotherRepositoryIsReadAsNoWorkspace() {
 	other := testkit.NewRepository(s.T(), map[string]string{"README.md": "other\n"})
 	s.deps.VCS = types.VCSOptions{BaseRef: other.Head()}
 	head := other.Commit("change", map[string]string{"README.md": "changed\n"})
@@ -146,7 +146,8 @@ func (s *UnverifiedReaderSuite) TestAnotherRepositoryNamesEachChangedFileAsReadB
 	got, err := guardUnverified(s.deps)(s.T().Context(), other.Root(), head)
 	s.Require().NoError(err)
 	s.Empty(got.Unknown)
-	s.Equal([]types.UnverifiedFile{{Path: "README.md"}}, got.Unverified, "no target of this workspace's declares it")
+	s.Equal([]types.UnverifiedFile{{Path: "README.md"}}, got.Unverified, "no target declares it")
+	s.True(got.NoWorkspace, "no magus workspace holds the other repository")
 }
 
 // UnverifiedBudgetSuite pins unverifiedBudget against a frozen clock.

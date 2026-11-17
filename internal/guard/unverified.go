@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -35,9 +38,8 @@ func unverifiedBudget(ctx context.Context, share time.Duration) time.Duration {
 // guardUnverified is the reader a workspace command rule's magus\workspace(dir).unverified
 // calls. A judgment asks it once per checkout and revision: the approved and the working
 // tree's rule are asked apart, and both would otherwise read. It locates the checkout
-// holding dir, so `git -C other push` reads the store of other. A checkout no workspace
-// holds is read as one that declares no target, so every file it changed is named as one
-// no target reads.
+// holding dir, so `git -C other push` reads the store of other. A checkout no magus
+// workspace holds is read as one that declares no target, and the report says so.
 func guardUnverified(deps Dependencies) unverified.Reader {
 	var mu sync.Mutex
 	answered := map[[2]string]types.UnverifiedReport{}
@@ -45,7 +47,7 @@ func guardUnverified(deps Dependencies) unverified.Reader {
 		if deps.Inspect == nil {
 			return types.UnverifiedReport{}, errors.New("this caller cannot open the workspace, so no run can be read")
 		}
-		checkout, ok := unverifiedCheckout(deps, dir)
+		checkout, noWorkspace, ok := unverifiedCheckout(deps, dir)
 		if !ok {
 			return types.UnverifiedReport{Revision: revision, Unknown: fmt.Sprintf("the output store of the workspace holding `%s` cannot be located", dir)}, nil
 		}
@@ -56,29 +58,41 @@ func guardUnverified(deps Dependencies) unverified.Reader {
 			return got, nil
 		}
 		report := readWithin(ctx, checkout, revision)
+		report.NoWorkspace = noWorkspace && report.Unknown == ""
 		answered[key] = report
 		return report, nil
 	}
 }
 
 // unverifiedCheckout is the checkout a read of dir weighs: the workspace holding it and its
-// store, or, when no workspace holds dir, dir with no projects and no store. False when a
-// workspace holds dir but its store cannot be located.
-func unverifiedCheckout(deps Dependencies, dir string) (unverified.Checkout, bool) {
-	if _, err := workspace.FindRoot(dir); err != nil {
+// store, or, when no magus workspace holds dir, dir with no projects and no store, which
+// noWorkspace reports. False when a workspace holds dir but its store cannot be located.
+func unverifiedCheckout(deps Dependencies, dir string) (checkout unverified.Checkout, noWorkspace, ok bool) {
+	// FindRoot falls back to the version-control checkout when nothing declares a
+	// workspace, which an open would read as one with projects of its own.
+	if root, err := workspace.FindRoot(dir); err != nil || !declaresWorkspace(root) {
 		return unverified.Checkout{
 			Dir: dir, Workspace: dir, VCS: deps.VCS,
 			Projects: func(context.Context) (unverified.Projects, error) { return unverified.NoProjects, nil },
-		}, true
+		}, true, true
 	}
 	where := hookLocationAt(deps, dir)
 	if where.workspace == "" || where.cacheDir == "" {
-		return unverified.Checkout{}, false
+		return unverified.Checkout{}, false, false
 	}
 	return unverified.Checkout{
 		Dir: dir, Workspace: where.workspace, CacheDir: where.cacheDir, VCS: deps.VCS,
 		Projects: func(c context.Context) (unverified.Projects, error) { return deps.inspect(c, where.workspace) },
-	}, true
+	}, false, true
+}
+
+// declaresWorkspace reports whether root holds a magus.yaml or a magusfile. It copies the
+// markers internal/workspace's FindRoot reads, which keeps them unexported.
+func declaresWorkspace(root string) bool {
+	return slices.ContainsFunc([]string{"magus.yaml", "magusfile.buzz", "magusfiles"}, func(name string) bool {
+		_, err := os.Stat(filepath.Join(root, name))
+		return err == nil
+	})
 }
 
 // readWithin reads revision in checkout within unverifiedBudget, recorded as the judgment's
