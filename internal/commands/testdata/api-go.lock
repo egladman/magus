@@ -4319,6 +4319,7 @@ github.com/egladman/magus/types.TreeCommit.Tree field string
 github.com/egladman/magus/types.TreeMerge type struct
 github.com/egladman/magus/types.TreeMerge.Base field string
 github.com/egladman/magus/types.TreeMerge.Ours field string
+github.com/egladman/magus/types.TreeMerge.TextOnly field bool
 github.com/egladman/magus/types.TreeMerge.Theirs field string
 github.com/egladman/magus/types.TreeMergeResult type struct
 github.com/egladman/magus/types.TreeMergeResult.Conflicts field []Conflict
