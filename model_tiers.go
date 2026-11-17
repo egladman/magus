@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ModelRow is one model a harness or agents.models lists, as [Magus.Models] reads it.
-type ModelRow = model.Row
+// ModelRecord is one model a harness or agents.models lists, as [Magus.Models] reads it.
+type ModelRecord = model.Row
 
 // CheckGrader judges a job row's check the way the guard will judge its holder running
 // it, as [Magus.CheckGrader] returns it.
@@ -50,8 +50,8 @@ func (m *Magus) ModelTierMatrix() types.ModelTierMatrix {
 
 // Models is the lazy reader of the model rows this workspace's wired harnesses
 // publish. The first call loads each harness spell.
-func (m *Magus) Models(ctx context.Context) func() []ModelRow {
-	return sync.OnceValue(func() []ModelRow {
+func (m *Magus) Models(ctx context.Context) func() []ModelRecord {
+	return sync.OnceValue(func() []ModelRecord {
 		wired, err := workspace.WiredHarnesses(m)
 		if err != nil {
 			return nil

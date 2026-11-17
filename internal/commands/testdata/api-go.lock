@@ -154,7 +154,7 @@ github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Con
 github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/libs/safetyscissors/tier.Set
-github.com/egladman/magus.Magus.Models method(ptr) func(ctx context.Context) func() []ModelRow
+github.com/egladman/magus.Magus.Models method(ptr) func(ctx context.Context) func() []ModelRecord
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRef method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRefRemote method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
@@ -212,13 +212,13 @@ github.com/egladman/magus.MaybeLaunchSandbox func()
 github.com/egladman/magus.MergeMarkers func(base []byte, ours []byte, theirs []byte, markerSize int) ([]byte, bool)
 github.com/egladman/magus.MetricsCollector type struct
 github.com/egladman/magus.MetricsCollector.Collect method(ptr) func(ctx context.Context) (go.opentelemetry.io/otel/sdk/metric/metricdata.ResourceMetrics, error)
-github.com/egladman/magus.ModelRow type = github.com/egladman/magus/internal/agent/model.Row
-github.com/egladman/magus.ModelRow.Alias field string
-github.com/egladman/magus.ModelRow.ID field string
-github.com/egladman/magus.ModelRow.Multiplier method func(promptTokens int64) float64
-github.com/egladman/magus.ModelRow.Price embedded github.com/egladman/magus/libs/safetyscissors/budget.Price
-github.com/egladman/magus.ModelRow.Tier field string
-github.com/egladman/magus.ModelRow.Window field int64
+github.com/egladman/magus.ModelRecord type = github.com/egladman/magus/internal/agent/model.Row
+github.com/egladman/magus.ModelRecord.Alias field string
+github.com/egladman/magus.ModelRecord.ID field string
+github.com/egladman/magus.ModelRecord.Multiplier method func(promptTokens int64) float64
+github.com/egladman/magus.ModelRecord.Price embedded github.com/egladman/magus/libs/safetyscissors/budget.Price
+github.com/egladman/magus.ModelRecord.Tier field string
+github.com/egladman/magus.ModelRecord.Window field int64
 github.com/egladman/magus.NewLazyWorkspace func(root string, open func(context.Context) (*Magus, error)) *LazyWorkspace
 github.com/egladman/magus.NewSink func(format github.com/egladman/magus/libs/clikit/output.Format, stdout io.Writer, stderr io.Writer, opts ...SinkOption) (*Sink, error)
 github.com/egladman/magus.NewWorkspaceRegistry func() *WorkspaceRegistry
