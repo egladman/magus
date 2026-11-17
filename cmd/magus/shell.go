@@ -109,7 +109,7 @@ func shellCommand(ctx context.Context, args []string) error {
 // reason in its host reply and must not leak a second, non-protocol message into the
 // host's hook stream.
 func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
-	fset := flag.NewFlagSet("shell", flag.ContinueOnError) //nolint:hostvocab // TestEveryLeafRendersEveryFormatOrRefusesThem requires the leaf name shell
+	fset := flag.NewFlagSet(commands.Shell.Name, flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
 	// LOOKS: no rule judges a read, so running the write rules over one would only
 	// ever manufacture a false advisory about editing a file the agent opened
