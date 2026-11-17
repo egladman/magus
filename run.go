@@ -97,6 +97,25 @@ func (o run) lockRole() []lockerOption {
 	return nil
 }
 
+// typed reports whether somebody asked for this run, as opposed to index work a read or the
+// watcher started (Background) or a read's rebuild under its ancestor's lock
+// (UnderAncestor). Only a typed run may install a project's dependencies (ADR 0052).
+func (o run) typed() bool { return !o.Background && !o.UnderAncestor }
+
+type typedRunKey struct{}
+
+// withTypedRun records on ctx whether the run that owns it is typed. Each run sets it
+// afresh, so index work nested in a typed run is still not typed.
+func withTypedRun(ctx context.Context, typed bool) context.Context {
+	return context.WithValue(ctx, typedRunKey{}, typed)
+}
+
+// inTypedRun reports whether ctx belongs to a run somebody typed.
+func inTypedRun(ctx context.Context) bool {
+	typed, _ := ctx.Value(typedRunKey{}).(bool)
+	return typed
+}
+
 // out is the sink the run reports through.
 func (o run) out(m *Magus) *Sink {
 	if o.sink != nil {
@@ -2918,6 +2937,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = cache.WithTargetRuns(ctx, runs)
 	cross := interp.NewCrossDispatch(runs)
 	ctx = interp.WithCrossDispatch(ctx, cross)
+	ctx = withTypedRun(ctx, opts.typed())
 	lim := m.limiter()
 	if opts.Step {
 		slog.With(attr.Component("magus")).InfoContext(ctx, "--step forces Concurrency=1")

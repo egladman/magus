@@ -259,19 +259,74 @@ func (m *Magus) missingInstall(s *spells.Spell, bin, dir string) string {
 		if err != nil || !found {
 			continue
 		}
-		fix := m.installCommand(dir, name)
-		if _, err := os.Stat(filepath.Join(dir, choice.Install.Dir)); err != nil {
-			return fmt.Sprintf("no %s in %s: run `%s`", choice.Install.Dir, shown, fix)
-		}
-		for _, stamp := range choice.Install.Stamps {
-			if _, err := os.Stat(filepath.Join(dir, stamp)); err != nil {
-				return fmt.Sprintf("the install in %s never finished (%s is missing): run `%s`", shown, stamp, fix)
-			}
+		if gap := m.installGap(dir, name, choice.Install); gap != "" {
+			return gap
 		}
 		return fmt.Sprintf("the install in %s provides no %s: add the package that ships it to %s",
 			shown, bin, filepath.Base(choice.Manifest))
 	}
 	return fmt.Sprintf("nothing in %s installs %s", shown, bin)
+}
+
+// installGap names what is missing from dir's install of inst, which the op called name
+// runs, and the command that installs it: its directory, or a stamp an install writes when
+// it finishes. It is "" when both are there, and for an install into a global store (Dir
+// empty, as Go's), which leaves nothing in the tree to check.
+func (m *Magus) installGap(dir, name string, inst spells.Install) string {
+	if inst.Dir == "" {
+		return ""
+	}
+	shown, fix := m.displayDir(dir), m.installCommand(dir, name)
+	if _, err := os.Stat(filepath.Join(dir, inst.Dir)); err != nil {
+		return fmt.Sprintf("no %s in %s: run `%s`", inst.Dir, shown, fix)
+	}
+	for _, stamp := range inst.Stamps {
+		if _, err := os.Stat(filepath.Join(dir, stamp)); err != nil {
+			return fmt.Sprintf("the install in %s never finished (%s is missing): run `%s`", shown, stamp, fix)
+		}
+	}
+	return ""
+}
+
+// projectInstalls is, for each install one of p's spells declares that resolves for p, the
+// op that runs it and the install it resolved to. An install into a global store (Dir
+// empty, as Go's) is left out: it puts nothing in the tree an index reads.
+func (m *Magus) projectInstalls(p *types.Project) []installChoice {
+	stop := p.Dir
+	if m.ws != nil {
+		stop = m.ws.Root
+	}
+	var out []installChoice
+	for _, s := range p.ResolvedSpells {
+		for _, name := range s.Targets() {
+			op, ok := s.Op(name)
+			if !ok || op.Kind != spells.OpKindInstall {
+				continue
+			}
+			choice, found, err := spell.ResolveInstall(op.Install, p.Dir, stop)
+			if err != nil || !found || choice.Install.Dir == "" {
+				continue
+			}
+			out = append(out, installChoice{op: name, install: choice.Install})
+		}
+	}
+	return out
+}
+
+// installChoice is one install a project resolved to and the op that runs it.
+type installChoice struct {
+	op      string
+	install spells.Install
+}
+
+// installTarget is the target that installs p's dependencies, op among them: p's own
+// install target when it has one, so a ctx.needs(install) in the same run meets the same
+// node and two installs of one tree never race, else the spell's op.
+func installTarget(p *types.Project, op string) string {
+	if slices.Contains(projectTargets(p), "install") {
+		return "install"
+	}
+	return op
 }
 
 // installCommand is how a person installs dir's dependencies: the project's own install

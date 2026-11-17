@@ -480,6 +480,82 @@ func TestFreshenOutsideARunReindexesThroughItsOwnRun(t *testing.T) {
 	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m))
 }
 
+// installingWorkspace is an indexed workspace whose root project also binds a spell that
+// installs deps/ from deps.lock, through a magusfile install target, and a reader spell
+// whose lint target freshens the index and records what it got.
+func installingWorkspace(t *testing.T) (m *Magus, src string, freshenErr *error) {
+	t.Helper()
+	indexerOnPath(t)
+	deps := spells.Install{Name: "zzz-deps-install", Dir: "deps"}
+	depsSpell := register.Spell(t, "zzz-deps-install-spell",
+		spells.WithTargets(deps.Name),
+		spells.WithOps(map[string]spells.Op{deps.Name: {Kind: spells.OpKindInstall, Install: &spells.InstallSpec{
+			Spell: "zzz-deps-install-spell", Manifests: []spells.Manifest{{
+				Value: "deps.json", LockCandidates: []string{"deps.lock"}, Installs: map[string]spells.Install{"deps.lock": deps},
+			}},
+		}}}),
+	)
+	freshenErr = new(error)
+	readerSpell := register.Spell(t, "zzz-installing-index-reader-spell",
+		spells.WithTargets("lint"),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "lint" {
+				*freshenErr = m.freshenSymbolIndexes(ctx, []string{"."}, nil)
+			}
+			return nil, nil
+		}),
+	)
+	m, src, _ = newIndexedWorkspaceUnder(t, `import "magus";
+import "fs";
+export fun install(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["deps/**"]);
+    fs\mkdirAll("deps");
+    fs\writeFile("deps/installed", "yes\n");
+}
+`, depsSpell, readerSpell)
+	root := m.Root()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "deps.json"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "deps.lock"), []byte("pinned\n"), 0o644))
+	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
+	require.Equal(t, types.SymbolIndexStale, freshness(t, m), "the Go edit leaves the index behind")
+	return m, src, freshenErr
+}
+
+// A run somebody typed installs a project before it indexes it: the install target runs
+// through that run, and the index the reader asked for is current.
+func TestFreshenInsideATypedRunInstallsBeforeItIndexes(t *testing.T) {
+	m, _, freshenErr := installingWorkspace(t)
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "lint"}}))
+	require.NoError(t, *freshenErr)
+	assert.FileExists(t, filepath.Join(m.Root(), "deps", "installed"), "the install ran inside the run")
+	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m))
+}
+
+// A read outside any run installs nothing: the index it cannot make current fails MGS7003
+// naming what is missing and the command that installs it.
+func TestFreshenOutsideARunNamesTheInstallAndInstallsNothing(t *testing.T) {
+	m, _, _ := installingWorkspace(t)
+
+	err := m.freshenSymbolIndexes(context.Background(), []string{"."}, nil)
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Contains(t, err.Error(), "no deps in")
+	assert.Contains(t, err.Error(), "run `magus run install .`")
+	assert.NoDirExists(t, filepath.Join(m.Root(), "deps"), "a read never installs")
+	assert.Equal(t, types.SymbolIndexStale, freshness(t, m), "and builds no index over a tree missing its dependencies")
+}
+
+// Index work a read or the watcher starts runs in the background, and nobody typed it, so
+// a reader inside it installs nothing either.
+func TestFreshenInsideABackgroundRunInstallsNothing(t *testing.T) {
+	m, _, freshenErr := installingWorkspace(t)
+
+	require.NoError(t, m.runTargets(context.Background(), []types.Target{{Path: ".", Name: "lint"}}, run{Background: true}))
+	require.ErrorIs(t, *freshenErr, types.SymbolIndexNotCurrent)
+	assert.Contains(t, (*freshenErr).Error(), "run `magus run install .`")
+	assert.NoDirExists(t, filepath.Join(m.Root(), "deps"), "a background run never installs")
+}
+
 func TestFreshenLeavesIndexesOfOtherLanguagesAlone(t *testing.T) {
 	indexerOnPath(t)
 	m, src := newIndexedWorkspace(t)
@@ -534,6 +610,13 @@ const indexerBin = "zzz-scip-freshness-indexer"
 // further registered spells to bind the root project to.
 func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *string) {
 	t.Helper()
+	return newIndexedWorkspaceUnder(t, "", extra...)
+}
+
+// newIndexedWorkspaceUnder is newIndexedWorkspaceWith with magusfile as the root
+// project's magusfile.buzz.
+func newIndexedWorkspaceUnder(t *testing.T, magusfile string, extra ...string) (*Magus, string, *string) {
+	t.Helper()
 	version := "1.0.0"
 	spellName := register.Spell(t, "zzz-scip-freshness-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
@@ -562,7 +645,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 	skillsSpell := register.Spell(t, "zzz-scip-freshness-skills-spell", spells.WithSources(".claude/skills/**/SKILL.md"))
 
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("")
+	w.Magusfile(magusfile)
 	// The fixture indexer is an external SCIP command, which runs only where it is opted in.
 	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s]\n", spellName))
 	root := w.Root()
