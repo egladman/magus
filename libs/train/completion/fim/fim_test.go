@@ -10,9 +10,9 @@ import (
 	"github.com/egladman/magus/libs/train/dedup"
 )
 
-type fimSuite struct{ suite.Suite }
+type FIMSuite struct{ suite.Suite }
 
-func TestFIMSuite(t *testing.T) { suite.Run(t, new(fimSuite)) }
+func TestFIMSuite(t *testing.T) { suite.Run(t, new(FIMSuite)) }
 
 const goSrc = `package p
 
@@ -72,7 +72,7 @@ func texts(src string, rs []Range) []string {
 	return out
 }
 
-func (s *fimSuite) TestConstructsGo() {
+func (s *FIMSuite) TestConstructsGo() {
 	got := texts(goSrc, Constructs(dedup.Go, goSrc))
 	s.Contains(got, "return sum")
 	s.Contains(got, `fmt.Println("sum", sum)`)
@@ -80,7 +80,7 @@ func (s *fimSuite) TestConstructsGo() {
 	s.Contains(got, "return a - b")
 }
 
-func (s *fimSuite) TestConstructsBuzz() {
+func (s *FIMSuite) TestConstructsBuzz() {
 	got := texts(buzzSrc, Constructs(dedup.Buzz, buzzSrc))
 	s.Contains(got, "return sum;")
 	s.Contains(got, `final sum = a + b;`)
@@ -89,20 +89,20 @@ func (s *fimSuite) TestConstructsBuzz() {
 	s.Contains(got, `1, b: 2`)
 }
 
-func (s *fimSuite) TestConstructsTypeScript() {
+func (s *FIMSuite) TestConstructsTypeScript() {
 	got := texts(tsSrc, Constructs(dedup.TypeScript, tsSrc))
 	s.Contains(got, "return sum;")
 	s.Contains(got, "const sum = a + b;")
 	s.Contains(got, "'sum', sum")
 }
 
-func (s *fimSuite) TestConstructsOfBrokenSourceAreNone() {
+func (s *FIMSuite) TestConstructsOfBrokenSourceAreNone() {
 	s.Empty(Constructs(dedup.Go, "func ("))
 	s.Empty(Constructs(dedup.Buzz, "fun ("))
 	s.Empty(Constructs(dedup.TypeScript, "function ( {"))
 }
 
-func (s *fimSuite) TestSeedIsFixedPerFileAndBlob() {
+func (s *FIMSuite) TestSeedIsFixedPerFileAndBlob() {
 	a1, b1 := Seed("a.go", "blob1")
 	a2, b2 := Seed("a.go", "blob1")
 	a3, _ := Seed("a.go", "blob2")
@@ -110,7 +110,7 @@ func (s *fimSuite) TestSeedIsFixedPerFileAndBlob() {
 	s.NotEqual(a1, a3)
 }
 
-func (s *fimSuite) TestBuildIsDeterministic() {
+func (s *FIMSuite) TestBuildIsDeterministic() {
 	f := File{Path: "a.go", Blob: "b1", Language: dedup.Go, Text: manyGo(20)}
 	one := Build(f, 200, Limit{})
 	two := Build(f, 200, Limit{})
@@ -119,7 +119,7 @@ func (s *fimSuite) TestBuildIsDeterministic() {
 	s.NotEqual(one, other)
 }
 
-func (s *fimSuite) TestSampleInvariants() {
+func (s *FIMSuite) TestSampleInvariants() {
 	text := manyGo(30)
 	f := File{Path: "a.go", Blob: "b1", Language: dedup.Go, Text: text}
 	kinds := map[Kind]int{}
@@ -155,7 +155,7 @@ func (s *fimSuite) TestSampleInvariants() {
 	s.InDelta(0.5, float64(orders[PSM])/(total-float64(kinds[KindLM])), 0.05)
 }
 
-func (s *fimSuite) TestPrefixWindowStartsOnAlignedLine() {
+func (s *FIMSuite) TestPrefixWindowStartsOnAlignedLine() {
 	var b strings.Builder
 	for i := range 3000 {
 		fmt.Fprintf(&b, "line %d of the file\n", i)
@@ -174,7 +174,7 @@ func (s *fimSuite) TestPrefixWindowStartsOnAlignedLine() {
 	s.Len(short, 100)
 }
 
-func (s *fimSuite) TestLimitReservesATail() {
+func (s *FIMSuite) TestLimitReservesATail() {
 	text := manyGo(30)
 	f := File{Path: "a.go", Blob: "b1", Language: dedup.Go, Text: text}
 	cut := len(text) * 8 / 10
@@ -185,7 +185,7 @@ func (s *fimSuite) TestLimitReservesATail() {
 	}
 }
 
-func (s *fimSuite) TestFileWithoutASpanFallsBackAndSaysSo() {
+func (s *FIMSuite) TestFileWithoutASpanFallsBackAndSaysSo() {
 	f := File{Path: "a.go", Blob: "b1", Language: dedup.Go, Text: "func ("}
 	var fell int
 	for _, sm := range Build(f, 300, Limit{}) {

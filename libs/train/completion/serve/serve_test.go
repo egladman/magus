@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type serveSuite struct{ suite.Suite }
+type ServeSuite struct{ suite.Suite }
 
-func TestServe(t *testing.T) { suite.Run(t, new(serveSuite)) }
+func TestServe(t *testing.T) { suite.Run(t, new(ServeSuite)) }
 
-func (s *serveSuite) TestParseVersionReadsTheBuildLine() {
+func (s *ServeSuite) TestParseVersionReadsTheBuildLine() {
 	b, err := ParseVersion("version: 0.8.0 (build 11960, commit 8642541b2)\nbuilt with AppleClang\n")
 	s.Require().NoError(err)
 	s.Equal(Build{Version: "0.8.0", Number: 11960, Commit: "8642541b2"}, b)
@@ -24,7 +24,7 @@ func (s *serveSuite) TestParseVersionReadsTheBuildLine() {
 	s.ErrorContains(err, "not a version")
 }
 
-func (s *serveSuite) TestArgsOrderTheInfillAndPinTheCache() {
+func (s *ServeSuite) TestArgsOrderTheInfillAndPinTheCache() {
 	args := Args(Options{Model: "m.gguf", Ctx: 8192, Slots: 1, SPM: true, CacheReuse: 256, SpecType: "ngram-simple"}, 9000)
 	s.Equal([]string{"-m", "m.gguf", "--host", "127.0.0.1", "--port", "9000", "-c", "8192", "-np", "1", "--no-webui", "--no-warmup",
 		"--cache-reuse", "256", "--metrics", "--spm-infill", "--spec-type", "ngram-simple"}, args)
@@ -35,18 +35,17 @@ func (s *serveSuite) TestArgsOrderTheInfillAndPinTheCache() {
 	s.NotContains(plain, "--spec-type")
 }
 
-func (s *serveSuite) TestStartRefusesNoSlots() {
+func (s *ServeSuite) TestStartRefusesNoSlots() {
 	_, err := Start(context.Background(), Options{Bin: "llama-server", Model: "m"}, 0)
 	s.ErrorContains(err, "must be positive")
 }
 
-func (s *serveSuite) TestInfillSendsTheRequestAndReadsTheReply() {
+func (s *ServeSuite) TestInfillSendsTheRequestAndReadsTheReply() {
 	var got map[string]any
-	var decoded error
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.Equal("/infill", r.URL.Path)
 		b, _ := io.ReadAll(r.Body)
-		decoded = json.Unmarshal(b, &got)
+		s.Require().NoError(json.Unmarshal(b, &got))
 		_, _ = w.Write([]byte(`{"content":"a + b","stop_type":"eos","timings":{"cache_n":5,"prompt_n":3,"prompt_ms":2.5,"predicted_n":4,"predicted_ms":9},
 			"completion_probabilities":[{"token":"a","logprob":-0.1},{"token":" + b","logprob":-0.3}]}`))
 	}))
@@ -54,7 +53,6 @@ func (s *serveSuite) TestInfillSendsTheRequestAndReadsTheReply() {
 	c, err := Attach(ts.URL).Infill(context.Background(), Request{Prefix: "p", Suffix: "q", NPredict: 8, Temperature: 0.8, TopP: 0.95, Seed: 7,
 		Stop: []string{"\n"}, CachePrompt: true, Extra: []Chunk{{Path: "x.go", Text: "t"}}})
 	s.Require().NoError(err)
-	s.Require().NoError(decoded, "the server reads the request it was sent")
 	s.Equal("a + b", c.Text)
 	s.Equal(5, c.Timings.CacheN)
 	s.Equal(2.5, c.Timings.PromptMS)
@@ -66,7 +64,7 @@ func (s *serveSuite) TestInfillSendsTheRequestAndReadsTheReply() {
 	s.Equal([]any{map[string]any{"filename": "x.go", "text": "t"}}, got["input_extra"])
 }
 
-func (s *serveSuite) TestInfillReportsAServerError() {
+func (s *ServeSuite) TestInfillReportsAServerError() {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":{"message":"Loading model","code":503}}`))
@@ -76,7 +74,7 @@ func (s *serveSuite) TestInfillReportsAServerError() {
 	s.ErrorContains(err, "Loading model")
 }
 
-func (s *serveSuite) TestEraseSlotPostsTheAction() {
+func (s *ServeSuite) TestEraseSlotPostsTheAction() {
 	var path string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path = r.Method + " " + r.URL.RequestURI()
@@ -87,7 +85,7 @@ func (s *serveSuite) TestEraseSlotPostsTheAction() {
 	s.Equal("POST /slots/2?action=erase", path)
 }
 
-func (s *serveSuite) TestFirstLineConfidenceStopsAtTheFirstNewline() {
+func (s *ServeSuite) TestFirstLineConfidenceStopsAtTheFirstNewline() {
 	toks := []Token{{Text: "a", Logprob: math.Log(0.5)}, {Text: "b\n", Logprob: math.Log(0.5)}, {Text: "c", Logprob: math.Log(0.001)}}
 	s.InDelta(0.5, FirstLineConfidence(toks), 1e-9)
 	s.Equal(0.0, FirstLineConfidence(nil))

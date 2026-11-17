@@ -132,7 +132,7 @@ func RunG1(e Env, cutoff Cutoff) (G1Report, error) {
 		float64(len(r.CrossPairs)), fmt.Sprintf("%d (of %d exact, %d near in all)", len(r.CrossPairs), r.Pairs["exact"], r.Pairs["near"]), len(r.CrossPairs) == 0))
 
 	// 13-gram recount over the training files the fim stage kept, at their cutoff blobs.
-	texts, err := HeldOutTexts(e)
+	texts, err := EvalTexts(e)
 	if err != nil {
 		return r, err
 	}

@@ -28,7 +28,7 @@ func Temporal(root, cutoff, rev string, keep func(path string) bool) ([]Change, 
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
-		return nil, 0, fmt.Errorf("git log %s..%s: %s: %w", cutoff, rev, strings.TrimSpace(errb.String()), err)
+		return nil, 0, fmt.Errorf("git log %s..%s: %w: %s", cutoff, rev, err, strings.TrimSpace(errb.String()))
 	}
 	var changes []Change
 	commits := 0
