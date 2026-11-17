@@ -339,7 +339,7 @@ func TestTimeRuleLoadLapsesOnlyAFailurePastTheDeadline(t *testing.T) {
 
 // A phase that runs out answers the deadline's error and is recorded lapsed, and every
 // later call of it in the judgment answers at once without running. The call itself never
-// sees ctx's cancel, so a memoized answer cannot be cached as cancelled.
+// sees ctx's cancel, so a computed-once answer cannot be cached as cancelled.
 func TestBoundedPhaseLapsesOncePerJudgment(t *testing.T) {
 	waitForLapsedWork(t)
 	ctx, cancel := context.WithTimeout(withPhaseLog(t.Context(), trail.Phase{}), judgeReserve+50*time.Millisecond)
