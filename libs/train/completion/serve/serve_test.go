@@ -45,7 +45,10 @@ func (s *serveSuite) TestInfillSendsTheRequestAndReadsTheReply() {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.Equal("/infill", r.URL.Path)
 		b, _ := io.ReadAll(r.Body)
-		s.Require().NoError(json.Unmarshal(b, &got))
+		if err := json.Unmarshal(b, &got); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		_, _ = w.Write([]byte(`{"content":"a + b","stop_type":"eos","timings":{"cache_n":5,"prompt_n":3,"prompt_ms":2.5,"predicted_n":4,"predicted_ms":9},
 			"completion_probabilities":[{"token":"a","logprob":-0.1},{"token":" + b","logprob":-0.3}]}`))
 	}))
