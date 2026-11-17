@@ -108,8 +108,6 @@ func TestChildEnvNamesTheJobserverWhereTheLauncherPutsIt(t *testing.T) {
 		fd += scissors.LauncherFiles
 	}
 	assert.Equal(t, fmt.Sprintf("-j --jobserver-fds=%d,%d --jobserver-auth=%d,%d", fd, fd+1, fd, fd+1), lookupEnv(env, "CARGO_MAKEFLAGS"))
-	assert.Equal(t, 3+scissors.LauncherFiles, jobserverFD(true), "the launcher's files take the descriptors ahead of the pipe")
-	assert.Equal(t, 3, jobserverFD(false))
 }
 
 // A step seated with N slots runs the Go toolchain N wide, whether or not the platform

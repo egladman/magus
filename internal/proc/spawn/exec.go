@@ -412,16 +412,6 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 	return c, c.ExtraFiles[0], nil
 }
 
-// jobserverFD is the descriptor a jobserver pipe appended to a child's ExtraFiles lands
-// on: after the launcher's own files, which a confined child carries ahead of it.
-func jobserverFD(confined bool) int {
-	launcher := 0
-	if confined {
-		launcher = scissors.LauncherFiles
-	}
-	return firstExtraFD + launcher
-}
-
 // childEnv layers self-reference variables and caller overrides over the base environment.
 //
 // Under a policy the base is its BaseEnv even when that is empty: a sandboxed child
@@ -448,8 +438,13 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	if js := jobserverFromContext(ctx); js != nil {
 		// An error here is a required policy the kernel cannot confine; Exec refuses
 		// that child before it would start, so the answer is never used.
-		confined, _ := policy.KernelConfines()
-		env = append(env, js.environ(env, jobserverFD(confined))...)
+		// The pipe lands after the launcher's own files, which a confined child carries
+		// ahead of every appended one.
+		fd := firstExtraFD
+		if confined, _ := policy.KernelConfines(); confined {
+			fd += scissors.LauncherFiles
+		}
+		env = append(env, js.environ(env, fd)...)
 	}
 	if slots := seatedSlots(ctx); slots > 0 {
 		env = append(env, goEnviron(env, slots)...)

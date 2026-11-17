@@ -1661,7 +1661,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 	// the call instead, as the built-in asks do, under the asking rule's name; an unnamed
 	// ask is the human-only refusal the built-in asks report as.
 	if judgment.Decision == verdict.Ask && !req.RendersAsk {
-		judgment.Decision, judgment.Reason = verdict.Deny, judgment.Reason+"\n\n"+askUnrenderedDeny("this call")
+		judgment.Decision, judgment.Reason = verdict.Deny, fmt.Sprintf("%s\n\n%s", judgment.Reason, askUnrenderedDeny("this call"))
 		judgment.Rule = cmp.Or(judgment.Rule, string(denyRuleHumanOnly))
 	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a

@@ -3,6 +3,7 @@ package bindings
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -584,7 +585,7 @@ try {
 func parseChoices(t *testing.T, ctx context.Context, body string) (interp.Parsed, error) {
 	t.Helper()
 	dir := t.TempDir()
-	writeMagusfile(t, dir, "import \"magus\";\n"+body+"\n")
+	writeMagusfile(t, dir, fmt.Sprintf("import \"magus\";\n%s\n", body))
 	srcs, err := interp.FindAll(dir)
 	require.NoError(t, err)
 	return interp.Parse(ctx, srcs[0])
