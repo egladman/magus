@@ -181,8 +181,12 @@ type Magus struct {
 	foldedEdges map[string][]string
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
-	// magus\secret.read costs one provider invocation rather than two.
+	// magus\secret.read costs one provider invocation rather than two. load derives it
+	// once through the provider the magusfiles chose.
 	resolver *secrets.Resolver
+	// choices are the secret provider and remote cache backend the magusfiles chose,
+	// merged across projects. Written once by load.
+	choices interp.Choices
 
 	// spellImports is resolved once in load, before any magusfile, and read by every
 	// import resolver after; see SpellImports.
@@ -424,13 +428,15 @@ func (m *Magus) load(ctx context.Context) error {
 	// Read before any magusfile adds to the registry, so a magusfile's policy table is
 	// still held to targets that exist.
 	goDeclared := goDeclaredTargets(m)
-	customTargets, err := preloadMagusfiles(ctx, m)
+	customTargets, choices, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		// Apply and the policy check would judge a registry the failed magusfiles
 		// never populated. The shadow ward reads only the tree, so it still reports.
 		return errors.Join(err, m.spellShadows())
 	}
 	m.magusfileExports = customTargets
+	m.choices = choices
+	m.resolver = m.resolver.WithProvider(choices.SecretProvider)
 	if err := m.steps.CheckJudged(m.stepRules.Kinds()); err != nil {
 		return fmt.Errorf("magus: WithStepSpecs: %w", err)
 	}
@@ -703,12 +709,19 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 // preloadMagusfiles parses magusfiles in each project so magus.project() calls
 // populate m.wsReg, and returns each project's custom (export fun) target names,
 // keyed by project path — used afterward by validateTargetPolicies to confirm a
-// project's per-target policy table names only targets that actually exist.
+// project's per-target policy table names only targets that actually exist — and the
+// choices every magusfile made, merged. Two magusfiles naming different spells for one
+// choice are an *interp.ChoiceConflictError.
+//
+// Every evaluation here reads through the base resolver: a provider one magusfile
+// chooses applies to its own reads and, after preload, to every run, but never to
+// another magusfile's top level.
 //
 // A failing magusfile does not stop the rest: the error joins every failure, so one
 // load names all of them instead of one per fix.
-func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
+func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, interp.Choices, error) {
 	customTargets := make(map[string][]string)
+	var merged interp.ChoiceMerge
 	ctx = m.installWorkspaceRegistry(ctx)
 	ctx = interp.WithBytecodeWarnings(ctx)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
@@ -727,24 +740,28 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			continue
 		}
 		if !interp.Available() && len(srcs) > 0 && len(srcs[0].Files) > 0 {
-			return nil, &types.EngineNotLinkedError{Op: "evaluate " + srcs[0].Files[0]}
+			return nil, interp.Choices{}, &types.EngineNotLinkedError{Op: "evaluate " + srcs[0].Files[0]}
 		}
+		label := types.ProjectLabel(p.Path, p.Dir)
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
-			targets, err := interp.Parse(pctx, src)
+			parsed, err := interp.Parse(pctx, src)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err))
+				errs = append(errs, fmt.Errorf("magus: %s: %w", label, err))
 				continue
 			}
-			for _, t := range targets {
+			if err := merged.Add(label, parsed.Choices); err != nil {
+				errs = append(errs, fmt.Errorf("magus: %w", err))
+			}
+			for _, t := range parsed.Targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
 			}
 		}
 	}
 	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+		return nil, interp.Choices{}, errors.Join(errs...)
 	}
-	return customTargets, nil
+	return customTargets, merged.Choices(), nil
 }
 
 // validateTargetPolicies errors when a project's per-target policy table
@@ -985,7 +1002,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
 	// every machine so the misconfiguration can't silently go live. A backend the caller
 	// gave with WithCacheBackend is held to the same trust set.
-	name := m.wsReg.RemoteBackend()
+	name := m.choices.RemoteBackend
 	if name != "" && m.cacheBackend != nil {
 		shutdownTel()
 		return nil, fmt.Errorf("magus: WithCacheBackend gives the %q backend and the magusfile wires magus.cache.remote(%q), and a workspace has one remote cache, so drop one",
@@ -2545,11 +2562,11 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 // bound to one workspace. A server-wide action has no workspace and therefore nothing to
 // redact against, which is the honest answer rather than a gap.
 //
-// It reads through the provider the magusfile declared, derived from the workspace's
-// resolver at each call: the resolver is built at Open, before any magusfile runs.
+// After load it reads through the provider the magusfiles chose; during load, through
+// the built-in environment provider.
 func (m *Magus) ContextWithSecrets(ctx context.Context) context.Context {
 	if m == nil || m.resolver == nil {
 		return ctx
 	}
-	return secrets.WithResolver(ctx, m.resolver.WithProvider(m.wsReg.SecretProvider()))
+	return secrets.WithResolver(ctx, m.resolver)
 }

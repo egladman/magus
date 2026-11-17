@@ -135,7 +135,7 @@ func (m *Magus) TargetSandboxes() map[string]spells.Sandbox {
 // spell's cache write token would otherwise reach every target it caches for.
 func (m *Magus) serviceSpells(loaded []*spells.Spell) []string {
 	var names []string
-	if name := m.wsReg.RemoteBackend(); name != "" {
+	if name := m.choices.RemoteBackend; name != "" {
 		names = append(names, name)
 	}
 	for _, s := range loaded {

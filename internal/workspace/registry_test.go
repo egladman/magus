@@ -318,18 +318,6 @@ func TestApply_EmptyRegistryIsNoop(t *testing.T) {
 	assert.Nil(t, p.ResolvedSpells)
 }
 
-func TestRemoteBackend_RoundTrip(t *testing.T) {
-	r := NewWorkspaceRegistry()
-	assert.Empty(t, r.RemoteBackend())
-
-	r.SetRemoteBackend("aws-s3")
-	assert.Equal(t, "aws-s3", r.RemoteBackend())
-
-	// Last writer wins.
-	r.SetRemoteBackend("gcs-cache")
-	assert.Equal(t, "gcs-cache", r.RemoteBackend())
-}
-
 func TestRegistryProfile(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Empty(t, r.Profile(), "nothing declared is unset, which the guard reads as light")

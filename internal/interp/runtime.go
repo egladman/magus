@@ -1056,8 +1056,16 @@ func RunDir(ctx context.Context, dir, target string, extraArgs []string) (any, e
 	return nil, ErrUnknownTarget
 }
 
-// Parse executes src in parse mode (name discovery only) and returns discovered targets.
-func Parse(ctx context.Context, src *Source) ([]Target, error) {
+// Parsed is what a parse-mode evaluation of one magusfile source yields: its targets,
+// sorted by key, and the workspace-wide choices its top level made.
+type Parsed struct {
+	Targets []Target
+	Choices Choices
+}
+
+// Parse executes src in parse mode (name discovery only) and returns the discovered
+// targets and choices.
+func Parse(ctx context.Context, src *Source) (Parsed, error) {
 	// Carry the source so bindings resolve paths relative to the magusfile's own
 	// directory (local-spell require/import), not the process cwd, the same context
 	// Run establishes. Without this, preloading a magusfile from outside its dir
@@ -1440,11 +1448,11 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	return ret, nil
 }
 
-// parseBuzz executes src in parse mode to collect target names.
-func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
+// parseBuzz executes src in parse mode to collect target names and choices.
+func parseBuzz(ctx context.Context, src *Source) (Parsed, error) {
 	load, err := execBuzzSource(ctx, src, true)
 	if err != nil {
-		return nil, err
+		return Parsed{}, err
 	}
 	_ = load.Session.Close()
 
@@ -1458,7 +1466,7 @@ func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
 	for i, name := range names {
 		out[i] = Target{Key: name, Name: name}
 	}
-	return out, nil
+	return Parsed{Targets: out, Choices: load.Choices}, nil
 }
 
 // targetCollisionError reports two source target names that normalize to the same
@@ -1488,6 +1496,7 @@ func ctxlessTargetError(name string) error {
 type loadedBuzz struct {
 	Session *buzz.Session
 	Targets map[string]vm.Callable
+	Choices Choices
 }
 
 func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz, error) {
@@ -1501,6 +1510,9 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	// Installed before the bindings capture ctx, so their module resolver can report.
 	importErrs := &importErrors{}
 	ctx = context.WithValue(ctx, importErrorsKey{}, importErrs)
+	// Run mode re-executes the top level too, so it needs a record of its own even though
+	// only parse mode returns one to a caller that applies it.
+	ctx, choices := WithChoiceRecord(ctx)
 	// The buzz path uses the standalone interpreter's concrete API (Exec, Targets,
 	// CallVal) directly; the engine.Session adapter is only for generic registry
 	// consumers, so there's no need to round-trip through engine.Lookup. Confine
@@ -1705,7 +1717,7 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		}
 	}
 
-	return &loadedBuzz{Session: buzzSess, Targets: targetMap}, nil
+	return &loadedBuzz{Session: buzzSess, Targets: targetMap, Choices: choices.Choices()}, nil
 }
 
 // withDeclaredStep confines ctx to the target key of the project whose magusfile dir is
@@ -1772,6 +1784,11 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 		buzzSess.SetSourceReader(read)
 	}
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
+	if autoload {
+		// An autoloaded magusfile is an evaluation, so its magus\cache.remote and
+		// magus\secret.provider calls must succeed. The REPL applies neither choice.
+		ctx, _ = WithChoiceRecord(ctx)
+	}
 	if buzzHostBindingsFn != nil {
 		// nil exports: the REPL has no export-discovery pass, so ctx.needs
 		// falls back to name-only resolution there.

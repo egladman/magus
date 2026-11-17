@@ -70,9 +70,10 @@ func (e *externalHandles) lookup(v vm.Value) (externalTarget, bool) {
 //	magus.cache.remote(github)
 //
 // The import already registered the spell (with handler op support, for a Buzz
-// spell); remote() just records its name on the per-Open workspace registry, and
-// magus.Open resolves it by name once the magusfile has been evaluated. The spell
-// must expose get_artifact/put_artifact handler ops (and optionally enabled()).
+// spell); remote() just records its name in the evaluation's choices, and magus.Open
+// resolves it by name once every magusfile has been evaluated. Outside a magusfile
+// evaluation it is an error, not a no-op. The spell must expose
+// get_artifact/put_artifact handler ops (and optionally enabled()).
 func buildCache(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	cache := vm.NewMap()
 	cache.MapSet("remote", directVal(obs, "magus.cache.remote", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -83,8 +84,8 @@ func buildCache(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\cache.remote: argument is not a spell handle (no name)`)
 		}
-		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
-			reg.SetRemoteBackend(nv.AsString())
+		if err := interp.RecordRemoteBackend(ctx, nv.AsString()); err != nil {
+			return vm.Null, err
 		}
 		return vm.Null, nil
 	}))
@@ -210,11 +211,10 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
 		}
-		// The workspace's resolver is built at Open, before any magusfile runs, so the
-		// selection cannot be a construction option. It is declared on the registry,
-		// the same way buildCache declares its backend, and Magus.ContextWithSecrets
-		// derives the selected resolver from it for every later run. This evaluation's
-		// own reads go through the resolver derived here.
+		// The selection is recorded in the evaluation's choices, the same way buildCache
+		// records its backend, and the code opening the workspace derives the resolver
+		// every later run reads through. This evaluation's own reads go through the
+		// resolver derived here.
 		//
 		// ERRORS when there is no resolver rather than no-opping. A silently dropped
 		// selection means the run falls back to the built-in environment provider: the
@@ -225,10 +225,10 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: no secret resolver on this run`)
 		}
-		selected.Store(r.WithProvider(nv.AsString()))
-		if reg := workspace.WorkspaceRegistryFromContext(runCtx); reg != nil {
-			reg.DeclareSecretProvider(nv.AsString())
+		if err := interp.RecordSecretProvider(runCtx, nv.AsString()); err != nil {
+			return vm.Null, err
 		}
+		selected.Store(r.WithProvider(nv.AsString()))
 		return vm.Null, nil
 	}))
 	secretObj.MapSet("read", directVal(obs, "magus.secret.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {

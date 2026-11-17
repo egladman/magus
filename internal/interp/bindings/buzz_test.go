@@ -89,8 +89,9 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	src.Files = []string{path}
 
-	targets, err := interp.Parse(context.Background(), src)
+	parsed, err := interp.Parse(context.Background(), src)
 	require.NoError(t, err)
+	targets := parsed.Targets
 
 	got := make(map[string]bool)
 	for _, tgt := range targets {

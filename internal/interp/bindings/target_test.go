@@ -22,7 +22,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -388,24 +387,24 @@ func TestNeedsMarksADependencyFailureParkedOrInline(t *testing.T) {
 
 func TestBuildCache(t *testing.T) {
 	t.Run("valid spell handle records the remote backend", func(t *testing.T) {
-		reg := workspace.NewWorkspaceRegistry()
-		// buildCache captures the ctx at construction; remote() records onto that
-		// registry regardless of the call-time ctx.
-		cache := buildCache(workspace.ContextWithRegistry(context.Background(), reg), nil)
+		// buildCache captures the ctx at construction; remote() records into that
+		// evaluation's choices regardless of the call-time ctx.
+		ctx, rec := interp.WithChoiceRecord(context.Background())
+		cache := buildCache(ctx, nil)
 
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StringValue("aws-s3"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
-		assert.Equal(t, "aws-s3", reg.RemoteBackend())
+		assert.Equal(t, "aws-s3", rec.Choices().RemoteBackend)
 	})
 
-	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
-		// describe/parse runs have no per-Open registry; remote() must not panic and
-		// simply records nothing.
+	t.Run("no evaluation record in context is refused", func(t *testing.T) {
 		cache := buildCache(context.Background(), nil)
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StringValue("aws-s3"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
+		err := callVoidDirect(t, requireDirect(t, cache, "remote"), handle)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is a magusfile declaration")
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
@@ -568,13 +567,13 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 	p := testkit.NewSecretProvider(map[string]string{"op://vault/token": "op-token-value"})
 	r := secrets.NewResolver(secrets.WithOpener(p.Opener()))
-	reg := workspace.NewWorkspaceRegistry()
-	secretObj := buildSecret(workspace.ContextWithRegistry(secrets.WithResolver(context.Background(), r), reg), nil)
+	ctx, rec := interp.WithChoiceRecord(secrets.WithResolver(context.Background(), r))
+	secretObj := buildSecret(ctx, nil)
 
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StringValue("onepassword"))
 	require.NoError(t, callSecret(t, secretObj, "provider", handle))
-	assert.Equal(t, "onepassword", reg.SecretProvider(), "the selection is declared for the workspace's later runs")
+	assert.Equal(t, "onepassword", rec.Choices().SecretProvider, "the selection is returned for the workspace's later runs")
 	assert.Empty(t, r.ProviderName(), "the run's resolver is derived from, never changed")
 
 	// The same evaluation's reads go through the selected provider.
@@ -585,8 +584,8 @@ func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 
 func TestSecretProviderRejectsNonHandles(t *testing.T) {
 	r := secrets.NewResolver()
-	reg := workspace.NewWorkspaceRegistry()
-	secretObj := buildSecret(workspace.ContextWithRegistry(secrets.WithResolver(context.Background(), r), reg), nil)
+	ctx, rec := interp.WithChoiceRecord(secrets.WithResolver(context.Background(), r))
+	secretObj := buildSecret(ctx, nil)
 
 	err := callSecret(t, secretObj, "provider")
 	require.Error(t, err)
@@ -597,7 +596,16 @@ func TestSecretProviderRejectsNonHandles(t *testing.T) {
 	err = callSecret(t, secretObj, "provider", vm.NewMap())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a spell handle")
-	assert.Empty(t, reg.SecretProvider(), "a rejected handle must not be recorded")
+	assert.Empty(t, rec.Choices().SecretProvider, "a rejected handle must not be recorded")
+}
+
+func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	handle := vm.NewMap()
+	handle.MapSet("name", vm.StringValue("onepassword"))
+	err := callSecret(t, secretObj, "provider", handle)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is a magusfile declaration")
 }
 
 func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {

@@ -28,9 +28,6 @@ type registryKey struct{}
 type WorkspaceRegistry struct {
 	mu          sync.Mutex
 	projectOpts map[string][]ProjectOption
-	// remoteBackend is the spell name a magusfile chose as the remote cache
-	// backend (via magus.cache.remote); empty when none was wired.
-	remoteBackend string
 	// providers are the spell names a magusfile wired as workspace providers (via
 	// magus.workspace.provider), in wiring order. Ordered, not a set, because two
 	// providers that report the same path must resolve deterministically: the first
@@ -39,9 +36,6 @@ type WorkspaceRegistry struct {
 	// lifecycleProvider is the spell a magusfile wired via magus\lifecycle.provider;
 	// empty when none was.
 	lifecycleProvider string
-	// secretProvider is the spell a magusfile declared via magus\secret.provider; empty
-	// when none was, and the built-in environment provider applies.
-	secretProvider string
 	// shellRules are additive agent-guard rules a magusfile declared via
 	// magus\guard.shell, in declaration order. They strengthen only: the guard
 	// merges them after compiled built-ins.
@@ -146,22 +140,6 @@ func registerPathHint(w types.WorkspaceRepository) string {
 		strings.Join(known, ", "))
 }
 
-// SetRemoteBackend records the spell name a magusfile chose as the remote cache
-// backend. Last writer wins; safe to call concurrently.
-func (r *WorkspaceRegistry) SetRemoteBackend(spellName string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.remoteBackend = spellName
-}
-
-// RemoteBackend returns the remote-cache-backend spell name a magusfile wired, or
-// "" when none was.
-func (r *WorkspaceRegistry) RemoteBackend() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.remoteBackend
-}
-
 // AddProvider records a spell name a magusfile wired as a workspace provider,
 // ignoring a repeat of one already wired so a magusfile that wires the same spell
 // twice does not run it twice. Safe to call concurrently.
@@ -202,25 +180,6 @@ func (r *WorkspaceRegistry) LifecycleProvider() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.lifecycleProvider
-}
-
-// DeclareSecretProvider records the spell a magusfile declared as its secret provider.
-// Declaring a second one replaces the first. Safe to call concurrently.
-func (r *WorkspaceRegistry) DeclareSecretProvider(spellName string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.secretProvider = spellName
-}
-
-// SecretProvider returns the secret-provider spell name, or "" when none was declared.
-// A nil registry declares none.
-func (r *WorkspaceRegistry) SecretProvider() string {
-	if r == nil {
-		return ""
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.secretProvider
 }
 
 // AddShellRule appends an additive shell-guard rule. Safe to call concurrently.
