@@ -13,7 +13,7 @@ require github.com/egladman/magus/libs/diagnostics v0.2.0 // indirect
 require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
-	github.com/egladman/magus/libs/gopherbuzz v0.0.0
+	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

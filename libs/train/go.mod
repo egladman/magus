@@ -3,7 +3,7 @@ module github.com/egladman/magus/libs/train
 go 1.26.5
 
 require (
-	github.com/egladman/magus/libs/embed v0.0.0-00010101000000-000000000000
+	github.com/egladman/magus/libs/embed v0.1.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/egladman/magus/libs/xdg v0.1.0
 	github.com/gomlx/compute v0.1.6
