@@ -986,7 +986,7 @@ func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
 // instead of calling codec.AppendLines: none of them is a JSON Lines store. It only shrinks:
 // TestStoresAreJSONLines fails on an entry whose site is gone.
 var appendAllowed = map[string]string{
-	"internal/proc/detach_unix.go:RedirectStdio":            "a log: the process's stderr, held open as an fd",
+	"internal/proc/detach_other.go:RedirectStdio":           "a log: the process's stderr, held open as an fd",
 	"internal/proc/detach_windows.go:RedirectStdio":         "a log: the process's stderr, held open as an fd",
 	"internal/render/output.go:Tee.openFile":                "--tee mirrors a stream into a file held open for the command",
 	"internal/proc/detach.go:SpawnDetached":                 "a log: the daemon's stdio, handed to the child",

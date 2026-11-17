@@ -4,10 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }

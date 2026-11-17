@@ -682,6 +682,7 @@ github.com/egladman/magus/std.MagusWorkspaceRisk func(ctx context.Context, _ git
 github.com/egladman/magus/std.MagusWorkspaceSkills func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, opts github.com/egladman/magus/types.SkillsOptions) ([]github.com/egladman/magus/types.Skill, error)
 github.com/egladman/magus/std.MagusWorkspaceTierOutcomes func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus/std.MagusWorkspaceUnmerged func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/libs/safetyscissors/job.UnmergedReport, error)
+github.com/egladman/magus/std.MagusWorkspaceUnverified func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace, revision string) (github.com/egladman/magus/types.UnverifiedReport, error)
 github.com/egladman/magus/std.MagusWorkspaceVolatility func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.Volatility, error)
 github.com/egladman/magus/std.Markdown var Module
 github.com/egladman/magus/std.MarkdownFrontmatter func(_ context.Context, source string) (string, error)
@@ -1392,6 +1393,13 @@ github.com/egladman/magus/types.CommandInvocation.Program field string
 github.com/egladman/magus/types.CommandInvocation.Repeats field bool
 github.com/egladman/magus/types.CommandInvocation.VCS field *VCSInvocation
 github.com/egladman/magus/types.CommandOpNeverExits const DiagnosticCode = "MGS5003"
+github.com/egladman/magus/types.CommandPush type struct
+github.com/egladman/magus/types.CommandPush.Dir field string
+github.com/egladman/magus/types.CommandPush.OpensPullRequest field bool
+github.com/egladman/magus/types.CommandPush.Revision field string
+github.com/egladman/magus/types.CommandPush.Source field string
+github.com/egladman/magus/types.CommandPush.Tool field string
+github.com/egladman/magus/types.CommandPush.Unknown field string
 github.com/egladman/magus/types.CommandRequest type struct
 github.com/egladman/magus/types.CommandRequest.Agent field string
 github.com/egladman/magus/types.CommandRequest.Checkout field *CheckoutState
@@ -1404,6 +1412,7 @@ github.com/egladman/magus/types.CommandRequest.Lease field *github.com/egladman/
 github.com/egladman/magus/types.CommandRequest.Orchestration field Orchestration
 github.com/egladman/magus/types.CommandRequest.OwnedCheckouts field []string
 github.com/egladman/magus/types.CommandRequest.Parent field string
+github.com/egladman/magus/types.CommandRequest.Push field *CommandPush
 github.com/egladman/magus/types.CommandRequest.Role field AgentRole
 github.com/egladman/magus/types.CommandRequest.Session field string
 github.com/egladman/magus/types.CommandRequest.Thread field AgentThread
@@ -3708,6 +3717,16 @@ github.com/egladman/magus/types.RuleDoc.Name field string "json:\"name\""
 github.com/egladman/magus/types.RuleDoc.Verdicts field []github.com/egladman/magus/libs/safetyscissors/verdict.Decision "json:\"verdicts\""
 github.com/egladman/magus/types.RuleDoc.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Workspace field string "json:\"workspace,omitempty\""
+github.com/egladman/magus/types.RunEvidence type struct
+github.com/egladman/magus/types.RunEvidence.Cached field bool "json:\"cached,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Claims field []string "json:\"claims,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Dirty field bool "json:\"dirty,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Failed field bool "json:\"failed,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Project field string "json:\"project\""
+github.com/egladman/magus/types.RunEvidence.Reads field []string "json:\"reads,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Ref field string "json:\"ref\""
+github.com/egladman/magus/types.RunEvidence.Revision field string "json:\"revision,omitempty\""
+github.com/egladman/magus/types.RunEvidence.Target field string "json:\"target\""
 github.com/egladman/magus/types.RunsUnderAStep func(ancestors []string) bool
 github.com/egladman/magus/types.SandboxMode type string
 github.com/egladman/magus/types.SandboxMode.Enabled method func() bool
@@ -4385,6 +4404,18 @@ github.com/egladman/magus/types.UnregisteredDepError.Is method(ptr) func(target 
 github.com/egladman/magus/types.UnregisteredDepError.Missing field []UnregisteredDep
 github.com/egladman/magus/types.UnresolvableBuzzImport const DiagnosticCode = "MGS7001"
 github.com/egladman/magus/types.Unsupported const BindingStatus = "unsupported"
+github.com/egladman/magus/types.UnverifiedFile type struct
+github.com/egladman/magus/types.UnverifiedFile.Commands field []string "json:\"commands,omitempty\""
+github.com/egladman/magus/types.UnverifiedFile.Declared field bool "json:\"declared,omitempty\""
+github.com/egladman/magus/types.UnverifiedFile.Path field string "json:\"path\""
+github.com/egladman/magus/types.UnverifiedReport type struct
+github.com/egladman/magus/types.UnverifiedReport.Base field string "json:\"base\""
+github.com/egladman/magus/types.UnverifiedReport.Changed field []string "json:\"changed,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.NoWorkspace field bool "json:\"no_workspace,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.Revision field string "json:\"revision\""
+github.com/egladman/magus/types.UnverifiedReport.Runs field []RunEvidence "json:\"runs,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.Unknown field string "json:\"unknown,omitempty\""
+github.com/egladman/magus/types.UnverifiedReport.Unverified field []UnverifiedFile "json:\"unverified,omitempty\""
 github.com/egladman/magus/types.UpdateRef type struct
 github.com/egladman/magus/types.UpdateRef.Except field []string "json:\"except,omitempty\" yaml:\"except,omitempty\""
 github.com/egladman/magus/types.UpdateRef.Glob field string "json:\"glob\" yaml:\"glob\""

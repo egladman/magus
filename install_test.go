@@ -155,3 +155,33 @@ func TestInstallReachedThroughNeedsRunsAtWidthOne(t *testing.T) {
 	assert.True(t, installed.Load())
 	assert.Equal(t, budget.LimiterSnapshot{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
 }
+
+// TestAnInstallGapNamesTheCommandUntilItsTreeAndStampsExist pins the refusal a symbol
+// index outside a typed run gets for a project whose install is not in place: it names the
+// missing directory or stamp and `magus run <op> <project>`, and nothing once both exist.
+func TestAnInstallGapNamesTheCommandUntilItsTreeAndStampsExist(t *testing.T) {
+	m, root := openTempWorkspace(t, "web", nil)
+	dir := filepath.Join(root, "web")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte("lockfileVersion: '9.0'\n"), 0o644))
+	p := m.Get("web")
+	require.NotNil(t, p)
+	pnpm := spells.Install{Name: "pnpm-install", Dir: "node_modules", Stamps: []string{"node_modules/.modules.yaml"}}
+	p.ResolvedSpells = []*spells.Spell{spells.NewSpell("typescript", spells.WithTargets("pnpm-install"), spells.WithOps(map[string]spells.Op{"pnpm-install": {
+		Kind: spells.OpKindInstall,
+		Install: &spells.InstallSpec{Spell: "typescript", Manifests: []spells.Manifest{{
+			Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml"}, Installs: map[string]spells.Install{"pnpm-lock.yaml": pnpm},
+		}}},
+	}}))}
+	installs := m.projectInstalls(p)
+	require.Len(t, installs, 1)
+	assert.Equal(t, "pnpm-install", installTarget(p, installs[0].op), "a project with no install target runs the spell's op")
+
+	assert.Equal(t, "no node_modules in web: run `magus run pnpm-install web`", m.installGap(dir, "pnpm-install", pnpm))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "node_modules"), 0o755))
+	assert.Equal(t, "the install in web never finished (node_modules/.modules.yaml is missing): run `magus run pnpm-install web`",
+		m.installGap(dir, "pnpm-install", pnpm))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "node_modules", ".modules.yaml"), nil, 0o644))
+	assert.Empty(t, m.installGap(dir, "pnpm-install", pnpm))
+	assert.Empty(t, m.installGap(dir, "go-mod-download", spells.Install{Name: "go-mod-download"}), "a global-store install leaves nothing in the tree to miss")
+}

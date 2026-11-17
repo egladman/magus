@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"maps"
 	"os"
@@ -27,11 +25,14 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -1019,6 +1020,10 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths, languages []str
 	if len(touched) == 0 {
 		return nil
 	}
+	if err := m.installIndexedProjects(ctx, touched); err != nil {
+		return err
+	}
+	gaps := m.installGaps(touched)
 	c := m.freshnessCache(ctx)
 	if c == nil {
 		return cacheWouldNotOpen(touched)
@@ -1054,6 +1059,11 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths, languages []str
 		return out
 	}
 	return freshenIndexes(touched, probe, func(idx projectIndex) error {
+		// Built over a tree missing its dependencies, an index answers for code that does
+		// not build; the install is the fix, and only a typed run makes it.
+		if gap := gaps[idx.project.Path]; gap != "" {
+			return fmt.Errorf("%w: %s", errDependenciesNotInstalled, gap)
+		}
 		if err := unkeyable[idx.ref()]; err != nil {
 			return err
 		}
@@ -1090,6 +1100,61 @@ func (m *Magus) buildSkew(ctx context.Context) string {
 		}
 		return job.ChangedBuildInputs(ctx, res.VCS, m.ws.Root, m.All(), built, head)
 	})
+}
+
+// installIndexedProjects runs the installs of each project among touched before any of
+// their indexes is probed: the tool probes that key an index, and the indexer, read what an
+// install puts in the tree. It runs them only inside a run somebody typed, through that
+// run as a cross-project ctx.needs does, and each install's own step decides whether it
+// has anything to do, so a moved lockfile reinstalls and a current tree replays. Anywhere
+// else it installs nothing, and a cold project's index fails naming the install (ADR 0052).
+func (m *Magus) installIndexedProjects(ctx context.Context, touched []projectIndex) error {
+	cd := interp.CrossDispatchFromContext(ctx)
+	if cd == nil || !inTypedRun(ctx) {
+		return nil
+	}
+	var seen []types.TargetRef
+	for _, idx := range touched {
+		p := idx.project
+		for _, in := range m.projectInstalls(p) {
+			target := installTarget(p, in.op)
+			if key := (types.TargetRef{Project: p.Path, Target: target}); !slices.Contains(seen, key) {
+				seen = append(seen, key)
+				lim := cache.LimiterFromContext(ctx)
+				err := cache.LendMachineClaim(ctx, func(ctx context.Context) error {
+					return proc.RunChildSync(ctx, lim, func() error { return cd.Dispatch(budget.WithoutSlotHeld(ctx), p, target) })
+				})
+				if err != nil {
+					return fmt.Errorf("installing %s before its symbol index: %w", idx.projectRef().Display(), err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// errDependenciesNotInstalled refuses an index whose project's install is not in place,
+// which the indexer never ran to find out.
+var errDependenciesNotInstalled = errors.New("its dependencies are not installed")
+
+// installGaps names, per project among touched, what its installs are missing and the
+// command that installs them, for a project that has a gap.
+func (m *Magus) installGaps(touched []projectIndex) map[string]string {
+	gaps := map[string]string{}
+	for _, idx := range touched {
+		p := idx.project
+		if _, done := gaps[p.Path]; done {
+			continue
+		}
+		var found []string
+		for _, in := range m.projectInstalls(p) {
+			if gap := m.installGap(p.Dir, in.op, in.install); gap != "" {
+				found = append(found, gap)
+			}
+		}
+		gaps[p.Path] = strings.Join(found, "; ")
+	}
+	return gaps
 }
 
 // buildSymbolIndex rebuilds one stale index. A reader inside a target body (the run that
@@ -1266,7 +1331,7 @@ func toDiagnostic(err error) types.Diagnostic {
 // reports no version (MGS3035), never reached it either, and rerunning does not help, so it
 // gets no hint of either kind: the diagnostic says what to do.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
-	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) || errors.Is(err, types.GateSuperseded) {
+	if errors.Is(err, errDependenciesNotInstalled) || errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) || errors.Is(err, types.GateSuperseded) {
 		return fmt.Errorf("%s: %w", project.Display(), err)
 	}
 	var busy interface{ ExitCode() int }

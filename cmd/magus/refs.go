@@ -151,11 +151,11 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	if len(page.Scopes) > 0 {
 		slog.WarnContext(ctx, page.RefsNote(out.RefCount, unscoped), attr.Notice("magus refs"))
 	}
-	return emitRefsList(ctx, env, opts, out)
+	return emitRefsList(ctx, opts, out)
 }
 
 // emitRefsList prints the plain reference list in the format asked for.
-func emitRefsList(ctx context.Context, env knowledge.RefsEnv, opts output.Options, out types.KnowledgeRefsOutput) error {
+func emitRefsList(ctx context.Context, opts output.Options, out types.KnowledgeRefsOutput) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		if err := emitFormatted(opts, out); err != nil {
@@ -175,7 +175,7 @@ func emitRefsList(ctx context.Context, env knowledge.RefsEnv, opts output.Option
 		return knowledge.ReportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
 	}
 
-	return knowledge.WriteRefsText(os.Stdout, env, out)
+	return knowledge.WriteRefsText(os.Stdout, out)
 }
 
 // refsMissCommand reports a name no symbol node matches. `absent` is true of SYMBOLS and

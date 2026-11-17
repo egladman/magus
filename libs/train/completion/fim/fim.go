@@ -27,9 +27,9 @@ const (
 	// extends the prefix keeps the cache (plan 5.3).
 	AnchorAlign = 1024
 
-	// FIMRate is the share of samples that are fill-in-the-middle; the rest are plain
+	// Rate is the share of samples that are fill-in-the-middle; the rest are plain
 	// left-to-right text.
-	FIMRate = 0.9
+	Rate = 0.9
 
 	// The span mix of a FIM sample, cumulative: AST, then single-line, then random
 	// characters, then an empty middle.
@@ -132,7 +132,7 @@ func Build(f File, n int, lim Limit) []Sample {
 
 func one(f File, rng *rand.Rand, cands []Range, lim Limit) Sample {
 	s := Sample{Path: f.Path, Blob: f.Blob, Language: f.Language, Context: []Chunk{}}
-	if rng.Float64() >= FIMRate {
+	if rng.Float64() >= Rate {
 		s.Kind = KindLM
 		s.Start, s.End = lim.From, lim.From
 		s.Prefix = clip(f.Text, lineStartAtOrAfter(f.Text, lim.From), min(lim.To, lineStartAtOrAfter(f.Text, lim.From)+lmWindow))

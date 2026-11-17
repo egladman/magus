@@ -120,7 +120,7 @@ func RenderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 	var b strings.Builder
 	switch {
 	case reason != "":
-		fmt.Fprintf(&b, "magus workspace: the graph is stale, %s. Run `%s` once any merge or rebase is finished, then ask again.\n", reason, hint.GraphBuild)
+		fmt.Fprintf(&b, "magus workspace: the graph is stale, %s. Run `%s` once any merge or rebase is finished, then ask again. This answer describes another tree.\n", reason, hint.GraphBuild)
 	case len(stale) > 0:
 		b.WriteString("magus workspace: the answer you are about to get is drawn from an index built before the current sources. refs, query and explain refresh it in the background.\n")
 	default:

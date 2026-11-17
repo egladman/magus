@@ -75,6 +75,26 @@ var magusObjects = []Object{
 				Impl:    MagusWorkspaceUnmerged,
 			},
 			{
+				Name: "unverified",
+				Doc: "The files revision changed since its merge base with the base ref, and those no passing run " +
+					"recorded in the checkout holding this Workspace's dir read as revision holds them: {revision, base, " +
+					"changed, unverified, runs, unknown}. A run counts for a file when it passed and the file held, as it ran, " +
+					"what revision holds, whatever else in the tree was uncommitted. It read the files its target's declared " +
+					"inputs claim, held to the paths its command names when it names any, and the declared outputs it wrote; " +
+					"a target that declares no inputs read only the paths its command names. An unverified file with no " +
+					"commands is one no target declares. A cache hit records a new attempt and counts as a run. Evidence is " +
+					"per checkout: a push from a second worktree sees no runs until the targets rerun there, which are cache " +
+					"hits. A clean attempt can be evicted by five later attempts of the same key. unknown says why the read " +
+					"did not finish, and then changed and unverified are not an answer. Facts only: repo policy decides what " +
+					"they stop. Inside a magus\\guard rule it is bounded by half the hook's budget and answered once per " +
+					"judgment, and a checkout no workspace holds reads as one that declares no target. A relative dir is " +
+					"the process's. Raises on an empty revision, outside a workspace, and for a dir outside the workspace.",
+				Args:    []Arg{{Name: "revision"}},
+				Returns: []Ret{{Object: "UnverifiedReport"}},
+				Raises:  true,
+				Impl:    MagusWorkspaceUnverified,
+			},
+			{
 				Name:    "tierOutcomes",
 				Doc:     "Recorded outcomes per (model tier, job kind): {definition, rows}. Annotate `> ModelTiers`. Workspace-wide; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 				Returns: []Ret{{Object: "ModelTiers"}},

@@ -2,17 +2,16 @@ package review
 
 import (
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types/diff"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }

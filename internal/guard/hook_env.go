@@ -57,6 +57,9 @@ type HookCall struct {
 	Flags    flaggen.ShellFlags
 	Output   output.Options
 	Operands []string
+	// Argv is the command line after the program name, which a checkout's ./magus is
+	// handed whole when the call is delegated to it.
+	Argv []string
 	// Quiet is -q or -s: the exit code is the answer and nothing prints.
 	Quiet bool
 	// Window names the terminal window a person typed this in, "" for a host's hook.

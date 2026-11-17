@@ -2250,7 +2250,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 	if err == nil {
 		loaded = m
 	}
-	return job.ValidationWorkspace(ctx, root, loaded, err, func(err error) string {
+	return job.NewWorkspace(ctx, root, loaded, err, func(err error) string {
 		running, pathErr := selfupdate.RunningBinary()
 		if pathErr != nil {
 			return err.Error()

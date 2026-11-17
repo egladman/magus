@@ -227,12 +227,12 @@ type LoadedWorkspace interface {
 	All() []*types.Project
 }
 
-// ValidationWorkspace is the workspace at root as a job record's validation reads it, from loaded
+// NewWorkspace returns the workspace at root as a job record's validation reads it, from loaded
 // and the error that opening it returned. A workspace that will not load comes back
 // Unavailable with failure's text for that error, and so does one listing no projects or
 // rooted elsewhere than root, so the checks that need it say they did not run rather than
 // pass or judge against the wrong tree.
-func ValidationWorkspace(ctx context.Context, root string, loaded LoadedWorkspace, err error, failure func(error) string) Workspace {
+func NewWorkspace(ctx context.Context, root string, loaded LoadedWorkspace, err error, failure func(error) string) Workspace {
 	switch {
 	case err != nil:
 		return Workspace{Unavailable: failure(err)}

@@ -70,7 +70,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	}
 	var judge, judgeRoot string
 	if sf.Transport != "" {
-		handled, declined, err := e.delegateToCheckout(ctx, input, opts, out, errOut)
+		handled, declined, err := e.delegateToCheckout(ctx, call.Argv, input, opts, out, errOut)
 		if handled {
 			return err
 		}

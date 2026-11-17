@@ -95,7 +95,7 @@ func hookCommand(ctx context.Context, in io.Reader, out, errOut io.Writer, args 
 	if err != nil {
 		return err
 	}
-	call := HookCall{Flags: *sf, Output: opts, Operands: fset.Args(), Quiet: *quiet}
+	call := HookCall{Flags: *sf, Output: opts, Operands: fset.Args(), Argv: append([]string{"shell"}, args...), Quiet: *quiet}
 	return testHookEnv().RunHook(ctx, call, in, out, errOut)
 }
 

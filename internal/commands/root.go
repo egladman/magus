@@ -44,7 +44,7 @@ dot-prefixed names are accepted; having both in the same directory is an error.`
 	},
 	Children: slices.Concat(
 		group("Projects and targets", listCommand, describeCommand, whereCommand, runCommand,
-			affectedCommand, xCommand, cleanCommand, shellCommand),
+			affectedCommand, xCommand, cleanCommand, Shell),
 		group("Knowledge graph", queryCommand, refsCommand, explainCommand, graphCommand),
 		group("Changes and history", diffCommand, vcsCommand, sessionCommand, jobCommand, notesCommand, queueCommand),
 		group("Background processes (start on demand)", serverCommand, mcpCommand),
