@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
@@ -261,7 +262,7 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 			fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
 			return nil
 		}
-		return settle.OwedByHand(ctx, os.Stdout, m, res.VCS, buildDefinesTarget(ctx, m), settleRun(root, rc))
+		return settle.OwedByHand(ctx, os.Stdout, m, res.VCS, interactive.DefinesTarget(ctx, m), settleRun(root, rc))
 	}
 
 	if !globalCfg.DryRun {

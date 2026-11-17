@@ -133,7 +133,7 @@ func TestRememberedSettingsAreAppendedPerRule(t *testing.T) {
 	assert.Equal(t, map[string]builtin.Setting{"busy-wait": busy}, recalled(t, dir))
 }
 
-// A JSON memo an older magus left is not read as a second format: recalling the settings fails
+// A JSON file of kept settings an older magus left is not read as a second format: recalling the settings fails
 // naming the file to preserve, and a lapse grades by the defaults.
 func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	dir := t.TempDir()

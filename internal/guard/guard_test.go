@@ -2160,28 +2160,28 @@ func TestJobRowsReadIsBoundedByTheDeadline(t *testing.T) {
 	assert.Contains(t, asked.lapse.what(), "reading the job store did not finish within")
 }
 
-// WorkspaceMemoSuite pins what Dependencies.Opens carries from one judgment to the next:
+// OpenedWorkspacesSuite pins what Dependencies.Opens carries from one judgment to the next:
 // an open that succeeded, never one that failed.
-type WorkspaceMemoSuite struct {
+type OpenedWorkspacesSuite struct {
 	suite.Suite
 	opens int
 	fail  bool
 }
 
-func TestWorkspaceMemoSuite(t *testing.T) {
-	suite.Run(t, new(WorkspaceMemoSuite))
+func TestOpenedWorkspacesSuite(t *testing.T) {
+	suite.Run(t, new(OpenedWorkspacesSuite))
 }
 
-func (s *WorkspaceMemoSuite) SetupTest() {
+func (s *OpenedWorkspacesSuite) SetupTest() {
 	s.opens, s.fail = 0, false
 }
 
 // stubWorkspace is an opened workspace no rule here reads.
 type stubWorkspace struct{ types.WorkspaceRepository }
 
-// judgment is one judgment's Dependencies over memo, as Judge fills them.
-func (s *WorkspaceMemoSuite) judgment(memo *WorkspaceMemo) Dependencies {
-	deps := Dependencies{Opens: memo, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+// judgment is one judgment's Dependencies over opened, as Judge fills them.
+func (s *OpenedWorkspacesSuite) judgment(opened *OpenedWorkspaces) Dependencies {
+	deps := Dependencies{Opens: opened, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
 		s.opens++
 		if s.fail {
 			return nil, errors.New("did not open")
@@ -2192,7 +2192,7 @@ func (s *WorkspaceMemoSuite) judgment(memo *WorkspaceMemo) Dependencies {
 	return deps
 }
 
-func (s *WorkspaceMemoSuite) TestWithoutAMemoEachJudgmentOpens() {
+func (s *OpenedWorkspacesSuite) TestWithoutKeptWorkspacesEachJudgmentOpens() {
 	for range 2 {
 		deps := s.judgment(nil)
 		_, _ = deps.inspect(s.T().Context(), "/w")
@@ -2201,32 +2201,32 @@ func (s *WorkspaceMemoSuite) TestWithoutAMemoEachJudgmentOpens() {
 	s.Equal(2, s.opens, "once per judgment, however often a rule asks")
 }
 
-func (s *WorkspaceMemoSuite) TestAKeptWorkspaceServesEveryJudgment() {
-	memo := NewWorkspaceMemo()
-	memo.Keep("/w", stubWorkspace{})
+func (s *OpenedWorkspacesSuite) TestAKeptWorkspaceServesEveryJudgment() {
+	opened := NewOpenedWorkspaces()
+	opened.Keep("/w", stubWorkspace{})
 	for range 2 {
-		_, err := s.judgment(memo).inspect(s.T().Context(), "/w")
+		_, err := s.judgment(opened).inspect(s.T().Context(), "/w")
 		s.Require().NoError(err)
 	}
 	s.Zero(s.opens)
 }
 
-func (s *WorkspaceMemoSuite) TestAnOpenServesTheJudgmentsAfterIt() {
-	memo := NewWorkspaceMemo()
+func (s *OpenedWorkspacesSuite) TestAnOpenServesTheJudgmentsAfterIt() {
+	opened := NewOpenedWorkspaces()
 	for range 3 {
-		_, err := s.judgment(memo).inspect(s.T().Context(), "/w")
+		_, err := s.judgment(opened).inspect(s.T().Context(), "/w")
 		s.Require().NoError(err)
 	}
 	s.Equal(1, s.opens)
 }
 
-func (s *WorkspaceMemoSuite) TestAFailedOpenIsTriedAgainNextJudgment() {
-	memo := NewWorkspaceMemo()
+func (s *OpenedWorkspacesSuite) TestAFailedOpenIsTriedAgainNextJudgment() {
+	opened := NewOpenedWorkspaces()
 	s.fail = true
-	_, err := s.judgment(memo).inspect(s.T().Context(), "/w")
+	_, err := s.judgment(opened).inspect(s.T().Context(), "/w")
 	s.Require().Error(err)
 	s.fail = false
-	_, err = s.judgment(memo).inspect(s.T().Context(), "/w")
+	_, err = s.judgment(opened).inspect(s.T().Context(), "/w")
 	s.Require().NoError(err)
 	s.Equal(2, s.opens)
 }

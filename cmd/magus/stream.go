@@ -11,11 +11,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-const streamAllSentinel = watch.AllSentinel
-
 // streamAffected reads file-path batches from r and runs target on the affected
 // projects, each batch through m.Run with runOpts, so the guard judges it as it judges
-// any run. watch.RunBatches schedules the batches. streamAllSentinel triggers a
+// any run. watch.RunBatches schedules the batches. watch.AllSentinel triggers a
 // full-workspace build. null reads NUL-separated paths with double-NUL batch
 // boundaries. Per-batch errors go to errFn.
 func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target string, null bool, errFn func(error), runOpts ...magus.RunOption) {
@@ -32,9 +30,9 @@ func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target str
 }
 
 // streamTargets is target on every project the batch affects, or on the whole
-// workspace when the batch carries streamAllSentinel.
+// workspace when the batch carries watch.AllSentinel.
 func streamTargets(ctx context.Context, m *magus.Magus, paths []string, target string) ([]types.Target, error) {
-	if slices.Contains(paths, streamAllSentinel) {
+	if slices.Contains(paths, watch.AllSentinel) {
 		ts, err := m.ExpandPath(types.Target{Name: target})
 		if err != nil {
 			return nil, fmt.Errorf("stream: expand all: %w", err)

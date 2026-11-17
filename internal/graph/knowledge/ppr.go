@@ -45,13 +45,19 @@ const pprSeedsPerScore = 3
 // negative Tolerance, no relation or an unknown one in Edges, a negative or infinite edge
 // or seed weight, and seeds of which none is a node or none that is placed weighs anything.
 func (g *Graph) PersonalizedPageRank(seeds map[string]float64, w textrank.PPRWeights) (PPRResult, error) {
+	return g.personalizedPageRank(seeds, w, nil)
+}
+
+// personalizedPageRank is PersonalizedPageRank over the graph less every node skip reports:
+// a skipped node is neither placed as a seed nor admitted to the walk. A nil skip skips none.
+func (g *Graph) personalizedPageRank(seeds map[string]float64, w textrank.PPRWeights, skip func(string) bool) (PPRResult, error) {
 	if err := checkPPR(seeds, w); err != nil {
 		return PPRResult{}, err
 	}
 	var res PPRResult
 	var placed []string
 	for _, id := range slices.Sorted(maps.Keys(seeds)) {
-		if _, ok := g.node(id); ok {
+		if _, ok := g.node(id); ok && (skip == nil || !skip(id)) {
 			placed = append(placed, id)
 		} else {
 			res.Unplaced = append(res.Unplaced, id)
@@ -67,7 +73,7 @@ func (g *Graph) PersonalizedPageRank(seeds map[string]float64, w textrank.PPRWei
 			walk[types.RelationID(rel)] = weight
 		}
 	}
-	sub := g.pprSubgraph(placed, walk, w.MaxNodes)
+	sub := g.pprSubgraph(placed, walk, w.MaxNodes, skip)
 	res.Walked, res.Truncated = len(sub.ids), sub.truncated
 	for _, rel := range slices.Sorted(maps.Keys(w.Edges)) {
 		if !sub.carried[types.RelationID(rel)] {
@@ -134,13 +140,13 @@ type pprGraph struct {
 
 // pprSubgraph admits the placed seeds, then their neighbors breadth-first, each frontier in
 // sorted order, until maxNodes are in. The seeds count against maxNodes too.
-func (g *Graph) pprSubgraph(placed []string, walk map[types.RelationID]float64, maxNodes int) pprGraph {
+func (g *Graph) pprSubgraph(placed []string, walk map[types.RelationID]float64, maxNodes int, skip func(string) bool) pprGraph {
 	g.ensureAdj()
 	var sub pprGraph
 	admitted := map[string]bool{}
 	var queue []string
 	admit := func(id string) bool {
-		if admitted[id] {
+		if admitted[id] || skip != nil && skip(id) {
 			return true
 		}
 		if len(queue) == maxNodes {

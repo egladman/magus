@@ -167,19 +167,14 @@ func (w *rowWrite) carryRecord() error {
 			row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
 			row.CheckoutRoot = prev.CheckoutRoot
 		}
-		// An ended row declared again is handed out afresh: a checkout left
-		// on it would refuse every new taker.
-		if w.refork {
-			if err := w.foldAttempt(); err != nil {
-				return err
-			}
-			row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
-		}
 		if w.kind != asObservation {
 			row.Unattributed, row.ReleaseRequests = prev.Unattributed, prev.ReleaseRequests
 		}
 		if w.refork {
-			row.ReleaseRequests = nil
+			if err := w.foldAttempt(); err != nil {
+				return err
+			}
+			*row = handedOutAfresh(*row)
 		}
 		if w.kind != asObservation && !w.entering {
 			row.Entries = prev.Entries
@@ -189,6 +184,15 @@ func (w *rowWrite) carryRecord() error {
 		row.CheckoutRoot = ""
 	}
 	return nil
+}
+
+// handedOutAfresh is row, an ended row declared again, with nothing of the holder that took
+// it last: a checkout left on it would refuse every new taker, and its grade would stand in
+// that checkout. A fork is graded on this row, so the write and the grade share it.
+func handedOutAfresh(row types.Job) types.Job {
+	row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
+	row.ReleaseRequests = nil
+	return row
 }
 
 // foldAttempt folds the live attempt of the ended row being forked again,

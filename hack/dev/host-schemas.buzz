@@ -1,5 +1,5 @@
 // host-schemas.buzz refreshes the agent-host schemas vendored under
-// testdata/hosts, and says when one has moved upstream.
+// internal/render/testdata/hosts, and says when one has moved upstream.
 //
 // The schemas are what internal/agent's tests grade this repository's hook configs and
 // rendered verdicts against. Vendoring them is what keeps that test off the network;
@@ -34,8 +34,8 @@ import "flags";
 
 import "assert";
 
-final SOURCES = "testdata/hosts/SOURCES.md";
-final DIR = "testdata/hosts";
+final SOURCES = "internal/render/testdata/hosts/SOURCES.md";
+final DIR = "internal/render/testdata/hosts";
 
 // code reads a column the table quotes in backticks, which is every path and URL.
 // Split rather than replace because this file runs WITHOUT --embedded, so strict mode
@@ -253,7 +253,7 @@ final usage = "usage: magus buzz hack/dev/host-schemas.buzz -- <step>\n"
     + "  verify   re-fetch and report drift; writes nothing\n"
     + "  fetch    re-fetch and write the vendored schemas that moved";
 
-final HELP = "cost: network; fetch also writes testdata/hosts\n{usage}";
+final HELP = "cost: network; fetch also writes internal/render/testdata/hosts\n{usage}";
 
 // parse returns the step args name, or "--help". Neither step is a default, and neither
 // takes a flag.

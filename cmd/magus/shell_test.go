@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"text/template"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +19,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -29,7 +27,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
@@ -118,14 +115,14 @@ func TestWriteGuardVerdictNameGoesToTheHandedWriterAndTheTee(t *testing.T) {
 // below this line fires the advisory, and that is the point: the set has to be filled
 // by every write, not only by the ones this rule speaks about.
 //
-// The workspace comes from the same memoized load the rule itself uses, rather than
+// The workspace comes from the same load, kept for the process, that the rule itself uses, rather than
 // from a root this test resolves on its own. That load is a package-level sync.Once, so
 // whichever test in this binary reaches it first pins it; asserting against a root this
 // test picked would pass or fail on test ORDER, since the rule is silent whenever the
 // loaded workspace is not the one the host reported.
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Setenv(trail.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
@@ -278,9 +275,9 @@ func judgeSpawnAt(t *testing.T, root string) types.GuardJudgment {
 	return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: spawnEnvelope, Host: "claude-code"})
 }
 
-// resetWorkspaceMemo gives a test its own memoized workspace load and restores the
+// resetOpenedWorkspaces gives a test its own workspace load and restores the
 // process-wide state afterwards.
-func resetWorkspaceMemo(t *testing.T) {
+func resetOpenedWorkspaces(t *testing.T) {
 	t.Helper()
 	savedVersion := version
 	resetStartupSingletons()
@@ -295,7 +292,7 @@ func resetWorkspaceMemo(t *testing.T) {
 func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	root := committedDenyRule(t).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	version = "v0.5.0"
 	globalCfg.RequiredVersion = ">= 99.0.0"
 
@@ -315,7 +312,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 // so the committed rules still apply to a spawn and to a command.
 func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	root := committedDenyRule(t).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
 	t.Chdir(root)
 	_, err := loadGuardRules(t.Context(), "")
@@ -370,7 +367,7 @@ magus\guard.command(p\judge);
 
 	write("magusfile.buzz", importing("b"))
 	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 
 	rules, err := loadGuardRules(t.Context(), "")
@@ -391,7 +388,7 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
 	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
 	root := repo.Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	judge := func() types.GuardJudgment {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
@@ -416,7 +413,7 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 // an uncommitted edit anywhere else changes nothing either side registers.
 func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	root := committedDenyRule(t).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "other", "spell.buzz"), []byte("// untracked\n"), 0o644))
@@ -445,7 +442,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 // a linked worktree, so the envelope's cwd, not the hook process's, decides the store.
 func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	testkit.Isolate(t)
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"magusfile.buzz": "import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n",
@@ -644,261 +641,6 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
 	s.NotEqual("deny", v.Decision, v.Reason)
-}
-
-// hookAudienceSuite pins decision 110 per host: a deny shows the person its first line, and
-// the agent gets the rest through the host's agent-only channel.
-type hookAudienceSuite struct {
-	suite.Suite
-}
-
-func TestHookAudienceSuite(t *testing.T) {
-	suite.Run(t, new(hookAudienceSuite))
-}
-
-const audienceReason = "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"
-
-// render runs the Claude Code / Codex glue on event and renders its template on verdict.
-func (s *hookAudienceSuite) render(host, event string, verdict map[string]any) map[string]any {
-	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: host, host: host, event: event, codex: host == "codex"})
-	tmpl, err := template.New(host).Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
-	s.Require().NoError(err)
-	var out strings.Builder
-	s.Require().NoError(tmpl.Execute(&out, verdict))
-	reply, ok := glueDecode(s.T(), host, out.String()).(map[string]any)
-	s.Require().True(ok, out.String())
-	return reply
-}
-
-func (s *hookAudienceSuite) TestClaudeCodeDenyShowsOneLineAndHandsTheAgentTheRest() {
-	reply := s.render("claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
-		map[string]any{"decision": "deny", "reason": audienceReason})
-	out := reply["hookSpecificOutput"].(map[string]any)
-	s.Equal("a text search the graph answers", out["permissionDecisionReason"])
-	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
-}
-
-func (s *hookAudienceSuite) TestCodexDenyShowsOneLineAndHandsTheAgentTheRest() {
-	reply := s.render("codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
-		map[string]any{"decision": "deny", "reason": audienceReason})
-	out := reply["hookSpecificOutput"].(map[string]any)
-	s.Equal("a text search the graph answers", out["permissionDecisionReason"])
-	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
-	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["codex"]).Validate(reply))
-}
-
-func (s *hookAudienceSuite) TestAOneLineDenyCarriesNoAgentContext() {
-	reply := s.render("claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
-		map[string]any{"decision": "deny", "reason": "no"})
-	out := reply["hookSpecificOutput"].(map[string]any)
-	s.Equal("no", out["permissionDecisionReason"])
-	s.NotContains(out, "additionalContext")
-}
-
-func (s *hookAudienceSuite) TestAStopBlockShowsOneLineAndHandsTheAgentTheRest() {
-	reply := s.render("claude-code", `{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`,
-		map[string]any{"decision": "deny", "reason": audienceReason})
-	s.Equal("block", reply["decision"])
-	s.Equal("a text search the graph answers", reply["reason"])
-	out := reply["hookSpecificOutput"].(map[string]any)
-	s.Equal("Stop", out["hookEventName"])
-	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
-}
-
-func (s *hookAudienceSuite) TestASubagentStopBlockNamesItsOwnEvent() {
-	reply := s.render("claude-code", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
-		map[string]any{"decision": "deny", "reason": audienceReason})
-	s.Equal("SubagentStop", reply["hookSpecificOutput"].(map[string]any)["hookEventName"])
-}
-
-func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
-	reply := s.render("codex", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
-		map[string]any{"decision": "deny", "reason": audienceReason})
-	s.Equal(audienceReason, reply["reason"])
-	s.NotContains(reply, "hookSpecificOutput")
-	s.Require().NoError(glueLoadSchema(s.T(), "codex/stop.command.output.schema.json").Validate(reply))
-}
-
-func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
-	verdict, err := json.Marshal(types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
-	s.Require().NoError(err)
-	s.T().Setenv("GLUE_VERDICT", string(verdict))
-	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,
-		event: `{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":"git stash","cwd":"/tmp"}`})
-	reply, ok := glueDecode(s.T(), "cursor", body).(map[string]any)
-	s.Require().True(ok, body)
-	s.Equal("a text search the graph answers", reply["user_message"])
-	s.Equal(audienceReason, reply["agent_message"])
-}
-
-// unjudgedHookSuite pins decision 114a: a call no magus judged fails closed, and the
-// person is told how to get a magus on every such call.
-type unjudgedHookSuite struct {
-	suite.Suite
-}
-
-func TestUnjudgedHookSuite(t *testing.T) {
-	suite.Run(t, new(unjudgedHookSuite))
-}
-
-// glueBrokenMagus stands in for a magus that runs but cannot judge.
-const glueBrokenMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'cannot load this tree' >&2\nexit 3\n"
-
-func (s *unjudgedHookSuite) reply(name, host, event string) map[string]any {
-	body, _ := runGlue(s.T(), name, glueArrangement{label: host, host: host, event: event, stub: glueBrokenMagus, codex: host == "codex"})
-	reply, ok := glueDecode(s.T(), host, body).(map[string]any)
-	s.Require().True(ok, body)
-	return reply
-}
-
-func (s *unjudgedHookSuite) TestClaudeCodeRefusesACallThatMayChangeState() {
-	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
-	out := reply["hookSpecificOutput"].(map[string]any)
-	s.Equal("deny", out["permissionDecision"])
-	s.Contains(out["permissionDecisionReason"], "cannot load this tree")
-	s.Contains(reply["systemMessage"], "Rebuild or update", "the person reads the fix")
-	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
-}
-
-func (s *unjudgedHookSuite) TestClaudeCodeRefusesAReadAndTellsThePerson() {
-	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`)
-	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
-	s.Contains(reply["systemMessage"], "could not judge this call")
-}
-
-func (s *unjudgedHookSuite) TestTheSecondCallInASessionIsToldToo() {
-	event := `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"ls"}}`
-	s.reply("magus-command.buzz", "claude-code", event)
-	reply := s.reply("magus-command.buzz", "claude-code", event)
-	s.Contains(reply["systemMessage"], "could not judge this call")
-}
-
-func (s *unjudgedHookSuite) TestASilentFailureNamesItsExitCode() {
-	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: "claude-code", host: "claude-code", stub: "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\nexit 3\n",
-		event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`})
-	reply, ok := glueDecode(s.T(), "claude-code", body).(map[string]any)
-	s.Require().True(ok, body)
-	s.Contains(reply["systemMessage"], "it printed no error (exit code 3)")
-}
-
-func (s *unjudgedHookSuite) TestCodexRefusalFitsItsSchema() {
-	reply := s.reply("magus-command.buzz", "codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
-	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
-	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["codex"]).Validate(reply))
-}
-
-func (s *unjudgedHookSuite) TestCodexPermissionRequestKeepsThePromptAndTellsThePerson() {
-	reply := s.reply("magus-command.buzz", "codex", `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push"}}`)
-	s.NotContains(reply["hookSpecificOutput"], "decision")
-	s.Contains(reply["systemMessage"], "could not judge this call")
-	s.Require().NoError(glueLoadSchema(s.T(), "codex/permission-request.command.output.schema.json").Validate(reply))
-}
-
-func (s *unjudgedHookSuite) TestAStopTellsThePersonRatherThanStderr() {
-	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`)
-	s.Contains(reply["systemMessage"], "could not judge this call")
-	s.NotContains(reply, "decision")
-}
-
-func (s *unjudgedHookSuite) TestAPathWriteIsRefused() {
-	reply := s.reply("magus-path.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Write","tool_input":{"file_path":"README.md"}}`)
-	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
-}
-
-func (s *unjudgedHookSuite) TestCursorRefusesAndShowsThePersonTheFix() {
-	reply := s.reply("cursor-hook.buzz", "cursor", `{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":"git stash","cwd":"/tmp"}`)
-	s.Equal("deny", reply["permission"])
-	s.Contains(reply["user_message"], "Rebuild or update")
-}
-
-const glueBrokenMultiLineMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'magus.yaml has keys this magus does not know:' >&2\necho '  - guard.newest  (line 4)' >&2\nexit 3\n"
-
-func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
-	encoded, err := json.Marshal(command)
-	s.Require().NoError(err)
-	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
-}
-
-// repairRootEnv and repairLinesEnv are the variables guard.ExportRepairLines fills for the
-// hook glue, spelled out because the glue reads them by these names.
-const (
-	repairRootEnv  = "__MAGUS_REPAIR_ROOT"
-	repairLinesEnv = "__MAGUS_REPAIR_LINES"
-)
-
-// suppliedRepair is a workspace whose repair lines magus handed the glue, as startup does.
-func (s *unjudgedHookSuite) suppliedRepair() string {
-	root := s.T().TempDir()
-	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	// Setenv first so the test restores both after ExportRepairLines overwrites them.
-	s.T().Setenv(repairRootEnv, "")
-	s.T().Setenv(repairLinesEnv, "")
-	s.Require().NoError(guard.ExportRepairLines(root))
-	return root
-}
-
-// repairEvent is a shell call from root.
-func (s *unjudgedHookSuite) repairEvent(root, command string) string {
-	encoded, err := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
-		"cwd": root, "tool_input": map[string]any{"command": command}})
-	s.Require().NoError(err)
-	return string(encoded)
-}
-
-func (s *unjudgedHookSuite) TestTheRepairLineAloneIsLetThroughAndTheNoticeStays() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), "magus self update"))
-	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
-	s.Contains(reply["systemMessage"], "could not judge this call")
-	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
-}
-
-func (s *unjudgedHookSuite) TestAnotherWorkspacesRepairIsRefused() {
-	s.suppliedRepair()
-	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.T().TempDir(), "magus self update"))
-	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
-	s.Contains(reply["systemMessage"], "magus did not supply the repair lines of")
-}
-
-func (s *unjudgedHookSuite) TestTheRepairLineWithAnotherCommandAfterItIsRefused() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), "magus self update && git stash"))
-	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
-}
-
-func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsARelease() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), ward.BootstrapCommand))
-	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
-}
-
-func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
-	root := s.suppliedRepair()
-	encoded, err := json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
-		"command": "magus self update", "cwd": root})
-	s.Require().NoError(err)
-	reply := s.reply("cursor-hook.buzz", "cursor", string(encoded))
-	s.Equal("allow", reply["permission"])
-	s.Contains(reply["user_message"], "could not judge this call")
-}
-
-func (s *unjudgedHookSuite) TestEveryLineOfTheLoadErrorReachesThePerson() {
-	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: "claude-code", host: "claude-code",
-		event: s.bootstrapEvent("git stash"), stub: glueBrokenMultiLineMagus})
-	reply, ok := glueDecode(s.T(), "claude-code", body).(map[string]any)
-	s.Require().True(ok, body)
-	s.Contains(reply["systemMessage"], "guard.newest")
-}
-
-func (s *unjudgedHookSuite) TestTheSessionStartTextPromisesNoGitStatus() {
-	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "magus-session.buzz"))
-	s.Require().NoError(err)
-	s.NotContains(string(body), "`git status` and the fix still run")
-}
-
-// The hook reads its repair from the variable magus fills, never from a copy of the rules.
-func (s *unjudgedHookSuite) TestTheHookReadsTheRepairMagusSupplies() {
-	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
-	s.Require().NoError(err)
-	s.Contains(string(body), fmt.Sprintf("final REPAIR_ENV = %q;", repairLinesEnv))
-	s.NotContains(string(body), ward.BootstrapCommand)
 }
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the

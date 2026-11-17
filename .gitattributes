@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-209-g3c2d49e1a (commit 3c2d49e1a40e2d7c76ecc831ac7caecc73a38229, 2026-11-16T23:05:25-05:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-222-g009748337-dirty (commit 0097483372ac35fe75d0e41e225f5a3de8d3d833, 2026-11-08T21:55:48-05:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -45,7 +45,6 @@
 .claude/skills/magus-vcs-hygiene*/** merge=magus linguist-generated
 .claude/skills/magus-workspace-rules*/** merge=magus linguist-generated
 .magus/coverage*.out merge=magus linguist-generated
-.magus/coverage.cmd*.out merge=magus linguist-generated
 .opencode/skills/magus-architecture-review*/** merge=magus linguist-generated
 .opencode/skills/magus-buzz-from-shell*/** merge=magus linguist-generated
 .opencode/skills/magus-buzz-lang*/** merge=magus linguist-generated
@@ -151,18 +150,20 @@ internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
 internal/queue/provider/gen/types/*.buzz merge=magus linguist-generated
-internal/spell/gen/decls/**/*.buzz merge=magus linguist-generated
+internal/render/testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
+internal/spell/gen/decls/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
-libs/apiversion/MAGUS.md merge=magus linguist-generated
-libs/apiversion/coverage.out merge=magus linguist-generated
 libs/clikit/MAGUS.md merge=magus linguist-generated
 libs/clikit/coverage.out merge=magus linguist-generated
 libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
-libs/embed/evals.jsonl merge=magus linguist-generated
 libs/embed/gen/table.digest merge=magus linguist-generated
+libs/train/embed/gen/holdout.jsonl merge=magus linguist-generated
+libs/train/embed/gen/pairs.jsonl merge=magus linguist-generated
+libs/train/embed/gen/sources.jsonl merge=magus linguist-generated
+libs/train/embed/gen/vocab.jsonl merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/token/testdata/fuzz/** merge=magus linguist-generated
@@ -173,7 +174,6 @@ libs/proofread/gen/proofread merge=magus linguist-generated
 libs/proofread/gen/proofread.inputs merge=magus linguist-generated
 libs/proofread/internal/wordclass/gen/model.gz merge=magus linguist-generated
 libs/proofread/internal/wordclass/testdata/en_ewt-ud-test.conllu.gz merge=magus linguist-generated
-libs/safetyscissors/assets/gen/*.svg merge=magus linguist-generated
 libs/scipbuzz/MAGUS.md merge=magus linguist-generated
 libs/scipbuzz/coverage.out merge=magus linguist-generated
 libs/scipbuzz/testdata/snapshots/gen/**/*.buzz merge=magus linguist-generated
@@ -185,10 +185,6 @@ libs/text/MAGUS.md merge=magus linguist-generated
 libs/text/coverage.out merge=magus linguist-generated
 libs/textsearch/MAGUS.md merge=magus linguist-generated
 libs/textsearch/coverage.lcov merge=magus linguist-generated
-libs/train/embed/gen/holdout.jsonl merge=magus linguist-generated
-libs/train/embed/gen/pairs.jsonl merge=magus linguist-generated
-libs/train/embed/gen/sources.jsonl merge=magus linguist-generated
-libs/train/embed/gen/vocab.jsonl merge=magus linguist-generated
 libs/xdg/MAGUS.md merge=magus linguist-generated
 libs/xdg/coverage.out merge=magus linguist-generated
 /magus.lock merge=magus linguist-generated
@@ -205,7 +201,6 @@ std/gen/std-api.lock merge=magus linguist-generated
 std/termkit/gen/**/*.go merge=magus linguist-generated
 tapes/core-loop.capture merge=magus linguist-generated
 tapes/showcase.capture merge=magus linguist-generated
-testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
 testdata/latex/onepage/build/** merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_list_test.go !merge !linguist-generated
 internal/interp/bindings/gen/boundary_objects_test.go !merge !linguist-generated

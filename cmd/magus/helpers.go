@@ -4,14 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
@@ -19,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
@@ -140,7 +138,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		}
 		magusOpened.root = root
 		stop := t.Phase("magus.open")
-		defer relaxGC()()
+		defer gcpolicy.Relax()()
 		opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		if lim := bootstrapLimiterFromContext(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
@@ -157,72 +155,6 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		return nil, err
 	}
 	return magusValue, magusErr
-}
-
-// loadGCPercent is the GOGC a workspace load runs under. Evaluating every magusfile and
-// local spell allocates heavily and retains little: measured on this repository, 400
-// cut `magus ls` from 121ms to 110ms and its CPU by a quarter, for 37MB more peak RSS.
-const loadGCPercent = 400
-
-// optimization: run the first second of every process under loadGCPercent, not only the load.
-//
-//	measured: median wall, interleaved runs, n=60: commit-msg hook 74.1->61.6ms, tool-call hook
-//	          89.7->78.1ms, describe targets 240.8->233.9ms; one fewer GC each.
-//	trade-off: a long-lived process grows its heap 5x live for its first second.
-//	assumes:  darwin arm64, 10 P; the GCs a short process pays are the 4MB-minimum-heap ones.
-//
-// GC off under a 512MiB limit ran level with 400 and peaked 100MB higher on describe targets.
-// GOGC 50, 100 and 200, GOMAXPROCS 2 and 4, and a freed 64 to 256MB ballast all lost to 400.
-const startupGCWindow = time.Second
-
-// relaxStartupGC holds relaxGC for window, so a command that exits sooner never restores it.
-// It takes over gcpolicy's init raise, restoring the GOGC that raise replaced.
-func relaxStartupGC(window time.Duration) {
-	restore := relaxGC()
-	if prior, ok := gcpolicy.Prior(); ok {
-		gcRelaxMu.Lock()
-		if gcRelaxCount == 1 && gcRelaxPrev == gcpolicy.Percent {
-			gcRelaxPrev = prior
-		}
-		gcRelaxMu.Unlock()
-	}
-	time.AfterFunc(window, restore)
-}
-
-var (
-	gcRelaxMu    sync.Mutex
-	gcRelaxCount int
-	gcRelaxPrev  int
-)
-
-// relaxGC raises GOGC for a workspace load and returns the restore. An explicit GOGC in
-// the environment is the caller's choice and is left alone.
-//
-// Refcounted and shared across callers because loadMagus and inspectWorkspace can both
-// first-load concurrently (the server bootstraps both in parallel goroutines). A plain
-// save/restore pair races there: either could observe the other's already-raised GOGC
-// as "the prior value" and restore to it instead of the true original, or one
-// restoring early could drop GOGC out from under the other's still-running load. Only
-// the caller that takes the count from 0 saves the prior value; only the one that takes
-// it back to 0 restores it.
-func relaxGC() func() {
-	if os.Getenv("GOGC") != "" {
-		return func() {}
-	}
-	gcRelaxMu.Lock()
-	if gcRelaxCount == 0 {
-		gcRelaxPrev = debug.SetGCPercent(loadGCPercent)
-	}
-	gcRelaxCount++
-	gcRelaxMu.Unlock()
-	return func() {
-		gcRelaxMu.Lock()
-		gcRelaxCount--
-		if gcRelaxCount == 0 {
-			debug.SetGCPercent(gcRelaxPrev)
-		}
-		gcRelaxMu.Unlock()
-	}
 }
 
 func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
@@ -249,7 +181,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			return
 		}
 		stop := t.Phase("workspace.inspect")
-		defer relaxGC()()
+		defer gcpolicy.Relax()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
 			append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 		stop()
@@ -258,25 +190,6 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 		return nil, err
 	}
 	return inspectValue, inspectErr
-}
-
-func listTargets(scope string, targets []types.Target, source string) {
-	var label string
-	switch len(targets) {
-	case 0:
-		label = "no projects"
-	case 1:
-		label = targets[0].Path
-	default:
-		label = fmt.Sprintf("%d projects", len(targets))
-	}
-	if source != "" {
-		label += fmt.Sprintf(" (%s)", source)
-	}
-	slog.Info("listed targets", slog.String("scope", scope), slog.String("summary", label))
-	for _, t := range targets {
-		fmt.Println(t.Path)
-	}
 }
 
 // reportedRunError reports whether err was already surfaced to the user, per project,
@@ -301,28 +214,11 @@ func canonicalTarget(name string) string {
 	}
 }
 
-func splitOnDashDash(args []string) (before, after []string) {
-	for i, a := range args {
-		if a == "--" {
-			return args[:i], args[i+1:]
-		}
-	}
-	return args, nil
-}
-
-// hintCanonicalSpelling nudges toward the canonical name when the user typed
-// another one. The fact comes off the parsed Target (Declared/DeclaredCharms), so
-// this is presentation only: types.ParseTarget stays a pure function and the
-// server and MCP paths get the same information without inheriting stderr output.
-//
-// Silent on canonical input, and deduped by interactive.Hint, so it teaches once
-// rather than nagging.
+// hintCanonicalSpelling shows the nudges hint.CanonicalSpelling offers once each (interactive.Hint dedupes),
+// so a run teaches a spelling once rather than once per project.
 func hintCanonicalSpelling(ctx context.Context, t types.Target) {
-	if t.Declared != "" {
-		interactive.Hint(ctx, fmt.Sprintf("target %q is canonically %q; both work, %q is what magus reports", t.Declared, t.Name, t.Name))
-	}
-	for _, c := range t.DeclaredCharms {
-		interactive.Hint(ctx, fmt.Sprintf("charm %q is canonically %q", c, types.NormalizeCharm(c)))
+	for _, msg := range hint.CanonicalSpelling(t) {
+		interactive.Hint(ctx, msg)
 	}
 }
 

@@ -114,7 +114,7 @@ func TestValueString(t *testing.T) {
 // a placeholder for the revisited list instead of stack-overflowing (a FATAL,
 // unrecoverable Go error) or erroring. Run on a goroutine and bounded with
 // select + time.After (the repo's hang/crash-test idiom; see pool_test.go
-// TestDispatchRejectsCycleWithMemo) since a regression here is unsafe to call
+// TestDispatchRejectsCycle) since a regression here is unsafe to call
 // inline.
 func TestValueStringCircular(t *testing.T) {
 	items := make([]Value, 1)

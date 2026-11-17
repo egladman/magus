@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -63,9 +64,122 @@ func (s *Service) answer(ctx context.Context, input string, matched, seededSymbo
 	return knowledge.Answer(input, matched, cov)
 }
 
+// indexStatus is the freshness probe a position query refuses on. The resolver seam does not
+// carry it, so QueryNodes asks the workspace for it and refuses a position when it is absent.
+type indexStatus interface {
+	SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus
+}
+
+// positionCoverage is what the symbol layer can vouch for under a position query: the gap
+// probe, plus every index the freshness probe reports out of date, and which files an
+// up-to-date index covers. ok is false when the workspace offers no freshness probe.
+func (s *Service) positionCoverage(ctx context.Context) (cov knowledge.Coverage, fresh func(file string) bool, ok bool) {
+	status, ok := s.ws.(indexStatus)
+	if !ok {
+		return knowledge.Coverage{}, nil, false
+	}
+	cov = knowledge.Coverage{Seeded: true}
+	cov.Gaps, cov.Probed = s.ws.SymbolGaps(ctx)
+	byProject := map[string]*projectIndexes{}
+	for _, st := range status.SymbolIndexStatus(ctx) {
+		p := byProject[st.Project.Path]
+		if p == nil {
+			p = &projectIndexes{changed: map[string]bool{}}
+			byProject[st.Project.Path] = p
+		}
+		p.add(st)
+		if st.Freshness == types.SymbolIndexStale {
+			cov.Stale = append(cov.Stale, types.KnowledgeStaleIndex{
+				Project: st.Project.Path, Language: st.Language, Op: st.Op, Changed: st.Changed, ChangedCount: st.ChangedCount,
+			})
+		}
+	}
+	return cov, freshFile(byProject), true
+}
+
+// projectIndexes is what one project's indexes vouch for: every file unless one is neither
+// up to date nor stale with every change listed, and never a file listed as changed.
+type projectIndexes struct {
+	unvouched bool
+	changed   map[string]bool
+}
+
+func (p *projectIndexes) add(st types.SymbolIndexStatus) {
+	switch {
+	case st.Freshness == types.SymbolIndexFresh:
+	case st.Freshness == types.SymbolIndexStale && len(st.Changed) == st.ChangedCount:
+		for _, f := range st.Changed {
+			p.changed[f] = true
+		}
+	default:
+		p.unvouched = true
+	}
+}
+
+// freshFile reports whether the indexes of the deepest project owning a file vouch for it.
+func freshFile(byProject map[string]*projectIndexes) func(string) bool {
+	return func(file string) bool {
+		owner, found := "", false
+		for project := range byProject {
+			if (project == "." || file == project || strings.HasPrefix(file, project+"/")) && (!found || len(project) > len(owner)) {
+				owner, found = project, true
+			}
+		}
+		if !found {
+			return false
+		}
+		p := byProject[owner]
+		return !p.unvouched && !p.changed[file]
+	}
+}
+
+// queryPosition answers a QueryNodes request that carries a position: the ranked symbols
+// its window names, over the symbol graph, or a FAILED_PRECONDITION naming why the index
+// cannot vouch for the position's file.
+func (s *Service) queryPosition(ctx context.Context, msg *graphv1.QueryNodesRequest) (*connect.Response[graphv1.QueryNodesResponse], error) {
+	p := msg.GetPosition()
+	if p.GetPath() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: position.path is required"))
+	}
+	pos := knowledge.Position{Path: p.GetPath(), Offset: int(p.GetOffset()), Prefix: p.GetPrefix(), Suffix: p.GetSuffix()}
+	cov, fresh, ok := s.positionCoverage(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("graph: this workspace reports no symbol index freshness, so it cannot vouch for a position"))
+	}
+	g, err := s.ws.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := g.RefusePosition(pos, cov); err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("graph: %w", err))
+	}
+	out, sites, err := g.QueryPosition(msg.GetQuery(), int(msg.GetBudget()), int(msg.GetOffset()), int(msg.GetPageSize()), knowledge.RetrieveOptions{
+		Weights:  knowledge.ShippedWeights(),
+		Exclude:  msg.GetExcludePaths(),
+		Position: &pos,
+	}, fresh)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("graph: %w", err))
+	}
+	return connect.NewResponse(&graphv1.QueryNodesResponse{
+		Query:      out.Query,
+		Budget:     int32(out.Budget),
+		MatchCount: int32(out.MatchCount),
+		Offset:     int32(out.Offset),
+		Matches:    matchesToProto(out.Matches),
+		Nodes:      nodesToProto(out.Nodes),
+		Links:      edgesToProto(out.Links),
+		Answer:     answerToProto(knowledge.Answer(out.Query, out.MatchCount > 0, cov)),
+		Context:    sitesToProto(sites),
+	}), nil
+}
+
 func (s *Service) QueryNodes(
 	ctx context.Context, req *connect.Request[graphv1.QueryNodesRequest],
 ) (*connect.Response[graphv1.QueryNodesResponse], error) {
+	if req.Msg.GetPosition() != nil {
+		return s.queryPosition(ctx, req.Msg)
+	}
 	query := req.Msg.GetQuery()
 	if query == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind=target project=api")`))
@@ -74,7 +188,12 @@ func (s *Service) QueryNodes(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := g.QueryPage(query, int(req.Msg.GetBudget()), int(req.Msg.GetOffset()), int(req.Msg.GetPageSize()), embedtable.Cached)
+	out, err := g.QueryRanked(query, int(req.Msg.GetBudget()), int(req.Msg.GetOffset()), int(req.Msg.GetPageSize()), knowledge.RetrieveOptions{
+		Weights: knowledge.ShippedWeights(), Table: embedtable.Cached, Exclude: req.Msg.GetExcludePaths(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	resp := &graphv1.QueryNodesResponse{
 		Query:      out.Query,
 		Budget:     int32(out.Budget),

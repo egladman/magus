@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"maps"
 	"net/http"
@@ -122,32 +121,6 @@ func queueEvents(t *testing.T, out []byte) []queue.Event {
 	return evs
 }
 
-func TestParseQueueSource(t *testing.T) {
-	for arg, want := range map[string]queueSource{
-		"verdicts":                {dir: "verdicts"},
-		"/tmp/queue/verdicts":     {dir: "/tmp/queue/verdicts"},
-		"./x:y":                   {dir: "./x:y"},
-		"x:y":                     {dir: "x:y"},
-		`C:\queue`:                {dir: `C:\queue`},
-		"dir/a:b":                 {dir: "dir/a:b"},
-		"run:acme/widgets/runs/7": {run: "acme/widgets/runs/7"},
-	} {
-		got, err := parseQueueSource(arg)
-		require.NoError(t, err, arg)
-		assert.Equal(t, want, got, arg)
-	}
-	for arg, msg := range map[string]string{
-		"":                                   "<source> is empty",
-		"s3:bucket/verdicts":                 `unknown scheme "s3"`,
-		"github-actions:acme/widgets/runs/7": `unknown scheme "github-actions"`,
-		"run:":                               "want run:<run>",
-		"run: ":                              "want run:<run>",
-	} {
-		_, err := parseQueueSource(arg)
-		require.ErrorContains(t, err, msg, "%q", arg)
-	}
-}
-
 // A misuse is refused before anything is opened: the mock expects no call.
 func TestQueueMisuseIsAUsageError(t *testing.T) {
 	withOutput(t, "")
@@ -246,257 +219,11 @@ func TestQueueCacheReadHandsHooksTheProxyAndPinsTheTrustSet(t *testing.T) {
 	assert.NotContains(t, strings.Join(env, "\n"), upstream.URL)
 }
 
-func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
-	f := newQueueFixture(t, "", "")
-	out, err := f.run(t, "", "--help")
-	require.NoError(t, err)
-	for _, verb := range []string{"describe", "ls", "plan", "validate", "apply", "reviews"} {
-		assert.Contains(t, string(out), fmt.Sprintf("  %s ", verb))
-	}
-	var stderr bytes.Buffer
-	err = runQueue(t.Context(), f.root, []string{"apply", "-h"}, strings.NewReader(""), &bytes.Buffer{}, &stderr)
-	require.ErrorIs(t, err, flag.ErrHelp)
-	assert.Contains(t, stderr.String(), "-status-context")
-	assert.Contains(t, stderr.String(), "<source> is where apply reads the plan and the verdicts")
-	assert.NotContains(t, stderr.String(), "-cache-dir", "the global flags are magus's, listed by magus -h")
-}
-
-func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
-	change := fmt.Sprintf("[{\"id\": \"1\", \"repo\": req.remoteURL, \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false}]", queueHead("1"))
-	f := newQueueFixture(t, change, "")
-	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
-	out, err := f.run(t, "", "ls", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	require.Equal(t, 1, bytes.Count(out, []byte("\n")))
-	got, err := queue.ReadChanges(bytes.NewReader(out))
-	require.NoError(t, err)
-	require.Len(t, got.Changes, 1)
-	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.Changes[0].Repo, "the provider names the repository from the remote's URL")
-	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.RemoteURL)
-}
-
-type QueueLsNamesSuite struct {
-	suite.Suite
-}
-
-func TestQueueLsNamesSuite(t *testing.T) {
-	suite.Run(t, new(QueueLsNamesSuite))
-}
-
-func (s *QueueLsNamesSuite) TestItPrintsTheChangesItLists() {
-	withOutput(s.T(), "")
-	change := fmt.Sprintf("[{\"id\": \"1\", \"repo\": req.remoteURL, \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false}]", queueHead("1"))
-	f := newQueueFixture(s.T(), change, "")
-	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
-	out, err := f.run(s.T(), "", "ls", "-o", "name", "--provider", "local.buzz", "--base", "main")
-	s.Require().NoError(err)
-	s.Equal("1\n", string(out))
-}
-
 func withOutput(t *testing.T, format string) {
 	t.Helper()
 	prev := global.output
 	t.Cleanup(func() { global.output = prev })
 	global.output = format
-}
-
-// describe prints what the provider reports, so a tool reads the queue label and the
-// merge methods from the provider rather than knowing them.
-func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
-	withOutput(t, "json")
-	f := newQueueFixture(t, "", "")
-	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
-	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1alpha1","base":"main","stack_merge":"sequential","linear_stacks":false,`+
-		`"methods":["squash"],"required_approvals":0,"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
-
-	_, err = f.run(t, "", "describe", "--provider", "local.buzz")
-	require.ErrorContains(t, err, "--base")
-}
-
-// A base requiring no approval is said out loud: the queue then merges what nobody
-// reviewed, and adds no review rule of its own.
-func TestQueueDescribeSaysWhenTheBaseRequiresNoApproval(t *testing.T) {
-	withOutput(t, "")
-	f := newQueueFixture(t, "", "")
-	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
-	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--status-context", "")
-	require.NoError(t, err)
-	assert.Equal(t, `# local.buzz on main: merge methods squash; stacks merge sequential; a stack queues by the label "merge: <method>"
-# main requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own
-# no setup: --status-context is empty, or provider local.buzz reports none
-`, string(out))
-}
-
-// setupProvider describes a setup naming the status context and app describe was asked
-// about, so a test reads the query from the answer. It declines one for the apps
-// "unknown" and "hidden", asking again with "<slug>" and "hidden:<id>".
-const setupProvider = `
-export fun describe(req: QueueDescribeRequest) > any {
-    if (req.statusContext == "") {
-        return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash"], "requiredApprovals": 2}};
-    }
-    if (req.app == "unknown") {
-        return {"refused": {"reason": "no app is named unknown", "url": "https://example.invalid/apps", "app": "<slug>"}};
-    }
-    if (req.app == "hidden") {
-        return {"refused": {"reason": "no id for hidden", "url": "https://example.invalid/apps/hidden", "app": "hidden:<id>"}};
-    }
-    return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash", "merge"], "requiredApprovals": 2, "queueLabel": "queue: ",
-        "setup": {
-            "statusContext": req.statusContext,
-            "credential": {"id": "812", "name": req.app},
-            "requiredChecks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["pull_request"]}],
-            "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
-            "steps": [
-                {"title": "Allow auto-merge", "command": "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
-                {"title": "Install it", "url": "https://github.com/apps/q/installations/new"},
-            ],
-        }}};
-}
-`
-
-func newSetupFixture(t *testing.T) *queueFixture {
-	t.Helper()
-	f := newQueueFixture(t, "", "")
-	src, err := os.ReadFile(f.provider)
-	require.NoError(t, err)
-	src = []byte(strings.Replace(string(src), "export fun describe(", "fun unused(", 1) + setupProvider)
-	require.NoError(t, os.WriteFile(f.provider, src, 0o644))
-	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
-	return f
-}
-
-// By default describe prints the setup as a script: every fact a comment, every step a
-// command or a link. magus runs none of it.
-func TestQueueDescribePrintsTheSetupStepsAPersonRuns(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q")
-	require.NoError(t, err)
-	assert.Equal(t, `# local.buzz on main: merge methods squash, merge; stacks merge atomic; a stack queues by the label "queue: <method>"
-# main requires 2 approving reviews at the commit a review of a change's head covers
-# the queue posts "merge-queue" as 812 (q)
-# main requires "merge-queue" from integration 15368 (not seen reported)
-# main requires "ci gate" from any source (seen on pull_request)
-# allow_auto_merge is false; the queue needs true
-
-# 1. Allow auto-merge
-gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true
-
-# 2. Install it
-# open https://github.com/apps/q/installations/new
-`, string(out))
-}
-
-// A provider that declines says what is missing and where; describe adds the command
-// that runs it again with the flags it was given and the app the provider asked for.
-func TestQueueDescribeRendersTheRerunARefusalAsksFor(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	root := shellWord(f.root)
-	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden")
-	var refused *types.SetupRefusedError
-	require.ErrorAs(t, err, &refused)
-	assert.EqualError(t, err, fmt.Sprintf("magus queue describe: retry with magus --root %s queue describe --provider local.buzz --base main --app 'hidden:<id>': no id for hidden: https://example.invalid/apps/hidden", root))
-	_, err = f.run(t, "", "describe", "--status-context", "my gate", "--remote", "origin", "--vcs", "git", "--app", "unknown",
-		"--base", "main", "--provider", "local.buzz")
-	assert.EqualError(t, err, fmt.Sprintf("magus queue describe: retry with magus --root %s queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app '<slug>': no app is named unknown: https://example.invalid/apps", root))
-}
-
-// --app is the provider's to read: the queue hands it over exactly as given.
-func TestQueueDescribePassesTheAppFlagThroughUnread(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "json", "--provider", "local.buzz", "--base", "main", "--app", ":a b:c:")
-	require.NoError(t, err)
-	var doc struct {
-		Setup types.Setup `json:"setup"`
-	}
-	require.NoError(t, json.Unmarshal(out, &doc))
-	assert.Equal(t, types.Setup{
-		StatusContext: "merge-queue",
-		Credential:    types.Integration{ID: "812", Name: ":a b:c:"},
-		RequiredChecks: []types.RequiredCheck{
-			{Context: "merge-queue", Integration: "15368"},
-			{Context: "ci gate", Events: []string{"pull_request"}},
-		},
-		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
-		Steps: []types.SetupStep{
-			{Title: "Allow auto-merge", Command: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
-			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
-		},
-	}, doc.Setup)
-}
-
-// -o json carries the setup as the capabilities document's structure.
-func TestQueueDescribeJSONCarriesTheSetup(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "json", "--provider", "local.buzz", "--base", "main", "--status-context", "gate")
-	require.NoError(t, err)
-	type capabilities struct {
-		Schema string      `json:"schema"`
-		Setup  types.Setup `json:"setup"`
-	}
-	var doc capabilities
-	require.NoError(t, json.Unmarshal(out, &doc))
-	assert.Equal(t, capabilities{Schema: types.SchemaCapabilities, Setup: types.Setup{
-		StatusContext: "gate",
-		Credential:    types.Integration{ID: "812"},
-		RequiredChecks: []types.RequiredCheck{
-			{Context: "merge-queue", Integration: "15368"},
-			{Context: "ci gate", Events: []string{"pull_request"}},
-		},
-		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
-		Steps: []types.SetupStep{
-			{Title: "Allow auto-merge", Command: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
-			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
-		},
-	}}, doc)
-}
-
-// An empty --status-context asks for no setup: the merge-queue advisor reads the
-// capabilities on a pull request token that cannot read checks.
-func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "json", "--status-context", "", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1alpha1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
-}
-
-func TestQueueDescribeRendersYAML(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "yaml", "--status-context", "", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	assert.Contains(t, string(out), "base: main")
-}
-
-func TestQueueDescribeRendersATemplate(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "template={{.base}}:{{.schema}}", "--status-context", "", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	assert.Equal(t, "main:mergequeue.capabilities/v1alpha1", string(out))
-}
-
-func TestQueueDescribeBareTemplateListsTheDocumentsFields(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "template", "--status-context", "", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	assert.Contains(t, string(out), "required_approvals")
-}
-
-func TestQueueDescribeRendersItsBaseAsAName(t *testing.T) {
-	withOutput(t, "")
-	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "-o", "name", "--status-context", "", "--provider", "local.buzz", "--base", "main")
-	require.NoError(t, err)
-	assert.Equal(t, "main\n", string(out))
 }
 
 // The three steps as a workflow drives them, over nothing to merge: every path the
@@ -763,19 +490,6 @@ func TestQueuePlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 	pl, err := queue.ReadPlanFile(filepath.Join(f.root, "plan.json"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"app"}, pl.Partitions[0][0].Affected)
-}
-
-func TestParseCommitter(t *testing.T) {
-	got, err := parseCommitter("Merge Bot <bot@example.invalid>")
-	require.NoError(t, err)
-	assert.Equal(t, magustypes.Person{Name: "Merge Bot", Email: "bot@example.invalid"}, got)
-	got, err = parseCommitter("")
-	require.NoError(t, err)
-	assert.Zero(t, got)
-	for _, bad := range []string{"bot@example.invalid", "<bot@example.invalid>", "Bot <>", "Bot <a b>", "Bot <x"} {
-		_, err := parseCommitter(bad)
-		require.Error(t, err, bad)
-	}
 }
 
 // workflowStep is what the gate tests read of a workflow step.

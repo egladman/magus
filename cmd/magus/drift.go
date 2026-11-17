@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -122,6 +123,6 @@ func noteJobDesktop(ctx context.Context, jobName, notice string) {
 		Outcome: types.OutcomeDiagnostic,
 		Source:  types.EventSource{Kind: "magus", Sub: jobName},
 	}
-	normalizeEvent(&ev)
+	sessions.NormalizeEvent(&ev)
 	_ = raiseDesktopNotification(ctx, ev)
 }

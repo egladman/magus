@@ -53,7 +53,7 @@ type WorkerFunc func(ctx context.Context) (*WorkerSession, error)
 // closing back to itself first. See TryRun.
 type TargetRuns struct {
 	mu         sync.Mutex
-	entries    map[string]*memoEntry
+	entries    map[string]*runEntry
 	waitingFor map[string]*waitEdge // caller name -> what it is waiting for
 }
 
@@ -89,7 +89,7 @@ func HasTargetInterceptor(ctx context.Context) bool {
 	return interceptor != nil
 }
 
-type memoEntry struct {
+type runEntry struct {
 	done chan struct{} // closed when the target finishes
 	err  error
 }
@@ -98,7 +98,7 @@ type memoEntry struct {
 // waiting for target to finish. cycle is closed by whichever goroutine first
 // discovers a loop that passes through this edge, waking the blocked TryRun
 // caller (via its own select) with a cycle error instead of leaving it parked
-// on a memoEntry.done that nothing will ever close.
+// on a runEntry.done that nothing will ever close.
 type waitEdge struct {
 	target string
 	cycle  chan struct{}
@@ -107,7 +107,7 @@ type waitEdge struct {
 // NewTargetRuns returns a TargetRuns for one invocation scope on which each of done has
 // already completed without error, so a ctx.needs of one returns at once.
 func NewTargetRuns(done ...string) *TargetRuns {
-	m := &TargetRuns{entries: make(map[string]*memoEntry, len(done))}
+	m := &TargetRuns{entries: make(map[string]*runEntry, len(done))}
 	m.MarkDone(done...)
 	return m
 }
@@ -124,7 +124,7 @@ func (m *TargetRuns) MarkDone(names ...string) {
 		}
 		closed := make(chan struct{})
 		close(closed)
-		m.entries[name] = &memoEntry{done: closed}
+		m.entries[name] = &runEntry{done: closed}
 	}
 }
 
@@ -143,7 +143,7 @@ func (m *TargetRuns) TryRun(caller, name string) (isNew bool, waitFn func(ctx co
 	defer m.mu.Unlock()
 	e, ok := m.entries[name]
 	if !ok {
-		e = &memoEntry{done: make(chan struct{})}
+		e = &runEntry{done: make(chan struct{})}
 		m.entries[name] = e
 		return true, nil
 	}
@@ -155,7 +155,7 @@ func (m *TargetRuns) TryRun(caller, name string) (isNew bool, waitFn func(ctx co
 	// complete the loop. chain[:len(chain)-1] are the callers already parked on
 	// this chain (chain's last element is caller itself, not yet parked), and
 	// each is woken via its edge's cycle channel rather than left to wait on a
-	// memoEntry.done that will now never close (every target on the loop is
+	// runEntry.done that will now never close (every target on the loop is
 	// stuck the same way).
 	if chain := m.waitForChain(name, caller); chain != nil {
 		for _, n := range chain[:len(chain)-1] {
@@ -221,7 +221,7 @@ func describeWaitCycle(chain []string) string {
 
 // waitEntry blocks until e.done closes or ctx is cancelled, for the no-caller
 // (top-level) TryRun path, which participates in no wait-for cycle.
-func waitEntry(ctx context.Context, e *memoEntry) error {
+func waitEntry(ctx context.Context, e *runEntry) error {
 	select {
 	case <-e.done:
 		return e.err

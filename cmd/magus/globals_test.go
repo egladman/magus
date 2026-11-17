@@ -14,32 +14,9 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/libs/clikit/command"
-	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
-
-type AffectedTargetSplitSuite struct{ suite.Suite }
-
-func TestAffectedTargetSplitSuite(t *testing.T) { suite.Run(t, new(AffectedTargetSplitSuite)) }
-
-func (s *AffectedTargetSplitSuite) TestBaseKeepsItsValueBesideATarget() {
-	var af *flaggen.AffectedFlags
-	bind := func(fs *flag.FlagSet) { af = flaggen.BindAffected(fs) }
-
-	target, rest, ok := splitTargetFromArgs([]string{"ci", "--base", "origin/main", "-o", "jsonl"}, bind)
-	s.Require().True(ok)
-	s.Equal("ci", target)
-
-	fs := flag.NewFlagSet("affected", flag.ContinueOnError)
-	bind(fs)
-	var format string
-	fs.StringVar(&format, "o", "", "")
-	s.Require().NoError(fs.Parse(rest))
-	s.Equal("origin/main", af.Base)
-	s.Equal("jsonl", format)
-}
 
 // TestGuardKnowsEveryGlobalFlag holds the guard's reading of a magus argv to the flags magus
 // really binds. A global flag the guard did not know would have its value read as the
@@ -55,134 +32,6 @@ func TestGuardKnowsEveryGlobalFlag(t *testing.T) {
 		b, isBool := f.Value.(interface{ IsBoolFlag() bool })
 		assert.Equal(t, !isBool || !b.IsBoolFlag(), takesValue, "-%s", f.Name)
 	})
-}
-
-func TestReorderFlagsFirst(t *testing.T) {
-	// A flag set mirroring the shapes commandParse sees: a value flag, a bool flag.
-	newFS := func() *flag.FlagSet {
-		fs := flag.NewFlagSet("t", flag.ContinueOnError)
-		fs.String("output", "", "value flag")
-		fs.Bool("explain", false, "bool flag")
-		var v verbosity
-		fs.Var(&v, "v", "counted bool flag")
-		return fs
-	}
-	cases := []struct {
-		name string
-		in   []string
-		want []string
-	}{
-		{"bool flag after positional", []string{"lint:rw", "--explain"}, []string{"--explain", "lint:rw"}},
-		{"value flag after positional", []string{"lint:rw", "-output", "name"}, []string{"-output", "name", "lint:rw"}},
-		{"flags already first unchanged", []string{"--explain", "lint:rw"}, []string{"--explain", "lint:rw"}},
-		{"equals form self-contained", []string{"api", "--output=json"}, []string{"--output=json", "api"}},
-		{"counted bool -v does not eat positional", []string{"build", "-v"}, []string{"-v", "build"}},
-		{"double-dash halts reorder, tail preserved", []string{"test", "--explain", "--", "-run", "X"}, []string{"--explain", "test", "--", "-run", "X"}},
-		{"bare dash is a positional", []string{"-", "--explain"}, []string{"--explain", "-"}},
-		{"multiple positionals keep order", []string{"a", "--explain", "b"}, []string{"--explain", "a", "b"}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, reorderFlagsFirst(newFS(), c.in))
-		})
-	}
-}
-
-// TestPartitionFlags locks the flag/positional split that both reorderFlagsFirst and
-// splitTargetFromArgs depend on. A regression here silently breaks flag placement, so
-// every rule (bool flag, value flag, -flag=value, "--" passthrough, unknown flag, and a
-// value flag with no trailing value) is pinned.
-func TestPartitionFlags(t *testing.T) {
-	// A self-contained FlagSet so the cases don't drift with the real global flags:
-	// "b" is boolean (no value), "val" takes the next token.
-	newFS := func() *flag.FlagSet {
-		fs := flag.NewFlagSet("test", flag.ContinueOnError)
-		fs.Bool("b", false, "")
-		fs.String("val", "", "")
-		return fs
-	}
-
-	cases := []struct {
-		name    string
-		args    []string
-		flags   []string
-		posargs []string
-	}{
-		{"positional only", []string{"x"}, []string{}, []string{"x"}},
-		{"bool flag before positional", []string{"-b", "x"}, []string{"-b"}, []string{"x"}},
-		{"bool flag after positional", []string{"x", "-b"}, []string{"-b"}, []string{"x"}},
-		{"value flag keeps its value (before)", []string{"-val", "v", "x"}, []string{"-val", "v"}, []string{"x"}},
-		{"value flag keeps its value (after)", []string{"x", "-val", "v"}, []string{"-val", "v"}, []string{"x"}},
-		{"value is not mistaken for a positional", []string{"-val", "x", "y"}, []string{"-val", "x"}, []string{"y"}},
-		{"flag=value is self-contained", []string{"-val=v", "x"}, []string{"-val=v"}, []string{"x"}},
-		{"double dash halts, tail preserved", []string{"-b", "x", "--", "-y", "z"}, []string{"-b"}, []string{"x", "--", "-y", "z"}},
-		{"unknown flag does not consume next token", []string{"-nope", "x"}, []string{"-nope"}, []string{"x"}},
-		{"value flag at end with no value", []string{"x", "-val"}, []string{"-val"}, []string{"x"}},
-		{"double-dash long forms too", []string{"--b", "--val", "v", "x"}, []string{"--b", "--val", "v"}, []string{"x"}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			gotFlags, gotPos := partitionFlags(newFS(), c.args)
-			assert.Equal(t, c.flags, gotFlags, "flags")
-			assert.Equal(t, c.posargs, gotPos, "positionals")
-			// reorderFlagsFirst must remain flags-then-positionals over the same split.
-			assert.Equal(t, append(append([]string{}, c.flags...), c.posargs...),
-				reorderFlagsFirst(newFS(), c.args), "reorderFlagsFirst")
-		})
-	}
-}
-
-// TestSplitTargetFromArgs is the regression guard for the fix: the target must be found
-// regardless of where recognized global/display flags sit (the bug was a flag BEFORE the
-// target being mistaken for it, e.g. `magus run --dry-run build`). Uses the real global
-// flag set (--dry-run bool, -o value) so it tracks the actual bindings.
-func TestSplitTargetFromArgs(t *testing.T) {
-	cases := []struct {
-		name   string
-		args   []string
-		target string
-		rest   []string
-		ok     bool
-	}{
-		{"target only", []string{"build"}, "build", []string{}, true},
-		{"bool flag BEFORE target (the fix)", []string{"--dry-run", "build"}, "build", []string{"--dry-run"}, true},
-		{"bool flag after target", []string{"build", "--dry-run"}, "build", []string{"--dry-run"}, true},
-		{"flag before target, project after", []string{"--dry-run", "build", "web"}, "build", []string{"--dry-run", "web"}, true},
-		{"value flag before target keeps value", []string{"-o", "json", "build"}, "build", []string{"-o", "json"}, true},
-		{"value flag between target and project", []string{"build", "-o", "json", "web"}, "build", []string{"-o", "json", "web"}, true},
-		{"multiple flags around target", []string{"--dry-run", "build", "-o", "json"}, "build", []string{"--dry-run", "-o", "json"}, true},
-		{"no args", []string{}, "", nil, false},
-		{"flag but no target", []string{"--dry-run"}, "", nil, false},
-		{"only a passthrough marker", []string{"--", "x"}, "", nil, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			target, rest, ok := splitTargetFromArgs(c.args, nil)
-			assert.Equal(t, c.ok, ok, "ok")
-			assert.Equal(t, c.target, target, "target")
-			assert.Equal(t, c.rest, rest, "rest")
-		})
-	}
-}
-
-// TestSplitTargetFromArgsLocalFlags proves why the prescan takes the command's own
-// flags. Without them a value-taking local flag reads as a bool here, so its value is
-// hoisted out as a positional, which one flag survives by luck of ordering, and a
-// REPEATED one does not: the first --skip ends up holding the second as its value.
-func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
-	args := []string{"generate", "--skip", "docs", "--skip", "console"}
-
-	target, rest, ok := splitTargetFromArgs(args, func(fs *flag.FlagSet) {
-		fs.Var(&skipFlag{}, "skip", "")
-	})
-	require.True(t, ok)
-	assert.Equal(t, "generate", target)
-	assert.Equal(t, []string{"--skip", "docs", "--skip", "console"}, rest)
-
-	// With no binder the first --skip swallows the second. A known cost.
-	_, rest, ok = splitTargetFromArgs(args, nil)
-	require.True(t, ok)
-	assert.Equal(t, []string{"--skip", "--skip", "docs", "console"}, rest)
 }
 
 // ---- the man page's flag list vs what the CLI binds ----
@@ -386,33 +235,6 @@ var modeSelectors = map[string]map[string]bool{
 	"affected": {"explain": true, "plan": true, "impact": true},
 }
 
-func TestPrintOwnDefaultsPrintsTheGeneratedTable(t *testing.T) {
-	var buf bytes.Buffer
-	fs := flag.NewFlagSet("graph build", flag.ContinueOnError)
-	fs.SetOutput(&buf)
-	flaggen.BindGraphBuild(fs)
-	printOwnDefaults(fs)
-	got := buf.String()
-
-	assert.Contains(t, got, "--[no-]symbols (default: on)")
-	assert.Contains(t, got, "--[no-]sessions (default: on)")
-	assert.NotContains(t, got, "  -symbols", "help names a flag with two dashes")
-	assert.NotContains(t, got, "--no-symbols\n", "the negation folds into --[no-]symbols")
-}
-
-// The garbled `-symbols magus diff --baseline` line: UnquoteUsage lifted the first
-// backquoted word out of a bool's usage as its value name.
-func TestUsageLineKeepsABoolsBackquotedWords(t *testing.T) {
-	var buf bytes.Buffer
-	fs := flag.NewFlagSet("graph export", flag.ContinueOnError)
-	fs.SetOutput(&buf)
-	flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{})
-	printOwnDefaults(fs)
-
-	assert.Contains(t, buf.String(), "--[no-]symbols (default: off)\n")
-	assert.NotContains(t, buf.String(), "-symbols magus diff")
-}
-
 func TestGraphSymbolsHasOnePolarityAcrossCommands(t *testing.T) {
 	parse := func(t *testing.T, args ...string) (build, export bool) {
 		t.Helper()
@@ -436,21 +258,6 @@ func TestGraphSymbolsHasOnePolarityAcrossCommands(t *testing.T) {
 	build, export = parse(t, "--no-symbols")
 	assert.False(t, build)
 	assert.False(t, export)
-}
-
-func TestNegatedBoolRefusesAValueAndNamesThePositiveSpelling(t *testing.T) {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	fs.SetOutput(&bytes.Buffer{})
-	rf := flaggen.BindRun(fs)
-	require.NoError(t, fs.Parse([]string{"--no-cache"}))
-	assert.False(t, rf.Cache)
-
-	fs = flag.NewFlagSet("run", flag.ContinueOnError)
-	fs.SetOutput(&bytes.Buffer{})
-	flaggen.BindRun(fs)
-	err := fs.Parse([]string{"--no-cache=false"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "write --cache")
 }
 
 func TestGraphExportHasNoStaticAlias(t *testing.T) {
@@ -506,110 +313,4 @@ func runCLIQuietly(t *testing.T, argv ...string) {
 	// only means the record stays absent and the subtest skips with that stated.
 	defer func() { _ = recover() }()
 	runCLI()
-}
-
-func TestFlagValueOfAndIsFlagNamedAgreeOnTheSameFlag(t *testing.T) {
-	// The two halves must not disagree about what counts as the flag: `--explain` is the
-	// bare form and only isFlagNamed sees it, `--explain=web` carries a value and only
-	// parseFlagValue sees it. A scanner that accepted both from one helper would read the
-	// next positional as the value.
-	require.True(t, isFlagNamed("--explain", "explain"))
-	require.Empty(t, parseFlagValue("--explain", "explain"))
-
-	require.False(t, isFlagNamed("--explain=web", "explain"))
-	require.Equal(t, "web", parseFlagValue("--explain=web", "explain"))
-}
-
-// -o is bound into every subcommand's FlagSet, so a verb that renders nothing structured
-// accepted `-o json`, printed prose and exited 0. Setting it there is a usage error now.
-func TestOutputRefusedByCommandsThatRenderNothing(t *testing.T) {
-	parsed := func(args ...string) *flag.FlagSet {
-		fs := flag.NewFlagSet("t", flag.ContinueOnError)
-		bindDisplayFlags(fs)
-		require.NoError(t, fs.Parse(args))
-		return fs
-	}
-
-	err := checkOutputSupported("buzz", parsed("-o", "json"))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "magus buzz: -o is not supported by this command")
-	assert.Equal(t, exit.Usage, mapExitCode(err), "a flag that could never act is misuse, not a failed run")
-
-	require.NoError(t, checkOutputSupported("ls", parsed("-o", "json")), "a verb that consults -o is untouched")
-	require.NoError(t, checkOutputSupported("clean", parsed("-o", "json")), "clean returns a report")
-	require.NoError(t, checkOutputSupported("buzz", parsed()), "an unset -o is not a misuse")
-}
-
-// The verdict is keyed on the flag being TYPED, not on global.output, which every
-// FlagSet seeds its default from: a value another dispatch on this process left behind
-// must not fail the next command for a flag nobody passed it.
-func TestOutputRefusalIgnoresAmbientGlobal(t *testing.T) {
-	prev := global.output
-	t.Cleanup(func() { global.output = prev })
-	global.output = "json"
-
-	fs := flag.NewFlagSet("t", flag.ContinueOnError)
-	bindDisplayFlags(fs)
-	require.NoError(t, fs.Parse(nil))
-	require.NoError(t, checkOutputSupported("buzz", fs))
-}
-
-// The check rides commandParse, so it fires on the real parse path for every spelling of the
-// flag, including one written AFTER the positional, which reorderFlagsFirst hoists.
-func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
-	prev := global.output
-	t.Cleanup(func() { global.output = prev })
-
-	for _, args := range [][]string{
-		{"-o", "json"},
-		{"--output=json"},
-		{"./web", "-o", "json"},
-	} {
-		global.output = ""
-		_, err := commandParse("buzz", args, nil)
-		require.Error(t, err, "args %v", args)
-		assert.Contains(t, err.Error(), "-o is not supported by this command")
-	}
-}
-
-func TestFlagIsBool(t *testing.T) {
-	fs := flag.NewFlagSet("t", flag.ContinueOnError)
-	fs.Bool("force", false, "")
-	fs.String("dir", "", "")
-
-	assert.True(t, flagIsBool(fs.Lookup("force")))
-	assert.False(t, flagIsBool(fs.Lookup("dir")))
-}
-
-// TestIsFlagNamedAndFlagValueOf pins all four spellings Go's flag package accepts. A
-// hand-rolled scanner that handles three of them fails invisibly on the fourth, which is
-// exactly how `magus affected -explain .` came to read "." as a target name.
-func TestIsFlagNamedAndFlagValueOf(t *testing.T) {
-	assert.True(t, isFlagNamed("-explain", "explain"))
-	assert.True(t, isFlagNamed("--explain", "explain"))
-	assert.False(t, isFlagNamed("-explain=web", "explain"))
-	assert.False(t, isFlagNamed("--explains", "explain"))
-
-	assert.Equal(t, "web", parseFlagValue("-explain=web", "explain"))
-	assert.Equal(t, "web", parseFlagValue("--explain=web", "explain"))
-	assert.Equal(t, "", parseFlagValue("--explain", "explain"))
-	assert.Equal(t, "", parseFlagValue("--base=main", "explain"))
-}
-func TestOutputOptionsOrDefault(t *testing.T) {
-	prev := global.output
-	t.Cleanup(func() { global.output = prev })
-
-	global.output = ""
-	opts, err := outputOptionsOrDefault()
-	require.NoError(t, err)
-	assert.Equal(t, outputText, opts.Format)
-
-	global.output = "json"
-	opts, err = outputOptionsOrDefault()
-	require.NoError(t, err)
-	assert.Equal(t, outputJSON, opts.Format)
-
-	global.output = "nonsense"
-	_, err = outputOptionsOrDefault()
-	assert.Error(t, err)
 }

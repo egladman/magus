@@ -192,6 +192,15 @@ type warmGraph struct {
 	valid    bool   // graph is populated AND known-fresh (a watcher is invalidating it)
 	watching bool   // a watcher is active; only then is the cache trusted
 	gen      uint64 // bumped on every invalidation, to catch a change landing mid-rebuild
+
+	// symMu guards the symbol-merged graph: the warm graph with every symbol shard merged
+	// in, kept while symBase is still the warm graph and symMemo the SymbolIndexStatus
+	// memo it was merged under. A graph change replaces the warm graph, and a source change
+	// or an index run replaces the memo, so either one merges again.
+	symMu   sync.Mutex
+	symBase *knowledge.Graph
+	symMemo *types.SymbolIndexStatus
+	symbols *knowledge.Graph
 }
 
 func newWarmGraph(rebuild func(context.Context, bool) (*knowledge.Graph, error), log *slog.Logger) *warmGraph {
@@ -278,6 +287,30 @@ func (w *warmGraph) invalidate() {
 	w.valid, w.graph = false, nil
 	w.gen++
 	w.mu.Unlock()
+	// The merged graph was built onto the graph just dropped; holding it would keep both
+	// alive until the next symbol read.
+	w.symMu.Lock()
+	w.symBase, w.symMemo, w.symbols = nil, nil, nil
+	w.symMu.Unlock()
+}
+
+// symbolGraph returns the graph merge builds onto base, merging only when the one it holds
+// was built onto another base or under another memo. Concurrent misses merge once: the rest
+// wait on symMu and take that result. A merge error is returned and nothing is kept. The
+// result reaches concurrent readers, so it is marked shared before it is kept.
+func (w *warmGraph) symbolGraph(base *knowledge.Graph, memo *types.SymbolIndexStatus, merge func() (*knowledge.Graph, error)) (*knowledge.Graph, error) {
+	w.symMu.Lock()
+	defer w.symMu.Unlock()
+	if w.symbols != nil && w.symBase == base && w.symMemo == memo {
+		return w.symbols, nil
+	}
+	merged, err := merge()
+	if err != nil {
+		return nil, err
+	}
+	merged.MarkShared()
+	w.symBase, w.symMemo, w.symbols = base, memo, merged
+	return merged, nil
 }
 
 // requestReload asks reloadLoop for a background rebuild without blocking; a request

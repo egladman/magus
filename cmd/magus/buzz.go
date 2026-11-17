@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
@@ -90,7 +91,7 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	var bf *flaggen.BuzzFlags
 	rest, err := commandParse("buzz", args, func(fs *flag.FlagSet) {
 		bf = flaggen.BindBuzz(fs)
-		fs.Usage = buzzUsage
+		fs.Usage = func() { commands.WriteBuzzUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
@@ -315,38 +316,4 @@ func buzzChdir(dir string) error {
 		return exit.Usagef("magus buzz: -%s %s: %v", flaggen.FlagBuzzC, dir, errors.Unwrap(err))
 	}
 	return nil
-}
-
-func buzzUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus buzz [-C dir] ... # every form below takes -C")
-	fmt.Fprintln(os.Stderr, "       magus buzz              # open a REPL with the magusfile loaded")
-	fmt.Fprintln(os.Stderr, "       magus buzz <file>       # run a script")
-	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
-	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
-	fmt.Fprintln(os.Stderr, "       magus buzz -t <file>... # run each file's test \"...\" {} blocks")
-	fmt.Fprintln(os.Stderr, "       magus buzz --check <file>...  # type-check without running")
-	fmt.Fprintln(os.Stderr, "       magus buzz lsp          # language server over stdio (LSP)")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Run Buzz source from a REPL, file, stdin, or an inline snippet. With no")
-	fmt.Fprintln(os.Stderr, "argument on a terminal it opens a REPL with the magusfile at cwd loaded,")
-	fmt.Fprintln(os.Stderr, "its targets and bindings ready; a piped or redirected stdin runs as a")
-	fmt.Fprintln(os.Stderr, "script. The Buzz stdlib, every magus host module (fs, os, http, markdown,")
-	fmt.Fprintln(os.Stderr, "...), and the magus.* namespace are available in both.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Flags:")
-	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line; it takes the --embedded rules, so no main")
-	fmt.Fprintln(os.Stderr, "  -t, -test   run each file's test \"...\" {} blocks and report pass/fail; each run is")
-	fmt.Fprintln(os.Stderr, "              recorded as `buzz -t <file>` and its ref printed, as --record does")
-	fmt.Fprintln(os.Stderr, "  --record    keep what the run printed in the output store and print its ref")
-	fmt.Fprintln(os.Stderr, "  --check     parse and type-check the named files without running them")
-	fmt.Fprintln(os.Stderr, "  --profile   print where compile and import time went, after the script runs")
-	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")
-	fmt.Fprintln(os.Stderr, "              argument labels) to match the magusfile engine")
-	fmt.Fprintln(os.Stderr, "  --no-autoload  start the REPL without executing the magusfile")
-	fmt.Fprintln(os.Stderr, "  -C <dir>    change to dir before anything else, as go -C does; script")
-	fmt.Fprintln(os.Stderr, "              paths and imports resolve from it (lsp: only as the first flag)")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Parsing is upstream-strict by default. A file written for the magusfile")
-	fmt.Fprintln(os.Stderr, "engine needs --embedded, or it fails on rules upstream Buzz enforces and")
-	fmt.Fprintln(os.Stderr, "magus does not (most often: \"argument N must be labeled\").")
 }
