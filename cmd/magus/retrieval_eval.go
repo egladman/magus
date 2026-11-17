@@ -84,7 +84,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 			for _, e := range slices.Concat(res.Out.Out, res.Out.In) {
 				hits = append(hits, e.Other)
 			}
-			err = writeExplainText(&printed, r.root, j.Query, r.next, r.next.served(hint.NextForExplain(res.Out)), res)
+			err = writeExplainText(ctx, &printed, r.root, j.Query, r.next, r.next.served(hint.NextForExplain(res.Out)), res)
 		}
 	case readRefs:
 		res := lookupRefs(ctx, r.m, r.cfg, r.symbols, read, r.coverage)

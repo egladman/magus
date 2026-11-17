@@ -3,6 +3,7 @@ package trail
 import (
 	"bufio"
 	"cmp"
+	"context"
 	"github.com/egladman/magus/types/diff"
 	"os"
 	"slices"
@@ -67,14 +68,14 @@ type observation struct {
 // a host that supplied no session id all just contribute less. A review must still open when
 // nothing was recorded, which is the normal case for a workspace whose agents have no guard
 // hook wired, and a file nobody touched keeps a nil Touches.
-func AttachTouches(rev *diff.Diff, root, base string) {
+func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) {
 	paths := make([]string, len(rev.Files))
 	for i, f := range rev.Files {
 		paths[i] = f.Path
 	}
-	byPath := replayTrail(root, base, paths, DefaultReplayEvents)
+	byPath := replayTrail(ctx, root, base, paths, DefaultReplayEvents)
 	if dir, err := sessions.Dir(root); err == nil {
-		if fold, err := session.ReadAll(dir); err == nil {
+		if fold, err := session.ReadAll(ctx, dir); err == nil {
 			for path, touches := range replayLoaded(fold, paths) {
 				for _, t := range touches {
 					if !slices.ContainsFunc(byPath[path], func(h diff.Touch) bool { return h.Host == t.Host && h.Session == t.Session }) {
@@ -93,8 +94,8 @@ func AttachTouches(rev *diff.Diff, root, base string) {
 
 // replayTrail reconstructs, for each of paths, which agent sessions the trail at base saw
 // write it and what they had read first, reading at most limit recent events.
-func replayTrail(root, base string, paths []string, limit int) map[string][]diff.Touch {
-	events, err := trailtypes.ReadRecent(base, limit)
+func replayTrail(ctx context.Context, root, base string, paths []string, limit int) map[string][]diff.Touch {
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil || len(events) == 0 {
 		return map[string][]diff.Touch{}
 	}
@@ -367,12 +368,12 @@ type SessionSpawn struct {
 // ForSession folds the trail at base for one host session, reading at most limit recent
 // events. A trail that cannot be read is an empty result, never an error: the join is context
 // for a transcript that stands on its own.
-func ForSession(base, session string, limit int) SessionTrail {
+func ForSession(ctx context.Context, base, session string, limit int) SessionTrail {
 	var out SessionTrail
 	if session == "" {
 		return out
 	}
-	events, err := trailtypes.ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
 		return out
 	}
@@ -510,8 +511,8 @@ func relativize(root, p string) string {
 //
 // Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
 // caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
-func ObservedCounts(base string, limit int) (reads, writes, shell int) {
-	events, err := trailtypes.ReadRecent(base, limit)
+func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int) {
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
 		return 0, 0, 0
 	}

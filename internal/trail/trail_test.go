@@ -72,7 +72,7 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	Append(t.Context(), dir, trailtypes.Event{Ts: 2, Kind: trailtypes.KindTokenLifecycle, Action: "connector.create", Outcome: trailtypes.OutcomeOK})
 	Append(t.Context(), dir, trailtypes.Event{Ts: 3, Kind: trailtypes.KindJob, Workspace: "/ws", Action: "graph build", Outcome: trailtypes.OutcomeError, Error: "boom"})
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		Append(t.Context(), dir, trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: string(rune('a' + i - 1))})
 	}
-	events, err := trailtypes.ReadRecent(dir, 2)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 2)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
@@ -122,14 +122,14 @@ func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
 }
 
 func TestReadRecent_MissingTrailIsEmptyAndNoBaseIsRefused(t *testing.T) {
-	if evs, err := trailtypes.ReadRecent(t.TempDir(), 10); err != nil || len(evs) != 0 {
+	if evs, err := trailtypes.ReadRecent(t.Context(), t.TempDir(), 10); err != nil || len(evs) != 0 {
 		t.Errorf("missing trail: got %d events, err %v; want 0, nil", len(evs), err)
 	}
 	var invalid *trailtypes.InvalidReadError
-	if _, err := trailtypes.ReadRecent("", 10); !errors.As(err, &invalid) {
+	if _, err := trailtypes.ReadRecent(t.Context(), "", 10); !errors.As(err, &invalid) {
 		t.Errorf("empty base: got %v; want an InvalidReadError", err)
 	}
-	if _, err := trailtypes.ReadRecent(t.TempDir(), 0); !errors.As(err, &invalid) {
+	if _, err := trailtypes.ReadRecent(t.Context(), t.TempDir(), 0); !errors.As(err, &invalid) {
 		t.Errorf("zero limit: got %v; want an InvalidReadError", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 		Decision:  "pass",
 	})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -189,7 +189,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: "pass"})
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events)
 }
@@ -198,7 +198,7 @@ func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: "pass", GuardMs: 278})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, int64(278), events[0].GuardMs)
@@ -209,7 +209,7 @@ func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -233,7 +233,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0", Cwd: "/work/tree",
 	})
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	var commands, spawns []trailtypes.Event
@@ -280,7 +280,7 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -325,7 +325,7 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	}
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: "pass", AgentFacts: want})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
@@ -342,7 +342,7 @@ func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls"})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
@@ -357,7 +357,7 @@ func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
 	empty := 0
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
@@ -377,7 +377,7 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5", AgentFacts: want,
 	})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
@@ -404,7 +404,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 		Context:   handed,
 	})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -441,12 +441,12 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events, "a spawn with no handed context has nothing to audit")
 
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Context: "go and do the thing"})
-	events, err = trailtypes.ReadRecent(dir, 1)
+	events, err = trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// An unlabelled callee still says a spawn happened, and names no lease.
@@ -473,7 +473,7 @@ func TestAppendAgentSpawn_ContinueIsExplicit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			AppendAgentSpawn(t.Context(), dir, tc.spawn)
-			events, err := trailtypes.ReadRecent(dir, 1)
+			events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 			require.NoError(t, err)
 			require.Len(t, events, 1)
 			assert.Equal(t, tc.want, events[0].Action)
@@ -548,7 +548,7 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
 
-	events, err := trailtypes.ReadRecent(dir, 3)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 3)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	assert.Empty(t, events[0].Lease, "newest first: an unresolved call is uncorrelated, never the environment's")
@@ -570,7 +570,7 @@ func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Empty(t, events[0].Lease, "a missing join is the designed outcome, never an invented one")
@@ -628,7 +628,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 
 	rotate(dir, 2) // keep the last 2 events
 
-	events, _ := trailtypes.ReadRecent(dir, 10)
+	events, _ := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if len(events) != 2 {
 		t.Fatalf("after rotate got %d events, want 2", len(events))
 	}
@@ -719,7 +719,7 @@ func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
 	Append(t.Context(), dir, trailtypes.Event{Ts: 1, Action: "a"})
 	rotate(dir, 10) // under cap: no rewrite
-	if evs, _ := trailtypes.ReadRecent(dir, 10); len(evs) != 1 {
+	if evs, _ := trailtypes.ReadRecent(t.Context(), dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
 	}
 	rotate("", 2) // must not panic
@@ -731,7 +731,7 @@ func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 		Append(t.Context(), dir, trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindJob, Action: "x"})
 	}
 	Rotate(dir) // maxEvents is 10000, so this is a no-op that must not lose events
-	if evs, _ := trailtypes.ReadRecent(dir, 10); len(evs) != 3 {
+	if evs, _ := trailtypes.ReadRecent(t.Context(), dir, 10); len(evs) != 3 {
 		t.Errorf("Rotate under cap changed the trail: got %d events, want 3", len(evs))
 	}
 }
@@ -745,7 +745,7 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
 	Rotate(dir)
-	got, err := trailtypes.ReadRecent(dir, maxEvents+100)
+	got, err := trailtypes.ReadRecent(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
 	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
@@ -778,7 +778,7 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 	require.NoError(t, os.Chmod(eventsPath(dir), 0o644))
 
 	Rotate(dir)
-	got, err := trailtypes.ReadRecent(dir, maxEvents+100)
+	got, err := trailtypes.ReadRecent(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents, "the rotate ran")
 	fi, err := os.Stat(eventsPath(dir))
@@ -802,7 +802,7 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	require.Less(t, info.Size(), int64(maxEvents)*minEventBytes, "a one-event trail is below the skip threshold")
 
 	Rotate(dir)
-	got, err := trailtypes.ReadRecent(dir, 10)
+	got, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
 
@@ -881,7 +881,7 @@ func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 	f.Close()
 	Append(t.Context(), dir, trailtypes.Event{Ts: 2, Kind: trailtypes.KindJob, Action: "good-two"})
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}

@@ -41,7 +41,7 @@ func (s *ReadSuite) TestReadRecentIsNewestFirst() {
 		s.eventLine(Event{Ts: 2, Kind: KindJob, Action: "two", Outcome: OutcomeOK}),
 		s.eventLine(Event{Ts: 3, Kind: KindJob, Action: "three", Outcome: OutcomeOK}),
 	)
-	got, err := ReadRecent(s.dir, 10)
+	got, err := ReadRecent(s.T().Context(), s.dir, 10)
 	s.Require().NoError(err)
 	s.Require().Len(got, 3)
 	s.Equal([]string{"three", "two", "one"}, []string{got[0].Action, got[1].Action, got[2].Action})
@@ -53,14 +53,14 @@ func (s *ReadSuite) TestReadRecentLimitKeepsTheTail() {
 		lines = append(lines, s.eventLine(Event{Ts: int64(i), Kind: KindJob, Action: fmt.Sprint(i)}))
 	}
 	s.writeLines(lines...)
-	got, err := ReadRecent(s.dir, 3)
+	got, err := ReadRecent(s.T().Context(), s.dir, 3)
 	s.Require().NoError(err)
 	s.Require().Len(got, 3)
 	s.Equal([]int64{10, 9, 8}, []int64{got[0].Ts, got[1].Ts, got[2].Ts})
 }
 
 func (s *ReadSuite) TestReadRecentOfAMissingTrailIsEmptyAndNoError() {
-	got, err := ReadRecent(s.dir, 10)
+	got, err := ReadRecent(s.T().Context(), s.dir, 10)
 	s.Require().NoError(err)
 	s.Empty(got, "a missing trail")
 
@@ -69,11 +69,11 @@ func (s *ReadSuite) TestReadRecentOfAMissingTrailIsEmptyAndNoError() {
 
 func (s *ReadSuite) TestReadRecentRefusesNoDirAndNoLimit() {
 	var invalid *InvalidReadError
-	_, err := ReadRecent("", 10)
+	_, err := ReadRecent(s.T().Context(), "", 10)
 	s.Require().ErrorAs(err, &invalid, "an empty dir")
 
 	s.writeLines(s.eventLine(Event{Ts: 1, Kind: KindJob}))
-	_, err = ReadRecent(s.dir, 0)
+	_, err = ReadRecent(s.T().Context(), s.dir, 0)
 	s.Require().ErrorAs(err, &invalid, "a zero limit")
 	s.Equal(0, invalid.Limit)
 }
@@ -84,7 +84,7 @@ func (s *ReadSuite) TestReadRecentSkipsACorruptLine() {
 		"this is not json",
 		s.eventLine(Event{Ts: 2, Kind: KindJob, Action: "good-two"}),
 	)
-	got, err := ReadRecent(s.dir, 10)
+	got, err := ReadRecent(s.T().Context(), s.dir, 10)
 	s.Require().NoError(err)
 	s.Require().Len(got, 2)
 	s.Equal("good-two", got[0].Action)
@@ -93,7 +93,7 @@ func (s *ReadSuite) TestReadRecentSkipsACorruptLine() {
 
 func (s *ReadSuite) TestEventReadsTheOriginInline() {
 	s.writeLines(`{"ts":1,"kind":"job","user":"eli","host":"claude","action":"a","outcome":"ok"}`)
-	got, err := ReadRecent(s.dir, 1)
+	got, err := ReadRecent(s.T().Context(), s.dir, 1)
 	s.Require().NoError(err)
 	s.Require().Len(got, 1)
 	s.Equal(job.Origin{User: "eli", Host: "claude"}, got[0].Origin)

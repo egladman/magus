@@ -92,7 +92,7 @@ func denyRepeatVerify(ctx context.Context, deps Dependencies, _, command string)
 		return denial{}
 	}
 	if last.Outcome == session.OutcomeFail {
-		return denyFailedGate(at.workspace, last)
+		return denyFailedGate(ctx, at.workspace, last)
 	}
 	runs, _ := recentGateRuns(workspaceRunsDir(at.cacheDir), time.Now())
 	if runs < verifyRepeatDenyRuns {
@@ -110,12 +110,12 @@ func denyRepeatVerify(ctx context.Context, deps Dependencies, _, command string)
 // denyFailedGate names each target red failed that no run has passed since, and the narrow
 // run of each. A red run that recorded no failing target has nothing to name, so refuses
 // nothing.
-func denyFailedGate(workspace string, red sessions.GateRecord) denial {
+func denyFailedGate(ctx context.Context, workspace string, red sessions.GateRecord) denial {
 	dir, err := sessions.Dir(workspace)
 	if err != nil {
 		return denial{}
 	}
-	results, err := session.FoldKind(dir, session.KindTargetResult)
+	results, err := session.FoldKind(ctx, dir, session.KindTargetResult)
 	if err != nil {
 		return denial{}
 	}
@@ -173,7 +173,7 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 	if err != nil {
 		return sessions.GateRecord{}, false
 	}
-	fold, err := sessions.ReadGateResults(dir)
+	fold, err := sessions.ReadGateResults(ctx, dir)
 	if err != nil {
 		return sessions.GateRecord{}, false
 	}
@@ -181,7 +181,7 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 	if !ok || last.Commit == "" {
 		return sessions.GateRecord{}, false
 	}
-	if written, err := session.FoldKind(dir, sessions.KindHarnessWrite); err == nil {
+	if written, err := session.FoldKind(ctx, dir, sessions.KindHarnessWrite); err == nil {
 		if hw, ok := sessions.LatestHarnessWrite(written); ok && hw.At.After(last.At) {
 			return sessions.GateRecord{}, false
 		}

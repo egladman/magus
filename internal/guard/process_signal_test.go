@@ -25,18 +25,18 @@ func TestGuardDeniesProcessSignals(t *testing.T) {
 		`kill -- -l`,
 	} {
 		t.Run(command, func(t *testing.T) {
-			v := Evaluate(strict(testDependencies()), command)
+			v := Evaluate(t.Context(), strict(testDependencies()), command)
 			require.Equal(t, denyRuleName("process-signal"), v.Rule.Name)
 			require.NotEmpty(t, v.Deny)
 			assert.Contains(t, v.Deny, "cancel")
 			require.Len(t, v.Next, 1)
 			assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run)
-			assert.Empty(t, Evaluate(strict(testDependencies()), v.Next[0].Run).Deny)
+			assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), v.Next[0].Run).Deny)
 		})
 	}
 	deps := advising(testDependencies(), "process-signal")
-	assert.Empty(t, Evaluate(deps, "kill 30940").Deny)
-	assert.NotEmpty(t, advised(Evaluate(deps, "kill 30940")))
+	assert.Empty(t, Evaluate(t.Context(), deps, "kill 30940").Deny)
+	assert.NotEmpty(t, advised(Evaluate(t.Context(), deps, "kill 30940")))
 }
 
 func TestGuardAllowsSignalDocumentationAndMentions(t *testing.T) {
@@ -51,7 +51,7 @@ func TestGuardAllowsSignalDocumentationAndMentions(t *testing.T) {
 		`pkill --help`,
 		`killall --version`,
 	} {
-		assert.NotEqual(t, denyRuleName("process-signal"), Evaluate(strict(testDependencies()), command).Rule.Name, command)
+		assert.NotEqual(t, denyRuleName("process-signal"), Evaluate(t.Context(), strict(testDependencies()), command).Rule.Name, command)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestGuardDeniesSingleProcessProbe(t *testing.T) {
 		`sleep 1m; kill -0 4242`,
 		`kill -0 4242 && ./magus run go-test .`,
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.Equal(t, denyRuleProcessPoll, v.Rule.Name, command)
 		assert.NotEmpty(t, v.Deny, command)
 	}

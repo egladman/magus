@@ -21,17 +21,17 @@ func (s *GateFoldSuite) TestReadGateResultsFoldsOnlyGateVerdicts() {
 		V: session.APIVersion, Invocation: "a", Seq: 1, Kind: session.KindAgentEvent, Ts: 1,
 		Payload: fmt.Appendf(nil, `{"host":"h","event":"file.read","ref":"1","at":1,"text":%q}`, "x.go"),
 	}})
-	s.Require().NoError(RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: session.OutcomePass}, session.InvocationStart{}))
+	s.Require().NoError(RecordGate(s.T().Context(), dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: session.OutcomePass}, session.InvocationStart{}))
 
-	_, err := session.FoldAgentEvents(dir)
+	_, err := session.FoldAgentEvents(s.T().Context(), dir)
 	s.Require().NoError(err)
-	gates, err := ReadGateResults(dir)
+	gates, err := ReadGateResults(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(gates.Records, 1)
 	s.Equal(KindGateResult, gates.Records[0].Kind)
 
-	s.Require().NoError(RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "def456", Outcome: session.OutcomeFail}, session.InvocationStart{}))
-	gates, err = ReadGateResults(dir)
+	s.Require().NoError(RecordGate(s.T().Context(), dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "def456", Outcome: session.OutcomeFail}, session.InvocationStart{}))
+	gates, err = ReadGateResults(s.T().Context(), dir)
 	s.Require().NoError(err)
 	rec, ok := GateAt(gates, "def456", "ci")
 	s.Require().True(ok)

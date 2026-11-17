@@ -26,7 +26,7 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	Append(ctx, dir, trailtypes.Event{Kind: trailtypes.KindJob, Action: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
 	Append(ctx, dir, trailtypes.Event{Kind: trailtypes.KindJob, Action: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
-	events, err := trailtypes.ReadRecent(dir, 2)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 2)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	local := LocalOrigin(ctx)

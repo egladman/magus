@@ -664,7 +664,7 @@ func keepDerived(row *job.Job, prev job.Job) {
 // attempt began, for the fold a fork of the ended row makes, and whether the trail still
 // reaches back to that start. Only an ended row is read. A dry run, or a trail that cannot
 // be placed or read, gives none and unknown, which the fold records as unknown.
-func (s *Store) endedAttemptDenials(id string) ([]job.Denial, bool) {
+func (s *Store) endedAttemptDenials(ctx context.Context, id string) ([]job.Denial, bool) {
 	if s.dryRun {
 		return nil, false
 	}
@@ -685,7 +685,7 @@ func (s *Store) endedAttemptDenials(id string) ([]job.Denial, bool) {
 	if err != nil {
 		return nil, false
 	}
-	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row, job.NewAttempts(all)), maxDenialsRead)
+	denials, known, err := trail.LeaseDenials(ctx, base, id, attemptStart(row, job.NewAttempts(all)), maxDenialsRead)
 	if err != nil {
 		return nil, false
 	}

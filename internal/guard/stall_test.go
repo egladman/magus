@@ -43,7 +43,7 @@ func (s *HookRowAppendSuite) SetupTest() {
 func (s *HookRowAppendSuite) assertTwoOpensOneRow() {
 	dir, err := sessions.Dir(s.root)
 	s.Require().NoError(err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r session.Record) bool { return r.Kind != sessions.KindAttentionOpen })
 	s.Len(opens, 2)
@@ -115,7 +115,7 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	queue := sessions.AttentionQueue(fold)
 	require.Len(t, queue, 1, "one row per lease and rule")

@@ -511,7 +511,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 	deps := advising(testDependencies(), commandAdvisories...)
 	deps.GraphIDs = diagnosticGraph
 	for _, tt := range tests {
-		v := Evaluate(deps, tt.command)
+		v := Evaluate(t.Context(), deps, tt.command)
 		if (tt.rule != denyRule{}) {
 			// assert rather than require: a require here stops the loop at the first
 			// wrong row, and a rule change that moves seven of them should name all
@@ -634,7 +634,7 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		{command: "git stash --help > usage.txt", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
 	}
 	for _, tt := range tests {
-		v := Evaluate(strict(testDependencies()), tt.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tt.command)
 		assert.Equal(t, tt.rule, v.Rule, "%q", tt.command)
 		if (tt.rule == denyRule{}) {
 			assert.Empty(t, v.Deny, "%q must not deny", tt.command)
@@ -730,7 +730,7 @@ func TestDenyReasonsStayShort(t *testing.T) {
 		`magus run test . ; echo "rc=$?"`,
 	}
 	for _, command := range commands {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		if v.Deny == "" {
 			continue // a rule this build does not reach; other tests pin which fire
 		}
@@ -749,7 +749,7 @@ func TestDenyReasonsStayShort(t *testing.T) {
 // were not already looking at.
 func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 	body := strings.Repeat("x = 1\n", 200)
-	v := Evaluate(strict(testDependencies()), fmt.Sprintf("go run -c \"%s\"", body))
+	v := Evaluate(t.Context(), strict(testDependencies()), fmt.Sprintf("go run -c \"%s\"", body))
 	require.NotEmpty(t, v.Deny)
 	assert.NotContains(t, v.Deny, body, "the command is elided, not quoted back")
 	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
@@ -763,7 +763,7 @@ func advised(v ShellVerdict) string { return advice{Say: v.Context, Why: v.Why}.
 // agree only when the pattern is a real symbol. The advisory hands back the exact command AND
 // hedges: an empty semantic result means the pattern was text, and grep was the right tool.
 func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), `grep -rn "funcName" .`)
+	v := Evaluate(t.Context(), strict(testDependencies()), `grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
 	assert.Contains(t, advised(v), "grep is right", "and hedges rather than promising equivalence")
 }
@@ -894,7 +894,7 @@ func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
 // arg-passthrough escape hatch, which is the one thing the target form does not
 // cover as directly.
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
-	verdict := Evaluate(strict(testDependencies()), "go test ./... -run TestFocused")
+	verdict := Evaluate(t.Context(), strict(testDependencies()), "go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
 	assert.Equal(t, "magus guard denied `go test ./... -run TestFocused`; run it through magus: `magus run <target> <project>`.", verdict.Deny)
 	assert.Contains(t, verdict.Why, "magus describe targets")
@@ -926,7 +926,7 @@ func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
 		"cd /tmp/copy && magus run lint .", "cd libs/foo && magus run test",
 		`grep -rn "funcName" .`, "magus notes edit x", "sed -i 's/a/b/' f.go",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		assert.NotRegexp(t, canonical, v.Deny, "%q names a canonical target in its deny reason", command)
 		assert.NotRegexp(t, canonical, v.Context, "%q names a canonical target in its advisory", command)
 	}
@@ -960,7 +960,7 @@ func TestPrecisionFixesHoldBesideGitGlobalOptions(t *testing.T) {
 		{command: "git -C /repo status && ./magus run lint . 2>/dev/null", rule: denyRuleOutputRedirect},
 		{command: "git -c core.pager=cat log && gofmt -w x.go", rule: denyRuleRawTool},
 	} {
-		v := Evaluate(advising(testDependencies(), commandAdvisories...), tc.command)
+		v := Evaluate(t.Context(), advising(testDependencies(), commandAdvisories...), tc.command)
 		if tc.rule == "" {
 			assert.Empty(t, v.Deny, tc.command)
 			continue
@@ -1000,7 +1000,7 @@ func TestRawToolPassesAGofmtListing(t *testing.T) {
 		{command: "govulncheck ./...", denied: true},
 		{command: "shellcheck scripts/release.sh", denied: true},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		if tc.denied {
 			assert.Equal(t, denyRuleRawTool, v.Rule.Name, tc.command)
 			continue
@@ -1031,7 +1031,7 @@ func TestRawToolReadsModeArgs(t *testing.T) {
 		{command: "shellcheck scripts/release.sh", denied: true},
 		{command: "shellcheck -x scripts/release.sh", denied: true},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		if tc.denied {
 			assert.Equal(t, denyRuleRawTool, v.Rule.Name, tc.command)
 			continue
@@ -1134,7 +1134,7 @@ func TestGuardAdversarial(t *testing.T) {
 	for _, tt := range denied {
 		t.Run("deny/"+tt.name, func(t *testing.T) {
 			cmds, _ := ParseCommands(tt.command)
-			assert.NotEmpty(t, Evaluate(strict(testDependencies()), tt.command).Deny,
+			assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), tt.command).Deny,
 				"%q must deny (parsed: %+v)", tt.command, cmds)
 		})
 	}
@@ -1199,7 +1199,7 @@ func TestGuardAdversarial(t *testing.T) {
 	for _, tt := range allowed {
 		t.Run("allow/"+tt.name, func(t *testing.T) {
 			cmds, _ := ParseCommands(tt.command)
-			assert.Empty(t, Evaluate(advising(testDependencies(), commandAdvisories...), tt.command).Deny,
+			assert.Empty(t, Evaluate(t.Context(), advising(testDependencies(), commandAdvisories...), tt.command).Deny,
 				"%q must not deny (parsed: %+v)", tt.command, cmds)
 		})
 	}
@@ -1239,7 +1239,7 @@ func TestGuardKnownHoles(t *testing.T) {
 	}
 	for _, tt := range holes {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Empty(t, Evaluate(strict(testDependencies()), tt.command).Deny,
+			assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), tt.command).Deny,
 				"%q is a KNOWN HOLE (%s). If this now denies, the guard got stronger: move it into TestGuardAdversarial rather than deleting it.", tt.command, tt.why)
 		})
 	}
@@ -1263,13 +1263,13 @@ func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
 	} {
 		_, parsed := ParseCommands(cmd)
 		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "%q must deny on the fallback path", cmd)
 	}
 
 	// Reading a stash is still safe, whether or not the line parses.
 	for _, cmd := range []string{"git stash list && (", "git stash show && ("} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "%q only reads", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "%q only reads", cmd)
 	}
 }
 
@@ -1289,11 +1289,11 @@ func TestPushFallbackCoversEveryBackend(t *testing.T) {
 	} {
 		_, parsed := ParseCommands(cmd)
 		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Equal(t, string(advisoryPushGate), v.RuleName(), "%q must reach the push gate on the fallback path", cmd)
 	}
 	for _, cmd := range []string{"hg pull && (", "jj git fetch && (", "sl pull && ("} {
-		assert.NotEqual(t, string(advisoryPushGate), Evaluate(strict(testDependencies()), cmd).RuleName(), "%q does not publish", cmd)
+		assert.NotEqual(t, string(advisoryPushGate), Evaluate(t.Context(), strict(testDependencies()), cmd).RuleName(), "%q does not publish", cmd)
 	}
 }
 
@@ -1305,18 +1305,18 @@ func TestPushFallbackCoversEveryBackend(t *testing.T) {
 func TestDenyOutranksHeldAdvisory(t *testing.T) {
 	const offending = `SP=/private/tmp/x/scratchpad; cd "$SP/fixci" && ./magus run generate . -s >/dev/null 2>&1`
 
-	require.NotEmpty(t, Evaluate(strict(testDependencies()), offending).Deny, "the line alone must deny")
+	require.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), offending).Deny, "the line alone must deny")
 	for _, suffix := range []string{
 		"; git commit -q -m x && git log --oneline -1",
 		"; git status --porcelain",
 		"; git add -- file.go",
 	} {
-		assert.NotEmpty(t, Evaluate(strict(testDependencies()), offending+suffix).Deny,
+		assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), offending+suffix).Deny,
 			"appending %q must not downgrade a deny to an advisory", suffix)
 	}
 
 	// The advisory still surfaces when nothing denies: holding it must not drop it.
-	plain := Evaluate(strict(testDependencies()), "git commit -q -m x")
+	plain := Evaluate(t.Context(), strict(testDependencies()), "git commit -q -m x")
 	assert.Empty(t, plain.Deny)
 	assert.NotEmpty(t, plain.Context, "a held advisory is still the answer when no rule denies")
 }
@@ -1328,22 +1328,22 @@ func TestDenyOutranksHeldAdvisory(t *testing.T) {
 // distinct messages, because the right replacement differs by shape: a filter
 // wanted one value, a redirect wanted a copy of the whole thing.
 func TestOutputGuardNamesTheReplacement(t *testing.T) {
-	piped := Evaluate(strict(testDependencies()), "magus ls targets . | grep build").Deny
+	piped := Evaluate(t.Context(), strict(testDependencies()), "magus ls targets . | grep build").Deny
 	require.NotEmpty(t, piped)
 	assert.Contains(t, piped, "-o name")
 	assert.Contains(t, piped, "-o template=")
-	assert.Contains(t, Evaluate(strict(testDependencies()), "magus ls targets . | grep build").Why, "exit status",
+	assert.Contains(t, Evaluate(t.Context(), strict(testDependencies()), "magus ls targets . | grep build").Why, "exit status",
 		"a pipe replaces the exit status; that is why it is denied, not advised")
 
 	// Discarding and KEEPING are different intents, so they get different corrections.
 	// Both name where the log already is, because `affected ci` mints one.
-	discarded := Evaluate(strict(testDependencies()), "magus affected ci --silent > /dev/null 2>&1").Deny
+	discarded := Evaluate(t.Context(), strict(testDependencies()), "magus affected ci --silent > /dev/null 2>&1").Deny
 	require.NotEmpty(t, discarded)
 	assert.Contains(t, discarded, "silent", "the --silent + /dev/null combination is the case worth calling out")
 	assert.Contains(t, discarded, "magus query output", "the captured log is already persisted; that is the replacement")
 	assert.Contains(t, discarded, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
 
-	kept := Evaluate(strict(testDependencies()), "magus affected ci > run.log").Deny
+	kept := Evaluate(t.Context(), strict(testDependencies()), "magus affected ci > run.log").Deny
 	require.NotEmpty(t, kept)
 	assert.Contains(t, kept, "--tee", "keeping output is what --tee is for")
 	assert.Contains(t, kept, "keeps the STRUCTURED output",
@@ -1351,7 +1351,7 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 
 	// A verb that mints no ref must not be sent after one: `magus ls` has no run log and
 	// no output ref, so naming them would point the reader at an id that never existed.
-	noRef := Evaluate(strict(testDependencies()), "magus ls > out.txt").Deny
+	noRef := Evaluate(t.Context(), strict(testDependencies()), "magus ls > out.txt").Deny
 	require.NotEmpty(t, noRef)
 	assert.NotContains(t, noRef, "magus query output", "ls mints no ref, so the log pointer would be a dead end")
 
@@ -1397,12 +1397,12 @@ func TestOutputRedirectJudgesWhereEachStreamEnds(t *testing.T) {
 		verb, dest, ok := magusRedirected(tc.command, DialectBash)
 		if tc.dest == "" {
 			assert.False(t, ok, "should pass: %s (got %s %s)", tc.command, verb, dest)
-			assert.NotEqual(t, denyRuleOutputRedirect, Evaluate(strict(testDependencies()), tc.command).Rule.Name, tc.command)
+			assert.NotEqual(t, denyRuleOutputRedirect, Evaluate(t.Context(), strict(testDependencies()), tc.command).Rule.Name, tc.command)
 			continue
 		}
 		assert.True(t, ok, "should be denied: %s", tc.command)
 		assert.Equal(t, tc.dest, dest, tc.command)
-		assert.Equal(t, denyRuleOutputRedirect, Evaluate(strict(testDependencies()), tc.command).Rule.Name, tc.command)
+		assert.Equal(t, denyRuleOutputRedirect, Evaluate(t.Context(), strict(testDependencies()), tc.command).Rule.Name, tc.command)
 	}
 }
 
@@ -1410,11 +1410,11 @@ func TestOutputRedirectJudgesWhereEachStreamEnds(t *testing.T) {
 // covers exactly the flag that makes refs a grep replacement, not the command
 // name in general.
 func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
-	assert.Empty(t, Evaluate(strict(testDependencies()), "magus refs TODO --text | grep -n fixme").Deny,
+	assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), "magus refs TODO --text | grep -n fixme").Deny,
 		"a raw text search exists to be piped")
-	assert.Empty(t, Evaluate(strict(testDependencies()), "magus refs TODO --text > /tmp/hits.txt").Deny,
+	assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), "magus refs TODO --text > /tmp/hits.txt").Deny,
 		"and to be redirected")
-	assert.Equal(t, denyRuleName(advisoryGraphPipe), Evaluate(strict(testDependencies()), "magus refs Open | grep -n Open").Rule.Name,
+	assert.Equal(t, denyRuleName(advisoryGraphPipe), Evaluate(t.Context(), strict(testDependencies()), "magus refs Open | grep -n Open").Rule.Name,
 		"a symbol lookup still renders a structured record -o shapes; only --text is silent")
 }
 
@@ -1451,8 +1451,8 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 		{"magus query output out1a2b | grep cause", ""},
 		{"magus refs TODO --text | grep fixme", ""},
 	} {
-		assert.NotEqual(t, advisoryGraphPipe, Evaluate(testDependencies(), tc.command).Kind, "graph-pipe refuses by default: %s", tc.command)
-		v := Evaluate(advising(testDependencies(), string(advisoryGraphPipe)), tc.command)
+		assert.NotEqual(t, advisoryGraphPipe, Evaluate(t.Context(), testDependencies(), tc.command).Kind, "graph-pipe refuses by default: %s", tc.command)
+		v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryGraphPipe)), tc.command)
 		switch tc.want {
 		case "deny":
 			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
@@ -1471,13 +1471,13 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 // checking only Args[0]: magus accepts its global flags before the verb, so a
 // flag ahead of `query output` must not defeat the exemption.
 func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
-	assert.Empty(t, Evaluate(strict(testDependencies()), "magus --root /tmp/ws query output ref1a2b3c | grep x").Deny,
+	assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), "magus --root /tmp/ws query output ref1a2b3c | grep x").Deny,
 		"a valued global flag ahead of the verb still resolves to the exemption")
-	assert.Empty(t, Evaluate(strict(testDependencies()), "magus -v query output ref1a2b3c | grep x").Deny,
+	assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), "magus -v query output ref1a2b3c | grep x").Deny,
 		"a value-less global flag ahead of the verb still resolves to the exemption")
-	assert.Empty(t, Evaluate(strict(testDependencies()), "magus query output ref1a2b3c | grep x").Deny,
+	assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), "magus query output ref1a2b3c | grep x").Deny,
 		"the plain form stays allowed")
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), "magus --root /tmp/ws run test . | grep x").Deny,
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), "magus --root /tmp/ws run test . | grep x").Deny,
 		"a global flag does not widen the exemption to any other command")
 }
 
@@ -1486,7 +1486,7 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 // wrapper, does the staging.
 // `git add -- <paths>` stays named: a hand-picked subset is still fine.
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
-	verdict := Evaluate(strict(testDependencies()), "git add -A")
+	verdict := Evaluate(t.Context(), strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
 	assert.Contains(t, verdict.Deny, fmt.Sprintf("a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `%s | git add --pathspec-from-file=-`.", hint.VCSLsFiles.With("-o", "name")))
 	assert.Contains(t, verdict.Why, "--include-generated")
@@ -1512,14 +1512,14 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git describe",
 		"git stash create",
 	} {
-		assert.Contains(t, Evaluate(testDependencies(), cmd).Deny, "magus vcs checkpoint", "%q is refused by default", cmd)
-		v := Evaluate(advising(testDependencies(), string(advisoryCheckpointState)), cmd)
+		assert.Contains(t, Evaluate(t.Context(), testDependencies(), cmd).Deny, "magus vcs checkpoint", "%q is refused by default", cmd)
+		v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryCheckpointState)), cmd)
 		assert.Empty(t, v.Deny, "%q advises when set to advise", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
 	// A leading cd is not this rule's business, since nothing after it is magus: the
 	// checkpoint advise still fires.
-	v := Evaluate(advising(testDependencies(), string(advisoryCheckpointState)), "cd libs/foo && git rev-parse HEAD")
+	v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryCheckpointState)), "cd libs/foo && git rev-parse HEAD")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus vcs checkpoint")
 
@@ -1536,7 +1536,7 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git describe --tags --always",
 		"git describe --always",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Empty(t, v.Deny)
 		assert.NotContains(t, v.Context, "magus vcs checkpoint",
 			"%q is not asking which revision this is", cmd)
@@ -1545,7 +1545,7 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 	// A destructive stash form is still a deny: adding `create` to the safe list
 	// must not have widened the arm.
 	for _, cmd := range []string{"git stash", "git stash push -u", "git stash pop"} {
-		assert.NotEmpty(t, Evaluate(strict(testDependencies()), cmd).Deny, "%q must still deny", cmd)
+		assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "%q must still deny", cmd)
 	}
 }
 
@@ -1570,31 +1570,31 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		"poetry update",
 		"pip-compile",
 	} {
-		assert.Contains(t, Evaluate(testDependencies(), cmd).Deny, ":update", "%q is refused by default, naming the charm", cmd)
-		v := Evaluate(advising(testDependencies(), string(advisoryDependencyUpdate)), cmd)
+		assert.Contains(t, Evaluate(t.Context(), testDependencies(), cmd).Deny, ":update", "%q is refused by default, naming the charm", cmd)
+		v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryDependencyUpdate)), cmd)
 		assert.Empty(t, v.Deny, "%q advises when set to advise", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
 	// A leading cd is not this rule's business, since nothing after it is magus: the
 	// update advise still fires.
-	v := Evaluate(advising(testDependencies(), string(advisoryDependencyUpdate)), "cd libs/foo && pnpm add lodash")
+	v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryDependencyUpdate)), "cd libs/foo && pnpm add lodash")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, ":update")
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
 	// spell op and a dependency refresh, and the deny answers first, so without this
 	// the reader is sent to a target that would refuse the write.
-	tidy := Evaluate(strict(testDependencies()), "go mod tidy")
+	tidy := Evaluate(t.Context(), strict(testDependencies()), "go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
 	assert.Contains(t, tidy.Deny, ":update")
-	assert.Contains(t, Evaluate(advising(testDependencies(), string(advisoryDependencyUpdate)), "go test ./... && npm update").Why, ":update",
+	assert.Contains(t, Evaluate(t.Context(), advising(testDependencies(), string(advisoryDependencyUpdate)), "go test ./... && npm update").Why, ":update",
 		"a rewrite later on the line is named in the stored verdict")
 
 	// Applying a lockfile is not re-resolving one, and installing a tool is not a
 	// dependency at all. Firing here would put an advisory on the most routine
 	// command in a JS repo.
 	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
-		assert.NotContains(t, Evaluate(strict(testDependencies()), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
+		assert.NotContains(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
 	}
 }
 
@@ -1611,13 +1611,13 @@ func TestGuardAdvisesInstallOnRawInstalls(t *testing.T) {
 		"cargo fetch",
 		"go mod download",
 	} {
-		assert.Equal(t, installGuardContext, Evaluate(testDependencies(), cmd).Deny, "%q is refused by default", cmd)
-		v := Evaluate(advising(testDependencies(), string(advisoryDependencyInstall)), cmd)
+		assert.Equal(t, installGuardContext, Evaluate(t.Context(), testDependencies(), cmd).Deny, "%q is refused by default", cmd)
+		v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryDependencyInstall)), cmd)
 		assert.Empty(t, v.Deny, "%q advises when set to advise", cmd)
 		assert.Equal(t, installGuardContext, v.Context, cmd)
 	}
 	for _, cmd := range []string{"pnpm install lodash", "go mod download golang.org/x/mod", "npm install", "mise install"} {
-		assert.Equal(t, ShellVerdict{}, Evaluate(strict(testDependencies()), cmd), cmd)
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), strict(testDependencies()), cmd), cmd)
 	}
 }
 
@@ -1643,7 +1643,7 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		"sed -i.bak s/a/b/ **/*.go",
 		"sed -i.bak s/a/b/ $(git ls-files)",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 	}
 	// A sed that NAMES its files is a targeted edit and is allowed. This reverses the
@@ -1657,7 +1657,7 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		"sed -i.bak -e s/a/b/ one.go two.go",
 		"sed -i.bak -f prog.sed one.go",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Empty(t, v.Deny, "a sed naming its files is targeted, not blind: %q", cmd)
 	}
 	for _, cmd := range []string{
@@ -1666,7 +1666,7 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		"cat f | sed -e 's/a/b/'",
 		"echo x | sed s/x/y/",
 	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
 	}
 }
 
@@ -1682,7 +1682,7 @@ func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
 		"cd /private/tmp/c/scratchpad/exp && sed -i '' 's|a|b|' M_*.yml && grep formula M_comment.yml",
 		"sed -i -e 's/a/b/' /tmp/x/one.txt /tmp/x/two.txt",
 	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "%q edits only scratch files", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "%q edits only scratch files", cmd)
 	}
 	for _, cmd := range []string{
 		"sed -i '' 's/a/b/' f.go",
@@ -1693,7 +1693,7 @@ func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
 		// The files come from the traversal, which is the blind sweep wherever it starts.
 		"find /tmp/x -name '*.py' -exec sed -i 's/a/b/' {} +",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleSedInPlace, v.Rule.Name, "%q may edit a workspace file", cmd)
 	}
 }
@@ -1750,10 +1750,10 @@ func TestDenyTextsNameTheScriptsServingTheRule(t *testing.T) {
 		{"jj --no-pager workspace forget", denyRuleWorktreeRemove, prune},
 		{"git checkout MERGE_HEAD -- a.go", denyRuleMergeSideCheckout, resolve},
 	} {
-		v := Evaluate(carries, tt.command)
+		v := Evaluate(t.Context(), carries, tt.command)
 		require.Equal(t, tt.rule, v.Rule.Name, tt.command)
 		assert.Equal(t, 1, strings.Count(v.Deny, tt.note), "%q names its script once: %s", tt.command, v.Deny)
-		assert.NotContains(t, Evaluate(bare, tt.command).Deny, "hack/", "%q in a workspace without the script", tt.command)
+		assert.NotContains(t, Evaluate(t.Context(), bare, tt.command).Deny, "hack/", "%q in a workspace without the script", tt.command)
 	}
 
 	at := location{workspace: root, dir: root}
@@ -1775,8 +1775,8 @@ func TestWorkspaceDenyNamesTheScriptReplacingTheLine(t *testing.T) {
 	}})
 
 	assert.Equal(t, "merge through the script\nThis workspace's script for it, to merge job branches, settling generated conflicts: `magus buzz hack/dev/merge-job-branches.buzz`",
-		Evaluate(deps, "git merge --no-ff feat").Deny)
-	assert.Equal(t, "no reverts", Evaluate(deps, "git revert abc123").Deny)
+		Evaluate(t.Context(), deps, "git merge --no-ff feat").Deny)
+	assert.Equal(t, "no reverts", Evaluate(t.Context(), deps, "git revert abc123").Deny)
 }
 
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
@@ -1785,7 +1785,7 @@ func TestWorkspaceDenyNamesTheScriptReplacingTheLine(t *testing.T) {
 // which is exactly the fallback the advisory exists to prevent.
 func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	t.Parallel()
-	v := Evaluate(strict(testDependencies()), `grep -rn "someFunc" .`)
+	v := Evaluate(t.Context(), strict(testDependencies()), `grep -rn "someFunc" .`)
 	assert.Contains(t, advised(v), "magus graph build", "a cold index must name the command that fixes it")
 	assert.Contains(t, advised(v), "unknown, not absent", "the verdict's meaning is the point, not just the command")
 }
@@ -1811,7 +1811,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 		// A line the parser cannot read still falls back to the pattern.
 		`magus diff ` + "--ack" + ` && (`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 		assert.Contains(t, v.Deny, "only a person may stamp a read receipt")
 	}
@@ -1835,7 +1835,7 @@ func TestGuardDeniesSessionDispose(t *testing.T) {
 		// A line the parser cannot read still falls back to the pattern.
 		`magus session dispose att-3f9a && (`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 		assert.Contains(t, v.Deny, "only a person may stamp a read receipt, dispose an attention request")
 		assert.Contains(t, v.Why, "session dispose")
@@ -1851,7 +1851,7 @@ func TestGuardAllowsSessionAttention(t *testing.T) {
 		`magus session attention`,
 		`magus session attention -o json`,
 	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "unexpected deny for %q", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "unexpected deny for %q", cmd)
 	}
 }
 
@@ -1865,7 +1865,7 @@ func TestGuardAllowsReadingTheReport(t *testing.T) {
 		`magus diff --impact`,
 		`magus diff -o json`,
 	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "unexpected deny for %q", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "unexpected deny for %q", cmd)
 	}
 }
 
@@ -1880,7 +1880,7 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		{"magus run lint . | magus run test . && magus run build .", "magus run lint . | magus run test . | magus run build ."},
 		{"magus affected generate:rw && magus run test .", "magus affected generate:rw | magus run test ."},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		require.NotEmpty(t, v.Deny, tc.command)
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
 		require.Len(t, v.Next, 1, tc.command)
@@ -1891,7 +1891,7 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		assert.Contains(t, v.Why, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
 		assert.Contains(t, v.Why, "exits red", tc.command)
 
-		served := Evaluate(strict(testDependencies()), tc.pipe)
+		served := Evaluate(t.Context(), strict(testDependencies()), tc.pipe)
 		assert.Empty(t, served.Deny, "the served pipe passes the guard: %s", tc.pipe)
 		assert.NotEqual(t, denyRuleChainedRun, served.Rule.Name, "a pipe is the remedy, not a chain: %s", tc.pipe)
 	}
@@ -1902,7 +1902,7 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		"echo 'magus run format . ; magus run lint .'",
 		"magus run generate:rw . | magus run test .",
 	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Context, "should not fire: %s", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Context, "should not fire: %s", cmd)
 	}
 }
 
@@ -1915,17 +1915,17 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 		{"magus run generate:rw docs && magus run generate:rw .", "magus run generate:rw docs | magus run generate:rw .", "magus run generate:rw docs ."},
 		{"./magus run test libs/a --silent; ./magus run test libs/b libs/a --silent", "./magus run test libs/a --silent | ./magus run test libs/b libs/a --silent", "./magus run test libs/a libs/b --silent"},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		require.NotEmpty(t, v.Deny, tc.command)
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name)
 		require.Len(t, v.Next, 1)
 		assert.Equal(t, tc.pipe, v.Next[0].Run)
 		assert.Contains(t, v.Why, fmt.Sprintf("when their order does not matter: `%s`", tc.combined))
-		assert.Empty(t, Evaluate(strict(testDependencies()), tc.combined).Deny)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), tc.combined).Deny)
 	}
 
 	// Charms are part of the target, so a differing charm is two targets and no one call.
-	v := Evaluate(strict(testDependencies()), "magus run lint . && magus run lint:rw docs")
+	v := Evaluate(t.Context(), strict(testDependencies()), "magus run lint . && magus run lint:rw docs")
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, "magus run lint . | magus run lint:rw docs", v.Next[0].Run)
 	assert.NotContains(t, v.Why, "when their order does not matter")
@@ -1952,7 +1952,7 @@ func TestChainedRunAdvisesWherePipingChangesTheChain(t *testing.T) {
 		{"magus run lint . && ./magus run test .", "different magus binaries"},
 		{"magus --root ../w run lint . && magus run test .", "different magus binaries or workspaces"},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		assert.Empty(t, v.Deny, tc.command)
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
 		assert.Contains(t, v.Why, "Not refused, because ", tc.command)
@@ -1960,7 +1960,7 @@ func TestChainedRunAdvisesWherePipingChangesTheChain(t *testing.T) {
 	}
 
 	// A line that does not parse is read by its shape and only advised on.
-	v := Evaluate(strict(testDependencies()), "magus run lint . && magus run test . )")
+	v := Evaluate(t.Context(), strict(testDependencies()), "magus run lint . && magus run test . )")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "compose through ctx.needs")
 }
@@ -1971,7 +1971,7 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 	pipesProveStages = false
 	t.Cleanup(func() { pipesProveStages = restore })
 
-	v := Evaluate(strict(testDependencies()), "magus run generate . && magus run lint .")
+	v := Evaluate(t.Context(), strict(testDependencies()), "magus run generate . && magus run lint .")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Why, "cannot prove a pipe's upstream")
 }
@@ -1989,16 +1989,16 @@ func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 		"./magus run go-build . && ./magus run generate:rw .",
 		"./magus run go_build . -s && ./magus run test .",
 	} {
-		v := Evaluate(deps, cmd)
+		v := Evaluate(t.Context(), deps, cmd)
 		assert.Empty(t, v.Deny, cmd)
 		assert.Contains(t, v.Why, "relinks ./magus", cmd)
 	}
-	assert.NotEmpty(t, Evaluate(deps, "./magus run test . && ./magus run go-build .").Deny,
+	assert.NotEmpty(t, Evaluate(t.Context(), deps, "./magus run test . && ./magus run go-build .").Deny,
 		"a relink in the LAST stage replaces nothing a later stage runs")
-	assert.NotEmpty(t, Evaluate(deps, "./magus run build . ; ./magus run test .").Deny,
+	assert.NotEmpty(t, Evaluate(t.Context(), deps, "./magus run build . ; ./magus run test .").Deny,
 		"a target named build that declares nothing relinks nothing")
 
-	assert.Equal(t, denyRuleRawTool, Evaluate(strict(testDependencies()), "go build -o magus ./cmd/magus && ./magus run go-build .").Rule.Name)
+	assert.Equal(t, denyRuleRawTool, Evaluate(t.Context(), strict(testDependencies()), "go build -o magus ./cmd/magus && ./magus run go-build .").Rule.Name)
 }
 
 // Naming the side deliberately is the spelling the merge-side deny points at, so it must
@@ -2009,7 +2009,7 @@ func TestGuardAllowsAnExplicitSideChoice(t *testing.T) {
 		"git checkout --ours -- a.go",
 		"git checkout --theirs -- a.go",
 	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "an explicit side is the sanctioned form: %s", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "an explicit side is the sanctioned form: %s", cmd)
 	}
 }
 
@@ -2034,7 +2034,7 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`while :; do if [ -s out.txt ]; then break; fi; sleep 2; done`,
 		`f=/tmp/tasks/b1.output; for i in $(seq 1 110); do grep -q summary: "$f" && break; sleep 5; done`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "announces when it ends", cmd)
@@ -2048,7 +2048,7 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`for i in 1 2 3; do ./magus run build .; sleep 1; done`,
 		`while read -r f; do gofmt -l "$f"; done < list.txt`,
 	} {
-		assert.NotEqual(t, denyRuleBusyWait, Evaluate(strict(testDependencies()), cmd).Rule.Name, cmd)
+		assert.NotEqual(t, denyRuleBusyWait, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, cmd)
 	}
 }
 
@@ -2066,7 +2066,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		`until ./magus describe job worker-a -o name; do sleep 60; done`,
 		`while kill -0 4242 2>/dev/null; do echo still running; sleep 30; done`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "waits on work you did not start", cmd)
 		assert.Contains(t, v.Deny, hint.DescribeJob.With("<job>"), cmd)
@@ -2075,7 +2075,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		assert.NotContains(t, v.Deny, "monitor", cmd)
 		assert.NotContains(t, v.Deny, "announces when it ends", cmd)
 	}
-	own := Evaluate(strict(testDependencies()), `until grep -q "^summary:" out.log; do sleep 25; done`)
+	own := Evaluate(t.Context(), strict(testDependencies()), `until grep -q "^summary:" out.log; do sleep 25; done`)
 	assert.Contains(t, own.Deny, "announces when it ends", "a probe of the caller's own output keeps the claim")
 }
 
@@ -2095,7 +2095,7 @@ func TestOutputPipeServesOnlyAnExactRemedy(t *testing.T) {
 		"magus ls | sort | uniq":             "",
 		"cd docs && magus run lint . | tail": "",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		require.Equal(t, denyRuleOutputPipe, v.Rule.Name, cmd)
 		if want == "" {
 			assert.Empty(t, v.Next, cmd)
@@ -2103,7 +2103,7 @@ func TestOutputPipeServesOnlyAnExactRemedy(t *testing.T) {
 		}
 		require.Len(t, v.Next, 1, cmd)
 		assert.Equal(t, want, v.Next[0].Run, cmd)
-		assert.Empty(t, Evaluate(strict(testDependencies()), v.Next[0].Run).Deny, "the remedy for %q passes the guard", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), v.Next[0].Run).Deny, "the remedy for %q passes the guard", cmd)
 	}
 }
 
@@ -2120,7 +2120,7 @@ func TestOutputRedirectRemedyPassesOutputRedirect(t *testing.T) {
 		"magus run lint . 2> err.log":          "",
 		"magus ls jobs --tee a.json > b.json":  "",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		require.Equal(t, denyRuleOutputRedirect, v.Rule.Name, cmd)
 		if want == "" {
 			assert.Empty(t, v.Next, cmd)
@@ -2128,7 +2128,7 @@ func TestOutputRedirectRemedyPassesOutputRedirect(t *testing.T) {
 		}
 		require.Len(t, v.Next, 1, cmd)
 		assert.Equal(t, want, v.Next[0].Run, cmd)
-		assert.Empty(t, Evaluate(strict(testDependencies()), v.Next[0].Run).Deny, "the remedy for %q passes the guard", cmd)
+		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), v.Next[0].Run).Deny, "the remedy for %q passes the guard", cmd)
 	}
 }
 
@@ -2143,7 +2143,7 @@ func TestStageAllServesTheSamePathsThroughLsFiles(t *testing.T) {
 		"git add -A -f vendor/":         "",
 		"git -C ../other add -A":        "",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		require.Equal(t, denyRuleStageAll, v.Rule.Name, cmd)
 		if want == "" {
 			assert.Empty(t, v.Next, cmd)
@@ -2162,7 +2162,7 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 		`ps -p 85665 -o pid,etime,command`,
 		`bash -c 'ps -p 85665'`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleProcessPoll, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "background your call as `magus job exec --timeout <d> -- <command>` and wait for its notice", cmd)
@@ -2181,7 +2181,7 @@ func TestShellRulesAdviseWhenSetToAdvise(t *testing.T) {
 		denyRuleStageAll:          "git add -A",
 	} {
 		t.Run(string(rule), func(t *testing.T) {
-			requireAdvisedOnce(t, Evaluate(advising(testDependencies()), command), rule)
+			requireAdvisedOnce(t, Evaluate(t.Context(), advising(testDependencies()), command), rule)
 		})
 	}
 }
@@ -2196,7 +2196,7 @@ func TestGuardDeniesProcessLookup(t *testing.T) {
 		`/usr/bin/pgrep -f magus`,
 		`bash -c 'pgrep -fl magus'`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleProcessLookup, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "background-task notification", cmd)
 		assert.Contains(t, v.Deny, "magus server status", cmd)
@@ -2204,7 +2204,7 @@ func TestGuardDeniesProcessLookup(t *testing.T) {
 		require.Len(t, v.Next, 1, cmd)
 		assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run, cmd)
 	}
-	assert.NotEmpty(t, advised(Evaluate(advising(testDependencies(), "process-lookup"), "pgrep magus")))
+	assert.NotEmpty(t, advised(Evaluate(t.Context(), advising(testDependencies(), "process-lookup"), "pgrep magus")))
 }
 
 func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
@@ -2213,8 +2213,8 @@ func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
 		`echo 'pgrep -fl magus'`,
 		`./magus server status --watch=15s`,
 	} {
-		assert.NotEqual(t, denyRuleProcessLookup, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
-		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleProcessLookup, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -2246,13 +2246,13 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 		`bash -c 'grep cause: tasks/abc123.output'`,
 		`LC_ALL=C grep cause: tasks/abc123.output`,
 	} {
-		v := Evaluate(advising(testDependencies(), string(advisoryCaptureFilter)), cmd)
+		v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryCaptureFilter)), cmd)
 		assert.Empty(t, v.Deny, "advise when set to advise: %s", cmd)
 		assert.Equal(t, ShellVerdict{Context: v.Context, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
 	}
 
 	// A deny elsewhere on the line still outranks the advice.
-	v := Evaluate(advising(testDependencies(), string(advisoryCaptureFilter)), `grep cause: tasks/abc123.output; git add -A`)
+	v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryCaptureFilter)), `grep cause: tasks/abc123.output; git add -A`)
 	assert.Equal(t, denyRuleStageAll, v.Rule.Name)
 }
 
@@ -2262,7 +2262,7 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 // The PAIR is what carries the argument: `cause:` is what a filter matches and `output:`
 // is the ref it drops, two lines below it.
 func TestCaptureFilterAdviceNamesTheFailureBlock(t *testing.T) {
-	v := Evaluate(advising(testDependencies(), string(advisoryCaptureFilter)), `grep -n "cause:" tasks/abc123.output | head -8`)
+	v := Evaluate(t.Context(), advising(testDependencies(), string(advisoryCaptureFilter)), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Context)
 	for _, field := range []string{"cause:", "output: out<hex>"} {
 		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs, said inline")
@@ -2296,7 +2296,7 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		// A run log's name is a content hash.
 		`grep x .magus/logs/notes.log`,
 	} {
-		assert.NotEqual(t, advisoryCaptureFilter, Evaluate(strict(testDependencies()), cmd).Kind, "should not fire: %s", cmd)
+		assert.NotEqual(t, advisoryCaptureFilter, Evaluate(t.Context(), strict(testDependencies()), cmd).Kind, "should not fire: %s", cmd)
 	}
 }
 
@@ -2315,7 +2315,7 @@ func TestGuardDeniesBacktickSubstitution(t *testing.T) {
 		"grep -n \"``\" README.md",
 		"cat <<EOF\n`whoami`\nEOF",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Equal(t, denyRule{Name: denyRuleBacktickSubstitution}, v.Rule, cmd)
 		assert.Contains(t, v.Deny, "`$(...)`", "the substitution spelling that cannot pair: %s", cmd)
 		assert.Contains(t, v.Deny, "a backtick inside double quotes runs a command", cmd)
@@ -2334,7 +2334,7 @@ func TestGuardAllowsBackticksAsText(t *testing.T) {
 		// either, and the guard fails open.
 		"echo \"`\"",
 	} {
-		assert.NotEqual(t, denyRuleBacktickSubstitution, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleBacktickSubstitution, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -2349,7 +2349,7 @@ func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
 		`printf '%s\n' "replace the sed -i call with the editor tool"`,
 		`echo "run find . -name '*.go' by hand"`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.Empty(t, v.Deny, "a mention is not an invocation: %s", cmd)
 		assert.Empty(t, v.Context, "a mention is not an invocation: %s", cmd)
 	}
@@ -2357,12 +2357,12 @@ func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
 
 // The conversion must not have blunted the rules: each still fires on the real thing.
 func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), `sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), `sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), `grep -rn "HandleRequest" .`).Context, "a recursive grep")
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), `rg HandleRequest`).Context, "ripgrep is repo-wide")
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), `cat cmd/magus/main.go`).Context, "reading source")
-	assert.NotEmpty(t, Evaluate(strict(testDependencies()), `perl -i -pe 's/a/b/' f`).Deny, "perl -i")
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), `sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), `sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), `grep -rn "HandleRequest" .`).Context, "a recursive grep")
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), `rg HandleRequest`).Context, "ripgrep is repo-wide")
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), `cat cmd/magus/main.go`).Context, "reading source")
+	assert.NotEmpty(t, Evaluate(t.Context(), strict(testDependencies()), `perl -i -pe 's/a/b/' f`).Deny, "perl -i")
 }
 
 // The rule is about polling, not about loops or about sleep. A loop that does real work
@@ -2377,7 +2377,7 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 		// string that runs no loop at all. It is why the rule reads the AST.
 		`echo 'until grep -q x f; do sleep 1; done'`,
 	} {
-		assert.NotEqual(t, denyRuleBusyWait, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleBusyWait, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -2412,13 +2412,13 @@ func TestGuardDeniesExitStatusEcho(t *testing.T) {
 		`./check.sh | tail -5; echo "${PIPESTATUS[@]}"`,
 		`./check.sh | tail -5; ps=${PIPESTATUS[0]}; echo "first stage: $ps"`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleExitStatusEcho, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "exits 0", "the masked failure is the fact a reader cannot see: %s", cmd)
 	}
 	// PIPESTATUS asks for a failure the pipe already discarded, so the answer is to keep it.
-	v := Evaluate(strict(testDependencies()), `./check.sh | tail -5; echo "${PIPESTATUS[0]}"`)
+	v := Evaluate(t.Context(), strict(testDependencies()), `./check.sh | tail -5; echo "${PIPESTATUS[0]}"`)
 	assert.Contains(t, v.Deny, "set -o pipefail")
 }
 
@@ -2458,7 +2458,7 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 		"magus config token print && (",                 // unparsable: the pattern answers
 		"magus config console token create --code && (", // unparsable: the pattern answers
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
+		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleCredentialVerb, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "use the token you were given", cmd)
@@ -2475,7 +2475,7 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 		"magus describe rule credential-verb",
 		"go run ./cmd/magus-docs config console token create",
 	} {
-		assert.NotEqual(t, denyRuleCredentialVerb, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleCredentialVerb, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -2542,7 +2542,7 @@ func TestGuardAllowsExitStatusThatFeedsLogic(t *testing.T) {
 		`echo $?`,
 		`./check.sh; echo done`,
 	} {
-		assert.NotEqual(t, denyRuleExitStatusEcho, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleExitStatusEcho, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

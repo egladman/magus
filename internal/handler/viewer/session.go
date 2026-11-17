@@ -42,15 +42,15 @@ func unrecordedParts() []*viewerv1.Unrecorded {
 
 // GetSessionActivity serves the loaded events of one session that led up to its last write
 // of the requested path.
-func (s *Service) GetSessionActivity(_ context.Context, req *connect.Request[viewerv1.GetSessionActivityRequest]) (*connect.Response[viewerv1.SessionActivity], error) {
-	out, err := s.loadSessionActivity(req.Peer().Addr, req.Msg.GetSession(), req.Msg.GetPath())
+func (s *Service) GetSessionActivity(ctx context.Context, req *connect.Request[viewerv1.GetSessionActivityRequest]) (*connect.Response[viewerv1.SessionActivity], error) {
+	out, err := s.loadSessionActivity(ctx, req.Peer().Addr, req.Msg.GetSession(), req.Msg.GetPath())
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(out), nil
 }
 
-func (s *Service) loadSessionActivity(peer, hostSession, path string) (*viewerv1.SessionActivity, error) {
+func (s *Service) loadSessionActivity(ctx context.Context, peer, hostSession, path string) (*viewerv1.SessionActivity, error) {
 	// The rest of this service rides the share routes. A session's record does not: the diff
 	// routes it annotates are loopback only, and so is this.
 	if !loopbackPeer(peer) {
@@ -66,7 +66,7 @@ func (s *Service) loadSessionActivity(peer, hostSession, path string) (*viewerv1
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}

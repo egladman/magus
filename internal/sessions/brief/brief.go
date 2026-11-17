@@ -299,8 +299,8 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 		}
 	}
 	brief.Unintegrated = unintegratedBranches(ctx, r, root)
-	brief.Failures = lastRunFailures(r, root)
-	brief.Attention = briefAttentionQueue(r, root)
+	brief.Failures = lastRunFailures(ctx, r, root)
+	brief.Attention = briefAttentionQueue(ctx, r, root)
 	if wired, err := workspace.WiredHarnesses(ws); err == nil {
 		brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, wired...))
 		brief.Rules = ruleLocations(ctx, root, wired...)
@@ -309,7 +309,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 	}
 	brief.PromptCache = r.PromptCache(root, time.Now())
 	if base, err := r.CacheDir(root); err == nil {
-		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
+		if feedback, err := trail.RecentGuardFeedback(ctx, base, "", briefFeedbackEvents); err == nil {
 			for _, item := range feedback {
 				if item.NeedsReview() {
 					item.Evidence = item.Evidence[:min(len(item.Evidence), briefFeedbackEvidence)]
@@ -321,7 +321,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 			}
 		}
 	}
-	brief.Recent = recentLoadedSessions(r.ResolveRoot(root))
+	brief.Recent = recentLoadedSessions(ctx, r.ResolveRoot(root))
 	brief.Console = r.ConsoleURL()
 	return brief
 }
@@ -340,12 +340,12 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 //
 // Best-effort and silent, like every other source feeding the brief: a workspace that
 // loads no transcripts contributes nothing instead of an error.
-func recentLoadedSessions(root string) []briefSession {
+func recentLoadedSessions(ctx context.Context, root string) []briefSession {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return nil
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return nil
 	}
@@ -593,12 +593,12 @@ func briefNextStep(rows []jobtypes.Job, row jobtypes.Job, unpushed *briefUnpushe
 // The most recent SESSION rather than the most recent failure: a session that has
 // since run green answered the question already, and reporting its predecessor's
 // failures would send a reader after work that is done.
-func lastRunFailures(r Readers, root string) []briefFailure {
+func lastRunFailures(ctx context.Context, r Readers, root string) []briefFailure {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return nil
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return nil
 	}
@@ -625,12 +625,12 @@ func lastRunFailures(r Readers, root string) []briefFailure {
 // briefAttentionQueue reads the store `session ls` reads, through the same
 // [sessions.AttentionQueue]. A queue it cannot read is reported as Unread: silence would
 // read as none open. "Since" is the last activity of the checkout's previous host session.
-func briefAttentionQueue(r Readers, root string) *briefAttention {
+func briefAttentionQueue(ctx context.Context, r Readers, root string) *briefAttention {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return &briefAttention{Unread: err.Error()}
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return &briefAttention{Unread: err.Error()}
 	}

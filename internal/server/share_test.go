@@ -95,7 +95,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	_, secret, ok := strings.Cut(resp.URL, "#token=")
 	require.True(t, ok)
 
-	events, err := trailtypes.ReadRecent(trailDir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), trailDir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	e := events[0]

@@ -437,7 +437,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	secondSecret, secondID := create()
 	require.NotEqual(t, firstID, secondID)
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	var subjects []string
 	for _, e := range events {

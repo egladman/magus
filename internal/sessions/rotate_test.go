@@ -51,13 +51,13 @@ func (s *AttentionTieSuite) stored() []string {
 }
 
 func (s *AttentionTieSuite) read() session.Fold {
-	fold, err := session.ReadAll(s.dir)
+	fold, err := session.ReadAll(s.T().Context(), s.dir)
 	s.Require().NoError(err)
 	return fold
 }
 
 func (s *AttentionTieSuite) prune() {
-	s.Require().NoError(session.Prune(s.dir, retention, session.WithTie(AttentionTie())))
+	s.Require().NoError(session.Prune(s.T().Context(), s.dir, retention, session.WithTie(AttentionTie())))
 }
 
 // Rule 1: a request nobody has answered pins every file naming it, however old. The
@@ -153,7 +153,7 @@ func (s *AttentionTieSuite) TestAMagusWriterPrunesWithTheTie() {
 		attRecord(t, "ancient", 1, msAgo(age), session.KindTargetResult, session.TargetResult{Target: "build", Outcome: session.OutcomePass}),
 	})
 
-	s.Require().NoError(RecordGate(s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: session.OutcomePass}, session.InvocationStart{}))
+	s.Require().NoError(RecordGate(s.T().Context(), s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: session.OutcomePass}, session.InvocationStart{}))
 
 	s.NotContains(s.stored(), "ancient")
 	s.Contains(s.stored(), "blocked")

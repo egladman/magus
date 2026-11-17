@@ -23,14 +23,14 @@ func TestToolCacheUnscoped(t *testing.T) {
 
 	t.Run("unset", func(t *testing.T) {
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
-		got := Evaluate(deps, ".magus/custom-gcl run ./...")
+		got := Evaluate(t.Context(), deps, ".magus/custom-gcl run ./...")
 		want := denied("", "custom-gcl run ./...", "GOLANGCI_LINT_CACHE is unset, so the tool falls back to its shared user cache")
 		want.Deny = "magus guard denied `custom-gcl run ./...` (what `.magus/custom-gcl run ./...` resolves to); " + want.Deny[len("magus guard denied `custom-gcl run ./...`; "):]
 		assert.Equal(t, want, got)
 	})
 
 	t.Run("outside the checkout, inline", func(t *testing.T) {
-		got := Evaluate(deps, "GOLANGCI_LINT_CACHE=/Users/x/Library/Caches/golangci-lint custom-gcl run")
+		got := Evaluate(t.Context(), deps, "GOLANGCI_LINT_CACHE=/Users/x/Library/Caches/golangci-lint custom-gcl run")
 		want := denied("", "custom-gcl run", "GOLANGCI_LINT_CACHE=/Users/x/Library/Caches/golangci-lint is outside the checkout /work/repo")
 		want.Deny = "magus guard denied `custom-gcl run` (what `GOLANGCI_LINT_CACHE=/Users/x/Library/Caches/golangci-lint custom-gcl run` resolves to); " + want.Deny[len("magus guard denied `custom-gcl run`; "):]
 		assert.Equal(t, want, got)
@@ -38,27 +38,27 @@ func TestToolCacheUnscoped(t *testing.T) {
 
 	t.Run("outside the checkout, from the hook environment", func(t *testing.T) {
 		t.Setenv("GOLANGCI_LINT_CACHE", "/shared/lint")
-		got := Evaluate(deps, "custom-gcl run")
+		got := Evaluate(t.Context(), deps, "custom-gcl run")
 		assert.Equal(t, denied("", "custom-gcl run", "GOLANGCI_LINT_CACHE=/shared/lint is outside the checkout /work/repo"), got)
 	})
 
 	t.Run("scoped under the checkout passes", func(t *testing.T) {
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, scoped+"custom-gcl run ./..."))
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, fmt.Sprintf("env %scustom-gcl run", scoped)))
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), deps, scoped+"custom-gcl run ./..."))
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), deps, fmt.Sprintf("env %scustom-gcl run", scoped)))
 	})
 
 	t.Run("a relative cache resolves against the working directory", func(t *testing.T) {
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, "GOLANGCI_LINT_CACHE=.magus/golangci-lint custom-gcl run"))
-		got := Evaluate(deps, "GOLANGCI_LINT_CACHE=../other/lint custom-gcl run")
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), deps, "GOLANGCI_LINT_CACHE=.magus/golangci-lint custom-gcl run"))
+		got := Evaluate(t.Context(), deps, "GOLANGCI_LINT_CACHE=../other/lint custom-gcl run")
 		assert.Equal(t, "custom-gcl run", got.Rule.Arg)
 	})
 
 	t.Run("help and a computed value pass", func(t *testing.T) {
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, "custom-gcl run --help"))
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, "custom-gcl version"))
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, "GOLANGCI_LINT_CACHE=$(pwd)/.magus/golangci-lint custom-gcl run"))
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), deps, "custom-gcl run --help"))
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), deps, "custom-gcl version"))
+		assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), deps, "GOLANGCI_LINT_CACHE=$(pwd)/.magus/golangci-lint custom-gcl run"))
 	})
 }

@@ -61,7 +61,7 @@ func forkOverrun(ctx context.Context, root string, row jobtypes.Job) (*job.Foreg
 	if err != nil {
 		return nil, err
 	}
-	return job.CheckOverrun(m.Root(), row, hostForegroundMax(ctx, m)), nil
+	return job.CheckOverrun(ctx, m.Root(), row, hostForegroundMax(ctx, m)), nil
 }
 
 // collectNotes is row's notes over the already loaded workspace m.

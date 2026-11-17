@@ -1664,7 +1664,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 		return live
 	}
 	changes := jobWatchFiles(ctx, out, root, plan)
-	cursor := job.CursorAt(job.Ascending(recentTrail(cacheDir)))
+	cursor := job.CursorAt(job.Ascending(recentTrail(ctx, cacheDir)))
 	runs := job.NewRunCursor()
 	runs.Prime(rows)
 
@@ -1686,7 +1686,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 				job.PrintFeedLine(out, e)
 			}
 		case <-tick.C:
-			for _, e := range job.ToolEvents(cursor.Next(job.Ascending(recentTrail(cacheDir)))) {
+			for _, e := range job.ToolEvents(cursor.Next(job.Ascending(recentTrail(ctx, cacheDir)))) {
 				if e.Job == id {
 					job.PrintFeedLine(out, e)
 				}
@@ -1719,8 +1719,8 @@ func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() 
 // recentTrail is what this checkout's activity trail still holds, newest first. An
 // unreadable trail reads as empty: a watcher that refused to start because nothing had been
 // recorded yet would refuse exactly when a job has only just begun.
-func recentTrail(cacheDir string) []trailtypes.Event {
-	events, err := trailtypes.ReadRecent(cacheDir, jobWatchWindow)
+func recentTrail(ctx context.Context, cacheDir string) []trailtypes.Event {
+	events, err := trailtypes.ReadRecent(ctx, cacheDir, jobWatchWindow)
 	if err != nil {
 		return nil
 	}

@@ -157,10 +157,10 @@ func TestGateMatchesEachBackendsRevision(t *testing.T) {
 			root := t.TempDir()
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+			require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 				Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: rev.full, Outcome: session.OutcomePass,
 			}, session.InvocationStart{Workspace: root}))
-			assert.Equal(t, gatePassed, gateVerdictAt(root, rev.short))
+			assert.Equal(t, gatePassed, gateVerdictAt(t.Context(), root, rev.short))
 
 			runs := t.TempDir()
 			runLog(t, runs, "a.jsonl", "v0.4.3-1-g"+rev.full, "pass", "affected", "ci")
@@ -177,17 +177,17 @@ func TestGateVerdictSeesAGateRecordedAfterTheLastRead(t *testing.T) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: commit, Outcome: session.OutcomeFail,
 	}, session.InvocationStart{Workspace: root}))
-	assert.Equal(t, gateFailed, gateVerdictAt(root, commit[:12]))
+	assert.Equal(t, gateFailed, gateVerdictAt(t.Context(), root, commit[:12]))
 
 	// Records order by millisecond; a later one puts the pass after the fail.
 	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: commit, Outcome: session.OutcomePass,
 	}, session.InvocationStart{Workspace: root}))
-	assert.Equal(t, gatePassed, gateVerdictAt(root, commit[:12]))
+	assert.Equal(t, gatePassed, gateVerdictAt(t.Context(), root, commit[:12]))
 }
 
 // TestGateStandsDownOnARevisionItCannotMatch pins the other half: an id that is not a
@@ -211,10 +211,10 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 			root := t.TempDir()
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+			require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 				Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", Outcome: session.OutcomeFail,
 			}, session.InvocationStart{Workspace: root}))
-			assert.Equal(t, gateUnknown, gateVerdictAt(root, id))
+			assert.Equal(t, gateUnknown, gateVerdictAt(t.Context(), root, id))
 		})
 	}
 }
@@ -615,7 +615,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 	dir, err := sessions.Dir(repo.Root())
 	require.NoError(t, err)
 	gated = repo.Head()
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(ctx, dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: gated, Outcome: session.OutcomePass, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: repo.Root()}))
 	fixtureGit(t, repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
@@ -632,7 +632,7 @@ func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gate
 func TestPushGateAcceptsAPassingGateOnTheIdenticalTree(t *testing.T) {
 	ctx, repo, gated, replayed := replayedBranch(t)
 
-	lineage := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(repo.Root()))
+	lineage := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(t.Context(), repo.Root()))
 	rec, ok := lineage.replay, lineage.replayed
 	require.True(t, ok)
 	assert.Equal(t, sessions.GateRecord{
@@ -661,7 +661,7 @@ func TestPushGateStillNeedsItsOwnGateForADifferentTree(t *testing.T) {
 	repo.Commit("more", map[string]string{"b.go": "package a\n"})
 	changed := fixtureGit(t, repo.Root(), "rev-parse", "HEAD")
 
-	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), changed, readGateHistory(repo.Root())).replayed
+	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), changed, readGateHistory(t.Context(), repo.Root())).replayed
 	assert.False(t, ok)
 	assert.Equal(t, gateAbsent, coverageAtPush(ctx, repo, changed))
 }
@@ -678,7 +678,7 @@ func TestGateScopeSuite(t *testing.T) { suite.Run(t, new(GateScopeSuite)) }
 func (s *GateScopeSuite) recordAt(root string, g sessions.GateResult) {
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(dir, g, session.InvocationStart{Workspace: root}))
+	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, g, session.InvocationStart{Workspace: root}))
 	time.Sleep(2 * time.Millisecond)
 }
 
@@ -715,7 +715,7 @@ func (s *GateScopeSuite) TestAProjectPassIsNoReplayOfTheTree() {
 	fixtureGit(s.T(), repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
 	replayed := fixtureGit(s.T(), repo.Root(), "rev-parse", "HEAD")
 
-	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(repo.Root())).replayed
+	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(s.T().Context(), repo.Root())).replayed
 	s.False(ok)
 }
 
@@ -724,12 +724,12 @@ func (s *GateScopeSuite) TestAPreScopeVerdictSaysItReadsAsProjectScope() {
 	root := s.T().TempDir()
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
-	w, err := session.Open(dir, sessions.NewID(), session.InvocationStart{Workspace: root})
+	w, err := session.Open(s.T().Context(), dir, sessions.NewID(), session.InvocationStart{Workspace: root})
 	s.Require().NoError(err)
 	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
-	s.Require().NoError(w.Append(sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": session.OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": session.OutcomePass}))
 
-	s.Equal(gateUnscoped, gateVerdictAt(root, commit[:12]))
+	s.Equal(gateUnscoped, gateVerdictAt(s.T().Context(), root, commit[:12]))
 	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateUnscoped, commit: commit[:12]}, "")
 	s.Equal(decisionDeny, decision)
 	s.Contains(reason, "recorded before gate records named their scope, so it reads as project scope")
@@ -781,7 +781,7 @@ func (s *NarrowPushSuite) SetupTest() {
 func (s *NarrowPushSuite) gateAtFirstCommit() {
 	dir, err := sessions.Dir(s.repo.Root())
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.gated, Outcome: session.OutcomePass, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: s.repo.Root()}))
 }
@@ -843,7 +843,7 @@ func (s *NarrowPushSuite) TestAPushJudgmentReadsTheStoreOnceAndGitOnceForEveryGa
 	var gated []string
 	for i := range 4 {
 		c := s.repo.Commit(fmt.Sprintf("gated %d", i), map[string]string{"a.go": fmt.Sprintf("package a\n\nvar A = %d\n", i)})
-		s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+		s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
 			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: c, Outcome: session.OutcomePass, Inv: fmt.Sprintf("inv-%d", i),
 		}, session.InvocationStart{Workspace: s.repo.Root()}))
 		gated = append(gated, c)
@@ -853,10 +853,10 @@ func (s *NarrowPushSuite) TestAPushJudgmentReadsTheStoreOnceAndGitOnceForEveryGa
 	s.passed(strings.Repeat("d", 64), "go-test", head)
 
 	reads := 0
-	defer func(read func(string) (session.Fold, error)) { readGateFold = read }(readGateFold)
-	readGateFold = func(dir string) (session.Fold, error) {
+	defer func(read func(context.Context, string) (session.Fold, error)) { readGateFold = read }(readGateFold)
+	readGateFold = func(ctx context.Context, dir string) (session.Fold, error) {
 		reads++
-		return sessions.ReadGateResults(dir)
+		return sessions.ReadGateResults(ctx, dir)
 	}
 	calls := s.gitCalls()
 
@@ -1060,7 +1060,7 @@ func (s *UnrunGateSuite) SetupTest() {
 }
 
 func (s *UnrunGateSuite) record(outcome string, scope sessions.GateScope) {
-	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(s.T().Context(), s.dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: scope, Commit: unrunCommit, Outcome: outcome,
 		Unrun: []string{"images/magus:image-build: MGS3004 docker is installed but not ready"},
 	}, session.InvocationStart{Workspace: s.root}))
@@ -1070,7 +1070,7 @@ func (s *UnrunGateSuite) record(outcome string, scope sessions.GateScope) {
 
 func (s *UnrunGateSuite) TestAPushTheGateCouldNotFullyRunPassesNamingWhatIsOwed() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
-	cover, rec := readGateHistory(s.root).recordAt(unrunCommit[:12])
+	cover, rec := readGateHistory(s.T().Context(), s.root).recordAt(unrunCommit[:12])
 	s.Require().Equal(gateUnrun, cover)
 
 	ev := pushEvidence{cover: cover, commit: unrunCommit[:12], unrun: rec}
@@ -1082,18 +1082,18 @@ func (s *UnrunGateSuite) TestAPushTheGateCouldNotFullyRunPassesNamingWhatIsOwed(
 func (s *UnrunGateSuite) TestAFailedGateAtTheCommitOutranksALaterUnrunOne() {
 	s.record(session.OutcomeFail, sessions.GateScopeAffected)
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
-	s.Equal(gateFailed, gateVerdictAt(s.root, unrunCommit[:12]))
+	s.Equal(gateFailed, gateVerdictAt(s.T().Context(), s.root, unrunCommit[:12]))
 }
 
 func (s *UnrunGateSuite) TestAnUnrunGateOverNamedProjectsIsProjectScope() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeProject)
-	s.Equal(gateProjectScoped, gateVerdictAt(s.root, unrunCommit[:12]))
+	s.Equal(gateProjectScoped, gateVerdictAt(s.T().Context(), s.root, unrunCommit[:12]))
 }
 
 func (s *UnrunGateSuite) TestAnUnrunBranchGateOutranksAProjectPass() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
 	s.record(session.OutcomePass, sessions.GateScopeProject)
-	s.Equal(gateUnrun, gateVerdictAt(s.root, unrunCommit[:12]))
+	s.Equal(gateUnrun, gateVerdictAt(s.T().Context(), s.root, unrunCommit[:12]))
 }
 
 // RemoteGatePushSuite pins the push gate under ci.remote_gate.
@@ -1139,7 +1139,7 @@ func (s *RemoteGatePushSuite) TestPushGateStillRefusesAFailedGateUnderARemoteGat
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	dir, err := sessions.Dir(s.repo.Root())
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: head, Outcome: session.OutcomeFail, Inv: "inv-red",
 	}, session.InvocationStart{Workspace: s.repo.Root()}))
 

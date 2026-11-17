@@ -94,7 +94,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	summaries := session.Summarize(fold)
@@ -141,12 +141,12 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 
 	runDir, err := sessions.Dir(runRoot)
 	require.NoError(t, err)
-	runFold, err := session.ReadAll(runDir)
+	runFold, err := session.ReadAll(t.Context(), runDir)
 	require.NoError(t, err)
 
 	affectedDir, err := sessions.Dir(affectedRoot)
 	require.NoError(t, err)
-	affectedFold, err := session.ReadAll(affectedDir)
+	affectedFold, err := session.ReadAll(t.Context(), affectedDir)
 	require.NoError(t, err)
 
 	assert.Equal(t,
@@ -181,7 +181,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			fold, err := session.ReadAll(dir)
+			fold, err := session.ReadAll(t.Context(), dir)
 			require.NoError(t, err)
 
 			summaries := session.Summarize(fold)
@@ -207,7 +207,7 @@ func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)

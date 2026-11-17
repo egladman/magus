@@ -103,7 +103,7 @@ func RecordHarnessWrite(ctx context.Context, root, command, version string, path
 	}
 	dir, err := sessions.Dir(root)
 	if err == nil {
-		err = sessions.RecordHarnessWrite(dir, sessions.HarnessWrite{Paths: paths},
+		err = sessions.RecordHarnessWrite(ctx, dir, sessions.HarnessWrite{Paths: paths},
 			session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root, Command: command, Version: version})
 	}
 	if err != nil {

@@ -507,7 +507,7 @@ func (g *GateRedundancy) heldRepairs(ctx context.Context) (sessions.GateRecord, 
 	if err != nil {
 		return sessions.GateRecord{}, nil, err
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return sessions.GateRecord{}, nil, err
 	}
@@ -533,7 +533,7 @@ func (g *GateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 	if err != nil {
 		return gateFinding{}, false
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return gateFinding{}, false
 	}
@@ -714,7 +714,7 @@ func (g *GateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	if err != nil {
 		return
 	}
-	err = sessions.RecordGate(dir, rec, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
+	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
 	if err != nil {
 		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",
 			slog.String("store", dir), attr.Error(err))

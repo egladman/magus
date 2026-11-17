@@ -81,7 +81,7 @@ func TestGuardDeniesAFilterWithoutInput(t *testing.T) {
 		{"P=/tmp/x; python3 - 2>/dev/null; cat >> $P <<'EOF'\nprint(1)\nEOF", "python3"},
 		{"python3 - 2>/dev/null; cat >> f <<'EOF'\nx\nEOF", "python3"},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tc.command)
 		assert.Equal(t, denyRule{Name: denyRuleFilterWithoutInput, Arg: tc.tool}, v.Rule, tc.command)
 		assert.Contains(t, v.Deny, fmt.Sprintf("`%s`", tc.tool), "the deny names the stage left without input: %s", tc.command)
 	}
@@ -188,7 +188,7 @@ func TestGuardAllowsAFedFilter(t *testing.T) {
 		"read -t 5 x",
 		"while read -r l; do echo \"$l\"; done < f",
 	} {
-		assert.NotEqual(t, denyRuleFilterWithoutInput, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleFilterWithoutInput, Evaluate(t.Context(), strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -229,5 +229,5 @@ func TestStdinReaderFlagsAreUnambiguous(t *testing.T) {
 }
 
 func TestFilterWithoutInputAdvisesWhenSetToAdvise(t *testing.T) {
-	requireAdvisedOnce(t, Evaluate(advising(testDependencies()), "wc -l"), denyRuleFilterWithoutInput)
+	requireAdvisedOnce(t, Evaluate(t.Context(), advising(testDependencies()), "wc -l"), denyRuleFilterWithoutInput)
 }

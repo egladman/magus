@@ -251,7 +251,7 @@ export fun review_threads(target: Target, req: ReviewRef) > any !> any {
 // mergedReviewEvents returns the review.merged events the job left on the trail.
 func mergedReviewEvents(t *testing.T, cacheDir string) []trail.Event {
 	t.Helper()
-	events, err := trail.ReadRecent(cacheDir, 20)
+	events, err := trail.ReadRecent(t.Context(), cacheDir, 20)
 	require.NoError(t, err)
 	var out []trail.Event
 	for _, e := range events {

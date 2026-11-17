@@ -18,7 +18,7 @@ func loadedStore(t *testing.T, events []session.LoadEvent) session.Fold {
 	dir := t.TempDir()
 	_, err := session.LoadEvents(t.Context(), dir, events, session.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return fold
 }
@@ -122,7 +122,7 @@ func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
 	_, err = session.LoadEvents(t.Context(), dir, joined, session.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, []HintUptakeRow{{ID: "query-explain", Served: 1, Followed: 1, Rate: 1}}, HintUptake(fold),
 		"one call, counted once, with the ids the second load recovered")

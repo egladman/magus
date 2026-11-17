@@ -805,7 +805,7 @@ func gradeEntry(ctx context.Context, deps Dependencies, at location, owner jobty
 	if !ok {
 		return writeGrade{}, false
 	}
-	if last, seen := holderLastCall(deps, at, owner); seen {
+	if last, seen := holderLastCall(ctx, deps, at, owner); seen {
 		if idle := time.Since(last); idle < entryIdle {
 			return writeGrade{Decision: decisionDeny, Reason: denial{
 				Say: fmt.Sprintf("magus workspace: lease %s's holder made a tool call %s ago and may be mid-edit; retry once it has been idle for %s.",
@@ -821,7 +821,7 @@ func gradeEntry(ctx context.Context, deps Dependencies, at location, owner jobty
 // holderLastCall is when the guard last graded a tool call under owner's lease, read from
 // the trail of the checkout its holder took it in. False when nothing says, which honors
 // the entry: a holder magus never saw working is not one it can call busy.
-func holderLastCall(deps Dependencies, at location, owner jobtypes.Job) (time.Time, bool) {
+func holderLastCall(ctx context.Context, deps Dependencies, at location, owner jobtypes.Job) (time.Time, bool) {
 	if owner.CheckoutRoot == "" {
 		return time.Time{}, false
 	}
@@ -829,7 +829,7 @@ func holderLastCall(deps Dependencies, at location, owner jobtypes.Job) (time.Ti
 	if realPath(owner.CheckoutRoot) != realPath(at.workspace) {
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
-	events, err := trailtypes.ReadRecent(cacheDir, holderTrailWindow)
+	events, err := trailtypes.ReadRecent(ctx, cacheDir, holderTrailWindow)
 	if err != nil {
 		return time.Time{}, false
 	}

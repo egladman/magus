@@ -163,7 +163,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
@@ -212,7 +212,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	_, err := h(context.Background(), callRequest("client", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, trailtypes.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")

@@ -314,7 +314,7 @@ func rootMergeServesBaseScript(t *testing.T, ctx context.Context, deps Dependenc
 	return Request{}, next
 }
 
-func servedFixtures() []servedFixture {
+func servedFixtures(ctx context.Context) []servedFixture {
 	return []servedFixture{
 		{"a root's merge names the script that brings the base in", rootMergeServesBaseScript},
 		{"a stale index's rebuild", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
@@ -331,7 +331,7 @@ func servedFixtures() []servedFixture {
 				lease:         role.call.Lease,
 				worker:        role.worker,
 			})
-			v := Evaluate(stale, "grep -rn CheckStatus internal")
+			v := Evaluate(ctx, stale, "grep -rn CheckStatus internal")
 			require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "CheckStatus"}, v.Rule)
 			var next []string
 			for _, n := range v.Next {
@@ -442,7 +442,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, n.ID, n.Run)
 			}
 		})
-		for _, f := range servedFixtures() {
+		for _, f := range servedFixtures(t.Context()) {
 			t.Run(fmt.Sprintf("%s/%s", role.name, f.name), func(t *testing.T) {
 				call, next := f.setup(t, ctx, deps, role)
 				call = servedAs(call, role)

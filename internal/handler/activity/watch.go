@@ -59,7 +59,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 	// The cursors live in internal/job so `magus job watch` follows the feed exactly the way
 	// this stream does. Two answers to "what has happened since I last looked" is how a
 	// terminal and a drawer come to disagree about whether a worker is still going.
-	past := jobstore.Ascending(readMerged(s.loaded(), maxWindow))
+	past := jobstore.Ascending(readMerged(ctx, s.loaded(), maxWindow))
 	cursor := jobstore.CursorAt(past)
 	runs := jobstore.NewRunCursor()
 
@@ -99,7 +99,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 				return err
 			}
 		case <-tick.C:
-			fresh := cursor.Next(jobstore.Ascending(readMerged(s.loaded(), maxWindow)))
+			fresh := cursor.Next(jobstore.Ascending(readMerged(ctx, s.loaded(), maxWindow)))
 			for _, e := range fresh {
 				if !matchFilter(e, filter) {
 					continue

@@ -17,7 +17,7 @@ import (
 func TestCheckRecurringGuardDenialsReportsNoTrailAsClean(t *testing.T) {
 	root := t.TempDir()
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:    "recurring-guard-denials",
@@ -33,7 +33,7 @@ func TestCheckRecurringGuardDenialsIgnoresAOneOffDenial(t *testing.T) {
 	root := t.TempDir()
 	recordGuardDenial(t, filepath.Join(root, ".magus"), "claude-code", "session-1")
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:    "recurring-guard-denials",
@@ -57,7 +57,7 @@ func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {
 		Command: "magus run test .", Decision: "pass",
 	})
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:     "recurring-guard-denials",
@@ -77,7 +77,7 @@ func TestCheckRecurringGuardDenialsCountsTwoSessionsWithoutClaimingFollowUp(t *t
 	recordGuardDenial(t, base, "codex", "first")
 	recordGuardDenial(t, base, "codex", "second")
 
-	got := (&runner{root: root}).checkRecurringGuardDenials()
+	got := (&runner{root: root}).checkRecurringGuardDenials(t.Context())
 
 	assert.Equal(t, check.Check{
 		Name:     "recurring-guard-denials",

@@ -72,14 +72,14 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		return nil
 	}
 	if h.writer == nil {
-		w, err := openWriter(h.dir, e.Inv, h.start)
+		w, err := openWriter(ctx, h.dir, e.Inv, h.start)
 		if err != nil {
 			h.stopRecording(ctx, err)
 			return nil
 		}
 		h.writer = w
 	}
-	if err := h.writer.Append(session.KindTargetResult, session.TargetResult{
+	if err := h.writer.Append(ctx, session.KindTargetResult, session.TargetResult{
 		Target:         e.Target,
 		Project:        e.Project,
 		Outcome:        factOutcome(e.Status),

@@ -1,6 +1,7 @@
 package trail
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -109,12 +110,12 @@ const (
 //
 // Best-effort throughout, like [Replay]: a missing trail, an unreadable blob, or an agent whose
 // host wires no hook all contribute less.
-func Consulted(root, base string, paths []string, limit int) ([]Consultation, ConsultGap) {
+func Consulted(ctx context.Context, root, base string, paths []string, limit int) ([]Consultation, ConsultGap) {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		want[p] = true
 	}
-	events, err := trailtypes.ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
 		return nil, ConsultGapUnobserved
 	}

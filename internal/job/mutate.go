@@ -31,7 +31,7 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 	// Read before the lock, like Exec's checkpoint: the trail may be another
 	// checkout's, and only a declaration of an ended row folds it.
 	if kind == asDeclaration {
-		w.denials, w.denialsKnown = s.endedAttemptDenials(id)
+		w.denials, w.denialsKnown = s.endedAttemptDenials(ctx, id)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

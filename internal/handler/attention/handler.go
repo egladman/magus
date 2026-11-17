@@ -111,7 +111,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.Fail(w, r, "attention", err)
 		return
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(r.Context(), dir)
 	if err != nil {
 		h.Fail(w, r, "attention", err)
 		return
@@ -135,7 +135,7 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, session.InvocationStart{
+	req, err := sessions.DisposeRequest(r.Context(), dir, body.ID, body.Reason, session.InvocationStart{
 		Origin:    trail.StampOrigin(r.Context(), jobtypes.Origin{Host: consoleHost}),
 		Workspace: h.root,
 		Version:   h.version,

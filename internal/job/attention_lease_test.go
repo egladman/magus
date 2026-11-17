@@ -56,7 +56,7 @@ func openRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return sessions.AttentionQueue(fold)
 }

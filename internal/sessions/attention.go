@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -393,16 +394,16 @@ func resolveIDPrefix(ids []string, ref string) (id string, candidates []string) 
 // start describes the writing invocation; its Command is set here, and its id is minted
 // by [NewID]. The returned id is the request's, addressable whether or not this call
 // wrote anything.
-func OpenRequest(dir, sourceID string, open AttentionOpen, start session.InvocationStart) (id string, opened bool, err error) {
+func OpenRequest(ctx context.Context, dir, sourceID string, open AttentionOpen, start session.InvocationStart) (id string, opened bool, err error) {
 	open.Request = RequestID(sourceID, open)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return open.Request, false, err
 	}
 	if slices.ContainsFunc(AttentionQueue(fold), func(req AttentionRequest) bool { return req.ID == open.Request }) {
 		return open.Request, false, nil
 	}
-	if err := AppendRequest(dir, sourceID, open, start); err != nil {
+	if err := AppendRequest(ctx, dir, sourceID, open, start); err != nil {
 		return open.Request, false, err
 	}
 	return open.Request, true, nil
@@ -411,14 +412,14 @@ func OpenRequest(dir, sourceID string, open AttentionOpen, start session.Invocat
 // AppendRequest is [OpenRequest] without its dedupe, which folds the whole
 // store: for a hook's caller that already knows the block is new. A repeat
 // collapses in the fold.
-func AppendRequest(dir, sourceID string, open AttentionOpen, start session.InvocationStart) error {
+func AppendRequest(ctx context.Context, dir, sourceID string, open AttentionOpen, start session.InvocationStart) error {
 	open.Request = RequestID(sourceID, open)
 	start.Command = "session notify"
-	w, err := openWriter(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return err
 	}
-	return w.Append(KindAttentionOpen, open)
+	return w.Append(ctx, KindAttentionOpen, open)
 }
 
 // DisposeRequest closes the request ref names under dir and returns it as the store now
@@ -436,8 +437,8 @@ func AppendRequest(dir, sourceID string, open AttentionOpen, start session.Invoc
 // The returned request is re-read from the store rather than patched in memory: the
 // disposal's timestamp and invocation are whatever landed on disk, and a hand-assembled
 // answer could disagree with what every other worktree is about to read.
-func DisposeRequest(dir, ref, reason string, start session.InvocationStart) (AttentionRequest, error) {
-	fold, err := session.ReadAll(dir)
+func DisposeRequest(ctx context.Context, dir, ref, reason string, start session.InvocationStart) (AttentionRequest, error) {
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return AttentionRequest{}, err
 	}
@@ -452,15 +453,15 @@ func DisposeRequest(dir, ref, reason string, start session.InvocationStart) (Att
 	}
 
 	start.Command = "session dispose " + id
-	w, err := openWriter(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return AttentionRequest{}, err
 	}
-	if err := w.Append(KindAttentionDispose, AttentionDispose{Request: id, Note: reason}); err != nil {
+	if err := w.Append(ctx, KindAttentionDispose, AttentionDispose{Request: id, Note: reason}); err != nil {
 		return AttentionRequest{}, err
 	}
 
-	if fold, err = session.ReadAll(dir); err != nil {
+	if fold, err = session.ReadAll(ctx, dir); err != nil {
 		return AttentionRequest{}, err
 	}
 	all = Attention(fold)

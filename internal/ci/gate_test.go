@@ -315,7 +315,7 @@ func seedGreenGate(t *testing.T, root, fp string) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
 		Outcome: session.OutcomePass, Fingerprint: fp,
 		Projects: []string{"."}, Charms: []string{"quiet"},
@@ -373,7 +373,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	rec, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	require.True(t, ok)
@@ -472,7 +472,7 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
 		Outcome: session.OutcomeFail, Fingerprint: "fp-1",
 	}, session.InvocationStart{Workspace: root}))
@@ -616,7 +616,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	cancel()
 	g.Record(cut, nil, true /* cutShort */, nil)
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	_, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	assert.False(t, ok, "a cancelled run must record no verdict, whatever it returned")
@@ -652,7 +652,7 @@ func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
 // fold2 re-reads the store, since a Fold is a snapshot rather than a live view.
 func fold2(t *testing.T, dir string) session.Fold {
 	t.Helper()
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return fold
 }

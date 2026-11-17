@@ -46,7 +46,7 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		{"sleep 30 && echo done", false},
 		{"echo 'sleep 30; magus server status'", false},
 	} {
-		v := Evaluate(deps, tt.line)
+		v := Evaluate(t.Context(), deps, tt.line)
 		if tt.want {
 			assert.Equal(t, denyRuleSleepPoll, v.Rule.Name, tt.line)
 			assert.Contains(t, v.Deny, "background the work as `magus job exec --timeout <d> -- <command>` and wait for its notice", tt.line)
@@ -55,7 +55,7 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		}
 	}
 	// It denies by default too.
-	v := Evaluate(Dependencies{}, "sleep 30; ./magus server status")
+	v := Evaluate(t.Context(), Dependencies{}, "sleep 30; ./magus server status")
 	assert.Equal(t, denyRuleSleepPoll, v.Rule.Name)
 	assert.NotEmpty(t, v.Deny)
 }
@@ -510,7 +510,7 @@ func TestEveryServedBackgroundCheckPassesTheGuardForEveryRole(t *testing.T) {
 }
 
 func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), "kill -0 4242 && ./magus run go-test .")
+	v := Evaluate(t.Context(), strict(testDependencies()), "kill -0 4242 && ./magus run go-test .")
 	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
 	require.Len(t, v.Next, 1)
 	assert.Contains(t, v.Next[0].Run, "job exec --timeout")
@@ -519,7 +519,7 @@ func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
 }
 
 func TestProcessPollWithNoRunOnTheLineReadsStatus(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), "ps -p 4242")
+	v := Evaluate(t.Context(), strict(testDependencies()), "ps -p 4242")
 	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run)
@@ -676,7 +676,7 @@ func TestSleepFormPollSuite(t *testing.T) {
 }
 
 func (s *SleepFormPollSuite) refusesBeforeAStatusRead(sleeper string) {
-	v := Evaluate(Dependencies{}, sleeper+"; ./magus server status")
+	v := Evaluate(s.T().Context(), Dependencies{}, sleeper+"; ./magus server status")
 	s.Equal(denyRuleSleepPoll, v.Rule.Name, sleeper)
 }
 
@@ -724,7 +724,7 @@ func (s *WaitRemedySuite) SetupTest() {
 }
 
 func (s *WaitRemedySuite) evaluate(line string) ShellVerdict {
-	return Evaluate(Dependencies{scope: workspaceScope{root: s.root}}, line)
+	return Evaluate(s.T().Context(), Dependencies{scope: workspaceScope{root: s.root}}, line)
 }
 
 func (s *WaitRemedySuite) TestBoundIsTheMeasuredRunWithHalfAgain() {

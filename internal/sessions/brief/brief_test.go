@@ -171,7 +171,7 @@ func TestSessionBriefAttentionMarksRowsSinceThePreviousSession(t *testing.T) {
 
 	raise := func(source, message string) {
 		t.Helper()
-		_, opened, err := sessions.OpenRequest(dir, "host-1", sessions.AttentionOpen{Outcome: "waiting", Source: source, Message: message},
+		_, opened, err := sessions.OpenRequest(t.Context(), dir, "host-1", sessions.AttentionOpen{Outcome: "waiting", Source: source, Message: message},
 			session.InvocationStart{Workspace: elsewhere})
 		require.NoError(t, err)
 		require.True(t, opened)
@@ -194,7 +194,7 @@ func TestSessionBriefAttentionMarksRowsSinceThePreviousSession(t *testing.T) {
 	pause()
 	raise("magus/job-release", "after it")
 
-	got := briefAttentionQueue(testReaders(t, root), root)
+	got := briefAttentionQueue(t.Context(), testReaders(t, root), root)
 
 	require.Empty(t, got.Unread)
 	assert.Equal(t, 2, got.Open)
@@ -348,7 +348,7 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 		Kind: journal.KindResult, Inv: "invOther", Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
 	})
 
-	failures := lastRunFailures(testReaders(t, root), root)
+	failures := lastRunFailures(t.Context(), testReaders(t, root), root)
 	require.Len(t, failures, 1)
 	require.NotEmpty(t, failures[0].At)
 	assert.Equal(t, briefFailure{Target: "ci", Project: "pkg", DiagnosticCode: "MGS3009", At: failures[0].At}, failures[0],

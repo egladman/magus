@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -25,7 +26,9 @@ const KindGateResult = "gate_result"
 
 // ReadGateResults is [session.ReadAll] narrowed to the [KindGateResult] records; see
 // [session.FoldKind].
-func ReadGateResults(dir string) (session.Fold, error) { return session.FoldKind(dir, KindGateResult) }
+func ReadGateResults(ctx context.Context, dir string) (session.Fold, error) {
+	return session.FoldKind(ctx, dir, KindGateResult)
+}
 
 // OutcomeDeferred marks a gate invocation that was REFUSED as redundant under
 // load (MGS3010, exit 75) rather than run. It is a record of the deferral
@@ -280,16 +283,16 @@ func FailuresOwed(gate GateRecord, results session.Fold) []types.TargetRef {
 // short-lived fact, and joining it to the run's execution journal is not what
 // it is read for. Callers on the run path must not fail the build over an
 // error here.
-func RecordGate(dir string, g GateResult, start session.InvocationStart) error {
+func RecordGate(ctx context.Context, dir string, g GateResult, start session.InvocationStart) error {
 	// Checked before Open: a payload that fails to marshal would leave the start record.
 	if _, err := g.Scope.MarshalJSON(); err != nil {
 		return err
 	}
-	w, err := openWriter(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return err
 	}
-	return w.Append(KindGateResult, g)
+	return w.Append(ctx, KindGateResult, g)
 }
 
 // KindHarnessWrite records files that `magus agent harness install` or
@@ -337,15 +340,15 @@ type HarnessWriteRecord struct {
 
 // RecordHarnessWrite appends one harness write under dir. A repeat
 // appends a newer record.
-func RecordHarnessWrite(dir string, hw HarnessWrite, start session.InvocationStart) error {
+func RecordHarnessWrite(ctx context.Context, dir string, hw HarnessWrite, start session.InvocationStart) error {
 	if _, err := hw.MarshalJSON(); err != nil {
 		return err
 	}
-	w, err := openWriter(dir, NewID(), start)
+	w, err := openWriter(ctx, dir, NewID(), start)
 	if err != nil {
 		return err
 	}
-	return w.Append(KindHarnessWrite, hw)
+	return w.Append(ctx, KindHarnessWrite, hw)
 }
 
 // LatestHarnessWrite returns the newest write in a fold of

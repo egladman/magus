@@ -168,7 +168,7 @@ func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunR
 	// deliberately does not guess. A replay is not a stale answer: the cache key covers the
 	// target's sources, so a hit means THIS tree state passed. What can go stale is the reader's
 	// view moving on after the verdict, which as_of covers.
-	if ev, ok := trail.LastRun(h.cacheDir, job.ActionString(argv)); ok {
+	if ev, ok := trail.LastRun(ctx, h.cacheDir, job.ActionString(argv)); ok {
 		out.State = "passed"
 		if ev.Outcome != trailtypes.OutcomeOK {
 			out.State = "failed"

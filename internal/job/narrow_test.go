@@ -405,7 +405,7 @@ func (s *ReleaseRequestRowSuite) TestAttentionIsFiledWithoutReadingTheStore() {
 
 	dir, err := sessions.Dir(s.store.root)
 	s.Require().NoError(err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r session.Record) bool { return r.Kind != sessions.KindAttentionOpen })
 	s.Len(opens, 2)
@@ -456,7 +456,7 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != releaseRequestSource })
 }

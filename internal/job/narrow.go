@@ -259,7 +259,7 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 		return
 	}
 	// The row just answered that this request is new.
-	_ = sessions.AppendRequest(dir, holder, open, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
+	_ = sessions.AppendRequest(ctx, dir, holder, open, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
 }
 
 // FileReleaseRequest puts req on holder's row and stamps its time. It answers

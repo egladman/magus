@@ -125,7 +125,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 			},
 		})
 	}
-	tr := ForSession(base, "s1", 100)
+	tr := ForSession(t.Context(), base, "s1", 100)
 
 	got := SummarizeCost(&tr, fixtureModels())
 

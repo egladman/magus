@@ -140,8 +140,8 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 // one commit behind HEAD, which is every gate after a commit that was not rebuilt, reads
 // as absent in the log while the redundancy check (MGS3010) refuses to run it again: two
 // rules each blocking the only way past the other.
-func gateVerdictAt(workspace, commit string) gateCoverage {
-	cover, _ := readGateHistory(workspace).recordAt(commit)
+func gateVerdictAt(ctx context.Context, workspace, commit string) gateCoverage {
+	cover, _ := readGateHistory(ctx, workspace).recordAt(commit)
 	return cover
 }
 
@@ -156,7 +156,7 @@ type gateHistory struct {
 	read bool
 }
 
-func readGateHistory(workspace string) gateHistory {
+func readGateHistory(ctx context.Context, workspace string) gateHistory {
 	if workspace == "" {
 		return gateHistory{}
 	}
@@ -164,7 +164,7 @@ func readGateHistory(workspace string) gateHistory {
 	if err != nil {
 		return gateHistory{}
 	}
-	fold, err := readGateFold(dir)
+	fold, err := readGateFold(ctx, dir)
 	if err != nil {
 		return gateHistory{}
 	}
@@ -490,7 +490,7 @@ func pushCoverageWithin(ctx context.Context, budget time.Duration, deps Dependen
 // readGates grades ev.commit by the gates recorded in the workspace at, and
 // by a gate on its tree or a waiver. dir is the checkout the push runs in.
 func (ev *pushEvidence) readGates(ctx context.Context, r *pushReads, deps Dependencies, at location, dir string) gateLineage {
-	gates := pushStep(ctx, r, phasePushGateHistory, func() gateHistory { return readGateHistory(at.workspace) })
+	gates := pushStep(ctx, r, phasePushGateHistory, func() gateHistory { return readGateHistory(ctx, at.workspace) })
 	var rec sessions.GateRecord
 	ev.cover, rec = gates.recordAt(ev.commit)
 	if ev.cover == gateUnrun {

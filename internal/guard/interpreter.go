@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"regexp"
@@ -208,9 +209,9 @@ func interpreterScriptVerdict(interp string) ShellVerdict {
 // buzzSpawnVerdict is the first deny a command a `magus buzz -e` body or stdin heredoc on
 // the line starts earns. It reads a hooked call, never limits Buzz: proc runs anything, and
 // a script run outside the harness is not judged at all.
-func buzzSpawnVerdict(deps Dependencies, held *heldAdvice, command string, d Dialect) (ShellVerdict, bool) {
+func buzzSpawnVerdict(ctx context.Context, deps Dependencies, held *heldAdvice, command string, d Dialect) (ShellVerdict, bool) {
 	for _, program := range inlineBuzzPrograms(command, d) {
-		if v, ok := buzzProgramSpawnVerdict(deps, held, program); ok {
+		if v, ok := buzzProgramSpawnVerdict(ctx, deps, held, program); ok {
 			return v, true
 		}
 		if v, ok := computedSpawnVerdict(deps, program); ok {
@@ -253,9 +254,9 @@ func inlineBuzzPrograms(command string, d Dialect) []string {
 // buzzProgramSpawnVerdict judges each command program's proc calls start as the line it
 // would be typed as, every rule included, and returns the first deny. A demoted deny is
 // left in held.
-func buzzProgramSpawnVerdict(deps Dependencies, held *heldAdvice, program string) (ShellVerdict, bool) {
+func buzzProgramSpawnVerdict(ctx context.Context, deps Dependencies, held *heldAdvice, program string) (ShellVerdict, bool) {
 	for _, line := range buzzSpawns(program) {
-		v := evaluateLine(deps, held, line, DialectBash)
+		v := evaluateLine(ctx, deps, held, line, DialectBash)
 		if v.Deny == "" {
 			continue
 		}

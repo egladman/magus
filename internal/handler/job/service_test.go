@@ -171,7 +171,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	j, ok := jobstore.Lookup("rotate-activities")
 	require.True(t, ok)
-	got := s.job(j, running, job.Job{}, nil)
+	got := s.job(t.Context(), j, running, job.Job{}, nil)
 
 	require.Equal(t, "jobs/rotate-activities", got.Name)
 	require.True(t, got.Running)

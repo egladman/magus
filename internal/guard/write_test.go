@@ -120,7 +120,7 @@ func heldAttention(t *testing.T, root string) []sessions.AttentionRequest {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	return sessions.AttentionQueue(fold)
 }
@@ -594,15 +594,15 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 		"./magus --root . notes capture",
 		"magus notes capture && (",
 	} {
-		v := Evaluate(testDependencies(), cmd)
+		v := Evaluate(t.Context(), testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 		assert.Equal(t, denyRule{Name: denyRuleNotesAuthor}, v.Rule, "%q must deny as the notes rule", cmd)
 	}
 	// Tokens after `--` go to the spell's tool, not to magus.
-	assert.Empty(t, Evaluate(testDependencies(), "magus run go::go-test . -- notes capture").Deny)
+	assert.Empty(t, Evaluate(t.Context(), testDependencies(), "magus run go::go-test . -- notes capture").Deny)
 	// Reading is untouched: the boundary is on authorship, not on access.
 	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
-		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads", cmd)
+		assert.Empty(t, Evaluate(t.Context(), testDependencies(), cmd).Deny, "%q only reads", cmd)
 	}
 }
 

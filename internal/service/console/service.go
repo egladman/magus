@@ -332,7 +332,7 @@ func (s *Service) DiffWith(ctx context.Context, paths []string, opts diff.Option
 	}
 	// The agent record: which sessions wrote each file and what they had read first, from the
 	// guard hook's trail and from loaded transcripts.
-	trail.AttachTouches(&rev, s.magus.Root(), s.magus.CacheDir())
+	trail.AttachTouches(ctx, &rev, s.magus.Root(), s.magus.CacheDir())
 	// Which of these files somebody has recorded reading, from the same store `magus diff
 	// --ack` writes. The console gets it because "how much of this has anyone read" is a
 	// question a review app should answer without the reader dropping to a terminal.

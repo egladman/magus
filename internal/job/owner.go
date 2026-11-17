@@ -48,7 +48,7 @@ func noteAttention(ctx context.Context, root, source, lease, message string) {
 	if err != nil {
 		return
 	}
-	_, _, _ = sessions.OpenRequest(dir, source, sessions.AttentionOpen{
+	_, _, _ = sessions.OpenRequest(ctx, dir, source, sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeFailed),
 		Severity: string(types.SeverityWarning),
 		Source:   source,

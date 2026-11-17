@@ -361,7 +361,7 @@ func (m *Magus) FileDiskAttention(ctx context.Context, message string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = sessions.OpenRequest(dir, diskAttentionSource, sessions.AttentionOpen{
+	_, _, err = sessions.OpenRequest(ctx, dir, diskAttentionSource, sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeDiagnostic),
 		Severity: string(types.SeverityWarning),
 		Source:   diskAttentionSource,

@@ -17,7 +17,7 @@ func TestSessionTrailHereJoinsThisCheckoutsTrail(t *testing.T) {
 	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
 	AppendAgentSpawn(t.Context(), cacheDir, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
 
-	tr := SessionTrailHere(cacheDir, "s1")
+	tr := SessionTrailHere(t.Context(), cacheDir, "s1")
 	require.NotNil(t, tr)
 	var out strings.Builder
 	RenderSessionTrail(&out, tr)
@@ -30,5 +30,5 @@ func TestSessionTrailHereIsNilForASessionThatRanElsewhere(t *testing.T) {
 	cacheDir := t.TempDir()
 	AppendAgentCommand(t.Context(), cacheDir, AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass"})
 
-	assert.Nil(t, SessionTrailHere(cacheDir, "s2"))
+	assert.Nil(t, SessionTrailHere(t.Context(), cacheDir, "s2"))
 }

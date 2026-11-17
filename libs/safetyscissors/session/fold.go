@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,7 +53,11 @@ func (e foldEntry) sameFile(fi os.FileInfo) bool {
 }
 
 // FoldAgentEvents is [ReadAll] narrowed to the [KindAgentEvent] records; see [FoldKind].
-func FoldAgentEvents(dir string) (Fold, error) { return FoldKind(dir, KindAgentEvent) }
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func FoldAgentEvents(ctx context.Context, dir string) (Fold, error) {
+	return FoldKind(ctx, dir, KindAgentEvent)
+}
 
 // FoldKind is [ReadAll] narrowed to the records of one kind, with Invocations, Skipped and
 // Legacy counted over the whole store as ReadAll counts them. It is not a pure read: it
@@ -70,7 +75,9 @@ func FoldAgentEvents(dir string) (Fold, error) { return FoldKind(dir, KindAgentE
 // refolds from the files, and a failed write leaves the next call to refold again. Two
 // callers racing to write each replace it whole with a fold that was correct for the files
 // they listed, so neither can leave an entry that claims more than its file held.
-func FoldKind(dir, kind string) (Fold, error) {
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func FoldKind(ctx context.Context, dir, kind string) (Fold, error) {
 	var fold Fold
 	if !ValidFileID(kind) {
 		return fold, &InvalidIDError{Field: "kind", ID: kind}
@@ -87,6 +94,9 @@ func FoldKind(dir, kind string) (Fold, error) {
 	next := foldCache{Format: foldCacheFormat, Schema: APIVersion, Kind: kind, Files: make(map[string]foldEntry, len(entries))}
 	changed := false
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return Fold{}, err
+		}
 		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
 			continue
 		}

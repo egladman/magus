@@ -32,7 +32,7 @@ func TestAttemptWorkFoldsTheHoldersCallsUpToAndAfterItsFirstWrite(t *testing.T) 
 	call(t, base, "a", "file.write", 30_000, "pass")
 	call(t, base, "a", "file.write", 50_000, "pass")
 
-	got, calls := attemptWork(base, "a", since)
+	got, calls := attemptWork(t.Context(), base, "a", since)
 	assert.Len(t, calls, 4, "one fact per call of this holder")
 
 	require.NotNil(t, got)
@@ -57,7 +57,7 @@ func TestAttemptWorkLeavesTheContextUnknownWhenACallReportedNone(t *testing.T) {
 	call(t, base, "a", "file.read", 0, "pass")
 	call(t, base, "a", "file.write", 30_000, "pass")
 
-	got, _ := attemptWork(base, "a", since)
+	got, _ := attemptWork(t.Context(), base, "a", since)
 
 	require.NotNil(t, got)
 	require.NotNil(t, got.SetupMs)
@@ -74,7 +74,7 @@ func TestAttemptWorkOfAHolderThatNeverWroteHasNoSetupFigures(t *testing.T) {
 	base := t.TempDir()
 	call(t, base, "a", "file.read", 10_000, "pass")
 
-	got, _ := attemptWork(base, "a", time.Now().Unix()-1)
+	got, _ := attemptWork(t.Context(), base, "a", time.Now().Unix()-1)
 
 	require.NotNil(t, got)
 	assert.Equal(t, types.JobWork{
@@ -91,7 +91,7 @@ func TestAttemptWorkIsUnknownWithoutAnObservedCall(t *testing.T) {
 	base := t.TempDir()
 	call(t, base, "other", "file.write", 10_000, "pass")
 	work := func(base string, since int64) *types.JobWork {
-		w, _ := attemptWork(base, "a", since)
+		w, _ := attemptWork(t.Context(), base, "a", since)
 		return w
 	}
 	assert.Nil(t, work(base, time.Now().Unix()-1), "no call of this lease")

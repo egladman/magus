@@ -546,8 +546,8 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 // worker argv recorded for a background job, e.g. "graph build") and whether one was found.
 // It is how a caller shows a job's last outcome. Scans the retained trail newest-first; a job
 // that has not run within it is (zero, false).
-func LastRun(base, action string) (trailtypes.Event, bool) {
-	events, _ := trailtypes.ReadRecent(base, maxEvents)
+func LastRun(ctx context.Context, base, action string) (trailtypes.Event, bool) {
+	events, _ := trailtypes.ReadRecent(ctx, base, maxEvents)
 	for _, e := range events { // newest-first
 		if e.Kind == trailtypes.KindJob && e.Action == action {
 			return e, true

@@ -31,7 +31,7 @@ func dispose(t *testing.T, root, id string) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.DisposeRequest(dir, id, "confirmed", session.InvocationStart{})
+	_, err = sessions.DisposeRequest(t.Context(), dir, id, "confirmed", session.InvocationStart{})
 	require.NoError(t, err)
 }
 

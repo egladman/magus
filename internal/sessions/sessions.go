@@ -21,6 +21,7 @@
 package sessions
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -48,6 +49,6 @@ func Dir(root string) (string, error) {
 }
 
 // openWriter is [session.Open] with the attention tie every magus writer prunes with.
-func openWriter(dir, invocation string, start session.InvocationStart) (*session.Writer, error) {
-	return session.Open(dir, invocation, start, session.WithTie(AttentionTie()))
+func openWriter(ctx context.Context, dir, invocation string, start session.InvocationStart) (*session.Writer, error) {
+	return session.Open(ctx, dir, invocation, start, session.WithTie(AttentionTie()))
 }

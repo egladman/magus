@@ -93,7 +93,7 @@ func (s *SessionAdviseSuite) TestAPromptWithContextShowsItInsteadOfTheStop() {
 // A directive reaches every session as the person's own words, so an agent
 // posting or retracting one would put words in the person's mouth.
 func (s *SessionAdviseSuite) deniedToAnAgent(command string) {
-	s.Contains(Evaluate(strict(testDependencies()), command).Deny, "post or retract an advisory")
+	s.Contains(Evaluate(s.T().Context(), strict(testDependencies()), command).Deny, "post or retract an advisory")
 }
 
 func (s *SessionAdviseSuite) TestAnAgentMayNotAdvise() {
@@ -113,7 +113,7 @@ func (s *SessionAdviseSuite) TestAnAgentMayNotRetract() {
 }
 
 func (s *SessionAdviseSuite) TestAnAgentMayListAdvisories() {
-	s.Empty(Evaluate(strict(testDependencies()), `magus session advisories`).Deny)
+	s.Empty(Evaluate(s.T().Context(), strict(testDependencies()), `magus session advisories`).Deny)
 }
 
 func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {

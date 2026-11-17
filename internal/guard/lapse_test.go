@@ -80,7 +80,7 @@ func TestLapseNeverDegradesADestructiveVerbOrAPush(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	nothing := func(context.Context) {}
 	reset := "git reset --hard origin/main"
-	want := Evaluate(Dependencies{}, reset)
+	want := Evaluate(t.Context(), Dependencies{}, reset)
 	require.NotEmpty(t, want.Deny, "the destructive verb denies by default")
 	for range lapsesBeforeDegrade + 2 {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: reset, Host: "claude-code", Session: "s1"}, nothing)

@@ -57,13 +57,13 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	case "load":
 		return sessionLoad(ctx, root, rest)
 	case "show":
-		return sessionShow(root, rest)
+		return sessionShow(ctx, root, rest)
 	case "hints":
-		return sessionHints(root, rest)
+		return sessionHints(ctx, root, rest)
 	case "attention":
-		return attentionList(root, rest)
+		return attentionList(ctx, root, rest)
 	case "dispose":
-		return attentionDispose(root, rest)
+		return attentionDispose(ctx, root, rest)
 	case "advise":
 		return adviseCommand(root, rest)
 	case "advisories":
@@ -154,7 +154,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 }
 
 // sessionShow implements `magus session show <id>`.
-func sessionShow(root string, args []string) error {
+func sessionShow(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session show", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus session show <session-id>")
@@ -321,7 +321,7 @@ func sessionShow(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return err
 	}
@@ -513,7 +513,7 @@ func sessionTrailHere(root, session string) *trail.SessionTrail {
 	if cacheDir == "" {
 		return nil
 	}
-	return trail.SessionTrailHere(cacheDir, session)
+	return trail.SessionTrailHere(context.Background(), cacheDir, session)
 }
 
 func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
@@ -545,7 +545,7 @@ func sessionHintsUsage(fs *flag.FlagSet) func() {
 }
 
 // sessionHints implements `magus session hints`.
-func sessionHints(root string, args []string) error {
+func sessionHints(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session hints", args, func(fs *flag.FlagSet) {
 		fs.Usage = sessionHintsUsage(fs)
 	})
@@ -564,7 +564,7 @@ func sessionHints(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return err
 	}

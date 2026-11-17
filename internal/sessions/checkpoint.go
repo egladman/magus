@@ -79,14 +79,14 @@ type CheckpointRecord struct {
 // reporting what it recorded cannot print something the store does not hold.
 //
 // start describes the writing invocation. Its Command and invocation id are set here.
-func RecordCheckpoint(dir string, c Checkpoint, start session.InvocationStart) (stored Checkpoint, recorded bool, err error) {
+func RecordCheckpoint(ctx context.Context, dir string, c Checkpoint, start session.InvocationStart) (stored Checkpoint, recorded bool, err error) {
 	c.Note = boundMessage(c.Note)
 	id := checkpointInvocationID(checkpointKey(c))
 	// One file, not the whole store. Every checkpoint for this line of work is in the
 	// file checkpointInvocationID names and nowhere else, so folding the store would
 	// decode a 30-day history to answer a question one file holds, on every turn of
 	// every session, which is when this runs.
-	records, err := session.ReadInvocation(dir, id)
+	records, err := session.ReadInvocation(ctx, dir, id)
 	if err != nil {
 		return c, false, err
 	}
@@ -94,11 +94,11 @@ func RecordCheckpoint(dir string, c Checkpoint, start session.InvocationStart) (
 		return c, false, nil
 	}
 	start.Command = "session checkpoint"
-	w, err := openWriter(dir, id, start)
+	w, err := openWriter(ctx, dir, id, start)
 	if err != nil {
 		return c, false, err
 	}
-	if err := w.Append(KindCheckpoint, c); err != nil {
+	if err := w.Append(ctx, KindCheckpoint, c); err != nil {
 		return c, false, err
 	}
 	return c, true, nil

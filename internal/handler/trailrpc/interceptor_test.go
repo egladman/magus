@@ -135,7 +135,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "laptop"})); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("ReadRecent = %d events, %v", len(events), err)
 	}
@@ -237,7 +237,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 		t.Fatal("expected RevokeToken to fail")
 	}
 
-	events, err := trailtypes.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}

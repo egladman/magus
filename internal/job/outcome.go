@@ -275,7 +275,7 @@ func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) ty
 			out.Projects = projects
 		}
 	}
-	work, calls := attemptWork(h.trail, h.row.ID, attemptStart(h.row, h.tries))
+	work, calls := attemptWork(ctx, h.trail, h.row.ID, attemptStart(h.row, h.tries))
 	out.Work = work
 	out.Tokens, out.CostUSD = s.priceAttempt(work, calls)
 	return out

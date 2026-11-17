@@ -16,9 +16,9 @@ import (
 func recordResults(t *testing.T, dir string, results ...session.TargetResult) {
 	t.Helper()
 	for i, r := range results {
-		w, err := session.Open(dir, fmt.Sprintf("invmv%04d1", i), session.InvocationStart{Command: "run"})
+		w, err := session.Open(t.Context(), dir, fmt.Sprintf("invmv%04d1", i), session.InvocationStart{Command: "run"})
 		require.NoError(t, err)
-		require.NoError(t, w.Append(session.KindTargetResult, r))
+		require.NoError(t, w.Append(t.Context(), session.KindTargetResult, r))
 	}
 }
 
@@ -39,26 +39,26 @@ func (s *RunDurationWithSuite) SetupTest() {
 		{"run go-test . -- -run TestA", 20_000},
 		{"run go-test . --", 300_000},
 	} {
-		w, err := session.Open(s.dir, fmt.Sprintf("invwith%04d1", i), session.InvocationStart{Command: run.command})
+		w, err := session.Open(s.T().Context(), s.dir, fmt.Sprintf("invwith%04d1", i), session.InvocationStart{Command: run.command})
 		s.Require().NoError(err)
-		s.Require().NoError(w.Append(session.KindTargetResult, session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: run.took}))
+		s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: run.took}))
 	}
 }
 
 func (s *RunDurationWithSuite) TestTheSameForwardedArgumentsMatch() {
-	got, ok := LastRunDurationWith(s.dir, ".", "go-test", []string{"-run", "TestA"})
+	got, ok := LastRunDurationWith(s.T().Context(), s.dir, ".", "go-test", []string{"-run", "TestA"})
 	s.Require().True(ok)
 	s.Equal(20*time.Second, got)
 }
 
 func (s *RunDurationWithSuite) TestNoForwardedArgumentsMatchAnUnfilteredRun() {
-	got, ok := LastRunDurationWith(s.dir, ".", "go-test", nil)
+	got, ok := LastRunDurationWith(s.T().Context(), s.dir, ".", "go-test", nil)
 	s.Require().True(ok)
 	s.Equal(300*time.Second, got, "a bare -- forwards nothing")
 }
 
 func (s *RunDurationWithSuite) TestOtherArgumentsHaveNoRecord() {
-	_, ok := LastRunDurationWith(s.dir, ".", "go-test", []string{"-run", "TestB"})
+	_, ok := LastRunDurationWith(s.T().Context(), s.dir, ".", "go-test", []string{"-run", "TestB"})
 	s.False(ok)
 }
 
@@ -73,19 +73,19 @@ func TestLastRunDurationIsTheNewestRun(t *testing.T) {
 		session.TargetResult{Target: "lint", Project: ".", Outcome: session.OutcomePass, DurationMs: 70_000},
 	)
 
-	got, ok := LastRunDuration(dir, ".", "go-test")
+	got, ok := LastRunDuration(t.Context(), dir, ".", "go-test")
 	require.True(t, ok)
 	assert.Equal(t, 300*time.Second, got, "the newest run that ran: a replay, a refusal and another project do not count, and a spell filter or charm names the same target")
 
-	got, ok = LastRunDuration(dir, "", "go_test:rw")
+	got, ok = LastRunDuration(t.Context(), dir, "", "go_test:rw")
 	require.True(t, ok)
 	assert.Equal(t, 300*time.Second, got, "an empty project is the root, and the name is compared normalized")
 
-	_, ok = LastRunDuration(dir, ".", "build")
+	_, ok = LastRunDuration(t.Context(), dir, ".", "build")
 	assert.False(t, ok, "a target that never ran here has no duration")
-	_, ok = LastRunDuration(t.TempDir(), ".", "go-test")
+	_, ok = LastRunDuration(t.Context(), t.TempDir(), ".", "go-test")
 	assert.False(t, ok, "an empty store")
-	_, ok = LastRunDuration(dir+"/absent", ".", "go-test")
+	_, ok = LastRunDuration(t.Context(), dir+"/absent", ".", "go-test")
 	assert.False(t, ok, "a missing store")
 }
 
@@ -98,6 +98,6 @@ func TestLastRunDurationReadsOnlyTheNewestFiles(t *testing.T) {
 	}
 	recordResults(t, dir, results...)
 
-	_, ok := LastRunDuration(dir, ".", "go-test")
+	_, ok := LastRunDuration(t.Context(), dir, ".", "go-test")
 	assert.False(t, ok, "a run older than the newest %d files is not read", maxInvocationFiles)
 }

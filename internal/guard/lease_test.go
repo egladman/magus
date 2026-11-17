@@ -212,7 +212,7 @@ func verifyRepeatRepository(t *testing.T, runs int, outcome string) (context.Con
 	}
 	dir, err := sessions.Dir(repo.Root())
 	require.NoError(t, err)
-	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: repo.Root()}))
 	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
@@ -276,7 +276,7 @@ func TestDenyRepeatVerify(t *testing.T) {
 		}
 		otherDir, err := sessions.Dir(other.Root())
 		require.NoError(t, err)
-		require.NoError(t, sessions.RecordGate(otherDir, sessions.GateResult{
+		require.NoError(t, sessions.RecordGate(t.Context(), otherDir, sessions.GateResult{
 			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: other.Head(), Outcome: session.OutcomePass, Inv: "inv-other",
 		}, session.InvocationStart{Workspace: other.Root()}))
 		other.Write("b.go", "package a\n")
@@ -325,10 +325,10 @@ func (s *redGateSuite) SetupTest() {
 }
 
 func (s *redGateSuite) results(inv string, results ...session.TargetResult) {
-	w, err := session.Open(s.dir, inv, session.InvocationStart{Workspace: s.repo.Root()})
+	w, err := session.Open(s.T().Context(), s.dir, inv, session.InvocationStart{Workspace: s.repo.Root()})
 	s.Require().NoError(err)
 	for _, r := range results {
-		s.Require().NoError(w.Append(session.KindTargetResult, r))
+		s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, r))
 	}
 }
 
@@ -357,16 +357,16 @@ func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 
 func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
 	time.Sleep(2 * time.Millisecond)
-	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
+	s.Require().NoError(sessions.RecordHarnessWrite(s.T().Context(), s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
 		session.InvocationStart{Workspace: s.repo.Root()}))
 	s.Empty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
-	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
+	s.Require().NoError(sessions.RecordHarnessWrite(s.T().Context(), s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
 		session.InvocationStart{Workspace: s.repo.Root()}))
 	time.Sleep(2 * time.Millisecond)
-	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(s.T().Context(), s.dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: session.OutcomeFail, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: s.repo.Root()}))
 	s.NotEmpty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))

@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"slices"
@@ -60,12 +61,12 @@ func (c PathContact) Touched() bool { return c.Sessions > 0 }
 // record this build cannot decode all report nothing rather than failing the caller. A
 // workspace that has never loaded a transcript is indistinguishable from one whose files
 // no session touched, which is correct: both have nothing to say.
-func readPathContact(dir, path string) PathContact {
+func readPathContact(ctx context.Context, dir, path string) PathContact {
 	var out PathContact
 	if dir == "" || path == "" {
 		return out
 	}
-	fold, err := session.FoldAgentEvents(dir)
+	fold, err := session.FoldAgentEvents(ctx, dir)
 	if err != nil {
 		return out
 	}
@@ -140,7 +141,7 @@ func ContactForNode(node types.KnowledgeNode, dir func() (string, error)) *PathC
 	if err != nil {
 		return nil
 	}
-	c := readPathContact(d, path)
+	c := readPathContact(context.Background(), d, path)
 	if !c.Touched() {
 		return nil
 	}

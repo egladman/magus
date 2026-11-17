@@ -68,13 +68,13 @@ func noProducers() func(target, project string) bool {
 // judgeBriefCommand refuses a brief that teaches a denied command, naming the command and
 // the rule. Otherwise it passes, and the verdict may carry Context saying why a magus run
 // in the brief was not held to a check.
-func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
+func judgeBriefCommand(ctx context.Context, deps Dependencies, brief briefInput) ShellVerdict {
 	for _, cmd := range briefCommands(brief.text) {
 		cmd = withoutBootstrap(cmd)
 		if strings.TrimSpace(cmd) == "" {
 			continue
 		}
-		v := Evaluate(deps, briefPlaceholderRe.ReplaceAllString(cmd, "X"))
+		v := Evaluate(ctx, deps, briefPlaceholderRe.ReplaceAllString(cmd, "X"))
 		if v.Deny == "" {
 			continue
 		}

@@ -636,7 +636,7 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 				err = writeQueryText(ctx, &got, nx, nx.served(hint.NextForQuery(res.Out)), res)
 			case knowledge.ExplainResult:
 				require.True(t, res.Found)
-				err = writeExplainText(&got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
+				err = writeExplainText(t.Context(), &got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
 			}
 			assert.Equal(t, want, got.String())
 			assert.Equal(t, cmdErr, err, "the same exit status")

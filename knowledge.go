@@ -653,7 +653,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 		in.CoverageGaps = rootModuleGaps(src.root, knowledge.CoverageGaps(in.Coverage, in.Symbols))
 	}
 	if needs(knowledge.ClassSession) {
-		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
+		in.AgentContacts = loadKnowledgeAgentContacts(ctx, src.root)
 	}
 	return in
 }
@@ -1203,7 +1203,7 @@ func inNestedModule(root, dir string) bool {
 // builds exactly the graph it built before. A record whose payload this build cannot
 // decode is skipped rather than failing the graph, which is the same tolerance every
 // other reader of the store applies to a kind it does not know.
-func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
+func loadKnowledgeAgentContacts(ctx context.Context, root string) []knowledge.AgentContact {
 	if root == "" {
 		return nil
 	}
@@ -1211,7 +1211,7 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 	if err != nil {
 		return nil
 	}
-	fold, err := session.FoldAgentEvents(dir)
+	fold, err := session.FoldAgentEvents(ctx, dir)
 	if err != nil {
 		return nil
 	}

@@ -1194,7 +1194,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		// A script is judged by what running it would be judged by, and the write is the
 		// last moment that costs nothing to change. Its verdict is graded already.
 		if judgment.Decision != decisionDeny {
-			if v, refused := pending.hold(deps, denyScriptWrite(deps, input, write)); refused {
+			if v, refused := pending.hold(deps, denyScriptWrite(ctx, deps, input, write)); refused {
 				judgment.Decision, judgment.Reason, judgment.Rule = decisionDeny, v.Deny, v.RuleName()
 				whys[v.Deny] = v.Why
 			}
@@ -1562,7 +1562,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		// Added to whatever advice stands rather than waiting for silence: a worker that
 		// misses it parks, which no other advice on the line costs.
 		if run, ok := worker(); ok && (judgment.Decision == decisionPass || judgment.Decision == decisionAdvise) {
-			if a := adviseCheckTimeout(location, run, call); a.Say != "" {
+			if a := adviseCheckTimeout(ctx, location, run, call); a.Say != "" {
 				if held := deps.heldBy(markers, string(advisoryCheckTimeout)).Once(a.Key, a.Say); held != "" {
 					whys[a.Say] = a.Why
 					if judgment.Decision == decisionAdvise {
@@ -1735,10 +1735,10 @@ func (d Dependencies) judging(dir string) judgeSource {
 // holds: Evaluate's, then the ones that read the filesystem. Each is graded before it is
 // ranked, so a demoted one outranks only an advisory.
 func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
-	v := rankOwnBuild(Evaluate(deps, hardResetAsSwitch(ctx, deps, at, callDir, line, d)), ownBuildVerdict(ctx, deps, callDir, line, d))
+	v := rankOwnBuild(Evaluate(ctx, deps, hardResetAsSwitch(ctx, deps, at, callDir, line, d)), ownBuildVerdict(ctx, deps, callDir, line, d))
 	// A remedy computed from a script's line would run outside the directory and the
 	// lines around it that the script sets up.
-	script := denyScriptContent(deps, callDir, line, d)
+	script := denyScriptContent(ctx, deps, callDir, line, d)
 	script.Next, script.Lead = nil, ""
 	v = rankScriptContent(v, script)
 	owned := func(root string) bool { return ownsCheckout(ctx, deps, at, root) }

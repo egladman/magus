@@ -20,7 +20,7 @@ func shownSession(t *testing.T, lines ...string) string {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	var out strings.Builder

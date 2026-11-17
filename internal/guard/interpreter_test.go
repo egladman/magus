@@ -38,14 +38,14 @@ func (s *ComputedSpawnSuite) script(dir, program string) string {
 }
 
 func (s *ComputedSpawnSuite) TestAWorkersInlineComputedSpawnIsRefused() {
-	v, ok := buzzSpawnVerdict(s.deps(true), &heldAdvice{}, "magus buzz -e '"+computedSpawn+"'", DialectBash)
+	v, ok := buzzSpawnVerdict(s.T().Context(), s.deps(true), &heldAdvice{}, "magus buzz -e '"+computedSpawn+"'", DialectBash)
 	s.Require().True(ok)
 	s.Contains(v.Deny, "computed argv")
 	s.Equal(denyRuleInterpreterScript, v.Rule.Name)
 }
 
 func (s *ComputedSpawnSuite) TestAnUnleasedInlineComputedSpawnPasses() {
-	_, ok := buzzSpawnVerdict(s.deps(false), &heldAdvice{}, "magus buzz -e '"+computedSpawn+"'", DialectBash)
+	_, ok := buzzSpawnVerdict(s.T().Context(), s.deps(false), &heldAdvice{}, "magus buzz -e '"+computedSpawn+"'", DialectBash)
 	s.False(ok)
 }
 
@@ -55,13 +55,13 @@ func (s *ComputedSpawnSuite) TestAWorkersLiteralSpawnIsNotComputed() {
 
 func (s *ComputedSpawnSuite) TestAWorkersScratchScriptWithAComputedSpawnIsRefused() {
 	file := s.script(s.scratch, computedSpawn)
-	v := denyScriptContent(s.deps(true), s.root, "magus buzz "+file, DialectBash)
+	v := denyScriptContent(s.T().Context(), s.deps(true), s.root, "magus buzz "+file, DialectBash)
 	s.Contains(v.Deny, "computed argv")
 }
 
 func (s *ComputedSpawnSuite) TestARepositoryScriptWithAComputedSpawnPasses() {
 	file := s.script(s.root, computedSpawn)
-	s.Empty(denyScriptContent(s.deps(true), s.root, "magus buzz "+file, DialectBash).Deny)
+	s.Empty(denyScriptContent(s.T().Context(), s.deps(true), s.root, "magus buzz "+file, DialectBash).Deny)
 }
 
 // TestInterpreterScriptDeniesAdHocScripts: Buzz is the scripting language, so a program
@@ -130,7 +130,7 @@ func TestInterpreterScriptDeniesAdHocScripts(t *testing.T) {
 		{command: "cat >> notes.md <<EOF\nrun python3 with re.sub( then .write( and $(\nEOF"},
 		{command: `echo 'python3 -c x'`},
 	} {
-		v := Evaluate(strict(testDependencies()), tt.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tt.command)
 		if !tt.denied {
 			assert.NotEqual(t, denyRuleInterpreterScript, v.Rule.Name, tt.command)
 			continue
@@ -161,7 +161,7 @@ func TestInterpreterScriptJudgesAScriptsProgram(t *testing.T) {
 		{"node rw.js", true},
 		{"node scratch.js", false},
 	} {
-		v := denyScriptContent(strict(Dependencies{}), dir, tt.command, DialectBash)
+		v := denyScriptContent(t.Context(), strict(Dependencies{}), dir, tt.command, DialectBash)
 		if !tt.denied {
 			assert.Empty(t, v.Deny, tt.command)
 			continue
@@ -170,9 +170,9 @@ func TestInterpreterScriptJudgesAScriptsProgram(t *testing.T) {
 		assert.Contains(t, v.Why, "Judged from the content of", tt.command)
 	}
 
-	written := denyScriptWrite(strict(Dependencies{}), dir+"/new.js", writeFields{Content: rewrite})
+	written := denyScriptWrite(t.Context(), strict(Dependencies{}), dir+"/new.js", writeFields{Content: rewrite})
 	assert.Equal(t, denyRuleInterpreterScript, written.Rule.Name)
-	assert.Empty(t, denyScriptWrite(strict(Dependencies{}), dir+"/s.js", writeFields{Content: scratch}).Deny)
+	assert.Empty(t, denyScriptWrite(t.Context(), strict(Dependencies{}), dir+"/s.js", writeFields{Content: scratch}).Deny)
 }
 
 // TestGuardJudgesWhatABuzzProgramSpawns: `magus shell 'go test ./...'` is refused as a raw
@@ -201,7 +201,7 @@ func TestGuardJudgesWhatABuzzProgramSpawns(t *testing.T) {
 		{buzz(`proc\exec("go", args: ["test", "{pkg}"]);`), ""},
 		{"magus buzz --check -e '" + `proc\exec("go", args: ["test", "./..."]);` + "'", ""},
 	} {
-		v := Evaluate(strict(testDependencies()), tt.command)
+		v := Evaluate(t.Context(), strict(testDependencies()), tt.command)
 		if tt.rule == "" {
 			assert.Empty(t, v.Deny, tt.command)
 			continue
@@ -213,10 +213,10 @@ func TestGuardJudgesWhatABuzzProgramSpawns(t *testing.T) {
 	dir := testkit.NewWorkspace(t)
 	dir.WriteExecutable("spawn.buzz", "import \"proc\";\nexport fun main(args: [str]) > void !> any {\n    proc\\exec(\"go\", args: [\"test\", \"./...\"]);\n}\n")
 	dir.WriteExecutable("status.buzz", "import \"proc\";\nexport fun main(args: [str]) > void !> any {\n    proc\\exec(\"git\", args: [\"status\"]);\n}\n")
-	v := denyScriptContent(strict(testDependencies()), dir.Root(), "magus buzz spawn.buzz", DialectBash)
+	v := denyScriptContent(t.Context(), strict(testDependencies()), dir.Root(), "magus buzz spawn.buzz", DialectBash)
 	assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 	assert.Contains(t, v.Why, "Judged from the content of spawn.buzz")
-	assert.Empty(t, denyScriptContent(strict(testDependencies()), dir.Root(), "magus buzz status.buzz", DialectBash).Deny)
+	assert.Empty(t, denyScriptContent(t.Context(), strict(testDependencies()), dir.Root(), "magus buzz status.buzz", DialectBash).Deny)
 }
 
 func TestBuzzSpawnsSpellsLiteralArgv(t *testing.T) {

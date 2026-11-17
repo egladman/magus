@@ -56,7 +56,7 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 // workspace with no index at all is advised.
 func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	verdict := func(defined, definitive bool) ShellVerdict {
-		return Evaluate(strict(Dependencies{
+		return Evaluate(t.Context(), strict(Dependencies{
 			SymbolDefined: func(string) (bool, bool) { return defined, definitive },
 		}), "grep -r HandleRequest internal/")
 	}
@@ -80,7 +80,7 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	assert.Empty(t, absent.Deny, "nothing replaces a search for a name the current index does not hold")
 	assert.Empty(t, absent.Context)
 
-	unwired := Evaluate(strict(Dependencies{}), "grep -r HandleRequest internal/")
+	unwired := Evaluate(t.Context(), strict(Dependencies{}), "grep -r HandleRequest internal/")
 	assert.Empty(t, unwired.Deny, "with no index at all a deny would route nowhere")
 	assert.Equal(t, advisoryPrecedent, unwired.Kind)
 	assert.Empty(t, unwired.Brief, "a repeat saying the index is still missing changes nothing, so it goes quiet")
@@ -118,7 +118,7 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	// The deny arm reads Deny, which no gate call touches; a Kind on a deny would be a
 	// contradiction, so this also asserts the verdict carries none.
 	for _, command := range []string{"git stash", "go build ./...", "magus ls | head -5"} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		require.NotEmpty(t, v.Deny, "fixture %q must deny", command)
 		assert.Empty(t, v.Kind, "a deny carries no advisory kind, so nothing can hold it to one firing")
 		assert.Empty(t, v.Brief, "a deny has no degraded form: the caller cannot see past a refusal")
@@ -149,5 +149,5 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 
 func TestSymbolSearchAdvisesWhenSetToAdvise(t *testing.T) {
 	deps := advising(Dependencies{SymbolDefined: func(string) (bool, bool) { return true, true }}, string(denyRuleSymbolSearch))
-	requireAdvisedOnce(t, Evaluate(deps, "grep -r HandleRequest internal/"), denyRuleSymbolSearch)
+	requireAdvisedOnce(t, Evaluate(t.Context(), deps, "grep -r HandleRequest internal/"), denyRuleSymbolSearch)
 }

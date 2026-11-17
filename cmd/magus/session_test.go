@@ -95,7 +95,7 @@ func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
 	_, err := loadStream(t, root, `{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
 	require.NoError(t, err)
 
-	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(t.Context(), root, []string{"s1"})) })
 
 	assert.Contains(t, out, "Cost, with the root as the main thread:")
 	assert.Contains(t, out, "root context     not measured: this checkout's trail holds nothing for the session")

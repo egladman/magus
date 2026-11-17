@@ -189,7 +189,7 @@ func (m *Magus) recordedCheckouts(ctx context.Context, ref string) []string {
 		slog.WarnContext(ctx, "other checkouts were not consulted for "+ref, attr.Error(err))
 		return nil
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		slog.WarnContext(ctx, "other checkouts were not consulted for "+ref, attr.Error(err))
 		return nil

@@ -458,7 +458,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content review.Content, p
 	// The agent record: which sessions wrote each file and what they had read first, from the
 	// guard hook's trail and from loaded transcripts. Empty when neither has anything, which
 	// is the common case rather than a fault.
-	trail.AttachTouches(&rev, m.Root(), m.CacheDir())
+	trail.AttachTouches(ctx, &rev, m.Root(), m.CacheDir())
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.

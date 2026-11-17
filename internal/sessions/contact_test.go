@@ -51,7 +51,7 @@ func TestReadPathContactCountsSessionsNotEvents(t *testing.T) {
 
 	assert.Equal(t,
 		PathContact{Sessions: 2, Writes: 2, Reads: 1, Last: time.UnixMilli(now - 1000)},
-		readPathContact(dir, "internal/guard/buzz.go"),
+		readPathContact(t.Context(), dir, "internal/guard/buzz.go"),
 		"one session saving twice is one session, and Last is the newest contact with THIS path")
 }
 
@@ -67,7 +67,7 @@ func TestReadPathContactIgnoresPathlessKinds(t *testing.T) {
 		contact{session: "one", kind: session.EventSkillLoad, path: "magusfile.buzz", atMs: 7},
 	)
 
-	assert.Equal(t, PathContact{}, readPathContact(dir, "magusfile.buzz"))
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, "magusfile.buzz"))
 }
 
 func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
@@ -80,7 +80,7 @@ func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
 
 	assert.Equal(t,
 		PathContact{Sessions: 1, Writes: 2, Denials: 1, Last: time.UnixMilli(11)},
-		readPathContact(dir, "gen/graph.json"))
+		readPathContact(t.Context(), dir, "gen/graph.json"))
 }
 
 // TestReadPathContactLeavesAnUndatedContactUndated pins that a host that recorded no time
@@ -95,7 +95,7 @@ func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
 		contact{session: "one", kind: session.EventFileRead, path: "a.go", atMs: 0},
 	)
 
-	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, readPathContact(dir, "a.go"))
+	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, readPathContact(t.Context(), dir, "a.go"))
 }
 
 func TestReadPathContactSaysNothingWhenThereIsNothingToSay(t *testing.T) {
@@ -103,8 +103,8 @@ func TestReadPathContactSaysNothingWhenThereIsNothingToSay(t *testing.T) {
 
 	dir := contactStore(t, contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 1})
 
-	assert.Equal(t, PathContact{}, readPathContact(dir, "b.go"), "a path no session reached")
-	assert.Equal(t, PathContact{}, readPathContact(dir, ""), "a node that is about no file")
-	assert.Equal(t, PathContact{}, readPathContact("", "a.go"), "no store")
-	assert.Equal(t, PathContact{}, readPathContact(t.TempDir(), "a.go"), "an empty store")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, "b.go"), "a path no session reached")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, ""), "a node that is about no file")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), "", "a.go"), "no store")
+	assert.Equal(t, PathContact{}, readPathContact(t.Context(), t.TempDir(), "a.go"), "an empty store")
 }

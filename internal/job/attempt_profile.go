@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"math"
 	"slices"
 
@@ -24,15 +25,15 @@ const writeTool = "file.write"
 // call recorded under lease, which is a holder the guard never saw rather than an idle
 // one. It reads the trail [trail.LeaseDenials] reads, whose test of how far the retained
 // trail reaches is the one this profile is known by.
-func attemptWork(base, lease string, since int64) (*types.JobWork, []types.AgentFacts) {
+func attemptWork(ctx context.Context, base, lease string, since int64) (*types.JobWork, []types.AgentFacts) {
 	if base == "" {
 		return nil, nil
 	}
-	denials, known, err := trail.LeaseDenials(base, lease, since, math.MaxInt)
+	denials, known, err := trail.LeaseDenials(ctx, base, lease, since, math.MaxInt)
 	if err != nil || !known {
 		return nil, nil
 	}
-	events, err := trailtypes.ReadRecent(base, workReadWindow)
+	events, err := trailtypes.ReadRecent(ctx, base, workReadWindow)
 	if err != nil {
 		return nil, nil
 	}

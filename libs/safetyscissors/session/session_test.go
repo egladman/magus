@@ -51,11 +51,11 @@ func TestWriter(t *testing.T) { suite.Run(t, new(WriterSuite)) }
 func (s *WriterSuite) TestAppendReadRoundTrip() {
 	dir := s.T().TempDir()
 
-	w, err := Open(dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(fold.Records, 2, "the first append also writes the start record")
 	s.Zero(fold.Skipped)
@@ -73,9 +73,9 @@ func (s *WriterSuite) TestAppendReadRoundTrip() {
 func (s *WriterSuite) TestStoreIsPrivateToItsOwner() {
 	dir := filepath.Join(s.T().TempDir(), "sessions")
 
-	w, err := Open(dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass}))
 
 	info, err := os.Stat(dir)
 	s.Require().NoError(err)
@@ -90,11 +90,11 @@ func (s *WriterSuite) TestAppendStampsWithTheCallersClock() {
 	dir := s.T().TempDir()
 	at := time.UnixMilli(1_700_000_000_000)
 
-	w, err := Open(dir, "sess1", InvocationStart{}, WithClock(func() time.Time { return at }))
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{}, WithClock(func() time.Time { return at }))
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(fold.Records, 2)
 	s.Equal(at.UnixMilli(), fold.Records[0].Ts)
@@ -133,16 +133,16 @@ func (s *WriterSuite) TestTargetResultReadsTheOlderDurationSpelling() {
 func (s *WriterSuite) TestOpenWritesNothingUntilTheFirstFact() {
 	dir := s.T().TempDir()
 
-	w, err := Open(dir, "sess1", InvocationStart{})
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{})
 	s.Require().NoError(err)
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Empty(fold.Records)
 	s.Zero(fold.Invocations)
 
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
-	fold, err = ReadAll(dir)
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
+	fold, err = ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Len(fold.Records, 2)
 }
@@ -152,11 +152,11 @@ func (s *WriterSuite) TestOpenWritesNothingUntilTheFirstFact() {
 func (s *WriterSuite) TestAppendStoresABounderAsItBoundsItself() {
 	dir := s.T().TempDir()
 
-	w, err := Open(dir, "sess1", InvocationStart{})
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append("note", note{Text: "a long line of text"}))
+	s.Require().NoError(w.Append(s.T().Context(), "note", note{Text: "a long line of text"}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(fold.Records, 2)
 	s.JSONEq(`{"text":"a long l"}`, string(fold.Records[1].Payload))
@@ -168,16 +168,16 @@ func (s *WriterSuite) TestAppendStoresABounderAsItBoundsItself() {
 func (s *WriterSuite) TestOpenResumesTheSequenceOfAnExistingInvocation() {
 	dir := s.T().TempDir()
 
-	first, err := Open(dir, "sess1", InvocationStart{Command: "run build"})
+	first, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Command: "run build"})
 	s.Require().NoError(err)
-	s.Require().NoError(first.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
-	s.Require().NoError(first.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
+	s.Require().NoError(first.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	s.Require().NoError(first.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
-	second, err := Open(dir, "sess1", InvocationStart{Command: "run lint"})
+	second, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Command: "run lint"})
 	s.Require().NoError(err)
-	s.Require().NoError(second.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
+	s.Require().NoError(second.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(fold.Records, 5, "each writer declares its own command line")
 
@@ -192,7 +192,7 @@ func (s *WriterSuite) TestOpenResumesTheSequenceOfAnExistingInvocation() {
 
 func (s *WriterSuite) TestOpenRejectsAnIDThatCouldEscapeTheStore() {
 	for _, id := range []string{"", "../escape", "a/b", "."} {
-		_, err := Open(s.T().TempDir(), id, InvocationStart{})
+		_, err := Open(s.T().Context(), s.T().TempDir(), id, InvocationStart{})
 		var invalid *InvalidIDError
 		s.Require().ErrorAs(err, &invalid, "invocation id %q", id)
 		s.Equal(id, invalid.ID)
@@ -208,11 +208,11 @@ func (s *WriterSuite) TestValidFileIDRefusesAPathSeparator() {
 // A pane name is an id like any other: a caller with no host session still writes.
 func (s *WriterSuite) TestAnInvocationNeedsNoHostSession() {
 	dir := s.T().TempDir()
-	w, err := Open(dir, "pane-left", InvocationStart{Command: "edit"})
+	w, err := Open(s.T().Context(), dir, "pane-left", InvocationStart{Command: "edit"})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "save", Outcome: OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "save", Outcome: OutcomePass}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
@@ -237,7 +237,7 @@ func (s *ReadSuite) TestReadAllSkipsAnOversizedLineAndKeepsReading() {
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Equal(1, fold.Skipped)
 	s.Require().Len(fold.Records, 2)
@@ -251,16 +251,16 @@ func (s *ReadSuite) TestReadAllSkipsAnOversizedLineAndKeepsReading() {
 func (s *ReadSuite) TestFoldSeesEveryWriterInTheStore() {
 	dir := s.T().TempDir()
 
-	left, err := Open(dir, "wt-left", InvocationStart{Workspace: "/repo/a"})
+	left, err := Open(s.T().Context(), dir, "wt-left", InvocationStart{Workspace: "/repo/a"})
 	s.Require().NoError(err)
-	right, err := Open(dir, "wt-right", InvocationStart{Workspace: "/repo/b"})
+	right, err := Open(s.T().Context(), dir, "wt-right", InvocationStart{Workspace: "/repo/b"})
 	s.Require().NoError(err)
 
-	s.Require().NoError(left.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
-	s.Require().NoError(right.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomeFail}))
-	s.Require().NoError(left.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
+	s.Require().NoError(left.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	s.Require().NoError(right.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomeFail}))
+	s.Require().NoError(left.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Equal(2, fold.Invocations)
 	s.Len(fold.Records, 5)
@@ -297,7 +297,7 @@ func (s *ReadSuite) TestFoldOrdersByTimeThenInvocationThenSeq() {
 		{V: APIVersion, Invocation: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
 	})
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 
 	var order []string
@@ -312,9 +312,9 @@ func (s *ReadSuite) TestFoldOrdersByTimeThenInvocationThenSeq() {
 func (s *ReadSuite) TestReadAllToleratesACorruptTail() {
 	dir := s.T().TempDir()
 
-	w, err := Open(dir, "sess1", InvocationStart{})
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 
 	path := filepath.Join(dir, "sess1.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
@@ -323,7 +323,7 @@ func (s *ReadSuite) TestReadAllToleratesACorruptTail() {
 	s.Require().NoError(err)
 	s.Require().NoError(f.Close())
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err, "a half-written line must never fail the read")
 	s.Len(fold.Records, 2)
 	s.Equal(1, fold.Skipped)
@@ -346,7 +346,7 @@ func (s *ReadSuite) TestReadAllCountsEveryUnusableLine() {
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Len(fold.Records, 1)
 	s.Equal(3, fold.Skipped)
@@ -364,7 +364,7 @@ func (s *ReadSuite) TestUnknownKindsAndFieldsAreIgnoredNotRejected() {
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Len(fold.Records, 3)
 	s.Zero(fold.Skipped, "an unknown kind is not damage")
@@ -387,7 +387,7 @@ func (s *ReadSuite) TestSummarizeOrdersMostRecentFirst() {
 	writeRaw(&s.Suite, dir, "new", []Record{{V: APIVersion, Invocation: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
 	writeRaw(&s.Suite, dir, "mid", []Record{{V: APIVersion, Invocation: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 
 	var ids []string
@@ -402,11 +402,11 @@ func (s *ReadSuite) TestSummarizeOrdersMostRecentFirst() {
 func (s *ReadSuite) TestLeaseSurvivesTheStoreOnBothPayloads() {
 	dir := s.T().TempDir()
 
-	w, err := Open(dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
+	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Lease: "fleet/f3"}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Lease: "fleet/f3"}))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(fold.Records, 2)
 
@@ -439,12 +439,12 @@ func (s *ReadSuite) TestTraceContextSurvivesTheStoreAndSummarizes() {
 		Spawner:      "claude code",
 	}
 	for id, start := range map[string]InvocationStart{"sess1": parent, "sess2": child} {
-		w, err := Open(dir, id, start)
+		w, err := Open(s.T().Context(), dir, id, start)
 		s.Require().NoError(err)
-		s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+		s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 	}
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	byID := make(map[string]Summary)
 	for _, sum := range Summarize(fold) {
@@ -469,7 +469,7 @@ func (s *ReadSuite) TestAnInvocationWrittenWithoutALeaseStillReads() {
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Zero(fold.Skipped)
 
@@ -481,7 +481,7 @@ func (s *ReadSuite) TestAnInvocationWrittenWithoutALeaseStillReads() {
 }
 
 func (s *ReadSuite) TestReadAllMissingStoreIsEmptyNotAnError() {
-	fold, err := ReadAll(filepath.Join(s.T().TempDir(), "never-created"))
+	fold, err := ReadAll(s.T().Context(), filepath.Join(s.T().TempDir(), "never-created"))
 	s.Require().NoError(err, "nothing has run yet is not a failure")
 	s.Empty(fold.Records)
 	s.Zero(fold.Invocations)
@@ -492,10 +492,10 @@ func (s *ReadSuite) TestReadInvocationReadsOneFile() {
 	writeRaw(&s.Suite, dir, "a", []Record{{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindTargetResult, Ts: 1}})
 	writeRaw(&s.Suite, dir, "b", []Record{{V: APIVersion, Invocation: "b", Seq: 1, Kind: KindTargetResult, Ts: 2}})
 
-	got, err := ReadInvocation(dir, "a")
+	got, err := ReadInvocation(s.T().Context(), dir, "a")
 	s.Require().NoError(err)
 	s.Equal([]Record{{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindTargetResult, Ts: 1}}, got)
-	got, err = ReadInvocation(dir, "absent")
+	got, err = ReadInvocation(s.T().Context(), dir, "absent")
 	s.Require().NoError(err)
 	s.Empty(got)
 }
@@ -504,7 +504,7 @@ func (s *ReadSuite) TestReadInvocationReadsOneFile() {
 func (s *ReadSuite) TestReadInvocationRefusesAnEscapingID() {
 	dir := s.T().TempDir()
 	for _, id := range []string{"", "../a", "a/b", "."} {
-		_, err := ReadInvocation(dir, id)
+		_, err := ReadInvocation(s.T().Context(), dir, id)
 		var invalid *InvalidIDError
 		s.Require().ErrorAs(err, &invalid, "invocation id %q", id)
 	}
@@ -524,7 +524,7 @@ func (s *PreFoldRecordSuite) SetupTest() {
 		`{"v":1,"session":"old","seq":1,"kind":"invocation_start","ts":5}`,
 	}, "\n")
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "sess1.jsonl"), []byte(body+"\n"), 0o644))
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.fold = fold
 }
@@ -562,7 +562,7 @@ func (s *LoadSuite) TestLoadEventsDedupsOnHostSessionRef() {
 	s.Equal(LoadResult{Deduped: 3, ByKind: map[string]int{}}, second,
 		"a dedup run reports no kinds: the breakdown counts what was written")
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Len(AgentEvents(fold, "s1"), 2)
 	s.Len(AgentEvents(fold, "s2"), 1)
@@ -582,7 +582,7 @@ func (s *LoadSuite) TestALoadThatAddsHintIDsIsFoldedIntoOneEvent() {
 	s.Require().NoError(err)
 	s.Equal(1, got.Loaded, "the ids are new, so the event is appended again")
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	events := AgentEvents(fold, "s1")
 	s.Require().Len(events, 1)
@@ -596,7 +596,7 @@ func (s *LoadSuite) TestLoadEventsRecordsTheHostOnTheInvocationStart() {
 	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{Workspace: "/tmp/ws"})
 	s.Require().NoError(err)
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
@@ -627,7 +627,7 @@ func (s *LoadSuite) TestSummarizeReadsTheNewestModelAndHostVersionPair() {
 	}, InvocationStart{})
 	s.Require().NoError(err)
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
@@ -654,7 +654,7 @@ func (s *LoadSuite) TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne() {
 	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
 	s.Require().NoError(err)
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
@@ -671,13 +671,13 @@ func (s *LoadSuite) TestNewestEventMsReadsTheHostTimestamp() {
 	}, InvocationStart{})
 	s.Require().NoError(err)
 
-	fold, err := ReadAll(dir)
+	fold, err := ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Equal(int64(900), NewestEventMs(fold))
 }
 
 func (s *LoadSuite) TestNewestEventMsIsZeroWithoutALoad() {
-	fold, err := ReadAll(s.T().TempDir())
+	fold, err := ReadAll(s.T().Context(), s.T().TempDir())
 	s.Require().NoError(err)
 	s.Zero(NewestEventMs(fold))
 }

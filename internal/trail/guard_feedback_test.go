@@ -18,7 +18,7 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	base := t.TempDir()
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 
-	feedback, err := RecentGuardFeedback(base, "", 100)
+	feedback, err := RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	assert.Equal(t, GuardFeedback{
@@ -37,7 +37,7 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 		Host: "claude-code", Session: "one", Tool: "shell.command", Command: "magus run test .", Decision: "pass",
 	})
 
-	feedback, err = RecentGuardFeedback(base, "one", 100)
+	feedback, err = RecentGuardFeedback(t.Context(), base, "one", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	assert.Equal(t, GuardFeedback{
@@ -57,7 +57,7 @@ func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t
 	recordFeedbackCommand(t, base, "codex", "first", "go test ./...")
 	recordFeedbackCommand(t, base, "codex", "second", "go test ./...")
 
-	feedback, err := RecentGuardFeedback(base, "", 100)
+	feedback, err := RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	// FollowedSessions stays zero: the hook observes requests, never target completion.
@@ -78,13 +78,13 @@ func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
 	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
 	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
 
-	feedback, err := RecentGuardFeedback(base, "", 100)
+	feedback, err := RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	assert.Empty(t, feedback, "a probe nobody wired is not evidence that a host integration should change")
 
 	recordFeedbackCommand(t, base, "cursor", "real", "go test ./...")
 
-	feedback, err = RecentGuardFeedback(base, "", 100)
+	feedback, err = RecentGuardFeedback(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	// The host-less denials must not inflate the count.
@@ -114,7 +114,7 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 	deny("wave/b", "focus-read", "deny")
 	deny("wave/a", "raw-tool", "deny")
 
-	got, known, err := LeaseDenials(base, "wave/a", 0, 64)
+	got, known, err := LeaseDenials(t.Context(), base, "wave/a", 0, 64)
 	require.NoError(t, err)
 	assert.True(t, known, "a trail inside the retained window is read whole")
 	require.Len(t, got, 2)
@@ -124,12 +124,12 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 	assert.Equal(t, wantFirst, got[0])
 	assert.Positive(t, got[0].Ts)
 
-	newest, _, err := LeaseDenials(base, "wave/a", 0, 1)
+	newest, _, err := LeaseDenials(t.Context(), base, "wave/a", 0, 1)
 	require.NoError(t, err)
 	require.Len(t, newest, 1)
 	assert.Equal(t, "raw-tool", newest[0].Rule, "the cap keeps the newest")
 
-	later, known, err := LeaseDenials(base, "wave/a", got[1].Ts+3600, 64)
+	later, known, err := LeaseDenials(t.Context(), base, "wave/a", got[1].Ts+3600, 64)
 	require.NoError(t, err)
 	assert.Empty(t, later)
 	assert.True(t, known, "nothing since then is none, not unknown, while the trail is whole")
@@ -147,7 +147,7 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 	body := strings.Repeat(string(line)+"\n", maxEvents)
 	require.NoError(t, os.WriteFile(eventsPath(base), []byte(body), 0o644))
 
-	got, known, err := LeaseDenials(base, "wave/a", 1, 64)
+	got, known, err := LeaseDenials(t.Context(), base, "wave/a", 1, 64)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	assert.False(t, known)

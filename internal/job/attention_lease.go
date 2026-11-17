@@ -66,7 +66,7 @@ func FileAttention(ctx context.Context, root string, ev types.Event, origin job.
 		Files:     sessions.AttentionFiles(ev.Where),
 		Message:   ev.Message,
 	}
-	_, opened, err := sessions.OpenRequest(dir, ev.Source.ID, open, session.InvocationStart{
+	_, opened, err := sessions.OpenRequest(ctx, dir, ev.Source.ID, open, session.InvocationStart{
 		Origin:    origin,
 		Workspace: root,
 		Version:   version,

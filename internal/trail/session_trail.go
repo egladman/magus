@@ -1,6 +1,7 @@
 package trail
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -12,8 +13,8 @@ const sessionTrailEvents = 5000
 
 // SessionTrailHere folds the trail under cacheDir for the session, or nil when it holds
 // nothing: no trail, or a session that ran elsewhere, reads the same.
-func SessionTrailHere(cacheDir, session string) *SessionTrail {
-	tr := ForSession(cacheDir, session, sessionTrailEvents)
+func SessionTrailHere(ctx context.Context, cacheDir, session string) *SessionTrail {
+	tr := ForSession(ctx, cacheDir, session, sessionTrailEvents)
 	if tr.Commands == 0 && len(tr.Spawns) == 0 {
 		return nil
 	}

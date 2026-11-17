@@ -159,7 +159,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	// The first use is recorded, and the record holds no secret.
 	var events []trail.Event
 	require.Eventually(t, func() bool {
-		events, _ = trail.ReadRecent(trailDir, 10)
+		events, _ = trail.ReadRecent(t.Context(), trailDir, 10)
 		return len(events) > 0
 	}, 5*time.Second, 20*time.Millisecond)
 	require.NoError(t, filepath.WalkDir(trailDir, func(path string, d os.DirEntry, err error) error {
@@ -586,7 +586,7 @@ func waitTrailCount(t *testing.T, dir string, want int) []trail.Event {
 	var events []trail.Event
 	for time.Now().Before(deadline) {
 		var err error
-		events, err = trail.ReadRecent(dir, 10)
+		events, err = trail.ReadRecent(t.Context(), dir, 10)
 		if err != nil {
 			t.Fatalf("ReadRecent: %v", err)
 		}

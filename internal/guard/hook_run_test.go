@@ -258,7 +258,7 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), io.Discard, []string{"-o", "name"}))
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	phases := events[0].Phases
@@ -304,7 +304,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -329,7 +329,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "-o", "name"}))
 	assert.Equal(t, "advise\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -343,7 +343,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	out.Reset()
 	require.NoError(t, hookStdin(emptyCtx, strings.NewReader(""), &out, nil))
 	assert.Equal(t, "pass\n", out.String())
-	events, err = trailtypes.ReadRecent(emptyDir, 1)
+	events, err = trailtypes.ReadRecent(ctx, emptyDir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
@@ -362,7 +362,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		[]string{"--agent-name", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -405,7 +405,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &out, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -431,7 +431,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--observe", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -460,7 +460,7 @@ func TestHookCmd_ObserveOutranksPath(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "--observe", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "file.read", events[0].Action)
@@ -478,7 +478,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -503,7 +503,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -527,7 +527,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader(""), &out, []string{"--observe", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events)
 }
@@ -558,7 +558,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -598,7 +598,7 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 		&out, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trailtypes.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// No marker, so the spawn is uncorrelated: no lease.
@@ -1373,7 +1373,7 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 
-	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	calls := trail.ForSession(ctx, cacheDir, "s1", 10).Calls
 	require.Len(t, calls, 1)
 	calls[0].At = time.Time{}
 	assert.Equal(t, trail.SessionCall{
@@ -1394,7 +1394,7 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	require.NoError(t, codec.Unmarshal(out.Bytes(), &v), out.String())
 	assert.Equal(t, "pass", v.Decision)
 
-	events, err := trailtypes.ReadRecent(cacheDir, 1)
+	events, err := trailtypes.ReadRecent(ctx, cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]

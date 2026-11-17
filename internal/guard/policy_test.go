@@ -205,7 +205,7 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	calls := trail.ForSession(t.Context(), cacheDir, "s1", 10).Calls
 	require.Len(t, calls, 1)
 	got := calls[0]
 	got.At = time.Time{}
@@ -220,7 +220,7 @@ func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	calls := trail.ForSession(t.Context(), cacheDir, "s1", 10).Calls
 	require.Len(t, calls, 2)
 	assert.Equal(t, []string{"call", "result"}, calls[0].Unobserved)
 	assert.Equal(t, []string{"result"}, calls[1].Unobserved)

@@ -605,7 +605,7 @@ func TestWorktreeRemoveLeavesPruneAndHelpAlone(t *testing.T) {
 	r := newWorktreeRepository(t)
 	for _, command := range []string{"git worktree prune", "git worktree list", "git worktree remove --help", "git worktree remove -h", "git help worktree remove"} {
 		assert.Equal(t, ShellVerdict{}, r.judge(command), "%q", command)
-		assert.Empty(t, Evaluate(testDependencies(), command).Deny, "%q", command)
+		assert.Empty(t, Evaluate(t.Context(), testDependencies(), command).Deny, "%q", command)
 	}
 	wt := r.add("gone")
 	require.NoError(t, os.RemoveAll(wt))

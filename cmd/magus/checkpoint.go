@@ -97,7 +97,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 	}
 	origin := trail.LocalOrigin(ctx)
 	origin.Host, origin.Session = c.Host, c.HostSession
-	stored, recorded, err := sessions.RecordCheckpoint(dir, c, session.InvocationStart{
+	stored, recorded, err := sessions.RecordCheckpoint(ctx, dir, c, session.InvocationStart{
 		Origin:    origin,
 		Workspace: wsRoot,
 		Version:   version,

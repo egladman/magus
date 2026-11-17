@@ -73,7 +73,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 
 	// The redeem is audited, naming the code it spent and the token it minted, never either
 	// secret.
-	events, err := trailtypes.ReadRecent(trailDir, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), trailDir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "link.redeem", events[0].Action)

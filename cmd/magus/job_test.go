@@ -508,9 +508,9 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			w, err := session.Open(dir, "invmv00001", session.InvocationStart{Command: "run"})
+			w, err := session.Open(t.Context(), dir, "invmv00001", session.InvocationStart{Command: "run"})
 			require.NoError(t, err)
-			require.NoError(t, w.Append(session.KindTargetResult, session.TargetResult{
+			require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{
 				Target: "test", Project: ".", Outcome: session.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
 			}))
 

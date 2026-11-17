@@ -39,15 +39,15 @@ func TestMessageBound(t *testing.T) { suite.Run(t, new(MessageBoundSuite)) }
 func (s *MessageBoundSuite) TestAppendBoundsAnOversizedAttentionMessage() {
 	dir := s.T().TempDir()
 
-	w, err := session.Open(dir, "sess1", session.InvocationStart{})
+	w, err := session.Open(s.T().Context(), dir, "sess1", session.InvocationStart{})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindAttentionOpen, AttentionOpen{
+	s.Require().NoError(w.Append(s.T().Context(), KindAttentionOpen, AttentionOpen{
 		Request: "att-1",
 		Outcome: "waiting",
 		Message: strings.Repeat("x", MaxMessageBytes*4),
 	}))
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Require().Len(fold.Records, 2)
 
@@ -85,7 +85,7 @@ func (s *MessageBoundSuite) TestOversizedOpenDoesNotHideALaterOne() {
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(s.T().Context(), dir)
 	s.Require().NoError(err)
 	s.Equal(1, fold.Skipped)
 

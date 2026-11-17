@@ -71,7 +71,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	summaries := session.Summarize(fold)
@@ -119,7 +119,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
@@ -147,7 +147,7 @@ func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
@@ -198,7 +198,7 @@ func TestFactHandlerWithAttrsCarriesAttrsIntoTheSameStore(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
@@ -221,7 +221,7 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records, "a run that produced no target result leaves no session")
 }
@@ -247,7 +247,7 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 
 	dir, err := Dir(main)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	summaries := session.Summarize(fold)
@@ -301,7 +301,7 @@ func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 
 	summaries := session.Summarize(fold)

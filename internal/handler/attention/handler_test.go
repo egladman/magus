@@ -40,7 +40,7 @@ func plantStore(t *testing.T) (root, dir string) {
 // records written exactly the way `magus session notify` writes them.
 func raise(t *testing.T, dir, agentSession, message string) string {
 	t.Helper()
-	id, opened, err := sessions.OpenRequest(dir, agentSession, sessions.AttentionOpen{
+	id, opened, err := sessions.OpenRequest(t.Context(), dir, agentSession, sessions.AttentionOpen{
 		Outcome: "waiting",
 		Source:  "claude/Notification",
 		Where:   "/repo",
@@ -173,7 +173,7 @@ func TestAttentionHandler_DisposeStampsTheConsoleAsTheDisposer(t *testing.T) {
 		t.Fatalf("want 200, got %d; body %s", w.Code, w.Body.String())
 	}
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("re-read store: %v", err)
 	}

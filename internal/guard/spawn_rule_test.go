@@ -569,7 +569,7 @@ func TestSpawnRuleSeesTheCheckoutItWasJudgedIn(t *testing.T) {
 // lineage assertion reads left-to-right as it happened.
 func trailEvents(t *testing.T, base string, kind trailtypes.Kind) []trailtypes.Event {
 	t.Helper()
-	all, err := trailtypes.ReadRecent(base, 1000)
+	all, err := trailtypes.ReadRecent(t.Context(), base, 1000)
 	require.NoError(t, err)
 	var out []trailtypes.Event
 	for i := len(all) - 1; i >= 0; i-- {

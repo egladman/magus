@@ -63,12 +63,12 @@ type Tie struct {
 //
 // Every error is dropped, a failed prune included: Open cannot fail over housekeeping,
 // and the next interval prunes again.
-func claimStalePruneStamp(dir, stamp, keep string, o options) {
-	_ = codec.WithLock(context.Background(), stamp+".lock", 0, func() error {
+func claimStalePruneStamp(ctx context.Context, dir, stamp, keep string, o options) {
+	_ = codec.WithLock(ctx, stamp+".lock", 0, func() error {
 		if fi, err := os.Stat(stamp); err == nil && o.now().Sub(fi.ModTime()) < pruneInterval {
 			return nil // another caller already pruned and refreshed the stamp while this one waited
 		}
-		_ = prune(dir, DefaultRetention, defaultMaxFiles, keep, o)
+		_ = prune(ctx, dir, DefaultRetention, defaultMaxFiles, keep, o)
 		now := o.now()
 		if os.Chtimes(stamp, now, now) != nil {
 			_ = os.WriteFile(stamp, nil, 0o644)
@@ -115,15 +115,17 @@ func claimStalePruneStamp(dir, stamp, keep string, o options) {
 // Rule 2 keeps a file alive while a younger sibling shares one of its groups, which
 // delays that file rather than pinning it: the sibling ages out too, and then both go.
 // Rule 1 does pin, for as long as the Tie holds the group, which is the intended trade.
-func Prune(dir string, retain time.Duration, opts ...Option) error {
-	return prune(dir, retain, defaultMaxFiles, "", newOptions(opts))
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func Prune(ctx context.Context, dir string, retain time.Duration, opts ...Option) error {
+	return prune(ctx, dir, retain, defaultMaxFiles, "", newOptions(opts))
 }
 
 // prune is [Prune] with the caller's own invocation file held back. Open passes its
 // invocation file so a writer can never delete the file it is about to append to,
 // whatever the clock or a reused invocation id says. maxFiles of zero or less leaves the
 // count uncapped.
-func prune(dir string, retain time.Duration, maxFiles int, keep string, o options) error {
+func prune(ctx context.Context, dir string, retain time.Duration, maxFiles int, keep string, o options) error {
 	if retain <= 0 {
 		return nil
 	}
@@ -176,6 +178,9 @@ func prune(dir string, retain time.Duration, maxFiles int, keep string, o option
 	newest := make(map[string]int64)
 	holdsAgentEvents := make(map[string]bool)
 	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		path := filepath.Join(dir, name)
 		records, _, legacy, vanished := readFile(path)
 		if vanished {
@@ -244,6 +249,9 @@ func prune(dir string, retain time.Duration, maxFiles int, keep string, o option
 
 	var errs []error
 	for name := range candidates {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(append(errs, err)...)
+		}
 		path := filepath.Join(dir, name)
 		// An invocation idle past the window can still wake up and append. Re-stat so a
 		// file that grew after the fold was read survives: the decision to delete it

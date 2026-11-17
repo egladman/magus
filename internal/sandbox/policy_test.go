@@ -260,7 +260,7 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	require.Error(t, policy.CheckWrite(ctx, "/definitely/not/allowed/f"))
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(allowed, "f")), "an allow leaves no event")
 
-	events, err := trailtypes.ReadRecent(base, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.NotEmpty(t, events[0].Error)
@@ -283,7 +283,7 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 
 	require.Error(t, policy.CheckExec(ctx, "/definitely/not/allowed/f"))
 
-	events, err := trailtypes.ReadRecent(base, 10)
+	events, err := trailtypes.ReadRecent(t.Context(), base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, trailtypes.Event{

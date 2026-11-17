@@ -2,6 +2,7 @@ package trail
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"iter"
 	"slices"
@@ -39,8 +40,8 @@ func (f GuardFeedback) NeedsReview() bool {
 // not write a second journal: agent-command activity is the source of truth,
 // and a derived view avoids divergence between what the guard saw and what a
 // later report reads.
-func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, error) {
-	events, err := trailtypes.ReadRecent(base, limit)
+func RecentGuardFeedback(ctx context.Context, base, session string, limit int) ([]GuardFeedback, error) {
+	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil || len(events) == 0 {
 		return nil, err
 	}
@@ -126,11 +127,11 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 // retained trail reaches back to since, so an empty result means none rather than unknown:
 // the whole trail fits the retained window, or it holds an agent command at or before since.
 // A missing trail is an empty one; an empty base or lease has no trail to read.
-func LeaseDenials(base, lease string, since int64, limit int) ([]job.Denial, bool, error) {
+func LeaseDenials(ctx context.Context, base, lease string, since int64, limit int) ([]job.Denial, bool, error) {
 	if base == "" || lease == "" || limit <= 0 {
 		return nil, false, nil
 	}
-	events, err := trailtypes.ReadRecent(base, maxEvents)
+	events, err := trailtypes.ReadRecent(ctx, base, maxEvents)
 	if err != nil {
 		return nil, false, err
 	}

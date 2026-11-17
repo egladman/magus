@@ -104,7 +104,7 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 	catalog := make(map[string]bool, len(all))
 	for _, j := range all {
 		catalog[j.Name] = true
-		out = append(out, s.job(j, running, byID[j.Name], tries.Result(j.Name)))
+		out = append(out, s.job(ctx, j, running, byID[j.Name], tries.Result(j.Name)))
 	}
 	for _, row := range list.Jobs {
 		if !catalog[row.ID] {
@@ -239,7 +239,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	info := s.job(j, running, s.row(j.Name), s.result(j.Name))
+	info := s.job(ctx, j, running, s.row(j.Name), s.result(j.Name))
 
 	state := jobv1.SubmitState_SUBMIT_STATE_SUBMITTED
 	if inv == "" { // the server coalesced this into an identical in-flight job
@@ -284,7 +284,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 // job assembles a job's descriptor plus its running state, last completed run (from the
 // trail), and the current size of what it maintains. running maps a worker-argv key to the live
 // invocation id, so ListJobs and submit share one status query.
-func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row job.Job, result *job.Result) *jobv1.Job {
+func (s *Service) job(ctx context.Context, j jobstore.CatalogEntry, running map[string]string, row job.Job, result *job.Result) *jobv1.Job {
 	info := &jobv1.Job{
 		Name:        jobsPrefix + j.Name,
 		Id:          j.Name,
@@ -303,7 +303,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row jo
 	// for a job that ran before anything wrote rows, where a run with no id still beats none.
 	if row.LastRun != nil {
 		info.LastRun = storedRun(row.LastRun)
-	} else if ev, ok := trail.LastRun(s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
+	} else if ev, ok := trail.LastRun(ctx, s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
 		info.LastRun = lastRun(ev)
 	}
 	info.Goals = wireGoals(row.Goals)

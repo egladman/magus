@@ -259,7 +259,12 @@ type Writer struct {
 //
 // An id that already has a file is RESUMED rather than restarted: see [Writer.resume].
 // An id [ValidFileID] refuses is an [*InvalidIDError].
-func Open(dir, invocation string, start InvocationStart, opts ...Option) (*Writer, error) {
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func Open(ctx context.Context, dir, invocation string, start InvocationStart, opts ...Option) (*Writer, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !ValidFileID(invocation) {
 		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
 	}
@@ -269,7 +274,7 @@ func Open(dir, invocation string, start InvocationStart, opts ...Option) (*Write
 	o := newOptions(opts)
 	stamp := filepath.Join(dir, pruneStamp)
 	if fi, err := os.Stat(stamp); err != nil || o.now().Sub(fi.ModTime()) >= pruneInterval {
-		claimStalePruneStamp(dir, stamp, invocation+FileExt, o)
+		claimStalePruneStamp(ctx, dir, stamp, invocation+FileExt, o)
 	}
 	w := &Writer{path: filepath.Join(dir, invocation+FileExt), invocation: invocation, now: o.now, start: start}
 	w.resume()
@@ -305,7 +310,12 @@ func (w *Writer) resume() {
 // The first call also writes the start record, so seq 1 is always the start. Errors are
 // returned rather than swallowed, but callers on a run path must not fail a build over
 // one: a store that can break a build is worse than no store.
-func (w *Writer) Append(kind string, payload any) error {
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func (w *Writer) Append(ctx context.Context, kind string, payload any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if b, ok := payload.(Bounder); ok {
 		payload = b.Bound()
 	}
@@ -380,7 +390,9 @@ type Fold struct {
 // process cannot make the whole history unreadable. A file listed by the directory but
 // gone by the time it is opened was pruned by another process mid-fold; it counts as
 // neither an invocation nor damage. Only an unreadable DIRECTORY is an error.
-func ReadAll(dir string) (Fold, error) {
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func ReadAll(ctx context.Context, dir string) (Fold, error) {
 	var fold Fold
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -390,6 +402,9 @@ func ReadAll(dir string) (Fold, error) {
 		return fold, &StoreError{Op: "read store", Path: dir, Err: err}
 	}
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return Fold{}, err
+		}
 		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
 			continue
 		}
@@ -410,7 +425,12 @@ func ReadAll(dir string) (Fold, error) {
 // when it has no file. It reads that file alone: a caller that knows which invocation
 // holds its answer need not fold the store. An id [ValidFileID] refuses, which could name
 // a file outside dir, is an [*InvalidIDError] before anything is opened.
-func ReadInvocation(dir, invocation string) ([]Record, error) {
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func ReadInvocation(ctx context.Context, dir, invocation string) ([]Record, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !ValidFileID(invocation) {
 		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
 	}
@@ -756,15 +776,15 @@ func LoadEvents(ctx context.Context, dir string, events []LoadEvent, start Invoc
 	var result LoadResult
 	err := codec.WithLock(ctx, filepath.Join(dir, loadLockName), loadLockTimeout, func() error {
 		var err error
-		result, err = loadEvents(dir, events, start, opts)
+		result, err = loadEvents(ctx, dir, events, start, opts)
 		return err
 	})
 	return result, err
 }
 
 // loadEvents is LoadEvents' body, run under the store's load lock.
-func loadEvents(dir string, events []LoadEvent, start InvocationStart, opts []Option) (LoadResult, error) {
-	fold, err := ReadAll(dir)
+func loadEvents(ctx context.Context, dir string, events []LoadEvent, start InvocationStart, opts []Option) (LoadResult, error) {
+	fold, err := ReadAll(ctx, dir)
 	if err != nil {
 		return LoadResult{}, err
 	}
@@ -782,12 +802,12 @@ func loadEvents(dir string, events []LoadEvent, start InvocationStart, opts []Op
 		if w == nil {
 			loadStart := start
 			loadStart.Host, loadStart.Session = ev.Event.Host, ev.Session
-			if w, err = Open(dir, ev.Session, loadStart, opts...); err != nil {
+			if w, err = Open(ctx, dir, ev.Session, loadStart, opts...); err != nil {
 				return result, err
 			}
 			writers[ev.Session] = w
 		}
-		if err := w.Append(KindAgentEvent, ev.Event); err != nil {
+		if err := w.Append(ctx, KindAgentEvent, ev.Event); err != nil {
 			return result, err
 		}
 		seen[key] = ev.Event

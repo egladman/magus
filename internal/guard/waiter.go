@@ -444,7 +444,7 @@ func waitBound(target string, took time.Duration, measured bool, ceiling time.Du
 // lastRunHere is the newest real run of r's target in root's session store,
 // the longest over several projects. One project with no run leaves the line
 // unmeasured. So does `affected`: no one project's run prices the diff's set.
-func lastRunHere(root string, r targetRun) (time.Duration, bool) {
+func lastRunHere(ctx context.Context, root string, r targetRun) (time.Duration, bool) {
 	if root == "" || r.verb != "run" {
 		return 0, false
 	}
@@ -458,7 +458,7 @@ func lastRunHere(root string, r targetRun) (time.Duration, bool) {
 	}
 	var last time.Duration
 	for _, p := range projects {
-		d, ok := sessions.LastRunDuration(dir, p, r.target)
+		d, ok := sessions.LastRunDuration(ctx, dir, p, r.target)
 		if !ok {
 			return 0, false
 		}
@@ -501,12 +501,12 @@ func waitedRun(command string, d Dialect) ([]string, targetRun, bool) {
 
 // waitRemedy backgrounds a waiting line's target run under job exec. A line
 // waitedRun declines gets an empty lead, which withRemedy reads as no remedy.
-func waitRemedy(deps Dependencies, rule denyRuleName, command string, d Dialect) (string, types.NextStep) {
+func waitRemedy(ctx context.Context, deps Dependencies, rule denyRuleName, command string, d Dialect) (string, types.NextStep) {
 	run, r, ok := waitedRun(command, d)
 	if !ok {
 		return "", types.NextStep{}
 	}
-	took, measured := lastRunHere(deps.scope.root, r)
+	took, measured := lastRunHere(ctx, deps.scope.root, r)
 	bound, note := waitBound(r.target, took, measured, configuredBackgroundLimits(deps).ceiling)
 	argv := boundedRunArgv(run[0], formatLimit(bound), run)
 	next := hint.NextForDenyRemedy(string(rule), argv,

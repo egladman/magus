@@ -177,7 +177,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		t.Errorf("stdout carried a line nobody asked for: %q", lines.Text())
 	}
 
-	events, err := trailtypes.ReadRecent(m.CacheDir(), 10)
+	events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]

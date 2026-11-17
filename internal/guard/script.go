@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -46,7 +47,7 @@ const (
 // denyScriptContent refuses a line that runs a script whose content would be refused
 // typed inline. callDir resolves a relative script path; with none, only an absolute one
 // is read.
-func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) ShellVerdict {
+func denyScriptContent(ctx context.Context, deps Dependencies, callDir, command string, d Dialect) ShellVerdict {
 	var held ShellVerdict
 	for _, run := range scriptRuns(command, d) {
 		file := run.path
@@ -64,7 +65,7 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 		if lang == scriptNone {
 			lang = detectScriptLang(file, body)
 		}
-		v := judged(judgeScript(deps, lang, body), run.path, fmt.Sprintf("\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed inline.", run.path))
+		v := judged(judgeScript(ctx, deps, lang, body), run.path, fmt.Sprintf("\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed inline.", run.path))
 		if _, inside := workspaceRelative(deps.scope.root, file); v.Deny == "" && lang == scriptBuzz && !inside {
 			if computed, ok := computedSpawnVerdict(deps, body); ok {
 				v = judged(computed, run.path, fmt.Sprintf("\nJudged from the content of %s, which lies outside the workspace.", run.path))
@@ -89,7 +90,7 @@ func rankScriptContent(v, script ShellVerdict) ShellVerdict {
 // denyScriptWrite refuses a write that leaves a script refused typed inline, when the
 // write is what introduced the refusal: editing a script that already carried one, for
 // any other reason, is not blocked on a line it did not touch.
-func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict {
+func denyScriptWrite(ctx context.Context, deps Dependencies, file string, w writeFields) ShellVerdict {
 	file = strings.TrimSpace(file)
 	// Every write passes through here, so a file whose extension names another language
 	// is not read at all; only an extensionless one needs its shebang. A .buzz file is as
@@ -108,8 +109,8 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 		after = strings.Replace(before, w.OldText, w.NewText, 1)
 	}
 	lang = detectScriptLang(file, after)
-	v := judgeScript(deps, lang, after)
-	if v.Deny == "" && !v.demoted || judgeScript(deps, lang, before).advisoryName() == v.advisoryName() {
+	v := judgeScript(ctx, deps, lang, after)
+	if v.Deny == "" && !v.demoted || judgeScript(ctx, deps, lang, before).advisoryName() == v.advisoryName() {
 		return ShellVerdict{}
 	}
 	return judged(v, file, fmt.Sprintf("\nJudged from what this write leaves in %s: a script gets the verdict its lines would get typed inline.", file))
@@ -117,10 +118,10 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 
 // judgeScript is the inline verdict for a script's content, kept only when it is one of
 // the rules a script answers to.
-func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
+func judgeScript(ctx context.Context, deps Dependencies, lang scriptLang, body string) ShellVerdict {
 	switch lang {
 	case scriptShell:
-		v := evaluateRules(deps, body, DialectBash)
+		v := evaluateRules(ctx, deps, body, DialectBash)
 		if (v.Deny != "" || v.demoted) && slices.Contains(scriptJudgedRules, denyRuleName(v.advisoryName())) {
 			return v
 		}
@@ -138,7 +139,7 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 			})
 		}
 		var held heldAdvice
-		if v, ok := buzzProgramSpawnVerdict(deps, &held, body); ok {
+		if v, ok := buzzProgramSpawnVerdict(ctx, deps, &held, body); ok {
 			return v
 		}
 		return held.v

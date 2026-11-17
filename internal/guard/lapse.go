@@ -47,7 +47,7 @@ func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Requ
 	case env.IsContinue || input == "":
 		return ShellVerdict{}
 	}
-	if v := Evaluate(deps, input); v.Deny != "" {
+	if v := Evaluate(ctx, deps, input); v.Deny != "" {
 		return v
 	}
 	dialect := effectiveDialect(deps.ShellDialect)

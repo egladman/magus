@@ -243,7 +243,7 @@ func TestWholeTreeStoresTheBackendsScratchCheckout(t *testing.T) {
 		"jj abandon":       "a throwaway clone",
 		"git reset --hard": "a throwaway `git worktree add`",
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(t.Context(), strict(testDependencies()), command)
 		require.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
 		cacheDir := t.TempDir()
 		shown, _, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), v.RuleName(), v.Deny, v.Why, "", nil, false)

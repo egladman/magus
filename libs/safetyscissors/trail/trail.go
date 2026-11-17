@@ -15,6 +15,7 @@ package trail
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -200,7 +201,12 @@ func (e *InvalidReadError) Error() string {
 // first. A missing or empty trail yields an empty slice and no error; an empty dir or a
 // limit below 1 is an [*InvalidReadError]. A corrupt line is skipped, not fatal. Memory
 // is O(limit) however long the file is.
-func ReadRecent(dir string, limit int) ([]Event, error) {
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func ReadRecent(ctx context.Context, dir string, limit int) ([]Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if dir == "" || limit <= 0 {
 		return nil, &InvalidReadError{Dir: dir, Limit: limit}
 	}
@@ -219,6 +225,9 @@ func ReadRecent(dir string, limit int) ([]Event, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // ref lines stay small; allow headroom
 	for sc.Scan() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		line := sc.Text()
 		if line == "" {
 			continue

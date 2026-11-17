@@ -35,7 +35,7 @@ func NewRejudge(ctx context.Context, root string, loadRules func(ctx context.Con
 	})
 	return func(text string) (program, verdict, rule string) {
 		program = commandProgram(text)
-		v := Evaluate(deps(), text)
+		v := Evaluate(ctx, deps(), text)
 		switch {
 		case v.Deny != "":
 			return program, session.VerdictDeny, v.RuleName()

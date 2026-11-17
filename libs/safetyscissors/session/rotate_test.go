@@ -113,7 +113,7 @@ func (s *PruneSuite) stored() []string {
 }
 
 func (s *PruneSuite) read() Fold {
-	fold, err := ReadAll(s.dir)
+	fold, err := ReadAll(s.T().Context(), s.dir)
 	s.Require().NoError(err)
 	return fold
 }
@@ -122,7 +122,7 @@ func (s *PruneSuite) TestDeletesAnInvocationWhoseNewestFactAgedOut() {
 	s.writeAged("stale", 40*24*time.Hour, []Record{s.result("stale", 1, 40*24*time.Hour)})
 	s.writeAged("fresh", time.Hour, []Record{s.result("fresh", 1, time.Hour)})
 
-	s.Require().NoError(Prune(s.dir, retention))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention))
 
 	s.Equal([]string{"fresh"}, s.stored())
 	s.Len(s.read().Records, 1)
@@ -137,7 +137,7 @@ func (s *PruneSuite) TestKeepsEveryFactInAFileItSpares() {
 		s.result("long-lived", 3, time.Hour),
 	})
 
-	s.Require().NoError(Prune(s.dir, retention))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention))
 
 	s.Equal([]string{"long-lived"}, s.stored(), "the newest record is inside the window, so the file is not old")
 	s.Len(s.read().Records, 3, "a spared file is spared whole")
@@ -147,7 +147,7 @@ func (s *PruneSuite) TestKeepsEveryFactInAFileItSpares() {
 func (s *PruneSuite) TestDecidesOnRecordsNotOnTheFilesystemClock() {
 	s.writeAged("misdated", 200*24*time.Hour, []Record{s.result("misdated", 1, time.Hour)})
 
-	s.Require().NoError(Prune(s.dir, retention))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention))
 
 	s.Equal([]string{"misdated"}, s.stored())
 }
@@ -156,7 +156,7 @@ func (s *PruneSuite) TestDecidesOnRecordsNotOnTheFilesystemClock() {
 func (s *PruneSuite) TestAgesByTheCallersClock() {
 	s.writeAged("recent", time.Hour, []Record{s.result("recent", 1, time.Hour)})
 
-	s.Require().NoError(Prune(s.dir, retention, WithClock(func() time.Time { return time.Now().Add(60 * 24 * time.Hour) })))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention, WithClock(func() time.Time { return time.Now().Add(60 * 24 * time.Hour) })))
 
 	s.Empty(s.stored(), "sixty days on, an hour-old fact is past a thirty-day window")
 }
@@ -167,7 +167,7 @@ func (s *PruneSuite) TestExemptsAFileHoldingAHeldGroup() {
 	s.writeAged("blocked", age, []Record{s.record("blocked", 1, msAgo(age), kindHeld, grouped{Group: "g1"})})
 	s.writeAged("quiet", age, []Record{s.result("quiet", 1, age)})
 
-	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention, WithTie(testTie())))
 
 	s.Equal([]string{"blocked"}, s.stored(), "the exemption covers the held file only; its neighbor ages out normally")
 }
@@ -180,7 +180,7 @@ func (s *PruneSuite) TestKeepsAnOldHalfWhileItsGroupHasAYoungOne() {
 	})
 	s.writeAged("answer", 199*24*time.Hour, []Record{s.record("answer", 1, msAgo(199*24*time.Hour), kindTied, grouped{Group: "g1"})})
 
-	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention, WithTie(testTie())))
 
 	s.Equal([]string{"answer", "asker"}, s.stored())
 }
@@ -190,7 +190,7 @@ func (s *PruneSuite) TestWithoutATieTheOldHalfGoes() {
 	s.writeAged("asker", time.Hour, []Record{s.record("asker", 1, msAgo(time.Hour), kindTied, grouped{Group: "g1"})})
 	s.writeAged("answer", 199*24*time.Hour, []Record{s.record("answer", 1, msAgo(199*24*time.Hour), kindTied, grouped{Group: "g1"})})
 
-	s.Require().NoError(Prune(s.dir, retention))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention))
 
 	s.Equal([]string{"asker"}, s.stored())
 }
@@ -202,7 +202,7 @@ func (s *PruneSuite) TestDeletesAGroupsFilesTogetherOnceAllAgedOut() {
 	s.writeAged("asker", age, []Record{s.record("asker", 1, msAgo(age), kindTied, grouped{Group: "g1"})})
 	s.writeAged("answer", age-time.Hour, []Record{s.record("answer", 1, msAgo(age-time.Hour), kindTied, grouped{Group: "g1"})})
 
-	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention, WithTie(testTie())))
 
 	s.Empty(s.stored())
 }
@@ -218,7 +218,7 @@ func (s *PruneSuite) TestExemptionPropagatesThroughASharedFile() {
 	})
 	s.writeAged("answer", age, []Record{s.record("answer", 1, msAgo(age), kindTied, grouped{Group: "g-done"})})
 
-	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, retention, WithTie(testTie())))
 
 	s.Equal([]string{"answer", "asker"}, s.stored())
 }
@@ -227,7 +227,7 @@ func (s *PruneSuite) TestExemptionPropagatesThroughASharedFile() {
 func (s *PruneSuite) TestOpenPrunesTheStore() {
 	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
 
-	_, err := Open(s.dir, "current", InvocationStart{Workspace: "/repo"})
+	_, err := Open(s.T().Context(), s.dir, "current", InvocationStart{Workspace: "/repo"})
 	s.Require().NoError(err)
 
 	s.Empty(s.stored())
@@ -238,7 +238,7 @@ func (s *PruneSuite) TestOpenPrunesWithItsTie() {
 	age := 400 * 24 * time.Hour
 	s.writeAged("blocked", age, []Record{s.record("blocked", 1, msAgo(age), kindHeld, grouped{Group: "g1"})})
 
-	_, err := Open(s.dir, "current", InvocationStart{}, WithTie(testTie()))
+	_, err := Open(s.T().Context(), s.dir, "current", InvocationStart{}, WithTie(testTie()))
 	s.Require().NoError(err)
 
 	s.Equal([]string{"blocked"}, s.stored())
@@ -247,17 +247,17 @@ func (s *PruneSuite) TestOpenPrunesWithItsTie() {
 // Pruning reads every invocation file's metadata, so Open does it at most once per
 // interval; a store pruned a moment ago is left alone.
 func (s *PruneSuite) TestOpenPrunesAtMostOncePerInterval() {
-	_, err := Open(s.dir, "first", InvocationStart{})
+	_, err := Open(s.T().Context(), s.dir, "first", InvocationStart{})
 	s.Require().NoError(err)
 
 	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
-	_, err = Open(s.dir, "second", InvocationStart{})
+	_, err = Open(s.T().Context(), s.dir, "second", InvocationStart{})
 	s.Require().NoError(err)
 	s.Equal([]string{"ancient"}, s.stored())
 
 	stale := time.Now().Add(-2 * pruneInterval)
 	s.Require().NoError(os.Chtimes(filepath.Join(s.dir, pruneStamp), stale, stale))
-	_, err = Open(s.dir, "third", InvocationStart{})
+	_, err = Open(s.T().Context(), s.dir, "third", InvocationStart{})
 	s.Require().NoError(err)
 	s.Empty(s.stored())
 }
@@ -267,9 +267,9 @@ func (s *PruneSuite) TestOpenPrunesAtMostOncePerInterval() {
 func (s *PruneSuite) TestOpenNeverPrunesItsOwnFile() {
 	s.writeAged("resumed", 400*24*time.Hour, []Record{s.result("resumed", 1, 400*24*time.Hour)})
 
-	w, err := Open(s.dir, "resumed", InvocationStart{})
+	w, err := Open(s.T().Context(), s.dir, "resumed", InvocationStart{})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
 	s.Equal([]string{"resumed"}, s.stored())
 	s.Len(s.read().Records, 3, "the old fact, the start, and the new fact")
@@ -278,9 +278,9 @@ func (s *PruneSuite) TestOpenNeverPrunesItsOwnFile() {
 func (s *PruneSuite) TestANonPositiveWindowKeepsEverything() {
 	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
 
-	s.Require().NoError(Prune(filepath.Join(s.dir, "absent"), retention), "a store that does not exist has nothing to prune")
-	s.Require().NoError(Prune(s.dir, 0))
-	s.Require().NoError(Prune(s.dir, -time.Hour))
+	s.Require().NoError(Prune(s.T().Context(), filepath.Join(s.dir, "absent"), retention), "a store that does not exist has nothing to prune")
+	s.Require().NoError(Prune(s.T().Context(), s.dir, 0))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, -time.Hour))
 
 	s.Equal([]string{"ancient"}, s.stored())
 }
@@ -326,7 +326,7 @@ func (s *PruneSuite) TestASchemaOneFileIsCountedAndAgesOutByItsTimestamps() {
 	s.Equal(Fold{Records: fold.Records, Invocations: 3, Skipped: 1, Legacy: 4}, fold,
 		"a line written before the rename is not damage; the undated one is")
 
-	s.Require().NoError(Prune(s.dir, DefaultRetention))
+	s.Require().NoError(Prune(s.T().Context(), s.dir, DefaultRetention))
 	s.NoFileExists(old, "a schema-1 file past the window ages out like any other")
 	s.FileExists(young)
 	s.FileExists(undated, "a file with no dated line has no known age, so it stays")
@@ -341,7 +341,7 @@ func (s *PruneSuite) TestCapsTheStoreAtItsNewestFiles() {
 	}
 	s.writeLegacy("legacy", time.Now().Add(-30*time.Minute))
 
-	s.Require().NoError(prune(s.dir, retention, 3, "inv4"+FileExt, newOptions(nil)))
+	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 3, "inv4"+FileExt, newOptions(nil)))
 
 	s.Equal([]string{"inv0", "inv1", "inv4", "legacy"}, s.stored(),
 		"the newest three by newest fact survive, schema-1 included, and the writer's own file is never past the cap")
@@ -358,7 +358,7 @@ func (s *PruneSuite) TestCapSparesTheNewestLoadedSessions() {
 		})
 	}
 
-	s.Require().NoError(prune(s.dir, retention, 2, "", newOptions(nil)))
+	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 2, "", newOptions(nil)))
 
 	s.Equal([]string{"inv0", "inv1", "loaded"}, s.stored(), "a loaded host session is the rare kind the cap must not push out")
 }
@@ -372,7 +372,7 @@ func (s *PruneSuite) TestCapStillHonorsTheTie() {
 		})
 	}
 
-	s.Require().NoError(prune(s.dir, retention, 2, "", newOptions([]Option{WithTie(testTie())})))
+	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 2, "", newOptions([]Option{WithTie(testTie())})))
 
 	s.Equal([]string{"asker", "inv0", "inv1"}, s.stored(), "a held file is exempt from the cap as from retention")
 }
@@ -396,7 +396,7 @@ func (s *PruneSuite) TestClaimStalePruneStampPrunesOnceUnderConcurrency() {
 		wg.Go(func() {
 			ready.Done()
 			ready.Wait() // line every goroutine up before any of them races the claim
-			claimStalePruneStamp(s.dir, stamp, "", newOptions(nil))
+			claimStalePruneStamp(s.T().Context(), s.dir, stamp, "", newOptions(nil))
 		})
 	}
 	wg.Wait()
@@ -425,7 +425,7 @@ func (s *PruneSuite) TestClaimStalePruneStampSkipsWhenAlreadyContended() {
 	}()
 	<-held
 
-	claimStalePruneStamp(s.dir, stamp, "", newOptions(nil))
+	claimStalePruneStamp(s.T().Context(), s.dir, stamp, "", newOptions(nil))
 	close(release)
 	s.Require().NoError(<-done)
 

@@ -170,7 +170,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trailtypes.ReadRecent(cacheDir, 1)
+	events, err := trailtypes.ReadRecent(t.Context(), cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
 	assert.Equal(t, worker.ID, events[0].Lease)

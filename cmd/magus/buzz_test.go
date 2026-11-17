@@ -94,7 +94,7 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	require.Error(t, err, "a write outside the workspace must be refused")
 	assert.ErrorContains(t, err, string(types.PathWriteDenied))
 
-	events, rerr := trailtypes.ReadRecent(m.CacheDir(), 10)
+	events, rerr := trailtypes.ReadRecent(ctx, m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	require.Len(t, events, 1, "the refusal must be readable on the trail, as a target's is")
 	assert.Equal(t, trailtypes.KindSandboxDenial, events[0].Kind)
@@ -108,7 +108,7 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 
 	require.NoError(t, buzzCommand(ctx, "", []string{"-s", script}))
 
-	events, rerr := trailtypes.ReadRecent(m.CacheDir(), 10)
+	events, rerr := trailtypes.ReadRecent(ctx, m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	assert.Empty(t, events, "nothing was refused, so nothing belongs on the trail")
 }

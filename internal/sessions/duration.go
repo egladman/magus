@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"cmp"
+	"context"
 	"os"
 	"path"
 	"slices"
@@ -25,16 +26,16 @@ const invocationPrefix = "inv"
 // invocation files under dir. A replay, a run refused before it started and a result with
 // no duration are not a run. The charm and a spell filter are ignored, so `lint:rw` answers
 // for `lint`. ok is false when none of the newest files records one.
-func LastRunDuration(dir, project, target string) (time.Duration, bool) {
-	return lastRunDuration(dir, project, target, func(session.InvocationStart) bool { return true })
+func LastRunDuration(ctx context.Context, dir, project, target string) (time.Duration, bool) {
+	return lastRunDuration(ctx, dir, project, target, func(session.InvocationStart) bool { return true })
 }
 
 // LastRunDurationWith is LastRunDuration over the runs whose
 // command forwarded exactly forwarded after `--`. Nil matches a
 // run that forwarded nothing.
-func LastRunDurationWith(dir, project, target string, forwarded []string) (time.Duration, bool) {
+func LastRunDurationWith(ctx context.Context, dir, project, target string, forwarded []string) (time.Duration, bool) {
 	want := strings.Join(forwarded, " ")
-	return lastRunDuration(dir, project, target, func(s session.InvocationStart) bool { return forwardedArgs(s.Command) == want })
+	return lastRunDuration(ctx, dir, project, target, func(s session.InvocationStart) bool { return forwardedArgs(s.Command) == want })
 }
 
 // forwardedArgs is what a recorded command line passed after
@@ -47,7 +48,7 @@ func forwardedArgs(command string) string {
 	return after
 }
 
-func lastRunDuration(dir, project, target string, ran func(session.InvocationStart) bool) (time.Duration, bool) {
+func lastRunDuration(ctx context.Context, dir, project, target string, ran func(session.InvocationStart) bool) (time.Duration, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, false
@@ -62,7 +63,7 @@ func lastRunDuration(dir, project, target string, ran func(session.InvocationSta
 	project, target = path.Clean(cmp.Or(project, ".")), baseTarget(target)
 	newest := names[max(0, len(names)-maxInvocationFiles):]
 	for _, name := range slices.Backward(newest) {
-		records, err := session.ReadInvocation(dir, strings.TrimSuffix(name, session.FileExt))
+		records, err := session.ReadInvocation(ctx, dir, strings.TrimSuffix(name, session.FileExt))
 		if err != nil {
 			continue
 		}

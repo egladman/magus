@@ -1921,11 +1921,11 @@ func (r *runner) ownVersion() string {
 // Commands with no reads is the diagnostic pattern. An empty trail is NOT a failure: a
 // workspace where no agent has run yet is the ordinary case, and failing it would train
 // people to ignore the check.
-func (r *runner) checkObserverRecording() check.Check {
+func (r *runner) checkObserverRecording(ctx context.Context) check.Check {
 	const name = "agent-observer"
 	const window = 2000
 
-	reads, writes, shell := trail.ObservedCounts(r.cacheDir(), window)
+	reads, writes, shell := trail.ObservedCounts(ctx, r.cacheDir(), window)
 	total := reads + writes + shell
 	switch {
 	case total == 0:
@@ -1991,14 +1991,14 @@ func (r *runner) checkObserverRecording() check.Check {
 //
 // Advice rather than fail, on the doctrine that a convention magus recommends is never a
 // gate: a repository nobody audits is not a broken repository.
-func (r *runner) checkSessionLoad() check.Check {
+func (r *runner) checkSessionLoad(ctx context.Context) check.Check {
 	const name = "session-load"
 
 	dir, err := sessions.Dir(r.root)
 	if err != nil {
 		return check.Check{Name: name, Status: check.Advice, Message: err.Error()}
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return check.Check{Name: name, Status: check.Advice, Message: err.Error()}
 	}

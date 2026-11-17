@@ -241,7 +241,7 @@ func (s *NarrowPushSuite) TestAGateFoundByAReadThatOutlivedTheBudgetAdmits() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	dir, err := sessions.Dir(s.repo.Root())
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: head, Outcome: session.OutcomePass, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: s.repo.Root()}))
 	s.deps.Revision = func(ctx context.Context, _, _ string) string {

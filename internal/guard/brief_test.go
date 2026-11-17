@@ -81,14 +81,14 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief})
+		v := judgeBriefCommand(t.Context(), strict(testDependencies()), briefInput{text: tt.brief})
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(tt.arg)}, v.Rule, tt.name)
 		assert.Contains(t, v.Deny, string(tt.arg), "the deny names the rule the brief would trip: %s", tt.name)
-		bound := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief, bound: true})
+		bound := judgeBriefCommand(t.Context(), strict(testDependencies()), briefInput{text: tt.brief, bound: true})
 		assert.Equal(t, v.Rule, bound.Rule, "%s: a message to a bound worker is still graded for denied commands", tt.name)
 	}
 }

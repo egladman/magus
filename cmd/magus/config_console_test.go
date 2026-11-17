@@ -63,7 +63,7 @@ func TestCLIMintsAreAudited(t *testing.T) {
 
 	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	events, err := trail.ReadRecent(base, 10)
+	events, err := trail.ReadRecent(t.Context(), base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	want := map[string]auth.Token{"cli.mint": rec, "link.code": codeRec}

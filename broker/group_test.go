@@ -81,7 +81,7 @@ func TestAHeldCommandStopsAtItsDeadline(t *testing.T) {
 	require.NoError(t, err)
 	var queue []sessions.AttentionRequest
 	require.Eventually(t, func() bool {
-		fold, err := sessionstore.ReadAll(dir)
+		fold, err := sessionstore.ReadAll(t.Context(), dir)
 		queue = sessions.AttentionQueue(fold)
 		return err == nil && len(queue) > 0
 	}, 5*time.Second, 20*time.Millisecond)

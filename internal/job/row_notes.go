@@ -174,20 +174,20 @@ func RowNotesWith(ctx context.Context, root string, projects []*types.Project, r
 	return RowNotes{
 		RegeneratedOutside: regenerated,
 		UnrunGates:         UnrunGates(root, row, projects, regenerated),
-		ForegroundOverrun:  CheckOverrun(root, row, foregroundMax),
+		ForegroundOverrun:  CheckOverrun(ctx, root, row, foregroundMax),
 	}
 }
 
 // CheckOverrun is row's check when its last real run here took longer than a wired host
 // lets a foreground call wait. The session store is read first, and the harnesses are
 // consulted only for a check that has a recorded run.
-func CheckOverrun(root string, row job.Job, foregroundMax func() (time.Duration, bool)) *ForegroundOverrun {
+func CheckOverrun(ctx context.Context, root string, row job.Job, foregroundMax func() (time.Duration, bool)) *ForegroundOverrun {
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return nil
 	}
 	lastRun := func(project, target string) (time.Duration, bool) {
-		return sessions.LastRunDuration(dir, project, target)
+		return sessions.LastRunDuration(ctx, dir, project, target)
 	}
 	overrun, ok := OverrunsForeground(row, lastRun, foregroundMax)
 	if !ok {

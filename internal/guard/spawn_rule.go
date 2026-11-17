@@ -129,7 +129,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		deps.scope = scopeAt(at)
 		_, bound := continuedRow(ctx, at, facts, env)
 		brief := briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled), bound: bound}
-		if v, refused := held.hold(deps, judgeBriefCommand(deps, brief)); refused {
+		if v, refused := held.hold(deps, judgeBriefCommand(ctx, deps, brief)); refused {
 			judged = verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
 		} else if v.Context != "" && judged.Decision == decisionPass {

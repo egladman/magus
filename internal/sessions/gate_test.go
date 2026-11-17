@@ -32,9 +32,9 @@ func TestGateRoundTrip(t *testing.T) {
 		// that could not have changed the verdict.
 		UndeclaredSeeds: []string{"."},
 	}
-	require.NoError(t, RecordGate(dir, g, start))
+	require.NoError(t, RecordGate(t.Context(), dir, g, start))
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	rec, ok := LatestGate(fold, "polish", "ci")
 	require.True(t, ok)
@@ -53,13 +53,13 @@ func TestGateNewestWins(t *testing.T) {
 	dir := t.TempDir()
 	start := session.InvocationStart{Workspace: "/repo"}
 	pass := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: session.OutcomePass, Fingerprint: "f1"}
-	require.NoError(t, RecordGate(dir, pass, start))
+	require.NoError(t, RecordGate(t.Context(), dir, pass, start))
 	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
 	time.Sleep(5 * time.Millisecond)
 	fail := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c2", Outcome: session.OutcomeFail, Fingerprint: "f2"}
-	require.NoError(t, RecordGate(dir, fail, start))
+	require.NoError(t, RecordGate(t.Context(), dir, fail, start))
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	rec, ok := LatestGate(fold, "b", "ci")
 	require.True(t, ok)
@@ -69,7 +69,7 @@ func TestGateNewestWins(t *testing.T) {
 // TestLatestGateEmptyStore is the inert state: nothing recorded means no
 // finding, so the first gate on a branch always runs.
 func TestLatestGateEmptyStore(t *testing.T) {
-	fold, err := session.ReadAll(t.TempDir())
+	fold, err := session.ReadAll(t.Context(), t.TempDir())
 	require.NoError(t, err)
 	_, ok := LatestGate(fold, "b", "ci")
 	assert.False(t, ok)
@@ -81,11 +81,11 @@ func TestLatestGateEmptyStore(t *testing.T) {
 func TestGateAtMatchesTheCommitOnAnyRef(t *testing.T) {
 	dir := t.TempDir()
 	start := session.InvocationStart{Workspace: "/repo"}
-	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "a", Commit: "a89dee5c7f00", Outcome: session.OutcomePass}, start))
+	require.NoError(t, RecordGate(t.Context(), dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "a", Commit: "a89dee5c7f00", Outcome: session.OutcomePass}, start))
 	time.Sleep(5 * time.Millisecond)
-	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "a89dee5c7f00", Outcome: OutcomeDeferred}, start))
+	require.NoError(t, RecordGate(t.Context(), dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "a89dee5c7f00", Outcome: OutcomeDeferred}, start))
 
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	rec, ok := GateAt(fold, "a89dee5c", "ci")
 	require.True(t, ok)
@@ -114,13 +114,13 @@ func (s *GateScopeSuite) SetupTest() {
 }
 
 func (s *GateScopeSuite) record(g GateResult) {
-	s.Require().NoError(RecordGate(s.dir, g, s.start))
+	s.Require().NoError(RecordGate(s.T().Context(), s.dir, g, s.start))
 	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
 	time.Sleep(2 * time.Millisecond)
 }
 
 func (s *GateScopeSuite) fold() session.Fold {
-	fold, err := session.ReadAll(s.dir)
+	fold, err := session.ReadAll(s.T().Context(), s.dir)
 	s.Require().NoError(err)
 	return fold
 }
@@ -163,9 +163,9 @@ func (s *GateScopeSuite) TestAProjectFailIsARedBranch() {
 }
 
 func (s *GateScopeSuite) TestAnEntryWithoutAScopeReadsAsProjectScope() {
-	w, err := session.Open(s.dir, NewID(), s.start)
+	w, err := session.Open(s.T().Context(), s.dir, NewID(), s.start)
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindGateResult, map[string]string{"target": "ci", "ref": "b", "commit": "c1", "outcome": session.OutcomePass}))
+	s.Require().NoError(w.Append(s.T().Context(), KindGateResult, map[string]string{"target": "ci", "ref": "b", "commit": "c1", "outcome": session.OutcomePass}))
 
 	_, ok := LatestGate(s.fold(), "b", "ci")
 	s.False(ok, "a pre-scope pass is not the branch gate")
@@ -177,7 +177,7 @@ func (s *GateScopeSuite) TestAnEntryWithoutAScopeReadsAsProjectScope() {
 }
 
 func (s *GateScopeSuite) TestRecordGateRefusesAResultWithNoScope() {
-	err := RecordGate(s.dir, GateResult{Target: "ci", Ref: "b", Commit: "c1", Outcome: session.OutcomePass}, s.start)
+	err := RecordGate(s.T().Context(), s.dir, GateResult{Target: "ci", Ref: "b", Commit: "c1", Outcome: session.OutcomePass}, s.start)
 	s.Require().Error(err)
 	s.Contains(err.Error(), `want "affected" or "project"`)
 	s.Empty(s.fold().Records, "nothing is written, not even the start record")
@@ -202,19 +202,19 @@ func (s *FailuresOwedSuite) SetupTest() { s.dir = s.T().TempDir() }
 // results files one invocation's target results, then waits out the millisecond so the
 // next record sorts after them.
 func (s *FailuresOwedSuite) results(inv string, results ...session.TargetResult) {
-	w, err := session.Open(s.dir, inv, session.InvocationStart{Workspace: "/repo"})
+	w, err := session.Open(s.T().Context(), s.dir, inv, session.InvocationStart{Workspace: "/repo"})
 	s.Require().NoError(err)
 	for _, r := range results {
-		s.Require().NoError(w.Append(session.KindTargetResult, r))
+		s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, r))
 	}
 	time.Sleep(2 * time.Millisecond)
 }
 
 func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
-	s.Require().NoError(RecordGate(s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: outcome, Inv: inv},
+	s.Require().NoError(RecordGate(s.T().Context(), s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: outcome, Inv: inv},
 		session.InvocationStart{Workspace: "/repo"}))
 	time.Sleep(2 * time.Millisecond)
-	fold, err := ReadGateResults(s.dir)
+	fold, err := ReadGateResults(s.T().Context(), s.dir)
 	s.Require().NoError(err)
 	rec, ok := LatestGate(fold, "b", "ci")
 	s.Require().True(ok)
@@ -222,7 +222,7 @@ func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
 }
 
 func (s *FailuresOwedSuite) owed(gate GateRecord) []types.TargetRef {
-	fold, err := session.FoldKind(s.dir, session.KindTargetResult)
+	fold, err := session.FoldKind(s.T().Context(), s.dir, session.KindTargetResult)
 	s.Require().NoError(err)
 	return FailuresOwed(gate, fold)
 }
@@ -310,11 +310,11 @@ func TestHarnessWriteSuite(t *testing.T) { suite.Run(t, new(HarnessWriteSuite)) 
 func (s *HarnessWriteSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 func (s *HarnessWriteSuite) record(paths ...string) {
-	s.Require().NoError(RecordHarnessWrite(s.dir, HarnessWrite{Paths: paths}, session.InvocationStart{Workspace: "/repo"}))
+	s.Require().NoError(RecordHarnessWrite(s.T().Context(), s.dir, HarnessWrite{Paths: paths}, session.InvocationStart{Workspace: "/repo"}))
 }
 
 func (s *HarnessWriteSuite) latest() (HarnessWriteRecord, bool) {
-	fold, err := session.FoldKind(s.dir, KindHarnessWrite)
+	fold, err := session.FoldKind(s.T().Context(), s.dir, KindHarnessWrite)
 	s.Require().NoError(err)
 	return LatestHarnessWrite(fold)
 }
@@ -327,7 +327,7 @@ func (s *HarnessWriteSuite) TestAWriteReadsBackSortedAndDeduplicated() {
 }
 
 func (s *HarnessWriteSuite) TestAnEmptyWriteIsRefused() {
-	err := RecordHarnessWrite(s.dir, HarnessWrite{}, session.InvocationStart{Workspace: "/repo"})
+	err := RecordHarnessWrite(s.T().Context(), s.dir, HarnessWrite{}, session.InvocationStart{Workspace: "/repo"})
 	s.Error(err)
 	_, ok := s.latest()
 	s.False(ok)
@@ -356,13 +356,13 @@ type LatestRepairSuite struct {
 func (s *LatestRepairSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 func (s *LatestRepairSuite) record(g GateResult) {
-	s.Require().NoError(RecordGate(s.dir, g, session.InvocationStart{Workspace: "/repo"}))
+	s.Require().NoError(RecordGate(s.T().Context(), s.dir, g, session.InvocationStart{Workspace: "/repo"}))
 	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
 	time.Sleep(2 * time.Millisecond)
 }
 
 func (s *LatestRepairSuite) fold() session.Fold {
-	fold, err := session.ReadAll(s.dir)
+	fold, err := session.ReadAll(s.T().Context(), s.dir)
 	s.Require().NoError(err)
 	return fold
 }

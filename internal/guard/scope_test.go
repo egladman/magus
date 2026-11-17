@@ -44,9 +44,9 @@ func TestAdvisoriesStayInsideTheWorkspace(t *testing.T) {
 
 	deps := strict(testDependencies())
 	deps.scope = scope
-	assert.Empty(t, Evaluate(deps, "cat /work/other/main.go").Context, "an outside read is advised nothing")
-	assert.Contains(t, Evaluate(deps, "cat internal/guard/shell.go").Context, "refs", "the same read inside still is")
-	assert.NotEmpty(t, Evaluate(deps, "cd /tmp/copy && magus run lint .").Deny, "a deny is never scoped away")
+	assert.Empty(t, Evaluate(t.Context(), deps, "cat /work/other/main.go").Context, "an outside read is advised nothing")
+	assert.Contains(t, Evaluate(t.Context(), deps, "cat internal/guard/shell.go").Context, "refs", "the same read inside still is")
+	assert.NotEmpty(t, Evaluate(t.Context(), deps, "cd /tmp/copy && magus run lint .").Deny, "a deny is never scoped away")
 }
 
 // A relative word is the call directory's, after the line's cds: read-navigation and

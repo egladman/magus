@@ -144,7 +144,7 @@ func latestGreenGate(ctx context.Context, root string, env Env) job.GreenGate {
 	if err != nil {
 		return job.GreenGate{}
 	}
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(ctx, dir)
 	if err != nil {
 		return job.GreenGate{}
 	}

@@ -1293,7 +1293,7 @@ func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
 		"npm update":                      advisoryDependencyUpdate,
 		"pnpm install":                    advisoryDependencyInstall,
 	} {
-		v := Evaluate(advising(testDependencies()), command)
+		v := Evaluate(t.Context(), advising(testDependencies()), command)
 		require.NotEmpty(t, v.Context, command)
 		assert.Equal(t, string(want), v.advisoryName(), command)
 		_, ok := Rule(v.advisoryName())
@@ -1412,8 +1412,8 @@ func TestRecoverableRulesDenyUnlessSetToAdvise(t *testing.T) {
 	}
 	assert.Len(t, strict(Dependencies{}).Builtins, len(defaults))
 
-	assert.Equal(t, denyRuleSedInPlace, Evaluate(Dependencies{}, sedInPlace).Rule.Name, "the default denies")
-	assert.Empty(t, Evaluate(advising(Dependencies{}), sedInPlace).Deny, "advise is the opt-out")
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(t.Context(), Dependencies{}, sedInPlace).Rule.Name, "the default denies")
+	assert.Empty(t, Evaluate(t.Context(), advising(Dependencies{}), sedInPlace).Deny, "advise is the opt-out")
 }
 
 // sedInPlace is a recoverable deny on its own line, and nothing else.
@@ -1478,13 +1478,13 @@ func TestGradeDefaultsAndUnknownRules(t *testing.T) {
 func TestEvaluateGradesEachSite(t *testing.T) {
 	t.Parallel()
 
-	advised := Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Advise), sedInPlace)
+	advised := Evaluate(t.Context(), withSetting(string(denyRuleSedInPlace), builtin.Advise), sedInPlace)
 	assert.Empty(t, advised.Deny)
 	assert.True(t, advised.demoted)
 	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), advised.Kind)
 
-	assert.Equal(t, denyRuleSedInPlace, Evaluate(Dependencies{}, sedInPlace).Rule.Name)
-	assert.Equal(t, ShellVerdict{}, Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace))
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(t.Context(), Dependencies{}, sedInPlace).Rule.Name)
+	assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace))
 }
 
 func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
@@ -1495,7 +1495,7 @@ func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
 		"git add -A && git reset --hard",
 		"git add -A && git stash",
 	} {
-		v := Evaluate(advising(Dependencies{}), command)
+		v := Evaluate(t.Context(), advising(Dependencies{}), command)
 		assert.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
 		assert.NotEmpty(t, v.Deny, command)
 	}
@@ -1504,18 +1504,18 @@ func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
 func TestDemotedDenyOutranksAdvisories(t *testing.T) {
 	t.Parallel()
 
-	v := Evaluate(advising(Dependencies{}), sedInPlace+" && git commit -m x")
+	v := Evaluate(t.Context(), advising(Dependencies{}), sedInPlace+" && git commit -m x")
 	assert.True(t, v.demoted, "the held advice outranks the commit advisory")
 	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), v.Kind)
 
-	off := Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace+" && git commit -m x")
+	off := Evaluate(t.Context(), withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace+" && git commit -m x")
 	assert.Equal(t, advisoryStageClassify, off.Kind, "an off rule leaves the line to the advisory")
 }
 
 func TestDemotedDenyKeepsThePushGate(t *testing.T) {
 	t.Parallel()
 
-	v := Evaluate(advising(Dependencies{}), sedInPlace+" && git push")
+	v := Evaluate(t.Context(), advising(Dependencies{}), sedInPlace+" && git push")
 	assert.Equal(t, advisoryPushGate, v.Rule.Name, "Judge upgrades the push gate, so no advice may hide it")
 }
 

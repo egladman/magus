@@ -66,7 +66,7 @@ func loadedEvent(t *testing.T, root, hostSession string, i int) session.AgentEve
 	t.Helper()
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	events := session.AgentEvents(fold, hostSession)
 	require.Greater(t, len(events), i)
@@ -97,7 +97,7 @@ func TestLoadIsIdempotent(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := session.ReadAll(dir)
+	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Len(t, session.AgentEvents(fold, "s1"), 3, "a second load must not double the history")
 }

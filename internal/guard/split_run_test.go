@@ -66,16 +66,16 @@ func TestSplitRunTargetIdentity(t *testing.T) {
 // A one-line chain chained-run only advises on still words the combined form when every
 // stage shares a target; a chain of different targets keeps chained-run's own text.
 func TestSplitRunLineGivesCombinedForm(t *testing.T) {
-	v := Evaluate(testDependencies(), "magus run lint . || magus run lint docs")
+	v := Evaluate(t.Context(), testDependencies(), "magus run lint . || magus run lint docs")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus run lint . docs", "the combined form the reader can run instead")
 	assert.Contains(t, v.Context, "runs both in one invocation")
 
-	different := Evaluate(testDependencies(), "magus run generate . || magus run lint .")
+	different := Evaluate(t.Context(), testDependencies(), "magus run generate . || magus run lint .")
 	assert.Contains(t, different.Context, "compose through ctx.needs")
 	assert.NotContains(t, different.Context, "runs both in one invocation")
 
-	charms := Evaluate(testDependencies(), "magus run lint . || magus run lint:rw docs")
+	charms := Evaluate(t.Context(), testDependencies(), "magus run lint . || magus run lint:rw docs")
 	assert.NotContains(t, charms.Context, "runs both in one invocation", "lint and lint:rw are two targets")
 }
 

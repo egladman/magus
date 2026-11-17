@@ -102,7 +102,7 @@ var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 // page_token is a decimal offset into the filtered, newest-first stream, and next_page_token is
 // set while events remain, so "load older activity" walks the whole retained trail instead of
 // stopping at the first page.
-func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
+func (s *Service) ListActivityEvents(ctx context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
 	limit := int(req.Msg.GetPageSize())
 	if limit <= 0 {
 		limit = defaultPageSize
@@ -117,7 +117,7 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 
 	filter := req.Msg.GetFilter()
 	matched := make([]trail.Event, 0, limit)
-	for _, e := range readMerged(s.loaded(), maxWindow) {
+	for _, e := range readMerged(ctx, s.loaded(), maxWindow) {
 		if matchFilter(e, filter) {
 			matched = append(matched, e)
 		}
@@ -208,10 +208,10 @@ func pageBounds(total, offset, limit int) (from, to int, next string) {
 //
 // limit is the READ WINDOW, not the page: the caller filters and pages what comes back, so cutting
 // here to a page size would starve a filtered page of matches sitting just past the boundary.
-func readMerged(workspaces []Workspace, limit int) []trail.Event {
+func readMerged(ctx context.Context, workspaces []Workspace, limit int) []trail.Event {
 	merged := make([]trail.Event, 0, limit)
 	for _, w := range workspaces {
-		events, err := trail.ReadRecent(w.CacheDir, limit)
+		events, err := trail.ReadRecent(ctx, w.CacheDir, limit)
 		if err != nil {
 			continue
 		}
