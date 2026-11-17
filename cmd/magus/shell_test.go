@@ -1125,14 +1125,14 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 // below this line fires the advisory, and that is the point: the set has to be filled
 // by every write, not only by the ones this rule speaks about.
 //
-// The workspace comes from the same memoized load the rule itself uses, rather than
+// The workspace comes from the same load, kept for the process, that the rule itself uses, rather than
 // from a root this test resolves on its own. That load is a package-level sync.Once, so
 // whichever test in this binary reaches it first pins it; asserting against a root this
 // test picked would pass or fail on test ORDER, since the rule is silent whenever the
 // loaded workspace is not the one the host reported.
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Setenv(trail.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
@@ -1937,9 +1937,9 @@ func TestGuardModelTiersIsNilOutsideAWorkspace(t *testing.T) {
 	assert.Nil(t, guardModelTiers(t.Context(), t.TempDir()))
 }
 
-// resetWorkspaceMemo gives a test its own memoized workspace load and restores the
+// resetOpenedWorkspaces gives a test its own workspace load and restores the
 // process-wide state afterwards.
-func resetWorkspaceMemo(t *testing.T) {
+func resetOpenedWorkspaces(t *testing.T) {
 	t.Helper()
 	savedVersion := version
 	resetStartupSingletons()
@@ -1954,7 +1954,7 @@ func resetWorkspaceMemo(t *testing.T) {
 func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	root := committedDenyRule(t).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	version = "v0.5.0"
 	globalCfg.RequiredVersion = ">= 99.0.0"
 
@@ -1974,7 +1974,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 // so the committed rules still apply to a spawn and to a command.
 func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	root := committedDenyRule(t).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
 	t.Chdir(root)
 	_, err := loadGuardRules(t.Context(), "")
@@ -2029,7 +2029,7 @@ magus\guard.command(p\judge);
 
 	write("magusfile.buzz", importing("b"))
 	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 
 	rules, err := loadGuardRules(t.Context(), "")
@@ -2050,7 +2050,7 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
 	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
 	root := repo.Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	judge := func() types.GuardJudgment {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
@@ -2075,7 +2075,7 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 // an uncommitted edit anywhere else changes nothing either side registers.
 func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	root := committedDenyRule(t).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "other", "spell.buzz"), []byte("// untracked\n"), 0o644))
@@ -2120,7 +2120,7 @@ func TestWithinBudgetReturnsOnTime(t *testing.T) {
 // a linked worktree, so the envelope's cwd, not the hook process's, decides the store.
 func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	testkit.Isolate(t)
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"magusfile.buzz": "import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n",
