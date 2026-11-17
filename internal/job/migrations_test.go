@@ -208,7 +208,7 @@ func (s *regroupSuite) before() {
 }
 
 func (s *regroupSuite) TestARowTakesTheJobGroupAndItsAnnotations() {
-	e, err := entryOf([]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"Job","metadata":{"name":"a","annotations":{"batch.magus/requires":"claim-declarations","other/key":"v"}},"spec":{}}`))
+	e, err := decodeEntry([]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"Job","metadata":{"name":"a","annotations":{"batch.magus/requires":"claim-declarations","other/key":"v"}},"spec":{}}`))
 	s.Require().NoError(err)
 
 	got, err := regroup(e)
