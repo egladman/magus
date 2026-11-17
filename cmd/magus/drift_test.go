@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -9,19 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
-
-// resolveGitDriver resolves dir's real git driver through vcs.Resolve; vcs_test.go reads it.
-func resolveGitDriver(t *testing.T, dir string) types.VCSDriver { //nolint:ireturn // the VCS driver is picked by detection at runtime
-	t.Helper()
-	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
-	require.NoError(t, err)
-	require.NotNil(t, res.VCS)
-	require.Equal(t, "git", res.Name)
-	return res.VCS
-}
 
 // TestParseCheckDriftArgsReadsWhatTheJobSubmits pins that the worker reads back exactly the hook
 // the submitter wrote, and that a run with no flags, the one an older drift section starts, is a
