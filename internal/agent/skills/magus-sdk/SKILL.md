@@ -24,8 +24,9 @@ and fail as `unknown revision libs/gopherbuzz/v0.0.0`{{end}}.
 Say `go get` succeeds only for a version you ran it against, and say how: a scratch
 module, `go get github.com/egladman/magus@<version>`, then `go build ./...`{{if .Full}}. A worked
 example that compiles for you inside the module but fails for them is worse than
-admitting you did not check. `go install .../cmd/magus@<version>` refuses the
-root module at any version, since its `go.mod` carries replace directives{{end}}.
+admitting you did not check. `go install .../cmd/magus@<version>` works from a
+release tag cut by `{{cmd "run"}} release`, whose commit drops the replaces; a commit on
+main carries them, so `@main` or a pseudo-version is refused{{end}}.
 
 ## Entry points
 
