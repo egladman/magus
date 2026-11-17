@@ -80,7 +80,7 @@ func leaseAttempts(ctx context.Context, at location) (jobtypes.Attempts, error) 
 	if pinned, ok := job.SnapshotFromContext(ctx); ok {
 		return jobtypes.NewAttempts(pinned.Attempts), pinned.Err
 	}
-	all, err := job.NewStore(at.jobs()).Attempts()
+	all, err := job.NewStore(at.jobs()).Attempts(ctx)
 	return jobtypes.NewAttempts(all), err
 }
 

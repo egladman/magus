@@ -37,7 +37,7 @@ func (s *Store) ReportRun(ctx context.Context, r Report) (RunRef, error) {
 	if strings.TrimSpace(r.By) == "" {
 		return "", s.wrap(&ReportError{Job: r.Job, Goal: r.Goal})
 	}
-	if _, _, err := s.checkGoal(r.Job, r.Goal); err != nil {
+	if _, _, err := s.checkGoal(ctx, r.Job, r.Goal); err != nil {
 		return "", err
 	}
 	tree, err := s.digestTree(ctx, "for the report")

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"time"
 
 	"github.com/egladman/magus/libs/codec"
 )
@@ -17,6 +16,7 @@ func (s *Store) grantsLog() (codec.JSONL[Grant], error) {
 	}
 	return codec.JSONL[Grant]{
 		Path: filepath.Join(filepath.Dir(path), grantsFileName),
+		Perm: 0o600,
 		Key:  Grant.Key,
 	}, nil
 }
@@ -30,7 +30,7 @@ func (s *Store) Grant(ctx context.Context, id, rule string, until int64) (Grant,
 		if row.State.Terminal() {
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to grant", id, row.State)
 		}
-		tries, err := s.Attempts()
+		tries, err := s.Attempts(ctx)
 		if err != nil {
 			return err
 		}
@@ -59,10 +59,13 @@ func (e *GrantRefusedError) Error() string {
 }
 
 func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(Job, *Grant) error) (Grant, error) {
+	if err := s.needWriter("Grant"); err != nil {
+		return Grant{}, err
+	}
 	if actor := s.Actor(); actor.Bound() {
 		return Grant{}, s.wrap(&GrantRefusedError{Lease: actor.Lease})
 	}
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return Grant{}, err
 	}
@@ -70,7 +73,7 @@ func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(Job,
 	if i < 0 {
 		return Grant{}, s.wrap(fmt.Errorf("%w: %q", ErrUnknownJob, id))
 	}
-	g := Grant{Job: id, Rule: rule, By: s.originOf(ctx), At: time.Now().Unix()}
+	g := Grant{Job: id, Rule: rule, By: s.originOf(ctx), At: s.Now().Unix()}
 	if err := fill(rows[i], &g); err != nil {
 		return Grant{}, err
 	}
@@ -83,31 +86,11 @@ func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(Job,
 
 // Grants is every job and rule's last line, revocations included, in the order they were
 // last written.
-func (s *Store) Grants() ([]Grant, error) {
+func (s *Store) Grants(ctx context.Context) ([]Grant, error) {
 	log, err := s.grantsLog()
 	if err != nil {
 		return nil, err
 	}
 	grants, err := log.Load()
 	return grants, s.wrap(err)
-}
-
-// LiveGrant is row's grant of rule while it still lowers the rule at now (see
-// [Grant.Lowers]).
-func (s *Store) LiveGrant(row Job, rule string, now int64) (Grant, bool, error) {
-	grants, err := s.Grants()
-	if err != nil {
-		return Grant{}, false, err
-	}
-	tries, err := s.Attempts()
-	if err != nil {
-		return Grant{}, false, err
-	}
-	attempt := NewAttempts(tries).LiveN(row.ID)
-	for _, g := range grants {
-		if g.Rule == rule && g.Lowers(row, attempt, now) {
-			return g, true, nil
-		}
-	}
-	return Grant{}, false, nil
 }

@@ -24,9 +24,84 @@ func TestStoreSuite(t *testing.T) { suite.Run(t, new(StoreSuite)) }
 func (s *StoreSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 func (s *StoreSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.dir, opts...)
+	st, err := Open(s.dir, append(writable(), opts...)...)
 	s.Require().NoError(err)
 	return st
+}
+
+// writable is opts with the seams every write needs: an unbound actor and a notice sink.
+func writable(opts ...StoreOption) []StoreOption {
+	return append([]StoreOption{WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {})}, opts...)
+}
+
+func (s *StoreSuite) TestAStoreWithNoActorRefusesAWrite() {
+	st, err := Open(s.dir, WithNotices(func(Notice) {}))
+	s.Require().NoError(err)
+
+	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
+
+	refused, ok := errors.AsType[*UnconfiguredError](err)
+	s.Require().True(ok, err)
+	s.Equal("WithActor", refused.Option)
+	s.NoFileExists(filepath.Join(s.dir, jobsFileName))
+}
+
+func (s *StoreSuite) TestAStoreWithNoNoticesRefusesAWrite() {
+	st, err := Open(s.dir, WithActor(func() Actor { return Actor{} }))
+	s.Require().NoError(err)
+
+	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
+
+	refused, ok := errors.AsType[*UnconfiguredError](err)
+	s.Require().True(ok, err)
+	s.Equal("WithNotices", refused.Option)
+}
+
+func (s *StoreSuite) TestAPinnedActorNeedsNoActorOption() {
+	st, err := Open(s.dir, WithNotices(func(Notice) {}))
+	s.Require().NoError(err)
+
+	_, err = st.As(Actor{}).Update(s.T().Context(), "a", func(*Job) {})
+
+	s.NoError(err)
+}
+
+func (s *StoreSuite) TestARewriteLeavingTwoRowsUnderOneIDIsRefused() {
+	st := s.open()
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+
+	err = st.Rewrite(s.T().Context(), func(f *Rows) error {
+		f.Jobs = append(f.Jobs, f.Jobs[0].Clone())
+		return nil
+	})
+
+	refused, ok := errors.AsType[*DuplicateRowError](err)
+	s.Require().True(ok, err)
+	s.Equal("a", refused.ID)
+	rows, err := st.List(s.T().Context())
+	s.Require().NoError(err)
+	s.Len(rows, 1)
+}
+
+func (s *StoreSuite) TestAWriteReadsTheStoresClock() {
+	at := time.Unix(1_700_000_000, 0)
+	st := s.open(WithClock(func() time.Time { return at }))
+
+	row, err := st.Update(s.T().Context(), "a", func(*Job) {})
+
+	s.Require().NoError(err)
+	s.Equal(at.Unix(), row.Updated)
+}
+
+func (s *StoreSuite) TestACancelledReadStopsWaitingOnAnAppendInFlight() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(`{"apiVersion":`), 0o600))
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	_, err := s.open().List(ctx)
+
+	s.ErrorIs(err, context.Canceled)
 }
 
 func (s *StoreSuite) TestOpenRefusesNoDirectory() {
@@ -39,14 +114,14 @@ func (s *StoreSuite) TestAnUnopenedStoreFailsEveryOperation() {
 	cause := errors.New("no state dir")
 	st := Unopened(cause)
 
-	_, err := st.List()
+	_, err := st.List(s.T().Context())
 	s.ErrorIs(err, cause)
 	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
 	s.ErrorIs(err, cause, "an unplaceable store never reads as an empty ledger")
 }
 
 func (s *StoreSuite) TestAnAbsentFileIsAnEmptyLedger() {
-	rows, err := s.open().List()
+	rows, err := s.open().List(s.T().Context())
 
 	s.Require().NoError(err)
 	s.Empty(rows)
@@ -89,7 +164,7 @@ func (s *StoreSuite) TestALineOfAnotherGroupIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
 		[]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
 
-	_, err := s.open().List()
+	_, err := s.open().List(s.T().Context())
 
 	var version *RecordVersionError
 	s.Require().ErrorAs(err, &version)
@@ -100,7 +175,7 @@ func (s *StoreSuite) TestAFileAtANewerMigrationIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
 		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":3}`+"\n"), 0o600))
 
-	_, err := s.open(WithMigrations(1, nil)).List()
+	_, err := s.open(WithMigrations(1, nil)).List(s.T().Context())
 
 	var newer *NewerWriterError
 	s.Require().ErrorAs(err, &newer)
@@ -117,7 +192,7 @@ func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
 		return os.WriteFile(path, []byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
 	}
 
-	_, err := s.open(WithMigrations(1, migrate)).List()
+	_, err := s.open(WithMigrations(1, migrate)).List(s.T().Context())
 
 	s.Require().NoError(err)
 	s.Equal([]int{0}, found)
@@ -126,7 +201,7 @@ func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
 func (s *StoreSuite) TestTheDocumentAnOlderWriterKeptIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, documentFileName), []byte(`{}`), 0o600))
 
-	_, err := s.open().List()
+	_, err := s.open().List(s.T().Context())
 
 	var legacy *LegacyDocumentError
 	s.Require().ErrorAs(err, &legacy)
@@ -142,7 +217,7 @@ func (s *StoreSuite) TestARowRequiringAnUnknownFeatureIsReadButNotWritten() {
 		return nil
 	}))
 
-	rows, err := st.List()
+	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.Parent = "p" })
@@ -156,7 +231,7 @@ func (s *StoreSuite) TestErrorWrapSeesTheStoresOwnRefusals() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, documentFileName), []byte(`{}`), 0o600))
 	coded := errors.New("coded")
 
-	_, err := s.open(WithErrorWrap(func(err error) error { return errors.Join(coded, err) })).List()
+	_, err := s.open(WithErrorWrap(func(err error) error { return errors.Join(coded, err) })).List(s.T().Context())
 
 	s.ErrorIs(err, coded)
 }
@@ -179,7 +254,7 @@ func (s *StoreSuite) TestRetentionRunsInsideEveryRewrite() {
 	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
 	s.Require().NoError(err)
 
-	rows, err := st.List()
+	rows, err := st.List(s.T().Context())
 
 	s.Require().NoError(err)
 	s.Equal(1, seen)
@@ -212,7 +287,7 @@ func (s *StoreSuite) TestAnEntryIsRecordedOnceAndConsumed() {
 	s.ErrorContains(err, "already has an entry")
 
 	s.Require().NoError(st.ConsumeEntry(s.T().Context(), "a", "internal/x/y.go"))
-	rows, err := st.List()
+	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
 	_, open := OpenEntry(rows[0], "internal/x/y.go")
 	s.False(open, "a consumed entry is no longer open")
@@ -243,7 +318,7 @@ func (s *StoreSuite) TestAttemptsLiveBesideTheRows() {
 	_, err = st.Delete(s.T().Context(), "a", true)
 	s.Require().NoError(err)
 
-	tries, err := st.Attempts()
+	tries, err := st.Attempts(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(tries, "a dropped row's tries end with it")
 	archives, err := filepath.Glob(filepath.Join(s.dir, "jobs-*.attempts.jsonl"))
@@ -255,7 +330,7 @@ func (s *StoreSuite) TestAnAttemptOfAnotherVersionIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, attemptsFileName),
 		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
 
-	_, err := s.open().Attempts()
+	_, err := s.open().Attempts(s.T().Context())
 
 	var newer *NewerRecordsError
 	s.Require().ErrorAs(err, &newer)

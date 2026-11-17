@@ -25,7 +25,7 @@ func TestStoreUnixSuite(t *testing.T) { suite.Run(t, new(StoreUnixSuite)) }
 
 // open is a store whose releases digest root.
 func (s *StoreUnixSuite) open(root string, opts ...StoreOption) *Store {
-	st, err := Open(s.T().TempDir(), append([]StoreOption{WithRoot(root)}, opts...)...)
+	st, err := Open(s.T().TempDir(), append(writable(WithRoot(root)), opts...)...)
 	s.Require().NoError(err)
 	return st
 }
@@ -113,7 +113,7 @@ func (s *StoreUnixSuite) TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutFor
 	s.Require().NoError(err)
 	s.Equal("drop", dropped.ID)
 
-	rows, err := st.List()
+	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1, "the other row is untouched, which is the difference from Clear")
 	s.Equal("keep", rows[0].ID)
@@ -128,7 +128,7 @@ func (s *StoreUnixSuite) TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutFor
 
 	_, err = st.Delete(s.T().Context(), "keep", true)
 	s.Require().NoError(err, "force is the caller saying they meant it")
-	rows, err = st.List()
+	rows, err = st.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
 }

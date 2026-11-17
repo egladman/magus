@@ -77,7 +77,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 		return fmt.Errorf("vcs\\cmd: lease %s is acting and this binary registers no lease-vcs gate, so `%s %s` is refused rather than run unguarded",
 			lease, backend, strings.Join(args, " "))
 	}
-	row, ok := liveRow(loc, lease)
+	row, ok := liveRow(ctx, loc, lease)
 	if !ok {
 		return nil
 	}
@@ -106,8 +106,8 @@ func childEnv(ctx context.Context) []string {
 
 // liveRow is lease's live row in the store at loc, false when the store holds none or
 // cannot be read.
-func liveRow(loc job.Location, lease string) (jobtypes.Job, bool) {
-	rows, err := job.NewStore(loc).List()
+func liveRow(ctx context.Context, loc job.Location, lease string) (jobtypes.Job, bool) {
+	rows, err := job.NewStore(loc).List(ctx)
 	if err != nil {
 		return jobtypes.Job{}, false
 	}

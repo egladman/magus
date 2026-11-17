@@ -98,7 +98,7 @@ func (s *jobSuite) forkShare(file string, ws Workspace) error {
 	there := testkit.NewRepository(s.T(), files)
 	store := NewStore(tempLocation(s.T(), here)).InWorkspace(ws)
 	seed(s.T(), store, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{file}}, Checkpoint: there.Head(), CheckoutRoot: there.Root()})
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	return unorderedFileShareProblems(s.T().Context(), store, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{file}}}).Error()
 }

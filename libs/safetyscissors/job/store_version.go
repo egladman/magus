@@ -147,7 +147,7 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 	if err != nil {
 		return nil, err
 	}
-	check := wireGoalKind.spell(GoalKindCheck)
+	check := wireGoalKind().spell(GoalKindCheck)
 	changed := false
 	for i, g := range goals {
 		var kind string

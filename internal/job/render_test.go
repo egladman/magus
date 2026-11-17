@@ -432,14 +432,14 @@ func (s *DescribeJobRecordSuite) TestTheTermsAndGoalsStayBesideTheJob() {
 func (s *DescribeJobRecordSuite) TestTheWholeRecordRoundTripsThroughApply() {
 	raw, err := codec.Marshal(s.out)
 	s.Require().NoError(err)
-	rows, err := DecodeDeclarations(bytes.NewReader(raw))
+	rows, _, err := DecodeDeclarations(bytes.NewReader(raw))
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 	s.Equal("wave/a", rows[0].ID)
 }
 
 func (s *DescribeJobRecordSuite) TestTheJobMemberAloneRoundTripsThroughApply() {
-	rows, err := DecodeDeclarations(bytes.NewReader(s.printed()["job"]))
+	rows, _, err := DecodeDeclarations(bytes.NewReader(s.printed()["job"]))
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 	s.Equal([]string{"a.go"}, rows[0].Paths.Write)

@@ -181,7 +181,7 @@ func joinDescendants(descs []descendant) string {
 // disposes the attention request the refusal names (the guard denies an agent that), and
 // the same call proceeds afterwards.
 func Abandon(ctx context.Context, store *Store, ids []string) ([]job.Job, []error, []error) {
-	rows, err := store.Unswept()
+	rows, err := store.Unswept(ctx)
 	if err != nil {
 		return nil, nil, []error{err}
 	}
@@ -358,7 +358,7 @@ func (s *Store) EndNamedCheckouts(ctx context.Context, written WrittenPaths, end
 }
 
 func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []string, onlyNamed bool) ([]job.Job, error) {
-	rows, err := s.Unswept()
+	rows, err := s.Unswept(ctx)
 	if err != nil {
 		return nil, err
 	}

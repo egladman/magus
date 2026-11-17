@@ -99,7 +99,7 @@ func (s *FollowCheckpointSuite) TestAReforkOverTheJobsOwnCommitsStartsAtTheHead(
 	mine := s.head()
 	wt, err := s.fork(s.start)
 	s.Require().NoError(err)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", s.start, wt)
@@ -118,7 +118,7 @@ func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
 	mine := s.head()
 	wt, err := s.fork("")
 	s.Require().NoError(err)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", "", wt)
@@ -129,7 +129,7 @@ func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
 
 func (s *FollowCheckpointSuite) TestACheckoutAnotherJobHoldsKeepsTheDeclaredCheckpoint() {
 	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w2", s.start, *s.row.Worktree)
@@ -388,10 +388,10 @@ func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
 	seed(t, s, job.Job{ID: "finish", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a.txt"}}})
 	_, err = s.RecordWorktree(ctx, "finish", wt)
 	require.NoError(t, err)
-	owned, err := s.OwnedCheckout(dir)
+	owned, err := s.OwnedCheckout(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, dir, owned)
-	none, err := s.OwnedCheckout(repo.Root())
+	none, err := s.OwnedCheckout(t.Context(), repo.Root())
 	require.NoError(t, err)
 	assert.Empty(t, none)
 
@@ -427,7 +427,7 @@ func TestParentCheckoutIsWhereTheParentWorksWhenNotHere(t *testing.T) {
 		"a parent nobody took":             {here: repo.Root(), parent: "untaken"},
 		"a parent the store does not know": {here: repo.Root(), parent: "nobody"},
 	} {
-		dir, bound, err := s.ParentCheckout(tc.here, tc.parent)
+		dir, bound, err := s.ParentCheckout(t.Context(), tc.here, tc.parent)
 		require.NoError(t, err, name)
 		assert.Equal(t, tc.dir, dir, name)
 		assert.Equal(t, tc.bound, bound, name)
@@ -748,7 +748,7 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 	assert.NoDirExists(t, clean.Worktree.Root, "a clean checkout goes with its row")
 	assert.NotZero(t, dropped.Worktree.Removed)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "dirty", rows[0].ID)
@@ -1308,7 +1308,7 @@ func (s *BinaryPinSuite) write(body string) {
 }
 
 func (s *BinaryPinSuite) refusal(bin string) string {
-	why, err := s.store.PinRefusal(bin)
+	why, err := s.store.PinRefusal(s.T().Context(), bin)
 	s.Require().NoError(err)
 	return why
 }

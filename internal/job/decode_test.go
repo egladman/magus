@@ -36,7 +36,7 @@ func declaration(members ...string) *strings.Reader {
 func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
-	row, err := decodeDeclaration(declaration(
+	row, _, err := decodeDeclaration(declaration(
 		`"id":"adj/ledger"`, `"owned_paths":["internal/ledger"]`,
 		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`))
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 func TestDecodeDeclarationRefusesAFieldSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeDeclaration(declaration(`"id":"adj/ledger"`, `"owned_paths":["a"]`, `"paths":{"write":["b"]}`))
+	_, _, err := decodeDeclaration(declaration(`"id":"adj/ledger"`, `"owned_paths":["a"]`, `"paths":{"write":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -101,7 +101,7 @@ func TestDecodeReadsItsOwnVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, job.ResultAPIVersion, rep.Version)
 
-	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"safetyscissors.job/v1alpha1","id":"adj/store"}`))
+	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"safetyscissors.job/v1alpha1","id":"adj/store"}`))
 	require.NoError(t, err)
 	assert.Equal(t, job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "adj/store"}, row)
 }
@@ -111,11 +111,11 @@ func TestDecodeReadsItsOwnVersion(t *testing.T) {
 func TestDecodeRefusesAnUnmetRequirement(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeDeclaration(declaration(`"requires":["never-implemented"]`, `"id":"adj/store"`))
+	_, _, err := decodeDeclaration(declaration(`"requires":["never-implemented"]`, `"id":"adj/store"`))
 	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (%s) lacks, update magus`,
 		job.APIVersion), err.Error())
 
-	row, err := decodeDeclaration(declaration(`"requires":["claim-declarations"]`, `"id":"adj/store"`))
+	row, _, err := decodeDeclaration(declaration(`"requires":["claim-declarations"]`, `"id":"adj/store"`))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"claim-declarations"}, row.Requires)
 }
@@ -143,7 +143,7 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 		{"registered_by", `"registered_by":{"session":"someone"}`},
 		{"releases", `"releases":[]`},
 	} {
-		_, err := decodeDeclaration(declaration(`"id":"adj/store"`, field.member))
+		_, _, err := decodeDeclaration(declaration(`"id":"adj/store"`, field.member))
 		require.Error(t, err, field.name)
 		// The refusal has to NAME the field. An error alone is satisfied by the version
 		// check too, so a fixture whose schema_version fell behind would leave this
@@ -156,15 +156,15 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeDeclaration(declaration(`"id":"adj store"`))
+	_, _, err := decodeDeclaration(declaration(`"id":"adj store"`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = decodeDeclaration(declaration(`"id":"adj/store"`, `"state":"done"`))
+	_, _, err = decodeDeclaration(declaration(`"id":"adj/store"`, `"state":"done"`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
-	row, err := decodeDeclaration(declaration(
+	row, _, err := decodeDeclaration(declaration(
 		`"id":"adj/store"`, `"paths":{"write":["internal/ledger"]}`, `"state":"declared"`))
 	require.NoError(t, err)
 	assert.Equal(t, job.StateDeclared, row.State)
@@ -186,19 +186,19 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 %s
 `, string(one), two),
 	} {
-		rows, err := DecodeDeclarations(strings.NewReader(raw))
+		rows, _, err := DecodeDeclarations(strings.NewReader(raw))
 		require.NoError(t, err, name)
 		assert.Equal(t, []string{"a", "b"}, []string{rows[0].ID, rows[1].ID}, name)
 	}
-	rows, err := DecodeDeclarations(strings.NewReader(string(one)))
+	rows, _, err := DecodeDeclarations(strings.NewReader(string(one)))
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 
 	bad := fmt.Sprintf(`{"api_version":%q,"id":"c","confidence":"high"}`, job.APIVersion)
-	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s\n%s", string(one), two, bad)))
+	_, _, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s\n%s", string(one), two, bad)))
 	require.ErrorContains(t, err, "record 3:")
 	assert.Contains(t, err.Error(), "confidence")
-	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s", string(one), string(one))))
+	_, _, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s", string(one), string(one))))
 	require.ErrorContains(t, err, "a is record 1 too")
 }
 
@@ -226,17 +226,17 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
 		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
 		`"unknown":["spec.x"],"releases":[],"model_tier":{"name":"routine","rank":0,"skills":"full","source":"default"}}`, job.APIVersion)
-	rows, err := DecodeDeclarations(strings.NewReader(stored))
+	rows, _, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []string{"internal/job"}, rows[0].Paths.Write)
 	assert.Empty(t, rows[0].State, "the status a described row prints is the store's, and apply never writes one")
 
 	typo := strings.Replace(stored, `"paths"`, `"pathz"`, 1)
-	_, err = DecodeDeclarations(strings.NewReader(typo))
+	_, _, err = DecodeDeclarations(strings.NewReader(typo))
 	require.ErrorContains(t, err, "pathz")
 
-	_, err = decodeDeclaration(strings.NewReader(stored))
+	_, _, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
 }
 
@@ -245,18 +245,18 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 	t.Parallel()
 
-	plain, err := DecodeDeclarations(strings.NewReader(fmt.Sprintf(
+	plain, _, err := DecodeDeclarations(strings.NewReader(fmt.Sprintf(
 		`{"api_version":%q,"id":"a","paths":{"write":["internal/job"]}}`, job.APIVersion)))
 	require.NoError(t, err)
 
 	described := `{"job":{"id":"a","paths":{"write":["internal/job"]},"state":"declared","created":1},` +
 		`"projects":["."],"graph_cold":true,"goals":{"id":"a"}}`
-	rows, err := DecodeDeclarations(strings.NewReader(described))
+	rows, _, err := DecodeDeclarations(strings.NewReader(described))
 	require.NoError(t, err)
 	assert.Equal(t, plain, rows)
 
 	typo := strings.Replace(described, `"projects"`, `"projectz"`, 1)
-	_, err = DecodeDeclarations(strings.NewReader(typo))
+	_, _, err = DecodeDeclarations(strings.NewReader(typo))
 	require.EqualError(t, err, fmt.Sprintf("record 1: %v", recordInvalid("projectz",
 		errors.New("\"projectz\" beside `job` is not a member `describe job -o json` prints")).Error()))
 }
@@ -268,19 +268,19 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 
 	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},`+
 		`"check":{"target":"go-test","project":"."},"validation":"magus run go-test ."}`, job.APIVersion)
-	rows, err := DecodeDeclarations(strings.NewReader(stored))
+	rows, _, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].Check)
 	assert.Equal(t, "go-test", rows[0].Check.Target)
 
 	line := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},"validation":"magus run go-test ."}`, job.APIVersion)
-	rows, err = DecodeDeclarations(strings.NewReader(line))
+	rows, _, err = DecodeDeclarations(strings.NewReader(line))
 	require.NoError(t, err)
 	require.NotNil(t, rows[0].Check, "a line alone is the declaration's own check")
 	assert.Equal(t, job.LeaseCheck{Target: "go-test", Project: "."}, *rows[0].Check)
 
-	_, err = decodeDeclaration(strings.NewReader(stored))
+	_, _, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "not both", "fork's decoder stays strict")
 }
 
@@ -289,7 +289,7 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeDeclaration(strings.NewReader("  \n"))
+	_, _, err := decodeDeclaration(strings.NewReader("  \n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
@@ -369,7 +369,7 @@ func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 	assert.Contains(t, goal.Properties.Expect.Description, "passed for check")
 	assert.Contains(t, goal.Properties.Expect.Description, "changed for paths and symbol")
 
-	decl, err := decodeDeclaration(declaration(`"id":"adj/store"`, `"goals":[`+
+	decl, _, err := decodeDeclaration(declaration(`"id":"adj/store"`, `"goals":[`+
 		`{"id":"unit","kind":"check","check":{"target":"test"}},`+
 		`{"id":"done","kind":"paths","paths":["internal/job"]}]`))
 	require.NoError(t, err)
@@ -383,13 +383,13 @@ func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
 	t.Parallel()
 
-	decl, err := decodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag","api.Open"]`))
+	decl, _, err := decodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag","api.Open"]`))
 	require.NoError(t, err)
 	var row job.Job
 	decl.Apply(&row)
 	assert.Equal(t, []string{"--old-flag", "api.Open"}, row.Breaks)
 
-	_, err = decodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag",""]`))
+	_, _, err = decodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag",""]`))
 	assert.ErrorContains(t, err, "breaks[1] is blank")
 }
 
@@ -472,26 +472,26 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 func TestDecodeStdinDeclarationRefusesARecordNamingNoVersion(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
+	_, _, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "carries no api_version")
 	assert.Contains(t, err.Error(), `add "api_version": "`+string(job.APIVersion)+`" to the record`, "the refusal names the field to add")
 
-	row, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
+	row, _, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
 	require.NoError(t, err)
 	assert.Equal(t, "a", row.ID)
 
-	_, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
+	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version")
 
-	_, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
+	_, _, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
 	require.Error(t, err, "a record that is not an object is refused")
 }
 
 func TestDecodeStdinDeclarationRefusesTheRecordThatWipedARow(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeStdinDeclaration(strings.NewReader(
+	_, _, err := DecodeStdinDeclaration(strings.NewReader(
 		`{"id":"hook-fails-closed","claim":[{"path":"cmd/magus/shell.go","because":"refs:withStaleConfig"}]}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "api_version")
@@ -500,16 +500,16 @@ func TestDecodeStdinDeclarationRefusesTheRecordThatWipedARow(t *testing.T) {
 func TestDecodeStdinDeclarationRefusesAClaimOrASettlementThatNamesItsVersion(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"claim":[{"path":"x.go","because":"refs:f"}]`))
+	_, _, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"claim":[{"path":"x.go","because":"refs:f"}]`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "a claim, not a declaration")
 	assert.Contains(t, err.Error(), "job apply --stdin")
 
-	_, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"left_unmerged":"scrapped"`))
+	_, _, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"left_unmerged":"scrapped"`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "a settlement, not a declaration")
 
-	row, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"enter":"x.go"`))
+	row, _, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"enter":"x.go"`))
 	require.NoError(t, err, "an entry is the one non-declaration fork takes")
 	assert.Equal(t, "x.go", row.Enter)
 }

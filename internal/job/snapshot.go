@@ -32,12 +32,12 @@ func (s Snapshot) Clone() Snapshot {
 
 // ReadSnapshot reads store's rows, swept as [Store.List] sweeps them, and
 // its tries.
-func ReadSnapshot(store *Store) Snapshot {
-	rows, err := store.List()
+func ReadSnapshot(ctx context.Context, store *Store) Snapshot {
+	rows, err := store.List(ctx)
 	if err != nil {
 		return Snapshot{Err: err}
 	}
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	return Snapshot{Rows: rows, Attempts: tries, Err: err}
 }
 

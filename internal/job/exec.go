@@ -56,7 +56,7 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 	// Read before the lock, since it runs the VCS. The row is read again there.
 	var row job.Job
-	if f, err := s.Read(); err == nil {
+	if f, err := s.Read(ctx); err == nil {
 		if i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 			row = f.Jobs[i]
 		}

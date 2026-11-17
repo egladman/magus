@@ -96,7 +96,7 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	assert.Equal(t, "w", rec.graded[0].ID, "the grader is handed the row, its id the lease to grade under")
 	assert.Equal(t, build, rec.graded[0].Check)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 

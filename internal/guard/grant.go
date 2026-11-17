@@ -32,16 +32,16 @@ func GrantableRules() []string {
 // grantedRules lowers to advise, for this call alone, each grantable rule a live grant names
 // for the acting lease, and returns the grants that did. A grants file that cannot be read
 // lowers nothing, so every rule keeps refusing.
-func grantedRules(deps Dependencies, at location, standing leaseStanding) (Dependencies, map[string]jobtypes.Grant) {
+func grantedRules(ctx context.Context, deps Dependencies, at location, standing leaseStanding) (Dependencies, map[string]jobtypes.Grant) {
 	if !standing.declared || !standing.state.Live() {
 		return deps, nil
 	}
 	store := job.NewStore(at.jobs())
-	grants, err := store.Grants()
+	grants, err := store.Grants(ctx)
 	if err != nil {
 		return deps, nil
 	}
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return deps, nil
 	}

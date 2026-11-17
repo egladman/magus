@@ -211,7 +211,7 @@ type heldOutcome struct {
 // fails the write rather than losing the outcome after it. A dry run writes nothing, a
 // store with no checkout has no workspace to name, and a row that ran at no tier has
 // nothing the lens could rank, so none holds one.
-func (e *endings) hold(s *Store, plan []job.Job, row job.Job) error {
+func (e *endings) hold(ctx context.Context, s *Store, plan []job.Job, row job.Job) error {
 	if s.dryRun || s.root == "" || row.ModelTier == nil {
 		return nil
 	}
@@ -222,7 +222,7 @@ func (e *endings) hold(s *Store, plan []job.Job, row job.Job) error {
 		}
 		e.path = path
 	}
-	all, err := s.Attempts()
+	all, err := s.Attempts(ctx)
 	if err != nil {
 		return err
 	}

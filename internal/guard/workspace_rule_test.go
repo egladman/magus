@@ -122,7 +122,7 @@ func commitAuthority(t *testing.T, ctx context.Context, root string) {
 		require.NoError(t, err, string(out))
 	}
 	store := job.NewStore(hookLocation(ctx, Dependencies{}).jobs())
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	for _, row := range rows {
 		_, err := store.AdvanceAuthority(ctx, row.ID)

@@ -270,7 +270,7 @@ func ApplyClaim(ctx context.Context, root string, records []job.Declaration, ope
 	if err != nil {
 		return job.Job{}, 0, err
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return job.Job{}, 0, err
 	}

@@ -112,7 +112,7 @@ func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string
 	if err != nil {
 		return fmt.Sprintf("the job store of %s, which pins every binary this hands a call to, did not open: %v", session, err)
 	}
-	why, err := store.PinRefusal(own)
+	why, err := store.PinRefusal(ctx, own)
 	if err != nil {
 		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}

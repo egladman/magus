@@ -741,7 +741,7 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	var filed map[string]any
 	require.NoError(t, codec.Unmarshal(raw, &filed))
 	line, err := codec.Marshal(map[string]any{
-		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"apiVersion": jobtypes.RecordAPIVersion, "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)

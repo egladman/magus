@@ -45,8 +45,8 @@ func configName(rel string) bool {
 }
 
 // stored is the ledger's row for id.
-func (s *Store) stored(id string) (job.Job, error) {
-	rows, err := s.List()
+func (s *Store) stored(ctx context.Context, id string) (job.Job, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return job.Job{}, err
 	}
@@ -109,7 +109,7 @@ func NarrowHold(ctx context.Context, store *Store, id, file string, touched []st
 		return nil
 	})
 	if errors.Is(err, errNarrowedAlready) {
-		row, err = store.stored(id)
+		row, err = store.stored(ctx, id)
 		return row, nil, err
 	}
 	if err != nil {
@@ -223,7 +223,7 @@ func (s *Store) FileReleaseRequest(ctx context.Context, holder string, req job.R
 
 // CloseReleaseRequest drops request id from the row carrying it, if any does.
 func (s *Store) CloseReleaseRequest(ctx context.Context, id string) error {
-	f, err := s.Read()
+	f, err := s.Read(ctx)
 	if err != nil {
 		return err
 	}

@@ -475,7 +475,7 @@ func readJobSnapshot(ctx context.Context, r Readers, root string) job.Snapshot {
 	if err != nil {
 		return job.Snapshot{Err: err}
 	}
-	return job.ReadSnapshot(store)
+	return job.ReadSnapshot(ctx, store)
 }
 
 // sessionJobTree is the jobs under this session's root, nil when it owns none. The CLI

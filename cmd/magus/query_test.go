@@ -613,7 +613,7 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 	// The gate prints a next step's reason once per session; silent drops it from both.
 	global.silent = true
 	ctx := context.Background()
-	nx := newNextGate(f.root)
+	nx := newNextGate(t.Context(), f.root)
 	for _, tc := range []struct {
 		verb  string
 		input string

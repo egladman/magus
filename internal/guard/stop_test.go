@@ -52,7 +52,7 @@ func fixtureAttemptLine(t *testing.T, a jobtypes.Attempt) []byte {
 		status["job_state"] = state
 	}
 	line, err := codec.Marshal(map[string]any{
-		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"apiVersion": jobtypes.RecordAPIVersion, "kind": "Attempt",
 		"spec": map[string]any{"job": a.Job, "n": a.N}, "status": fixtureCamelKeys(status),
 	})
 	require.NoError(t, err)

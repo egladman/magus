@@ -787,11 +787,11 @@ func (s *Store) Settle(ctx context.Context, records []job.Declaration, dryRun bo
 	if lease := s.Actor().Lease; lease != "" {
 		return nil, fmt.Errorf("%s holds a lease, and only its orchestrator settles a row", lease)
 	}
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	all, err := s.Attempts()
+	all, err := s.Attempts(ctx)
 	if err != nil {
 		return nil, err
 	}

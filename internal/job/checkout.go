@@ -839,7 +839,7 @@ func ownTree(rows []job.Job, root string, row job.Job) bool {
 //
 // An error means no range could be read at all: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -432,7 +432,7 @@ func (s *Store) writeHook(ctx context.Context, e *job.WriteEvent) error {
 			return nil
 		}
 		var ended endings
-		if err := ended.hold(s, e.Rows, *e.Row); err != nil {
+		if err := ended.hold(ctx, s, e.Rows, *e.Row); err != nil {
 			return err
 		}
 		e.After = append(e.After, func(ctx context.Context) error { return ended.record(ctx, time.Now().UnixMilli()) })

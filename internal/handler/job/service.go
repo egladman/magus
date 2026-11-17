@@ -159,11 +159,11 @@ func (s *Service) jobWorkspace(ctx context.Context) jobstore.Workspace {
 }
 
 // rows reads the job store, empty when there is none or it will not read; see [Service.report].
-func (s *Service) rows() []job.Job {
+func (s *Service) rows(ctx context.Context) []job.Job {
 	if s.store == nil {
 		return nil
 	}
-	rows, err := s.store.List()
+	rows, err := s.store.List(ctx)
 	if err != nil {
 		return nil
 	}
@@ -171,8 +171,8 @@ func (s *Service) rows() []job.Job {
 }
 
 // row is the stored row for the job named name, zero when nothing has recorded one.
-func (s *Service) row(name string) job.Job {
-	for _, r := range s.rows() {
+func (s *Service) row(ctx context.Context, name string) job.Job {
+	for _, r := range s.rows(ctx) {
 		if r.ID == name {
 			return r
 		}
@@ -182,11 +182,11 @@ func (s *Service) row(name string) job.Job {
 
 // result is what the job named name's live attempt filed, nil when it
 // filed nothing or the store will not read; see [Service.report].
-func (s *Service) result(name string) *job.Result {
+func (s *Service) result(ctx context.Context, name string) *job.Result {
 	if s.store == nil {
 		return nil
 	}
-	tries, err := s.store.Attempts()
+	tries, err := s.store.Attempts(ctx)
 	if err != nil {
 		return nil
 	}
@@ -239,7 +239,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	info := s.job(ctx, j, running, s.row(j.Name), s.result(j.Name))
+	info := s.job(ctx, j, running, s.row(ctx, j.Name), s.result(ctx, j.Name))
 
 	state := jobv1.SubmitState_SUBMIT_STATE_SUBMITTED
 	if inv == "" { // the server coalesced this into an identical in-flight job

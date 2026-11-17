@@ -377,7 +377,7 @@ var allChecks = []checkDef{
 		Doc:            "live jobs a holder took and left quiet past jobs.stale_after, or blocked on a dependency that ended without passing",
 		Evidence:       check.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(_ context.Context, r *runner, _ []*types.Project) check.Check { return r.checkJobTree() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) check.Check { return r.checkJobTree(ctx) },
 	},
 	{
 		Name:     "server-version",

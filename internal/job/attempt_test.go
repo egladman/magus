@@ -29,7 +29,7 @@ func fileTry(t *testing.T, s *Store, id string, result *job.Result) {
 // triesIn are the tries s holds, by job.
 func triesIn(t *testing.T, s *Store) job.Attempts {
 	t.Helper()
-	all, err := s.Attempts()
+	all, err := s.Attempts(t.Context())
 	require.NoError(t, err)
 	return job.NewAttempts(all)
 }
@@ -57,7 +57,7 @@ func (s *attemptStoreSuite) SetupTest() {
 func (s *attemptStoreSuite) at(sec int64) time.Time { return time.Unix(sec, 0) }
 
 func (s *attemptStoreSuite) TestAnUnwrittenStoreHoldsNoTries() {
-	all, err := s.store.Attempts()
+	all, err := s.store.Attempts(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(all)
 }
@@ -171,7 +171,7 @@ func (s *attemptStoreSuite) TestALineAnotherVersionWroteIsRefused() {
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
 	s.Require().NoError(os.WriteFile(path, []byte(`{"apiVersion":"batch.magus/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
 
-	_, err := s.store.Attempts()
+	_, err := s.store.Attempts(s.T().Context())
 
 	s.Require().Error(err)
 	s.Contains(err.Error(), "attempt 1 of a is batch.magus/v1alpha99 Attempt")
@@ -207,7 +207,7 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	s.Require().NoError(s.store.envelopeAttempts(s.T().Context()))
 	s.Require().NoError(s.store.envelopeAttempts(s.T().Context()))
 
-	got, err := s.store.Attempts()
+	got, err := s.store.Attempts(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(got, 1, "the dropped try reads as gone")
 	s.Equal(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, got[0])
@@ -248,7 +248,7 @@ const triesMovedFrom = `{"api_version":"safetyscissors.job/v1alpha1","migration"
 func (s *attemptStoreSuite) TestMigrationThreeMovesARowsTriesToAttempts() {
 	path := plantRaw(s.T(), s.store, triesMovedFrom)
 
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 
@@ -276,7 +276,7 @@ func (s *attemptStoreSuite) TestMovingTriesTwiceReadsThemOnce() {
 	s.Require().NoError(s.store.moveTries(s.T().Context()))
 	s.Require().NoError(s.store.moveTries(s.T().Context()))
 
-	all, err := s.store.Attempts()
+	all, err := s.store.Attempts(s.T().Context())
 	s.Require().NoError(err)
 	s.Len(all, 3)
 }
@@ -285,7 +285,7 @@ func (s *attemptStoreSuite) TestARowWithNoTriesMovesNothing() {
 	plantRaw(s.T(), s.store, `{"api_version":"safetyscissors.job/v1alpha1","migration":2}
 {"id":"a","state":"running","created":1,"updated":1}`)
 
-	_, err := s.store.List()
+	_, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	s.Empty(triesIn(s.T(), s.store))

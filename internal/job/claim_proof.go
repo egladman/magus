@@ -694,7 +694,7 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []job.ClaimRequest, f
 			return grantClaim(actor, cur, reqs, facts, limits, now, by)
 		})
 	}
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return job.Job{}, err
 	}

@@ -321,7 +321,7 @@ func jobRows(ctx context.Context, root string) func() ([]jobtypes.Job, error) {
 		if err != nil {
 			return nil, err
 		}
-		return store.List()
+		return store.List(ctx)
 	}
 }
 

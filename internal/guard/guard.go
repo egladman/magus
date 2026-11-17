@@ -1035,7 +1035,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		standing.endedBinding = binding.Job
 	}
 	deps.worker = standing.declared && standing.state.Live() && workerRole(standing.row, deps.caller) != ""
-	deps, granted := grantedRules(deps, location, standing)
+	deps, granted := grantedRules(ctx, deps, location, standing)
 	// pending is the call's first deny the workspace demoted to advise. It is spoken only
 	// once every rule has had its turn, so a later deny still wins.
 	var pending heldAdvice
@@ -2562,7 +2562,7 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	// An embedder's reader answers rows alone: its tasks keep no attempts.
 	var tries []jobtypes.Attempt
 	if err == nil && store != nil {
-		tries, err = store.Attempts()
+		tries, err = store.Attempts(ctx)
 	}
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Attempts: tries, Err: err})
 }
@@ -2623,7 +2623,7 @@ func leaseRows(ctx context.Context, at location) ([]jobtypes.Job, error) {
 	if at.rows != nil {
 		return at.rows.List(ctx)
 	}
-	return job.NewStore(at.jobs()).List()
+	return job.NewStore(at.jobs()).List(ctx)
 }
 
 // hardenCovering is harden, which keeps its rows' order, over rows narrowed to the soft

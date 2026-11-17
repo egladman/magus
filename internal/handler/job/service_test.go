@@ -43,7 +43,7 @@ func seedFiled(t *testing.T, store *jobstore.Store, id string, result *job.Resul
 	var filed map[string]any
 	require.NoError(t, codec.Unmarshal(raw, &filed))
 	line, err := codec.Marshal(map[string]any{
-		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"apiVersion": job.RecordAPIVersion, "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)
@@ -448,7 +448,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Equal(t, "diverged", got.BaseVerdict)
 	require.Equal(t, "/w/agent-1", got.CheckoutRoot)
 	require.Equal(t, int64(1700000100), got.Registered)
-	require.Equal(t, "batch.magus/v1alpha1", got.ApiVersion)
+	require.Equal(t, string(job.RecordAPIVersion), got.ApiVersion)
 	require.Equal(t, []string{"claims"}, got.Requires)
 
 	wantBy := &jobv1.JobOrigin{

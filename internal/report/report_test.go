@@ -393,7 +393,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	require.NoError(t, err)
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
-	served := ServedIn(job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
+	served := ServedIn(t.Context(), job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
 	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
 		return fmt.Errorf("exit 2")
 	}, RunOptions(w, served, nil)...)
@@ -454,13 +454,13 @@ func TestServedInFiltersForTheActingRole(t *testing.T) {
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
 	loc := job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: t.TempDir()}
-	served := ServedIn(loc)(next)
+	served := ServedIn(t.Context(), loc)(next)
 	require.Len(t, served, 2, "an unbound reader keeps the lot")
 
 	require.NoError(t, os.MkdirAll(filepath.Dir(loc.MarkerPath()), 0o755))
 	require.NoError(t, os.WriteFile(loc.MarkerPath(), []byte("harness/reviewer\n"), 0o644))
 	loc.Root = t.TempDir()
-	served = ServedIn(loc)(next)
+	served = ServedIn(t.Context(), loc)(next)
 	ids := make([]string, len(served))
 	for i, n := range served {
 		ids[i] = n.ID

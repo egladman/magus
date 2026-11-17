@@ -306,11 +306,11 @@ func MeasureOverlaps(ctx context.Context, root string, rows []job.Job, overlaps 
 // It never joins the queue snapshot: in-flight changes are the queue's, and a door that
 // wants them joins them itself.
 func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration) (job.List, error) {
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return job.List{}, err
 	}
-	tries, err := s.Attempts()
+	tries, err := s.Attempts(ctx)
 	if err != nil {
 		return job.List{}, err
 	}

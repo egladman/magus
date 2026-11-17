@@ -47,7 +47,7 @@ func InflightScope(changes []InflightChange, all bool) []InflightChange {
 // a follow-up fixing what the merge left red keeps the row. nil when there is no such row or
 // every goal is met.
 func UnfinishedIntegration(ctx context.Context, store *Store, row job.Declaration, observe Observer) ([]string, error) {
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func UnloadableMagusfile(err error) error {
 // NoteForkJudgedAsUpdate says when id is live, so its fork is judged only on
 // what it adds. A fork of the same record after the row ends is judged whole.
 func NoteForkJudgedAsUpdate(ctx context.Context, store *Store, id string) bool {
-	live, err := store.RowLive(id)
+	live, err := store.RowLive(ctx, id)
 	if err != nil {
 		slog.InfoContext(ctx, fmt.Sprintf("whether %s is live could not be read", id), attr.Error(err), attr.Notice("note"))
 		return false
@@ -99,7 +99,7 @@ func NoteForkRowEnded(ctx context.Context, store *Store, id string, wasLive bool
 	if !wasLive {
 		return
 	}
-	if live, err := store.RowLive(id); err == nil && !live {
+	if live, err := store.RowLive(ctx, id); err == nil && !live {
 		slog.InfoContext(ctx, fmt.Sprintf("%s ended while this fork ran, so it is judged whole as a new job, not as an update", id), attr.Notice("note"))
 	}
 }

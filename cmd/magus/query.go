@@ -161,7 +161,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	noteShardErrors(ctx, root, "magus query")
 
 	stop := observability.TraceFromContext(ctx).Phase("query.next")
-	nx := newNextGate(root)
+	nx := newNextGate(ctx, root)
 	next := nx.served(hint.NextForQuery(out))
 	stop()
 
@@ -334,7 +334,7 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 func emitExplainCard(ctx context.Context, root, input string, opts output.Options, source sourceWindow, res knowledge.ExplainResult) error {
 	out := res.Out
 	stop := observability.TraceFromContext(ctx).Phase("explain.next")
-	nx := newNextGate(root)
+	nx := newNextGate(ctx, root)
 	next := nx.served(hint.NextForExplain(out))
 	stop()
 

@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -74,7 +75,7 @@ func UnboundNextGate() NextGate {
 
 // ActingRole grades the acting lease against the job store at loc, which is placed
 // by placeErr. A store that cannot be read serves the worker's narrower set.
-func ActingRole(loc Location, placeErr error) (hint.Role, []string) {
+func ActingRole(ctx context.Context, loc Location, placeErr error) (hint.Role, []string) {
 	if placeErr != nil {
 		return hint.RoleWorker, nil
 	}
@@ -82,7 +83,7 @@ func ActingRole(loc Location, placeErr error) (hint.Role, []string) {
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(ctx)
 	if err != nil {
 		return hint.RoleWorker, nil
 	}

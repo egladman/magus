@@ -114,7 +114,7 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 		ObservedGeneration: 1,
 	}, status)
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, job.StatePass, rows[0].State)
@@ -140,7 +140,7 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	assert.True(t, status.Verified)
 	assert.Empty(t, status.Violations, "an unwritten soft path is no violation")
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Empty(t, rows[0].Releases, "and the exit gave up no path it held")
@@ -438,7 +438,7 @@ func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJo
 	s.Contains(strings.Join(status.Notes, "\n"), "gave up what it never touched")
 	s.Contains(strings.Join(status.Notes, "\n"), "docs/reference/*.md")
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
 	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.ID })
 	s.Equal(job.StateRunning, rows[i].State)
@@ -460,7 +460,7 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	assert.False(t, status.Verified)
 	assert.Contains(t, status.Violations, "job harness/ledger-accept is not read-only and the result claims no changed paths at all")
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, job.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
 }
@@ -472,7 +472,7 @@ func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
 
 	row := acceptRow()
 	loc := declared(t, row)
-	before, err := NewStore(loc).List()
+	before, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	run := passingRun
 	run.Ref, run.TimestampMs = passingResult().Validation.OutputRef, 9_999_999_999_999
@@ -483,7 +483,7 @@ func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
 	_, err = Wait(t.Context(), NewStore(loc), row.ID, &empty, resolve, nil, nil)
 	require.NoError(t, err)
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, rows[0].Rejection)
 	assert.Contains(t, rows[0].Rejection.Violations, "job harness/ledger-accept is not read-only and the result claims no changed paths at all")
@@ -495,7 +495,7 @@ func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
 	status, err := Wait(t.Context(), NewStore(loc), row.ID, &result, resolve, observeClaim(result), nil)
 	require.NoError(t, err)
 	require.True(t, status.Verified, status.Violations)
-	rows, err = NewStore(loc).List()
+	rows, err = NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Nil(t, rows[0].Rejection)
 }
@@ -533,7 +533,7 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	})
 	require.GreaterOrEqual(t, i, 0, status.Violations)
 	assert.Contains(t, status.Violations[i], "go-test", "the violation names the check to run again")
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, job.StateRunning, rows[0].State, "the rejection sends it back to rework")
 	require.NotNil(t, rows[0].Rejection)
@@ -574,7 +574,7 @@ func waitAs(t *testing.T, loc Location, holder, target string) (job.Status, erro
 // jobStates maps each row in loc's store to its state.
 func jobStates(t *testing.T, loc Location) map[string]job.State {
 	t.Helper()
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	out := map[string]job.State{}
 	for _, row := range rows {
@@ -671,7 +671,7 @@ func sweepStore(t *testing.T, now int64, staleAfter time.Duration) (*Store, *str
 
 func states(t *testing.T, s *Store) map[string]job.Job {
 	t.Helper()
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	out := map[string]job.Job{}
 	for _, r := range rows {
@@ -945,7 +945,7 @@ func TestSweepRefusesAnUnreadableWorkspaceConfig(t *testing.T) {
 	s := tempStore(t, root)
 	plant(t, s, job.Job{ID: "untaken", State: job.StateDeclared, Updated: 1})
 
-	_, err := s.List()
+	_, err := s.List(t.Context())
 	assert.ErrorContains(t, err, "jobs.stale_after")
 }
 
@@ -1137,7 +1137,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 				CheckpointObserver(repo.Root(), read), nil)
 			require.NoError(t, err)
 			require.Len(t, status.Gates, 1)
-			rows, err := NewStore(loc).List()
+			rows, err := NewStore(loc).List(t.Context())
 			require.NoError(t, err)
 			if tc.holds {
 				assert.True(t, status.Verified, "violations: %v", status.Violations)
@@ -1227,7 +1227,7 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 			assert.Empty(t, notices.String(), "prune reports its endings to its caller, not as sweep notices")
 
-			f, err := s.Read()
+			f, err := s.Read(t.Context())
 			require.NoError(t, err)
 			for i, row := range f.Jobs {
 				at := slices.IndexFunc(tt.want, func(e Ending) bool { return e.ID == row.ID })
@@ -1300,7 +1300,7 @@ func TestDryRunListEndsRowsOnlyInWhatItReturns(t *testing.T) {
 	before := dir()
 
 	s.dryRun = true
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, job.StateNoReturn, rows[0].State)
@@ -1374,7 +1374,7 @@ func (j waiterEvidenceJob) waitObserving(t *testing.T, here map[string]job.Captu
 
 func (j waiterEvidenceJob) stored(t *testing.T) job.Job {
 	t.Helper()
-	rows, err := NewStore(j.loc).List()
+	rows, err := NewStore(j.loc).List(t.Context())
 	require.NoError(t, err)
 	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == j.row.ID })
 	require.GreaterOrEqual(t, i, 0)

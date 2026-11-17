@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
-	"time"
 )
 
 // CheckCommand is the command goal, a check goal of row, is run by: the argv a caller's
@@ -19,156 +19,191 @@ import (
 // command, so it never witnesses the goal. See [WithCheckCommand].
 type CheckCommand func(row Job, goal Goal) (argv []string, dir string, err error)
 
-// WitnessRefusal names why [Store.Witness] or [Witness.Close] refused a command.
+// WitnessRefusal names why [Store.Witness] refused a command.
 type WitnessRefusal string
 
 const (
 	// RefusalNoCommand is a Witness call with no exec.Cmd.
 	RefusalNoCommand WitnessRefusal = "no-command"
-	// RefusalStarted is a command that started before the witness attached.
+	// RefusalStarted is a command that started before Witness ran it, or one carrying
+	// the Process or ProcessState of another command.
 	RefusalStarted WitnessRefusal = "started"
 	// RefusalOtherCheck is a command whose argv or directory is not the goal's check's.
 	RefusalOtherCheck WitnessRefusal = "other-check"
-	// RefusalNeverWaited is a Close before the caller waited on the command.
-	RefusalNeverWaited WitnessRefusal = "never-waited"
-	// RefusalOtherProcess is an exit status that is not the wait of the process the
-	// command started: one built by hand, or taken from another command.
-	RefusalOtherProcess WitnessRefusal = "other-process"
-	// RefusalRedirected is output sent past the witness's digest after it attached.
-	RefusalRedirected WitnessRefusal = "redirected"
-	// RefusalClosed is a second Close.
-	RefusalClosed WitnessRefusal = "closed"
+	// RefusalOtherProgram is a command whose Path is not the program its argv[0]
+	// resolves to, such as /bin/true carrying the check's argv.
+	RefusalOtherProgram WitnessRefusal = "other-program"
+	// RefusalEnv is a command carrying an Env the check's command does not name.
+	RefusalEnv WitnessRefusal = "env"
+	// RefusalSysProcAttr is a command carrying a SysProcAttr the check's command does not
+	// name.
+	RefusalSysProcAttr WitnessRefusal = "sys-proc-attr"
+	// RefusalExtraFiles is a command carrying ExtraFiles the check's command does not name.
+	RefusalExtraFiles WitnessRefusal = "extra-files"
+	// RefusalNotStarted is a command that would not start; Err is why.
+	RefusalNotStarted WitnessRefusal = "not-started"
+	// RefusalUnfinished is a run whose wait or output copy failed, so the digest is not
+	// the whole run's output; Err is why.
+	RefusalUnfinished WitnessRefusal = "unfinished"
 )
 
-// WitnessRefusedError is a command [Store.Witness] would not watch or [Witness.Close]
-// would not record. Detail adds what the refusal compared, when it compared anything.
+// WitnessRefusedError is a command [Store.Witness] would not run or record. Detail adds
+// what the refusal compared, when it compared anything, and Err the failure behind a
+// [RefusalNotStarted] or [RefusalUnfinished].
 type WitnessRefusedError struct {
 	Job, Goal string
 	Refusal   WitnessRefusal
 	Detail    string
+	Err       error
 }
 
 func (e *WitnessRefusedError) Error() string {
-	why := map[WitnessRefusal]string{
-		RefusalNoCommand:    "Witness needs the caller's exec.Cmd",
-		RefusalStarted:      "the command already started, so its start was not witnessed",
-		RefusalOtherCheck:   "the command's run would grade another check",
-		RefusalNeverWaited:  "the command was never waited on, so there is no exit status to witness",
-		RefusalOtherProcess: "the exit status is not the wait of the process this command started",
-		RefusalRedirected:   "the output was redirected after the witness attached, so its digest is not the run's output",
-		RefusalClosed:       "the witness is already closed",
-	}[e.Refusal]
-	if why == "" {
-		why = string(e.Refusal)
-	}
+	why := witnessRefusalText(e.Refusal)
 	if e.Detail != "" {
 		why += ": " + e.Detail
+	}
+	if e.Err != nil {
+		why += ": " + e.Err.Error()
 	}
 	return fmt.Sprintf("job: %s goal %q: %s", e.Job, e.Goal, why)
 }
 
-// Witness watches one run of a check goal's check that the caller starts and waits on.
-// Get one from [Store.Witness] before the command starts, and call Close after cmd.Wait
-// (or cmd.Run) returns. A Witness is used by one goroutine; Close is safe to call again
-// and refuses.
-type Witness struct {
-	s       *Store
-	row     Job
-	goal    Goal
-	argv    []string
-	dir     string
-	cmd     *exec.Cmd
-	out     *digestWriter
-	stdout  io.Writer
-	stderr  io.Writer
-	tree    string
-	started time.Time
+func (e *WitnessRefusedError) Unwrap() error { return e.Err }
 
-	mu     sync.Mutex
-	closed bool
+func witnessRefusalText(r WitnessRefusal) string {
+	switch r {
+	case RefusalNoCommand:
+		return "Witness needs the caller's exec.Cmd"
+	case RefusalStarted:
+		return "the command already started or carries another command's process, so its start would not be witnessed"
+	case RefusalOtherCheck:
+		return "the command's run would grade another check"
+	case RefusalOtherProgram:
+		return "the command runs a program its argv[0] does not name"
+	case RefusalEnv:
+		return "the command sets an environment the check's command does not name"
+	case RefusalSysProcAttr:
+		return "the command sets process attributes the check's command does not name"
+	case RefusalExtraFiles:
+		return "the command passes extra files the check's command does not name"
+	case RefusalNotStarted:
+		return "the command did not start"
+	case RefusalUnfinished:
+		return "the run did not finish cleanly, so its digest is not the whole output"
+	}
+	return string(r)
 }
 
-// Witness attaches to cmd, which must not have started and must carry exactly the argv
-// and directory [WithCheckCommand] names for goal goal of job id. It wraps cmd.Stdout and
-// cmd.Stderr so every byte the process writes passes through the store's digest as well
-// as wherever the caller sent it, and digests the tree before the run reads it.
+// Witness runs one check of goal goal of job id and records it. The caller builds cmd and
+// may set its Stdout, Stderr, Stdin, Cancel and WaitDelay; Witness starts it and waits on
+// it, so the exit status it records is the wait of the process it started and every byte
+// the process writes passes through the store's digest as well as wherever the caller
+// sent it. Bound the run with exec.CommandContext; ctx bounds the tree digests and the
+// record.
 //
-// Witness never starts cmd: the caller runs it however it likes, and [Witness.Close]
-// reads the outcome back from cmd. It needs [WithTree] and [WithCheckCommand]; each
-// refusal is a [*GradingUnconfiguredError], a [*GoalError], a [*WitnessRefusedError] or
-// a [*TreeError].
-func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (*Witness, error) {
+// cmd must not have started, must carry exactly the argv and directory
+// [WithCheckCommand] names, its Path must be the program argv[0] resolves to (through
+// exec.LookPath when argv[0] is a bare name), and it must leave Env, SysProcAttr and
+// ExtraFiles unset: the check's command names none, so a run under any of them is
+// another check. A run the tree moved under is recorded, and grades as not verified,
+// since no one tree is what it read.
+//
+// It needs [WithTree] and [WithCheckCommand]; each refusal is a
+// [*GradingUnconfiguredError], a [*GoalError], a [*WitnessRefusedError] or a [*TreeError].
+func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (RunRef, error) {
 	if err := s.needTree("Witness"); err != nil {
-		return nil, err
+		return "", err
 	}
 	if s.command == nil {
-		return nil, s.wrap(&GradingUnconfiguredError{Op: "Witness", Option: "WithCheckCommand"})
+		return "", s.wrap(&GradingUnconfiguredError{Op: "Witness", Option: "WithCheckCommand"})
 	}
-	refuse := func(r WitnessRefusal, detail string) error {
-		return s.wrap(&WitnessRefusedError{Job: id, Goal: goal, Refusal: r, Detail: detail})
+	refuse := func(r WitnessRefusal, detail string, err error) error {
+		return s.wrap(&WitnessRefusedError{Job: id, Goal: goal, Refusal: r, Detail: detail, Err: err})
 	}
-	switch {
-	case cmd == nil:
-		return nil, refuse(RefusalNoCommand, "")
-	case cmd.Process != nil || cmd.ProcessState != nil:
-		return nil, refuse(RefusalStarted, "")
+	if cmd == nil {
+		return "", refuse(RefusalNoCommand, "", nil)
 	}
-	row, g, err := s.checkGoal(id, goal)
-	if err != nil {
-		return nil, err
-	}
-	argv, dir, err := s.command(row, g)
-	if err != nil {
-		return nil, fmt.Errorf("job: %s goal %q: the check's command: %w", id, goal, err)
-	}
-	if !slices.Equal(cmd.Args, argv) || filepath.Clean(cmd.Dir) != filepath.Clean(dir) {
-		return nil, refuse(RefusalOtherCheck, fmt.Sprintf("the command runs %q in %s and the check is %q in %s", cmd.Args, cmd.Dir, argv, dir))
-	}
-	tree, err := s.digestTree(ctx, "before the run")
-	if err != nil {
-		return nil, err
-	}
-	out := &digestWriter{h: sha256.New()}
-	w := &Witness{s: s, row: row, goal: g, argv: slices.Clone(argv), dir: dir, cmd: cmd, out: out, tree: tree, started: s.Now()}
-	w.stdout, w.stderr = tee(cmd.Stdout, out), tee(cmd.Stderr, out)
-	cmd.Stdout, cmd.Stderr = w.stdout, w.stderr
-	return w, nil
-}
-
-// Close records the run the command finished and returns its ref. It refuses a command
-// never waited on, an exit status that is not the wait of the process the command
-// started, output redirected away from the witness after it attached, and a second Close,
-// each a [*WitnessRefusedError]; a refused Witness is spent. A run the tree moved under is
-// recorded, and grades as not verified, since no one tree is what it read.
-func (w *Witness) Close(ctx context.Context) (RunRef, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	refuse := func(r WitnessRefusal) error {
-		return w.s.wrap(&WitnessRefusedError{Job: w.row.ID, Goal: w.goal.ID, Refusal: r})
-	}
-	if w.closed {
-		return "", refuse(RefusalClosed)
-	}
-	w.closed = true
-	cmd, ps := w.cmd, w.cmd.ProcessState
-	switch {
-	case cmd.Process == nil || ps == nil:
-		return "", refuse(RefusalNeverWaited)
-	// Only a real wait sets a ProcessState's pid: one built by hand reads 0, and one taken
-	// from another Cmd names another process.
-	case ps.Pid() == 0 || ps.Pid() != cmd.Process.Pid:
-		return "", refuse(RefusalOtherProcess)
-	case cmd.Stdout != w.stdout || cmd.Stderr != w.stderr:
-		return "", refuse(RefusalRedirected)
-	}
-	after, err := w.s.digestTree(ctx, "after the run")
+	row, g, err := s.checkGoal(ctx, id, goal)
 	if err != nil {
 		return "", err
 	}
-	return w.s.record(ctx, run{
-		job: w.row.ID, goal: w.goal.ID, basis: BasisWitnessed, check: w.goal.Check, argv: w.argv, dir: w.dir,
-		tree: w.tree, exit: ps.ExitCode(), output: w.out.sum(), started: w.started, ended: w.s.Now(), moved: after != w.tree,
+	argv, dir, err := s.command(row, g)
+	if err != nil {
+		return "", fmt.Errorf("job: %s goal %q: the check's command: %w", id, goal, err)
+	}
+	if r, detail, err := foreignCommand(cmd, argv, dir); r != "" {
+		return "", refuse(r, detail, err)
+	}
+	tree, err := s.digestTree(ctx, "before the run")
+	if err != nil {
+		return "", err
+	}
+	out := &digestWriter{h: sha256.New()}
+	cmd.Stdout, cmd.Stderr = tee(cmd.Stdout, out), tee(cmd.Stderr, out)
+	started := s.Now()
+	if err := cmd.Start(); err != nil {
+		return "", refuse(RefusalNotStarted, "", err)
+	}
+	exit, err := exitOf(cmd.Wait())
+	if err != nil {
+		return "", refuse(RefusalUnfinished, "", err)
+	}
+	ended := s.Now()
+	after, err := s.digestTree(ctx, "after the run")
+	if err != nil {
+		return "", err
+	}
+	return s.record(ctx, run{
+		job: row.ID, goal: g.ID, basis: BasisWitnessed, check: g.Check, argv: slices.Clone(argv), dir: dir,
+		tree: tree, exit: exit, output: out.sum(), started: started, ended: ended, moved: after != tree,
 	})
+}
+
+// foreignCommand is the refusal cmd earns against the check's argv and dir, "" for none.
+func foreignCommand(cmd *exec.Cmd, argv []string, dir string) (WitnessRefusal, string, error) {
+	switch {
+	case cmd.Process != nil || cmd.ProcessState != nil:
+		return RefusalStarted, "", nil
+	case len(argv) == 0:
+		return RefusalOtherCheck, "the check's command names no program", nil
+	case !slices.Equal(cmd.Args, argv) || filepath.Clean(cmd.Dir) != filepath.Clean(dir):
+		return RefusalOtherCheck, fmt.Sprintf("the command runs %q in %s and the check is %q in %s", cmd.Args, cmd.Dir, argv, dir), nil
+	case cmd.Env != nil:
+		return RefusalEnv, "", nil
+	case cmd.SysProcAttr != nil:
+		return RefusalSysProcAttr, "", nil
+	case len(cmd.ExtraFiles) > 0:
+		return RefusalExtraFiles, "", nil
+	}
+	program, err := programOf(argv[0])
+	if err != nil {
+		return RefusalNotStarted, "", err
+	}
+	if cmd.Path != program {
+		return RefusalOtherProgram, fmt.Sprintf("Path is %s and argv[0] %q is %s", cmd.Path, argv[0], program), nil
+	}
+	return "", "", nil
+}
+
+// programOf is the Path exec.Command gives a command named argv0.
+func programOf(argv0 string) (string, error) {
+	if filepath.Base(argv0) != argv0 {
+		return argv0, nil
+	}
+	return exec.LookPath(argv0)
+}
+
+// exitOf is the exit code of the wait whose error is err. An *exec.ExitError carries the
+// state its own wait returned, which no write to cmd.ProcessState reaches; any other error
+// is a failed wait or output copy.
+func exitOf(err error) (int, error) {
+	if err == nil {
+		return 0, nil
+	}
+	if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+		return exit.ExitCode(), nil
+	}
+	return 0, err
 }
 
 func tee(caller, out io.Writer) io.Writer {

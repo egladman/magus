@@ -53,7 +53,7 @@ func Declare(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 // deviations, and nothing is written then. read may be nil where no graph is at hand, which
 // skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) (job.Job, error) {
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return job.Job{}, err
 	}
@@ -194,7 +194,7 @@ func goalIDs(goals []job.Goal) []string {
 // dryRun returns what would be written and writes nothing, a refusal's release request
 // included.
 func Apply(ctx context.Context, store *Store, records []job.Declaration, limits config.Jobs, read SymbolReader, checkpoint func() string, dryRun bool) ([]Applied, error) {
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -678,8 +678,8 @@ func resultShape(row job.Job) string {
 
 // FiledShape is [resultShape] for the row named id, or where to read the
 // schema when no row has that name.
-func FiledShape(store *Store, id string) string {
-	rows, err := store.List()
+func FiledShape(ctx context.Context, store *Store, id string) string {
+	rows, err := store.List(ctx)
 	if err == nil {
 		if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 			return resultShape(rows[i])
@@ -747,7 +747,7 @@ func LeaseRewrites(ctx context.Context, loc Location, target string, projects []
 		return "", nil, nil
 	}
 	loc.DryRun = true
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(ctx)
 	if err != nil {
 		return lease, nil, err
 	}

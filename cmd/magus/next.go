@@ -18,13 +18,13 @@ type nextGate struct{ job.NextGate }
 func (n nextGate) served(next []types.NextStep) []types.NextStep { return n.Served(next) }
 
 // newNextGate resolves the gate for a command running against root.
-func newNextGate(root string) nextGate {
+func newNextGate(ctx context.Context, root string) nextGate {
 	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nextGate{job.UnboundNextGate()}
 	}
 	loc, err := jobPlace(resolveRootOrEmpty(root))
-	role, writePaths := job.ActingRole(loc, err)
+	role, writePaths := job.ActingRole(ctx, loc, err)
 	return nextGate{job.NewNextGate(dir, role, writePaths)}
 }
 

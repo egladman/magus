@@ -251,15 +251,15 @@ func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 	seed(t, store, jobtypes.Job{ID: "live", State: jobtypes.StateRunning})
 
 	now := time.Now().Unix()
-	got := checkJobTree(place(t, "", root), config.Jobs{}, now)
+	got := checkJobTree(t.Context(), place(t, "", root), config.Jobs{}, now)
 	assert.Equal(t, check.OK, got.Status, "the read ended the orphan, so nothing is left to report: %s", got.Message)
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	orphan := rows[slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == "root/orphan" })]
 	assert.Equal(t, jobtypes.StateNoReturn, orphan.State)
 	assert.NotEmpty(t, orphan.EndReason)
 
-	stale := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Minute}, now+3600)
+	stale := checkJobTree(t.Context(), place(t, "", root), config.Jobs{StaleAfter: time.Minute}, now+3600)
 	require.Equal(t, check.Advice, stale.Status)
 	assert.Contains(t, strings.Join(stale.Details, "\n"), hint.JobExit.With("live"))
 	assert.Contains(t, stale.Message, "jobs.stale_after")
@@ -269,7 +269,7 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, jobtypes.Job{ID: "live", State: jobtypes.StateRunning})
 
-	got := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
+	got := checkJobTree(t.Context(), place(t, "", root), config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
 	assert.Equal(t, check.OK, got.Status, got.Message)
 }
 
@@ -280,7 +280,7 @@ func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
 	seed(t, store, jobtypes.Job{ID: "queued", State: jobtypes.StateDeclared, DependsOn: []string{"live"}})
 	seed(t, store, jobtypes.Job{ID: "live", State: jobtypes.StateRunning})
 
-	got := checkJobTree(place(t, "", root), config.Jobs{}, time.Now().Unix())
+	got := checkJobTree(t.Context(), place(t, "", root), config.Jobs{}, time.Now().Unix())
 	require.Equal(t, check.Advice, got.Status, got.Message)
 	assert.Contains(t, got.Message, "waiter is blocked on dep which is fail")
 	assert.NotContains(t, got.Message, "queued", "a dependency still running is a plan in order, not a finding")

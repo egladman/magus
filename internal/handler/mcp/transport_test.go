@@ -328,7 +328,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	}
 	_, result := post("magus.lease=root/other", session, shrink)
 	require.False(t, result.IsError, result.Content)
-	rows, err := jobs.List()
+	rows, err := jobs.List(t.Context())
 	require.NoError(t, err)
 	var paths []string
 	for _, row := range rows {

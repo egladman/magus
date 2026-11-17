@@ -227,7 +227,7 @@ func TestValidateDryForkWritesNothing(t *testing.T) {
 	assert.Contains(t, got, types.WritePathIsDirectory)
 	assert.Equal(t, "checkpoint", problemAt(t, v.Problems, types.JobCheckpointUnplaceable).Field)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a dry run writes nothing")
 
@@ -267,7 +267,7 @@ func (s *forkPlanSuite) TestDryRunListsWhatTheForkRefuses() {
 	for _, p := range dry.Validation.Problems {
 		s.ErrorIs(err, p.Code)
 	}
-	rows, lerr := s.store.List()
+	rows, lerr := s.store.List(s.T().Context())
 	s.Require().NoError(lerr)
 	s.Empty(rows)
 }
@@ -322,7 +322,7 @@ func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	seed(t, s, job.Job{ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/**", "docs/**"}}, Check: forkCheck()})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *job.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
@@ -343,7 +343,7 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 		Agent: &job.Agent{Instructions: "do the thing"},
 		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: *forkCheck()}},
 	})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	wiped := func(u *job.Job) {
@@ -392,7 +392,7 @@ func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	assert.Contains(t, err.Error(), `a: "cli", inside project "." is a directory`, "each message names its record")
 	assert.Contains(t, err.Error(), `b: the record for b carries state "running"`)
 
-	rows, lerr := s.List()
+	rows, lerr := s.List(t.Context())
 	require.NoError(t, lerr)
 	assert.Empty(t, rows, "nothing is written while any record has a problem")
 }

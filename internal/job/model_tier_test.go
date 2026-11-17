@@ -485,7 +485,7 @@ func TestStoreAssignsTheTierWhenARowIsCreated(t *testing.T) {
 	assert.Equal(t, 1, matrix.calls)
 	assert.Equal(t, "a", matrix.seen.ID)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, stored.ModelTier, rows[0].ModelTier, "the tier is stored, not recomputed on read")
@@ -572,7 +572,7 @@ func TestStoreRefusesAForkPastAMaxLiveBound(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "MaxLive")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes nothing")
 
@@ -591,7 +591,7 @@ func TestStoreFailsAForkWhoseMatrixFails(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "magus\\modelTier")
 
-	rows, listErr := s.List()
+	rows, listErr := s.List(t.Context())
 	require.NoError(t, listErr)
 	assert.Empty(t, rows)
 }
@@ -608,7 +608,7 @@ func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 	require.Len(t, plan, 1)
 	assert.Nil(t, plan[0].Next.ModelTier)
 	assert.Zero(t, matrix.calls)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 
@@ -703,7 +703,7 @@ func TestStoreRefusesAChildAboveItsParentsTierUnderDeny(t *testing.T) {
 	require.Error(t, err, "the declared default is held to the parent's tier too")
 	assert.ErrorContains(t, err, "c would run at model tier bounded (rank 1)")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes nothing")
 }
@@ -843,7 +843,7 @@ func (s *forkAboveParentSuite) SetupTest() {
 // notes forks the child and returns the notes the fork owes its reader.
 func (s *forkAboveParentSuite) notes() []string {
 	stored := seed(s.T(), s.store, s.child)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	return ForkNotes(s.T().Context(), s.store, rows, stored)
 }
@@ -883,7 +883,7 @@ func (s *forkAboveParentSuite) TestForkNotesSayASettingThatFailsToRead() {
 	s.store.spawnCeiling = func(context.Context) (builtin.Setting, error) {
 		return builtin.Setting{}, errors.New("magus.yaml does not load")
 	}
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 
 	s.Contains(ForkNotes(s.T().Context(), s.store, rows, stored),
@@ -907,7 +907,7 @@ func (s *fourModelTiersSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
 	st.notices = &bytes.Buffer{}
 	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":3}`, line))
-	f, err := st.Read()
+	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	return f.Jobs[0], storedSpec(s.T(), path, f.Jobs[0].ID)

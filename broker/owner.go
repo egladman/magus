@@ -637,12 +637,12 @@ func (c *Client) noteSeat(ctx context.Context, wait *SeatWait) {
 // client runs in, once, for a client acting under a lease. A failure is the caller's
 // misconfiguration and refuses the run with exit 78: guessing a cap would either
 // serialize what the workspace allows or run what it forbids.
-func (c *Client) resolveScope() error {
+func (c *Client) resolveScope(ctx context.Context) error {
 	c.scopeOnce.Do(func() {
 		if c.hello.Lease == "" {
 			return
 		}
-		c.hello.Tree, c.hello.MaxValidations, c.scopeErr = validationScope(c.hello.Dir, c.hello.Lease)
+		c.hello.Tree, c.hello.MaxValidations, c.scopeErr = validationScope(ctx, c.hello.Dir, c.hello.Lease)
 		if c.scopeErr != nil {
 			c.scopeErr = types.ExitError{Code: cache.ExitCodeMachineDeclaration, Err: fmt.Errorf(
 				"broker: cannot tell how many runs job %s's tree may have going: %w", c.hello.Lease, c.scopeErr)}
@@ -654,7 +654,7 @@ func (c *Client) resolveScope() error {
 // validationScope is the root of lease's job tree and the jobs.max_validations of the
 // workspace holding dir. Workspace config only, as every jobs rule that acts reads it. A
 // dir in no workspace caps at the default, per lease.
-func validationScope(dir, lease string) (tree string, maxValidations int, err error) {
+func validationScope(ctx context.Context, dir, lease string) (tree string, maxValidations int, err error) {
 	root := workspaceRoot(dir)
 	cfg, err := config.LoadWorkspaceOnly(root)
 	if err != nil {
@@ -671,7 +671,7 @@ func validationScope(dir, lease string) (tree string, maxValidations int, err er
 	if err != nil {
 		return "", 0, fmt.Errorf("resolve the user state dir that holds the job store: %w", err)
 	}
-	tree, err = job.NewStore(job.Location{Root: root, StateBase: stateBase}).TreeRoot(lease)
+	tree, err = job.NewStore(job.Location{Root: root, StateBase: stateBase}).TreeRoot(ctx, lease)
 	if err != nil {
 		return "", 0, err
 	}

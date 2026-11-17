@@ -350,7 +350,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 
 	completeJobRow(t.Context(), store, []string{"graph", "build"}, 250*time.Millisecond, nil)
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]
@@ -364,7 +364,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 
 	completeJobRow(t.Context(), store, []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, jobtypes.StateFail, rows[0].State)
@@ -383,7 +383,7 @@ func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 
 	completeJobRow(t.Context(), store, []string{"run", "test", "."}, time.Second, nil)
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }

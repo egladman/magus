@@ -96,7 +96,7 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 		}))
 	}
 	write(aged("old", job.StatePass, 8), aged("live", job.StateRunning, 8))
-	rows, err := s.Read()
+	rows, err := s.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"old", "live"}, ids(rows.Jobs), "the first write stamps the clock and keeps every row")
 	assert.Equal(t, retainNow, rows.Retained)
@@ -104,13 +104,13 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 
 	now = now.Add(retainEvery - time.Second)
 	write(aged("old-again", job.StatePass, 8))
-	rows, err = s.Read()
+	rows, err = s.Read(t.Context())
 	require.NoError(t, err)
 	assert.True(t, slices.Contains(ids(rows.Jobs), "old"), "no pass inside the interval")
 
 	now = now.Add(time.Second)
 	write()
-	rows, err = s.Read()
+	rows, err = s.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"live"}, ids(rows.Jobs), "the first write past the interval runs the pass")
 	assert.Equal(t, now.Unix(), rows.Retained)
@@ -155,7 +155,7 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			got, err := s.Read()
+			got, err := s.Read(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, ids(got.Jobs))
 		})
@@ -180,7 +180,7 @@ func TestDeleteArchivesOnlyTheDroppedRow(t *testing.T) {
 	require.Len(t, archives, 1)
 	archived := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir()})
 	archived.path = archives[0]
-	f, err := archived.Read()
+	f, err := archived.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"drop"}, ids(f.Jobs))
 }

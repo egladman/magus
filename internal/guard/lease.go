@@ -782,7 +782,7 @@ func knockHolder(ctx context.Context, deps Dependencies, me, holder jobtypes.Job
 	if err != nil || slices.ContainsFunc(jobtypes.Ancestors(rows, holder.ID), func(a jobtypes.Job) bool { return a.ID == me.ID }) {
 		return ""
 	}
-	root, err := job.NewStore(at.jobs()).TreeRoot(holder.ID)
+	root, err := job.NewStore(at.jobs()).TreeRoot(ctx, holder.ID)
 	if err != nil {
 		return ""
 	}
@@ -2131,7 +2131,7 @@ var forkFlagsUnbounded = map[string]bool{
 func cliFork(args []string, stdin string) childFork {
 	operands, flags := verbArgv(args, hint.JobFork)
 	if flags["stdin"] != "" && flags["stdin"] != "false" {
-		row, err := job.DecodeStdinDeclaration(strings.NewReader(stdin))
+		row, _, err := job.DecodeStdinDeclaration(strings.NewReader(stdin))
 		if err != nil {
 			return childFork{}
 		}

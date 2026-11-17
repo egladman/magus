@@ -42,17 +42,17 @@ func (a Actor) Verifies(rows []Job, id string) bool {
 	return slices.ContainsFunc(Ancestors(rows, id), func(r Job) bool { return r.ID == a.Lease })
 }
 
-// Grading is what KIND of write reaches [Store.Mutate], which decides two things: whether
+// WriteKind is what KIND of write reaches [Store.Mutate], which decides two things: whether
 // the acting party's boundary applies to it, and which store-owned fields it may set. Both
 // are spelled at every call site rather than defaulted, because a write that reaches the
 // file ungraded, or one that carries its own registration, is the escape the rules exist
 // to close and a silent default is how one gets added.
-type Grading int
+type WriteKind int
 
 const (
 	// AsDeclaration is a caller's row: the boundary applies and every store-owned field is
 	// carried forward from the stored row.
-	AsDeclaration Grading = iota
+	AsDeclaration WriteKind = iota
 	// AsExec is a worker reporting the base it landed on: graded, and the one
 	// write that sets the registration fields.
 	AsExec
@@ -76,7 +76,7 @@ const (
 )
 
 // Graded reports whether the acting party's boundary applies to this write.
-func (g Grading) Graded() bool { return g != AsObservation && g != AsNarrowing }
+func (g WriteKind) Graded() bool { return g != AsObservation && g != AsNarrowing }
 
 // RefusedError is a write the store would not apply, naming the rule, the actor it
 // applied to, and what the actor should do instead.
@@ -153,7 +153,7 @@ func landsRow(actor Actor, id string, rows []Job) bool {
 //
 // An [AsClaim] write is the store's claim rule's to grade, so this refuses it: a claim
 // graded by nothing would be a widening anybody can make.
-func AuthorizeRow(actor Actor, id string, kind Grading, prev, next Job, exists bool, rows []Job) error {
+func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists bool, rows []Job) error {
 	if kind == AsClaim {
 		return refuse(actor, id, "no claim rule grades a claim on this store, so none is accepted")
 	}

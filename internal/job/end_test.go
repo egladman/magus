@@ -37,7 +37,7 @@ func dispose(t *testing.T, root, id string) {
 
 func storedRows(t *testing.T, s *Store) map[string]job.Job {
 	t.Helper()
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	out := map[string]job.Job{}
 	for _, r := range rows {
@@ -428,7 +428,7 @@ func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, job.StateNoReturn, stored.State)
 	assert.Nil(t, stored.Attempt)
-	tries, err := NewStore(loc).Attempts()
+	tries, err := NewStore(loc).Attempts(t.Context())
 	require.NoError(t, err)
 	live := job.NewAttempts(tries).Live(row.ID)
 	assert.Nil(t, live.Status.Result)
@@ -466,7 +466,7 @@ func (s *exitCommittedSuite) TestUncommittedEditIsRefusedNamingThePath() {
 
 	s.ErrorContains(err, "hold uncommitted work")
 	s.ErrorContains(err, "internal/ledger/a.go")
-	rows, listErr := NewStore(s.loc).List()
+	rows, listErr := NewStore(s.loc).List(s.T().Context())
 	s.Require().NoError(listErr)
 	s.Equal(job.StateRunning, rows[0].State)
 }

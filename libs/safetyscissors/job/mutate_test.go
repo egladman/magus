@@ -15,7 +15,7 @@ type MutateSuite struct {
 func TestMutateSuite(t *testing.T) { suite.Run(t, new(MutateSuite)) }
 
 func (s *MutateSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.T().TempDir(), opts...)
+	st, err := Open(s.T().TempDir(), append(writable(), opts...)...)
 	s.Require().NoError(err)
 	return st
 }
@@ -57,7 +57,7 @@ func (s *MutateSuite) TestARefusingHookWritesNothing() {
 	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
 
 	s.ErrorIs(err, refused)
-	rows, err := st.List()
+	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
 }
@@ -78,7 +78,7 @@ func (s *MutateSuite) TestAReforkStoresTheFoldTheHookMakes() {
 
 	s.Require().NoError(err)
 	s.Equal(StateDeclared, row.State)
-	tries, err := st.Attempts()
+	tries, err := st.Attempts(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(tries, 1)
 	s.Equal(StateFail, tries[0].Status.State, "the ended attempt was folded")

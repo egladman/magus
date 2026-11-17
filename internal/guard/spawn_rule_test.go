@@ -909,7 +909,7 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 			write := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "agent_id": "a1b2c3", "agent_type": "general-purpose", "cwd": cwd, "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
 			v := Judge(ctx, deps, Request{Input: write, Host: "claude-code", Lease: tc.lease})
 
-			rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List()
+			rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List(t.Context())
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
 			assert.Equal(t, want, outcome{
@@ -969,7 +969,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	assert.Equal(t, graded{verdict.Defer, "guard-facts", jobtypes.LeaseSourceAgent}, graded{inside.Decision, inside.Lease, jobtypes.LeaseSource(inside.LeaseFrom)})
 	assert.Equal(t, graded{verdict.Deny, "guard-facts", jobtypes.LeaseSourceAgent}, graded{outside.Decision, outside.Lease, jobtypes.LeaseSource(outside.LeaseFrom)})
 
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: workerCache, Root: workerRoot}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: workerCache, Root: workerRoot}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	rev, _ := types.ParseCheckpointToken(rows[0].ReportedBase)
@@ -996,7 +996,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	require.True(t, registerAgentBase(t.Context(), deps, worker, row.ID))
 	assert.False(t, registerAgentBase(t.Context(), deps, worker, row.ID), "a job registers once")
 
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: worker.cacheDir, Root: workerRoot}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: worker.cacheDir, Root: workerRoot}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	abs, err := filepath.Abs(workerRoot)
@@ -1071,7 +1071,7 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 
 			wrote := registerAgentBase(ctx, deps, at, row.ID)
 
-			rows, err := store.List()
+			rows, err := store.List(t.Context())
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
 			assert.Equal(t, []any{tc.wantBase != tc.reported, revs[tc.wantBase], tc.wantVerdict},
@@ -1100,7 +1100,7 @@ func TestRegisterAgentBaseLeavesAnExitedRowExited(t *testing.T) {
 
 	wrote := registerAgentBase(ctx, deps, at, row.ID)
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []any{false, jobtypes.StateExited, created},
@@ -1479,7 +1479,7 @@ func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
 	assert.Equal(t, row.ID, store.Bound(who.caller()))
 	_, err = os.Stat(at.jobs().MarkerPath())
 	assert.True(t, os.IsNotExist(err), "no checkout record")
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "77aa01c", rows[0].ReportedBase, "the base already reported is kept")
 }

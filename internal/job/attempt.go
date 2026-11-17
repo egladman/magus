@@ -72,7 +72,7 @@ func BoundAttempts(rows []job.Job, attempts []job.Attempt, now int64) []job.Atte
 // so a hook fired twice records one start; an ended one starts again,
 // which is a holder sent back with more work.
 func (s *Store) StartAttempt(ctx context.Context, id string, now time.Time) (job.Attempt, error) {
-	rows, err := s.Unswept()
+	rows, err := s.Unswept(ctx)
 	if err != nil {
 		return job.Attempt{}, err
 	}

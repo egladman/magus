@@ -97,18 +97,18 @@ func TestValidationScopeReadsTheWorkspacesCap(t *testing.T) {
 	sub := filepath.Join(root, "a", "b")
 	require.NoError(t, os.MkdirAll(sub, 0o755))
 
-	tree, n, err := validationScope(sub, "plan/a")
+	tree, n, err := validationScope(t.Context(), sub, "plan/a")
 	require.NoError(t, err)
 	assert.Equal(t, "plan/a", tree, "a lease no row declares is its own tree")
 	assert.Equal(t, 2, n)
 
-	tree, n, err = validationScope(t.TempDir(), "w")
+	tree, n, err = validationScope(t.Context(), t.TempDir(), "w")
 	require.NoError(t, err)
 	assert.Equal(t, "w", tree)
 	assert.Equal(t, 1, n, "outside a workspace the default holds")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("jobs:\n  max_validations: -1\n"), 0o644))
-	_, _, err = validationScope(sub, "plan/a")
+	_, _, err = validationScope(t.Context(), sub, "plan/a")
 	require.ErrorContains(t, err, "jobs.max_validations is -1")
 }
 

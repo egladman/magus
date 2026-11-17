@@ -109,7 +109,7 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (job.Job, bool, error)
 			job.EndReasonSessionEnded, c.Host, b.Job)
 		f.Jobs[i].Updated = now
 		ended = f.Jobs[i].Clone()
-		return outcomes.hold(s, f.Jobs, ended)
+		return outcomes.hold(ctx, s, f.Jobs, ended)
 	})
 	if err != nil || integrating {
 		return job.Job{}, false, err
@@ -163,7 +163,7 @@ func (s *Store) ClearHolderStopped(ctx context.Context, c Caller) error {
 	if b.Job == "" || b.Gone {
 		return nil
 	}
-	rows, err := s.Read()
+	rows, err := s.Read(ctx)
 	if err != nil {
 		return err
 	}
@@ -189,8 +189,8 @@ func (s *Store) ClearHolderStopped(ctx context.Context, c Caller) error {
 // TreeRoot is the root of the job tree id belongs to: its topmost ancestor, or id itself
 // when it has none or no row declares it. It reads the store without sweeping, so it
 // writes nothing and runs no VCS probe.
-func (s *Store) TreeRoot(id string) (string, error) {
-	f, err := s.Read()
+func (s *Store) TreeRoot(ctx context.Context, id string) (string, error) {
+	f, err := s.Read(ctx)
 	if err != nil {
 		return "", err
 	}

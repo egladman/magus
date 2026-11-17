@@ -155,7 +155,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row job.Job
 	if len(ps) == 0 {
 		return nil
 	}
-	if f, err := store.Read(); err == nil {
+	if f, err := store.Read(ctx); err == nil {
 		combined := append(slices.DeleteFunc(slices.Clone(f.Jobs), func(r job.Job) bool { return r.ID == row.ID }), row)
 		for _, file := range files {
 			for _, holder := range liveHolders(f.Jobs, row.ID, file) {

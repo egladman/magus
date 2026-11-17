@@ -27,7 +27,7 @@ func plantUnknownMember(t *testing.T, ctx context.Context, id, member string) {
 	t.Helper()
 	at := ctx.Value(locationKey{}).(location)
 	store := job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: at.workspace})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.True(t, slices.ContainsFunc(rows, func(r jobtypes.Job) bool { return r.ID == id }), "%s is seeded", id)
 	path, err := store.Path()

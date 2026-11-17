@@ -36,7 +36,7 @@ func parentCheckout(ctx context.Context, store *Store, here string, row job.Decl
 	if row.Parent == "" {
 		return row, false, nil
 	}
-	there, bound, err := store.ParentCheckout(here, row.Parent)
+	there, bound, err := store.ParentCheckout(ctx, here, row.Parent)
 	switch {
 	case err != nil || there == "":
 		return row, false, err
@@ -64,7 +64,7 @@ func ForkCheckout(ctx context.Context, store *Store, root string, row job.Declar
 	if child, inherited, err := parentCheckout(ctx, store, here, row); inherited || err != nil {
 		return child, err
 	}
-	owned, err := store.OwnedCheckout(here)
+	owned, err := store.OwnedCheckout(ctx, here)
 	if err != nil {
 		return row, err
 	}

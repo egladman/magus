@@ -927,7 +927,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	focus, inFocus := describe.MarkFileFocus(ws, files)
 	report := types.NewFileReport(files)
-	nx := newNextGate(root)
+	nx := newNextGate(ctx, root)
 	next := nx.served(hint.NextForFiles(files))
 
 	switch opts.Format {

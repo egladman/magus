@@ -667,7 +667,7 @@ func TestCheckOptOutIsARecordField(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, parsed.NoDefaultCharms)
 
-	decl, err := decodeDeclaration(declaration(`"id":"adj/drift"`,
+	decl, _, err := decodeDeclaration(declaration(`"id":"adj/drift"`,
 		`"check":{"target":"generate","project":".","no_default_charms":true}`))
 	require.NoError(t, err)
 	var row job.Job
@@ -1042,7 +1042,7 @@ func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 	assert.True(t, grade.Verified, "%+v", grade.Gates)
 	assert.Equal(t, []string{"check", "lint"}, []string{grade.Gates[0].ID, grade.Gates[1].ID})
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, job.StatePass, rows[0].State)
 	require.NotNil(t, rows[0].Integration)
@@ -1064,7 +1064,7 @@ func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 	assert.True(t, grade.Gates[0].Verified)
 	assert.Contains(t, strings.Join(grade.Gates[1].Violations, "\n"), "failed")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, job.StateExited, rows[0].State)
 	assert.False(t, rows[0].Integration.Verified)
@@ -1078,7 +1078,7 @@ func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "nope", OutputRef: "out3"})
 	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged", nil)
 	require.ErrorContains(t, err, `goal "nope"`)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
 }
@@ -1099,7 +1099,7 @@ func TestWaitIntegrationAcceptsARunUnderAnotherLease(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, grade.Verified, "%+v", grade.Gates)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	att, err := resolve(t.Context(), "out1")
 	require.NoError(t, err)

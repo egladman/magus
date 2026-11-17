@@ -56,7 +56,7 @@ func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 	assert.Contains(t, err.Error(), madeUpRevision)
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused checkpoint writes no row")
 }
@@ -103,7 +103,7 @@ func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nor an ancestor")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }

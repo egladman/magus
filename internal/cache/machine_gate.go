@@ -701,7 +701,7 @@ func leaseWeight(ctx context.Context, cacheDir string) float64 {
 	if lease == "" {
 		return 0
 	}
-	rows, err := job.NewStore(loc).List()
+	rows, err := job.NewStore(loc).List(ctx)
 	if err != nil {
 		return 0
 	}

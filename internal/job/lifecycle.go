@@ -71,7 +71,7 @@ func endedReason(prev job.Job, filed, byHolder bool) string {
 func Exit(ctx context.Context, store *Store, id string, result *job.Result, resolve AttemptResolver) (job.Job, error) {
 	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
 	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
-	rows, err := store.Unswept()
+	rows, err := store.Unswept(ctx)
 	if err != nil {
 		return job.Job{}, err
 	}
@@ -86,7 +86,7 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
 		return job.Job{}, err
 	}
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return job.Job{}, err
 	}
@@ -243,7 +243,7 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 		return job.Status{}, errors.New("job: waiter evidence starts from the result filed with the job, and a supplied result is not that")
 	}
 	ctx = withFootprintCache(ctx, store.footprintCache())
-	jobs, err := store.List()
+	jobs, err := store.List(ctx)
 	if err != nil {
 		return job.Status{}, err
 	}
@@ -256,7 +256,7 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 		return job.Status{}, fmt.Errorf("job: there is no job %q", id)
 	}
 
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return job.Status{}, err
 	}
@@ -789,7 +789,7 @@ func (s *Store) acrossCheckouts(rows []job.Job, id string, resolve AttemptResolv
 // observe reads store's footprint cache and fills it, unless store is a dry run's.
 func GradeGates(ctx context.Context, store *Store, id string, observe Observer) (job.Status, error) {
 	ctx = withFootprintCache(ctx, store.footprintCache())
-	jobs, err := store.List()
+	jobs, err := store.List(ctx)
 	if err != nil {
 		return job.Status{}, err
 	}
@@ -799,7 +799,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	}
 	row := inheritGoals(jobs[i], jobs)
 
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return job.Status{}, err
 	}
@@ -1010,7 +1010,7 @@ func (w *sweeper) checkoutGone(root string) bool {
 // A dry-run store ends the rows in the returned plan only.
 //
 // It is the module store's [job.WithSweep], run by every [job.Store.List].
-func (s *Store) sweep(_ context.Context, f job.Rows) (job.Rows, error) {
+func (s *Store) sweep(ctx context.Context, f job.Rows) (job.Rows, error) {
 	clock := s.clock
 	if clock == nil {
 		clock = time.Now
@@ -1025,7 +1025,7 @@ func (s *Store) sweep(_ context.Context, f job.Rows) (job.Rows, error) {
 		endRows(f.Jobs, dead, w.now)
 		return f, nil
 	}
-	f, ended, err := s.endDead(w, f)
+	f, ended, err := s.endDead(ctx, w, f)
 	if err != nil {
 		return job.Rows{}, err
 	}
@@ -1037,13 +1037,13 @@ func (s *Store) sweep(_ context.Context, f job.Rows) (job.Rows, error) {
 // verdict is reached twice: once lock-free, so a plan with nothing to end costs no lock,
 // and again under the file lock against a fresh read, so a row another process revived in
 // between is not ended on a stale view.
-func (s *Store) endDead(w *sweeper, f job.Rows) (job.Rows, bool, error) {
+func (s *Store) endDead(ctx context.Context, w *sweeper, f job.Rows) (job.Rows, bool, error) {
 	dead, err := w.dead(f.Jobs)
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
 	var ended endings
-	err = s.Rewrite(context.Background(), func(cur *job.Rows) error {
+	err = s.Rewrite(ctx, func(cur *job.Rows) error {
 		ended = endings{}
 		var err error
 		if dead, err = w.dead(cur.Jobs); err != nil {
@@ -1056,7 +1056,7 @@ func (s *Store) endDead(w *sweeper, f job.Rows) (job.Rows, bool, error) {
 		}
 		for _, e := range dead {
 			i := slices.IndexFunc(cur.Jobs, func(r job.Job) bool { return r.ID == e.id })
-			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
+			if err := ended.hold(ctx, s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err
 			}
 		}
@@ -1075,7 +1075,7 @@ func (s *Store) endDead(w *sweeper, f job.Rows) (job.Rows, bool, error) {
 			s.noteEnded(e.id, e.reason)
 		}
 	}
-	if err := ended.record(context.Background(), w.now*1000); err != nil {
+	if err := ended.record(ctx, w.now*1000); err != nil {
 		return job.Rows{}, false, err
 	}
 	return f, len(dead) > 0, nil
@@ -1141,7 +1141,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	}
 	w := &sweeper{now: clock().Unix(), window: func() (time.Duration, error) { return window, nil }, gone: map[string]bool{}}
 
-	f, err := s.Read()
+	f, err := s.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1190,7 +1190,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 			cur.Jobs[i].EndReason = e.Reason
 			cur.Jobs[i].Landed = w.proved(e.ID, e.Reason)
 			cur.Jobs[i].Updated = w.now
-			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
+			if err := ended.hold(ctx, s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err
 			}
 		}

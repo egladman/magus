@@ -2864,7 +2864,7 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(t, ctx, who, held.ID)
 	require.NoError(t, os.RemoveAll(gone))
-	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List()
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List(t.Context())
 	require.NoError(t, err)
 	b := boundJob(who, at)
 	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
@@ -2928,7 +2928,7 @@ func TestAWideningApplyKeepsTheHoldersBinding(t *testing.T) {
 				Goals: []jobtypes.Goal{{ID: "done", Kind: jobtypes.GoalKindPaths, Expect: jobtypes.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []jobtypes.Declaration{widen}, config.Jobs{}, nil, nil, false)
 			require.NoError(t, err)
-			_, err = store.List()
+			_, err = store.List(t.Context())
 			require.NoError(t, err)
 
 			at := hookLocation(ctx, Dependencies{})
@@ -2952,7 +2952,7 @@ func TestATombstonedBindingAllowsTheFixItNames(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(t, ctx, who, held.ID)
 	require.NoError(t, os.RemoveAll(gone))
-	_, err := job.NewStore(at.jobs()).List()
+	_, err := job.NewStore(at.jobs()).List(t.Context())
 	require.NoError(t, err)
 	b := boundJob(who, at)
 	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
@@ -2993,7 +2993,7 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	_, err := store.Delete(t.Context(), held.ID, true)
 	require.NoError(t, err)
-	_, err = store.List()
+	_, err = store.List(t.Context())
 	require.NoError(t, err)
 
 	b := boundJob(who, at)

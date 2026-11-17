@@ -533,7 +533,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	if closed {
 		return nil, fmt.Errorf("%w: client closed", ErrUnavailable)
 	}
-	if err := c.resolveScope(); err != nil {
+	if err := c.resolveScope(ctx); err != nil {
 		return nil, err
 	}
 

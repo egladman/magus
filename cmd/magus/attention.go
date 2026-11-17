@@ -157,7 +157,7 @@ func attentionDispose(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	req, err := sessions.DisposeRequest(ctx, dir, rest[0], reason, session.InvocationStart{
-		Origin:    localOrigin(jobtypes.EntryPointCLI),
+		Origin:    localOrigin(ctx, jobtypes.EntryPointCLI),
 		Workspace: root,
 		Version:   version,
 	})
@@ -219,5 +219,5 @@ func noteAttentionOpenFailure(err error) {
 // fileAttention files an event as an attention request of the repository at root; see
 // [job.FileAttention] for which events open one.
 func fileAttention(ctx context.Context, root string, ev types.Event) (held bool, err error) {
-	return job.FileAttention(ctx, resolveRootOrEmpty(root), ev, localOrigin(jobtypes.EntryPointHook), version, jobPlace)
+	return job.FileAttention(ctx, resolveRootOrEmpty(root), ev, localOrigin(ctx, jobtypes.EntryPointHook), version, jobPlace)
 }

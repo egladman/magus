@@ -339,7 +339,7 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	_, err = Apply(ctx, s, []job.Declaration{{ID: "w", Paths: job.Paths{Write: paths}, Check: narrow}}, config.Jobs{}, nil, nil, true)
 	require.ErrorContains(t, err, "TestBeta", "job apply, a dry run included")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 

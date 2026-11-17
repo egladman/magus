@@ -280,7 +280,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 // reportForkFacts prints what a top-level fork leaves waiting. It never stops
 // the fork: policy decides that, on magus\workspace().forkFacts().
 func reportForkFacts(ctx context.Context, store *job.Store, root string) {
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		slog.InfoContext(ctx, "the work waiting off the base could not be counted", attr.Error(err), attr.Notice("note"))
 		return
@@ -437,7 +437,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	leases, err := store.List()
+	leases, err := store.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -463,7 +463,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	facts := leaseBoundary(ctx, root, store, row, leases, graph)
 	waiting.Stop()
 	facts.Evidence, facts.GraphCold = evidence.LeaseGraphEvidence(ctx, graph, row.Paths.Write)
-	tries, err := store.Attempts()
+	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return err
 	}
@@ -675,9 +675,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: --stdin takes the job from the record, so %s would be ignored: put it in the record (`%s` prints its fields)",
 				strings.Join(dropped, ", "), hint.JobFork.With("--schema"))
 		}
-		if row, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
+		var defaulted []job.DefaultedAccept
+		if row, defaulted, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
 		}
+		noteDefaultedAccepts(ctx, defaulted)
 		if row.Checkout, err = recordCheckout(row.Checkout, spec.Checkout); err != nil {
 			return err
 		}
@@ -844,7 +846,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				return job.FailedProvision(ctx, store, worktree, made, fmt.Errorf("pinning %s: %w", worktree.Binary, err))
 			}
 		}
-		rows, err := store.List()
+		rows, err := store.List(ctx)
 		if err != nil {
 			return err
 		}
@@ -910,7 +912,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{stored.ID})
 	}
 	// The notes compare the row with its peers, which the merge read and did not return.
-	plan, err := store.List()
+	plan, err := store.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -1081,7 +1083,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := refusePaused(store, pos[0]); err != nil {
+	if err := refusePaused(ctx, store, pos[0]); err != nil {
 		return err
 	}
 	stored, err := store.Exec(ctx, pos[0])
@@ -1135,7 +1137,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		if loc, err := jobPlace(root); err == nil {
 			lease, _ = job.ActingLease(loc, caller.Lease)
 			if lease != "" {
-				if err := refusePaused(job.NewStore(loc), lease); err != nil {
+				if err := refusePaused(ctx, job.NewStore(loc), lease); err != nil {
 					return err
 				}
 			}
@@ -1301,7 +1303,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if rows, listErr := store.List(); listErr == nil {
+	if rows, listErr := store.List(ctx); listErr == nil {
 		for _, row := range rows {
 			if !slices.Contains(pos, row.ID) {
 				continue
@@ -1318,7 +1320,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 
 	result, err := job.DecodeResult(os.Stdin)
 	if err != nil {
-		return exit.Usagef("magus job exit: %s\nFile this shape:\n%s", err, job.FiledShape(store, pos[0]))
+		return exit.Usagef("magus job exit: %s\nFile this shape:\n%s", err, job.FiledShape(ctx, store, pos[0]))
 	}
 	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
@@ -1487,7 +1489,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	store = store.InWorkspace(jobWorkspace(ctx, root))
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -1519,7 +1521,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		// caller left to remove it.
 		return errors.Join(exit.Usagef("magus job wait: %s", err), endWorktrees(ctx, os.Stdout, store))
 	}
-	if rows, err := store.List(); err == nil {
+	if rows, err := store.List(ctx); err == nil {
 		status.Entries = job.Entries(rows, status.Job)
 	}
 
@@ -1639,7 +1641,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -1658,7 +1660,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	// The job plan is re-read per batch rather than captured: a holder releases paths as it
 	// goes, and a boundary frozen here would keep attributing a file it gave up.
 	plan := func() []jobtypes.Job {
-		live, lerr := store.List()
+		live, lerr := store.List(ctx)
 		if lerr != nil {
 			return nil
 		}
@@ -1733,9 +1735,17 @@ func recentTrail(ctx context.Context, cacheDir string) []trailtypes.Event {
 // to be wider than one second of a very busy machine.
 const jobWatchWindow = 2000
 
+// noteDefaultedAccepts says, one line each, which check goals defaulted to accept a
+// witnessed run because the record named no accept.
+func noteDefaultedAccepts(ctx context.Context, defaulted []job.DefaultedAccept) {
+	for _, d := range defaulted {
+		slog.InfoContext(ctx, d.String(), attr.Notice("note"))
+	}
+}
+
 // refusePaused refuses work under job id while a person has it paused.
-func refusePaused(store *job.Store, id string) error {
-	rows, err := store.List()
+func refusePaused(ctx context.Context, store *job.Store, id string) error {
+	rows, err := store.List(ctx)
 	if err != nil {
 		return fmt.Errorf("magus job exec: read whether %s is paused: %w", id, err)
 	}
@@ -1932,9 +1942,11 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			defer f.Close()
 			in = f
 		}
-		if records, err = job.DecodeDeclarations(in); err != nil {
+		var defaulted []job.DefaultedAccept
+		if records, defaulted, err = job.DecodeDeclarations(in); err != nil {
 			return exit.Usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
 		}
+		noteDefaultedAccepts(ctx, defaulted)
 		if slices.ContainsFunc(records, func(r jobtypes.Declaration) bool { return len(r.Claim) > 0 }) {
 			return applyClaim(ctx, root, records)
 		}
@@ -1945,7 +1957,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if editing {
-		edited, err := job.WidenedDeclaration(store, pos[0], addPaths)
+		edited, err := job.WidenedDeclaration(ctx, store, pos[0], addPaths)
 		if err == nil {
 			edited, err = job.NarrowedDeclaration(edited, pos[0], releasePaths)
 		}
@@ -2038,7 +2050,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 // as the apply leaves it, so two rows of one apply note each other. A dry run's rows are
 // read as they would be written.
 func applyClaimNotes(ctx context.Context, store *job.Store, applied []job.Applied) map[string][]string {
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return nil
 	}

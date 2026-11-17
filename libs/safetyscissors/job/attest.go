@@ -74,7 +74,7 @@ func (s *Store) Attest(ctx context.Context, payload, sig []byte) (RunRef, error)
 	if err := codec.UnmarshalStrict(payload, &st); err != nil {
 		return "", s.wrap(&StatementError{Err: err})
 	}
-	if _, _, err := s.checkGoal(st.Job, st.Goal); err != nil {
+	if _, _, err := s.checkGoal(ctx, st.Job, st.Goal); err != nil {
 		return "", err
 	}
 	return s.record(ctx, run{

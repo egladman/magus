@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -26,11 +27,11 @@ func (s *RecordSuite) TestAnUnlistedStoredSpellingIsRefused() {
 	_, err := s.record("Row").job(newWireEnum[CredentialKind]())
 
 	s.Require().Error(err)
-	s.ErrorContains(err, `job a: "Row" is not a stored ModelTierSource`)
+	s.ErrorContains(err, `job a: "Row" is not a stored Source`)
 }
 
 func (s *RecordSuite) TestAListedSpellingReadsAsItsValue() {
-	got, err := s.record(wireTierSource.spell(tier.SourceMatrix)).job(newWireEnum[CredentialKind]())
+	got, err := s.record(wireTierSource().spell(tier.SourceMatrix)).job(newWireEnum[CredentialKind]())
 
 	s.Require().NoError(err)
 	s.Equal(tier.SourceMatrix, got.ModelTier.Source)
@@ -96,4 +97,57 @@ func (s *RecordSuite) TestAStoredBasisNoBuildSpellsIsRefused() {
 	_, err := r.job(newWireEnum[CredentialKind]())
 
 	s.ErrorContains(err, `job a: "Trusted" is not a stored Basis`)
+}
+
+func (s *RecordSuite) nestedRefusal(err error) *UnknownMemberError {
+	refused, ok := errors.AsType[*UnknownMemberError](err)
+	s.Require().True(ok, err)
+	return refused
+}
+
+func (s *RecordSuite) TestAMemberANewerWriterStoredInAGoalIsRefused() {
+	line := []byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
+		`"spec":{"goals":[{"id":"tests","kind":"Check","later":1}]},"status":{"created":0,"updated":0}}`)
+
+	_, _, err := ReadRecord(line)
+
+	refused := s.nestedRefusal(err)
+	s.Equal("goalRecord", refused.Record)
+	s.Equal([]string{"later"}, refused.Members)
+}
+
+func (s *RecordSuite) TestAMemberANewerWriterStoredTwoLevelsDownIsRefused() {
+	line := []byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
+		`"spec":{},"status":{"created":0,"updated":0,"registeredBy":{"user":"eli","credential":{"id":"c1","later":true}}}}`)
+
+	_, _, err := ReadRecord(line)
+
+	s.Equal("credentialRecord", s.nestedRefusal(err).Record)
+}
+
+func (s *RecordSuite) TestAMemberANewerWriterStoredOnAnAttemptIsRefused() {
+	line := []byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Attempt","spec":{"job":"a","n":1},"status":{"started":1,"later":1}}`)
+
+	var r attemptRecord
+	err := codec.Unmarshal(line, &r)
+
+	s.Equal("attemptStatusRecord", s.nestedRefusal(err).Record)
+}
+
+func (s *RecordSuite) TestEveryNestedRecordRoundTrips() {
+	row := Job{ID: "a", State: StateDeclared, Agent: &Agent{Instructions: "go", Worker: Worker{Type: WorkerTypeNew}},
+		Goals:        []Goal{{ID: "tests", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test"}, Accept: []Basis{BasisWitnessed}}},
+		RegisteredBy: Origin{User: "eli"}, Worktree: &Worktree{Root: "/w", Source: "/s", Base: "abc"},
+		Rejection: &Rejection{Unmet: []VerificationStatus{{ID: "tests"}}, At: 1}}
+	out, err := MarshalRecord(row, nil)
+	s.Require().NoError(err)
+
+	got, ok, err := ReadRecord(out)
+
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Equal(row.Agent, got.Agent)
+	s.Equal(row.Goals, got.Goals)
+	s.Equal(row.Worktree, got.Worktree)
+	s.Equal(row.Rejection, got.Rejection)
 }

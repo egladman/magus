@@ -58,32 +58,33 @@ func DecodeResult(r io.Reader) (job.Result, error) {
 // decodeDeclaration reads one declared job in [DecodeResult]'s two passes.
 // A record that is not a job fails as JobRecordInvalid problems. A newer
 // api_version, or a missing feature, fails naming the update.
-func decodeDeclaration(r io.Reader) (job.Declaration, error) {
+func decodeDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) {
 	raw, err := readInput(r, "job")
 	switch {
 	case err != nil:
-		return job.Declaration{}, asRecordInvalid(err)
+		return job.Declaration{}, nil, asRecordInvalid(err)
 	case !codec.Valid(raw):
-		return job.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Error()
+		return job.Declaration{}, nil, recordInvalid("", errors.New("the job is not JSON")).Error()
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
 		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
 			ps := recordInvalid("api_version", err)
 			ps[0].Fix = fmt.Sprintf("add \"api_version\": %q to the record", job.APIVersion)
-			return job.Declaration{}, ps.Error()
+			return job.Declaration{}, nil, ps.Error()
 		}
-		return job.Declaration{}, err
+		return job.Declaration{}, nil, err
 	}
 	raw, legacy, err := splitLegacy(raw)
 	if err != nil {
-		return job.Declaration{}, err
+		return job.Declaration{}, nil, err
 	}
 	var row job.Declaration
 	if err := codec.UnmarshalStrict(raw, &row); err != nil {
-		return job.Declaration{}, memberProblems(raw, err).Error()
+		return job.Declaration{}, nil, memberProblems(raw, err).Error()
 	}
-	row.Goals = resolveAccept(row.Goals)
-	return row, errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
+	var defaulted []string
+	row.Goals, defaulted = resolveAccept(row.Goals)
+	return row, defaultedAccepts(row.ID, defaulted), errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
 }
 
 // splitLegacy is raw without the members [types.LegacySpellings] reads, and those members.
@@ -141,19 +142,20 @@ func foldValidation(row *job.Declaration, line string) error {
 // A record naming no api_version is refused, never read as this magus's: the version is
 // what tells a declaration from a record of another shape, and a guess at it re-declared a
 // live job as an empty row. A claim or a settlement is refused too, since fork would
-// declare it, and `magus job apply` is the door that takes them.
-func DecodeStdinDeclaration(r io.Reader) (job.Declaration, error) {
-	row, err := decodeDeclaration(r)
+// declare it, and `magus job apply` is the door that takes them. It also names each check
+// goal whose accept defaulted, for the caller to say so.
+func DecodeStdinDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) {
+	row, defaulted, err := decodeDeclaration(r)
 	if err != nil {
-		return job.Declaration{}, err
+		return job.Declaration{}, nil, err
 	}
 	switch {
 	case len(row.Claim) > 0:
-		return job.Declaration{}, notDeclaration(row.ID, "claim", "a claim")
+		return job.Declaration{}, nil, notDeclaration(row.ID, "claim", "a claim")
 	case row.Settles():
-		return job.Declaration{}, notDeclaration(row.ID, "deferred", "a settlement")
+		return job.Declaration{}, nil, notDeclaration(row.ID, "deferred", "a settlement")
 	}
-	return row, nil
+	return row, defaulted, nil
 }
 
 // notDeclaration is the refusal of a record that is not a declaration but reached the
@@ -306,18 +308,18 @@ func objectMembers(raw []byte) (map[string]codec.RawMessage, bool) {
 // DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
 // array of them, or one object per line. Each is held to [decodeDeclaration]'s rules, and a
 // failure names the record by its position, so nothing is applied from a stream with one
-// bad record in it.
-func DecodeDeclarations(r io.Reader) ([]job.Declaration, error) {
+// bad record in it. It also names each check goal whose accept defaulted.
+func DecodeDeclarations(r io.Reader) ([]job.Declaration, []DefaultedAccept, error) {
 	raw, err := readInput(r, "records")
 	if err != nil {
-		return nil, asRecordInvalid(err)
+		return nil, nil, asRecordInvalid(err)
 	}
 	var parts []codec.RawMessage
 	trimmed := strings.TrimSpace(string(raw))
 	switch {
 	case strings.HasPrefix(trimmed, "["):
 		if err := codec.Unmarshal([]byte(trimmed), &parts); err != nil {
-			return nil, fmt.Errorf("job: the records are not a JSON array of jobs: %w", err)
+			return nil, nil, fmt.Errorf("job: the records are not a JSON array of jobs: %w", err)
 		}
 	case codec.Valid([]byte(trimmed)):
 		parts = []codec.RawMessage{codec.RawMessage(trimmed)}
@@ -329,30 +331,32 @@ func DecodeDeclarations(r io.Reader) ([]job.Declaration, error) {
 		}
 	}
 	if len(parts) == 0 {
-		return nil, recordInvalid("", errors.New("the records hold no job")).Error()
+		return nil, nil, recordInvalid("", errors.New("the records hold no job")).Error()
 	}
 	rows := make([]job.Declaration, 0, len(parts))
+	var defaulted []DefaultedAccept
 	seen := map[string]int{}
 	for i, part := range parts {
 		unwrapped, err := unwrapDescribed(part)
 		if err != nil {
-			return nil, fmt.Errorf("record %d: %w", i+1, err)
+			return nil, nil, fmt.Errorf("record %d: %w", i+1, err)
 		}
 		declared, err := dropStoreStamped(unwrapped)
 		if err != nil {
-			return nil, fmt.Errorf("record %d: %w", i+1, err)
+			return nil, nil, fmt.Errorf("record %d: %w", i+1, err)
 		}
-		row, err := decodeDeclaration(strings.NewReader(string(declared)))
+		row, accepts, err := decodeDeclaration(strings.NewReader(string(declared)))
 		if err != nil {
-			return nil, fmt.Errorf("record %d: %w", i+1, err)
+			return nil, nil, fmt.Errorf("record %d: %w", i+1, err)
 		}
 		if first, dup := seen[row.ID]; dup {
-			return nil, fmt.Errorf("record %d: job: %s is record %d too, and one stream applies each job once", i+1, row.ID, first)
+			return nil, nil, fmt.Errorf("record %d: job: %s is record %d too, and one stream applies each job once", i+1, row.ID, first)
 		}
 		seen[row.ID] = i + 1
 		rows = append(rows, row)
+		defaulted = append(defaulted, accepts...)
 	}
-	return rows, nil
+	return rows, defaulted, nil
 }
 
 // readInput reads what r holds. It fails as an *invalidInput when the input is no record at

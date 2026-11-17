@@ -616,7 +616,7 @@ func fleetLedger(t *testing.T, ctx context.Context) *job.Store {
 
 func unattributedWrites(t *testing.T, store *job.Store, id string) []jobtypes.UnattributedWrite {
 	t.Helper()
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	for _, r := range rows {
 		if r.ID == id {
@@ -1149,7 +1149,7 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 	holderCalled(t, ctx, "orch/worker", 2*time.Minute)
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "orch", target).Decision, "one write through")
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	entries := job.Entries(rows, "orch/worker")
 	require.Len(t, entries, 1)
@@ -1201,7 +1201,7 @@ func TestEnterRefuses(t *testing.T) {
 	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/c.go")
 	require.ErrorContains(t, err, "resume its holder", "a job takes two")
 
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Len(t, job.Entries(rows, "orch/worker"), job.MaxJobEntries)
 }

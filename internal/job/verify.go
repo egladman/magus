@@ -1272,7 +1272,7 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep job.Resul
 	if resolve == nil {
 		return job.Integration{}, fmt.Errorf("job: no output resolver reads %s's runs", checkout)
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return job.Integration{}, err
 	}

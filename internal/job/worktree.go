@@ -60,7 +60,7 @@ func MirroredBinary(exe, root string) string {
 // discards it with [Store.DiscardWorktree] when the fork is refused.
 func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary string) (wt job.Worktree, made bool, err error) {
 	dir = filepath.Clean(dir)
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return job.Worktree{}, false, err
 	}
@@ -262,8 +262,8 @@ func StartCheckpoint(ctx context.Context, rows []job.Job, id, declared string, w
 
 // RowLive reports whether job id has a row that has not ended, which a fork
 // updates rather than declares.
-func (s *Store) RowLive(id string) (bool, error) {
-	rows, err := s.dry().List()
+func (s *Store) RowLive(ctx context.Context, id string) (bool, error) {
+	rows, err := s.dry().List(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -276,7 +276,7 @@ func (s *Store) RowLive(id string) (bool, error) {
 // the source, or "" when none is. Each candidate's own version says what it
 // holds, since a checkout's binary can outlive the base its row records.
 func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (string, error) {
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -425,8 +425,8 @@ func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (job.Worktree
 
 // OwnedCheckout is the root of the standing checkout a row records that dir lies in, "" when
 // no row records one there.
-func (s *Store) OwnedCheckout(dir string) (string, error) {
-	rows, err := s.List()
+func (s *Store) OwnedCheckout(ctx context.Context, dir string) (string, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -441,8 +441,8 @@ func (s *Store) OwnedCheckout(dir string) (string, error) {
 // ParentCheckout is the checkout job parent works in when it is not here: the one its fork
 // made or adopted (bound true, so a child inherits it), else the one it was taken in (bound
 // false). It is "" when parent is unknown, works here, or has not been taken.
-func (s *Store) ParentCheckout(here, parent string) (dir string, bound bool, err error) {
-	rows, err := s.List()
+func (s *Store) ParentCheckout(ctx context.Context, here, parent string) (dir string, bound bool, err error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", false, err
 	}
@@ -936,8 +936,8 @@ func digestCache(path string) file.JSONL[binaryDigest] {
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it
 // may. It may when a live row's standing checkout records bin as its Binary
 // and bin still hashes to that row's BinaryDigest.
-func (s *Store) PinRefusal(bin string) (string, error) {
-	rows, err := s.List()
+func (s *Store) PinRefusal(ctx context.Context, bin string) (string, error) {
+	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -963,7 +963,7 @@ func (s *Store) PinRefusal(bin string) (string, error) {
 // caller gets a [*RefusedError]: a worker that pinned its own build would pick
 // its judge.
 func (s *Store) PinBinary(ctx context.Context, id string) ([]job.Job, error) {
-	rows, err := s.List()
+	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}

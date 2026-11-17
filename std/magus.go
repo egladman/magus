@@ -1684,7 +1684,7 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedR
 	if err != nil {
 		return jobtypes.UnmergedReport{}, err
 	}
-	snap := job.ReadSnapshot(store)
+	snap := job.ReadSnapshot(ctx, store)
 	if snap.Err != nil {
 		return jobtypes.UnmergedReport{}, snap.Err
 	}
@@ -1730,7 +1730,7 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (jobtypes.ForkFact
 	if err != nil {
 		return jobtypes.ForkFacts{}, err
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return jobtypes.ForkFacts{}, err
 	}

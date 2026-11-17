@@ -243,10 +243,16 @@ func (g Goal) Subject() []string {
 // Anything outside it is refused at declaration rather than graded into a verdict nobody
 // can act on: `check` + `absent` has no meaning, and a goal nobody can satisfy reads as a
 // job nobody can finish.
-var goalAccepts = map[GoalKind][]GoalExpect{
-	GoalKindCheck:  {ExpectPassed},
-	GoalKindPaths:  {ExpectChanged, ExpectPresent, ExpectAbsent},
-	GoalKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced, ExpectSignature},
+func goalAccepts(kind GoalKind) ([]GoalExpect, bool) {
+	switch kind {
+	case GoalKindCheck:
+		return []GoalExpect{ExpectPassed}, true
+	case GoalKindPaths:
+		return []GoalExpect{ExpectChanged, ExpectPresent, ExpectAbsent}, true
+	case GoalKindSymbol:
+		return []GoalExpect{ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced, ExpectSignature}, true
+	}
+	return nil, false
 }
 
 // EffectiveGoals returns the declared goals plus the primary Check as a goal. Keeping the
@@ -1546,7 +1552,7 @@ func (g Goal) faults(field string) []Fault {
 	// Validates what the job WILL BE, not what arrived. A declaration off the
 	// wire has not been through Resolve yet.
 	g = g.Resolve()
-	switch accepted, known := goalAccepts[g.Kind]; {
+	switch accepted, known := goalAccepts(g.Kind); {
 	case !known:
 		bad("kind", fmt.Sprintf("goal %q names kind %q", g.ID, g.Kind), "use one of "+quoteJoin(GoalKinds(), ", "))
 	case !slices.Contains(accepted, g.Expect):

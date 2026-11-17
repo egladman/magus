@@ -43,7 +43,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	// The version is READ from the constant, not typed as a digit: this case is about the
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
 	// it at the version check instead, naming nothing it came here to compare.
-	piped, err := DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
+	piped, _, err := DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
 	  "api_version": %q,
 	  "id": "adj/store",`, job.APIVersion) + `
 	  "parent": "adjacency",
@@ -260,7 +260,7 @@ func (s *widenSuite) SetupTest() {
 }
 
 func (s *widenSuite) apply(add ...string) []Applied {
-	rec, err := WidenedDeclaration(s.store, "w", add)
+	rec, err := WidenedDeclaration(s.T().Context(), s.store, "w", add)
 	s.Require().NoError(err)
 	applied, err := Apply(s.T().Context(), s.store, []job.Declaration{rec}, config.Jobs{}, nil, func() string { return "" }, false)
 	s.Require().NoError(err)
@@ -268,7 +268,7 @@ func (s *widenSuite) apply(add ...string) []Applied {
 }
 
 func (s *widenSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
-	before, err := s.store.List()
+	before, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	want := before[0]
 	want.Paths.Write, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
@@ -278,7 +278,7 @@ func (s *widenSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
 	s.Require().Len(applied, 1)
 	want.Validated, want.WriteProof = applied[0].Next.Validated, applied[0].Next.WriteProof
 	s.Equal(want, applied[0].Next)
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(want, rows[0])
 }
@@ -291,7 +291,7 @@ func (s *widenSuite) TestAPathTheRowHoldsChangesNothing() {
 }
 
 func (s *widenSuite) TestAnUnknownJobIsAUsageError() {
-	_, err := WidenedDeclaration(s.store, "nope", []string{"b.go"})
+	_, err := WidenedDeclaration(s.T().Context(), s.store, "nope", []string{"b.go"})
 
 	s.Require().Error(err)
 	s.Equal(exit.Usage, exit.Code(err))
@@ -316,7 +316,7 @@ func (s *narrowSuite) SetupTest() {
 }
 
 func (s *narrowSuite) release(paths ...string) job.Declaration {
-	held, err := WidenedDeclaration(s.store, "w", nil)
+	held, err := WidenedDeclaration(s.T().Context(), s.store, "w", nil)
 	s.Require().NoError(err)
 	rec, err := NarrowedDeclaration(held, "w", paths)
 	s.Require().NoError(err)
@@ -336,7 +336,7 @@ func (s *narrowSuite) TestADeclarationClaimIsReleasedByItsWholeValue() {
 }
 
 func (s *narrowSuite) TestAPathTheJobLacksIsAUsageError() {
-	held, err := WidenedDeclaration(s.store, "w", nil)
+	held, err := WidenedDeclaration(s.T().Context(), s.store, "w", nil)
 	s.Require().NoError(err)
 
 	_, err = NarrowedDeclaration(held, "w", []string{"nope.go"})
@@ -393,16 +393,27 @@ func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
 		{ID: "docs", Kind: job.GoalKindPaths, Paths: []string{"docs"}},
 	}
 
-	got := resolveAccept(in)
+	got, defaulted := resolveAccept(in)
 
+	s.Equal([]string{"unit"}, defaulted, "only the goal naming no basis defaulted")
 	s.Equal([]job.Basis{job.BasisWitnessed}, got[0].Accept, "an unnamed kind is a check")
 	s.Equal([]job.Basis{job.BasisReported}, got[1].Accept, "a goal naming its bases keeps them")
 	s.Empty(got[2].Accept, "only a check goal accepts a basis")
 	s.Empty(in[0].Accept, "the caller's goals are not written through")
 }
 
+func (s *resolveAcceptSuite) TestADecodedRecordNamesTheCheckGoalThatDefaulted() {
+	_, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"api_version":"` + job.APIVersion + `","id":"w",` +
+		`"paths":{"write":["a.go"]},"goals":[{"id":"unit","kind":"check","check":{"target":"test","project":"."}},` +
+		`{"id":"lint","kind":"check","check":{"target":"lint","project":"."},"accept":["reported"]}]}`))
+
+	s.Require().NoError(err)
+	s.Equal([]DefaultedAccept{{Job: "w", Goal: "unit"}}, defaulted)
+	s.Equal(`w: check goal "unit" names no accept, so it defaulted to accept [witnessed]`, defaulted[0].String())
+}
+
 func (s *resolveAcceptSuite) TestADecodedRecordValidatesWithItsCheckGoalResolved() {
-	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + job.APIVersion + `","id":"w",` +
+	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + job.APIVersion + `","id":"w",` +
 		`"goals":[{"id":"unit","check":{"target":"test","project":"."}}]}`))
 
 	s.Require().NoError(err)

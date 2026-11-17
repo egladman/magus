@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 )
 
 // WriteStage is where in a row write [WithWriteHook]'s hook runs.
@@ -45,7 +44,7 @@ type WriteHook func(ctx context.Context, e *WriteEvent) error
 // WriteEvent is one row write as a [WriteHook] sees it at one stage.
 type WriteEvent struct {
 	Stage WriteStage
-	Kind  Grading
+	Kind  WriteKind
 	ID    string
 	Actor Actor
 	// Prev is the stored row, the zero Job when Exists is false, and Row the row being
@@ -73,9 +72,9 @@ type WriteEvent struct {
 }
 
 // Mutate is the locked read-modify-write every row write shares, and the only place a row
-// is written row-wise. kind says what the write is; see [Grading]. apply may fail, and
+// is written row-wise. kind says what the write is; see [WriteKind]. apply may fail, and
 // nothing is written then.
-func (s *Store) Mutate(ctx context.Context, id string, kind Grading, apply func(cur *Job, exists bool, now int64) error) (Job, error) {
+func (s *Store) Mutate(ctx context.Context, id string, kind WriteKind, apply func(cur *Job, exists bool, now int64) error) (Job, error) {
 	return s.MutateSeeing(ctx, id, kind, func(cur *Job, exists bool, now int64, _ []Job) error {
 		return apply(cur, exists, now)
 	})
@@ -83,7 +82,7 @@ func (s *Store) Mutate(ctx context.Context, id string, kind Grading, apply func(
 
 // MutateSeeing is Mutate whose apply also sees every stored row.
 // The rows are read under the same lock; apply must not change them.
-func (s *Store) MutateSeeing(ctx context.Context, id string, kind Grading, apply func(cur *Job, exists bool, now int64, rows []Job) error) (Job, error) {
+func (s *Store) MutateSeeing(ctx context.Context, id string, kind WriteKind, apply func(cur *Job, exists bool, now int64, rows []Job) error) (Job, error) {
 	if strings.TrimSpace(id) == "" {
 		return Job{}, ErrNoID
 	}
@@ -128,7 +127,7 @@ func (s *Store) MutateSeeing(ctx context.Context, id string, kind Grading, apply
 type rowWrite struct {
 	s            *Store
 	id           string
-	kind         Grading
+	kind         WriteKind
 	actor        Actor
 	denials      []Denial
 	denialsKnown bool
@@ -183,7 +182,7 @@ func (w *rowWrite) run(ctx context.Context, apply func(cur *Job, exists bool, no
 	}
 	w.row = w.prev.Clone()
 	w.row.ID = w.id
-	w.now = time.Now().Unix()
+	w.now = w.s.Now().Unix()
 	if err := apply(&w.row, w.exists(), w.now, w.f.Jobs); err != nil {
 		return err
 	}
@@ -289,7 +288,7 @@ func (w *rowWrite) carryRecord(ctx context.Context) error {
 // live attempt and may refuse a fork past the cap. With no hook the attempt is not folded,
 // and a fork past max_attempts is refused.
 func (w *rowWrite) fold(ctx context.Context) error {
-	all, err := w.s.Attempts()
+	all, err := w.s.Attempts(ctx)
 	if err != nil {
 		return err
 	}
@@ -341,7 +340,7 @@ func (w *rowWrite) endReason(ctx context.Context) error {
 	if !w.exists() || !prev.State.Live() || w.s.hook == nil {
 		return nil
 	}
-	all, err := w.s.Attempts()
+	all, err := w.s.Attempts(ctx)
 	if err != nil {
 		return err
 	}
@@ -451,7 +450,7 @@ func (w *rowWrite) place(ctx context.Context) error {
 // than prev's for a write that changes the declared spec ([SpecChanges]). An observation
 // declares nothing, and neither does a write that only widens the write paths: evidence
 // taken under the narrower set still asks what the wider one asks.
-func nextGeneration(prev, row Job, exists bool, kind Grading) int {
+func nextGeneration(prev, row Job, exists bool, kind WriteKind) int {
 	if !exists {
 		return 1
 	}

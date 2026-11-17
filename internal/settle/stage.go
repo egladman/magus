@@ -50,7 +50,7 @@ func heldForOtherLeases(ctx context.Context, place func(root string) (job.Locati
 	if err != nil {
 		return nil, fmt.Errorf("place the job store to read which leases share this checkout: %w", err)
 	}
-	rows, err := job.NewStore(loc).List()
+	rows, err := job.NewStore(loc).List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the job store for the paths other leases in this checkout write: %w", err)
 	}

@@ -92,7 +92,7 @@ func refuse(actor Actor, id, rule string) error {
 
 // authorizeRow is [job.AuthorizeRow] with magus's rules added: a proved claim graded by
 // [authorizeClaim], and the gate a child may run (see [authorizeGate]).
-func authorizeRow(actor Actor, id string, kind job.Grading, prev, next job.Job, exists bool, rows []job.Job) error {
+func authorizeRow(actor Actor, id string, kind job.WriteKind, prev, next job.Job, exists bool, rows []job.Job) error {
 	if kind == job.AsClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
 	}

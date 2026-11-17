@@ -646,7 +646,7 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
-	leases, err := store.List()
+	leases, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, leases, 1)
 	assert.Equal(t, "shared row", leases[0].Instructions())
@@ -973,12 +973,12 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 
 	stored, err := jobStoreFromContext(ctx, "job.list")
 	require.NoError(t, err)
-	rows, err := stored.List()
+	rows, err := stored.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused put writes nothing")
 
 	require.NoError(t, put("go::go-vet ."))
-	rows, err = stored.List()
+	rows, err = stored.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 }

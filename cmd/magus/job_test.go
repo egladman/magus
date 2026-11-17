@@ -143,7 +143,7 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
 
 	require.NoError(t, fork("accepted", "run.go#A"))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].Paths.Deny})
@@ -166,12 +166,12 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 		d.Schema = jobtypes.Schema{}
 		return d
 	}
-	first, err := store.List()
+	first, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w"}))
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
@@ -184,7 +184,7 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--instructions", "anew"}))
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, jobtypes.Declaration{ID: "w", Agent: jobtypes.Instructed("anew"), ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
@@ -206,7 +206,7 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 
 	require.NoError(t, fork("reader", "--read-only", "--instructions", "find the callers"))
 	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	got := make(map[string]bool, len(rows))
 	for _, r := range rows {
@@ -255,7 +255,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 
 	captureStdout(t, func() { require.NoError(t, fork("real", head[:9])) })
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []string{"real", head}, []string{rows[0].ID, rows[0].Checkpoint})
@@ -294,7 +294,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	assert.Contains(t, err.Error(), own)
 
 	captureStdout(t, func() { require.NoError(t, fork(record("own", ""), "--checkout", own)) })
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "own" })
 	require.GreaterOrEqual(t, i, 0, "the fork wrote its row")
@@ -326,7 +326,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	_, err := store.Update(t.Context(), "integrate", func(u *jobtypes.Job) { u.State = jobtypes.StateExited })
 	require.NoError(t, err)
 	captureStdout(t, func() { require.NoError(t, fork(own, record("finish", "notes.txt"))) })
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "finish" })
 	require.GreaterOrEqual(t, i, 0)
@@ -366,7 +366,7 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 	captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin", "--checkout", standing}))
 	})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "merge" })
 	require.GreaterOrEqual(t, i, 0)
@@ -406,7 +406,7 @@ func (s *IntegrationStandingCheckoutSuite) SetupTest() {
 }
 
 func (s *IntegrationStandingCheckoutSuite) row() jobtypes.Job {
-	rows, err := s.store.List()
+	rows, err := s.store.List(s.T().Context())
 	s.Require().NoError(err)
 	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == "merge" })
 	s.Require().GreaterOrEqual(i, 0)
@@ -444,7 +444,7 @@ func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	repo.Git("merge", "-q", "--ff-only", "done")
 
 	captureStdout(t, func() { require.NoError(t, fork(), "its check never passed, so the row takes the follow-up") })
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []string{"pricing.txt"}, rows[0].Paths.Write, "the re-fork keeps the paths the row held")
@@ -666,7 +666,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{jobtypes.PrimaryGoalID: passed.Ref})
 
 	require.ErrorContains(t, err, "names no run this checkout recorded")
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, jobtypes.StateExited, rows[0].State)
 }
@@ -837,7 +837,7 @@ func TestJobExecRefusesATypedBase(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "-base")
 
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: repo.Root()}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: repo.Root()}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []any{jobtypes.StateDeclared, ""}, []any{rows[0].State, rows[0].ReportedBase}, "a refused exec takes nothing")
@@ -970,7 +970,7 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 	assert.Contains(t, err.Error(), "`Alpha|^(TestBeta)$`")
 
 	require.NoError(t, fork("go-test . -- -run Alpha|^(TestBeta)$"))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the refused fork wrote no row")
 }
@@ -1018,12 +1018,12 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	rows, err := store.List()
+	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "grading dry-runs the guard and the refused fork wrote no row")
 
 	require.NoError(t, fork("go::go-vet ."))
-	rows, err = store.List()
+	rows, err = store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 }
@@ -1199,7 +1199,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(err.Error(), string(types.JobUngraded)), "reported once: %s", err)
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a fork nobody graded writes nothing")
 }
@@ -1363,7 +1363,7 @@ func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.
 
 func (s *jobApplyContractSuite) stored(store *job.Store) jobtypes.Job {
 	s.T().Helper()
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 	return rows[0]
@@ -1425,20 +1425,20 @@ func (s *jobApplyContractSuite) TestAnUnknownSettlementExitsFailureAndWritesNoth
 	})
 	s.Require().ErrorContains(err, "nothing declares job absent, so nothing settles")
 	s.Equal(exit.Failure, exit.Code(err))
-	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root}).List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
 }
 
 func (s *jobApplyContractSuite) TestAnInvalidFiledResultExitsUsageAndKeepsTheJob() {
 	root, store, _ := s.integration()
-	before, err := store.List()
+	before, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	writeStdin(s.T(), `{"api_version":"safetyscissors.job-result/v1alpha1","unexpected":"field"}`)
 	err = jobExit(s.T().Context(), root, []string{"integration", "--stdin"})
 	s.Require().ErrorContains(err, "File this shape:")
 	s.Equal(exit.Usage, exit.Code(err))
-	after, err := store.List()
+	after, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(before, after)
 }
@@ -1511,7 +1511,7 @@ func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
 	s.ErrorIs(err, fs.ErrNotExist)
 	s.ErrorContains(err, "magus job fork:")
 	s.Equal(exit.Usage, exit.Code(err))
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
 }

@@ -65,11 +65,11 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	case "dispose":
 		return attentionDispose(ctx, root, rest)
 	case "advise":
-		return adviseCommand(root, rest)
+		return adviseCommand(ctx, root, rest)
 	case "advisories":
 		return advisoriesCommand(root, rest)
 	case "retract":
-		return retractCommand(root, rest)
+		return retractCommand(ctx, root, rest)
 	case "checkpoint":
 		return checkpointCommand(ctx, root, os.Stdin, os.Stdout, rest)
 	case "notify":
@@ -197,10 +197,9 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	return emitFormatted(opts, out)
 }
 
-// localOrigin is this process's OS account, entering through e, for a verb with no ctx to
-// read the entry point from.
-func localOrigin(e jobtypes.EntryPoint) jobtypes.Origin {
-	return trail.StampOrigin(context.Background(), jobtypes.Origin{EntryPoint: e})
+// localOrigin is this process's OS account, entering through e.
+func localOrigin(ctx context.Context, e jobtypes.EntryPoint) jobtypes.Origin {
+	return trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: e})
 }
 
 func sessionLoadUsage(fs *flag.FlagSet) func() {
@@ -262,7 +261,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	guard.JoinServedNext(summary.Events, summary.Commands, hint.ReadServedNext(cacheDir))
 	result, err := session.LoadEvents(ctx, dir, summary.Events, session.InvocationStart{
-		Origin:    localOrigin(jobtypes.EntryPointCLI),
+		Origin:    localOrigin(ctx, jobtypes.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,
@@ -370,7 +369,7 @@ func directiveStore(root string) (sessions.DirectiveStore, error) {
 	return sessions.OpenDirectiveStore(root)
 }
 
-func adviseCommand(root string, args []string) error {
+func adviseCommand(ctx context.Context, root string, args []string) error {
 	var flags *flaggen.SessionAdviseFlags
 	rest, err := commandParse("session advise", args, func(fs *flag.FlagSet) {
 		flags = flaggen.BindSessionAdvise(fs)
@@ -383,21 +382,21 @@ func adviseCommand(root string, args []string) error {
 	if text == "" {
 		return exit.Usagef(`magus session advise: needs the text to show every session, as in magus session advise "push what you have"`)
 	}
-	if err := requirePerson(context.Background(), "session advise records a person's words"); err != nil {
+	if err := requirePerson(ctx, "session advise records a person's words"); err != nil {
 		return err
 	}
 	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
-	a, err := store.Post(context.Background(), text, expect, localOrigin(jobtypes.EntryPointCLI).User, time.Now())
+	a, err := store.Post(ctx, text, expect, localOrigin(ctx, jobtypes.EntryPointCLI).User, time.Now())
 	if err != nil {
 		return err
 	}
 	return emitDirective(a, "posted")
 }
 
-func retractCommand(root string, args []string) error {
+func retractCommand(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session retract", args, func(*flag.FlagSet) {})
 	if err != nil {
 		return err
@@ -405,14 +404,14 @@ func retractCommand(root string, args []string) error {
 	if len(rest) != 1 {
 		return exit.Usagef("magus session retract: needs exactly one advisory id (got %d); `magus session advisories` lists them", len(rest))
 	}
-	if err := requirePerson(context.Background(), "session retract records that a person withdrew their words"); err != nil {
+	if err := requirePerson(ctx, "session retract records that a person withdrew their words"); err != nil {
 		return err
 	}
 	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
-	a, err := store.Retract(context.Background(), rest[0], localOrigin(jobtypes.EntryPointCLI).User, time.Now())
+	a, err := store.Retract(ctx, rest[0], localOrigin(ctx, jobtypes.EntryPointCLI).User, time.Now())
 	if errors.Is(err, sessions.ErrNoDirective) {
 		return fmt.Errorf("magus session retract: run `magus session advisories --all` to list every id: %w", err)
 	}
@@ -684,5 +683,5 @@ func readJobRows(ctx context.Context, root string) ([]jobtypes.Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	return store.List()
+	return store.List(ctx)
 }

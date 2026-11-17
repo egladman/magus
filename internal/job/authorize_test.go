@@ -57,7 +57,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	assert.Contains(t, err.Error(), "row adj/store is what this targeted")
 	assert.Contains(t, err.Error(), "ask your orchestrator to make this write")
 
-	after, err := NewStore(loc).List()
+	after, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, workerRow().Paths.Write, after[0].Paths.Write, "a refused write changes nothing")
 }
@@ -195,7 +195,7 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 
 	_, err := boundStore(loc, "adj/store").Clear(t.Context())
 	require.Error(t, err)
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 }
@@ -304,7 +304,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	_, err = s.Clear(t.Context())
 	require.ErrorAs(t, err, &refused)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, workerRow().Instructions(), rows[0].Instructions())
@@ -350,7 +350,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 	loc.Actor = nil
 	s := NewStore(loc)
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
@@ -378,7 +378,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 		assert.Contains(t, err.Error(), "send the lease you act under", name)
 	}
 
-	after, err := s.List()
+	after, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []job.Job{rows[0]}, after, "a refused write changes nothing")
 }
@@ -421,7 +421,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 
 	require.NoError(t, boundStore(loc, "adj/store").RecordUnattributedWrite(t.Context(), "adj/other", "held.go"))
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows[0].Unattributed, 1)
 	assert.Equal(t, "held.go", rows[0].Unattributed[0].Path)

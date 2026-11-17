@@ -270,7 +270,7 @@ func TestStoreRefusesToEndARowWhoseConfigDoesNotRead(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "history_path")
-	rows, lerr := s.List()
+	rows, lerr := s.List(t.Context())
 	require.NoError(t, lerr)
 	assert.Equal(t, job.StateRunning, rows[0].State, "the row did not move, so the outcome is not lost")
 }
@@ -346,7 +346,7 @@ func TestStoreCountsReworkRoundsAndKeepsThemAgainstAWholeRowWrite(t *testing.T) 
 	assert.Equal(t, 2, again.ReworkRounds, "a caller's count is replaced by the stored one")
 
 	require.NoError(t, s.RecordRework(t.Context(), "gone"), "a row removed since the message is nothing to report")
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "counting rework creates no row")
 }
@@ -372,7 +372,7 @@ func TestStoreRecordsAnOutcomeWhenTheSweepEndsARow(t *testing.T) {
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	plant(t, s, staleTieredRow(s, now))
 
-	_, err := s.List()
+	_, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	jobs := recordedJobs(t, history)

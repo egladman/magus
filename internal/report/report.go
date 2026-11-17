@@ -427,13 +427,13 @@ type NextServer func(next []types.NextStep) []types.NextStep
 // it unjournaled would give the most-served breadcrumb in the tree a denominator of
 // zero in `magus session hints`, and leave it the one suggestion the guard cannot
 // pre-authorize.
-func ServedIn(loc job.Location) NextServer {
+func ServedIn(ctx context.Context, loc job.Location) NextServer {
 	cacheDir := loc.CacheDir
 	return func(next []types.NextStep) []types.NextStep {
 		role, writePaths := hint.RoleUnbound, []string(nil)
 		if id, _ := job.ActingLease(loc, trail.LeaseFromEnv()); id != "" {
 			role = hint.RoleWorker
-			if rows, err := job.NewStore(loc).List(); err == nil {
+			if rows, err := job.NewStore(loc).List(ctx); err == nil {
 				role, writePaths = hint.LeaseRole(rows, id)
 			}
 		}

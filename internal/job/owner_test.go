@@ -118,7 +118,7 @@ func TestEndSessionLeavesAnIntegrationRowRunning(t *testing.T) {
 	assert.False(t, ok)
 	binding := s.Binding(holder)
 	assert.Equal(t, []any{"integrate", false}, []any{binding.Job, binding.Gone}, "the binding stays live, never a tombstone")
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, job.StateRunning, rows[0].State, rows[0].EndReason)
@@ -144,7 +144,7 @@ func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "an identity-less caller shares the checkout's record, so its end ends nothing")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	for _, r := range rows {
 		assert.NotEqual(t, job.StateNoReturn, r.State, r.ID)
@@ -203,7 +203,7 @@ func (s *HolderStoppedSuite) SetupTest() {
 }
 
 func (s *HolderStoppedSuite) row(id string) job.Job {
-	rows, err := NewStore(s.loc).List()
+	rows, err := NewStore(s.loc).List(s.T().Context())
 	s.Require().NoError(err)
 	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	s.Require().GreaterOrEqual(i, 0, id)
@@ -292,7 +292,7 @@ func (s *HolderStoppedSuite) TestTheDeadlineEndsAStampedRow() {
 		return nil
 	}))
 
-	rows, err := s.at(s.row("w").Deadline + 60).List()
+	rows, err := s.at(s.row("w").Deadline + 60).List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
 	s.Equal(job.StateNoReturn, rows[0].State, rows[0].EndReason)
@@ -317,7 +317,7 @@ func (s *HolderStoppedSuite) TestALaterJobTakesAStaleStampedHoldersPath() {
 	store := NewStore(loc)
 	s.Require().NoError(store.Bind(holder, "gone"))
 	s.Require().NoError(store.StampHolderStopped(s.T().Context(), holder))
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
 	gone := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })]
 	s.NotZero(gone.HolderStopped)
@@ -325,7 +325,7 @@ func (s *HolderStoppedSuite) TestALaterJobTakesAStaleStampedHoldersPath() {
 
 	_, err = boundStore(loc, row.ID).Claim(s.T().Context(), row.ID, []job.ClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}, facts, config.Defaults().Jobs, false)
 	s.Require().NoError(err)
-	rows, err = NewStore(loc).List()
+	rows, err = NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })].Paths.Write)
 }
@@ -336,7 +336,7 @@ func (s *HolderStoppedSuite) TestAHolderBackBeforeTheTakeKeepsItsPath() {
 	store := NewStore(loc)
 	s.Require().NoError(store.Bind(holder, "gone"))
 	s.Require().NoError(store.StampHolderStopped(s.T().Context(), holder))
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(s.T().Context())
 	s.Require().NoError(err)
 	gone := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })]
 	facts = facts.WithDeadHolders([]DeadHolder{{Row: gone, Since: gone.HolderStopped, Why: "its holder stopped"}})
@@ -368,7 +368,7 @@ func TestTreeRootIsTheTopmostAncestor(t *testing.T) {
 		job.Job{ID: "plan/a/b", Parent: "plan/a", State: job.StateRunning},
 	)
 	for id, want := range map[string]string{"plan/a/b": "plan", "plan": "plan", "undeclared": "undeclared"} {
-		got, err := s.TreeRoot(id)
+		got, err := s.TreeRoot(t.Context(), id)
 		require.NoError(t, err)
 		assert.Equal(t, want, got, id)
 	}
@@ -405,7 +405,7 @@ func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 	}
 	state := func(t *testing.T, loc Location) job.State {
 		t.Helper()
-		rows, err := NewStore(loc).List()
+		rows, err := NewStore(loc).List(t.Context())
 		require.NoError(t, err)
 		return rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == result.Job })].State
 	}

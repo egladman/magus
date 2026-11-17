@@ -9,8 +9,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -31,18 +33,12 @@ func (s *WitnessSuite) command() *exec.Cmd {
 	return cmd
 }
 
-func (s *WitnessSuite) attach(cmd *exec.Cmd) *Witness {
-	w, err := s.store.Witness(s.T().Context(), "j1", "tests", cmd)
-	s.Require().NoError(err)
-	return w
+func (s *WitnessSuite) witness(cmd *exec.Cmd) (RunRef, error) {
+	return s.store.Witness(s.T().Context(), "j1", "tests", cmd)
 }
 
-// witnessed is the caller's whole side: attach, run its own command, close.
 func (s *WitnessSuite) witnessed() RunRef {
-	cmd := s.command()
-	w := s.attach(cmd)
-	_ = cmd.Run()
-	ref, err := w.Close(s.T().Context())
+	ref, err := s.witness(s.command())
 	s.Require().NoError(err)
 	return ref
 }
@@ -51,6 +47,17 @@ func (s *WitnessSuite) refusal(err error) WitnessRefusal {
 	refused, ok := errors.AsType[*WitnessRefusedError](err)
 	s.Require().True(ok, err)
 	return refused.Refusal
+}
+
+func (s *WitnessSuite) output(ref RunRef) string {
+	runs, err := s.store.runs()
+	s.Require().NoError(err)
+	return runs[ref].output
+}
+
+func digestOf(out string) string {
+	sum := sha256.Sum256([]byte(out))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func (s *WitnessSuite) TestAWitnessedPassVerifies() {
@@ -75,42 +82,112 @@ func (s *WitnessSuite) TestTheCallerStillGetsTheOutputAndTheStoreItsDigest() {
 	cmd := s.command()
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	w := s.attach(cmd)
-	s.Require().NoError(cmd.Run())
-	ref, err := w.Close(s.T().Context())
+
+	ref, err := s.witness(cmd)
 	s.Require().NoError(err)
 
 	s.Equal("ok\n", out.String())
 	runs, err := s.store.runs()
 	s.Require().NoError(err)
-	sum := sha256.Sum256([]byte("ok\n"))
-	s.Equal("sha256:"+hex.EncodeToString(sum[:]), runs[ref].output)
+	s.Equal(digestOf("ok\n"), runs[ref].output)
 	s.Equal(s.argv, runs[ref].argv)
+}
+
+func (s *WitnessSuite) TestAnotherProgramUnderTheChecksArgvIsRefused() {
+	cmd := s.command()
+	cmd.Path = "/bin/true"
+
+	_, err := s.witness(cmd)
+
+	s.Equal(RefusalOtherProgram, s.refusal(err))
+}
+
+func (s *WitnessSuite) TestAnEnvTheCheckDoesNotNameIsRefused() {
+	cmd := s.command()
+	cmd.Env = append(os.Environ(), "GOFLAGS=-run=TestOne")
+
+	_, err := s.witness(cmd)
+
+	s.Equal(RefusalEnv, s.refusal(err))
+}
+
+func (s *WitnessSuite) TestProcessAttributesAreRefused() {
+	cmd := s.command()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	_, err := s.witness(cmd)
+
+	s.Equal(RefusalSysProcAttr, s.refusal(err))
+}
+
+func (s *WitnessSuite) TestExtraFilesAreRefused() {
+	cmd := s.command()
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _, _ = r.Close(), w.Close() })
+	cmd.ExtraFiles = []*os.File{w}
+
+	_, err = s.witness(cmd)
+
+	s.Equal(RefusalExtraFiles, s.refusal(err))
+}
+
+func (s *WitnessSuite) TestAnotherCommandsProcessIsRefused() {
+	other := s.command()
+	s.Require().NoError(other.Run())
+	cmd := s.command()
+	cmd.Process, cmd.ProcessState = other.Process, other.ProcessState
+
+	_, err := s.witness(cmd)
+
+	s.Equal(RefusalStarted, s.refusal(err))
 }
 
 func (s *WitnessSuite) TestAHandBuiltProcessStateIsRefused() {
 	cmd := s.command()
-	w := s.attach(cmd)
-	cmd.Process, cmd.ProcessState = &os.Process{Pid: 4242}, &os.ProcessState{}
+	cmd.ProcessState = &os.ProcessState{}
 
-	_, err := w.Close(s.T().Context())
+	_, err := s.witness(cmd)
 
-	s.Equal(RefusalOtherProcess, s.refusal(err))
+	s.Equal(RefusalStarted, s.refusal(err))
 }
 
-func (s *WitnessSuite) TestACommandNeverRunIsRefused() {
-	w := s.attach(s.command())
+// swapper swaps cmd's Stdout away and back on its first write, as a caller redirecting
+// output past the digest would.
+type swapper struct {
+	cmd     *exec.Cmd
+	swapped bool
+	out     bytes.Buffer
+}
 
-	_, err := w.Close(s.T().Context())
+func (w *swapper) Write(p []byte) (int, error) {
+	if !w.swapped {
+		w.swapped = true
+		held := w.cmd.Stdout
+		w.cmd.Stdout = io.Discard
+		w.cmd.Stdout = held
+	}
+	return w.out.Write(p)
+}
 
-	s.Equal(RefusalNeverWaited, s.refusal(err))
+func (s *WitnessSuite) TestARedirectSwappedAndRestoredStillDigestsTheWholeOutput() {
+	s.argv = []string{"sh", "-c", "echo one; echo two"}
+	cmd := s.command()
+	w := &swapper{cmd: cmd}
+	cmd.Stdout = w
+
+	ref, err := s.witness(cmd)
+	s.Require().NoError(err)
+
+	s.True(w.swapped)
+	s.Equal(digestOf("one\ntwo\n"), s.output(ref))
 }
 
 func (s *WitnessSuite) TestACommandAlreadyRunIsRefused() {
 	cmd := s.command()
 	s.Require().NoError(cmd.Run())
 
-	_, err := s.store.Witness(s.T().Context(), "j1", "tests", cmd)
+	_, err := s.witness(cmd)
 
 	s.Equal(RefusalStarted, s.refusal(err))
 }
@@ -119,7 +196,7 @@ func (s *WitnessSuite) TestANarrowedCommandIsRefused() {
 	cmd := exec.Command("sh", "-c", "echo ok", "narrowed")
 	cmd.Dir = s.work
 
-	_, err := s.store.Witness(s.T().Context(), "j1", "tests", cmd)
+	_, err := s.witness(cmd)
 
 	s.Equal(RefusalOtherCheck, s.refusal(err))
 }
@@ -128,50 +205,53 @@ func (s *WitnessSuite) TestACommandInAnotherDirectoryIsRefused() {
 	cmd := s.command()
 	cmd.Dir = s.T().TempDir()
 
-	_, err := s.store.Witness(s.T().Context(), "j1", "tests", cmd)
+	_, err := s.witness(cmd)
 
 	s.Equal(RefusalOtherCheck, s.refusal(err))
 }
 
-func (s *WitnessSuite) TestRedirectedOutputIsRefused() {
-	cmd := s.command()
-	w := s.attach(cmd)
-	cmd.Stdout = nil
-	_ = cmd.Run()
+func (s *WitnessSuite) TestNoCommandIsRefused() {
+	_, err := s.witness(nil)
 
-	_, err := w.Close(s.T().Context())
-
-	s.Equal(RefusalRedirected, s.refusal(err))
+	s.Equal(RefusalNoCommand, s.refusal(err))
 }
 
-func (s *WitnessSuite) TestASecondCloseIsRefused() {
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("disk full") }
+
+func (s *WitnessSuite) TestAFailedOutputCopyIsRefused() {
 	cmd := s.command()
-	w := s.attach(cmd)
-	s.Require().NoError(cmd.Run())
-	_, err := w.Close(s.T().Context())
-	s.Require().NoError(err)
+	cmd.Stdout = failingWriter{}
 
-	_, err = w.Close(s.T().Context())
+	_, err := s.witness(cmd)
 
-	s.Equal(RefusalClosed, s.refusal(err))
+	s.Equal(RefusalUnfinished, s.refusal(err))
 }
 
 func (s *WitnessSuite) TestARunTheTreeMovedUnderIsNotVerified() {
+	s.argv = []string{"sh", "-c", "echo ok"}
 	cmd := s.command()
-	w := s.attach(cmd)
-	s.Require().NoError(cmd.Run())
-	s.tree = "tree-2"
-	ref, err := w.Close(s.T().Context())
+	cmd.Stdout = treeMover{s: s}
+
+	ref, err := s.witness(cmd)
 	s.Require().NoError(err)
 
 	g := s.grade(ref)
-
 	s.False(g.Verified)
 	s.Contains(g.Violations, "the tree changed while the check ran, so no one tree is what it read")
 }
 
+// treeMover moves the suite's tree while the run writes, as an edit during a check does.
+type treeMover struct{ s *WitnessSuite }
+
+func (m treeMover) Write(p []byte) (int, error) {
+	m.s.tree = "tree-2"
+	return len(p), nil
+}
+
 func (s *WitnessSuite) TestAStoreWithNoCheckCommandRefuses() {
-	st, err := Open(s.dir, WithTree(s.store.tree))
+	st, err := Open(s.dir, writable(WithTree(s.store.tree))...)
 	s.Require().NoError(err)
 
 	_, err = st.Witness(s.T().Context(), "j1", "tests", s.command())

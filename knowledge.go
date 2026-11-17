@@ -88,7 +88,7 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 				if loc.StateBase, err = xdg.StateDir(); err != nil {
 					return nil, err
 				}
-				rows, err := job.NewStore(loc).List()
+				rows, err := job.NewStore(loc).List(ctx)
 				if err != nil {
 					return nil, err
 				}

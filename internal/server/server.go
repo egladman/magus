@@ -266,7 +266,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				// invalidation and the activity feed's attributed file changes. Two read
 				// loops over one channel would take alternate batches.
 				jobFeed = console.NewJobFeed(ctx, bWatcher, opts.Magus.Root(), func() []jobtypes.Job {
-					rows, err := opts.Jobs.List()
+					rows, err := opts.Jobs.List(ctx)
 					if err != nil {
 						return nil
 					}
@@ -421,7 +421,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// the guard's observations, which is what this service served before.
 			activitySvc := activityhandler.NewService(s.activityWorkspaces(),
 				activityhandler.WithJobs(func() []jobtypes.Job {
-					rows, jerr := opts.Jobs.List()
+					rows, jerr := opts.Jobs.List(ctx)
 					if jerr != nil {
 						return nil
 					}

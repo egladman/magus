@@ -80,7 +80,7 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 			}
 			if tc.want != "" {
 				for _, s := range []*Store{fork, apply} {
-					rows, err := s.List()
+					rows, err := s.List(t.Context())
 					require.NoError(t, err)
 					assert.Empty(t, rows, "a refused fork writes no row")
 				}
@@ -141,14 +141,14 @@ func (s *narrowHoldSuite) narrow(id, file string, touched ...string) (job.Job, [
 }
 
 func (s *narrowHoldSuite) stored(id string) job.Job {
-	row, err := s.s.stored(id)
+	row, err := s.s.stored(s.T().Context(), id)
 	s.Require().NoError(err)
 	return row
 }
 
 func (s *narrowHoldSuite) TestAPatternHoldNarrowsToTheTouchedDeclarations() {
 	peer := job.Job{ID: "peer", State: job.StateDeclared, Paths: job.Paths{Write: []string{"magusfile.buzz#project.name"}}}
-	rows, err := s.s.List()
+	rows, err := s.s.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(job.WriteProofOverlapping, s.s.WriteProof(rows, peer), "the pattern covers the magusfile whole")
 
@@ -168,7 +168,7 @@ func (s *narrowHoldSuite) TestAPatternHoldNarrowsToTheTouchedDeclarations() {
 	s.Nil(ClaimedDeclarations(got, "libs/lib/magusfile.buzz"), "the pattern still covers every other file whole")
 	s.Zero(got.Widenings, "a narrowing widens nothing")
 
-	rows, err = s.s.List()
+	rows, err = s.s.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(job.WriteProofDisjoint, s.s.WriteProof(rows, peer), "a narrowed file is out of the pattern's reach")
 }

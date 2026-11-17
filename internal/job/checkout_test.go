@@ -287,7 +287,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.want)
 			assert.Contains(t, err.Error(), "a write path names files")
 			assert.Contains(t, err.Error(), "list the files the job will edit")
-			rows, lerr := s.List()
+			rows, lerr := s.List(t.Context())
 			require.NoError(t, lerr)
 			assert.Empty(t, rows, "a refused fork writes no row")
 		})
@@ -353,7 +353,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.Exec(ctx, held.ID)
 	require.NoError(t, err)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	ps := sharedCheckoutProblems(s, rows, job.Job{ID: "wave/worker-two", Paths: job.Paths{Write: []string{"magusfile.buzz"}}})
@@ -385,7 +385,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 		require.NoError(t, err)
 		_, err = s.Exec(ctx, held.ID)
 		require.NoError(t, err)
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 		require.NotEmpty(t, sharedCheckoutProblems(s.dry(), rows, job.Job{ID: "wave/worker-two", Paths: job.Paths{Write: []string{"magusfile.buzz"}}}))
 		assert.Empty(t, releaseRequests(t, root))
@@ -600,7 +600,7 @@ func TestListTombstonesRecordsWhoseCheckoutIsGone(t *testing.T) {
 	}
 	require.NoError(t, os.RemoveAll(gone))
 
-	_, err := s.List()
+	_, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	type record struct {
@@ -650,7 +650,7 @@ func TestListPrunesTombstonesAfterStaleAfter(t *testing.T) {
 			require.NoError(t, os.WriteFile(s.record(callers["expired"]), []byte("gone w/expired 4600\n"), 0o600))
 			require.NoError(t, os.WriteFile(s.record(callers["fresh"]), []byte("gone w/fresh 4601\n"), 0o600))
 
-			_, err := s.List()
+			_, err := s.List(t.Context())
 			require.NoError(t, err)
 
 			got := map[string]Binding{}
@@ -677,24 +677,24 @@ func TestListSweepsRecordsOncePerIntervalUnlessARowGoes(t *testing.T) {
 	nobody := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
 	removed := Caller{Host: "claude-code", Session: "s1", Agent: "a2"}
 	require.NoError(t, s.Bind(removed, "w/removed"))
-	_, err := s.List()
+	_, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	require.NoError(t, s.Bind(nobody, "w/nobody"))
-	_, err = s.List()
+	_, err = s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, Binding{Job: "w/nobody"}, s.Binding(nobody), "inside the interval, with every row still there, no pass runs")
 
 	_, err = s.Delete(t.Context(), "w/removed", false)
 	require.NoError(t, err)
-	_, err = s.List()
+	_, err = s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, Binding{Job: "w/removed", Gone: true, swept: 1_000}, s.Binding(removed), "a row the last pass saw is gone")
 	assert.Equal(t, Binding{Job: "w/nobody", Gone: true, swept: 1_000}, s.Binding(nobody), "the pass reads every record")
 
 	require.NoError(t, s.Bind(nobody, "w/nobody-again"))
 	s.clock = func() time.Time { return time.Unix(1_000, 0).Add(recordSweepEvery) }
-	_, err = s.List()
+	_, err = s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, Binding{Job: "w/nobody-again", Gone: true, swept: 1_000 + int64(recordSweepEvery/time.Second)}, s.Binding(nobody),
 		"the interval runs a pass")
@@ -795,7 +795,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 	_, err = s.RecordWorktree(t.Context(), "peer", job.Worktree{Root: t.TempDir(), Source: peerRoot})
 	require.NoError(t, err)
 	seed(t, s, job.Job{ID: "peer-a", Parent: "peer", State: job.StatePass})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{})
@@ -807,7 +807,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []Unintegrated{{Job: "mine-a", Branch: "mine-a", Commits: 1}, {Job: "mine-b", Branch: "mine-b", Commits: 1}}, waiting)
 
-	peerRows, err := peer.List()
+	peerRows, err := peer.List(t.Context())
 	require.NoError(t, err)
 	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}).FinishedBranches, "mine-a (job mine-a, 1 commit(s))",
 		"another tree's backlog is not the peer's")

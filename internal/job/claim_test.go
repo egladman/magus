@@ -46,7 +46,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 			}
 			require.ErrorIs(t, err, types.WritePathClaimUngradable)
 			assert.Contains(t, err.Error(), tc.want)
-			rows, lerr := s.List()
+			rows, lerr := s.List(t.Context())
 			require.NoError(t, lerr)
 			assert.Empty(t, rows, "a refused fork writes no row")
 		})
@@ -142,7 +142,7 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 			}
 			a := job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: tc.aWrite}, DependsOn: tc.aDependsOn, Checkpoint: aRev, CheckoutRoot: checkout}
 			seed(t, s, a)
-			rows, err := s.List()
+			rows, err := s.List(t.Context())
 			require.NoError(t, err)
 
 			candidate := job.Job{ID: "B", Paths: job.Paths{Write: tc.bWrite}, Parent: tc.bParent, DependsOn: tc.bDependsOn}
@@ -171,7 +171,7 @@ func TestValidateMergeRefusesAContendedForkBeforeTheWorkspaceChecks(t *testing.T
 	aRepo := testkit.NewRepository(t, files)
 	s := NewStore(tempLocation(t, bRoot))
 	seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz"}}, Checkpoint: aRepo.Head(), CheckoutRoot: aRepo.Root()})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	declare := func(paths ...string) func(*job.Job) {
@@ -201,7 +201,7 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	for state, refused := range map[job.State]bool{job.StateRunning: true, job.StateExited: false} {
 		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, job.Job{ID: "A", State: state, Paths: job.Paths{Write: []string{"magusfile.buzz"}}, Checkpoint: aRev, CheckoutRoot: aRoot})
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 
 		err = unorderedFileShareProblems(context.Background(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"magusfile.buzz"}}}).Error()
@@ -226,7 +226,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 
 	s := NewStore(tempLocation(t, bRoot))
 	seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go", "notes.md"}}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	ps := unorderedFileShareProblems(t.Context(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}})
@@ -245,7 +245,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go"}}, Checkpoint: "not-a-revision", CheckoutRoot: aRepo.Root()})
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 		ps := unorderedFileShareProblems(t.Context(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}})
 		require.Len(t, ps, 1)
@@ -269,7 +269,7 @@ func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
 	seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"run_test.go"}, Soft: []string{"run_test.go"}},
 		Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 	fork := func(soft []string) types.JobValidation {
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 		return validateMerge(t.Context(), s, rows, "B", func(u *job.Job) {
 			u.Paths.Write, u.Paths.Soft, u.Check = []string{"run_test.go"}, soft, forkCheck()
@@ -287,7 +287,7 @@ func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
 	v := fork(nil)
 	assert.Contains(t, codes(v.Problems), types.WritePathFileShared, "the write hardened A's claim")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows[0].Paths.Soft, "the hardening is recorded on the row")
 	assert.Equal(t, []string{"run_test.go"}, rows[0].Paths.Write)
@@ -311,7 +311,7 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	s := NewStore(tempLocation(t, bRoot))
 	seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz"}}, Checkpoint: aRev, CheckoutRoot: aRoot})
 	seed(t, s, job.Job{ID: "B", State: job.StateDeclared, Paths: job.Paths{Write: []string{"notes.txt"}}})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	replacement := job.Job{ID: "B", Paths: job.Paths{Write: []string{"magusfile.buzz"}}, DependsOn: []string{"A"}}
@@ -363,7 +363,7 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tempLocation(t, bRoot))
 			seed(t, s, job.Job{ID: "A", State: job.StateRunning, Integrates: []string{"b1"}, Paths: job.Paths{Write: []string{"run.go"}}, Checkpoint: tc.checkpoint, CheckoutRoot: aRepo.Root()})
-			rows, err := s.List()
+			rows, err := s.List(t.Context())
 			require.NoError(t, err)
 
 			err = unorderedFileShareProblems(t.Context(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{tc.write}}}).Error()
@@ -379,10 +379,10 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go"}}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 		require.NoError(t, unorderedFileShareProblems(t.Context(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go#C"}}}).Error())
-		holder, err := s.stored("A")
+		holder, err := s.stored(t.Context(), "A")
 		require.NoError(t, err)
 		assert.True(t, job.Narrowed(holder, "run.go"))
 	})
@@ -421,10 +421,10 @@ func (s *grantUntouchedSuite) TearDownTest() {
 // It answers A as stored afterwards.
 func (s *grantUntouchedSuite) judge(store *Store, checkpoint string, paths ...string) (job.Job, error) {
 	seed(s.T(), store, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go"}}, Checkpoint: checkpoint, CheckoutRoot: s.holderRoot})
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	err = unorderedFileShareProblems(s.T().Context(), store, rows, job.Job{ID: "B", Paths: job.Paths{Write: paths}}).Error()
-	holder, serr := store.stored("A")
+	holder, serr := store.stored(s.T().Context(), "A")
 	s.Require().NoError(serr)
 	return holder, err
 }
@@ -445,10 +445,10 @@ func (s *grantUntouchedSuite) TestASecondJudgmentChangesNothing() {
 	store := NewStore(tempLocation(s.T(), s.root))
 	first, err := s.judge(store, s.checkpoint, "run.go#C")
 	s.Require().NoError(err)
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().NoError(unorderedFileShareProblems(s.T().Context(), store, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go#C"}}}).Error())
-	again, err := store.stored("A")
+	again, err := store.stored(s.T().Context(), "A")
 	s.Require().NoError(err)
 	s.Equal(first.Paths.Write, again.Paths.Write)
 	s.Equal("B", again.Releases[0].TakenBy)
@@ -563,7 +563,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tempLocation(t, bRoot))
 			seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: tc.holds}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
-			rows, err := s.List()
+			rows, err := s.List(t.Context())
 			require.NoError(t, err)
 
 			err = unorderedFileShareProblems(context.Background(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}, Goals: tc.goals}).Error()
@@ -579,7 +579,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 		quiet := testkit.NewRepository(t, claimFiles)
 		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go"}}, Checkpoint: quiet.Head(), CheckoutRoot: quiet.Root()})
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 
 		err = unorderedFileShareProblems(context.Background(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}}).Error()
@@ -710,7 +710,7 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	s := NewStore(loc)
 	seed(t, s, job.Job{ID: "A", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz"}}, Checkpoint: aRev, CheckoutRoot: aRoot})
 	seed(t, s, job.Job{ID: "M", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz"}}, Checkpoint: aRev, CheckoutRoot: aRoot, DependsOn: []string{"A"}})
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	candidate := job.Job{ID: "B", Paths: job.Paths{Write: []string{"magusfile.buzz"}}, DependsOn: []string{"M"}}

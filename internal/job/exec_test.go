@@ -213,7 +213,7 @@ func TestStoreExec(t *testing.T) {
 
 			// Stored, not just returned: the orchestrator reading the plan later sees the
 			// same verdict the worker was handed.
-			listed, err := s.List()
+			listed, err := s.List(t.Context())
 			require.NoError(t, err)
 			require.Len(t, listed, 1)
 			assert.Equal(t, wantRow, listed[0])
@@ -281,7 +281,7 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 	assert.Contains(t, err.Error(), hint.LsJobs.String(), "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
 
-	got, err := s.List()
+	got, err := s.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, got, 1, "a refused registration writes no row")
 	assert.Equal(t, "declared", got[0].ID)
@@ -302,7 +302,7 @@ func TestStoreExecRefusesACheckoutWithNoRevision(t *testing.T) {
 	assert.Contains(t, err.Error(), root, "the message names the checkout it read")
 	assert.Contains(t, err.Error(), hint.VCSCheckpoint.With("-o name"), "the message names how to see what version control answers")
 
-	got, err := s.List()
+	got, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, job.StateDeclared, got[0].State)
 	assert.Empty(t, got[0].ReportedBase)
@@ -390,7 +390,7 @@ func TestStoreExecRefusesAnEndedJob(t *testing.T) {
 
 		_, err := s.Exec(t.Context(), "u1")
 		require.Error(t, err, state)
-		got, err := s.List()
+		got, err := s.List(t.Context())
 		require.NoError(t, err)
 		assert.Empty(t, got[0].ReportedBase, state)
 	}
@@ -455,7 +455,7 @@ func TestStoreExecRefusesAJobAnotherCheckoutHolds(t *testing.T) {
 		assert.Contains(t, err.Error(), want)
 	}
 
-	got, err := ana.List()
+	got, err := ana.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, head, taken.ReportedBase)
 	assert.Equal(t, taken, got[0], "the refusal leaves the holder's row, checkout included, as it was")

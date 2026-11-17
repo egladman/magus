@@ -69,7 +69,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	var tries []job.Attempt
 	var triesErr error
 	if store != nil {
-		tries, triesErr = store.Attempts()
+		tries, triesErr = store.Attempts(ctx)
 	}
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows, Attempts: tries, Err: triesErr})
 	prev, updates = mergeBase(rows, id, merge)
@@ -453,7 +453,7 @@ func PlanFork(ctx context.Context, store *Store, id string, merge func(*job.Job)
 	if dry {
 		store = store.dry()
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return ForkPlan{}, err
 	}
@@ -469,7 +469,7 @@ func WriteFork(ctx context.Context, store *Store, plan ForkPlan, amend func(*job
 	if err := plan.Validation.Error(); err != nil {
 		return job.Job{}, err
 	}
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return job.Job{}, err
 	}
@@ -542,7 +542,7 @@ func validateFork(ctx context.Context, store *Store, rows []job.Job, id string, 
 	declared := merge
 	merge = func(u *job.Job) {
 		declared(u)
-		u.Goals = resolveAccept(u.Goals)
+		u.Goals, _ = resolveAccept(u.Goals)
 	}
 	merge, ps := store.declaredMerge(ctx, rows, id, merge)
 	if resolved, err := resolveMerge(ctx, store, rows, id, merge, read); err != nil {

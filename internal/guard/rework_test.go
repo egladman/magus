@@ -44,7 +44,7 @@ func (f reworkFixture) putJob(t *testing.T, state jobtypes.State) {
 
 func (f reworkFixture) rounds(t *testing.T) int {
 	t.Helper()
-	rows, err := f.store.List()
+	rows, err := f.store.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	return rows[0].ReworkRounds

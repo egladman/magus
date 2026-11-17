@@ -41,7 +41,7 @@ func (s *PinSuite) SetupTest() {
 func (s *PinSuite) store() *Store { return NewStore(s.loc) }
 
 func (s *PinSuite) row() job.Job {
-	rows, err := s.store().List()
+	rows, err := s.store().List(s.T().Context())
 	s.Require().NoError(err)
 	for _, r := range rows {
 		if r.ID == "pinned-work" {
@@ -68,7 +68,7 @@ func (s *PinSuite) TestPinRecordsTheHashTheBinaryHasNow() {
 	want, err := BinaryDigest(s.bin)
 	s.Require().NoError(err)
 	s.Equal(want, s.row().Worktree.BinaryDigest)
-	refusal, err := s.store().PinRefusal(s.bin)
+	refusal, err := s.store().PinRefusal(s.T().Context(), s.bin)
 	s.Require().NoError(err)
 	s.Empty(refusal, "the hook hands calls to the binary it pinned")
 }

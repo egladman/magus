@@ -90,7 +90,7 @@ func (s *Store) Grade(ctx context.Context, id string, refs map[string]RunRef) (G
 	if err := s.needTree("Grade"); err != nil {
 		return Grade{}, err
 	}
-	row, err := s.row(id)
+	row, err := s.row(ctx, id)
 	if err != nil {
 		return Grade{}, err
 	}
@@ -189,8 +189,8 @@ func (s *Store) digestTree(ctx context.Context, when string) (string, error) {
 }
 
 // row is the stored row id, as written: no sweep runs.
-func (s *Store) row(id string) (Job, error) {
-	f, err := s.Read()
+func (s *Store) row(ctx context.Context, id string) (Job, error) {
+	f, err := s.Read(ctx)
 	if err != nil {
 		return Job{}, err
 	}
@@ -202,8 +202,8 @@ func (s *Store) row(id string) (Job, error) {
 }
 
 // checkGoal is row id and its check goal named goal, the primary check included.
-func (s *Store) checkGoal(id, goal string) (Job, Goal, error) {
-	row, err := s.row(id)
+func (s *Store) checkGoal(ctx context.Context, id, goal string) (Job, Goal, error) {
+	row, err := s.row(ctx, id)
 	if err != nil {
 		return Job{}, Goal{}, err
 	}

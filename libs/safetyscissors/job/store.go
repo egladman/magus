@@ -126,11 +126,12 @@ type Notice struct {
 func (n Notice) String() string { return fmt.Sprintf("%s: %s", n.Path, n.Text) }
 
 // WithRoot names the checkout a row's paths are relative to, for the digest a release
-// records. Without one every release records [DigestAbsent].
+// records. Without one every release records [DigestAbsent] and a [Notice] says so.
 func WithRoot(root string) StoreOption { return func(c *storeConfig) { c.root = root } }
 
-// WithActor resolves who each write is made by, at every write. Without it every write is
-// the unbound actor's. [Store.As] pins one instead.
+// WithActor resolves who each write is made by, at every write; an unbound writer returns
+// the zero Actor. [Store.As] pins one instead. A store with neither refuses every row
+// write and grant with an [*UnconfiguredError] rather than guess who wrote it.
 func WithActor(actor func() Actor) StoreOption { return func(c *storeConfig) { c.actor = actor } }
 
 // WithOrigin stamps where a write came from onto what the store records of it: a row's
@@ -161,16 +162,17 @@ func WithSweep(sweep func(ctx context.Context, rows Rows) (Rows, error)) StoreOp
 	return func(c *storeConfig) { c.sweep = sweep }
 }
 
-// WithNotices sends each [Notice] to notice. Without it notices are dropped.
+// WithNotices sends each [Notice] to notice. A store without it refuses every row write
+// and grant with an [*UnconfiguredError], since a write is where a store notices.
 func WithNotices(notice func(Notice)) StoreOption { return func(c *storeConfig) { c.notices = notice } }
 
 // WithClock is the store's clock for what [Store.Now] reads. Without it, time.Now.
 func WithClock(clock func() time.Time) StoreOption { return func(c *storeConfig) { c.clock = clock } }
 
 // WithDeclarationDigest digests one declaration of the file at path, whose content is
-// body, for the release of a claim (`run.go#executeStages`). It answers a sha256 digest
-// of the lines the declaration spans, or one of the Digest markers. Without it a released
-// declaration records [DigestUnreadable].
+// body, for the release of a claim. It answers a sha256 digest of the lines the
+// declaration spans, or one of the Digest markers. Without it a released declaration
+// records [DigestUnreadable] and a [Notice] says so.
 func WithDeclarationDigest(digest func(ctx context.Context, path, decl string, body []byte) string) StoreOption {
 	return func(c *storeConfig) { c.declared = digest }
 }
@@ -298,6 +300,30 @@ func (s *Store) wrap(err error) error {
 		return err
 	}
 	return s.wrapErr(err)
+}
+
+// UnconfiguredError is a write on a store opened without an option every write needs.
+type UnconfiguredError struct {
+	// Op is the call, such as "Update", and Option the store option it needs, such as
+	// "WithActor".
+	Op, Option string
+}
+
+func (e *UnconfiguredError) Error() string {
+	return fmt.Sprintf("job: %s writes through a store opened with %s, and this one was opened without it", e.Op, e.Option)
+}
+
+// needWriter refuses write op on a store that cannot say who writes or what it noticed.
+func (s *Store) needWriter(op string) error {
+	switch {
+	case s.err != nil:
+		return s.err
+	case s.pinned == nil && s.actor == nil:
+		return s.wrap(&UnconfiguredError{Op: op, Option: "WithActor"})
+	case s.notices == nil:
+		return s.wrap(&UnconfiguredError{Op: op, Option: "WithNotices"})
+	}
+	return nil
 }
 
 // refuseDocument fails when the store's directory still holds the plan an older writer
@@ -585,7 +611,7 @@ func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
 
 // boundaryFields are the declared fields a widen or narrow changes, in ChangedFields'
 // spelling.
-var boundaryFields = []string{"paths.write", "paths.deny", "paths.read"}
+func boundaryFields() []string { return []string{"paths.write", "paths.deny", "paths.read"} }
 
 // WidensInPlace reports a declaration that changes a live row's boundaries and nothing
 // else it declares, while resetting a state its holder already moved past declared: a
@@ -600,7 +626,7 @@ func WidensInPlace(prev, next Job) bool {
 	moved := false
 	for _, field := range ChangedFields(prev, next) {
 		switch {
-		case slices.Contains(boundaryFields, field):
+		case slices.Contains(boundaryFields(), field):
 			moved = true
 		case field != "state" && field != "deadline":
 			return false
@@ -651,7 +677,7 @@ func (s *Store) endedAttemptDenials(ctx context.Context, id string) ([]Denial, b
 	if s.denials == nil {
 		return nil, false
 	}
-	f, err := s.Read()
+	f, err := s.Read(ctx)
 	if err != nil {
 		return nil, false
 	}
@@ -660,7 +686,7 @@ func (s *Store) endedAttemptDenials(ctx context.Context, id string) ([]Denial, b
 		return nil, false
 	}
 	row := f.Jobs[i]
-	all, err := s.Attempts()
+	all, err := s.Attempts(ctx)
 	if err != nil {
 		return nil, false
 	}
@@ -671,26 +697,26 @@ func (s *Store) endedAttemptDenials(ctx context.Context, id string) ([]Denial, b
 	return denials, known
 }
 
-// Reader is s as a [Reader]. A store reads its own files, so the reader's ctx bounds
-// nothing.
+// Reader is s as a [Reader].
 func (s *Store) Reader() Reader { return storeReader{s} }
 
 type storeReader struct{ s *Store }
 
-func (r storeReader) List(context.Context) ([]Job, error) { return r.s.List() }
+func (r storeReader) List(ctx context.Context) ([]Job, error) { return r.s.List(ctx) }
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
 //
 // With [WithSweep] every read sweeps first: the sweep may end a row it can prove dead,
-// which is the one write a read makes.
-func (s *Store) List() ([]Job, error) {
-	f, err := s.Read()
+// which is the one write a read makes. ctx bounds the lock a migration or the sweep's
+// write waits on, and reaches the sweep.
+func (s *Store) List(ctx context.Context) ([]Job, error) {
+	f, err := s.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if s.sweep != nil {
-		if f, err = s.sweep(context.Background(), f); err != nil {
+		if f, err = s.sweep(ctx, f); err != nil {
 			return nil, err
 		}
 	}
@@ -700,8 +726,8 @@ func (s *Store) List() ([]Job, error) {
 // Unswept is [Store.List] without the sweep, for a verb scoped to the rows it names:
 // ending one job must not end, or probe the landed work of, every other row in the plan.
 // A row [Store.EndDry] ended reads as ended.
-func (s *Store) Unswept() ([]Job, error) {
-	f, err := s.Read()
+func (s *Store) Unswept(ctx context.Context) ([]Job, error) {
+	f, err := s.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -750,7 +776,7 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 	var dropped int
 	err := s.Rewrite(ctx, func(f *Rows) error {
 		if len(f.Jobs) > 0 {
-			if err := s.archive(*f); err != nil {
+			if err := s.archive(ctx, *f); err != nil {
 				return err
 			}
 		}
@@ -767,15 +793,15 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 // archive writes the rows a clear or a delete is about to drop beside the ledger, in the
 // ledger's own shape and named for the moment they were dropped, with their attempts. A
 // second drop within the same second overwrites the first archive.
-func (s *Store) archive(f Rows) error {
+func (s *Store) archive(ctx context.Context, f Rows) error {
 	f.Migration = s.version
 	lines, err := s.encodeJobs(f)
 	if err != nil {
 		return err
 	}
-	stamp := time.Now().UTC().Format("20060102T150405Z")
+	stamp := s.Now().UTC().Format("20060102T150405Z")
 	dir := filepath.Dir(s.path)
-	if err := s.archiveAttempts(filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
+	if err := s.archiveAttempts(ctx, filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
 		return err
 	}
 	return codec.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
@@ -786,7 +812,8 @@ func (s *Store) archive(f Rows) error {
 // what fn leaves, after the [WithRetention] pass. fn returning an error, [ErrSkipWrite]
 // included, writes nothing; ErrSkipWrite is no error.
 //
-// fn must not touch the store. The lock wait is BOUNDED: a ledger write is a small append,
+// fn must not touch the store, and must leave each id once: a second row under an id is a
+// [*DuplicateRowError] and nothing is written. The lock wait is BOUNDED: a ledger write is a small append,
 // so a longer wait means a stuck holder.
 func (s *Store) Rewrite(ctx context.Context, fn func(*Rows) error) error {
 	s.mu.Lock()
@@ -796,8 +823,8 @@ func (s *Store) Rewrite(ctx context.Context, fn func(*Rows) error) error {
 
 // rewrite is Rewrite for a caller holding s.mu.
 func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
-	if s.err != nil {
-		return s.err
+	if err := s.needWriter("Rewrite"); err != nil {
+		return err
 	}
 	// Made here, before the lock and file helpers create it world-readable. Rows carry a
 	// repository's plan and its checkout paths.
@@ -839,6 +866,9 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
 // was dropped, the header changed, the file ended in a line no writer finished, or the
 // appended lines would make it [codec.CompactDue].
 func (s *Store) write(f Rows, log jobsLog) error {
+	if err := refuseDuplicateRows(f.Jobs); err != nil {
+		return s.wrap(err)
+	}
 	f.Migration = s.version
 	lines, err := s.encodeJobs(f)
 	if err != nil {
@@ -870,10 +900,30 @@ func (s *Store) write(f Rows, log jobsLog) error {
 	return codec.RewriteLines(s.path, lines, 0o600)
 }
 
+// DuplicateRowError is a rewrite leaving two rows under one id. A row is keyed by its id,
+// so the file would read back as the last of them and the others would be dropped.
+type DuplicateRowError struct{ ID string }
+
+func (e *DuplicateRowError) Error() string {
+	return fmt.Sprintf("job: the rewrite leaves two rows named %q, and a row is keyed by its id, so nothing was written", e.ID)
+}
+
+func refuseDuplicateRows(rows []Job) error {
+	seen := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		if seen[row.ID] {
+			return &DuplicateRowError{ID: row.ID}
+		}
+		seen[row.ID] = true
+	}
+	return nil
+}
+
 // Read loads the file. An absent file is an empty ledger, not a failure: nothing has
-// been recorded yet.
-func (s *Store) Read() (Rows, error) {
-	f, _, err := s.readFile(context.Background(), true)
+// been recorded yet. ctx bounds the wait for an append in flight and for the lock a
+// migration takes.
+func (s *Store) Read(ctx context.Context) (Rows, error) {
+	f, _, err := s.readFile(ctx, true)
 	return f, err
 }
 
@@ -891,7 +941,7 @@ func (s *Store) Read() (Rows, error) {
 // A file at an older migration is migrated first, once, under the lock (see
 // [WithMigrations]); without wait the caller already holds it.
 func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) {
-	f, log, lines, err := s.parse(wait)
+	f, log, lines, err := s.parse(ctx, wait)
 	if err != nil || f.Migration == s.version || log.lines == 0 {
 		return f, log, err
 	}
@@ -909,20 +959,20 @@ func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) 
 	if err != nil {
 		return Rows{}, jobsLog{}, err
 	}
-	f, log, _, err = s.parse(wait)
+	f, log, _, err = s.parse(ctx, wait)
 	return f, log, err
 }
 
 // parse reads the file as it stands; see [Store.readFile]. A file at another migration
 // than this build's has no rows decoded: they are returned as lines.
-func (s *Store) parse(wait bool) (Rows, jobsLog, []codec.Line, error) {
+func (s *Store) parse(ctx context.Context, wait bool) (Rows, jobsLog, []codec.Line, error) {
 	if s.err != nil {
 		return Rows{}, jobsLog{}, nil, s.err
 	}
 	if err := s.refuseDocument(); err != nil {
 		return Rows{}, jobsLog{}, nil, err
 	}
-	read, err := s.readLines(wait)
+	read, err := s.readLines(ctx, wait)
 	if err != nil {
 		return Rows{}, jobsLog{}, nil, err
 	}
@@ -935,8 +985,8 @@ func (s *Store) parse(wait bool) (Rows, jobsLog, []codec.Line, error) {
 	if f.Migration != s.version {
 		return f, log, texts, nil
 	}
-	if f.TypeMeta != jobListType && log.header != nil {
-		return Rows{}, jobsLog{}, nil, s.refuseRecord(jobListType, f.TypeMeta, 1)
+	if f.TypeMeta != jobListType() && log.header != nil {
+		return Rows{}, jobsLog{}, nil, s.refuseRecord(jobListType(), f.TypeMeta, 1)
 	}
 	if err := s.decodeRows(texts, &f, &log); err != nil {
 		return Rows{}, jobsLog{}, nil, err
@@ -947,11 +997,11 @@ func (s *Store) parse(wait bool) (Rows, jobsLog, []codec.Line, error) {
 	return f, log, nil, nil
 }
 
-// readLines reads the file's lines. With wait it reads again for up to [tailWait] while
-// the file ends in a line no writer finished.
-func (s *Store) readLines(wait bool) (codec.Lines, error) {
-	deadline := time.Now().Add(tailWait)
-	for {
+// readLines reads the file's lines. With wait it reads again, a millisecond apart, for up
+// to [tailWait] while the file ends in a line no writer finished. It counts tries rather
+// than read a clock: a store clock [WithClock] holds still would never reach the deadline.
+func (s *Store) readLines(ctx context.Context, wait bool) (codec.Lines, error) {
+	for try := time.Duration(0); ; try += time.Millisecond {
 		read, err := codec.ReadLines(s.path)
 		if err != nil {
 			return codec.Lines{}, fmt.Errorf("job: %w", err)
@@ -959,10 +1009,14 @@ func (s *Store) readLines(wait bool) (codec.Lines, error) {
 		if !read.Partial || !wait {
 			return read, nil
 		}
-		if time.Now().After(deadline) {
+		if try >= tailWait {
 			return codec.Lines{}, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
 		}
-		time.Sleep(time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return codec.Lines{}, fmt.Errorf("job: waiting out an append in flight to %s: %w", s.path, ctx.Err())
+		case <-time.After(time.Millisecond):
+		}
 	}
 }
 
@@ -1040,7 +1094,7 @@ func (s *Store) refuseUnmetFeatures(f Rows) error {
 // encodeJobs renders the ledger as its lines: the header first, then one line per row.
 // Every row, touched this call or not, keeps what its stored record carries.
 func (s *Store) encodeJobs(f Rows) ([][]byte, error) {
-	f.TypeMeta = jobListType
+	f.TypeMeta = jobListType()
 	header, err := codec.Marshal(f)
 	if err != nil {
 		return nil, err
@@ -1073,7 +1127,7 @@ func MarshalRecord(row Job, unknown map[string]codec.RawMessage, kinds ...Creden
 // MarshalHeader is the header line of a file whose rows require features, for a
 // migration that writes the header an older layout held.
 func MarshalHeader(features []apiversion.Feature) ([]byte, error) {
-	return codec.Marshal(Rows{TypeMeta: jobListType, Metadata: apiversion.Metadata{}.WithRequires(recordGroup, features)})
+	return codec.Marshal(Rows{TypeMeta: jobListType(), Metadata: apiversion.Metadata{}.WithRequires(recordGroup, features)})
 }
 
 // ReadRecord is the row a line of jobs.jsonl stores, kinds being the credential kinds
@@ -1083,7 +1137,7 @@ func ReadRecord(text []byte, kinds ...CredentialKind) (Job, bool, error) {
 	if err := codec.Unmarshal(text, &r); err != nil {
 		return Job{}, false, err
 	}
-	if r.Kind != jobType.Kind {
+	if r.Kind != jobType().Kind {
 		return Job{}, false, nil
 	}
 	row, err := r.job(newWireEnum(kinds...))
@@ -1131,7 +1185,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (Job, error) 
 		}
 		archived := f.Header()
 		archived.Jobs = []Job{dropped}
-		if err := s.archive(archived); err != nil {
+		if err := s.archive(ctx, archived); err != nil {
 			return err
 		}
 		f.Jobs = slices.Delete(f.Jobs, i, i+1)
@@ -1199,6 +1253,7 @@ func (s *Store) Digest(ctx context.Context, declared string) string {
 // fileDigest is Digest for a path SplitClaim already cut.
 func (s *Store) fileDigest(ctx context.Context, declared string) string {
 	if s.root == "" {
+		s.notice(Notice{Path: declared, Text: "the store names no root (WithRoot), so its release records " + DigestAbsent})
 		return DigestAbsent
 	}
 	if ctx.Err() != nil {
@@ -1262,6 +1317,7 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 		return whole
 	}
 	if s.declared == nil {
+		s.notice(Notice{Path: p, Text: "the store digests no declaration (WithDeclarationDigest), so the release of " + decl + " records " + DigestUnreadable})
 		return DigestUnreadable
 	}
 	full, ok := s.resolve(p)
@@ -1311,18 +1367,18 @@ func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
 // refuseAttemptVersion refuses a line another writer's version stored, which this one
 // cannot tell the meaning of.
 func (s *Store) refuseAttemptVersion(r attemptRecord) error {
-	if r.TypeMeta == attemptType {
+	if r.TypeMeta == attemptType() {
 		return nil
 	}
 	return s.wrap(&NewerRecordsError{
 		Record: fmt.Sprintf("attempt %d of %s", r.Spec.N, r.Spec.Job), Path: attemptsFileName,
-		Want: attemptType, Got: r.TypeMeta,
+		Want: attemptType(), Got: r.TypeMeta,
 	})
 }
 
 // Attempts is every try the store holds, in the order their last lines were written, as
 // stored: [Attempt.Bound] reads one under its job's deadline. An absent file holds none.
-func (s *Store) Attempts() ([]Attempt, error) {
+func (s *Store) Attempts(ctx context.Context) ([]Attempt, error) {
 	log, err := s.attemptsLog()
 	if err != nil {
 		return nil, err
@@ -1437,8 +1493,8 @@ func (s *Store) dropAttempts(ctx context.Context, gone map[string]bool) error {
 
 // archiveAttempts writes the tries of rows to path beside the rows' archive, so a cleared
 // or deleted job keeps its results there too.
-func (s *Store) archiveAttempts(path string, rows []Job) error {
-	all, err := s.Attempts()
+func (s *Store) archiveAttempts(ctx context.Context, path string, rows []Job) error {
+	all, err := s.Attempts(ctx)
 	if err != nil {
 		return err
 	}

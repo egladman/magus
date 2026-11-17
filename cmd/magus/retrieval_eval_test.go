@@ -82,7 +82,7 @@ func TestRetrievalEval(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 	ctx = withMagus(ctx, m)
 
-	r := replayer{root: root, m: m, cfg: cfg, next: newNextGate(root), coverage: memoCoverage(ctx, m, cfg)}
+	r := replayer{root: root, m: m, cfg: cfg, next: newNextGate(ctx, root), coverage: memoCoverage(ctx, m, cfg)}
 	r.domain, err = graphReads.LoadGraph(ctx, m, cfg, false, false, false)
 	require.NoError(t, err)
 	r.symbols, err = graphReads.LoadGraph(ctx, m, cfg, false, false, true)

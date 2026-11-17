@@ -28,10 +28,10 @@ func (s *gradingSuite) SetupTest() {
 }
 
 func (s *gradingSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.dir, append([]StoreOption{
+	st, err := Open(s.dir, append(writable(
 		WithTree(func(context.Context) (string, error) { return s.tree, nil }),
 		WithCheckCommand(func(Job, Goal) ([]string, string, error) { return s.argv, s.work, nil }),
-	}, opts...)...)
+	), opts...)...)
 	s.Require().NoError(err)
 	return st
 }
@@ -165,7 +165,7 @@ func (s *GradeSuite) TestAnUnknownJobIsRefused() {
 }
 
 func (s *GradeSuite) TestGradingWithNoTreeIsRefused() {
-	st, err := Open(s.dir)
+	st, err := Open(s.dir, writable()...)
 	s.Require().NoError(err)
 
 	_, err = st.Grade(s.T().Context(), "j1", nil)

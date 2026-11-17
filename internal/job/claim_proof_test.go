@@ -321,7 +321,7 @@ func TestHolderClaimsItsOwnJobWithAProof(t *testing.T) {
 	}
 	assert.Equal(t, want, claimedView(stored), "a claim adds the proved paths and never moves the job")
 
-	again, err := NewStore(loc).List()
+	again, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, stored.Claims, again[0].Claims, "the proof is on the row")
 }
@@ -409,7 +409,7 @@ func TestClaimRefusals(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.refused)
 
-			after, err := NewStore(loc).List()
+			after, err := NewStore(loc).List(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, row.Paths.Write, after[0].Paths.Write, "a refused claim writes nothing")
 			assert.Empty(t, after[0].Claims)
@@ -449,7 +449,7 @@ func TestClaimCommandIsOneApplyLine(t *testing.T) {
 	require.True(t, found, line)
 	assert.True(t, strings.HasSuffix(cmd, "job apply --stdin"), cmd)
 	record = strings.TrimSuffix(strings.TrimPrefix(record, "'"), "'")
-	decoded, err := DecodeDeclarations(bytes.NewBufferString(record))
+	decoded, _, err := DecodeDeclarations(bytes.NewBufferString(record))
 	require.NoError(t, err)
 	require.Len(t, decoded, 1)
 	assert.Equal(t, job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "cli-ls-files", Claim: reqs}, decoded[0])
@@ -486,7 +486,7 @@ func TestForkAdvisesASmallClaimCap(t *testing.T) {
 func deadHolderStore(t *testing.T) (Location, job.Job, job.Job, claimFacts) {
 	t.Helper()
 	loc, row, facts := claimStore(t, job.Job{ID: "gone", State: job.StateRunning, Registered: 50, Paths: job.Paths{Write: []string{"internal/free/free.go"}}})
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	gone := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })]
 	return loc, row, gone, facts.WithDeadHolders([]DeadHolder{{Row: gone, Since: 1_800_000_000, Why: "its holder's session ended"}})
@@ -526,7 +526,7 @@ func TestClaimFromADeadHolderIsRecordedOnBothRows(t *testing.T) {
 	}}
 	assert.Equal(t, want, claimedView(stored))
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	after := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })]
 	assert.Empty(t, after.Paths.Write, "the dead holder no longer holds the path")
@@ -549,7 +549,7 @@ func TestClaimFromADeadHolderRefusesARowWrittenSince(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "job gone was written after magus judged its holder dead, so its holder may be back")
 
-	rows, err := NewStore(loc).List()
+	rows, err := NewStore(loc).List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"internal/free/free.go"}, rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == "gone" })].Paths.Write, "nothing was written")
 }

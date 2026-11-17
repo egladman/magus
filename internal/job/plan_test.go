@@ -638,7 +638,7 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, plan, 1)
 	assert.Equal(t, []string{"other.go", "run.go#func A"}, plan[0].Next.Paths.Write)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a dry run writes nothing")
 
@@ -853,7 +853,7 @@ func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
 		u.Paths.Write = append(u.Paths.Write, "internal/**")
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.WritePathIsDirectory)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"internal/job/store.go"}, rows[0].Paths.Write)
 }
@@ -875,7 +875,7 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.WritePathClaimUngradable)
 	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows[0].Paths.Deny)
 
@@ -993,7 +993,7 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	t.Parallel()
 
 	s, _ := appliedRow(t, "a.go")
-	before, err := s.List()
+	before, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	got, err := Apply(t.Context(), s, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
@@ -1045,7 +1045,7 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Run("widening", func(t *testing.T) {
 		t.Parallel()
 		s := derived(t)
-		before, err := s.List()
+		before, err := s.List(t.Context())
 		require.NoError(t, err)
 		got := apply(t, s, spec("a.go", "a_test.go", "b_test.go", "c.go"))
 
@@ -1101,7 +1101,7 @@ func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
 	_, err = Apply(t.Context(), worker, []job.Declaration{criteria}, config.Jobs{}, nil, nil, true)
 	require.ErrorAs(t, err, &refused, "a dry run answers what the write would")
 
-	rows, err := s.List()
+	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	want := shrunk[0].Next.Clone()
 	want.Paths.Write, want.Agent = []string{"a.go"}, job.Instructed("goal")
@@ -1177,7 +1177,7 @@ func TestApplyWideningAnExitedOrEndedRowDeclaresItAgain(t *testing.T) {
 		got, err := Apply(t.Context(), s, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 		require.NoError(t, err, state)
 		assert.Equal(t, []string{"a.go", "b.go"}, got[0].Next.Paths.Write, state)
-		rows, err := s.List()
+		rows, err := s.List(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, job.StateDeclared, rows[0].State, "%s: the stored row is declared, not only the plan", state)
 	}
@@ -1359,7 +1359,7 @@ func (s *reapplySuite) narrowedAt(state job.State) *Store {
 		ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
 		Releases: []job.Release{{Path: "b.go", Digest: job.DigestAbsent, ReleasedAt: 1}},
 	})
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(rows[0].Releases, 1)
 	return store
@@ -1376,7 +1376,7 @@ func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromARunningRow() {
 func (s *reapplySuite) reappliedIs(from, to job.State) {
 	s.T().Helper()
 	store := s.narrowedAt(from)
-	rows, err := store.List()
+	rows, err := store.List(s.T().Context())
 	s.Require().NoError(err)
 	want := rows[0]
 	want.Paths.Write, want.State, want.Widenings = []string{"a.go", "b.go"}, to, 1

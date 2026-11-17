@@ -146,18 +146,37 @@ func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) job.
 }
 
 // resolveAccept is goals with each check goal that names no basis accepting a witnessed
-// run, the run magus's own `magus run` of the check records. The module refuses a check
-// goal accepting nothing, so a declaration magus reads resolves it before it is
-// validated, as the module resolves a goal's expect; a goal naming its bases keeps them.
-func resolveAccept(goals []job.Goal) []job.Goal {
+// run, the run magus's own `magus run` of the check records, and the ids of the goals it
+// defaulted so. The module refuses a check goal accepting nothing, so a declaration magus
+// reads resolves it before it is validated, as the module resolves a goal's expect; a
+// goal naming its bases keeps them.
+func resolveAccept(goals []job.Goal) ([]job.Goal, []string) {
 	if goals == nil {
-		return nil
+		return nil, nil
 	}
 	out := slices.Clone(goals)
+	var defaulted []string
 	for i, g := range out {
 		if len(g.Accept) == 0 && g.Resolve().Kind == job.GoalKindCheck {
 			out[i].Accept = []job.Basis{job.BasisWitnessed}
+			defaulted = append(defaulted, g.ID)
 		}
+	}
+	return out, defaulted
+}
+
+// DefaultedAccept is a check goal a declaration named no bases for, which a fork resolves
+// to accept a witnessed run.
+type DefaultedAccept struct{ Job, Goal string }
+
+func (d DefaultedAccept) String() string {
+	return fmt.Sprintf("%s: check goal %q names no accept, so it defaulted to accept [%s]", d.Job, d.Goal, job.BasisWitnessed)
+}
+
+func defaultedAccepts(id string, goals []string) []DefaultedAccept {
+	out := make([]DefaultedAccept, 0, len(goals))
+	for _, g := range goals {
+		out = append(out, DefaultedAccept{Job: id, Goal: g})
 	}
 	return out
 }
@@ -200,7 +219,7 @@ func StackedHead(ctx context.Context, root string, row job.Declaration, opts typ
 // RetriedDeclaration is the stored spec of the job row names, for a fork naming its id and no
 // spec flag, with row's checkout when --checkout gave one; row as it is when no job has that id.
 func RetriedDeclaration(ctx context.Context, store *Store, row job.Declaration) (job.Declaration, error) {
-	rows, err := store.List()
+	rows, err := store.List(ctx)
 	if err != nil {
 		return row, err
 	}
@@ -216,8 +235,8 @@ func RetriedDeclaration(ctx context.Context, store *Store, row job.Declaration) 
 
 // WidenedDeclaration is the job's own spec plus the paths it lacks, so a
 // widening is validated as a whole record is.
-func WidenedDeclaration(store *Store, id string, add []string) (job.Declaration, error) {
-	rows, err := store.List()
+func WidenedDeclaration(ctx context.Context, store *Store, id string, add []string) (job.Declaration, error) {
+	rows, err := store.List(ctx)
 	if err != nil {
 		return job.Declaration{}, err
 	}
