@@ -73,7 +73,43 @@ func TestStoreGradesAgainstItsOwnRoot(t *testing.T) {
 	s, rec := graderStore(t, CheckVerdict{})
 	assert.Empty(t, deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Check: forkCheck()}))
 	assert.Equal(t, []string{s.root}, rec.roots)
-	assert.Nil(t, tempStore(t, t.TempDir()).grader, "a Location that names no grader grades nothing")
+}
+
+// NoGraderSuite pins that a store whose Location names no grader never grades nothing in
+// silence.
+type NoGraderSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestNoGraderSuite(t *testing.T) { suite.Run(t, new(NoGraderSuite)) }
+
+func (s *NoGraderSuite) SetupTest() {
+	loc := tempLocation(s.T(), s.T().TempDir())
+	loc.Grader = nil
+	s.store = NewStore(loc)
+}
+
+func (s *NoGraderSuite) TestACheckIsOneUngradedProblem() {
+	ps := deniedCheckProblems(s.T().Context(), s.store, job.Job{ID: "w", Check: forkCheck()})
+
+	s.Require().Len(ps, 1)
+	s.Equal(types.JobUngraded, ps[0].Code)
+	s.Contains(ps[0].Message, "no check grader")
+	s.Contains(ps[0].Fix, "Grader")
+}
+
+func (s *NoGraderSuite) TestAGateIsOfferedUngradedRatherThanPassed() {
+	row := job.Job{ID: "w", Check: forkCheck()}
+
+	verdict := gradeWith(nil, s.store.root, row)(*forkCheck())
+
+	s.Equal(noGraderReason, verdict.NotGraded)
+	s.False(verdict.Denied)
+}
+
+func (s *NoGraderSuite) TestAJobWithNoCheckFindsNothing() {
+	s.Empty(deniedCheckProblems(s.T().Context(), s.store, job.Job{ID: "w"}))
 }
 
 func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing.T) {

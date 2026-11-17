@@ -31,14 +31,13 @@ type UnrunGate struct {
 }
 
 // gradeFunc is the guard's verdict on a check run by the holder of the row being gated.
-// Nil grades nothing, which offers every goal as it is.
 type gradeFunc func(job.LeaseCheck) CheckVerdict
 
 // gradeWith grades a check as the row with that check, the way [deniedCheckProblems]
-// does. A nil grader grades nothing.
+// does. A nil grader grades as [noGrader]: no verdict, never a pass.
 func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 	if grader == nil {
-		return nil
+		grader = noGrader
 	}
 	return func(c job.LeaseCheck) CheckVerdict {
 		pending := row
@@ -52,9 +51,6 @@ func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 // reached no conclusion (NotGraded) offers the goal as given; [deniedCheckProblems] reports
 // the missing grade once for the whole row.
 func gradedGoal(goal job.Goal, grade gradeFunc) (job.Goal, bool) {
-	if grade == nil {
-		return goal, false
-	}
 	charmless := goal
 	charmless.Check.NoDefaultCharms = true
 	for _, candidate := range []job.Goal{goal, charmless} {
@@ -86,7 +82,8 @@ const ciTarget = "ci"
 // when it spells the path out.
 //
 // Each goal is graded by grader before it is offered: the form a worker may run, else
-// none, with the gate marked IntegratorGates. A nil grader grades nothing. A workspace with
+// none, with the gate marked IntegratorGates. A nil grader reaches no verdict, so every goal
+// is offered as given. A workspace with
 // no root project, or one whose root has no ci chain, yields nil.
 func UnrunGates(root string, row job.Job, projects []*types.Project, regenerated []RegeneratedOutput, grader CheckGrader) []UnrunGate {
 	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(grader, root, row))

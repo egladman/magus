@@ -321,7 +321,7 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 	assert.Contains(t, lines, "build . (reads **/*.go): the integrator gates it; no worker may run it")
 	assert.NotContains(t, lines[len(lines)-1], `"id":"build"`)
 
-	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, nil)
+	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, gradeWith(nil, "", row))
 	for _, g := range ungraded {
 		assert.False(t, g.IntegratorGates, "with no grader every goal is offered as it is")
 	}

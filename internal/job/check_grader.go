@@ -38,8 +38,22 @@ type CheckVerdict struct {
 // door opens stores for, so it must be safe for concurrent use.
 type CheckGrader func(ctx context.Context, root string, row job.Job) CheckVerdict
 
-// checkGrader is the store's grader, nil when its Location names none.
-func (s *Store) checkGrader() CheckGrader { return s.grader }
+// checkGrader is the store's grader. A store whose Location names none grades every check
+// as [noGrader] does, so a missing grader is a problem the fork reports, never a pass.
+func (s *Store) checkGrader() CheckGrader {
+	if s.grader == nil {
+		return noGrader
+	}
+	return s.grader
+}
+
+// noGraderReason is why a check graded with no grader reached no verdict.
+const noGraderReason = "the job store was opened with no check grader (Location.Grader), so nothing judges whether the holder may run it"
+
+// noGrader is the grade of a store with no grader: no verdict, said as NotGraded.
+func noGrader(context.Context, string, job.Job) CheckVerdict {
+	return CheckVerdict{NotGraded: noGraderReason}
+}
 
 // WithGrader returns a Store over s's file that grades a declared check with g in place of
 // s's own: a fork wraps the grader it validates with in memos
@@ -113,15 +127,13 @@ const humanOnlyRule = "human-only"
 // the grader reached no verdict on is one JobUngraded problem, and grading stops there: why
 // no verdict was reached is the workspace's or the binary's, and holds for every check. A
 // deferred grade ends the grading the same way but is no problem: the row is stored. A
-// Store whose Location names no grader, and a job with no check, find nothing.
+// Store whose Location names no grader grades every check as [noGrader], one JobUngraded
+// problem, and a job with no check finds nothing.
 func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.JobProblems {
 	if store == nil {
 		return nil
 	}
 	grader := store.checkGrader()
-	if grader == nil {
-		return nil
-	}
 	var (
 		graded []job.LeaseCheck
 		ps     types.JobProblems
@@ -147,6 +159,9 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 		if verdict.NotGraded != "" {
 			p := ungradedCheckProblem(row.ID, which, goal.Check, verdict.NotGraded)
 			p.Field = goalCheckField(row, goal)
+			if verdict.NotGraded == noGraderReason {
+				p.Fix = "open the job store with a Location that names its Grader, as magus's own doors do"
+			}
 			return append(ps, p)
 		}
 		if !verdict.Denied {

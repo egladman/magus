@@ -27,4 +27,6 @@
   `std.RegisterJobGrader` (see its own entry). A store grades a declared check with
   `job.Location.Grader`; cmd/magus, the server and magus\workspace().putJob pass one, the
   last through the new `magus.Magus.CheckGrader`. `job.UnrunGates` and `job.RowNotesWith`
-  take the grader. A store whose Location names no grader grades no declared check.
+  take the grader. A store whose Location names no grader reaches no verdict on a declared
+  check: the fork reports one MGS3039 problem naming the missing grader, and an offered gate
+  goal is offered ungraded, never as passed.
