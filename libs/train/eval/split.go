@@ -1,7 +1,8 @@
 // Package eval holds the datasets stage S1 builds for evaluation (the FIM dev and test
 // sets and the Buzz pass@k task set), the 13-gram decontamination that keeps training text
-// away from them, the temporal holdout listing and the G1 report. It builds sets only: no
-// scoring lives here.
+// away from them, the temporal holdout listing and the G1 report. From stage S3 it also
+// scores a model on them: the completion metrics of plan 6.1, pass@k of 6.2 and the
+// latency replay, each with the interval and the clustered p-value plan 6 asks for.
 package eval
 
 import (

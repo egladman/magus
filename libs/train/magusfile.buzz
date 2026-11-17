@@ -40,6 +40,10 @@ magus\project({
         "fim": {"skip_cache": "reads the split and the eval sets from the cache root and writes the training samples there, outside the tree"},
         "g1": {"skip_cache": "recounts the datasets under the cache root, outside the tree"},
         "gguf-bench": {"skip_cache": "reads GGUFs from the cache root, outside the tree, and appends a measurement of this machine to runs.jsonl", "timeout": "1h"},
+        // Each target forks llama-server over a GGUF in the cache root and times a loaded, shared machine, so no cache entry could hold the answer.
+        "eval-complete": {"skip_cache": "serves GGUFs from the cache root with llama-server, outside the tree, and appends rows measured on this machine to evals.jsonl and runs.jsonl", "timeout": "12h"},
+        "pass-at-k": {"skip_cache": "serves GGUFs from the cache root with llama-server, outside the tree, and appends rows measured on this machine to evals.jsonl and runs.jsonl", "timeout": "12h"},
+        "latency": {"skip_cache": "serves GGUFs from the cache root with llama-server, outside the tree, and appends timings of this machine to evals.jsonl and runs.jsonl", "timeout": "6h"},
     },
 });
 
@@ -355,4 +359,37 @@ export fun fim(ctx: magus\Context, args: [str]) > void !> any {
 // Recounts every G1 bullet of plan 2.3 from the datasets and fails when one does not hold.
 export fun g1(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "g1"] + args});
+}
+
+// Serves each base GGUF with llama-server (the target forks it; magus serves no model),
+// completes the FIM test sets of stage S1 and appends plan 6.1's precision, recall, AUPRC,
+// identifier and check-pass rows with their intervals to evals.jsonl and a row per
+// system to runs.jsonl. Needs the eval sets and `-- -run <name>`; args after -- go to
+// `train eval-complete`: -systems, -sets, -max, -context. The with-context column waits
+// for stage S2: -context none is the only value until a provider fills the spans'
+// context. A rerun with the same -run resumes. Heavy: one at a time, with tests idle.
+// Manual, never part of ci.
+export fun eval_complete(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["evals.jsonl", "runs.jsonl"], editsExistingSource: true);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "eval-complete"] + args});
+}
+
+// Samples 20 bodies per held-out Buzz task from each base at temperature 0.8 and top-p
+// 0.95, grades each with `magus buzz -t` in a scratch tree under a seatbelt profile with
+// no network, and appends the unbiased pass@1, pass@5 and pass@10 rows to evals.jsonl.
+// Needs `-- -run <name>`; args after -- go to `train pass-at-k`. Heavy and manual, as
+// eval-complete.
+export fun pass_at_k(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["evals.jsonl", "runs.jsonl"], editsExistingSource: true);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "pass-at-k"] + args});
+}
+
+// Replays FIM-Buzz dev spans in typing order against each base, with and without
+// --spec-type ngram-simple, and appends p50, p95 and mean latency, cold and warm,
+// single-line (stop at a newline, 24 tokens) and 64-token, to evals.jsonl. Needs
+// `-- -run <name>`; args after -- go to `train latency`: -systems, -n, -set. Heavy and
+// manual, as eval-complete.
+export fun latency(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["evals.jsonl", "runs.jsonl"], editsExistingSource: true);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "latency"] + args});
 }
