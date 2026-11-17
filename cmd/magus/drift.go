@@ -125,4 +125,3 @@ func noteJobDesktop(ctx context.Context, jobName, notice string) {
 	normalizeEvent(&ev)
 	_ = raiseDesktopNotification(ctx, ev)
 }
-

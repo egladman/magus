@@ -693,4 +693,3 @@ func refsOccurrencePage(rf *flaggen.RefsFlags, fs *flag.FlagSet, root string, po
 		Again: refsAgain(fs, pos, flaggen.FlagRefsLimit, flaggen.FlagRefsOffset),
 	})
 }
-

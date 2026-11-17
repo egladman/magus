@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/review"
 	store "github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
 

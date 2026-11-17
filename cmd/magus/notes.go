@@ -690,4 +690,3 @@ func reviewServerGet(ctx context.Context, path string) ([]byte, bool) {
 	raw, err := io.ReadAll(resp.Body)
 	return raw, err == nil
 }
-

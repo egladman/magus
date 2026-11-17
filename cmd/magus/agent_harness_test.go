@@ -58,7 +58,6 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 }
 
-
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
 // this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
 // and never a stale binary found on disk. The command is copied from the text output the

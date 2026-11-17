@@ -1209,7 +1209,9 @@ func TestBuzzRunner_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 
 	var stdout string
 	var runErr error
-	stderr := captureStderr(t, func() { stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path) })
+	stderr := captureStderr(t, func() {
+		stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path)
+	})
 
 	require.NoError(t, runErr, "a warning must never fail the run")
 	assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
@@ -1592,7 +1594,9 @@ func (s *BuzzRunnerTestSuite) TestARecordedRunWithNoRecorderFails() {
 	r := scriptRunnerOver(&scriptOpens{})
 	r.Record = nil
 	var err error
-	testkit.CaptureStdout(s.T(), func() { err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false) })
+	testkit.CaptureStdout(s.T(), func() {
+		err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false)
+	})
 	s.Require().Error(err)
 	s.Contains(err.Error(), "--record")
 }

@@ -570,6 +570,7 @@ func vcsCheckoutCommand(ctx context.Context, root string, args []string) error {
 	}
 	return err
 }
+
 // emitCheckout renders rec: the structured formats get the record, the
 // terminal its text reading.
 func emitCheckout(rec job.ReviewCheckoutRecord) error {

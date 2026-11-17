@@ -677,7 +677,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		}
 
 		// text / wide
-			describe.RenderEvaluatedProjects(os.Stdout, out)
+		describe.RenderEvaluatedProjects(os.Stdout, out)
 		return nil
 	}
 
