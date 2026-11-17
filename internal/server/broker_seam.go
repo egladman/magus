@@ -13,7 +13,7 @@ import (
 // a line to the file and fails, so a test sees that a start was attempted and no detached
 // process outlives it. The test binary is re-run as `broker` otherwise, which runs the whole
 // suite again.
-const BrokerSpawnTrapEnv = "MAGUS_BROKER_SPAWN_TRAP"
+const BrokerSpawnTrapEnv = "BROKER_SPAWN_TRAP"
 
 var errBrokerSpawnTrapped = errors.New("a unit test never starts a real broker")
 

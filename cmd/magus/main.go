@@ -69,6 +69,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -123,7 +124,7 @@ func runCLI() int {
 	// this same environment, so it carries on and lets that verdict land.
 	if err := config.MisconfiguredEnv(os.Environ()); err != nil {
 		switch sub, subArgs := peekSub(args); sub {
-		case "shell":
+		case commands.Shell.Name:
 			return mapExitCode(shellCommand(guard.WithEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
@@ -363,7 +364,7 @@ func resolveProfile(sub string, subArgs []string) commands.DispatchProfile {
 			return commands.DispatchProfile{NeedsConfig: true, SpawnsWork: true}
 		}
 		return commands.DispatchProfile{NeedsConfig: true}
-	case "shell":
+	case commands.Shell.Name:
 		// The guard an agent host calls before every tool call. It reads the root magusfile's
 		// guard rules itself (loadGuardRules), and the few rules that need the workspace open
 		// it lazily, so a preload would put a full workspace load in front of every tool
@@ -1105,4 +1106,21 @@ func workspaceSandboxMode(ctx context.Context, root string) (types.SandboxMode, 
 		return "", err
 	}
 	return m.SandboxMode(), nil
+}
+
+// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
+// in, whose magus cannot start for root, since a host runs a failed hook's call.
+func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
+	if sub == commands.Shell.Name {
+		return mapExitCode(shellCommand(guard.WithStaleConfig(ctx, cause), subArgs)), true
+	}
+	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
+	if sub != "buzz" || termkit.StdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
+		return 0, false
+	}
+	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
+	if reason != "" {
+		fmt.Fprintln(os.Stderr, reason)
+	}
+	return answer.ExitCode(), true
 }

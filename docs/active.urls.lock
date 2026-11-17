@@ -199,6 +199,8 @@ decisions/0046-the-judge-takes-any-agent-step/
 decisions/0047-the-magus-module-has-namespaces/
 decisions/0048-a-local-ci-repairs-a-declared-writer/
 decisions/0049-retrieval-is-a-static-table-and-a-ranker/
+decisions/0050-the-harness-is-a-module-named-safetyscissors/
+decisions/0052-only-a-typed-run-installs/
 dependencies/
 design/
 design/judgment/
@@ -287,6 +289,7 @@ development/libs-orphanator/
 development/libs-pricing/
 development/libs-proofread-train/
 development/libs-proofread/
+development/libs-safetyscissors/
 development/libs-scipbuzz/
 development/libs-ssg/
 development/libs-termkit/
@@ -1475,6 +1478,7 @@ tags/monitoring/
 tags/monorepo/
 tags/naming/
 tags/needs/
+tags/network/
 tags/node/
 tags/notes/
 tags/notifications/

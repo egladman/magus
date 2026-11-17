@@ -10,8 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func writeFiles(t *testing.T, files map[string]string) string {
 	t.Helper()

@@ -1392,7 +1392,9 @@ renders no server), and an empty value means it ran and nothing answered.`,
 // A subcommand that reaches the dispatcher but not All is documented nowhere on the machine.
 // These eight were in that state; TestManpageCoversEverySubcommand now keeps them from being.
 
-var shellCommand = command.Command{
+// Shell is `magus shell`, the guard a host's hook calls. cmd/magus reads its Name where
+// it means its own command, since "shell" is also a host's word for a tool.
+var Shell = command.Command{
 	Name:        "shell",
 	Effect:      command.EffectRead,
 	Short:       "Check a command against this workspace's conventions before running it",

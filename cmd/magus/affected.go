@@ -203,7 +203,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		describe.ListTargets("affected:ls", targets, source)
+		describe.ListTargets(ctx, "affected:ls", targets, source)
 		// The listing is one path per line whatever -o says, so the breadcrumbs print
 		// only for the text reader; a caller parsing names must not find a next: block.
 		// The plan breadcrumb names ci, not ls: ls is the listing verb and has no shard

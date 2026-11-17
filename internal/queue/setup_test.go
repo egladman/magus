@@ -79,7 +79,7 @@ func (s *SetupSuite) TestRenderRerunCarriesTheFlagsGivenAndTheProvidersApp() {
 }
 
 func (s *SetupSuite) TestRequiredNamesTheFirstFlagGivenNoValue() {
-	s.NoError(Required("ls", [2]string{"provider", "github"}, [2]string{"base", "main"}))
+	s.Require().NoError(Required("ls", [2]string{"provider", "github"}, [2]string{"base", "main"}))
 	err := Required("ls", [2]string{"provider", "github"}, [2]string{"base", ""})
 	s.Require().EqualError(err, "magus queue ls: --base is required")
 	s.Equal(exit.Usage, exit.Code(err))

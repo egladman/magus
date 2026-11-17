@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -76,6 +77,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 			req.Checkout = deps.CheckoutState(ctx, site.dir)
 		}
 	}
+	req.Push = commandPush(ctx, deps, in, at)
 	bind := func(rule workspace.CommandRule) ruleCall {
 		if rule == nil {
 			return nil
@@ -89,6 +91,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 			return bind(rule), err
 		}
 	}
+	ctx = unverified.WithReader(ctx, guardUnverified(deps))
 	asked := askWorkspaceRules(ctx, seamCommand, deps, resolve, bind(deps.CommandRule))
 	denied := asked.denyShort(ctx, func() judgedCall { return commandCall(ctx, in, at) }, at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {

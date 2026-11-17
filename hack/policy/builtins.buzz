@@ -26,8 +26,13 @@ export final BUILTINS: {str: any} = {
     // transcript search a scout left behind ran for four.
     "background-unbounded": {"decision": "deny", "ceiling_minutes": 30},
     "background-silent": {"decision": "deny", "advise_minutes": 30, "deny_minutes": 60},
-    // Temporary: a cloud container that cannot pass ci pushes for CI to gate.
-    "push-unverified": {"decision": "advise"},
+    // Off: hack/policy/push.buzz judges a push. The built-in's read of the same runs spent
+    // three seconds of the hook's seven before that rule's, and push-unverified off alone
+    // does not skip it: push-gate's advisory is what starts that read. A cloud container
+    // that cannot pass ci still pushes for CI to check: push.buzz advises rather than
+    // refuses until runs record content ids and target inputs.
+    "push-unverified": {"decision": "off"},
+    "push-gate": {"decision": "off"},
 };
 
 // Evidence for the rules this repository set to deny before ADR 0013 made deny the

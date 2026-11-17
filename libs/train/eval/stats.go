@@ -42,7 +42,7 @@ type Row struct {
 	Run       string   `json:"run"`
 }
 
-func ptr(f float64) *float64 { return &f }
+func pointer(f float64) *float64 { return &f }
 
 // Units are a metric's per-unit values keyed by unit id, with each unit's provenance
 // group.
@@ -101,13 +101,13 @@ func (u Units) Fill(r *Row) {
 		r.NotScored = "no unit carries this metric"
 		return
 	}
-	r.Value = ptr(u.Mean())
+	r.Value = pointer(u.Mean())
 	if len(vals) < 2 {
 		r.Interval = "fewer than 2 units"
 		return
 	}
 	_, lo, hi := rankeval.PairedTInterval(vals, make([]float64, len(vals)), Confidence)
-	r.Low, r.High = ptr(lo), ptr(hi)
+	r.Low, r.High = pointer(lo), pointer(hi)
 	r.Interval = "paired t over units"
 }
 
@@ -128,7 +128,7 @@ func (u Units) PValue(ref Units) *float64 {
 		return nil
 	}
 	_, p := rankeval.ClusteredRandomization(a, b, clusters, Samples, Seed)
-	return ptr(p)
+	return pointer(p)
 }
 
 // Jackknife estimates a statistic over rows that carry a provenance group, for a
@@ -176,7 +176,7 @@ func JackknifeRow(r *Row, est float64, pseudo Units) {
 	if r.NotScored != "" {
 		return
 	}
-	r.Value = ptr(est)
+	r.Value = pointer(est)
 	if r.Low != nil {
 		r.Interval = "delete-one-group jackknife, t over pseudo-values"
 	}

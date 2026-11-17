@@ -29,6 +29,24 @@ func TestAnalyzer(t *testing.T) {
 	analysistest.Run(t, testdata, analyzer, "app", "app/gen", "pushgate")
 }
 
+// TestAllowKeepsAWordWhole pins identity as one word in a tree that also holds
+// id.go and entity.go. The split alone cannot tell it from a mash, so without the
+// allow entry the same file reports.
+func TestAllowKeepsAWordWhole(t *testing.T) {
+	testdata := analysistest.TestData()
+	sourcetest.Module(t, "example.com/m", "id/id.go", "entity/entity.go")
+	allowed, err := New(Options{Module: "example.com/m", Allow: []string{"identity"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysistest.Run(t, testdata, allowed, "word")
+	unlisted, err := New(Options{Module: "example.com/m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysistest.Run(t, testdata, unlisted, "mash")
+}
+
 // TestNewChecksSkipDirs fails at construction on a skip entry naming no
 // directory that holds Go files: the tree moved and the setting skips nothing.
 // A directory the go tool never reads does not count.

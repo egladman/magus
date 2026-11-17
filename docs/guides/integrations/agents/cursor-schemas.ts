@@ -72,7 +72,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // `gen`, not `generated`: this workspace's rule is that generated output lives in a gen/
 // directory and carries no suffix, so the DIRECTORY is the signal that nothing here is
 // hand-edited.
-const OUT = join(HERE, "..", "..", "..", "..", "internal", "render", "testdata", "hosts", "cursor", "gen");
+const OUT = join(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "..",
+  "internal",
+  "render",
+  "testdata",
+  "hosts",
+  "cursor",
+  "gen",
+);
 
 async function main(): Promise<void> {
   await mkdir(OUT, { recursive: true });

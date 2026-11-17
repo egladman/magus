@@ -536,6 +536,7 @@ linters:
             - jobserver # GNU make's name for the token protocol internal/proc/spawn implements
             - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
             - worktree  # git's own term
+            - identity  # an English word; id.go and entity.go only make it look like id + entity
 
       nameoutput:
         type: module
@@ -936,7 +937,7 @@ linters:
       # test file.
       - path: ^broker/(activation_unix|activation_unix_test)\.go$
         linters: [testpairing]
-      - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
+      - path: ^cmd/magus/bootstrap_exec_unix\.go$
         linters: [testpairing]
       - path: ^internal/audit/inode_unix\.go$
         linters: [testpairing]

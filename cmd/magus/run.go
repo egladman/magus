@@ -246,7 +246,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		if err != nil {
 			return err
 		}
-		describe.ListTargets("run:ls", targets, source)
+		describe.ListTargets(ctx, "run:ls", targets, source)
 		return nil
 	}
 

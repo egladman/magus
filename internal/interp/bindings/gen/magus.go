@@ -281,6 +281,18 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectJobUnmergedReport(ret0), nil
 	}))
+	m.MapSet("magus__Workspace__unverified", vm.DirectValue("magus.magus__Workspace__unverified", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__unverified", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		revision := ffi.String(bzArgs, 1)
+		ret0, err := std.MagusWorkspaceUnverified(ctx, recv, revision)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectUnverifiedReport(ret0), nil
+	}))
 	m.MapSet("magus__Workspace__tierOutcomes", vm.DirectValue("magus.magus__Workspace__tierOutcomes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Workspace__tierOutcomes", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
 		if err != nil {

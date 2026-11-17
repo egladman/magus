@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
-	"strings"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -111,7 +109,7 @@ func shellCommand(ctx context.Context, args []string) error {
 // reason in its host reply and must not leak a second, non-protocol message into the
 // host's hook stream.
 func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
-	fset := flag.NewFlagSet("shell", flag.ContinueOnError) //nolint:hostvocab // TestEveryLeafRendersEveryFormatOrRefusesThem requires the leaf name shell
+	fset := flag.NewFlagSet(commands.Shell.Name, flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
 	// LOOKS: no rule judges a read, so running the write rules over one would only
 	// ever manufacture a false advisory about editing a file the agent opened
@@ -149,6 +147,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		Flags:    *sf,
 		Output:   opts,
 		Operands: fset.Args(),
+		Argv:     os.Args[1:],
 		Quiet:    global.quiet || global.silent,
 		Window:   terminalWindow(),
 	}
@@ -260,21 +259,4 @@ func hookEmit(out io.Writer, opts output.Options, decision string, verdict any) 
 		return emitNames(out, []string{decision})
 	}
 	return writeFormatted(out, opts, verdict)
-}
-
-// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
-// in, whose magus cannot start for root, since a host runs a failed hook's call.
-func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
-	if sub == "shell" {
-		return mapExitCode(shellCommand(guard.WithStaleConfig(ctx, cause), subArgs)), true
-	}
-	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
-	if sub != "buzz" || termkit.StdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
-		return 0, false
-	}
-	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
-	if reason != "" {
-		fmt.Fprintln(os.Stderr, reason)
-	}
-	return answer.ExitCode(), true
 }

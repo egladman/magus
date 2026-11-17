@@ -26,6 +26,10 @@ In the docs:
 - [Latency](../guides/integrations/editor/events.md#latency)
 - [Latency](../reference/api/metrics/v1alpha1/metrics.md#latency)
 
+In the code (`magus refs <name>` lists every site):
+
+- `eval.Latency` (Go)
+
 <!-- END GLOSSARY USAGE -->
 
 ## See also

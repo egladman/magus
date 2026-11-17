@@ -1,0 +1,130 @@
+# This repository's push-unverified rule, hack/policy/push.buzz read from the tree rather
+# than copied here, judged through the real `magus shell` a hook invokes, over the real
+# req.push and magus\workspace(dir).unverified(revision). A push of a commit that changed a
+# declared file no passing run read as committed is advised on, naming the commands that
+# read it, while the rule advises; a run counts for a file that held, as it ran, what the
+# commit holds, whatever else was uncommitted; a target that declares no inputs reads
+# nothing its command does not name; a file no target declares does not block. Each step
+# is its own session, so no advice is held back as already spoken.
+
+env MAGUS_VCS_BASE_REF=main
+mkdir hack/policy
+cp $__MAGUS_TEMPLATES/../../../../hack/policy/push.buzz hack/policy/push.buzz
+cp $__MAGUS_TEMPLATES/../../../../hack/policy/verdict.buzz hack/policy/verdict.buzz
+exec git init -q -b main
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .gitignore magus.yaml magusfile.buzz hack src/a.txt
+exec git commit -q -m baseline
+exec git checkout -q -b topic
+
+# (a) A commit changing a.txt, with no run recorded: advised on, naming the commands to run.
+cp edit-a.txt src/a.txt
+exec git commit -q -am 'change a'
+stdin push-a.json
+exec magus shell
+! stdout 'deny'
+stdout '^advise .*\[workspace:push-unverified\]: pushing [0-9a-f]{12} changes 1 file that no passing run has read as committed; this advises for now and will refuse later: run the command on each line before you push'
+stdout '  `\./magus run lint \. -- src/a\.txt`'
+
+# (b) A run of a target that declares no inputs reads nothing, even over `.`.
+exec magus run build . -- .
+stdin push-b.json
+exec magus shell
+stdout '^advise .*\[workspace:push-unverified\]: pushing'
+
+# (c) A passing run of the target that declares it: allowed.
+exec magus run check .
+stdin push-c.json
+exec magus shell
+! stdout 'deny'
+! stdout 'push-unverified'
+
+# (d) A run while b.txt was still uncommitted counts once b.txt is committed as it ran.
+cp edit-b.txt src/b.txt
+exec magus run check .
+exec git add src/b.txt
+exec git commit -q -m 'add b'
+stdin push-d.json
+exec magus shell
+! stdout 'push-unverified'
+
+# (e) A file edited after the run is unread: advised on.
+cp edit-a2.txt src/a.txt
+exec git commit -q -am 'change a again'
+stdin push-e.json
+exec magus shell
+stdout '^advise .*\[workspace:push-unverified\]: pushing'
+
+# (f) Run again: allowed. A changed file no target declares is named and does not block.
+exec magus run check .
+cp notes-body NOTES.md
+exec git add NOTES.md
+exec git commit -q -m 'add notes'
+exec magus run check .
+stdin push-f.json
+exec magus shell
+! stdout 'deny'
+stdout 'advise \[workspace:push-unverified\]: 1 file changed here that no target of this workspace declares, so no run can check it: NOTES.md'
+
+# (g) A line whose commit only running it makes is advised on as unjudged, naming the fix.
+stdin commit-push.json
+exec magus shell
+stdout '^advise .*\[workspace:push-unverified\]: magus cannot tell, before the line runs, which commit this push publishes; this advises for now'
+
+# (h) A dry run publishes nothing and a line that pushes nothing is never read.
+stdin dry-run.json
+exec magus shell
+! stdout 'deny'
+stdin ls.json
+exec magus shell
+! stdout 'deny'
+
+-- .gitignore --
+.magus/
+*.json
+edit-*.txt
+notes-body
+-- magus.yaml --
+concurrency: 1
+-- magusfile.buzz --
+import "magus";
+import "./hack/policy/push" as pushes;
+
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["src/*.txt"]);
+}
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+}
+
+magus\guard.builtins({"push-unverified": {"decision": "off"}, "push-gate": {"decision": "off"}});
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict => pushes\decidePush(req.push, read: pushes\readUnverified));
+-- src/a.txt --
+a
+-- edit-a.txt --
+a, changed
+-- edit-a2.txt --
+a, changed again
+-- edit-b.txt --
+b
+-- notes-body --
+notes
+-- push-a.json --
+{"session_id":"s-a","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-b.json --
+{"session_id":"s-b","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-c.json --
+{"session_id":"s-c","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-d.json --
+{"session_id":"s-d","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-e.json --
+{"session_id":"s-e","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-f.json --
+{"session_id":"s-f","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- commit-push.json --
+{"session_id":"s-g","tool_name":"Bash","tool_input":{"command":"git commit --allow-empty -m x && git push origin HEAD:topic","description":"push"}}
+-- dry-run.json --
+{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push --dry-run origin HEAD:topic","description":"push"}}
+-- ls.json --
+{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"ls","description":"list"}}

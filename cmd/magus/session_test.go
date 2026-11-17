@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,22 +55,6 @@ type neverTerminalProbe struct{}
 
 func (neverTerminalProbe) IsTerminal(uintptr) bool        { return false }
 func (neverTerminalProbe) Size(uintptr) (int, int, error) { return 0, 0, nil }
-
-// journalRecordSink keeps the slog.Record journal.Emit builds, so a test can replay the
-// real encoding into another handler and see what that handler RETURNS. Going through
-// journal.NewLogger instead would drop the error: the fan-out swallows child errors by
-// contract, which is the very thing under test here.
-type journalRecordSink struct{ records []slog.Record }
-
-func (s *journalRecordSink) Enabled(context.Context, slog.Level) bool { return true }
-
-func (s *journalRecordSink) Handle(_ context.Context, r slog.Record) error {
-	s.records = append(s.records, r.Clone())
-	return nil
-}
-
-func (s *journalRecordSink) WithAttrs([]slog.Attr) slog.Handler { return s }
-func (s *journalRecordSink) WithGroup(string) slog.Handler      { return s }
 
 func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
 	t.Cleanup(snapshotGlobals())

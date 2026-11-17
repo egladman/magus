@@ -12,16 +12,19 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,6 +98,7 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 		Thread:     types.AgentThreadSub,
 		ThreadFrom: types.ThreadReported,
 		Checkout:   sub.Checkout, // read from the fixture's own checkout, which this test does not shape
+		Push:       sub.Push,     // the same; TestCommandRuleIsHandedThePush pins what a push reads
 		Dir:        sub.Dir,
 		Workspace:  sub.Workspace,
 	}, sub, "the subagent reports the main session's id; magus never saw it spawned, so no Parent or Lease")
@@ -773,4 +777,46 @@ func TestTheRuleStaysPutForAPushWithNoCd(t *testing.T) {
 func TestTheRuleStaysPutForAPushAfterACdTheShellResolves(t *testing.T) {
 	main := t.TempDir()
 	assert.Equal(t, main, pushPlaced(main, `cd "$CHECKOUT" && git push -u origin HEAD:topic`).Dir)
+}
+
+func TestNoCommandRuleReadsNoPushedRevision(t *testing.T) {
+	testkit.Isolate(t)
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"})
+	driver := typestest.NewMockVCSDriver(t)
+	driver.EXPECT().Name().Return("git").Maybe()
+	driver.EXPECT().Base().Return("main").Maybe()
+	at := location{dir: repo.Root(), workspace: repo.Root()}
+
+	verdict, _ := gradeWorkspaceCommand(t.Context(), Dependencies{VCS: types.VCSOptions{Driver: driver}},
+		types.GuardJudgment{Decision: decisionPass}, commandRuleInput{command: "git push", dialect: DialectBash}, hookAttribution{}, at)
+	assert.Equal(t, decisionPass, verdict.Decision)
+	driver.AssertNotCalled(t, "FindCommit", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestCommandRuleIsHandedThePush(t *testing.T) {
+	testkit.Isolate(t)
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"})
+	probe := &commandRuleProbe{}
+	at := location{dir: repo.Root(), workspace: repo.Root()}
+
+	gradeWorkspaceCommand(t.Context(), Dependencies{CommandRule: probe.rule()},
+		types.GuardJudgment{Decision: decisionPass}, commandRuleInput{command: "git push", dialect: DialectBash}, hookAttribution{}, at)
+	require.Len(t, probe.asked, 1)
+	require.NotNil(t, probe.asked[0].Push)
+	assert.Equal(t, repo.Head(), probe.asked[0].Push.Revision)
+}
+
+func TestCommandRuleCanCallTheUnverifiedReader(t *testing.T) {
+	testkit.Isolate(t)
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"})
+	pinned := false
+	deps := Dependencies{CommandRule: func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		_, pinned = unverified.PinnedReader(ctx)
+		return types.GuardVerdict{}, nil
+	}}
+	at := location{dir: repo.Root(), workspace: repo.Root()}
+
+	gradeWorkspaceCommand(t.Context(), deps, types.GuardJudgment{Decision: decisionPass},
+		commandRuleInput{command: "ls", dialect: DialectBash}, hookAttribution{}, at)
+	assert.True(t, pinned)
 }

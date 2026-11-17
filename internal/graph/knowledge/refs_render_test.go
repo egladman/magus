@@ -145,9 +145,8 @@ func TestWriteRefsText(t *testing.T) {
 		FileCount: 2, RefCount: 3,
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
-	var b, notices bytes.Buffer
-	env := testEnv(&b, &notices)
-	require.NoError(t, WriteRefsText(&b, env, out))
+	var b bytes.Buffer
+	require.NoError(t, WriteRefsText(&b, out))
 	assert.Equal(t, fmt.Sprintf(`symbol: symbol:a F().  (F)
 defined in:
   a.go
@@ -159,12 +158,12 @@ referenced in 2 file(s), 3 occurrence(s):
 	// A resolved symbol nothing references is a verified answer, unless the verdict is not.
 	out.Refs, out.FileCount, out.RefCount = nil, 0, 0
 	b.Reset()
-	require.NoError(t, WriteRefsText(&b, env, out))
+	require.NoError(t, WriteRefsText(&b, out))
 	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\nno references found\n", b.String())
 
 	out.Answer.Verdict = types.VerdictUnknown
 	b.Reset()
-	err := WriteRefsText(&b, env, out)
+	err := WriteRefsText(&b, out)
 	assert.True(t, exit.AlreadyReported(err))
 	assert.Contains(t, b.String(), "verdict: unknown")
 }
