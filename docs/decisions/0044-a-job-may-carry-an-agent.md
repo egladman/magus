@@ -86,7 +86,7 @@ maps them. The envelope is an unexported generic in `internal/job` until
 
 | concept | domain type                                                                             | record                                               | file                                 |
 | ------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------ |
-| Job     | `types.Job`, `libs/safetyscissors/job/job.go`                                                             | `jobRecord`, `internal/job/store.go`                 | `jobs.jsonl`                         |
+| Job     | `types.Job`, `libs/safetyscissors/job/job.go`                                           | `jobRecord`, `internal/job/store.go`                 | `jobs.jsonl`                         |
 | agent   | `agent.Spec`, `agent.Status` and the model tier types, `types/agent`; `types.Job.Agent` | `jobRecord.spec.agent`, `attemptRecord.status.agent` | none of its own                      |
 | Attempt | `types.Attempt`, a new file in `types/`                                                 | `attemptRecord`, a new file in `internal/job`        | `attempts.jsonl` beside `jobs.jsonl` |
 

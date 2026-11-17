@@ -38,6 +38,8 @@ import (
     "github.com/egladman/magus"
     _ "github.com/egladman/magus/buzzengine"
     "github.com/egladman/magus/libs/diagnostics"
+    "github.com/egladman/magus/libs/safetyscissors/tier"
+    "github.com/egladman/magus/libs/safetyscissors/verdict"
     "github.com/egladman/magus/project"
     "github.com/egladman/magus/spells"
     "github.com/egladman/magus/std"
@@ -476,7 +478,7 @@ func Example_judgeAToolCall() {
     }
     // Output:
     // cp api/greeting.txt api/out/: deny workspace:targets-only Build through the target: magus run build api
-    // magus run build api: pass
+    // magus run build api: defer
 }
 ```
 
@@ -518,7 +520,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     defer m.Close()
 
     err = m.Run(ctx, []types.Target{{Path: "api", Name: "build"}}, magus.WithSession("guide-session"))
-    var denied *types.GuardDeniedError
+    var denied *verdict.DeniedError
     if errors.As(err, &denied) {
         fmt.Println("denied by:", denied.Judgment.Rule)
     }
@@ -575,7 +577,7 @@ func Example_aProgramThatIsItsOwnHarness() {
             fmt.Println("judge:", err)
             return
         }
-        if j.Decision == "deny" {
+        if j.Decision == verdict.Deny {
             reason, _, _ := strings.Cut(j.Reason, "\n")
             fmt.Printf("denied %q: %s\n", command, reason)
             continue
