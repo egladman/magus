@@ -1,11 +1,12 @@
 // Command train runs the stage S0 probes of the local-models plan over the inputs
 // libs/train/inputs.jsonl pins, and appends one row per run to libs/train/runs.jsonl.
-// It never serves a model: mlx_lm.lora and llama-bench do the model work, and this
-// command measures them.
+// It never serves a model: mlx_lm.lora, llama-bench and llama-server do the model work,
+// and this command measures them.
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -36,6 +37,9 @@ commands:
   eval-sets   write the FIM dev and test sets and the Buzz pass@k tasks (stage S1)
   fim         write the FIM training samples, decontaminated against the eval sets (stage S1)
   g1          recount the G1 bullets from the datasets and write the report (stage S1)
+  eval-complete  serve each base with llama-server, complete the FIM test sets and score them (stage S3)
+  pass-at-k   sample the Buzz pass@k tasks from each base and grade them with magus buzz -t (stage S3)
+  latency     replay FIM-Buzz dev spans in typing order against each base (stage S3)
 
 run "train <command> -h" for a command's flags`
 
@@ -54,6 +58,8 @@ func main() {
 		err = runBench(os.Args[2:])
 	case "dedup", "pin-split", "eval-sets", "fim", "g1":
 		err = runS1(os.Args[1], os.Args[2:])
+	case "eval-complete", "pass-at-k", "latency":
+		err = runS3(os.Args[1], os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -451,4 +457,73 @@ func printJSON(v any) error {
 	}
 	fmt.Println(string(b))
 	return nil
+}
+
+// s3Tools binds the flags that name binaries and logs.
+func s3Tools(fs *flag.FlagSet, cfg *eval.Config) {
+	fs.StringVar(&cfg.Run, "run", "", "the run name: its predictions and scratch trees live under <cache>/tmp/codemodel-eval/<run>, and a rerun with the same name resumes")
+	fs.StringVar(&cfg.Llama, "llama-server", "llama-server", "the llama-server binary, built at the pinned commit")
+	fs.StringVar(&cfg.Magus, "magus", "../../magus", "the magus binary --check and -t run with")
+	fs.StringVar(&cfg.Evals, "evals", "evals.jsonl", "the evaluation log rows are appended to")
+	fs.StringVar(&cfg.Digests, "digests", "gen/split.digest", "the digest file datasets are pinned in")
+}
+
+// s3Models binds the flags that name what is served.
+func s3Models(fs *flag.FlagSet, cfg *eval.Config, defaultSystems string) {
+	fs.StringVar(&cfg.Systems, "systems", defaultSystems, "comma-separated base names under gguf/ in inputs.jsonl, each name[:psm|:spm]; the first is the reference the others' p-values pair against")
+	fs.StringVar(&cfg.Context, "context", "none", "the context provider in front of each base; none until stage S2 builds one, and any other name needs spans that carry context chunks")
+}
+
+// s3Flags binds the flags the three stage S3 commands share into an eval.Config. The
+// returned function parses args and then copies the shared flags in.
+func s3Flags(fs *flag.FlagSet, defaultSystems string) (*eval.Config, func(args []string)) {
+	var c common
+	c.register(fs)
+	cfg := &eval.Config{}
+	s3Tools(fs, cfg)
+	s3Models(fs, cfg, defaultSystems)
+	return cfg, func(args []string) {
+		_ = fs.Parse(args)
+		cfg.Inputs, cfg.Cache, cfg.Runs, cfg.Root = c.inputs, c.cache, c.runs, c.root
+	}
+}
+
+func runS3(cmd string, args []string) error {
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	ctx := context.Background()
+	switch cmd {
+	case "eval-complete":
+		cfg, parse := s3Flags(fs, "qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm,mellum-4b-base:spm")
+		sets := fs.String("sets", "buzz-test,go-test,typescript-test", "comma-separated <language>-<test|dev> sets")
+		max := fs.String("max", "", "comma-separated set=N caps on a set's span count, kept by span id order; absent keeps the whole set")
+		parse(args)
+		e, systems, err := cfg.Open()
+		if err != nil {
+			return err
+		}
+		specs, err := eval.ParseSets(*sets, *max)
+		if err != nil {
+			return err
+		}
+		return e.CompleteAll(ctx, systems, specs, os.Stderr)
+	case "pass-at-k":
+		cfg, parse := s3Flags(fs, "qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm")
+		tasks := fs.Int("tasks", 0, "sample and grade only this many tasks, by id order; 0 takes all")
+		parse(args)
+		e, systems, err := cfg.Open()
+		if err != nil {
+			return err
+		}
+		return e.PassAll(ctx, systems, *tasks, os.Stderr)
+	default:
+		cfg, parse := s3Flags(fs, "qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm")
+		n := fs.Int("n", 1000, "replay this many dev spans in typing order, or all of them when the set is smaller")
+		set := fs.String("set", "buzz-dev", "the dev set to replay")
+		parse(args)
+		e, systems, err := cfg.Open()
+		if err != nil {
+			return err
+		}
+		return e.LatencyAll(ctx, systems, *set, *n, os.Stderr)
+	}
 }
