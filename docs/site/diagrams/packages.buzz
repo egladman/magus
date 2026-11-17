@@ -12,7 +12,7 @@ export fun goPackages(glob: str) > [magus\Dir] !> any {
 // closed string sets and data the figures do not trace.
 export fun dataTypes() > [magus\Dir] !> any {
     final names = ["enum", "daemon", "diff", "events", "image", "trail",
-                   "agent", "check", "impact", "release", "vcs"];
+                   "check", "impact", "release", "vcs"];
     return names.map(fun (i: int, name: str) > magus\Dir !> any => magus\graph().dir("types/" + name));
 }
 
