@@ -28,7 +28,7 @@ func cyclicList() vm.Value {
 // genuine reference cycle: naive recursion would stack-overflow, a FATAL,
 // unrecoverable Go error. encodeJSON must instead report errCircularReference.
 // Run on a goroutine and bounded with select + time.After (the repo's
-// hang/crash-test idiom; see pool_test.go TestDispatchRejectsCycleWithMemo)
+// hang/crash-test idiom; see pool_test.go TestDispatchRejectsCycle)
 // since a regression here is unsafe to call inline.
 func TestEncodeJSONCircular(t *testing.T) {
 	l := cyclicList()
