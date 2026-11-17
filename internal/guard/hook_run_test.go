@@ -1399,7 +1399,6 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
 
-
 // installHostRows writes the tool rows directory install writes for host under the working
 // directory, with the given rows and limits.
 func installHostRows(t *testing.T, host string, limits types.Limits, rows ...types.HarnessTool) {

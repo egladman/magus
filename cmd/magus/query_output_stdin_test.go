@@ -291,7 +291,7 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 
 func jsonMarshalLine(v any) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := renderJSONL(&buf, []any{v}); err != nil {
+	if err := writeFormatted(&buf, output.Options{Format: outputJSONL}, []any{v}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

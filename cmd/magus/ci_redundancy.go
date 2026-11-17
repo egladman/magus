@@ -11,9 +11,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// gateMergeScanLimit bounds the history walk job_graph shares with the gate.
-const gateMergeScanLimit = internalci.GateMergeScanLimit
-
 // gatePoolProbeTimeout bounds the admission-server probe. The server is an
 // accelerant, never a capability gate: a probe that cannot answer in time
 // reads as idle and the gate runs.
