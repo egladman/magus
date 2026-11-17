@@ -3296,6 +3296,7 @@ github.com/egladman/magus/types.KnowledgeQueryOutput type struct
 github.com/egladman/magus/types.KnowledgeQueryOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Answer field KnowledgeAnswer "json:\"answer\" yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Budget field int "json:\"budget\"         yaml:\"budget\""
+github.com/egladman/magus/types.KnowledgeQueryOutput.Context field []KnowledgeDefinitionSite "json:\"context,omitempty\" yaml:\"context,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Links field []KnowledgeEdge "json:\"links\"          yaml:\"links\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.MatchCount field int "json:\"match_count\"    yaml:\"match_count\""

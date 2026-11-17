@@ -80,12 +80,14 @@ func (s *Service) positionCoverage(ctx context.Context) (cov knowledge.Coverage,
 	}
 	cov = knowledge.Coverage{Seeded: true}
 	cov.Gaps, cov.Probed = s.ws.SymbolGaps(ctx)
-	byProject := map[string]bool{}
+	byProject := map[string]*projectIndexes{}
 	for _, st := range status.SymbolIndexStatus(ctx) {
-		up := st.Freshness == types.SymbolIndexFresh
-		if prev, seen := byProject[st.Project.Path]; !seen || prev {
-			byProject[st.Project.Path] = up
+		p := byProject[st.Project.Path]
+		if p == nil {
+			p = &projectIndexes{changed: map[string]bool{}}
+			byProject[st.Project.Path] = p
 		}
+		p.add(st)
 		if st.Freshness == types.SymbolIndexStale {
 			cov.Stale = append(cov.Stale, types.KnowledgeStaleIndex{
 				Project: st.Project.Path, Language: st.Language, Op: st.Op, Changed: st.Changed, ChangedCount: st.ChangedCount,
@@ -95,8 +97,27 @@ func (s *Service) positionCoverage(ctx context.Context) (cov knowledge.Coverage,
 	return cov, freshFile(byProject), true
 }
 
-// freshFile reports whether every index of the deepest project owning a file is up to date.
-func freshFile(byProject map[string]bool) func(string) bool {
+// projectIndexes is what one project's indexes vouch for: every file unless one is neither
+// up to date nor stale with every change listed, and never a file listed as changed.
+type projectIndexes struct {
+	unvouched bool
+	changed   map[string]bool
+}
+
+func (p *projectIndexes) add(st types.SymbolIndexStatus) {
+	switch {
+	case st.Freshness == types.SymbolIndexFresh:
+	case st.Freshness == types.SymbolIndexStale && len(st.Changed) == st.ChangedCount:
+		for _, f := range st.Changed {
+			p.changed[f] = true
+		}
+	default:
+		p.unvouched = true
+	}
+}
+
+// freshFile reports whether the indexes of the deepest project owning a file vouch for it.
+func freshFile(byProject map[string]*projectIndexes) func(string) bool {
 	return func(file string) bool {
 		owner, found := "", false
 		for project := range byProject {
@@ -104,7 +125,11 @@ func freshFile(byProject map[string]bool) func(string) bool {
 				owner, found = project, true
 			}
 		}
-		return found && byProject[owner]
+		if !found {
+			return false
+		}
+		p := byProject[owner]
+		return !p.unvouched && !p.changed[file]
 	}
 }
 

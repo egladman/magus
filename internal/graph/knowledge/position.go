@@ -34,8 +34,9 @@ var errPositionCoverage = errors.New("the symbol index is partial for the positi
 
 // RefusePosition returns an error naming why cov cannot vouch for pos's file, nil when it
 // can. It refuses when the probe did not run, when the symbol shards were not merged, when
-// the graph holds no file node for the path, and when a gap or a stale index of the file's
-// language belongs to a project that owns the path.
+// the graph holds no file node for the path, when a gap of the file's language belongs to
+// a project that owns the path, and when such a project's index is stale for any source
+// but the position's own file.
 func (g *Graph) RefusePosition(pos Position, cov Coverage) error {
 	fail := func(format string, args ...any) error {
 		return fmt.Errorf("%w: %s, and `magus graph build` rebuilds it", errPositionCoverage, fmt.Sprintf(format, args...))
@@ -57,11 +58,18 @@ func (g *Graph) RefusePosition(pos Position, cov Coverage) error {
 		}
 	}
 	for _, s := range cov.Stale {
-		if ownsPath(s.Project, pos.Path) {
+		if ownsPath(s.Project, pos.Path) && !onlyChanged(s, pos.Path) {
 			return fail("%s is stale", s.Describe())
 		}
 	}
 	return nil
+}
+
+// onlyChanged reports whether path is the one source s changed since it was built. The
+// position's own file is masked from the ranking, so its being newer than the index
+// cannot mislead it; any other change can.
+func onlyChanged(s types.KnowledgeStaleIndex, path string) bool {
+	return s.ChangedCount == 1 && len(s.Changed) == 1 && s.Changed[0] == path
 }
 
 // ownsPath reports whether the project at project holds path.

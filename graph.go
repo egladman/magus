@@ -192,6 +192,15 @@ type warmGraph struct {
 	valid    bool   // graph is populated AND known-fresh (a watcher is invalidating it)
 	watching bool   // a watcher is active; only then is the cache trusted
 	gen      uint64 // bumped on every invalidation, to catch a change landing mid-rebuild
+
+	// symMu guards the symbol-merged graph: the warm graph with every symbol shard merged
+	// in, kept while symBase is still the warm graph and symMemo the SymbolIndexStatus
+	// memo it was merged under. A graph change replaces the warm graph, and a source change
+	// or an index run replaces the memo, so either one merges again.
+	symMu   sync.Mutex
+	symBase *knowledge.Graph
+	symMemo *types.SymbolIndexStatus
+	symbols *knowledge.Graph
 }
 
 func newWarmGraph(rebuild func(context.Context, bool) (*knowledge.Graph, error), log *slog.Logger) *warmGraph {

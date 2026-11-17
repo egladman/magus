@@ -195,6 +195,27 @@ func (s *positionSuite) TestRefusesAStaleIndexInTheOwningProject() {
 	s.ErrorContains(s.g.RefusePosition(s.position(), cov), "is stale")
 }
 
+// The position's file is masked from the ranking, so its being newer than the index is
+// the editing steady state and answers.
+func (s *positionSuite) TestAnswersWhenOnlyThePositionsFileChanged() {
+	cov := s.covered()
+	cov.Stale = []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz", Changed: []string{"app/main.buzz"}, ChangedCount: 1}}
+	s.NoError(s.g.RefusePosition(s.position(), cov))
+}
+
+func (s *positionSuite) TestRefusesWhenAnotherFileInTheProjectChanged() {
+	cov := s.covered()
+	cov.Stale = []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz", Changed: []string{"app/main.buzz", "lib/a.buzz"}, ChangedCount: 2}}
+	s.ErrorContains(s.g.RefusePosition(s.position(), cov), "is stale")
+}
+
+// A list cut short names only some changes, so one entry naming the file proves nothing.
+func (s *positionSuite) TestRefusesWhenTheChangedListIsCutShort() {
+	cov := s.covered()
+	cov.Stale = []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz", Changed: []string{"app/main.buzz"}, ChangedCount: 3}}
+	s.ErrorContains(s.g.RefusePosition(s.position(), cov), "is stale")
+}
+
 // A gap in another project, or of another language, cannot hold the position's symbols.
 func (s *positionSuite) TestAnswersPastAGapElsewhere() {
 	cov := s.covered()

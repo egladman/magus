@@ -408,6 +408,20 @@ func (s *queryPositionSuite) TestAStaleIndexIsAFailedPrecondition() {
 	s.Contains(err.Error(), "stale")
 }
 
+// The cursor's own file is newer than its index while it is edited; that alone answers.
+func (s *queryPositionSuite) TestAnIndexStaleOnlyForTheOwnFileAnswers() {
+	resp, err := s.service(types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Language: "buzz", Freshness: types.SymbolIndexStale,
+		Changed: []string{"app/main.buzz"}, ChangedCount: 1}).QueryNodes(context.Background(), s.request())
+	s.Require().NoError(err)
+	s.Len(resp.Msg.GetContext(), 1, "lib/a.buzz did not change, so its site still verifies")
+}
+
+func (s *queryPositionSuite) TestAnIndexStaleForAnotherFileIsAFailedPrecondition() {
+	_, err := s.service(types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Language: "buzz", Freshness: types.SymbolIndexStale,
+		Changed: []string{"app/main.buzz", "lib/a.buzz"}, ChangedCount: 2}).QueryNodes(context.Background(), s.request())
+	s.Equal(connect.CodeFailedPrecondition, connect.CodeOf(err))
+}
+
 func (s *queryPositionSuite) TestAWorkspaceWithNoFreshnessProbeIsUnimplemented() {
 	_, err := NewService(cannedResolver{g: s.g, probed: true}).QueryNodes(context.Background(), s.request())
 	s.Equal(connect.CodeUnimplemented, connect.CodeOf(err))

@@ -1639,6 +1639,19 @@ func ObjectKnowledgeRanking(v types.KnowledgeRanking) vm.Value {
 	return out
 }
 
+func ObjectKnowledgeDefinitionSite(v types.KnowledgeDefinitionSite, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", vm.StringValue(v.File))
+	out.MapSet("startLine", vm.IntValue(int64(v.StartLine)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("status", enums.Case("KnowledgeDefinitionStatus", string(v.Status)))
+	out.MapSet("source", vm.StringValue(v.Source))
+	out.MapSet("sourceStartLine", vm.IntValue(int64(v.SourceStartLine)))
+	out.MapSet("sourceTotalLines", vm.IntValue(int64(v.SourceTotalLines)))
+	out.MapSet("sourceNote", vm.StringValue(v.SourceNote))
+	return out
+}
+
 func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
@@ -1668,6 +1681,11 @@ func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCase
 		optRanking = ObjectKnowledgeRanking((*v.Ranking))
 	}
 	out.MapSet("ranking", optRanking)
+	itemsContext := make([]vm.Value, len(v.Context))
+	for indexContext := range v.Context {
+		itemsContext[indexContext] = ObjectKnowledgeDefinitionSite(v.Context[indexContext], enums)
+	}
+	out.MapSet("context", vm.ListValue(itemsContext))
 	return out
 }
 
