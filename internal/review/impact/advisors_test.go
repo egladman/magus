@@ -4,10 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/libs/testkit"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestImpactCountsFindingsNotSections pins the headline against the retraction shape every
 // real run produces: eleven advisors publish, one has something to say, and ten publish an

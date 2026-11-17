@@ -2,16 +2,20 @@ package review
 
 import (
 	"context"
-	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/notes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types/diff"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestChangedSymbolIDsAreWhatASymbolAnchorNames pins the second half of the anchors query. A note
 // anchors a symbol by its index id, so passing labels or paths would match nothing and the
