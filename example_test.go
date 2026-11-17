@@ -358,7 +358,7 @@ func Example_judgeAToolCall() {
 	}
 	// Output:
 	// cp api/greeting.txt api/out/: deny workspace:targets-only Build through the target: magus run build api
-	// magus run build api: pass
+	// magus run build api: defer
 }
 
 // Example_aDeniedRun runs a target the guard denies. Nothing runs, and the
