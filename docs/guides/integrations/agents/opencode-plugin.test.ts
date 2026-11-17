@@ -344,7 +344,7 @@ test("a verdict from an unknown schema is refused rather than obeyed", async () 
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
-    /verdict magus\.guard\/v1alpha99, not magus\.guard\/v1alpha2/,
+    /verdict safetyscissors\.verdict\/v1alpha99, not safetyscissors\.verdict\/v1alpha1/,
   );
 });
 
