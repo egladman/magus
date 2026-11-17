@@ -4,9 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestExplainText: the readable card folds edge direction into a natural-language
 // verb (out=active, in=passive), groups by that verb with a count when a list has
