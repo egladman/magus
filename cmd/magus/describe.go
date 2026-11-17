@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/hint"
@@ -370,7 +371,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
 	var tf *flaggen.DescribeTargetFlags
-	args, targetArgs := splitOnDashDash(args)
+	args, targetArgs := commands.SplitOnDashDash(args)
 	pos, err := commandParse("describe target", args, func(fs *flag.FlagSet) {
 		tf = flaggen.BindDescribeTarget(fs)
 		fs.Usage = func() {
@@ -677,7 +678,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		}
 
 		// text / wide
-			describe.RenderEvaluatedProjects(os.Stdout, out)
+		describe.RenderEvaluatedProjects(os.Stdout, out)
 		return nil
 	}
 

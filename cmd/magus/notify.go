@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -36,7 +37,7 @@ func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer
 	bindDisplayFlags(fset)
 	nf := flaggen.BindSessionNotify(fset)
 	fset.Usage = func() { notifyUsage(os.Stderr) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -130,7 +131,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// callers it is unreliable everywhere.
 	bindDisplayFlags(fset)
 	fset.Usage = func() { shellUsage(fset.Output()) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	// --transport is how installed glue says a host called; a person typing this names none.

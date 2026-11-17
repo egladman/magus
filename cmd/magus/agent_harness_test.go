@@ -58,7 +58,6 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 }
 
-
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
 // this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
 // and never a stale binary found on disk. The command is copied from the text output the
@@ -258,17 +257,6 @@ for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
   mv rewritten "$f"
 done
 `
-
-// TestAgentHarnessHasNoWritingVerb pins that apply and remove are gone.
-// Install, link and verify are the only verbs, and the error lists them.
-func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
-	for _, verb := range []string{"apply", "remove"} {
-		err := agentHarnessCommand(context.Background(), t.TempDir(), []string{verb, "--id", "x"})
-		require.Error(t, err, verb)
-		assert.Contains(t, err.Error(), "unknown subcommand", verb)
-		assert.Contains(t, err.Error(), "want install, link, or verify", verb)
-	}
-}
 
 // The checkpoint's spawn ancestry is read from the environment, so its lease must be the
 // environment's claim too: a hook process forwards none, and guard.CheckoutLease has to agree with

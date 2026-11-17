@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -554,7 +555,7 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 // glue file is graded on the next run instead of drifting away from a fixture nobody
 // updates.
 func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
-	funcs := templateFuncs()
+	funcs := render.TemplateFuncs()
 	for _, name := range []string{"magus-command.buzz", "magus-path.buzz"} {
 		raw, err := os.ReadFile(filepath.Join(glueTemplateDir, name))
 		require.NoError(t, err)
@@ -653,7 +654,7 @@ func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
 		t.Helper()
 		body, _ := runGlue(t, "magus-command.buzz", glueArrangement{host: "codex", codex: true, rules: true,
 			event: fmt.Sprintf(`{"hook_event_name":"%s","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"%s"}}`, event, command)})
-		tmpl, err := template.New("glue").Funcs(templateFuncs()).Parse(body)
+		tmpl, err := template.New("glue").Funcs(render.TemplateFuncs()).Parse(body)
 		require.NoError(t, err)
 		var out strings.Builder
 		require.NoError(t, tmpl.Execute(&out, map[string]string{"decision": decision, "reason": "a person runs this"}))
@@ -682,7 +683,7 @@ func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
 // Code and Cursor already give a shell command a closed stdin, Codex never did, and a
 // rewrite would take a command out of reach of the person's own permission rules.
 func TestGlueNeverRewritesTheCommand(t *testing.T) {
-	funcs := templateFuncs()
+	funcs := render.TemplateFuncs()
 	const input = `{"command":"git push","description":"push it","timeout":60000,"run_in_background":true}`
 	for _, tc := range []struct{ label, host, event string }{
 		{"claude-code", "claude-code", fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":%s}`, input)},
@@ -1181,7 +1182,9 @@ func TestBuzzRunner_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 
 	var stdout string
 	var runErr error
-	stderr := captureStderr(t, func() { stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path) })
+	stderr := captureStderr(t, func() {
+		stdout, runErr = runBuzzFile(t, scriptRunnerOver(&scriptOpens{}), "", interp.ScriptOptions{}, path)
+	})
 
 	require.NoError(t, runErr, "a warning must never fail the run")
 	assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
@@ -1544,7 +1547,9 @@ func (s *BuzzRunnerTestSuite) TestARecordedRunWithNoRecorderFails() {
 	r := scriptRunnerOver(&scriptOpens{})
 	r.Record = nil
 	var err error
-	testkit.CaptureStdout(s.T(), func() { err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false) })
+	testkit.CaptureStdout(s.T(), func() {
+		err = r.Run(s.T().Context(), s.dir, interp.ScriptOptions{Record: true}, "", []string{path}, nil, false)
+	})
 	s.Require().Error(err)
 	s.Contains(err.Error(), "--record")
 }

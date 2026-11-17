@@ -11,6 +11,8 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/log/quiet"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
 )
@@ -29,22 +31,14 @@ const (
 // globalFlags carries display/verbosity flags shared across the top-level and every subcommand FlagSet
 // (last write wins, so `magus -v ls` and `magus ls -v` are equivalent).
 type globalFlags struct {
-	teeInitialized string    // the capture already replaced during this invocation
-	output         string    // raw --output/-o value; parsed on demand
-	tee            string    // mirror this invocation's structured output to this file
-	verbose        verbosity // counted -v level
-	quiet          bool      // suppress progress; quiet wins over -v
-	silent         bool      // quiet + bounded failure dumps + bubbled notice lines
+	output  string          // raw --output/-o value; parsed on demand
+	tee     render.Tee      // mirror this invocation's structured output to this file
+	verbose quiet.Verbosity // counted -v level
+	quiet   bool            // suppress progress; quiet wins over -v
+	silent  bool            // quiet + bounded failure dumps + bubbled notice lines
 }
 
 var global globalFlags
-
-// template[=<body>]: a body renders a Go template; bare "-o template" lists the
-// output's fields (the json keys usable in -o json and -o template).
-// outputFormatHelp names the bare -o template form explicitly, because that is how a
-// caller discovers which field names a template may use: they are the -o json keys
-// (.name), not the Go field names (.Name), and nothing else advertises that.
-var outputFormatHelp = fmt.Sprintf("Output format (%s|template[=<go-template>]); default: text. Bare -o template lists the available template fields (they are the -o json names); see docs/reference/output-formats.md", output.Join(output.Common, "|"))
 
 // bindGlobalFlags registers the flags magus accepts before its subcommand, bar the display
 // set bindDisplayFlags adds. The guard reads a magus argv with its own copy of both
@@ -63,9 +57,9 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 }
 
 func bindOutputFlags(fs *flag.FlagSet) {
-	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
+	fs.StringVar(&global.output, "output", global.output, commands.OutputFormatHelp)
 	fs.StringVar(&global.output, "o", global.output, "Short for --output")
-	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (replaces previous contents)")
+	fs.StringVar(&global.tee.Path, "tee", global.tee.Path, "Also write structured output (-o json|yaml|jsonl|template) to this file (replaces previous contents)")
 }
 
 func bindProgressFlags(fs *flag.FlagSet) {
@@ -88,11 +82,11 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	// Reorder so a flag may follow a positional (`magus run build --explain`);
 	// stdlib flag otherwise stops at the first positional. Done after binding so the
 	// full flag set (config + display + local) is known for value detection.
-	if err := fs.Parse(reorderFlagsFirst(fs, expandVerbosityArgs(args))); err != nil {
+	if err := fs.Parse(commands.ReorderFlagsFirst(fs, quiet.ExpandVerbosityArgs(args))); err != nil {
 		return nil, err
 	}
 	if flagWasSet(fs, "tee") {
-		global.teeInitialized = ""
+		global.tee.Reset()
 	}
 	applyDisplay()
 	if err := checkOutputSupported(name, fs); err != nil {
@@ -115,115 +109,8 @@ func commandAt(name string) (command.Command, bool) {
 	return node, true
 }
 
-// reorderFlagsFirst moves recognized flags (and their values) ahead of positional
-// arguments, so a flag may appear after a positional and stdlib flag still sees it.
-// It restores the GNU-style interspersed-flag behavior users expect, without a
-// dependency. It stops at "--": everything after is left in place (the passthrough
-// marker and its tail survive for the caller or flag.Parse to handle). A value-taking
-// flag is detected from fs (a flag whose Value is not a bool flag consumes the next
-// token); an unknown or "=" flag is passed through untouched for flag.Parse to report.
-func reorderFlagsFirst(fs *flag.FlagSet, args []string) []string {
-	flags, positionals := partitionFlags(fs, args)
-	return append(flags, positionals...)
-}
-
-// partitionFlags splits args into recognized flags (with their values) and positionals,
-// preserving order within each group. Shared by reorderFlagsFirst (which concatenates
-// them) and splitTargetFromArgs (which needs the first positional). See reorderFlagsFirst
-// for the "--"/value-flag/unknown-flag rules.
-func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []string) {
-	flags = make([]string, 0, len(args))
-	positionals = make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if a == "--" {
-			positionals = append(positionals, args[i:]...)
-			break
-		}
-		if len(a) < 2 || a[0] != '-' {
-			positionals = append(positionals, a)
-			continue
-		}
-		name := strings.TrimLeft(a, "-")
-		if strings.IndexByte(name, '=') >= 0 {
-			flags = append(flags, a) // -flag=value: self-contained
-			continue
-		}
-		if f := fs.Lookup(name); f != nil && !flagIsBool(f) && i+1 < len(args) {
-			flags = append(flags, a, args[i+1]) // value flag consumes the next token
-			i++
-			continue
-		}
-		flags = append(flags, a) // bool flag, or unknown (flag.Parse reports it)
-	}
-	return flags, positionals
-}
-
-// splitTargetFromArgs finds the target (the first positional) even when recognized
-// global/display flags precede it, so `magus run --dry-run build` sees "build" as the
-// target instead of mistaking the flag for it. It hoists global/display flags out first,
-// then returns the first positional as the target and the remaining flags+positionals for
-// the subcommand's own commandParse. ok is false when there is no positional target at all.
-//
-// bind registers the command's OWN flags, and is what keeps the prescan from reading a
-// value-taking local flag as a bool: with the flag unknown here its value is hoisted out
-// as a positional, so `--skip api --skip web` reorders to `--skip --skip api web` and the
-// first flag swallows the second as its value. A command that passes nil accepts that
-// limit: one such flag survives it by luck of ordering, two do not.
-func splitTargetFromArgs(args []string, bind func(*flag.FlagSet)) (target string, rest []string, ok bool) {
-	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	flaggen.BindFlags(fs, &globalCfg)
-	bindDisplayFlags(fs)
-	if bind != nil {
-		bind(fs)
-	}
-	flags, positionals := partitionFlags(fs, args)
-	if len(positionals) == 0 || positionals[0] == "--" {
-		return "", nil, false
-	}
-	rest = append(append(make([]string, 0, len(args)), flags...), positionals[1:]...)
-	return positionals[0], rest, true
-}
-
-// flagIsBool reports whether f is a boolean flag (usable without a value), which
-// includes counted flags like -v (verbosity implements IsBoolFlag).
-func flagIsBool(f *flag.Flag) bool {
-	b, ok := f.Value.(interface{ IsBoolFlag() bool })
-	return ok && b.IsBoolFlag()
-}
-
 func outputOptionsOrDefault() (output.Options, error) {
 	return output.Parse(global.output)
-}
-
-// isFlagNamed and parseFlagValue recognize a flag the way Go's flag package does,
-// for the few readers that scan a raw argument tail instead of a FlagSet.
-//
-// Go accepts all FOUR spellings of every flag (`-f v`, `--f v`, `-f=v`,
-// `--f=v`) so every magus flag does too, for free, everywhere commandParse is used.
-// A hand-rolled scanner only accepts the spellings its author happened to write,
-// and the resulting gap is invisible until someone types the missing one:
-//
-//   - `magus affected -explain .` did not error on the flag at all. The scanner
-//     matched only `--explain`, so `-explain` fell through and `.` was read as a
-//     TARGET, producing "target name \".\": must contain only letters, digits..."
-//   - an error naming neither the flag nor the real problem.
-//
-// These exist so that gap is closed once rather than re-derived per call site.
-// Prefer a FlagSet; reach for these only when the tail cannot go through one.
-func isFlagNamed(arg, name string) bool {
-	return arg == "-"+name || arg == "--"+name
-}
-
-// parseFlagValue returns the value of an `-name=value` or `--name=value` argument,
-// or "" when arg is not that flag.
-func parseFlagValue(arg, name string) string {
-	for _, prefix := range []string{fmt.Sprintf("-%s=", name), fmt.Sprintf("--%s=", name)} {
-		if v, ok := strings.CutPrefix(arg, prefix); ok {
-			return v
-		}
-	}
-	return ""
 }
 
 // ---- what each command actually bound, for the man page's parity gate ----
@@ -258,7 +145,7 @@ type recordedFlag struct {
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag
 	fs.VisitAll(func(f *flag.Flag) {
-		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: flagIsBool(f)})
+		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: commands.FlagIsBool(f)})
 	})
 	flagRecord.Lock()
 	defer flagRecord.Unlock()
@@ -357,4 +244,16 @@ func globalFlagNames() map[string]bool {
 	out := map[string]bool{}
 	fs.VisitAll(func(f *flag.Flag) { out[f.Name] = true })
 	return out
+}
+
+// splitTargetFromArgs is commands.SplitTargetFromArgs over the global and display flags
+// this package binds, plus the command's own.
+func splitTargetFromArgs(args []string, bind func(*flag.FlagSet)) (target string, rest []string, ok bool) {
+	return commands.SplitTargetFromArgs(args, func(fs *flag.FlagSet) {
+		flaggen.BindFlags(fs, &globalCfg)
+		bindDisplayFlags(fs)
+		if bind != nil {
+			bind(fs)
+		}
+	})
 }

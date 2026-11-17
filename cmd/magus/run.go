@@ -15,6 +15,8 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	internalci "github.com/egladman/magus/internal/ci"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
@@ -81,7 +83,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	startedAt := time.Now()
 
-	flagArgs, extraArgs := splitOnDashDash(rest)
+	flagArgs, extraArgs := commands.SplitOnDashDash(rest)
 
 	// Bound from the command registry, not declared here: the man page's copy of
 	// this list and this one used to be written separately and reconciled by a test.
@@ -244,7 +246,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		if err != nil {
 			return err
 		}
-		listTargets("run:ls", targets, source)
+		describe.ListTargets("run:ls", targets, source)
 		return nil
 	}
 
@@ -520,7 +522,7 @@ func runReadsPlan(args []string) bool {
 	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	bindRunFlags(fs, nil)
-	flags, _ := partitionFlags(fs, args)
+	flags, _ := commands.PartitionFlags(fs, args)
 	stdin := false
 	for i := 0; i < len(flags); i++ {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(flags[i], "-"), "=")
@@ -532,7 +534,7 @@ func runReadsPlan(args []string) bool {
 			if hasValue {
 				stdin, _ = strconv.ParseBool(value)
 			}
-		case !flagIsBool(f) && !hasValue:
+		case !commands.FlagIsBool(f) && !hasValue:
 			i++ // partitionFlags kept the flag's value beside it
 		}
 	}

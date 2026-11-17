@@ -15,9 +15,9 @@ import (
 // arguments.
 func withOutputFlags(t *testing.T, format, tee string) {
 	t.Helper()
-	prevOut, prevTee := global.output, global.tee
-	global.output, global.tee = format, tee
-	t.Cleanup(func() { global.output, global.tee = prevOut, prevTee })
+	prevOut, prevTee := global.output, global.tee.Path
+	global.output, global.tee.Path = format, tee
+	t.Cleanup(func() { global.output, global.tee.Path = prevOut, prevTee })
 }
 
 // The seed goes to a secret store over a pipe, so stdout must carry the seed and

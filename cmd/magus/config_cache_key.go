@@ -83,7 +83,7 @@ func configCacheKeyGenerate(ctx context.Context, args []string) error {
 	// this one must never have it, or `-o json --tee keys.json` quietly does the one
 	// thing the whole key-handling design forbids. Refused rather than ignored: a
 	// silently-dropped --tee would leave you believing you had a copy.
-	if global.tee != "" {
+	if global.tee.Path != "" {
 		return exit.Usagef("magus config cache key generate: --tee writes to a file and a signing key must not come to rest on disk; drop it, or pipe -o template='{{.seed}}' straight into your secret store")
 	}
 

@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -42,7 +43,7 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 	id := fset.String("id", "", "harness descriptor ID; omit to install every magusfile-wired provider")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -102,7 +103,7 @@ func agentHarnessLinksCommand(ctx context.Context, rootOverride string, args []s
 	stdin := fset.Bool("stdin", false, "read destination-to-source links as JSON from stdin")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
@@ -223,7 +224,7 @@ func agentHarnessVerifyCommand(ctx context.Context, rootOverride string, args []
 	id := fset.String("id", "", "harness descriptor ID; omit to verify every magusfile-wired provider")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {

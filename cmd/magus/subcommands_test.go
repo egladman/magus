@@ -436,7 +436,7 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []command.
 				break
 			}
 			i++
-			if !flagIsBool(f) && !strings.Contains(tok, "=") && i < len(args) {
+			if !commands.FlagIsBool(f) && !strings.Contains(tok, "=") && i < len(args) {
 				i++ // value-taking flag consumes the next token too
 			}
 			continue
@@ -550,7 +550,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 						// negation terms (-kind:op) from flag parsing before commandParse.
 						parseArgs, _ = splitQueryNegations(parseArgs)
 					}
-					if err := fs.Parse(reorderFlagsFirst(fs, parseArgs)); err != nil {
+					if err := fs.Parse(commands.ReorderFlagsFirst(fs, parseArgs)); err != nil {
 						t.Errorf("example %q: %q fails to parse under %q's own flag set: %v",
 							ex.Command, strings.Join(gc.Args, " "), strings.Join(path, " "), err)
 					}

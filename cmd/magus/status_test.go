@@ -38,9 +38,9 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 func TestWriteStatusStructuredFormats(t *testing.T) {
 	// --tee is process-global, so a leftover value from another test would send this
 	// render at a file that may no longer be writable.
-	prevTee := global.tee
-	t.Cleanup(func() { global.tee = prevTee })
-	global.tee = ""
+	prevTee := global.tee.Path
+	t.Cleanup(func() { global.tee.Path = prevTee })
+	global.tee.Path = ""
 
 	r := daemon.Snapshot{Cache: daemon.Cache{Dir: "/tmp/c"}}
 

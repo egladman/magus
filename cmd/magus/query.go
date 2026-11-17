@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -72,7 +73,7 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	flaggen.BindQuery(fs, flaggen.QueryDefaults{URL: defaultLogViewerURL})
-	flags, positionals := partitionFlags(fs, args)
+	flags, positionals := commands.PartitionFlags(fs, args)
 	kept = make([]string, 0, len(args))
 	for i := 0; i < len(flags); i++ {
 		a := flags[i]
@@ -87,7 +88,7 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 			if f := fs.Lookup(name); f == nil {
 				negations = append(negations, a)
 				continue
-			} else if !flagIsBool(f) && i+1 < len(flags) {
+			} else if !commands.FlagIsBool(f) && i+1 < len(flags) {
 				// A value flag's value may itself start with a dash; consume it
 				// paired, the same way partitionFlags did, so it is never read
 				// as a negation.

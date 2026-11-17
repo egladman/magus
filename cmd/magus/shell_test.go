@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
@@ -655,7 +656,7 @@ const audienceReason = "a text search the graph answers\nnothing ran (2 commands
 // render runs the Claude Code / Codex glue on event and renders its template on verdict.
 func (s *hookAudienceSuite) render(host, event string, verdict map[string]any) map[string]any {
 	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: host, host: host, event: event, codex: host == "codex"})
-	tmpl, err := template.New(host).Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
+	tmpl, err := template.New(host).Funcs(render.TemplateFuncs()).Option("missingkey=error").Parse(body)
 	s.Require().NoError(err)
 	var out strings.Builder
 	s.Require().NoError(tmpl.Execute(&out, verdict))
