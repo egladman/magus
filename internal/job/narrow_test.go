@@ -310,18 +310,18 @@ func (s *releaseUnderPatternSuite) TestAPatternAloneLeavesTheFileHeldByNothing()
 	s.True(job.FileRelease(row, "magusfile.buzz") >= 0, "a record naming the glob does not take the file back")
 	s.Empty(job.ClaimsOnFile(row, "magusfile.buzz"))
 	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `magusfile.buzz#<declaration>`"},
-		job.ReleasedUnderPattern(row))
+		ReleasedUnderPattern(row))
 }
 
 func (s *releaseUnderPatternSuite) TestAKeptClaimIsNamedAsTheHold() {
 	row := s.applied("**/*.buzz", "magusfile.buzz#project.targets.test")
 
 	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it: only its claims do (project.targets.test)"},
-		job.ReleasedUnderPattern(row))
+		ReleasedUnderPattern(row))
 }
 
 func (s *releaseUnderPatternSuite) TestAReleasedFileNoPatternNamesIsNotNoted() {
-	s.Empty(job.ReleasedUnderPattern(job.Job{Paths: job.Paths{Write: []string{"a.go"}}, Releases: []job.Release{{Path: "b.go"}}}))
+	s.Empty(ReleasedUnderPattern(job.Job{Paths: job.Paths{Write: []string{"a.go"}}, Releases: []job.Release{{Path: "b.go"}}}))
 }
 
 // A fork refused over a magusfile another live job holds files one release request per
@@ -477,7 +477,7 @@ func (s *exitEvidenceSuite) TestOwedCheckForAnyReasonButNoSeatIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, Owed: "not this row's target"}
-	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat}}
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
@@ -493,7 +493,7 @@ func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
 		s.Require().NoError(os.WriteFile(full, []byte("package x\n"), 0o644))
 	}
 	result := passingResult()
-	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat}
 	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
 	exit := func(args ...string) (job.Job, error) {
 		resolve := func(_ context.Context, ref string) (job.CapturedRun, error) {

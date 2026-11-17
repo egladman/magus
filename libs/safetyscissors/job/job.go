@@ -46,18 +46,18 @@ const (
 	StateNoReturn State = "no_return"
 )
 
-// States is the closed set, in lifecycle order. The vocabulary lives beside the
+// states is the closed set, in lifecycle order. The vocabulary lives beside the
 // constants because four readers quote it: the job decoder, the put merge, the
 // published schema, and the error each of them raises. A closed set that drifts
 // rejects a client for a value the schema told it to send.
-func States() []State {
+func states() []State {
 	return []State{StateDeclared, StateRunning, StateExited, StatePass, StateFail, StateNoReturn}
 }
 
-// ValidState reports whether s is one of [States]. An empty state is NOT.
+// ValidState reports whether s is one of the job states. An empty state is NOT.
 // A job that has not said where it stands carries none, and the callers that
 // allow that test for it themselves.
-func ValidState(s State) bool { return slices.Contains(States(), s) }
+func ValidState(s State) bool { return slices.Contains(states(), s) }
 
 // LeaseCheck is the one check a lease runs, in the parts the output store records a run
 // by. The parts are the target, the project it runs in, and whatever
@@ -68,22 +68,22 @@ func ValidState(s State) bool { return slices.Contains(States(), s) }
 // with a stored run, and a parser that reads positions binds `run -o json test .` to a
 // target named json. Rendering one as a command is the runner's business.
 type LeaseCheck struct {
-	// Target is the magus target the check runs, without the `magus run` in front of it.
+	// Target is the target the check runs, without the runner's run command in front of it.
 	// Empty when Script names the check instead.
 	Target string `json:"target"             yaml:"target" schema:"target"`
-	// Script is a Buzz script the check runs with `magus buzz --record` in place of a
+	// Script is a Buzz script the check runs, recorded, in place of a
 	// target, for a fact no target checks: a passing recorded run of it is the evidence. A
 	// check names a target or a script, never both.
 	Script string `json:"script,omitempty"   yaml:"script,omitempty"`
 	// Project is the project the target runs in, "." when the job names none.
 	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
-	// Args are forwarded to the tool after `--`, never to magus.
+	// Args are forwarded to the tool after `--`, never to the runner.
 	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
 	// NoDefaultCharms runs the check with --no-default-charms, so only a run made without
 	// the workspace's default_charms satisfies it: the charmless `generate` that compares
 	// against HEAD, in a workspace whose default is rw.
 	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
-	// Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and
+	// Test runs Script's tests instead of its main: passing tests and
 	// a passing main are different facts, so each is satisfied only by its own run. A
 	// script check alone carries it.
 	Test bool `json:"test,omitzero" yaml:"test,omitempty"`
@@ -95,7 +95,7 @@ const PrimaryGoalID = "check"
 
 // Goal is one machine-verifiable condition a job must satisfy before it can pass.
 // Criteria remains the human-readable objective; goals bind that objective to recorded
-// Magus output rather than a holder's boolean attestation. The output must have been
+// output rather than a holder's boolean attestation. The output must have been
 // captured after the job was declared; target execution limits remain the target's run
 // policy rather than a second goal timeout.
 type Goal struct {
@@ -136,7 +136,7 @@ type Goal struct {
 // meant before goals existed; a goal that named a kind and no expectation takes that
 // kind's natural one.
 //
-// Called at the WRITE boundary (Declaration.Apply, job.PutMerge), never on read. That is the whole reason the enums have no empty member.
+// Called at the WRITE boundary (Declaration.Apply, and the merge a caller makes of a [Put]), never on read. That is the whole reason the enums have no empty member.
 func (g Goal) Resolve() Goal {
 	if g.Kind == "" {
 		g.Kind = GoalKindCheck
@@ -150,8 +150,8 @@ func (g Goal) Resolve() Goal {
 // GoalKind names WHAT a goal examines, because not every condition a job can be held to is
 // a target run.
 //
-// Each kind names an evidence source magus already holds: the output store, the VCS diff,
-// the knowledge graph. A condition magus can observe no evidence for is not declarable
+// Each kind names an evidence source the grader already holds: the output store, the VCS
+// diff, the knowledge graph. A condition the grader can observe no evidence for is not declarable
 // here on purpose, and there is deliberately no escape hatch for one. A goal accepting an
 // unrecorded exit status would be the easiest kind to satisfy falsely, which is the
 // attestation the whole mechanism replaces; declare a target and use GoalKindCheck.
@@ -159,7 +159,7 @@ type GoalKind string
 
 const (
 	// GoalKindCheck examines a recorded run of the goal's check. It is a return code, and
-	// what raises it above one is that magus RECORDED it: the output store holds the
+	// what raises it above one is that the grader RECORDED it: the output store holds the
 	// target, the project, the timestamp and the failure bit, so the run can be reopened
 	// and attributed to this job rather than taken on the holder's word.
 	GoalKindCheck GoalKind = "check"
@@ -172,10 +172,10 @@ const (
 	GoalKindSymbol GoalKind = "symbol"
 )
 
-// GoalKinds is the closed set, for the same reason States is one: the validator, the
+// goalKinds is the closed set, for the same reason states is one: the validator, the
 // published schema and the error each of them raises all quote it, and a vocabulary that
 // drifts rejects a client for a value the schema told it to send.
-func GoalKinds() []GoalKind {
+func goalKinds() []GoalKind {
 	return []GoalKind{GoalKindCheck, GoalKindPaths, GoalKindSymbol}
 }
 
@@ -209,8 +209,8 @@ const (
 	ExpectSignature GoalExpect = "signature"
 )
 
-// GoalExpects is the closed set. See GoalKinds.
-func GoalExpects() []GoalExpect {
+// goalExpects is the closed set. See goalKinds.
+func goalExpects() []GoalExpect {
 	return []GoalExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced, ExpectSignature}
 }
 
@@ -318,7 +318,7 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 		positional = append(positional, w)
 		if strings.HasPrefix(w, "-") {
 			return LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries the flag %s,"+
-				" flags belong after `--`, where they reach the tool rather than magus", s, w)}
+				" flags belong after `--`, where they reach the tool rather than the runner", s, w)}
 		}
 	}
 	words = positional
@@ -418,7 +418,7 @@ func ValidWeight(w float64) bool { return w > 0 && w <= 1 }
 const MaxIDLen = 128
 
 // ValidID reports whether id may be stamped as a lease and checked out as a branch:
-// see [ValidateID].
+// see validateID.
 //
 // The narrowness is a security property: a lease id is EXEMPT from the redaction
 // internal/trail applies to every other event field, so every channel that stamps one
@@ -426,19 +426,19 @@ const MaxIDLen = 128
 // the trail both read the id.
 func ValidID(id string) bool { return idRule(id) == "" }
 
-// ValidateID refuses an id that may not name a job, as an [*IDError] naming the rule it
+// validateID refuses an id that may not name a job, as an [*IDError] naming the rule it
 // breaks. The id is also the branch a checkout of the job is made on, so it is held to
 // what every VCS accepts as one: lowercase letters, digits, '-' and '.', with '/' only
 // between segments, no segment empty or starting with '.' or '-', never ':' or '..', at
 // most [MaxIDLen] characters.
-func ValidateID(id string) error {
+func validateID(id string) error {
 	if rule := idRule(id); rule != "" {
 		return &IDError{ID: id, Rule: rule}
 	}
 	return nil
 }
 
-// IDError is an id [ValidateID] refuses, and the rule it breaks.
+// IDError is an id validateID refuses, and the rule it breaks.
 type IDError struct {
 	ID   string
 	Rule string
@@ -477,10 +477,11 @@ func idRule(id string) string {
 }
 
 // APIVersion is the job shape this module writes and the only one a
-// client may send. An added field does not move it, since [Schema].Unknown
-// carries unknown members through a rewrite. It is untyped so that a
-// caller's own version type, as magus's types.APIVersion, takes it as it is.
-const APIVersion = apigroup.Job
+// client may send, and the apiVersion of every line of jobs.jsonl and
+// attempts.jsonl (ADR 0044): a line stamped with another is refused. An added
+// field does not move it, since [Schema].Unknown carries unknown members
+// through a rewrite.
+const APIVersion apiversion.APIVersion = apigroup.Job
 
 // ResultAPIVersion is the result shape a holder files, the only one
 // the decoder accepts.
@@ -510,7 +511,7 @@ const (
 )
 
 // LeaseSource is which channel answered the lease a call acts under. Every source but
-// [LeaseSourceEnv] is a record magus wrote or a flag the caller's wiring passed; the
+// [LeaseSourceEnv] is a record the caller wrote or a flag the caller's wiring passed; the
 // environment is the process's claim about itself, so it answers only when nothing else
 // does.
 type LeaseSource string
@@ -519,18 +520,18 @@ const (
 	// LeaseSourceFlag is an explicit --lease on the call.
 	LeaseSourceFlag LeaseSource = "flag"
 	// LeaseSourceAgent is the job the guard recorded for the caller its host named: a
-	// subagent a spawn attributed or that ran `magus job exec`, or a session that ran it.
+	// subagent a spawn attributed or that took the job, or a session that took it.
 	// Named for the subagent case it began with; a session with no agent id is recorded
 	// the same way.
 	LeaseSourceAgent LeaseSource = "agent"
 	// LeaseSourceMarker is the checkout's record, which the guard writes when a caller
-	// whose host names no session or agent runs `magus job exec`, and only such a caller
+	// whose host names no session or agent takes the job, and only such a caller
 	// reads.
 	LeaseSourceMarker LeaseSource = "marker"
 	// LeaseSourceContested is a record answering while a lower source named a different
 	// lease. The record's lease is the one graded; the other is ignored.
 	LeaseSourceContested LeaseSource = "contested"
-	// LeaseSourceEnv is magus.lease in the process's BAGGAGE.
+	// LeaseSourceEnv is the lease member of the process's BAGGAGE.
 	LeaseSourceEnv LeaseSource = "env"
 )
 
@@ -551,7 +552,7 @@ type Result struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// VerificationEvidence links a goal to captured Magus output, or says why its
+// VerificationEvidence links a goal to captured output, or says why its
 // run is owed instead. Owed names the reason, and the integration that merges
 // the job's branch runs the goal.
 type VerificationEvidence struct {
@@ -574,15 +575,6 @@ type ResultValidation struct {
 	Unrun string `json:"unrun,omitempty" yaml:"unrun,omitempty"`
 }
 
-// OwedNoSeat is the one reason a worker files a check as owed: the machine
-// would not seat it, its build budget full or its memory short, and a worker
-// waits on neither.
-const OwedNoSeat = "no seat"
-
-// OwedRemoteCI is the reason a check is owed when the workspace declares a
-// remote CI (ci.remote_gate) that runs it on the pull request.
-const OwedRemoteCI = "remote CI runs it"
-
 // Status reports the result of verifying a job.
 type Status struct {
 	Job             string               `json:"job" yaml:"job"`
@@ -592,7 +584,7 @@ type Status struct {
 	Command         string               `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates           []VerificationStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// Notes are what the grade passed over and says so rather than dropping silently, such
-	// as a changed path magus maintains itself outside the write paths. They never decide
+	// as a changed path the caller maintains itself outside the write paths. They never decide
 	// Verified.
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
 	// StaleIndexes are the projects whose symbol index was older than their sources when the
@@ -643,8 +635,8 @@ type VerificationStatus struct {
 	// Scope is the `--` args the run behind OutputRef narrowed its go test with, "" when it
 	// ran every package and test its check names.
 	Scope string `json:"scope,omitempty" yaml:"scope,omitempty"`
-	// Owed is why the goal's run is owed to the integration rather than cited (see
-	// [OwedNoSeat]), "" for a goal graded on a run.
+	// Owed is the caller's reason the goal's run is owed to the integration rather than
+	// cited, "" for a goal graded on a run.
 	Owed       string   `json:"owed,omitempty" yaml:"owed,omitempty"`
 	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
 }
@@ -705,9 +697,8 @@ type Paths struct {
 //
 // FACTS ONLY, NEVER ENFORCEMENT. Paths.Write and Paths.Deny are intent, not a
 // boundary this store checks. The agent guard reads them to grade a write.
-// The field set mirrors the magus-multi-agent skill's ledger table.
 type Job struct {
-	// Requires names the features a magus must implement to write
+	// Requires names the features a build must implement to write
 	// this job. Store-computed; the record keeps it as an annotation.
 	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
 	// Unknown names the record members this build does not declare,
@@ -725,9 +716,9 @@ type Job struct {
 	// the worker. Nil is ordinary work, and nothing graded reads it.
 	Agent *Agent `json:"agent,omitzero" yaml:"agent,omitempty"`
 	// Checkpoint is the working state this lease was handed, in the form
-	// `magus vcs checkpoint -o name` prints: the revision, plus a dirty-patch digest
+	// the caller's checkpoint token: the revision, plus a dirty-patch digest
 	// when the tree was not clean. A string, the form an orchestrator has at
-	// spawn time and `magus graph diff --rev` takes.
+	// spawn time.
 	Checkpoint string `json:"checkpoint,omitempty" yaml:"checkpoint,omitempty"`
 	// Paths are the declared write and read boundary. See [Paths].
 	Paths Paths `json:"paths,omitzero" yaml:"paths,omitempty"`
@@ -748,7 +739,7 @@ type Job struct {
 	// model tiers when the job was written.
 	ModelTier *tier.Assignment `json:"model_tier,omitzero" yaml:"model_tier,omitempty"`
 	// BriefFormat is the format a brief to this job's worker takes, ahead of
-	// the workspace's agents.brief_format. Empty defers to magus.yaml.
+	// the workspace's own default. Empty defers to it.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
 	// Delivery is how the person chose to deliver this job's work, one of
 	// Deliveries; empty means nobody chose. Workspace policy judges it.
@@ -773,7 +764,7 @@ type Job struct {
 	// taken against an earlier Generation reads as stale; zero is unknown.
 	Generation int `json:"generation" yaml:"generation,omitempty"`
 	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does.
-	// Zero is no cap. Checked only when the job is forked again; magus never
+	// Zero is no cap. Checked only when the job is forked again; the store never
 	// retries a job itself.
 	MaxAttempts int `json:"max_attempts" yaml:"max_attempts,omitempty"`
 	// MaxClaims caps how many proved claims one attempt takes, chosen by whoever declares the
@@ -791,14 +782,14 @@ type Job struct {
 	// budget.Claim. In (0,1]; zero reads as DefaultWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
-	// holder already has finishes; exec and the guard refuse its next magus run.
+	// holder already has finishes; the caller refuses its next run.
 	Paused int64 `json:"paused,omitzero" yaml:"paused,omitempty"`
 	// PausedBy is who paused the job, PauseReason why, and PausedUntil the unix second the
 	// pause lapses, zero for none (see [Job.PausedAt]). Set with Paused and cleared with it.
 	PausedBy    Origin `json:"paused_by,omitzero"    yaml:"paused_by,omitempty"`
 	PauseReason string `json:"pause_reason,omitempty" yaml:"pause_reason,omitempty"`
 	PausedUntil int64  `json:"paused_until,omitzero" yaml:"paused_until,omitempty"`
-	// Rejection is the last `magus job wait` that refused the live try,
+	// Rejection is the last grade that refused the live try,
 	// which leaves State where it was. Store-computed. The tries are
 	// [Attempt] records beside the job.
 	Rejection *Rejection `json:"rejection,omitzero" yaml:"rejection,omitempty"`
@@ -808,7 +799,7 @@ type Job struct {
 	// the row. Nothing in this module writes or reads it: [Declaration.Apply] leaves it as
 	// it was, so a store that keeps it renders it from Check on every write.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
-	// Goals are the job's definition of done that magus grades: a check that passed, paths
+	// Goals are the job's definition of done that the store grades: a check that passed, paths
 	// or symbols this job changed, added or removed. Check is graded as one more goal. Named
 	// goals rather than gates so the word never collides with the CI gate.
 	Goals []Goal `json:"goals,omitempty" yaml:"goals,omitempty"`
@@ -825,7 +816,7 @@ type Job struct {
 	// next agent needs to tell whether it inherited the file the releaser left.
 	Releases []Release `json:"releases,omitempty" yaml:"releases,omitempty"`
 	// Unattributed are paths this lease owns that somebody outside it wrote,
-	// newest last, at most MaxUnattributedWrites and one entry per path. The
+	// newest last, at most maxUnattributedWrites and one entry per path. The
 	// AGENT GUARD records them. Store-computed.
 	Unattributed []UnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
 	// Entries are the acknowledged writes into this job's write paths by
@@ -846,7 +837,7 @@ type Job struct {
 	// seconds; zero on a job never validated. Store-stamped like Created.
 	Validated int64 `json:"validated" yaml:"validated,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
-	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
+	// on, in the same checkpoint form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather
 	// than one overwritten in place, because a single value could never disagree with
 	// itself and the disagreement is the fact worth recording.
@@ -871,7 +862,7 @@ type Job struct {
 	// HolderStopped is unix seconds, set when the holder's turn ended
 	// with the job open, and cleared by its next hook call. It ends nothing.
 	HolderStopped int64 `json:"holder_stopped" yaml:"holder_stopped,omitempty"`
-	// CheckoutRoot is the absolute root of the checkout `magus job exec` took this job in,
+	// CheckoutRoot is the absolute root of the checkout the holder took this job in,
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
 	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
@@ -890,7 +881,7 @@ type Job struct {
 	Updated int64 `json:"updated" yaml:"updated"`
 	// Deadline is unix seconds past which the guard denies this lease's writes,
 	// zero for no bound. A fork's timeout stamps it. A taken job past it ends
-	// as no_return on the next read; `magus job prune` ends an untaken one.
+	// as no_return on the next read; a prune ends an untaken one.
 	Deadline int64 `json:"deadline" yaml:"deadline,omitempty"`
 	// Attempt is the run record behind the live try's result, resolved
 	// in the holder's OWN checkout, so a waiter in another checkout
@@ -903,12 +894,12 @@ type Job struct {
 	// invocation id lands at submit, the cost and outcome when the run ends.
 	LastRun *Run `json:"last_run,omitzero" yaml:"last_run,omitempty"`
 	// Integration is the latest grade of this job's check goals in another tree, nil until
-	// `magus job wait --integration` records one. Store-computed like Result, and kept
+	// a grade in an integration records one. Store-computed like Result, and kept
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
 	Integration *Integration `json:"integration,omitzero" yaml:"integration,omitempty"`
 	// WaiterEvidence names the goals whose passing run came from the waiter's checkout
-	// rather than the holder's, nil unless `magus job wait --evidence` took some. It sits
+	// rather than the holder's, nil unless the waiter took some. It sits
 	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
 	// failed where the work was written and passed once re-run here is two facts. Each
 	// Gates entry is one goal, the ref taken for it and its verdict; Checkout and At say
@@ -920,8 +911,8 @@ type Job struct {
 	WaiterEvidence *Integration `json:"waiter_evidence,omitzero" yaml:"waiter_evidence,omitempty"`
 }
 
-// Worktree is the checkout `magus job fork --checkout` made or adopted for one job: the
-// job's holder takes it there and nowhere else. One the fork made (Made) magus removes once
+// Worktree is the checkout a fork made or adopted for one job: the job's holder takes
+// it there and nowhere else. One the fork made (Made) the caller removes once
 // the job ends unless removing it would lose work.
 type Worktree struct {
 	// Root is the checkout's top level, absolute.
@@ -939,12 +930,12 @@ type Worktree struct {
 	// BinaryDigest pins Binary's bytes ("sha256:<hex>"), "" for none, so a reader can
 	// refuse a Binary that no longer hashes to it.
 	BinaryDigest string `json:"binary_digest,omitempty" yaml:"binary_digest,omitempty"`
-	// Removed is unix seconds when magus removed it, zero while it stands.
+	// Removed is unix seconds when the caller removed it, zero while it stands.
 	Removed int64 `json:"removed" yaml:"removed,omitempty"`
-	// Kept is why magus left it standing after the job ended, "" until then or once it is
+	// Kept is why the caller left it standing after the job ended, "" until then or once it is
 	// removed.
 	Kept string `json:"kept,omitempty" yaml:"kept,omitempty"`
-	// Made is true when the job's fork created the checkout, the one kind magus
+	// Made is true when the job's fork created the checkout, the one kind the caller
 	// removes once the job ends. A checkout the fork adopted, or one recorded
 	// before Made existed, reads false and stands until its maker removes it.
 	Made bool `json:"made" yaml:"made,omitempty"`
@@ -965,7 +956,7 @@ type Integration struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// Rejection is a `magus job wait` that refused the live attempt, At unix seconds.
+// Rejection is a grade that refused the live attempt, At unix seconds.
 type Rejection struct {
 	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
@@ -987,7 +978,7 @@ type Denial struct {
 // and nothing the store computes.
 //
 // It is a DECLARATION and not a merge: an omitted field is cleared rather than
-// kept. magus\workspace().putJob does the opposite (see job.PutMerge).
+// kept. A [Put] does the opposite: it merges.
 //
 // JSON only, so no yaml tags. The members it does not declare are kept in
 // Schema.Unknown by its own MarshalJSON and UnmarshalJSON, which plain encoding/json
@@ -1003,8 +994,8 @@ type Declaration struct {
 	Parent string `json:"parent,omitempty" schema:"leaseid"`
 	// Agent is the agent section; nil is ordinary work. See [Job.Agent].
 	Agent *Agent `json:"agent,omitzero"`
-	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
-	// name` prints it.
+	// Checkpoint is the working state this lease starts from, as the caller's
+	// checkpoint token. See [Job.Checkpoint].
 	Checkpoint string `json:"checkpoint,omitempty"`
 	// Paths are what this lease may write and read. See [Paths].
 	Paths Paths `json:"paths,omitzero"`
@@ -1019,7 +1010,7 @@ type Declaration struct {
 	// explicit 0 is out of range. See [Job.Weight].
 	Weight *float64 `json:"weight,omitzero"`
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
-	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
+	// the workspace's own default. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
 	// Delivery and ParentHead: see [Job.Delivery].
 	Delivery   string `json:"delivery,omitempty"`
@@ -1041,7 +1032,7 @@ type Declaration struct {
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitzero"`
-	// Goals are what done means, graded by `magus job wait`. See [Job.Goals].
+	// Goals are what done means, graded by [Store.Grade]. See [Job.Goals].
 	Goals []Goal `json:"goals,omitempty"`
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
 	// it writes the job, so a declaration carries a length and never an
@@ -1144,7 +1135,7 @@ func (r UnmergedReport) Lines() []string {
 // `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
 // [ParseClaimEvidence].
 //
-// Callers, given instead of Path and Because, names a symbol: `magus job apply` expands
+// Callers, given instead of Path and Because, names a symbol: the caller expands
 // the request into one per declaration holding an occurrence of it, path
 // `<file>#<declaration>` because `refs:<symbol>`, and the store proves each of those as
 // it would one written by hand.
@@ -1302,7 +1293,7 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 	}
 	if d.BriefFormat != "" && !d.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", d.BriefFormat),
-			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(d.BriefFormat.Values(), ", ")))
+			fmt.Sprintf("use one of %s, or leave it out for the workspace's default", strings.Join(d.BriefFormat.Values(), ", ")))
 	}
 	if d.Delivery != "" && !slices.Contains(Deliveries(), d.Delivery) {
 		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", d.Delivery),
@@ -1554,7 +1545,7 @@ func (g Goal) faults(field string) []Fault {
 	g = g.Resolve()
 	switch accepted, known := goalAccepts(g.Kind); {
 	case !known:
-		bad("kind", fmt.Sprintf("goal %q names kind %q", g.ID, g.Kind), "use one of "+quoteJoin(GoalKinds(), ", "))
+		bad("kind", fmt.Sprintf("goal %q names kind %q", g.ID, g.Kind), "use one of "+quoteJoin(goalKinds(), ", "))
 	case !slices.Contains(accepted, g.Expect):
 		bad("expect", fmt.Sprintf("goal %q is a %s goal expecting %q", g.ID, g.Kind, g.Expect),
 			fmt.Sprintf("a %s goal expects %s", g.Kind, quoteJoin(accepted, " or ")))
@@ -1668,8 +1659,8 @@ func (j Job) Overdue(now int64) bool {
 }
 
 // EndReasonSessionEnded opens the end_reason of a job the store ended because
-// the agent session holding it ended. It is the one ending `magus job exec`
-// takes back. A host may resume a session it reported over, and the resumed
+// the agent session holding it ended. It is the one ending a take of the job
+// reverses. A host may resume a session it reported over, and the resumed
 // session's next exec of the job rebinds it.
 const EndReasonSessionEnded = "its holder's session ended"
 
@@ -1768,10 +1759,10 @@ func Deliveries() []string {
 }
 
 // StateVocabulary is the closed set of job states, as an error quotes it. Shared by
-// Declaration.Validate and job.PutMerge, the two places a caller-supplied state is
-// checked against the set.
+// Declaration.Validate and the merge a caller makes of a [Put], the two places a
+// caller-supplied state is checked against the set.
 func StateVocabulary() string {
-	states := States()
+	states := states()
 	names := make([]string, len(states))
 	for i, s := range states {
 		names[i] = string(s)
@@ -1912,8 +1903,8 @@ type Release struct {
 	// Revoked is a path taken from a job a holder had taken, by a writer other than that
 	// holder: the orchestrator revoking it rather than the worker giving it up.
 	Revoked bool `json:"revoked" yaml:"revoked,omitempty"`
-	// TakenBy is the job magus granted the path to because this job's holder
-	// was dead, and DeadBecause why magus judged it dead. Both are empty on any
+	// TakenBy is the job the store granted the path to because this job's holder
+	// was dead, and DeadBecause why the caller judged it dead. Both are empty on any
 	// other release.
 	TakenBy     string `json:"taken_by,omitempty"     yaml:"taken_by,omitempty"`
 	DeadBecause string `json:"dead_because,omitempty" yaml:"dead_because,omitempty"`
@@ -1924,7 +1915,7 @@ type Release struct {
 
 // PausedAt reports whether a person's pause holds the job at now, unix seconds.
 // Past PausedUntil it has lapsed: the holder runs again, and the sweep and
-// `magus job prune` may end the job.
+// a prune may end the job.
 func (j Job) PausedAt(now int64) bool {
 	return j.Paused != 0 && (j.PausedUntil == 0 || now < j.PausedUntil)
 }
@@ -1933,12 +1924,12 @@ func (j Job) PausedAt(now int64) bool {
 // the content that writer left behind.
 //
 // The inverse of Release: a release is a worker saying "I am done with this, here is
-// what I left", and this is magus saying "somebody who is not you changed this, here is
+// what I left", and this is the caller saying "somebody who is not you changed this, here is
 // what is there now", so a lease that read the file earlier can find out by ASKING.
 //
-// UNATTRIBUTED is the honest word: magus knows only that the writer named no live lease,
+// UNATTRIBUTED is the honest word: the caller knows only that the writer named no live lease,
 // so a person editing in their own checkout and an agent that forgot to export its id are
-// indistinguishable here. Naming a human would be a claim magus cannot support.
+// indistinguishable here. Naming a human would be a claim nobody here can support.
 type UnattributedWrite struct {
 	Path string `json:"path"   yaml:"path"`
 	// Digest is the content AFTER the write, on the same three-marker vocabulary as
@@ -2047,15 +2038,15 @@ type List struct {
 	// has not passed, each naming the first such dependency. Derived with
 	// Overlaps.
 	Blocked []Block `json:"blocked,omitempty" yaml:"blocked,omitempty"`
-	// ReadOnly are the jobs requiring a feature this magus lacks. It lists and
+	// ReadOnly are the jobs requiring a feature this build lacks. It lists and
 	// honors them and refuses every write to them.
 	ReadOnly []ReadOnly `json:"read_only,omitempty" yaml:"read_only,omitempty"`
-	// Unmerged is filled by `magus ls jobs` alone. It reads the version
-	// control per job, and every other door lists on a hot path.
+	// Unmerged is filled only by a listing that asks for it. It reads the
+	// version control per job, and every other door lists on a hot path.
 	Unmerged *UnmergedReport `json:"unmerged,omitzero" yaml:"unmerged,omitempty"`
 }
 
-// ReadOnly names a job this magus will not write and the features it lacks.
+// ReadOnly names a job this build will not write and the features it lacks.
 type ReadOnly struct {
 	Job   string   `json:"job"   yaml:"job"`
 	Lacks []string `json:"lacks" yaml:"lacks"`
@@ -2494,19 +2485,19 @@ func (j Job) HardPaths() []string {
 	return slices.DeleteFunc(slices.Clone(j.Paths.Write), func(p string) bool { return slices.Contains(j.Paths.Soft, p) })
 }
 
-// Features are the Requires entries this build implements, sorted. A
+// features are the Requires entries this build implements, sorted. A
 // job requiring another is read and listed, and only writing it is
 // refused.
-func Features() []string {
+func features() []string {
 	return []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}
 }
 
-// Unmet returns the entries of Requires that [Features] does not name,
+// Unmet returns the entries of Requires that this build does not implement,
 // in job order, or nil when this build can write the job.
 func (j Job) Unmet() []string {
 	var out []string
 	for _, r := range j.Requires {
-		if !slices.Contains(Features(), r) {
+		if !slices.Contains(features(), r) {
 			out = append(out, r)
 		}
 	}
@@ -2610,33 +2601,6 @@ func cloneIntegration(g *Integration) *Integration {
 	return &c
 }
 
-// ParsePauseUntil reads a pause's --until as the unix second it lapses: a duration from now
-// or an RFC3339 instant. Empty is zero, a pause with no bound.
-func ParsePauseUntil(raw string, now time.Time) (int64, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return 0, nil
-	}
-	if d, err := time.ParseDuration(raw); err == nil {
-		if d <= 0 {
-			return 0, &PauseUntilError{Until: raw, Reason: "is not ahead of now, as a positive duration (2h) or a later instant is"}
-		}
-		return now.Add(d).Unix(), nil
-	}
-	if at, err := time.Parse(time.RFC3339, raw); err == nil {
-		return at.Unix(), nil
-	}
-	return 0, &PauseUntilError{Until: raw, Reason: "is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z"}
-}
-
-// PauseUntilError is a pause bound [ParsePauseUntil] refuses, and why.
-type PauseUntilError struct {
-	Until  string
-	Reason string
-}
-
-func (e *PauseUntilError) Error() string { return fmt.Sprintf("--until %q %s", e.Until, e.Reason) }
-
 // HoldsNoBuildSeat reports whether the worker for u can never take a build
 // seat. It writes nothing and declares no check, so it runs no target.
 func (j Job) HoldsNoBuildSeat() bool {
@@ -2724,8 +2688,7 @@ func (d *Declaration) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// isGlobMeta reports whether s holds a glob metacharacter. It copies magus's
-// types.IsGlobMeta, which the module may not import.
+// isGlobMeta reports whether s holds a glob metacharacter.
 func isGlobMeta(s string) bool { return strings.ContainsAny(s, "*?[{") }
 
 // orList joins codes for a sentence: "a", "a or b", "a, b or c".

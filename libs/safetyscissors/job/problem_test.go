@@ -49,6 +49,6 @@ func (s *FaultSuite) TestOrListJoinsForASentence() {
 }
 
 func (s *FaultSuite) TestARowRequiringAFeatureThisBuildLacksIsUnmet() {
-	s.Nil(Job{Requires: Features()}.Unmet())
+	s.Nil(Job{Requires: features()}.Unmet())
 	s.Equal([]string{"later"}, Job{Requires: []string{"later"}}.Unmet())
 }

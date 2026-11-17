@@ -169,8 +169,8 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	if err := codec.Unmarshal(text, &flat); err != nil {
 		return nil, fmt.Errorf("reading holder: %w", err)
 	}
-	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(job.APIVersion) < 0) {
-		return nil, types.RefuseVersion(job.APIVersion, flat.APIVersion, "job: row "+row.ID, job.StaleStoreFix(storePathToken))
+	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(types.APIVersion(job.APIVersion)) < 0) {
+		return nil, types.RefuseVersion(types.APIVersion(job.APIVersion), flat.APIVersion, "job: row "+row.ID, staleStoreFix(storePathToken))
 	}
 	holder := flat
 	if holder.Holder == "server" {
@@ -340,4 +340,10 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 		return nil, fmt.Errorf("writing the agent section: %w", err)
 	}
 	return e, nil
+}
+
+// staleStoreFix is how a person gets past the job store at path, which an older writer
+// wrote. A newer writer's lines are kept whole.
+func staleStoreFix(path string) string {
+	return fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", path)
 }

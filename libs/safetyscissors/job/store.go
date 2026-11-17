@@ -243,16 +243,10 @@ func Unopened(err error) *Store {
 	return &Store{storeConfig: storeConfig{err: err, creds: newWireEnum[CredentialKind]()}}
 }
 
-// View is a Store over s's file with every seam s has and a mutex of its own; the file
-// lock still serializes it against s and every other writer.
-func (s *Store) View() *Store {
-	return &Store{storeConfig: s.storeConfig}
-}
-
 // As returns a Store over s's file that writes as a, for a door serving a caller other
 // than this process. The view takes its own mutex.
 func (s *Store) As(a Actor) *Store {
-	v := s.View()
+	v := &Store{storeConfig: s.storeConfig}
 	v.pinned = &a
 	return v
 }
@@ -292,6 +286,12 @@ func (s *Store) notice(n Notice) {
 	if s.notices != nil {
 		s.notices(n)
 	}
+}
+
+// dropped is the [codec.JSONL] OnDrop of every log beside the rows: a rewrite that dropped
+// a line no writer finished is reported as a notice rather than refused.
+func (s *Store) dropped(_ context.Context, d codec.Dropped) {
+	s.notice(Notice{Path: d.Path, Text: fmt.Sprintf("line %d was one no writer finished; the rewrite dropped it", d.Line)})
 }
 
 // wrap is err through the caller's [WithErrorWrap].
@@ -456,9 +456,9 @@ func (s *Store) Update(ctx context.Context, id string, apply func(*Job)) (Job, e
 	})
 }
 
-// MaxUnattributedWrites bounds how many outside-written paths one row keeps. The newest are
+// maxUnattributedWrites bounds how many outside-written paths one row keeps. The newest are
 // kept, since a lease asking what moved is asking about the tree it faces now.
-const MaxUnattributedWrites = 32
+const maxUnattributedWrites = 32
 
 // errNoSuchJob is how an observation's apply declines a row that is not there without
 // inventing a lease nobody declared.
@@ -487,8 +487,8 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 			}
 		}
 		next = append(next, UnattributedWrite{Path: path, Digest: s.fileDigest(ctx, path), At: now})
-		if len(next) > MaxUnattributedWrites {
-			next = next[len(next)-MaxUnattributedWrites:]
+		if len(next) > maxUnattributedWrites {
+			next = next[len(next)-maxUnattributedWrites:]
 		}
 		cur.Unattributed = next
 		return nil
@@ -564,20 +564,6 @@ func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []
 	return nil
 }
 
-// EntryAdvice is what an entry is answered with: what the entrant may now do, and once.
-func EntryAdvice(row Job, rel string) string {
-	return fmt.Sprintf("entered %s on %s (%d of %d entries): your next write to it passes once its holder has been idle for a minute, and is recorded on the job",
-		rel, row.ID, len(row.Entries), MaxJobEntries)
-}
-
-// Entries is the entries recorded on job id in rows, nil when rows holds no such job.
-func Entries(rows []Job, id string) []Entry {
-	if i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == id }); i >= 0 {
-		return rows[i].Entries
-	}
-	return nil
-}
-
 // OpenEntry is the first entry on row that covers rel and has not been consumed.
 func OpenEntry(row Job, rel string) (Entry, bool) {
 	for _, e := range row.Entries {
@@ -613,13 +599,13 @@ func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
 // spelling.
 func boundaryFields() []string { return []string{"paths.write", "paths.deny", "paths.read"} }
 
-// WidensInPlace reports a declaration that changes a live row's boundaries and nothing
+// widensInPlace reports a declaration that changes a live row's boundaries and nothing
 // else it declares, while resetting a state its holder already moved past declared: a
 // re-fork that only moves paths. Such a write keeps the stored state, since resetting it
 // would hand the holder's job out again. A deadline may move with it. A re-fork that
 // changes no boundary still resets the state, which is how a rejected job is handed out
 // again.
-func WidensInPlace(prev, next Job) bool {
+func widensInPlace(prev, next Job) bool {
 	if !prev.State.Live() || prev.State == StateDeclared || next.State != StateDeclared {
 		return false
 	}
@@ -1076,8 +1062,8 @@ func (s *Store) decodeRows(texts []codec.Line, f *Rows, log *jobsLog) error {
 
 // refuseUnmetFeatures refuses a file requiring a feature this build lacks.
 func (s *Store) refuseUnmetFeatures(f Rows) error {
-	known := make([]apiversion.Feature, len(Features()))
-	for i, k := range Features() {
+	known := make([]apiversion.Feature, len(features()))
+	for i, k := range features() {
 		known[i] = apiversion.Feature(k)
 	}
 	lacks := f.Metadata.Unmet(recordGroup, known)
@@ -1336,20 +1322,6 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 // reader's side.
 const maxDigestBytes = 32 << 20
 
-// DigestSpans is the digest of the lines of body that spans name, 1-based and inclusive,
-// in order, for a [WithDeclarationDigest] that places a declaration's lines.
-func DigestSpans(body []byte, spans [][2]int) string {
-	lines := strings.SplitAfter(string(body), "\n")
-	var spanned strings.Builder
-	for _, r := range spans {
-		for n := r[0]; n <= r[1] && n-1 < len(lines); n++ {
-			spanned.WriteString(lines[n-1])
-		}
-	}
-	sum := sha256.Sum256([]byte(spanned.String()))
-	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
 // attemptsLog is attempts.jsonl beside the rows: an attempt lives and dies with the row
 // it is a try of.
 func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
@@ -1357,10 +1329,11 @@ func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
 		return codec.JSONL[attemptRecord]{}, s.err
 	}
 	return codec.JSONL[attemptRecord]{
-		Path: filepath.Join(filepath.Dir(s.path), attemptsFileName),
-		Perm: 0o600,
-		Key:  attemptRecord.key,
-		Live: func(r attemptRecord) bool { return !r.Status.Dropped },
+		Path:   filepath.Join(filepath.Dir(s.path), attemptsFileName),
+		Perm:   0o600,
+		Key:    attemptRecord.key,
+		Live:   func(r attemptRecord) bool { return !r.Status.Dropped },
+		OnDrop: s.dropped,
 	}, nil
 }
 

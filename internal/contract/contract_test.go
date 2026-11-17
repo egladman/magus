@@ -148,7 +148,7 @@ func (s *DigestSuite) TestMovingBytesBetweenFilesChangesTheDigest() {
 
 func (s *DigestSuite) TestReadsFormatReadsTheStoreLines() {
 	s.write(lockPath, []byte("config a\nstore safetyscissors.job/v1alpha1\n"))
-	reads, err := ReadsFormat(s.root, job.APIVersion)
+	reads, err := ReadsFormat(s.root, types.APIVersion(job.APIVersion))
 	s.Require().NoError(err)
 	s.True(reads)
 	reads, err = ReadsFormat(s.root, types.EventAPIVersion)
@@ -157,12 +157,12 @@ func (s *DigestSuite) TestReadsFormatReadsTheStoreLines() {
 }
 
 func (s *DigestSuite) TestReadsFormatOfATreeCarryingNoContract() {
-	_, err := ReadsFormat(s.root, job.APIVersion)
+	_, err := ReadsFormat(s.root, types.APIVersion(job.APIVersion))
 	s.ErrorIs(err, ErrNotCarried)
 }
 
 func (s *DigestSuite) TestTheEmbeddedLockNamesTheJobStore() {
-	reads, err := ReadsFormat(s.writeLock(), job.APIVersion)
+	reads, err := ReadsFormat(s.writeLock(), types.APIVersion(job.APIVersion))
 	s.Require().NoError(err)
 	s.True(reads, "this build reads the rows it writes")
 }

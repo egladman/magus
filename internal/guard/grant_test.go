@@ -31,7 +31,7 @@ func TestGrantedHooksOffAdvisesForThatLeaseAlone(t *testing.T) {
 	granted, other := grantRows()
 	ctx, root := fleetFixture(t, granted, other)
 	at := ctx.Value(locationKey{}).(location)
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: root, Actor: &job.Actor{}})
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: root, Actor: &jobtypes.Actor{}})
 	_, err := store.Grant(t.Context(), granted.ID, string(denyRuleHooksOff), 0)
 	require.NoError(t, err)
 
@@ -94,7 +94,7 @@ func waivedPush(t *testing.T, revision string, fill func(context.Context, *job.S
 	ctx, root := fleetFixture(t)
 	at := ctx.Value(locationKey{}).(location)
 	require.NoError(t, os.MkdirAll(filepath.Join(at.cacheDir, cache.RunsDir), 0o755))
-	fill(t.Context(), job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: root, Actor: &job.Actor{}}))
+	fill(t.Context(), job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: root, Actor: &jobtypes.Actor{}}))
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return revision }}
 	return Judge(ctx, deps, Request{Input: "git push origin HEAD", RendersAsk: true})
 }
@@ -127,12 +127,12 @@ func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 
 func TestGateWaiverIsAPersonsKeystroke(t *testing.T) {
 	_, root := fleetFixture(t)
-	leased := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, Actor: &job.Actor{Lease: "guard/worker"}})
+	leased := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, Actor: &jobtypes.Actor{Lease: "guard/worker"}})
 	_, err := WaiveGate(t.Context(), leased, "abc1234def5678", "skip")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `acts under lease "guard/worker"`)
 
-	person := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, Actor: &job.Actor{}})
+	person := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, Actor: &jobtypes.Actor{}})
 	_, err = WaiveGate(t.Context(), person, "abc1234def5678", " ")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--reason")

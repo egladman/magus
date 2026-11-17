@@ -345,7 +345,7 @@ func (s *Store) jobHistory(ctx context.Context) ([]types.JobOutcome, error) {
 var errNoSuchJob = errors.New("job: no such lease")
 
 // RecordRework counts one more rework round on job id: its holder handed back and was sent
-// more work. An observation, like [Store.RecordUnattributedWrite]: the guard noting what a
+// more work. An observation, like [job.Store.RecordUnattributedWrite]: the guard noting what a
 // message did is not the row's holder declaring anything. A missing row is not an error,
 // since the job may have been removed between the message and this call.
 func (s *Store) RecordRework(ctx context.Context, id string) error {

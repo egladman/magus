@@ -1629,7 +1629,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// the claim, so the checkout's record still outranks it.
 	if claim := jobtypes.LeaseFromContext(ctx); claim != "" {
 		lease, _ := job.ActingLease(loc, claim)
-		loc.Actor = &job.Actor{Lease: lease}
+		loc.Actor = &jobtypes.Actor{Lease: lease}
 	}
 	return job.NewStore(loc), nil
 }

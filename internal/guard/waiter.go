@@ -20,11 +20,12 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/libs/safetyscissors/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -756,19 +757,19 @@ func denySpawnWaiter() denial {
 // already attributed to it, the host has not said that worker stopped (on stops), and the row
 // is still being worked. A running row alone is not enough: a row stays running after its
 // worker dies, and only this session's own record says a worker of its own holds it.
-func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (job.Job, bool) {
+func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (jobtypes.Job, bool) {
 	row, ok := spawnTitleJob(ctx, at, title)
 	if !ok || !row.State.Editing() {
-		return job.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return job.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	return row, liveSpawnedJob(facts, stops, rows, row.ID)
 }
 
-func denySpawnDuplicate(row job.Job) denial {
+func denySpawnDuplicate(row jobtypes.Job) denial {
 	return denial{
 		Say: fmt.Sprintf("job %s already has a worker (%s); continue that worker with a message, or stop it before spawning another: `%s` names it.", row.ID, string(row.State), hint.DescribeJob.With(row.ID)),
 		Why: "Two workers on one job write the same paths from two contexts, and each reports a result the other never saw. " +

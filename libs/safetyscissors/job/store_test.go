@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -297,6 +298,29 @@ func (s *StoreSuite) TestAnUnattributedWriteToNoRowIsDropped() {
 	s.NoError(s.open().RecordUnattributedWrite(s.T().Context(), "nobody", "a.go"))
 }
 
+// The guard notes every write it grades, so an unbounded list would make a long editing
+// session against a declared plan grow the store without limit.
+func (s *StoreSuite) TestUnattributedWritesKeepTheNewest() {
+	st := s.open()
+	const over = 5
+	var owned []string
+	for i := range maxUnattributedWrites + over {
+		owned = append(owned, fmt.Sprintf("f%d.go", i))
+	}
+	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = owned })
+	s.Require().NoError(err)
+	for _, p := range owned {
+		s.Require().NoError(st.RecordUnattributedWrite(s.T().Context(), "a", p))
+	}
+
+	rows, err := st.List(s.T().Context())
+	s.Require().NoError(err)
+	kept := rows[0].Unattributed
+	s.Require().Len(kept, maxUnattributedWrites)
+	s.Equal(fmt.Sprintf("f%d.go", over), kept[0].Path, "the oldest are dropped")
+	s.Equal(fmt.Sprintf("f%d.go", maxUnattributedWrites+over-1), kept[len(kept)-1].Path)
+}
+
 func (s *StoreSuite) TestAReleaseOfARootlessStoreIsAbsent() {
 	st := s.open()
 	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = []string{"a.go"} })
@@ -307,6 +331,22 @@ func (s *StoreSuite) TestAReleaseOfARootlessStoreIsAbsent() {
 	s.Require().NoError(err)
 	s.Require().Len(row.Releases, 1)
 	s.Equal(DigestAbsent, row.Releases[0].Digest)
+}
+
+func (s *StoreSuite) TestARewriteDroppingAnUnfinishedAttemptLineIsANotice() {
+	var notices []Notice
+	st := s.open(WithNotices(func(n Notice) { notices = append(notices, n) }))
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+	path := filepath.Join(s.dir, attemptsFileName)
+	s.Require().NoError(os.WriteFile(path, []byte(`{"apiVersion":`), 0o600))
+
+	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
+
+	s.Contains(notices, Notice{Path: path, Text: "line 1 was one no writer finished; the rewrite dropped it"})
+	tries, err := st.Attempts(s.T().Context())
+	s.Require().NoError(err)
+	s.Len(tries, 1, "the append landed after the rewrite")
 }
 
 func (s *StoreSuite) TestAttemptsLiveBesideTheRows() {

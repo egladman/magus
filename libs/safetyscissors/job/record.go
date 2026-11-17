@@ -11,7 +11,6 @@ import (
 
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/internal/apigroup"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -479,8 +478,8 @@ func wireBaseVerdict() wireEnum[BaseVerdict] {
 func wireBriefFormat() wireEnum[BriefFormat] {
 	return newWireEnum(BriefFormatMarkdown, BriefFormatBuzz)
 }
-func wireGoalKind() wireEnum[GoalKind]     { return newWireEnum(GoalKinds()...) }
-func wireGoalExpect() wireEnum[GoalExpect] { return newWireEnum(GoalExpects()...) }
+func wireGoalKind() wireEnum[GoalKind]     { return newWireEnum(goalKinds()...) }
+func wireGoalExpect() wireEnum[GoalExpect] { return newWireEnum(goalExpects()...) }
 
 func wireClaimKind() wireEnum[ClaimKind] {
 	return newWireEnum(ClaimRefs, ClaimTest, ClaimOutput, ClaimReleased, ClaimDeadHolder)
@@ -781,23 +780,19 @@ func (r *integrationRecord) integration() *Integration {
 	return &Integration{Checkout: r.Checkout, At: r.At, Verified: r.Verified, Gates: verifications(r.Gates), ObservedGeneration: r.ObservedGeneration}
 }
 
-// RecordAPIVersion is the apiVersion of every line of jobs.jsonl and
-// attempts.jsonl (ADR 0044). A line stamped with another is refused.
-const RecordAPIVersion apiversion.APIVersion = apigroup.Job
-
 // recordGroup prefixes the annotations a record carries.
 const recordGroup = "safetyscissors.job"
 
 func jobListType() apiversion.TypeMeta {
-	return apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "JobList"}
+	return apiversion.TypeMeta{APIVersion: APIVersion, Kind: "JobList"}
 }
 
 func jobType() apiversion.TypeMeta {
-	return apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Job"}
+	return apiversion.TypeMeta{APIVersion: APIVersion, Kind: "Job"}
 }
 
 func attemptType() apiversion.TypeMeta {
-	return apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Attempt"}
+	return apiversion.TypeMeta{APIVersion: APIVersion, Kind: "Attempt"}
 }
 
 // attemptRecord is one line of attempts.jsonl, the persistence type of
@@ -883,7 +878,7 @@ func wireAttemptEnd() wireEnum[AttemptEnd] {
 	return newWireEnum(AttemptEndExit, AttemptEndHandback, AttemptEndStop, AttemptEndDeadline, AttemptEndJob)
 }
 
-func wireJobState() wireEnum[State] { return newWireEnum(States()...) }
+func wireJobState() wireEnum[State] { return newWireEnum(states()...) }
 
 func wireRetryChange() wireEnum[RetryChange] {
 	return newWireEnum(RetryAfterConfig, RetryAfterWidening, RetryAfterPerson, RetryAfterUpgrade)

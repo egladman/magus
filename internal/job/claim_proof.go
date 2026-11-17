@@ -718,7 +718,7 @@ func takesFromDeadHolder(req job.ClaimRequest) bool {
 // rows under one lock: id gains each path with its proof, and the dead holder drops it,
 // recording the release with who took it and why its holder was dead. A holder whose row
 // changed since the guard judged it dead is refused: its holder may be back.
-func (s *Store) claimFromDeadHolders(ctx context.Context, actor Actor, id string, reqs []job.ClaimRequest, facts claimFacts, limits config.Jobs, dryRun bool, by job.Origin) (job.Job, error) {
+func (s *Store) claimFromDeadHolders(ctx context.Context, actor job.Actor, id string, reqs []job.ClaimRequest, facts claimFacts, limits config.Jobs, dryRun bool, by job.Origin) (job.Job, error) {
 	var out job.Job
 	err := s.Rewrite(ctx, func(f *job.Rows) error {
 		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id })
@@ -795,7 +795,7 @@ func takeFromDeadHolder(ctx context.Context, s *Store, rows []job.Job, taker, re
 // grantClaim proves each of reqs against cur and appends the path and its proof, or
 // refuses the first that is past the cap claimCap gives, outside the checkout, held or denied by cur, or
 // unproved. Another job's hold is authorizeClaim's, which reads the rows.
-func grantClaim(actor Actor, cur *job.Job, reqs []job.ClaimRequest, facts claimFacts, limits config.Jobs, now int64, by job.Origin) error {
+func grantClaim(actor job.Actor, cur *job.Job, reqs []job.ClaimRequest, facts claimFacts, limits config.Jobs, now int64, by job.Origin) error {
 	limit, err := claimCap(*cur, limits)
 	if err != nil {
 		return claimRefusal(actor, cur.ID, err.Error())
@@ -829,7 +829,7 @@ func grantClaim(actor Actor, cur *job.Job, reqs []job.ClaimRequest, facts claimF
 // authorizeClaim grades a proved claim: the holder's own running or exited job, its
 // write paths extended by exactly the paths a proof was recorded for, and none of them a
 // path [checkClaimPath] refuses. An unbound actor is held to the same paths.
-func authorizeClaim(actor Actor, id string, prev, next job.Job, exists bool, rows []job.Job) error {
+func authorizeClaim(actor job.Actor, id string, prev, next job.Job, exists bool, rows []job.Job) error {
 	if err := holderClaims(actor, id); err != nil {
 		return err
 	}
@@ -859,7 +859,7 @@ func authorizeClaim(actor Actor, id string, prev, next job.Job, exists bool, row
 }
 
 // holderClaims refuses a bound actor claim any job but the one it holds.
-func holderClaims(actor Actor, id string) error {
+func holderClaims(actor job.Actor, id string) error {
 	switch {
 	case actor.Unstamped:
 		return refuse(actor, id, "a caller magus cannot name claims no job")
@@ -869,9 +869,9 @@ func holderClaims(actor Actor, id string) error {
 	return nil
 }
 
-func claimRefusal(actor Actor, id, rule string) error {
+func claimRefusal(actor job.Actor, id, rule string) error {
 	if actor.Bound() {
-		return &RefusedError{Lease: id, Actor: actor, Rule: rule, Remedy: "ask whoever forked the job to claim it"}
+		return &job.RefusedError{Lease: id, Actor: actor, Rule: rule, Remedy: "ask whoever forked the job to claim it"}
 	}
 	return fmt.Errorf("job: %s: %s", id, rule)
 }

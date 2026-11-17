@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
@@ -267,3 +268,30 @@ func NarrowedDeclaration(rec job.Declaration, id string, release []string) (job.
 	}
 	return rec, nil
 }
+
+// ParsePauseUntil reads a pause's --until as the unix second it lapses: a duration from now
+// or an RFC3339 instant. Empty is zero, a pause with no bound.
+func ParsePauseUntil(raw string, now time.Time) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d <= 0 {
+			return 0, &PauseUntilError{Until: raw, Reason: "is not ahead of now, as a positive duration (2h) or a later instant is"}
+		}
+		return now.Add(d).Unix(), nil
+	}
+	if at, err := time.Parse(time.RFC3339, raw); err == nil {
+		return at.Unix(), nil
+	}
+	return 0, &PauseUntilError{Until: raw, Reason: "is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z"}
+}
+
+// PauseUntilError is a pause bound [ParsePauseUntil] refuses, and why.
+type PauseUntilError struct {
+	Until  string
+	Reason string
+}
+
+func (e *PauseUntilError) Error() string { return fmt.Sprintf("--until %q %s", e.Until, e.Reason) }

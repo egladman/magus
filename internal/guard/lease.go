@@ -394,7 +394,7 @@ func denyWorkerBudgetWait(ctx context.Context, deps Dependencies, actingLease, c
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` may wait for the build budget; lease %s's runs carry --budget-wait 0: `%s`.", elideCommand(command), me.ID, checkCommand(checks[0])),
-		Why: fmt.Sprintf("A claim waits in the broker's queue for budget_wait, 30m by default. A worker never queues for a seat, so `%s` takes `--budget-wait 0`: a full budget refuses it with MGS3009 at once, and the check is filed owed %q.", waits.target, jobtypes.OwedNoSeat),
+		Why: fmt.Sprintf("A claim waits in the broker's queue for budget_wait, 30m by default. A worker never queues for a seat, so `%s` takes `--budget-wait 0`: a full budget refuses it with MGS3009 at once, and the check is filed owed %q.", waits.target, job.OwedNoSeat),
 	}
 }
 

@@ -15,9 +15,10 @@ func (s *Store) grantsLog() (codec.JSONL[Grant], error) {
 		return codec.JSONL[Grant]{}, err
 	}
 	return codec.JSONL[Grant]{
-		Path: filepath.Join(filepath.Dir(path), grantsFileName),
-		Perm: 0o600,
-		Key:  Grant.Key,
+		Path:   filepath.Join(filepath.Dir(path), grantsFileName),
+		Perm:   0o600,
+		Key:    Grant.Key,
+		OnDrop: s.dropped,
 	}, nil
 }
 

@@ -206,7 +206,7 @@ func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat}}
 
 	exited, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
@@ -218,8 +218,8 @@ func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
 func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat}
-	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat, OutputRef: "out9"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat, OutputRef: "out9"}}
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "lint"})
 
@@ -228,17 +228,17 @@ func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 
 func (s *exitEvidenceSuite) TestRefuseOwedReasonAcceptsRemoteCI() {
 	result := passingResult()
-	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedRemoteCI}}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: OwedRemoteCI}}
 	s.Require().NoError(refuseOwedReason(result))
 
 	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: "too slow"}}
-	s.ErrorContains(refuseOwedReason(result), job.OwedRemoteCI)
+	s.ErrorContains(refuseOwedReason(result), OwedRemoteCI)
 }
 
 func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat, OutputRef: "out9"}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat, OutputRef: "out9"}
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
@@ -283,7 +283,7 @@ func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
 func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat, Unrun: "disk under its floor"}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat, Unrun: "disk under its floor"}
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
@@ -293,7 +293,7 @@ func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
 func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat}
 	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out9"}}
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "build"})
@@ -316,7 +316,7 @@ func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
 func (s *exitEvidenceSuite) exitUnderDefaults(row job.Job, attempt job.CapturedRun) (job.Job, error) {
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat}}
 	loc := declared(s.T(), row)
 	s.Require().NoError(os.WriteFile(filepath.Join(loc.Root, "magus.yaml"), []byte("default_charms: [rw]\n"), 0o644))
 	resolve := func(_ context.Context, ref string) (job.CapturedRun, error) {
@@ -1312,7 +1312,7 @@ func TestDryRunListEndsRowsOnlyInWhatItReturns(t *testing.T) {
 func TestJobPruneRefusesABoundWorker(t *testing.T) {
 	loc := declared(t, job.Job{ID: "w", State: job.StateExited})
 	_, err := boundStore(loc, "w").Prune(t.Context(), PruneOptions{})
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, job.StateExited, jobStates(t, loc)["w"])
 }

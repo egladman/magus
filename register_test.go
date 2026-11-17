@@ -666,7 +666,7 @@ func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	})
 	s.Require().NoError(err)
 	store := job.NewStore(job.Location{
-		StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{},
+		StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &jobtypes.Actor{},
 		ModelTiers: set, SpawnRule: tier.Ceiling,
 		SpawnCeiling: func(context.Context) (builtin.Setting, error) { return builtin.Setting{Decision: builtin.Deny}, nil },
 	})

@@ -793,7 +793,7 @@ func (s *unmergedSuite) TestSettleRefusesBothARowAndAReason() {
 }
 
 func (s *unmergedSuite) TestSettleRefusesALeaseHolder() {
-	held := NewStore(Location{Root: s.repo.Root(), StateBase: s.T().TempDir(), Actor: &Actor{Lease: "worker"}})
+	held := NewStore(Location{Root: s.repo.Root(), StateBase: s.T().TempDir(), Actor: &job.Actor{Lease: "worker"}})
 
 	_, err := held.Settle(s.T().Context(), []job.Declaration{{ID: "r", LeftUnmerged: "dropped"}}, false)
 

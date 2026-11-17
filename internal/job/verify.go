@@ -316,7 +316,16 @@ func integratorGoals(row job.Job) []job.Goal {
 	return goals
 }
 
-// owedGoals are the checks the jobs row merges filed as owed (see [job.OwedNoSeat]), one
+// OwedNoSeat is the one reason a worker files a check as owed: the machine
+// would not seat it, its build budget full or its memory short, and a worker
+// waits on neither.
+const OwedNoSeat = "no seat"
+
+// OwedRemoteCI is the reason a check is owed when the workspace declares a
+// remote CI (ci.remote_gate) that runs it on the pull request.
+const OwedRemoteCI = "remote CI runs it"
+
+// owedGoals are the checks the jobs row merges filed as owed (see [OwedNoSeat]), one
 // goal per check no goal in held or before it covers. A merged job is one whose id names a
 // branch row integrates.
 func owedGoals(row job.Job, declared []job.Job, tries job.Attempts, held []job.Goal) []job.Goal {
@@ -744,8 +753,8 @@ func owedGate(row job.Job, gate job.Goal, reason string) job.VerificationStatus 
 	case row.Integrating():
 		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: its check waits for a seat itself, so it raises budget_wait or frees a holder, or after %s, which no seat clears, frees memory and runs the check again",
 			types.MemoryPressureHigh))
-	case reason != job.OwedNoSeat:
-		status.Violations = append(status.Violations, fmt.Sprintf("files its run as owed because %q, and the one reason a run is owed is %q", reason, job.OwedNoSeat))
+	case reason != OwedNoSeat:
+		status.Violations = append(status.Violations, fmt.Sprintf("files its run as owed because %q, and the one reason a run is owed is %q", reason, OwedNoSeat))
 	}
 	return status
 }

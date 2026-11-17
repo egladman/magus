@@ -50,7 +50,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 		u.Paths.Write = append(u.Paths.Write, "internal/sessions")
 	})
 
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, err.Error(), "adj/store is bound to this session")
 	assert.Contains(t, err.Error(), "SHRINK paths.write")
@@ -280,7 +280,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 				assert.Empty(t, stored.ReportedBase)
 				return
 			}
-			var refused *RefusedError
+			var refused *job.RefusedError
 			require.ErrorAs(t, err, &refused)
 			assert.Contains(t, err.Error(), tt.want)
 		})
@@ -299,7 +299,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	require.NoError(t, s.Bind(Caller{}, "adj/other"))
 
 	_, err := s.Update(t.Context(), "adj/store", func(u *job.Job) { u.Agent = job.Instructed("rewritten") })
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
 	require.ErrorAs(t, err, &refused)
@@ -316,15 +316,15 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 	for name, tc := range map[string]struct {
 		record, claim, stamped string
-		want                   Actor
+		want                   job.Actor
 	}{
-		"unstamped, nothing claimed":         {"", "", "", Actor{}},
-		"unstamped, the record wins":         {"adj/store", "adj/other", "", Actor{Lease: "adj/store"}},
-		"stamped lease":                      {"", "adj/other", "1", Actor{Lease: "adj/other"}},
-		"stamped absence":                    {"", "", "1", Actor{Unstamped: true}},
-		"stamped absence under a record":     {"adj/store", "", "1", Actor{Unstamped: true}},
-		"stamped lease against a record":     {"adj/store", "adj/other", "1", Actor{Unstamped: true}},
-		"stamped lease the record agrees on": {"adj/store", "adj/store", "1", Actor{Lease: "adj/store"}},
+		"unstamped, nothing claimed":         {"", "", "", job.Actor{}},
+		"unstamped, the record wins":         {"adj/store", "adj/other", "", job.Actor{Lease: "adj/store"}},
+		"stamped lease":                      {"", "adj/other", "1", job.Actor{Lease: "adj/other"}},
+		"stamped absence":                    {"", "", "1", job.Actor{Unstamped: true}},
+		"stamped absence under a record":     {"adj/store", "", "1", job.Actor{Unstamped: true}},
+		"stamped lease against a record":     {"adj/store", "adj/other", "1", job.Actor{Unstamped: true}},
+		"stamped lease the record agrees on": {"adj/store", "adj/store", "1", job.Actor{Lease: "adj/store"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir()}
@@ -372,7 +372,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 		"delete": func() error { _, err := s.Delete(t.Context(), "adj/store", true); return err },
 	} {
 		err := write()
-		var refused *RefusedError
+		var refused *job.RefusedError
 		require.ErrorAs(t, err, &refused, name)
 		assert.True(t, strings.HasPrefix(err.Error(), "job: this call arrived with no lease stamped on it"), "%s: %v", name, err)
 		assert.Contains(t, err.Error(), "send the lease you act under", name)
@@ -416,7 +416,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "held.go"), []byte("package held\n"), 0o644))
 	loc := tempLocation(t, root)
-	loc.Actor = &Actor{}
+	loc.Actor = &job.Actor{}
 	seed(t, NewStore(loc), job.Job{ID: "adj/other", Paths: job.Paths{Write: []string{"held.go"}}, State: job.StateRunning})
 
 	require.NoError(t, boundStore(loc, "adj/store").RecordUnattributedWrite(t.Context(), "adj/other", "held.go"))
@@ -445,7 +445,7 @@ func TestBoundWorkerNarrowsAWriteToADeclaration(t *testing.T) {
 	_, err = boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *job.Job) {
 		u.Paths.Write = []string{"magusfile.buzz"}
 	})
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused, "widening a claimed declaration back to the whole file is not a shrink")
 	assert.Contains(t, err.Error(), "SHRINK paths.write")
 }
@@ -477,7 +477,7 @@ func TestBoundWorkerCannotWidenAGlob(t *testing.T) {
 			_, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *job.Job) {
 				u.Paths.Write = []string{wider}
 			})
-			var refused *RefusedError
+			var refused *job.RefusedError
 			require.ErrorAs(t, err, &refused, "%q is not within internal/job/*.go", wider)
 			assert.Contains(t, err.Error(), "SHRINK paths.write")
 		})
@@ -499,7 +499,7 @@ func TestChildIsHandedAFileItsParentsGlobMatches(t *testing.T) {
 	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *job.Job) {
 		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"internal/job/plan.go", "internal/sessions/a.go"}}}
 	})
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
 }
@@ -523,7 +523,7 @@ func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
 	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/extra", func(u *job.Job) {
 		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"magusfile.buzz#lint", "other.go"}}}
 	})
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused, "a child claims more than its parent owns when it also names other.go")
 	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
 }
@@ -545,7 +545,7 @@ func TestChildBreaksOnlyWhatItsParentMayBreak(t *testing.T) {
 	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/b", func(u *job.Job) {
 		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag", "api.Open"}}
 	})
-	var refused *RefusedError
+	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, err.Error(), "may only break what its parent may break")
 }
@@ -555,7 +555,7 @@ func TestChildBreaksOnlyWhatItsParentMayBreak(t *testing.T) {
 func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	holder := Actor{Lease: "root/worker"}
+	holder := job.Actor{Lease: "root/worker"}
 	outside := "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's"
 	for name, tc := range map[string]struct {
 		target string
@@ -661,5 +661,5 @@ func TestAsKeepsTheBuildTheFootprintCacheKeysOn(t *testing.T) {
 
 	s := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir(), Build: testBuild})
 	assert.Equal(t, testBuild, s.footprintCache().build)
-	assert.Equal(t, testBuild, s.As(Actor{Lease: "wave/worker"}).footprintCache().build)
+	assert.Equal(t, testBuild, s.As(job.Actor{Lease: "wave/worker"}).footprintCache().build)
 }

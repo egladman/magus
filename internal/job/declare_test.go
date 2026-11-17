@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os/exec"
@@ -181,22 +182,38 @@ func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 	require.Error(t, refused.Set(""))
 }
 
-func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0)
-	cases := map[string]int64{
-		"":                     0,
-		"2h":                   now.Add(2 * time.Hour).Unix(),
-		"2027-01-15T09:00:00Z": 1_800_003_600,
-	}
-	for raw, want := range cases {
-		got, err := job.ParsePauseUntil(raw, now)
-		require.NoError(t, err, raw)
-		assert.Equal(t, want, got, raw)
-	}
-	for _, raw := range []string{"-2h", "tomorrow"} {
-		_, err := job.ParsePauseUntil(raw, now)
-		assert.Error(t, err, raw)
-	}
+type pauseUntilSuite struct{ suite.Suite }
+
+func TestPauseUntilSuite(t *testing.T) { suite.Run(t, new(pauseUntilSuite)) }
+
+func (s *pauseUntilSuite) TestAnEmptyBoundIsNoBound() {
+	at, err := ParsePauseUntil("", time.Unix(1000, 0))
+	s.Require().NoError(err)
+	s.Zero(at)
+}
+
+func (s *pauseUntilSuite) TestAPauseLapsesAtADurationOrAnInstant() {
+	now := time.Unix(1000, 0)
+	at, err := ParsePauseUntil("2h", now)
+	s.Require().NoError(err)
+	s.Equal(int64(1000+7200), at)
+	at, err = ParsePauseUntil("1970-01-01T00:20:00Z", now)
+	s.Require().NoError(err)
+	s.Equal(int64(1200), at)
+}
+
+func (s *pauseUntilSuite) TestABoundNotAheadOfNowIsRefused() {
+	_, err := ParsePauseUntil("-2h", time.Unix(1000, 0))
+	refused, ok := errors.AsType[*PauseUntilError](err)
+	s.Require().True(ok, err)
+	s.Contains(refused.Error(), "is not ahead of now")
+}
+
+func (s *pauseUntilSuite) TestABoundThatIsNeitherIsRefused() {
+	_, err := ParsePauseUntil("tomorrow", time.Unix(1000, 0))
+	refused, ok := errors.AsType[*PauseUntilError](err)
+	s.Require().True(ok, err)
+	s.Equal("tomorrow", refused.Until)
 }
 
 type forkDeliverySuite struct {
@@ -403,7 +420,7 @@ func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
 }
 
 func (s *resolveAcceptSuite) TestADecodedRecordNamesTheCheckGoalThatDefaulted() {
-	_, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"api_version":"` + job.APIVersion + `","id":"w",` +
+	_, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"api_version":"` + string(job.APIVersion) + `","id":"w",` +
 		`"paths":{"write":["a.go"]},"goals":[{"id":"unit","kind":"check","check":{"target":"test","project":"."}},` +
 		`{"id":"lint","kind":"check","check":{"target":"lint","project":"."},"accept":["reported"]}]}`))
 
@@ -413,7 +430,7 @@ func (s *resolveAcceptSuite) TestADecodedRecordNamesTheCheckGoalThatDefaulted() 
 }
 
 func (s *resolveAcceptSuite) TestADecodedRecordValidatesWithItsCheckGoalResolved() {
-	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + job.APIVersion + `","id":"w",` +
+	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + string(job.APIVersion) + `","id":"w",` +
 		`"goals":[{"id":"unit","check":{"target":"test","project":"."}}]}`))
 
 	s.Require().NoError(err)

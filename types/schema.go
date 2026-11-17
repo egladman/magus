@@ -88,17 +88,17 @@ func (l FormatLedger) Features() []string {
 var DeclarationSchema = FormatLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[job.Declaration](),
-	Version: job.APIVersion,
+	Version: APIVersion(job.APIVersion),
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
 	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
 		"write_paths", "deny_paths", "read_paths", "soft_paths"},
-	Added: map[string]APIVersion{"agent": job.APIVersion, "paths": job.APIVersion},
+	Added: map[string]APIVersion{"agent": APIVersion(job.APIVersion), "paths": APIVersion(job.APIVersion)},
 	Requires: map[string]APIVersion{
-		"dead-job-end":       job.APIVersion,
-		"claim-declarations": job.APIVersion,
-		"signature-goals":    job.APIVersion,
-		"job-generations":    job.APIVersion,
+		"dead-job-end":       APIVersion(job.APIVersion),
+		"claim-declarations": APIVersion(job.APIVersion),
+		"signature-goals":    APIVersion(job.APIVersion),
+		"job-generations":    APIVersion(job.APIVersion),
 	},
 }
 

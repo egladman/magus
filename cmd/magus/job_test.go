@@ -745,7 +745,7 @@ func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 
 	assert.Error(t, jobPause(t.Context(), root, "resume", []string{row.ID}), "the holder does not lift its own pause")
 
-	orchestrator := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &job.Actor{}})
+	orchestrator := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &jobtypes.Actor{}})
 	_, err = orchestrator.Resume(t.Context(), row.ID)
 	require.NoError(t, err)
 	captureStdout(t, func() {

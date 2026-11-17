@@ -12,8 +12,8 @@ type Attempt struct {
 	Status AttemptStatus `json:"status" yaml:"status"`
 }
 
-// AttemptStatus is what magus observed of one try. Magus records what
-// it saw and starts nothing.
+// AttemptStatus is what the store's caller observed of one try. The store
+// records what it was told and starts nothing.
 type AttemptStatus struct {
 	// Started is the unix second the guard let a spawn or continuation
 	// naming the job through, zero when it saw none.
@@ -22,7 +22,7 @@ type AttemptStatus struct {
 	// A started try with neither is "started, end unobserved".
 	Ended int64      `json:"ended,omitzero" yaml:"ended,omitempty"`
 	End   AttemptEnd `json:"end,omitempty"  yaml:"end,omitempty"`
-	// Result is what the holder filed with `magus job exit`.
+	// Result is what the holder filed when it exited.
 	Result *Result `json:"result,omitzero" yaml:"result,omitempty"`
 	// The members below are written when a fork of the ended job starts
 	// the next try. State is what the job ended as, "" until then.
@@ -49,7 +49,7 @@ type AttemptStatus struct {
 type AttemptEnd string
 
 const (
-	// AttemptEndExit is `magus job exit` ending the job.
+	// AttemptEndExit is the holder's own exit ending the job.
 	AttemptEndExit AttemptEnd = "exit"
 	// AttemptEndHandback is the worker's handback tool call.
 	AttemptEndHandback AttemptEnd = "handback"
@@ -166,11 +166,11 @@ const (
 	RetryAsIs RetryChange = ""
 	// RetryAfterConfig needs a declaration or configuration edit first.
 	RetryAfterConfig RetryChange = "config"
-	// RetryAfterWidening needs the job's write paths widened first (`magus job apply`).
+	// RetryAfterWidening needs the job's write paths widened first.
 	RetryAfterWidening RetryChange = "widening"
 	// RetryAfterPerson needs a person to decide or act first.
 	RetryAfterPerson RetryChange = "person"
-	// RetryAfterUpgrade needs a different magus or tool version first.
+	// RetryAfterUpgrade needs a different runner or tool version first.
 	RetryAfterUpgrade RetryChange = "upgrade"
 )
 

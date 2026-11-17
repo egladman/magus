@@ -18,6 +18,8 @@ package job
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -69,7 +71,7 @@ type storeConfig struct {
 	// from cacheDir and the environment. The server builds ONE Store at startup and serves
 	// every MCP job caller from it, so an actor frozen at construction grades all of
 	// them as whoever started the process.
-	actor     *Actor
+	actor     *job.Actor
 	cacheDir  string
 	stateBase string
 	// clock, staleAfter and notices are the sweep's seams (see [Store.sweep]); nil means
@@ -131,7 +133,7 @@ type Location struct {
 	// is a real value: nil is the only way to say "resolve it at every write, from the
 	// environment and CacheDir through [ActingActor]", which is what every door outside a
 	// test wants.
-	Actor *Actor
+	Actor *job.Actor
 	// Outputs resolves an output ref against the output store of the checkout at root.
 	// Exit and Wait fall back to it when the caller's resolver finds no run, trying the
 	// checkouts the job and its descendants were taken in. Nil tries the caller's
@@ -252,7 +254,7 @@ func (s *Store) withMigrations(migrations []migrate.Migration) *Store {
 // computes anything: `ledger accept` grades a report and must say a worker cannot grade
 // its own row before it reads one. Resolved per call unless Location pinned one, so a
 // checkout that binds a lease is graded from its next write.
-func (s *Store) Actor() Actor {
+func (s *Store) Actor() job.Actor {
 	if s.actor != nil {
 		return *s.actor
 	}
@@ -320,21 +322,21 @@ func diagnose(err error) error {
 	if newer, ok := errors.AsType[*job.NewerWriterError](err); ok {
 		if len(newer.Lacks) > 0 {
 			return types.WrapDiagnostic(types.JobStoreWriterOlder, err, "%s requires %s, which this magus (%s) lacks, update magus",
-				newer.Path, quoteAll(newer.Lacks), job.RecordAPIVersion)
+				newer.Path, quoteAll(newer.Lacks), job.APIVersion)
 		}
 		return types.WrapDiagnostic(types.JobStoreWriterOlder, err, "%v: update magus", err)
 	}
 	if newer, ok := errors.AsType[*job.NewerRecordsError](err); ok {
 		if len(newer.Lacks) > 0 {
 			return types.WrapDiagnostic(types.StoreRecordsNewer, err, "%s requires %s, which this magus (%s) lacks: update magus",
-				newer.Record, quoteAll(newer.Lacks), job.RecordAPIVersion)
+				newer.Record, quoteAll(newer.Lacks), job.APIVersion)
 		}
 		return types.WrapDiagnostic(types.StoreRecordsNewer, err, "%s: %s is %s %s, and this magus reads %s %s: update magus, or %s",
-			newer.Path, newer.Record, newer.Got.APIVersion, newer.Got.Kind, newer.Want.APIVersion, newer.Want.Kind, job.StaleStoreFix(newer.Path))
+			newer.Path, newer.Record, newer.Got.APIVersion, newer.Got.Kind, newer.Want.APIVersion, newer.Want.Kind, staleStoreFix(newer.Path))
 	}
 	if version, ok := errors.AsType[*job.RecordVersionError](err); ok {
 		return types.RefuseVersion(types.APIVersion(version.Want), types.APIVersion(version.Got),
-			fmt.Sprintf("job: %s:%d", version.Path, version.Line), job.StaleStoreFix(version.Path))
+			fmt.Sprintf("job: %s:%d", version.Path, version.Line), staleStoreFix(version.Path))
 	}
 	if legacy, ok := errors.AsType[*job.LegacyDocumentError](err); ok {
 		return fmt.Errorf("cannot open job plan %s: %w: once no older magus writes it, set it aside with `mv %s %s.old`",
@@ -615,35 +617,30 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string, body []by
 	if spans == nil {
 		return job.DigestAbsent
 	}
-	return job.DigestSpans(body, spans)
+	return digestSpans(body, spans)
+}
+
+// digestSpans is the digest of the lines of body that spans name, 1-based and inclusive,
+// in order.
+func digestSpans(body []byte, spans [][2]int) string {
+	lines := strings.SplitAfter(string(body), "\n")
+	var spanned strings.Builder
+	for _, r := range spans {
+		for n := r[0]; n <= r[1] && n-1 < len(lines); n++ {
+			spanned.WriteString(lines[n-1])
+		}
+	}
+	sum := sha256.Sum256([]byte(spanned.String()))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // checkCommand is the argv a witnessed run of goal's check carries, run in this store's
-// checkout: [CheckCommand]'s line as words, so an argument holding a space stays one.
+// checkout: [checkArgv].
 func (s *Store) checkCommand(_ job.Job, goal job.Goal) ([]string, string, error) {
 	if s.root == "" {
 		return nil, "", errors.New("this job store has no checkout to run a check in")
 	}
 	return checkArgv(goal.Check), s.root, nil
-}
-
-func checkArgv(c job.LeaseCheck) []string {
-	argv := []string{hint.BinaryName()}
-	switch {
-	case c.Script != "" && c.Test:
-		argv = append(argv, "buzz", "-t", c.Script)
-	case c.Script != "":
-		argv = append(argv, "buzz", "--record", c.Script)
-	default:
-		argv = append(argv, "run", c.Target, cmp.Or(c.Project, "."))
-		if c.NoDefaultCharms {
-			argv = append(argv, "--no-default-charms")
-		}
-	}
-	if len(c.Args) > 0 {
-		argv = append(append(argv, "--"), c.Args...)
-	}
-	return argv
 }
 
 // quoteAll is names each quoted, joined by commas.

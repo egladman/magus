@@ -625,7 +625,7 @@ func gradeAgainstOwnLease(me jobtypes.Job, owners []jobtypes.Job, rel string, en
 				"%s\n"+
 				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.\n"+
 				leaseActorWhy,
-				ownership, owner.State, me.ID, release, enterCall(owner.ID, rel), job.MaxJobEntries),
+				ownership, owner.State, me.ID, release, enterCall(owner.ID, rel), jobtypes.MaxJobEntries),
 		}.full()}
 	}
 	if len(me.Paths.Write) == 0 {
@@ -802,7 +802,7 @@ const holderTrailWindow = 2000
 // the entries owner carries, reporting whether an open one covered rel. A covered write
 // passes and consumes the entry when the holder is idle, and is denied while it is not.
 func gradeEntry(ctx context.Context, deps Dependencies, at location, owner jobtypes.Job, rel string) (writeGrade, bool) {
-	entry, ok := job.OpenEntry(owner, rel)
+	entry, ok := jobtypes.OpenEntry(owner, rel)
 	if !ok {
 		return writeGrade{}, false
 	}

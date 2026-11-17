@@ -90,7 +90,7 @@ func otherClaimants(me jobtypes.Job, owners []jobtypes.Job, rel string) []jobtyp
 // (see job.NarrowHold). Each growth is advised. A change to a declaration
 // another lease claims is denied; a write magus cannot place narrows nothing.
 func gradeNarrowedHold(ctx context.Context, at location, checkout string, me jobtypes.Job, owners []jobtypes.Job, rel string, fields writeFields) writeGrade {
-	narrowed := job.Narrowed(me, rel)
+	narrowed := jobtypes.Narrowed(me, rel)
 	if !narrowed && !coveredOnlyByPattern(me, rel) {
 		return writeGrade{}
 	}

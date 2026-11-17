@@ -124,14 +124,6 @@ func ReleasedReach(row Job, entry, other string) bool {
 	return Narrowed(row, o)
 }
 
-// heldByPattern reports whether a write path of row with glob metacharacters covers file.
-func heldByPattern(row Job, file string) bool {
-	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
-		p, decl := SplitClaim(entry)
-		return decl == "" && strings.ContainsAny(p, globMeta) && CoversPath(p, file)
-	})
-}
-
 // ClaimsOnFile are the declarations row's write paths claim in file.
 func ClaimsOnFile(row Job, file string) []string {
 	var out []string
@@ -153,20 +145,3 @@ func heldRequests(row Job) []ReleaseRequest {
 	})
 }
 
-// ReleasedUnderPattern says of each file row released that a pattern of its
-// write paths still names: the release stands, so the pattern does not hold it.
-func ReleasedUnderPattern(row Job) []string {
-	var notes []string
-	for _, r := range row.Releases {
-		file, decl := SplitClaim(r.Path)
-		if decl != "" || !heldByPattern(row, file) {
-			continue
-		}
-		if claims := ClaimsOnFile(row, file); len(claims) > 0 {
-			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
-			continue
-		}
-		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `%s#<declaration>`", file, file))
-	}
-	return notes
-}

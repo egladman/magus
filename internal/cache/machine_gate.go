@@ -954,7 +954,7 @@ func machineBusyError(c budget.Claim, v budget.Verdict, now time.Time, lease str
 // owedFiling tells a caller under a job lease how to file a refused check.
 func owedFiling(lease string) string {
 	return fmt.Sprintf("file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
-		hint.JobExit.With(lease), jobtypes.OwedNoSeat)
+		hint.JobExit.With(lease), job.OwedNoSeat)
 }
 
 // LeasedPressureNext is what a job does after MGS3053. An integration cannot

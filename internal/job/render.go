@@ -337,7 +337,7 @@ func (o DescribeOutput) MarshalJSON() ([]byte, error) {
 		Terms
 		Goals job.Status `json:"goals"`
 	}{
-		Lease: describedJob{APIVersion: job.APIVersion, Job: o.Lease},
+		Lease: describedJob{APIVersion: types.APIVersion(job.APIVersion), Job: o.Lease},
 		Terms: o.Terms,
 		Goals: o.Goals,
 	})

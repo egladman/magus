@@ -27,10 +27,10 @@ func (s *StoreVersionSuite) TestANewerMigrationNamesBoth() {
 	s.Equal("job store /s/jobs.jsonl is at migration 9, past this build's 7", err.Error())
 }
 
-func (s *StoreVersionSuite) TestARecordOfAnotherVersionSaysHowToGetPastIt() {
-	err := &RecordVersionError{Path: "/s/jobs.jsonl", Line: 2, Want: RecordAPIVersion, Got: apiversion.APIVersion("batch.magus/v1alpha1")}
+func (s *StoreVersionSuite) TestARecordOfAnotherVersionNamesBoth() {
+	err := &RecordVersionError{Path: "/s/jobs.jsonl", Line: 2, Want: APIVersion, Got: apiversion.APIVersion("batch.magus/v1alpha1")}
 
-	s.Contains(err.Error(), "move /s/jobs.jsonl aside, or delete it, and fork the jobs again")
+	s.Equal("job: /s/jobs.jsonl:2 is batch.magus/v1alpha1, and this build reads safetyscissors.job/v1alpha1", err.Error())
 }
 
 func (s *StoreVersionSuite) TestAShellWordIsQuotedOnlyWhenItMustBe() {

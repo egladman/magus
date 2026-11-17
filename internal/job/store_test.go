@@ -38,12 +38,12 @@ import (
 // fixtures the same way CI does. The rules that turn on a bound actor pass their own.
 func tempLocation(t *testing.T, root string) Location {
 	t.Helper()
-	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &Actor{}}
+	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}}
 }
 
 // boundStore is a Store acting as the worker leased to id, sharing loc's ledger file.
 func boundStore(loc Location, id string) *Store {
-	loc.Actor = &Actor{Lease: id}
+	loc.Actor = &job.Actor{Lease: id}
 	return NewStore(loc)
 }
 
@@ -676,12 +676,12 @@ func recordLine(id, condition, reason, spec, status string) string {
 		conditions = fmt.Sprintf(`"conditions":[{"type":%q,"status":"True","lastTransitionTime":"1970-01-01T00:00:01Z","reason":%q,"message":""}],`, condition, reason)
 	}
 	return fmt.Sprintf(`{"apiVersion":%q,"kind":"Job","metadata":{"name":%q},"spec":{%s},"status":{%s"created":1,"updated":1%s}}`,
-		RecordAPIVersion, id, spec, conditions, status)
+		job.APIVersion, id, spec, conditions, status)
 }
 
 // headerLine is the JobList line at this build's migration.
 func headerLine(extra string) string {
-	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, RecordAPIVersion, len(jobMigrations()), extra)
+	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, job.APIVersion, len(jobMigrations()), extra)
 }
 
 // A row a newer magus wrote is an ordinary row to this one: updating it or any other row
@@ -742,7 +742,7 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 	_, err = s.Update(t.Context(), "future", func(u *job.Job) { u.State = job.StatePass })
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (%s) lacks: update magus`,
-		RecordAPIVersion))
+		job.APIVersion))
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 
@@ -764,7 +764,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	_, err := s.List(t.Context())
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
 	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (%s) lacks, update magus`,
-		path, RecordAPIVersion))
+		path, job.APIVersion))
 
 	_, err = s.Update(t.Context(), "B", func(cur *job.Job) { *cur = lease("B") })
 	require.ErrorIs(t, err, types.JobStoreWriterOlder, "a write refuses the same file")
@@ -782,7 +782,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []map[string]any{{
-		"apiVersion": string(RecordAPIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
+		"apiVersion": string(job.APIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
 		"plan": "p1", "retained": float64(1_700_000_000),
 	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention stamp rides in it")
 }
@@ -1108,32 +1108,6 @@ func TestRecordUnattributedWriteKeepsOneRowPerPath(t *testing.T) {
 	assert.NotEqual(t, first, rows[0].Unattributed[0].Digest, "the newest write is the one that describes the tree")
 }
 
-// The guard calls this on every write it grades, so an unbounded list would make a long editing
-// session against a declared plan grow the ledger without limit.
-func TestRecordUnattributedWriteIsBounded(t *testing.T) {
-	root := t.TempDir()
-	s := tempStore(t, root)
-	ctx := t.Context()
-
-	const over = 5
-	var owned []string
-	for i := range job.MaxUnattributedWrites + over {
-		owned = append(owned, fmt.Sprintf("f%d.go", i))
-	}
-	seed(t, s, job.Job{ID: "worker-1", Paths: job.Paths{Write: owned}})
-	for _, p := range owned {
-		require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", p))
-	}
-
-	rows, err := s.List(t.Context())
-	require.NoError(t, err)
-	kept := rows[0].Unattributed
-	require.Len(t, kept, job.MaxUnattributedWrites)
-	// Written f0..f(Max+over-1), so trimming to the last Max drops exactly the first `over`.
-	assert.Equal(t, fmt.Sprintf("f%d.go", over), kept[0].Path, "the oldest are dropped")
-	assert.Equal(t, fmt.Sprintf("f%d.go", job.MaxUnattributedWrites+over-1), kept[len(kept)-1].Path)
-}
-
 // The generation counts declared-spec changes only: a lifecycle move, a deadline and a
 // caller's own count leave it where it was.
 func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
@@ -1403,7 +1377,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		{"due", 0, true},
 		{"retained", config.Defaults().Jobs.Retain, false},
 	} {
-		s := NewStore(Location{StateBase: b.TempDir(), CacheDir: b.TempDir(), Root: b.TempDir(), Actor: &Actor{}})
+		s := NewStore(Location{StateBase: b.TempDir(), CacheDir: b.TempDir(), Root: b.TempDir(), Actor: &job.Actor{}})
 		s.retain = &tc.retain
 		s.clock = func() time.Time { return time.Unix(now, 0) }
 		stale := 2 * time.Hour
@@ -1501,7 +1475,7 @@ func renamed(from, to string) migrate.Migration {
 // unmigrated is a header behind every migration, and row a running
 // with spec member name.
 func unmigrated(name string) string {
-	return fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion,
+	return fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion,
 		recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), ""))
 }
 
@@ -1534,7 +1508,7 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 }
 
 func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
+	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
@@ -1548,7 +1522,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
+	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, _ := s.migratingStore(body, renamed("goal", "parent"))
 
 	_, err := st.Read(s.T().Context())
@@ -1601,7 +1575,7 @@ func checkoutStore(t *testing.T, root, state string, extra map[string]any) (*Sto
 	notices := &bytes.Buffer{}
 	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent")})
 	st.notices = notices
-	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion, line)), notices
+	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion, line)), notices
 }
 
 // forkCheckout is the worktree member of a row whose fork made root.
@@ -1839,7 +1813,7 @@ func (s *authoritySuite) TestAWorkersChildTakesItsParentsAuthority() {
 	worktree := s.repo.AddWorktree("p")
 	worktree.Commit("the worker's own", map[string]string{"a.go": "package a\n"})
 	worker := s.loc
-	worker.Root, worker.Actor = worktree.Root(), &Actor{Lease: "p"}
+	worker.Root, worker.Actor = worktree.Root(), &job.Actor{Lease: "p"}
 
 	child, err := s.fork(NewStore(worker), job.Job{ID: "p/c", Parent: "p", Paths: job.Paths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
@@ -1884,7 +1858,7 @@ func (s *authoritySuite) TestALeasedCallerCannotAdvanceItsOwnAuthority() {
 	s.Require().NoError(err)
 	s.repo.Commit("the worker's own", map[string]string{"b.txt": "b\n"})
 	_, err = boundStore(s.loc, "a").AdvanceAuthority(s.T().Context(), "a")
-	var refused *RefusedError
+	var refused *job.RefusedError
 	s.Require().ErrorAs(err, &refused)
 	s.Contains(err.Error(), "only the root advances a row's authority")
 	rows, err := NewStore(s.loc).List(s.T().Context())

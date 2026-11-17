@@ -20,13 +20,13 @@ func TestJob(t *testing.T) { suite.Run(t, new(JobSuite)) }
 func (s *JobSuite) refusesID(id, rule string) {
 	s.T().Helper()
 	var refused *IDError
-	s.Require().ErrorAs(ValidateID(id), &refused, id)
+	s.Require().ErrorAs(validateID(id), &refused, id)
 	s.Equal(rule, refused.Rule, id)
 	s.False(ValidID(id), id)
 }
 
 func (s *JobSuite) TestValidateIDNamesTheRuleAnIDBreaks() {
-	s.NoError(ValidateID("area/fix-parser.v2"))
+	s.NoError(validateID("area/fix-parser.v2"))
 	s.refusesID("", "an id is not empty")
 	s.refusesID("a..b", "an id never contains ..")
 	s.refusesID("a:b", "an id never contains ':'")
@@ -36,7 +36,7 @@ func (s *JobSuite) TestValidateIDNamesTheRuleAnIDBreaks() {
 }
 
 func (s *JobSuite) TestAnIDIsAtMostMaxIDLen() {
-	s.NoError(ValidateID(strings.Repeat("a", MaxIDLen)))
+	s.NoError(validateID(strings.Repeat("a", MaxIDLen)))
 	s.refusesID(strings.Repeat("a", MaxIDLen+1), fmt.Sprintf("an id is at most %d characters", MaxIDLen))
 }
 
@@ -71,23 +71,6 @@ func (s *JobSuite) TestATimeoutIsEmptyOrAPositiveDuration() {
 	var refused *TimeoutError
 	s.Require().ErrorAs(err, &refused)
 	s.Equal("-1h", refused.Timeout)
-}
-
-func (s *JobSuite) TestAPauseLapsesAtADurationOrAnInstant() {
-	now := time.Unix(1000, 0)
-	at, err := ParsePauseUntil("2h", now)
-	s.Require().NoError(err)
-	s.Equal(int64(1000+7200), at)
-	at, err = ParsePauseUntil("1970-01-01T00:20:00Z", now)
-	s.Require().NoError(err)
-	s.Equal(int64(1200), at)
-	_, err = ParsePauseUntil("0s", now)
-	var refused *PauseUntilError
-	s.Require().ErrorAs(err, &refused)
-	s.Contains(refused.Error(), "is not ahead of now")
-	_, err = ParsePauseUntil("tomorrow", now)
-	s.Require().ErrorAs(err, &refused)
-	s.Equal("tomorrow", refused.Until)
 }
 
 func (s *JobSuite) TestAClaimEvidenceRefusalIsTyped() {

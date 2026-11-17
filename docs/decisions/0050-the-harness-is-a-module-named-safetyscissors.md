@@ -550,6 +550,25 @@ decided.
 
 ## Amendments
 
+### 2026-11-17: the job module's surface is trimmed
+
+- The `internal/job` compat forwarders are gone; callers name the module's `Actor`,
+  `RefusedError`, `ReadBoundary`, `MaxJobEntries`, `Narrowed` and `OpenEntry`.
+- `job.APIVersion` is the one typed constant (`apiversion.APIVersion`) for the job shape
+  and every line of jobs.jsonl and attempts.jsonl; `RecordAPIVersion` is gone, and
+  magus converts it to `types.APIVersion` where it compares.
+- What builds only on the exported store moved to `internal/job`: `EntryAdvice`,
+  `Entries`, `ParsePauseUntil`, `ReleasedUnderPattern`, `OwedNoSeat`, `OwedRemoteCI`, the
+  stale-store fix and the span digest. What the module itself reads stays in it.
+- One renderer draws a check, `internal/job.checkArgv`, led by the binary as invoked;
+  `CheckCommand` joins it.
+- The three logs beside the rows report a dropped unfinished line as a store notice.
+- LeaseCheck stays typed in the module until the binding generators learn a raw-JSON
+  member, an open question for Eli. Option A teaches the generators to carry
+  `codec.RawMessage` as `any?`, which costs Buzz callers the typed `LeaseCheck` object.
+  Option B has the bindings reflect magus-side view types of `Goal` and `Job` that carry
+  the typed check, which reshapes the boundary roots in `cmd/magus-utils`.
+
 ### 2026-11-17: steps 9 and 11 and goal grading are built
 
 - 2026-11-17, step 9: the job row store lives in `libs/safetyscissors/job`, opened on

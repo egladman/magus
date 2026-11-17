@@ -960,7 +960,7 @@ func (s *Store) PinRefusal(ctx context.Context, bin string) (string, error) {
 // PinBinary records the hash ./magus in job id's checkout has now on every
 // live row standing at that checkout, and returns those rows. The root pins
 // any row, and the integrator its own after it relinks there. Any other bound
-// caller gets a [*RefusedError]: a worker that pinned its own build would pick
+// caller gets a [*job.RefusedError]: a worker that pinned its own build would pick
 // its judge.
 func (s *Store) PinBinary(ctx context.Context, id string) ([]job.Job, error) {
 	rows, err := s.List(ctx)

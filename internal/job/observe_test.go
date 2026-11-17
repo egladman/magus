@@ -144,11 +144,9 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 		Symbols:     map[string]SymbolFact{},
 	}
 	graded := 0
-	for _, kind := range job.GoalKinds() {
-		if kind == job.GoalKindCheck {
-			continue // graded against the output store, not against Observed
-		}
-		for _, expect := range job.GoalExpects() {
+	// Every kind but check, which is graded against the output store, not against Observed.
+	for _, kind := range []job.GoalKind{job.GoalKindPaths, job.GoalKindSymbol} {
+		for _, expect := range []job.GoalExpect{job.ExpectPassed, job.ExpectChanged, job.ExpectPresent, job.ExpectAbsent, job.ExpectUnreferenced, job.ExpectSignature} {
 			// ONE subject, matching the kind. Carrying both Paths and Symbols made
 			// Validate refuse every pair as two subjects, so this loop used to `continue`
 			// on every iteration and grade nothing at all.

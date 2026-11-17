@@ -29,7 +29,7 @@ type NewerWriterError struct {
 
 func (e *NewerWriterError) Error() string {
 	if len(e.Lacks) > 0 {
-		return fmt.Sprintf("%s requires %s, which this build (%s) lacks", e.Path, quoteAll(e.Lacks), RecordAPIVersion)
+		return fmt.Sprintf("%s requires %s, which this build (%s) lacks", e.Path, quoteAll(e.Lacks), APIVersion)
 	}
 	return fmt.Sprintf("job store %s is at migration %d, past this build's %d", e.Path, e.Found, e.Known)
 }
@@ -48,7 +48,7 @@ type NewerRecordsError struct {
 
 func (e *NewerRecordsError) Error() string {
 	if len(e.Lacks) > 0 {
-		return fmt.Sprintf("%s requires %s, which this build (%s) lacks", e.Record, quoteAll(e.Lacks), RecordAPIVersion)
+		return fmt.Sprintf("%s requires %s, which this build (%s) lacks", e.Record, quoteAll(e.Lacks), APIVersion)
 	}
 	return fmt.Sprintf("%s: %s is %s %s, and this build reads %s %s", e.Path, e.Record, e.Got.APIVersion, e.Got.Kind, e.Want.APIVersion, e.Want.Kind)
 }
@@ -63,7 +63,7 @@ type RecordVersionError struct {
 }
 
 func (e *RecordVersionError) Error() string {
-	return fmt.Sprintf("job: %s:%d is %s, and this build reads %s: %s", e.Path, e.Line, e.Got, e.Want, StaleStoreFix(e.Path))
+	return fmt.Sprintf("job: %s:%d is %s, and this build reads %s", e.Path, e.Line, e.Got, e.Want)
 }
 
 // LegacyDocumentError is the store's directory still holding the plan an older writer kept
@@ -81,12 +81,6 @@ func (e *LegacyDocumentError) Error() string {
 }
 
 func (e *LegacyDocumentError) Unwrap() error { return e.Err }
-
-// StaleStoreFix is how a person gets past the job store at path, which an older writer
-// wrote. A newer writer's lines are kept whole.
-func StaleStoreFix(path string) string {
-	return fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", path)
-}
 
 // refuseRecord refuses the record at line of the store, got where this build reads only
 // want. Another version is a [*RecordVersionError], another kind a line no writer stores.

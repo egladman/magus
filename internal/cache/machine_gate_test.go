@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -927,7 +928,7 @@ func (s *BudgetWaitSuite) TestALeasedWorkerWaitsItsBoundThenNamesTheOwedFiling()
 	s.Require().ErrorIs(err, types.MachineBudgetExhausted)
 	s.Contains(err.Error(), fmt.Sprintf(
 		"Job wave/api got no seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
-		hint.JobExit.With("wave/api"), job.OwedNoSeat))
+		hint.JobExit.With("wave/api"), jobstore.OwedNoSeat))
 }
 
 // roomAtTheBound parks every claim and seats the one unparked ask.

@@ -10,7 +10,6 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
@@ -131,7 +130,7 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 		}
 		lease = jobtypes.Job{}
 	}
-	return focusVerdict(focus, job.ReadBoundary(lease), lease.ID, location.workspace, focusDir(location), operands)
+	return focusVerdict(focus, jobtypes.ReadBoundary(lease), lease.ID, location.workspace, focusDir(location), operands)
 }
 
 // focusVerdict judges resolved operands against a resolved focus, and is where the
@@ -208,7 +207,7 @@ func focusForLease(ctx context.Context, ws types.WorkspaceReader, location locat
 // read paths, which only widen. It is the job store's own read boundary, so the store's
 // subset check and this deny agree on what a lease may read.
 func leaseFocus(ws types.WorkspaceReader, me jobtypes.Job) (project.Focus, bool) {
-	return project.FocusForPaths(ws, job.ReadBoundary(me))
+	return project.FocusForPaths(ws, jobtypes.ReadBoundary(me))
 }
 
 // focusReadOperands is every path a read-shaped command in the line was pointed at.

@@ -1203,7 +1203,7 @@ func TestEnterRefuses(t *testing.T) {
 
 	rows, err := store.List(t.Context())
 	require.NoError(t, err)
-	assert.Len(t, job.Entries(rows, "orch/worker"), job.MaxJobEntries)
+	assert.Len(t, job.Entries(rows, "orch/worker"), jobtypes.MaxJobEntries)
 }
 
 // storeAt is the job store the fixture's context pins.

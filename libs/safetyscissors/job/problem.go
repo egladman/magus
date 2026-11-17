@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// Code names a class of problem in the caller's own vocabulary, such as magus's
+// Code names a class of problem in the caller's own vocabulary, such as its
 // diagnostic codes. This module defines none: it carries a code a caller gave it and
 // compares it with the ones the caller permits.
 type Code string

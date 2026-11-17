@@ -347,7 +347,7 @@ func delegatedJob(row job.Job, result *job.Result) *jobv1.Job {
 		Attempt:        wireAttempt(row.Attempt),
 		Integration:    wireIntegration(row.Integration),
 		WaiterEvidence: wireIntegration(row.WaiterEvidence),
-		ApiVersion:     string(jobstore.RecordAPIVersion),
+		ApiVersion:     string(job.APIVersion),
 		Requires:       row.Requires,
 		ModelTier:      wireModelTier(row.ModelTier),
 		BriefFormat:    string(row.BriefFormat),

@@ -1093,7 +1093,7 @@ func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
 	require.Len(t, shrunk[0].Next.Releases, 1)
 	assert.False(t, shrunk[0].Next.Releases[0].Revoked, "giving up its own path is a release, not a revocation")
 
-	var refused *RefusedError
+	var refused *job.RefusedError
 	_, err = Apply(t.Context(), worker, []job.Declaration{spec("a.go", "c.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorAs(t, err, &refused, "widening")
 	criteria := spec("a.go")

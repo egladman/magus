@@ -284,9 +284,10 @@ func (s *Store) gradesLog() (codec.JSONL[gradesEntry], error) {
 		return codec.JSONL[gradesEntry]{}, err
 	}
 	return codec.JSONL[gradesEntry]{
-		Path: filepath.Join(filepath.Dir(path), gradesFileName),
-		Perm: 0o600,
-		Key:  gradesEntry.key,
+		Path:   filepath.Join(filepath.Dir(path), gradesFileName),
+		Perm:   0o600,
+		Key:    gradesEntry.key,
+		OnDrop: s.dropped,
 	}, nil
 }
 
@@ -306,11 +307,11 @@ func (s *Store) appendGrades(ctx context.Context, entries ...gradesEntry) error 
 }
 
 func runType() apiversion.TypeMeta {
-	return apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Run"}
+	return apiversion.TypeMeta{APIVersion: APIVersion, Kind: "Run"}
 }
 
 func gradeType() apiversion.TypeMeta {
-	return apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Grade"}
+	return apiversion.TypeMeta{APIVersion: APIVersion, Kind: "Grade"}
 }
 
 // gradesEntry is one line of grades.jsonl: a run or a grade. A run's last line is keyed by

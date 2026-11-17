@@ -34,7 +34,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, jobtypes.Job) {
 	}
 	held := job.NewStore(job.Location{
 		CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, StateBase: fixture.StateBase(t), Root: root,
-		Actor: &job.Actor{Lease: row.ID},
+		Actor: &jobtypes.Actor{Lease: row.ID},
 	})
 	stored, err := held.Update(ctx, row.ID, func(u *jobtypes.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
 	require.NoError(t, err)

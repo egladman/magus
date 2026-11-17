@@ -673,7 +673,7 @@ func resultShape(row job.Job) string {
 		return fmt.Sprintf("the shape did not encode: %v", err)
 	}
 	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or verification_evidence entry.",
-		encoded, job.OwedNoSeat)
+		encoded, OwedNoSeat)
 }
 
 // FiledShape is [resultShape] for the row named id, or where to read the

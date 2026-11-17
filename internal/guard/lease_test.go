@@ -3194,9 +3194,9 @@ func childFleet(t *testing.T, readOnly bool) (context.Context, jobtypes.Job, *jo
 	other := jobtypes.Job{ID: "harness/other", Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateRunning}
 	ctx, root := fleetFixture(t, me, scout, other)
 	location, _ := ctx.Value(locationKey{}).(location)
-	unbound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{}})
+	unbound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &jobtypes.Actor{}})
 	require.NoError(t, unbound.Bind(job.Caller{}, me.ID))
-	bound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{Lease: me.ID}})
+	bound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &jobtypes.Actor{Lease: me.ID}})
 	return ctx, me, bound
 }
 
@@ -3227,7 +3227,7 @@ EOF`, string(jobtypes.APIVersion), me.ID, me.ID),
 	_, err = bound.Update(t.Context(), me.ID+"/wide", func(u *jobtypes.Job) {
 		*u = jobtypes.Job{ID: me.ID + "/wide", Parent: me.ID, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateDeclared}
 	})
-	var refused *job.RefusedError
+	var refused *jobtypes.RefusedError
 	require.ErrorAs(t, err, &refused, "the store is the one refusal for a child reaching past its parent")
 	assert.Contains(t, refused.Rule, "paths its parent owns")
 }
@@ -3261,7 +3261,7 @@ EOF`, me.ID): "cannot read",
 	_, err := bound.Update(t.Context(), me.ID+"/x", func(u *jobtypes.Job) {
 		*u = jobtypes.Job{ID: me.ID + "/x", Parent: other, ReadOnly: true, State: jobtypes.StateDeclared}
 	})
-	var refused *job.RefusedError
+	var refused *jobtypes.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, refused.Rule, fmt.Sprintf("must name %s as its parent", me.ID), "the guard and the store say the same thing")
 }

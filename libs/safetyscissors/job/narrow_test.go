@@ -46,11 +46,10 @@ func (s *NarrowSuite) TestALiteralStopsOnlyAtANarrowing() {
 	s.True(ReleasedReach(narrowed, "notes.buzz", "notes.buzz"))
 }
 
-func (s *NarrowSuite) TestAReleaseUnderAPatternIsNamed() {
+func (s *NarrowSuite) TestAClaimOnAReleasedFileIsListed() {
 	row := Job{Paths: Paths{Write: []string{"**/*.buzz", "magusfile.buzz#build"}}, Releases: []Release{{Path: "magusfile.buzz", Narrowed: true}}}
 
 	s.Equal([]string{"build"}, ClaimsOnFile(row, "magusfile.buzz"))
-	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it: only its claims do (build)"}, ReleasedUnderPattern(row))
 }
 
 func (s *NarrowSuite) TestARequestForAFileNoLongerHeldIsAnswered() {

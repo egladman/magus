@@ -286,3 +286,29 @@ func recordNarrowing(cur *job.Job, file, takenBy string, now int64, digest strin
 	}
 	cur.Releases = append(cur.Releases, rel)
 }
+
+// heldByPattern reports whether a write path of row with glob metacharacters covers file.
+func heldByPattern(row job.Job, file string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
+		p, decl := job.SplitClaim(entry)
+		return decl == "" && strings.ContainsAny(p, globMeta) && job.CoversPath(p, file)
+	})
+}
+
+// ReleasedUnderPattern says of each file row released that a pattern of its
+// write paths still names: the release stands, so the pattern does not hold it.
+func ReleasedUnderPattern(row job.Job) []string {
+	var notes []string
+	for _, r := range row.Releases {
+		file, decl := job.SplitClaim(r.Path)
+		if decl != "" || !heldByPattern(row, file) {
+			continue
+		}
+		if claims := job.ClaimsOnFile(row, file); len(claims) > 0 {
+			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `%s#<declaration>`", file, file))
+	}
+	return notes
+}

@@ -39,7 +39,7 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 	d := job.DecideAutoClaim(me, rel, facts, rows, projects, deps.fileFanIn)
 	switch {
 	case d.Stop == "":
-		store := job.NewStore(at.jobs()).As(job.Actor{Lease: me.ID})
+		store := job.NewStore(at.jobs()).As(jobtypes.Actor{Lease: me.ID})
 		if _, err := store.Claim(ctx, me.ID, []jobtypes.ClaimRequest{d.Request}, facts, config.Jobs{}, false); err != nil {
 			return writeGrade{}, "the job store refused the claim: " + err.Error()
 		}

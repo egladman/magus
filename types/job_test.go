@@ -566,7 +566,6 @@ func TestDeclarationValidatesSignatureGoals(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
-	assert.Contains(t, job.GoalExpects(), job.ExpectSignature)
 }
 
 func TestJobUnmetNamesWhatThisBuildLacks(t *testing.T) {

@@ -28,7 +28,7 @@ func TestPinSuite(t *testing.T) {
 
 func (s *PinSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"})
-	s.loc = Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root(), Actor: &Actor{}}
+	s.loc = Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root(), Actor: &job.Actor{}}
 	s.bin = filepath.Join(s.repo.Root(), "magus")
 	s.Require().NoError(os.WriteFile(s.bin, []byte("#!/bin/sh\necho one\n"), 0o755))
 	row := job.Job{ID: "pinned-work", State: job.StateDeclared}

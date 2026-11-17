@@ -19,7 +19,7 @@ import (
 // storeFormats are the shared store shapes this build reads.
 // Another checkout's binary may have written the rows.
 var storeFormats = []types.APIVersion{
-	job.APIVersion, job.ResultAPIVersion,
+	types.APIVersion(job.APIVersion), job.ResultAPIVersion,
 	types.EventAPIVersion, types.StoredOutputAPIVersion,
 }
 

@@ -1357,9 +1357,9 @@ func (s *BinaryPinSuite) TestTheCacheAnswersWhileTheFileKeepsItsIdentity() {
 }
 
 func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
-	worker := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: s.loc.Root, Actor: &Actor{Lease: "w1"}})
+	worker := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: s.loc.Root, Actor: &job.Actor{Lease: "w1"}})
 	_, err := worker.PinBinary(s.T().Context(), "w1")
-	var refused *RefusedError
+	var refused *job.RefusedError
 	s.Require().ErrorAs(err, &refused)
 	s.Contains(refused.Rule, "a worker that pinned its own build would pick its judge")
 }

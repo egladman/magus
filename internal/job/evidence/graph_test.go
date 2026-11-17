@@ -111,7 +111,7 @@ func TestExtendedFootprintRecordsSiblingTestsAsSoftPaths(t *testing.T) {
 		rebuild: true,
 		build:   func(context.Context) (*knowledge.Graph, error) { return g, nil },
 	}
-	store := job.NewStore(job.Location{Root: root, StateBase: t.TempDir(), CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	store := job.NewStore(job.Location{Root: root, StateBase: t.TempDir(), CacheDir: t.TempDir(), Actor: &jobtypes.Actor{}})
 	ws := job.Workspace{Projects: []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}}
 
 	rec, notes := ExtendedFootprint(t.Context(), store, graph, root,

@@ -721,13 +721,13 @@ func refuseOwedReason(result job.Result) error {
 		owed[evidence.GateID] = evidence.Owed
 	}
 	for _, goal := range slices.Sorted(maps.Keys(owed)) {
-		if reason := owed[goal]; reason != "" && reason != job.OwedNoSeat && reason != job.OwedRemoteCI {
+		if reason := owed[goal]; reason != "" && reason != OwedNoSeat && reason != OwedRemoteCI {
 			return fmt.Errorf("job: goal %q is filed as owed because %q, and the reasons a run is owed are %q and %q:"+
 				" a check the environment kept from running is filed as unrun with that cause, which fails the job,"+
 				" the integrator regenerates an output outside the write paths, so that files nothing,"+
 				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
 				" and a lint finding in a file this job did not change clears by linting the files it changed",
-				goal, reason, job.OwedNoSeat, job.OwedRemoteCI)
+				goal, reason, OwedNoSeat, OwedRemoteCI)
 		}
 	}
 	return nil

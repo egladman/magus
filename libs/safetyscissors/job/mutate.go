@@ -215,7 +215,7 @@ func (w *rowWrite) declare() {
 	if w.kind == AsDeclaration && w.row.State == "" {
 		w.row.State = StateDeclared
 	}
-	if w.kind == AsDeclaration && w.exists() && WidensInPlace(w.prev, w.row) {
+	if w.kind == AsDeclaration && w.exists() && widensInPlace(w.prev, w.row) {
 		w.row.State = w.prev.State
 	}
 }

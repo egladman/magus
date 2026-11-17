@@ -872,7 +872,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			err = errors.Join(err, store.DiscardWorktree(ctx, worktree))
 		}
 	}
-	var refused *job.RefusedError
+	var refused *jobtypes.RefusedError
 	switch {
 	case errors.As(err, &refused):
 		return err
@@ -939,7 +939,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.Worktree == nil {
 			job.PrintLandingBootstrap(ctx, os.Stdout, store, stored)
 		}
-		job.PrintClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), jobtypes.ReleasedUnderPattern(stored)))
+		job.PrintClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)))
 		for _, line := range narrowedLines {
 			fmt.Println(line)
 		}
@@ -968,7 +968,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
-				ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), jobtypes.ReleasedUnderPattern(stored)),
+				ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)),
 			},
 			DerivedClaims: derived,
 		})
@@ -993,7 +993,7 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 	case outputName:
 		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
-		fmt.Println(jobtypes.EntryAdvice(stored, rel))
+		fmt.Println(job.EntryAdvice(stored, rel))
 		pointAtConsole(ctx, stored.ID, false)
 		return nil
 	default:
@@ -1777,7 +1777,7 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 	if len(ids) == 0 {
 		return exit.Usagef("magus job %s: requires at least one job (`%s` lists them)", verb, hint.LsJobs)
 	}
-	lapse, err := jobtypes.ParsePauseUntil(until, time.Now())
+	lapse, err := job.ParsePauseUntil(until, time.Now())
 	if err != nil {
 		return exit.Usagef("magus job pause: %v", err)
 	}
@@ -2064,7 +2064,7 @@ func applyClaimNotes(ctx context.Context, store *job.Store, applied []job.Applie
 	out := map[string][]string{}
 	for _, a := range applied {
 		notes := job.ForkNotes(ctx, store, rows, a.Next)
-		if notes = append(notes, jobtypes.ReleasedUnderPattern(a.Next)...); len(notes) > 0 {
+		if notes = append(notes, job.ReleasedUnderPattern(a.Next)...); len(notes) > 0 {
 			out[a.Next.ID] = notes
 		}
 	}
@@ -2190,7 +2190,7 @@ func joinInflight(ctx context.Context, root string, store *job.Store, list jobty
 // that cannot read the row this fork writes. A rebuild there leaves a
 // checkout whose ./magus cannot read its own job.
 func checkoutReadsRow(root string) error {
-	reads, err := contract.ReadsFormat(root, jobtypes.APIVersion)
+	reads, err := contract.ReadsFormat(root, types.APIVersion(jobtypes.APIVersion))
 	switch {
 	case errors.Is(err, contract.ErrNotCarried):
 		return nil

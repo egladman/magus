@@ -38,7 +38,7 @@ func ledgerIn(t *testing.T, root string) (cacheDir string, store *job.Store) {
 	cacheDir = t.TempDir()
 	// Pinned unbound: these rows are the orchestrator's, and resolving the actor from
 	// the environment would make every write depend on whether this run is leased.
-	actor := job.Actor{}
+	actor := jobtypes.Actor{}
 	return cacheDir, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &actor})
 }
 

@@ -19,7 +19,7 @@ func TestAPIVersion(t *testing.T) {
 func (s *APIVersionSuite) TestParseAcceptsAlpha() {
 	v, err := ParseAPIVersion("safetyscissors.job/v1alpha1")
 	s.Require().NoError(err)
-	s.Equal(job.APIVersion, v)
+	s.Equal(APIVersion(job.APIVersion), v)
 }
 
 func (s *APIVersionSuite) TestParseAcceptsStable() {
@@ -86,29 +86,29 @@ func (s *APIVersionSuite) TestCompareOrdersByGroupFirst() {
 }
 
 func (s *APIVersionSuite) TestCompareSortsMalformedFirst() {
-	s.Equal(-1, APIVersion("13").Compare(job.APIVersion))
+	s.Equal(-1, APIVersion("13").Compare(APIVersion(job.APIVersion)))
 }
 
 func (s *APIVersionSuite) TestRefuseVersionAcceptsItsOwnVersion() {
-	s.NoError(RefuseVersion(job.APIVersion, job.APIVersion, "the row", "delete it"))
+	s.NoError(RefuseVersion(APIVersion(job.APIVersion), APIVersion(job.APIVersion), "the row", "delete it"))
 }
 
 func (s *APIVersionSuite) TestRefuseVersionNamesAMissingVersion() {
-	err := RefuseVersion(job.APIVersion, "", "the row", "delete the job store")
+	err := RefuseVersion(APIVersion(job.APIVersion), "", "the row", "delete the job store")
 	s.EqualError(err, "the row: record carries no apiVersion, and this reader reads only safetyscissors.job/v1alpha1: delete the job store")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionAsksForANewerMagus() {
-	err := RefuseVersion(job.APIVersion, "safetyscissors.job/v1alpha2", "the row", "delete it")
+	err := RefuseVersion(APIVersion(job.APIVersion), "safetyscissors.job/v1alpha2", "the row", "delete it")
 	s.EqualError(err, "the row: record is safetyscissors.job/v1alpha2, newer than the safetyscissors.job/v1alpha1 this reader reads: upgrade magus")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionNamesTheFixForAnOlderVersion() {
-	err := RefuseVersion("safetyscissors.job/v1alpha2", job.APIVersion, "the row", "delete it")
+	err := RefuseVersion("safetyscissors.job/v1alpha2", APIVersion(job.APIVersion), "the row", "delete it")
 	s.EqualError(err, "the row: record is safetyscissors.job/v1alpha1, and this reader reads only safetyscissors.job/v1alpha2: delete it")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionNamesTheFixForAnotherGroup() {
-	err := RefuseVersion(job.APIVersion, "magus.event/v9", "the row", "delete it")
+	err := RefuseVersion(APIVersion(job.APIVersion), "magus.event/v9", "the row", "delete it")
 	s.EqualError(err, "the row: record is magus.event/v9, and this reader reads only safetyscissors.job/v1alpha1: delete it")
 }

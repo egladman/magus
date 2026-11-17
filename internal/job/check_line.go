@@ -1,38 +1,41 @@
 package job
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
-// CheckCommand renders c as the command a person types and a job stores. Running it
-// satisfies the check. The charms it executes under, default_charms included, are the
-// charms the check is resolved to (ranCheck).
+// CheckCommand renders c as the command a person types and a job stores: [checkArgv]
+// joined by spaces. Running it satisfies the check. The charms it executes under,
+// default_charms included, are the charms the check is resolved to (ranCheck).
 func CheckCommand(c job.LeaseCheck) string {
-	if c.Script != "" {
-		line := "magus buzz --record " + c.Script
-		if c.Test {
-			line = "magus buzz -t " + c.Script
+	return strings.Join(checkArgv(c), " ")
+}
+
+// checkArgv is c as the argv that runs it, led by the binary as this process was invoked
+// (see [hint.BinaryName]). It is the one rendering of a check: [CheckCommand] joins it, and
+// a witnessed run executes it, so an argument holding a space stays one word there.
+func checkArgv(c job.LeaseCheck) []string {
+	argv := []string{hint.BinaryName()}
+	switch {
+	case c.Script != "" && c.Test:
+		argv = append(argv, "buzz", "-t", c.Script)
+	case c.Script != "":
+		argv = append(argv, "buzz", "--record", c.Script)
+	default:
+		argv = append(argv, "run", c.Target, cmp.Or(c.Project, "."))
+		if c.NoDefaultCharms {
+			argv = append(argv, "--no-default-charms")
 		}
-		if len(c.Args) > 0 {
-			line += " -- " + strings.Join(c.Args, " ")
-		}
-		return line
-	}
-	project := c.Project
-	if project == "" {
-		project = "."
-	}
-	line := fmt.Sprintf("magus run %s %s", c.Target, project)
-	if c.NoDefaultCharms {
-		line += " --no-default-charms"
 	}
 	if len(c.Args) > 0 {
-		line += " -- " + strings.Join(c.Args, " ")
+		argv = append(append(argv, "--"), c.Args...)
 	}
-	return line
+	return argv
 }
 
 // validationLine is a row's Validation: its check as [CheckCommand] renders it, "" for a row

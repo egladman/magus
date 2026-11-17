@@ -5,26 +5,26 @@ import (
 	"strings"
 )
 
-// EntryPoint is where a request entered magus. magus reads it from its own dispatch,
+// EntryPoint is where a request entered the caller, read from the caller's own dispatch,
 // never from anything the caller said about itself.
 type EntryPoint string
 
 const (
-	// EntryPointCLI is a magus command run directly, by a person or by a program.
+	// EntryPointCLI is a command run directly, by a person or by a program.
 	EntryPointCLI EntryPoint = "cli"
-	// EntryPointHook is `magus shell` called by a host's hook wiring.
+	// EntryPointHook is a call from a host's hook wiring.
 	EntryPointHook EntryPoint = "hook"
 	// EntryPointMCP is a tool call over MCP.
 	EntryPointMCP EntryPoint = "mcp"
 	// EntryPointRPC is an authenticated call on the server's HTTP API.
 	EntryPointRPC EntryPoint = "rpc"
-	// EntryPointServer is `magus server` acting on its own schedule.
+	// EntryPointServer is a server acting on its own schedule.
 	EntryPointServer EntryPoint = "server"
 )
 
-// Origin is where a record came from, as far as magus could see. Each field is bound to
+// Origin is where a record came from, as far as its writer could see. Each field is bound to
 // one channel, so the field says the provenance: User and UID are the OS account the
-// writing process ran as, EntryPoint is where the request entered magus, Host is the
+// writing process ran as, EntryPoint is where the request entered the writer, Host is the
 // label the host's wiring gave itself, and Session and Agent are the ids the host
 // delivered.
 //
@@ -35,7 +35,7 @@ type Origin struct {
 	// number on Unix, a SID on Windows) so uid 0 is not an empty value.
 	User string `json:"user,omitempty" yaml:"user,omitempty"`
 	UID  string `json:"uid,omitempty" yaml:"uid,omitempty"`
-	// EntryPoint is where the request entered magus.
+	// EntryPoint is where the request entered the writer.
 	EntryPoint EntryPoint `json:"entry_point,omitempty" yaml:"entry_point,omitempty"`
 	// Host is the program running the session (an agent host, the console), as its wiring
 	// named itself. A label, not a verified identity.

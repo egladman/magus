@@ -654,8 +654,7 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	assert.False(t, ranCheck(plain, gated, defaults, goCheckSelection))
 
 	assert.Equal(t, "magus run generate . --no-default-charms", CheckCommand(optOut))
-	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))
-	assert.True(t, strings.HasSuffix(gateCommand(plain), " run generate ."), gateCommand(plain))
+	assert.Equal(t, "magus run generate .", CheckCommand(plain))
 }
 
 // The opt-out is a field on the check record: a check line carrying the flag sets it, and
@@ -1199,8 +1198,8 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 		rep.Validation = job.ResultValidation{Command: acceptRow().Validation, Owed: reason}
 		return rep
 	}
-	v := verifyClaim(acceptRow(), owed(job.OwedNoSeat), job.CapturedRun{}, nil)
-	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []job.VerificationStatus{{ID: "check", Owed: job.OwedNoSeat}},
+	v := verifyClaim(acceptRow(), owed(OwedNoSeat), job.CapturedRun{}, nil)
+	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []job.VerificationStatus{{ID: "check", Owed: OwedNoSeat}},
 		Notes: []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}}, v)
 	var out strings.Builder
 	RenderGates(&out, v)
@@ -1211,7 +1210,7 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	assert.Equal(t, []string{"goal \"check\": files its run as owed because \"slow\", and the one reason a run is owed is \"no seat\""}, v.Violations)
 
 	integration := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
-	rep := owed(job.OwedNoSeat)
+	rep := owed(OwedNoSeat)
 	rep.Job = "integrate"
 	v = VerifyGates(integration, rep, job.CapturedRun{}, nil, nil, Observed{})
 	assert.False(t, v.Verified)
@@ -1225,7 +1224,7 @@ func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
 	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
 	rep := passingResult()
 	rep.Job = "integrate"
-	rep.Validation = job.ResultValidation{Command: acceptRow().Validation, Owed: job.OwedNoSeat}
+	rep.Validation = job.ResultValidation{Command: acceptRow().Validation, Owed: OwedNoSeat}
 	v := VerifyGates(row, rep, job.CapturedRun{}, nil, nil, Observed{})
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "after MGS3053, which no seat clears, frees memory and runs the check again")
 }
@@ -1241,8 +1240,8 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 		{ID: "buzz", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}}
 	owed := &job.Result{
-		Validation:           job.ResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: job.OwedNoSeat},
-		VerificationEvidence: []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}, {GateID: "buzz", Owed: job.OwedNoSeat}},
+		Validation:           job.ResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: OwedNoSeat},
+		VerificationEvidence: []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat}, {GateID: "buzz", Owed: OwedNoSeat}},
 	}
 	paid := job.Job{ID: "b", Check: &job.LeaseCheck{Target: "buzz-test", Project: "console"}}
 	elsewhere := worker
