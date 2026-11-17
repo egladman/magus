@@ -7,6 +7,7 @@
 package graph
 
 import (
+	"github.com/egladman/magus/internal/graph/knowledge"
 	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -153,6 +154,23 @@ func statsToProto(s types.KnowledgeStats) *graphv1.GraphStats {
 		out.Coverage = append(out.Coverage, &graphv1.DocCoverage{
 			Kind: c.Kind, Total: int32(c.Total), Documented: int32(c.Documented),
 			Percent: int32(c.Percent), Undocumented: c.Undocumented,
+		})
+	}
+	return out
+}
+
+func sitesToProto(in []knowledge.ContextSite) []*graphv1.DefinitionSite {
+	out := make([]*graphv1.DefinitionSite, 0, len(in))
+	for _, s := range in {
+		out = append(out, &graphv1.DefinitionSite{
+			File:            s.File,
+			StartLine:       int32(s.StartLine),
+			EndLine:         int32(s.EndLine),
+			Status:          string(s.Status),
+			Source:          s.Source,
+			SourceStartLine: int32(s.SourceStartLine),
+			Symbol:          s.Symbol,
+			MatchId:         s.MatchID,
 		})
 	}
 	return out

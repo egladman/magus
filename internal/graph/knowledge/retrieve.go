@@ -34,12 +34,18 @@ const pullTable = "magus graph pull -table"
 // means no table. A nil Table or a Table error skips the embed list, which the ranking's
 // Skipped says; Retrieve reads no file of its own and never pulls.
 // Limit truncates the matches; 0 keeps every one.
+//
+// Exclude names workspace paths dropped before ranking: no node at or under one is
+// matched, seeds the walk, or is walked through. Position, when set, seeds the ranking
+// from a cursor instead of free text (see rankPosition), and its own file is excluded.
 type RetrieveOptions struct {
-	Reader  []string
-	Weights textrank.Weights
-	Lexical *textrank.Index
-	Table   func() (*embed.Table, error)
-	Limit   int
+	Reader   []string
+	Weights  textrank.Weights
+	Lexical  *textrank.Index
+	Table    func() (*embed.Table, error)
+	Limit    int
+	Exclude  []string
+	Position *Position
 }
 
 type (
@@ -92,26 +98,37 @@ var ShippedWeights = sync.OnceValue(func() textrank.Weights {
 // rank. Ties break by kindRank, then id, so the answer is a pure function of the graph,
 // input and opts.
 //
-// A query with no free text ranks its matches by prior, then id. An error means opts
-// carries weights the rankers refuse.
+// A query with no free text ranks its matches by prior, then id. With opts.Position the
+// input may carry filters only, and the window ranks the symbols the filters admit. An
+// error means opts carries weights the rankers refuse, or a position query free text.
 func (g *Graph) Retrieve(input string, opts RetrieveOptions) ([]types.KnowledgeMatch, types.KnowledgeRanking, error) {
 	ranking := types.KnowledgeRanking{Weights: opts.Weights.Digest(), Reader: opts.Reader}
 	q := g.normalizePaths(parseQuery(input))
 	ix := g.ensureSearchIndex()
 	cq := g.compileQuery(q)
 	tokens, need := queryTokens(cq.terms)
+	x := newExclusion(opts.Exclude, opts.Position)
 
 	var matches []types.KnowledgeMatch
-	if len(tokens) == 0 {
-		matches = g.filterOnly(ix, cq, opts.Weights)
-	} else {
+	switch {
+	case opts.Position != nil:
+		if len(cq.terms) > 0 {
+			return nil, ranking, fmt.Errorf("a position query takes field filters only, not the free text %q: the window is the text", strings.TrimSpace(input))
+		}
+		var err error
+		if matches, err = g.rankPosition(ix, cq, opts, x, &ranking); err != nil {
+			return nil, ranking, err
+		}
+	case len(tokens) == 0:
+		matches = g.filterOnly(ix, cq, opts.Weights, x)
+	default:
 		lex := opts.Lexical
 		if lex == nil {
 			lex = ix.lexicalIndex()
 			ranking.Note = fmt.Sprintf("no stored lexical index: ranked over one built in memory from %d graph nodes, without section bodies", lex.Len())
 		}
 		var err error
-		matches, err = g.rankText(ix, cq, tokens, need, exactPhrase(cq.terms), lex, opts, &ranking)
+		matches, err = g.rankText(ix, cq, tokens, need, exactPhrase(cq.terms), lex, opts, x, &ranking)
 		if err != nil {
 			return nil, ranking, err
 		}
@@ -164,10 +181,10 @@ func termsHeld(h textrank.Hit, need []string) int {
 
 // filterOnly answers a query with no scored term: every node the filters admit, by prior,
 // then kindRank, then id.
-func (g *Graph) filterOnly(ix *searchIndex, cq *compiledQuery, w textrank.Weights) []types.KnowledgeMatch {
+func (g *Graph) filterOnly(ix *searchIndex, cq *compiledQuery, w textrank.Weights, x exclusion) []types.KnowledgeMatch {
 	var matches []types.KnowledgeMatch
 	add := func(i int) {
-		if !g.admits(ix, i, cq) {
+		if !g.admits(ix, i, cq) || x.drops(&ix.entries[i].node) {
 			return
 		}
 		prior := g.prior(&ix.entries[i].node, w)
@@ -209,11 +226,11 @@ type candidate struct {
 // rankText scores tokens over lex, keeps the hits the filters admit, and fuses their
 // lexical order with the ones named phrase exactly and a personalized PageRank over the
 // same matches. Why counts a match's tokens against need.
-func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []string, phrase string, lex *textrank.Index, opts RetrieveOptions, ranking *types.KnowledgeRanking) ([]types.KnowledgeMatch, error) {
+func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []string, phrase string, lex *textrank.Index, opts RetrieveOptions, x exclusion, ranking *types.KnowledgeRanking) ([]types.KnowledgeMatch, error) {
 	var cands []candidate
 	for _, h := range lex.Score(tokens, opts.Weights.BM25F) {
 		pos, ok := ix.byID[h.ID]
-		if !ok || !g.admits(ix, int(pos), cq) {
+		if !ok || !g.admits(ix, int(pos), cq) || x.drops(&ix.entries[pos].node) {
 			continue
 		}
 		prior := g.prior(&ix.entries[pos].node, opts.Weights)
@@ -237,9 +254,9 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 	}
 	seedsOf := map[string][]string{}
 	var graph *textrank.RankedList
-	if seeds := g.readerSeeds(opts.Reader); len(seeds) > 0 {
+	if seeds := g.readerSeeds(opts.Reader, x); len(seeds) > 0 {
 		var err error
-		if graph, err = g.graphList(cands, opts, seeds, seedsOf); err != nil {
+		if graph, err = g.graphList(cands, opts, seeds, seedsOf, x); err != nil {
 			return nil, err
 		}
 	} else {
@@ -369,14 +386,15 @@ func exactPhrase(terms []compiledTerm) string {
 // The fusion constant bounds the lexical seeds: a lexical rank past k carries under half
 // the weight of rank 1 in the fusion, so it is no stronger as a seed.
 //
-// seeds holds the reader seeds, which graphList adds the lexical seeds to.
-func (g *Graph) graphList(cands []candidate, opts RetrieveOptions, seeds map[string]float64, seedsOf map[string][]string) (*textrank.RankedList, error) {
+// seeds holds the reader seeds, which graphList adds the lexical seeds to. The walk never
+// enters a node x drops.
+func (g *Graph) graphList(cands []candidate, opts RetrieveOptions, seeds map[string]float64, seedsOf map[string][]string, x exclusion) (*textrank.RankedList, error) {
 	if top := cands[0].score; top > 0 {
 		for _, c := range cands[:min(len(cands), max(1, int(opts.Weights.Fusion.K)))] {
 			seeds[c.hit.ID] = c.score / top
 		}
 	}
-	res, err := g.PersonalizedPageRank(seeds, opts.Weights.PPR)
+	res, err := g.personalizedPageRank(seeds, opts.Weights.PPR, func(id string) bool { return g.dropsID(x, id) })
 	if err != nil {
 		return nil, err
 	}
@@ -394,15 +412,15 @@ func (g *Graph) graphList(cands []candidate, opts RetrieveOptions, seeds map[str
 	return list, nil
 }
 
-// readerSeeds weighs 1 each file and directory node a reader path names. With none there
+// readerSeeds weighs 1 each file and directory node a reader path names that x keeps. With none there
 // is no graph list: seeded by the lexical hits alone, the walk reranked them to no gain on
 // the retrieval eval (MRR .260 either way over 2548 judgments) at four times the explain
 // latency.
-func (g *Graph) readerSeeds(reader []string) map[string]float64 {
+func (g *Graph) readerSeeds(reader []string, x exclusion) map[string]float64 {
 	seeds := map[string]float64{}
 	for _, p := range reader {
 		for _, id := range []string{fileID(p), dirID(p)} {
-			if _, ok := g.node(id); ok {
+			if n, ok := g.node(id); ok && !x.drops(&n) {
 				seeds[id] = 1
 			}
 		}
