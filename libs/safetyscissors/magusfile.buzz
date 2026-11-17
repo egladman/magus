@@ -18,6 +18,9 @@ magus\project({
         "test": {
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
+        "test-jsonv-2": {
+            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
+        },
         "landlock-test": {
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
