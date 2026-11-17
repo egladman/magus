@@ -714,6 +714,9 @@ func (g *GateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	if err != nil {
 		return
 	}
+	// A verdict decided before the signal is still filed: the store write outlives the
+	// invocation's cancellation and keeps its values for the invocation id.
+	ctx = context.WithoutCancel(ctx)
 	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
 	if err != nil {
 		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",

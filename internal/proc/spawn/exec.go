@@ -413,12 +413,13 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 }
 
 // jobserverFD is the descriptor a jobserver pipe appended to a child's ExtraFiles lands
-// on: after the launcher's ruleset when the child is confined.
+// on: after the launcher's own files, which a confined child carries ahead of it.
 func jobserverFD(confined bool) int {
+	launcher := 0
 	if confined {
-		return firstExtraFD + scissors.LauncherFiles
+		launcher = scissors.LauncherFiles
 	}
-	return firstExtraFD
+	return firstExtraFD + launcher
 }
 
 // childEnv layers self-reference variables and caller overrides over the base environment.

@@ -3,6 +3,7 @@ package spawn
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/sandbox"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/types"
 )
 
@@ -101,12 +103,12 @@ func TestChildEnvNamesTheJobserverWhereTheLauncherPutsIt(t *testing.T) {
 	ctx := WithJobserver(context.Background(), &Jobserver{})
 	env, _ := childEnv(ctx, p, nil)
 
-	want := "-j --jobserver-fds=3,4 --jobserver-auth=3,4"
+	fd := 3
 	if confined, _ := p.KernelConfines(); confined {
-		want = "-j --jobserver-fds=4,5 --jobserver-auth=4,5"
+		fd += scissors.LauncherFiles
 	}
-	assert.Equal(t, want, lookupEnv(env, "CARGO_MAKEFLAGS"))
-	assert.Equal(t, 4, jobserverFD(true), "the launcher's ruleset takes descriptor 3")
+	assert.Equal(t, fmt.Sprintf("-j --jobserver-fds=%d,%d --jobserver-auth=%d,%d", fd, fd+1, fd, fd+1), lookupEnv(env, "CARGO_MAKEFLAGS"))
+	assert.Equal(t, 3+scissors.LauncherFiles, jobserverFD(true), "the launcher's files take the descriptors ahead of the pipe")
 	assert.Equal(t, 3, jobserverFD(false))
 }
 

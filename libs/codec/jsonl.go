@@ -295,7 +295,7 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 		}
 		if l.Log != nil {
 			l.Log.WarnContext(ctx, "store rewritten", slog.String("path", l.Path), slog.Int("line", partial),
-				slog.String("why", "it ended in a line no writer finished, so the rewrite dropped it"))
+				slog.String("why", l.Path+" ended in a line no writer finished, so the rewrite dropped it"))
 		}
 		if l.OnDrop != nil {
 			l.OnDrop(ctx, Dropped{Path: l.Path, Line: partial})
