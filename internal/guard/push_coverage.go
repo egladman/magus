@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -81,12 +82,10 @@ type runEvidence struct {
 	// files it holds unlike commit.
 	differingPaths map[string]map[string]bool
 	// footprints is each run's, by its index in runs, and declared each
-	// magusfile target's. Both name glob sets by index in globSets.
+	// magusfile target's. Both name glob sets by index in sets.
 	footprints []runFootprint
 	declared   []declaredTarget
-	globSets   [][]types.Glob
-	// claimed memoizes claiming.
-	claimed map[string][]bool
+	sets       unverified.GlobSets
 }
 
 // newRunEvidence weighs runs, recorded in the checkout at root, against what
@@ -94,7 +93,7 @@ type runEvidence struct {
 func newRunEvidence(driver types.VCSDriver, root, workspace string, ws types.WorkspaceRepository, runs []cache.OutputDescriptor, commit string) *runEvidence {
 	ev := &runEvidence{
 		driver: driver, root: root, workspace: workspace, ws: ws, runs: runs, commit: commit,
-		files: map[revisionFile]fileAt{}, revisions: map[string]bool{}, claimed: map[string][]bool{},
+		files: map[revisionFile]fileAt{}, revisions: map[string]bool{},
 	}
 	ev.index()
 	return ev
@@ -124,15 +123,14 @@ type declaredTarget struct {
 // index roots each target's globs and reads each run's named paths once.
 // Done per changed file, they spent a 1104-file push's whole deadline.
 func (ev *runEvidence) index() {
-	setIDs := map[string]int{}
 	targets := map[[2]string]targetFootprint{}
 	footprint := func(p *types.Project, target string) targetFootprint {
 		key := [2]string{p.Path, target}
 		fp, ok := targets[key]
 		if !ok {
 			fp = targetFootprint{
-				inputs:  ev.globSet(setIDs, rootedInputs(p, target)),
-				outputs: ev.globSet(setIDs, rootedOutputs(p, target)),
+				inputs:  ev.sets.Add(rootedInputs(p, target)),
+				outputs: ev.sets.Add(rootedOutputs(p, target)),
 			}
 			targets[key] = fp
 		}
@@ -162,39 +160,6 @@ func (ev *runEvidence) index() {
 	}
 }
 
-// globSet is the index in ev.globSets of a set matching as globs do, added
-// when none does. Targets of one project often share its sources.
-func (ev *runEvidence) globSet(ids map[string]int, globs []types.Glob) int {
-	var key strings.Builder
-	for _, g := range globs {
-		key.WriteString(g.Pattern)
-		for _, e := range g.Except {
-			key.WriteString("\x01" + e)
-		}
-		key.WriteString("\x00")
-	}
-	id, ok := ids[key.String()]
-	if !ok {
-		id = len(ev.globSets)
-		ev.globSets = append(ev.globSets, globs)
-		ids[key.String()] = id
-	}
-	return id
-}
-
-// claiming reports, for each of ev.globSets, whether it claims rel.
-func (ev *runEvidence) claiming(rel string) []bool {
-	if got, ok := ev.claimed[rel]; ok {
-		return got
-	}
-	got := make([]bool, len(ev.globSets))
-	for i, set := range ev.globSets {
-		got[i] = slices.ContainsFunc(set, func(g types.Glob) bool { return g.Match(rel) })
-	}
-	ev.claimed[rel] = got
-	return got
-}
-
 // fileAt is one file at one revision; known is false when the revision is not
 // in the repository.
 type fileAt struct {
@@ -206,11 +171,11 @@ type fileAt struct {
 // whose target outputs hold file and wrote it so covers it too. file is
 // repository-relative.
 func (ev *runEvidence) covered(ctx context.Context, file string) bool {
-	rel, inside := ev.workspacePath(file)
+	rel, inside := unverified.WorkspacePath(ev.root, ev.workspace, file)
 	if !inside {
 		return false
 	}
-	claims := ev.claiming(rel)
+	claims := ev.sets.Claiming(rel)
 	for i, d := range ev.runs {
 		if d.Failed {
 			continue
@@ -225,11 +190,11 @@ func (ev *runEvidence) covered(ctx context.Context, file string) bool {
 // wouldCover names at most three runs that would cover file: targets this
 // store ran over it, else magusfile targets whose inputs hold it.
 func (ev *runEvidence) wouldCover(file string) []string {
-	rel, inside := ev.workspacePath(file)
+	rel, inside := unverified.WorkspacePath(ev.root, ev.workspace, file)
 	if !inside {
 		return nil
 	}
-	claims := ev.claiming(rel)
+	claims := ev.sets.Claiming(rel)
 	var out []string
 	add := func(command string) {
 		if len(out) < 3 && !slices.Contains(out, command) {
@@ -262,20 +227,8 @@ func (ev *runEvidence) wouldCover(file string) []string {
 	return out
 }
 
-// workspacePath is file, repository-relative, relative to the workspace.
-func (ev *runEvidence) workspacePath(file string) (string, bool) {
-	prefix, err := filepath.Rel(ev.root, ev.workspace)
-	if err != nil {
-		return "", false
-	}
-	if prefix = filepath.ToSlash(prefix); prefix == "." {
-		return file, true
-	}
-	return strings.CutPrefix(file, prefix+"/")
-}
-
 // reads reports whether run i's target declares rel among its inputs. claims
-// is claiming(rel). scoped also holds a file-scoped run to the paths it named.
+// is sets.Claiming(rel). scoped also holds a file-scoped run to the paths it named.
 func (ev *runEvidence) reads(i int, claims []bool, rel string, scoped bool) bool {
 	r := ev.footprints[i]
 	if !r.known || !claims[r.inputs] {
@@ -310,7 +263,7 @@ func (ev *runEvidence) namedPaths(d cache.OutputDescriptor) []string {
 }
 
 // writes reports whether run i's target declares, among its outputs, the
-// file claims is claiming of.
+// file claims is sets.Claiming of.
 func (ev *runEvidence) writes(i int, claims []bool) bool {
 	r := ev.footprints[i]
 	return r.known && claims[r.outputs]
@@ -386,11 +339,11 @@ func (ev *runEvidence) readRevisions(ctx context.Context, files []string) error 
 	compared := map[string][]string{}
 	asked := map[revisionFile]bool{}
 	for _, file := range files {
-		rel, inside := ev.workspacePath(file)
+		rel, inside := unverified.WorkspacePath(ev.root, ev.workspace, file)
 		if !inside {
 			continue
 		}
-		claims := ev.claiming(rel)
+		claims := ev.sets.Claiming(rel)
 		read := false
 		for i, d := range ev.runs {
 			if d.Failed || !ev.reads(i, claims, rel, true) && !ev.writes(i, claims) {
