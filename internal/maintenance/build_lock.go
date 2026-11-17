@@ -82,7 +82,7 @@ func RunningMachineGraphBuild() (GraphBuildHolder, bool, error) {
 
 // ReindexSymbols runs reindex for `graph build` and returns how many symbol indexes
 // it refreshed. A failing or missing indexer is a hint, not an error: the domain graph
-// rebuilds regardless. The error is non-nil only for the [ReindexRefusals] part, worded
+// rebuilds regardless. The error is non-nil only for the [reindexRefusals] part, worded
 // for the rebuild that goes on over the stale index.
 func ReindexSymbols(ctx context.Context, reindex func(context.Context) (int, error)) (int, error) {
 	n, err := reindex(ctx)
@@ -91,18 +91,18 @@ func ReindexSymbols(ctx context.Context, reindex func(context.Context) (int, err
 		return n, nil
 	}
 	interactive.Hint(ctx, "some projects were not reindexed", attr.Error(err))
-	if refused := ReindexRefusals(err); refused != nil {
+	if refused := reindexRefusals(err); refused != nil {
 		return n, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused)
 	}
 	return n, nil
 }
 
-// ReindexRefusals is the part of a reindex failure that fails `graph build`:
+// reindexRefusals is the part of a reindex failure that fails `graph build`:
 // each project refused for the outer run's lock (MGS3007), a full build budget
 // (MGS3009) or memory pressure (MGS3053). The index it wanted stayed stale,
 // and an exit 0 under magus\cmd's quiet hid that. A missing indexer stays a
 // warning. Nil when nothing was refused.
-func ReindexRefusals(err error) error {
+func reindexRefusals(err error) error {
 	errs := []error{err}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		errs = joined.Unwrap()
