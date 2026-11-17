@@ -2961,7 +2961,7 @@ fun calibration() > [Fixture] {
             number = 431,
             title = "feat(cache): carry the caches spells declare; drop config cache --toolchain and --used-within",
             facts = Facts{ known = true, fragments = 2, shipped = 16, lines = 2742 },
-            verdict = "allow",
+            verdict = "defer",
             body = "On a magus miss, a fresh CI runner recompiled the whole tree because Go's own caches were empty. Carrying them took a flag per tool (`--toolchain go`, a proposed `--go-cache`), each naming a fact magus already holds.\n"
                 + "\n"
                 + "- A spell declares which of its sandbox grants are caches; the go spell declares GOCACHE and GOMODCACHE.\n"
@@ -2975,7 +2975,7 @@ fun calibration() > [Fixture] {
             number = 430,
             title = "feat(guard): bind job exec callers in the guard; drop job exec --session and --vacate",
             facts = Facts{ known = true, fragments = 1, shipped = 23, lines = 2251 },
-            verdict = "allow",
+            verdict = "defer",
             body = "`magus job exec` without `--session` bound the whole checkout, even for a read-only job, and the guard then applied that lease's denies to the orchestrator that forked it. A host that gives a subagent its parent's session id made the documented `--session` advice bind the parent too.\n"
                 + "\n"
                 + "- The guard now records the binding when it lets `magus job exec` or `magus_job op=exec` through, keyed exactly on the caller's host, session and subagent ids, with no fallback between keys.\n"
@@ -2988,7 +2988,7 @@ fun calibration() > [Fixture] {
             number = 429,
             title = "docs(decisions): ADR 0003, running an invocation on another operating system",
             facts = Facts{ known = true, fragments = 0, shipped = 0, lines = 201 },
-            verdict = "allow",
+            verdict = "defer",
             body = "Records whether magus should run an invocation on a kernel other than the host's, so a Mac can reproduce Linux-only failures (landlock, /proc, socket path limits) before CI.\n"
                 + "\n"
                 + "- Decided, proposed status: a prefix script in this repository only, `tools/on-linux magus ...`, with a stated contract (read-only mount, explicit environment, no implicit pulls or VM starts, honest exit codes, kernel scope only).\n"
@@ -3027,7 +3027,7 @@ fun calibration() > [Fixture] {
             number = 426,
             title = "feat(vcs): refuse shared-state writes from an older magus; write no keys from init",
             facts = Facts{ known = true, fragments = 1, shipped = 17, lines = 1372 },
-            verdict = "allow",
+            verdict = "defer",
             body = "An older magus overwrote hook sections a newer one had installed, and `init` dumped a full default config whose removed key then broke the newer binary.\n"
                 + "\n"
                 + "- Shared state is stamped with its writer: managed sections (`.gitattributes`, git hooks, hg/sl config), the merge-driver registration, and user and repo config. An older build refuses to overwrite a newer stamp. The error names both builds and how to update.\n"
@@ -3040,7 +3040,7 @@ fun calibration() > [Fixture] {
             number = 425,
             title = "fix(config): make MGS1040 a readable list without dropping a key or line",
             facts = Facts{ known = true, fragments = 1, shipped = 3, lines = 701 },
-            verdict = "allow",
+            verdict = "defer",
             body = "MGS1040 printed one line per occurrence and repeated its stale-binary paragraph for every unknown key.\n"
                 + "\n"
                 + "- Each unknown key prints once, by dotted path (`watch.env`), with every line it appears on and any suggestion or rename.\n"
@@ -3053,7 +3053,7 @@ fun calibration() > [Fixture] {
             number = 424,
             title = "feat(queue): add queue gate --go-cache; carry the go toolchain cache around ci's boxed gate",
             facts = Facts{ known = true, fragments = 1, shipped = 4, lines = 262 },
-            verdict = "allow",
+            verdict = "defer",
             body = "The boxed CI gate withheld the runner's Go caches, so every shard compiled cold.\n"
                 + "\n"
                 + "- `magus queue gate --go-cache <dir>` makes `<dir>/go-build` and `<dir>/pkg/mod` the gate's GOCACHE and GOMODCACHE. The box grants those two paths only, in the go spell's modes.\n"
@@ -3067,7 +3067,7 @@ fun calibration() > [Fixture] {
             number = 423,
             title = "fix(guard): ask the workspace command rule on a built-in ask",
             facts = Facts{ known = true, fragments = 1, shipped = 3, lines = 100 },
-            verdict = "allow",
+            verdict = "defer",
             body = "A push chained with an admin merge (`git push ... && gh pr merge <n> --admin`) only asked: the built-in push-unverified rule answered ask, and the workspace command rule was consulted only on pass or advise. Approving the push ran the admin merge.\n"
                 + "\n"
                 + "- The workspace command and write rules now run on anything but a built-in deny.\n"
@@ -3078,7 +3078,7 @@ fun calibration() > [Fixture] {
             number = 422,
             title = "fix(guard): narrow the rules that deny correct commands",
             facts = Facts{ known = true, fragments = 1, shipped = 8, lines = 1231 },
-            verdict = "allow",
+            verdict = "defer",
             body = "Measured precision put several guard rules well under half: most of their denials blocked correct commands.\n"
                 + "\n"
                 + "- cd: rule deleted, page retired\n"
