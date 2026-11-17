@@ -588,7 +588,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 			scopedRun(gate.Check, attemptByGate[gate.ID], seen.TestSelection) {
 			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run scoped with `-- %s`:"+
 				" -run and -skip select tests inside the packages `%s` runs, so it ran every package the check does",
-				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), gate.Check))
+				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), CheckCommand(gate.Check)))
 		}
 		if gate.Kind == job.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
 			narrowedFiles(gate.Check, attemptByGate[gate.ID], seen.namedFiles, seen.TestSelection) {
@@ -803,7 +803,7 @@ func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun,
 	}
 	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles, seen.TestSelection) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run%s",
-			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
+			status.OutputRef, RecordedCommand(attempt), CheckCommand(resolveCheck(gate.Check, seen.DefaultCharms)), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
 	}
 	if attempt.Failed {
 		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check, seen.namedFiles, seen.TestSelection))

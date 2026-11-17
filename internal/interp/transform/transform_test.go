@@ -111,15 +111,15 @@ func TestServeRejectsOversizedRequest(t *testing.T) {
 func TestBuzzWorker(t *testing.T) {
 	req := Request{
 		Script: `fun transform(input: any, args: [str]) > any { return input; }`,
-		Input:  json.RawMessage(`{"ok":true}`),
+		Input:  codec.RawMessage(`{"ok":true}`),
 	}
-	wire, err := json.Marshal(req)
+	wire, err := codec.Marshal(req)
 	require.NoError(t, err)
 	var stdout, stderr bytes.Buffer
 	assert.Zero(t, Serve(context.Background(), bytes.NewReader(wire), &stdout, &stderr))
 	assert.Empty(t, stderr.String())
 	var result Result
-	require.NoError(t, json.UnmarshalStrict(stdout.Bytes(), &result))
+	require.NoError(t, codec.UnmarshalStrict(stdout.Bytes(), &result))
 	assert.JSONEq(t, `{"ok":true}`, string(result.JSON))
 }
 

@@ -193,7 +193,7 @@ func refuseWrongRun(row job.Job, primary job.CapturedRun, gates []job.GateAttemp
 			return nil
 		}
 		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files, named, selection))
+			id, attempt.Ref, RecordedCommand(attempt), CheckCommand(resolveCheck(goals[i].Check, defaults)), leftOut(goals[i].Check, attempt, files, named, selection))
 	}
 	if primary.Found {
 		if err := check(job.PrimaryGoalID, primary); err != nil {
