@@ -1,6 +1,7 @@
 // push-unverified: a push or `gh pr create` whose commit changed a file, since its merge
 // base, that a target declares and no passing run in the pushing checkout read as that
-// commit holds it; and one magus could not judge, refused rather than let through.
+// commit holds it; and one magus could not judge. It advises while `advising` holds, and
+// refuses once that is false.
 //
 // A changed file no target declares as an input or output has no run that could read it. It
 // does not block: the reply names it, and declaring it as a target's input is how it gets
@@ -16,9 +17,15 @@ import "magus";
 import "result";
 import "./hack/policy/verdict" as verdict;
 
-// named is how many unread files a denial lists by path, and listed how many commands.
+// advising makes the rule answer with advice wherever it would refuse, so no push is
+// blocked while every would-be refusal is still spoken and counted. It stays true until a
+// run records the content id of each uncommitted path and the policy snapshot holds each
+// target's declared inputs; until then the read can call a file unread that a run did
+// read, and can run out of the hook's time. Set it false to refuse.
+final advising = true;
+
+// named is how many unread files a reply lists by path.
 final named = 5;
-final listed = 8;
 
 // readUnverified is magus\workspace(dir).unverified(revision), its raise returned as a value.
 export fun readUnverified(dir: str, revision: str) > result\Result::<UnverifiedReport> {
@@ -29,9 +36,10 @@ export fun readUnverified(dir: str, revision: str) > result\Result::<UnverifiedR
     }
 }
 
-// decidePush refuses push when its commit changed a file a target declares and no passing
-// run read as the commit holds it, and refuses it as unjudged when what it publishes, or
-// which runs read it, is unknown. A line that publishes nothing is allowed without a read.
+// decidePush refuses push (advises, while advising holds) when its commit changed a file a
+// target declares and no passing run read as the commit holds it, and as unjudged when what
+// it publishes, or which runs read it, is unknown. A line that publishes nothing is allowed
+// without a read.
 // Files no target declares are named in an advisory and never block. The hook and
 // hack/dev/land-commits.buzz both call it, with the same read.
 export fun decidePush(push: CommandPush?, read: fun (dir: str, revision: str) > result\Result::<UnverifiedReport>) > GuardVerdict {
@@ -68,7 +76,11 @@ export fun decidePush(push: CommandPush?, read: fun (dir: str, revision: str) > 
     return refused(unverifiedDenial(p, report: report, checkable: checkable, unclaimed: unclaimed));
 }
 
+// refused is the rule's answer where it would refuse: advice while advising holds.
 fun refused(text: str) > GuardVerdict {
+    if (advising) {
+        return magus\guard.advise(text, opts: {"rule": "push-unverified"});
+    }
     return magus\guard.deny(text, opts: {"rule": "push-unverified"});
 }
 
@@ -130,14 +142,12 @@ fun unclaimedNote(unclaimed: [UnverifiedFile]) > str {
         + "They do not block this push. Declaring each as a target's input is how it gets checked.";
 }
 
-// staleReaders names each target of a listed command whose run claims an unread file but
-// ran while that file differed from the commit, once per target.
-fun staleReaders(report: UnverifiedReport, checkable: [UnverifiedFile]) > [str] {
+// staleReaders names each target a remedy line runs whose run claims an unread file but ran
+// while that file differed from the commit, once per target.
+fun staleReaders(report: UnverifiedReport, checkable: [UnverifiedFile], remedy: [str]) > [str] {
     final unread = mut [<str>];
-    final commands = mut [<str>];
     foreach (f in checkable) {
         unread.append(f.path);
-        commands.append(f.commands[0]);
     }
     final found = mut [<str>];
     foreach (r in report.runs) {
@@ -145,7 +155,7 @@ fun staleReaders(report: UnverifiedReport, checkable: [UnverifiedFile]) > [str] 
             continue;
         }
         final label = "`{r.target} {r.project}`";
-        if (found.indexOf(label) != null or !listedTarget(commands, target: r.target, project: r.project)) {
+        if (found.indexOf(label) != null or !listedTarget(remedy, target: r.target, project: r.project)) {
             continue;
         }
         foreach (c in r.claims) {
@@ -158,36 +168,44 @@ fun staleReaders(report: UnverifiedReport, checkable: [UnverifiedFile]) > [str] 
     return found;
 }
 
-// listedTarget reports whether one of commands runs target in project.
+// listedTarget reports whether one of commands runs target in project, named bare or by
+// its spell.
 fun listedTarget(commands: [str], target: str, project: str) > bool {
     foreach (c in commands) {
-        if (c.indexOf(" run {target} {project}") != null) {
+        if (c.indexOf(" run {target} {project} ") != null or c.indexOf("::{target} {project} ") != null) {
             return true;
         }
     }
     return false;
 }
 
-// commandCounts are the distinct first commands of checkable, in order of first use, and how
-// many files each reads.
-fun commandCounts(checkable: [UnverifiedFile]) > [str] {
-    final order = mut [<str>];
-    final counts = mut {<str: int>};
-    foreach (f in checkable) {
-        final c = f.commands[0];
-        if (order.indexOf(c) == null) {
-            order.append(c);
-            counts[c] = 0;
-        }
-        counts[c] = (counts[c] ?? 0) + 1;
+// directory is the directory holding path, "." for one at the root.
+fun directory(path: str) > str {
+    final parts = path.split("/");
+    if (parts.len() < 2) {
+        return ".";
     }
-    final lines = mut [<str>];
-    foreach (c in order) {
-        if (lines.len() == listed) {
-            lines.append("  and {order.len() - listed} more commands");
-            break;
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+// remedy is what reads every path of unread as committed, built from the paths: one lint
+// over all of them, and one test run per Go package among them. <Name> stands for the tests
+// that cover the change, which only the reader knows.
+export fun remedy(unread: [str]) > [str] {
+    final lines = mut ["./magus run lint . -- {unread.join(" ")}"];
+    final packages = mut [<str>];
+    foreach (path in unread) {
+        final dir = directory(path);
+        if (path.endsWith(".go") and packages.indexOf(dir) == null) {
+            packages.append(dir);
         }
-        lines.append("  `{c}`: {files(counts[c] ?? 0)}");
+    }
+    foreach (dir in packages) {
+        var where = "./{dir}";
+        if (dir == ".") {
+            where = ".";
+        }
+        lines.append("./magus run go::go-test . -s -- -run '<Name>' {where}");
     }
     return lines;
 }
@@ -195,20 +213,27 @@ fun commandCounts(checkable: [UnverifiedFile]) > [str] {
 fun unverifiedDenial(p: CommandPush, report: UnverifiedReport, checkable: [UnverifiedFile], unclaimed: [UnverifiedFile]) > str {
     final n = checkable.len();
     final lines = mut ["{published(p)} changes {files(n)} that no passing run has read as committed; run the command on each line, then push again"];
+    final unread = mut [<str>];
+    foreach (f in report.unverified) {
+        unread.append(f.path);
+    }
+    final commands = remedy(unread);
+    foreach (c in commands) {
+        lines.append("  `{c}`");
+    }
+    if (commands.len() > 1) {
+        lines.append("<Name> is a pattern for the tests that cover the change.");
+    }
     var i = 0;
     foreach (f in checkable) {
         if (i == named) {
             lines.append("  and {files(n - named)} more");
             break;
         }
-        lines.append("  {f.path}: `{f.commands[0]}`");
+        lines.append("  unread: {f.path}");
         i = i + 1;
     }
-    lines.append("Run each of these once; the count is how many of the files it covers:");
-    foreach (c in commandCounts(checkable)) {
-        lines.append(c);
-    }
-    final stale = staleReaders(report, checkable: checkable);
+    final stale = staleReaders(report, checkable: checkable, remedy: commands);
     if (stale.len() > 0) {
         lines.append("{stale.join(", ")} ran while some of these files differed from the commit, or before they last changed, so those runs do not count for them.");
     }
@@ -241,15 +266,17 @@ test "a push whose changed files a passing run read is allowed" {
     std\assert(asked.len() == 1 and asked[0] == pushed.revision, message: "the pushed revision is read");
 }
 
-test "a push with an unread file is denied naming it and the command that reads it" {
+test "a push with an unread file is advised naming it and the commands that read it" {
     final asked = mut [<str>];
     final report = UnverifiedReport{ revision = pushed.revision, base = "origin/main", changed = ["a.go", "b.md"],
         unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run go-test . -- -run 'A'"] }, UnverifiedFile{ path = "b.md" }] };
     final v = decidePush(pushed, read: stub(report, asked: asked));
-    std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "advised while advising");
     verdict\assertVerdict(v.reason, label: "an unread file");
     std\assert(v.reason.split("\n")[0] == "pushing 0123456789ab changes 1 file that no passing run has read as committed; run the command on each line, then push again", message: v.reason);
-    std\assert(v.reason.indexOf("  a.go: `magus run go-test . -- -run 'A'`") != null, message: v.reason);
+    std\assert(v.reason.split("\n")[1] == "  `./magus run lint . -- a.go b.md`", message: v.reason);
+    std\assert(v.reason.split("\n")[2] == "  `./magus run go::go-test . -s -- -run '<Name>' .`", message: v.reason);
+    std\assert(v.reason.indexOf("  unread: a.go") != null, message: v.reason);
     std\assert(v.reason.indexOf("recorded in this checkout (`/w`)") != null, message: v.reason);
     std\assert(v.rule == "push-unverified", message: v.rule);
 }
@@ -272,34 +299,48 @@ test "two files no target declares are named in the plural" {
     std\assert(v.reason.indexOf("They do not block this push.") != null, message: v.reason);
 }
 
-test "a denial names a file no target declares beside the ones to run" {
+test "a reply names a file no target declares beside the ones to run" {
     final report = UnverifiedReport{ revision = pushed.revision, base = "origin/main",
         unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run test ."] }, UnverifiedFile{ path = "LICENSE" }] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
-    std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "advised while advising");
     std\assert(v.reason.indexOf("changes 1 file that no passing run") != null, message: "only the checkable file is counted: " + v.reason);
     std\assert(v.reason.indexOf("check it: LICENSE") != null and v.reason.indexOf("It does not block") != null, message: v.reason);
 }
 
-test "a denial names five files and counts the rest" {
+test "a reply names five files and counts the rest" {
     final many = mut [<UnverifiedFile>];
     foreach (name in ["a", "b", "c", "d", "e", "f", "g"]) {
         many.append(UnverifiedFile{ path = name, commands = ["magus run test ."] });
     }
     final v = decidePush(pushed, read: stub(UnverifiedReport{ revision = pushed.revision, unverified = many }, asked: mut [<str>]));
-    std\assert(v.reason.indexOf("  e: ") != null and v.reason.indexOf("  f: ") == null, message: v.reason);
+    std\assert(v.reason.indexOf("  unread: e\n") != null and v.reason.indexOf("  unread: f") == null, message: v.reason);
     std\assert(v.reason.indexOf("  and 2 files more") != null, message: v.reason);
 }
 
-test "each distinct command is listed once with its file count" {
+test "the remedy lints every unread path in one command" {
+    final lines = remedy(["docs/a.md", "hack/policy/push.buzz", "LICENSE"]);
+    std\assert(lines.len() == 1, message: lines.join("\n"));
+    std\assert(lines[0] == "./magus run lint . -- docs/a.md hack/policy/push.buzz LICENSE", message: lines[0]);
+}
+
+test "the remedy runs each Go package's tests once" {
+    final lines = remedy(["internal/guard/a.go", "internal/guard/a_test.go", "std/b.go", "c.go"]);
+    std\assert(lines.len() == 4, message: lines.join("\n"));
+    std\assert(lines[1] == "./magus run go::go-test . -s -- -run '<Name>' ./internal/guard", message: lines[1]);
+    std\assert(lines[2] == "./magus run go::go-test . -s -- -run '<Name>' ./std", message: lines[2]);
+    std\assert(lines[3] == "./magus run go::go-test . -s -- -run '<Name>' .", message: lines[3]);
+}
+
+test "the remedy names neither a generator nor one command per file" {
     final report = UnverifiedReport{ revision = pushed.revision, unverified = [
-        UnverifiedFile{ path = "a.go", commands = ["magus run test .", "magus run lint ."] },
-        UnverifiedFile{ path = "b.go", commands = ["magus run test ."] },
-        UnverifiedFile{ path = "c.md", commands = ["magus run docs-test docs"] },
+        UnverifiedFile{ path = "internal/a.go", commands = ["magus run go-api-generate .", "magus run lint . -- internal/a.go"] },
+        UnverifiedFile{ path = "internal/b.go", commands = ["magus run lint . -- internal/b.go"] },
     ] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
-    std\assert(v.reason.indexOf("  `magus run test .`: 2 files") != null, message: v.reason);
-    std\assert(v.reason.indexOf("  `magus run docs-test docs`: 1 file") != null, message: v.reason);
+    std\assert(v.reason.indexOf("go-api-generate") == null, message: v.reason);
+    std\assert(v.reason.indexOf("lint . -- internal/a.go`") == null, message: "one lint for both: " + v.reason);
+    std\assert(v.reason.indexOf("  `./magus run lint . -- internal/a.go internal/b.go`") != null, message: v.reason);
 }
 
 test "a run that claims the file but did not read it as committed is named once" {
@@ -313,32 +354,32 @@ test "a run that claims the file but did not read it as committed is named once"
 
 test "a run of a target no listed command runs is not named" {
     final report = UnverifiedReport{ revision = pushed.revision, unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run go-test ."] }],
-        runs = [RunEvidence{ ref = "out1", project = ".", target = "lint", dirty = true, claims = ["a.go"] }] };
+        runs = [RunEvidence{ ref = "out1", project = ".", target = "vet", dirty = true, claims = ["a.go"] }] };
     final v = decidePush(pushed, read: stub(report, asked: mut [<str>]));
-    std\assert(v.reason.indexOf("`lint .`") == null, message: v.reason);
+    std\assert(v.reason.indexOf("`vet .`") == null, message: v.reason);
 }
 
-test "a read that did not finish is refused as unjudged with its reason" {
+test "a read that did not finish is advised as unjudged with its reason" {
     final v = decidePush(pushed, read: stub(UnverifiedReport{ unknown = "the output store is unread: permission denied" }, asked: mut [<str>]));
-    std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "advised while advising");
     verdict\assertVerdict(v.reason, label: "an unfinished read");
     std\assert(v.reason.split("\n")[1] == "the output store is unread: permission denied", message: v.reason);
     std\assert(v.reason.split("\n")[2] == "Nothing on the line is wrong. Run it again; if it is refused twice for the same reason, report it and stop.", message: v.reason);
 }
 
-test "a read that raised is refused as unjudged" {
+test "a read that raised is advised as unjudged" {
     final raised = fun (dir: str, revision: str) > result\Result::<UnverifiedReport> {
         return result\fail::<UnverifiedReport>("magus\\workspace(`/w`).unverified: no workspace");
     };
     final v = decidePush(pushed, read: raised);
-    std\assert(v.decision == magus\GuardDecision.deny and v.reason.indexOf("no workspace") != null, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf("no workspace") != null, message: v.reason);
 }
 
-test "a push whose revision is unknown is refused as unjudged without a read" {
+test "a push whose revision is unknown is advised as unjudged without a read" {
     final asked = mut [<str>];
     final moved = CommandPush{ tool = "git", dir = "/w", unknown = "this line runs `git commit` before it pushes, so the revision it publishes exists only once the line runs" };
     final v = decidePush(moved, read: stub(UnverifiedReport{}, asked: asked));
-    std\assert(v.decision == magus\GuardDecision.deny and asked.len() == 0, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.advise and asked.len() == 0, message: v.reason);
     std\assert(v.reason.indexOf("`git commit` before it pushes") != null, message: v.reason);
     std\assert(v.reason.split("\n")[2] == "Run the push as one call of its own, naming one revision in literal words.", message: v.reason);
 }

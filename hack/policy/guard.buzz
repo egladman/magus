@@ -27,7 +27,8 @@
 //     by one the host reported no session for.
 //   unplaced-call (deny): a push, pull request call or relink after a cd magus
 //     cannot follow, which the other rules would judge in the wrong checkout.
-//   push-unverified (deny): a push or `gh pr create` whose commit changed a file, since its
+//   push-unverified (advise for now; deny once push.buzz advising is false): a push or
+//     `gh pr create` whose commit changed a file, since its
 //     merge base, that a target declares and no passing run in the pushing checkout read as
 //     that commit holds it, and one whose read could not finish. A changed file no target
 //     declares is named and does not block, beside whatever else advises. It runs after
@@ -362,8 +363,8 @@ fun requestPusher(req: CommandRequest) > branches\Pusher {
 // Publishing is what the publishing rules read about a line: who runs it, the branch or
 // bookmark its checkout is on, what the checkout knows of the remote, and the topic of the
 // branch's diff, read only when a name is judged. verified reads which of the files the push
-// publishes no clean passing run read, and runs only once push-authority and the cadence
-// rules have passed.
+// publishes no passing run read as committed, and runs only once push-authority and the
+// cadence rules have passed.
 export object Publishing {
     pusher: branches\Pusher,
     current: str,
