@@ -273,8 +273,6 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	}
 }
 
-const stopTimeout = proc.StopTimeout
-
 // serverStop shuts down the persistent server, or with --pools the live
 // per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
@@ -328,8 +326,8 @@ func serverStop(ctx context.Context, args []string) error {
 	// Verify the server is actually gone rather than trusting the shutdown reply. The
 	// shutdown handler acknowledges before the process has torn down, and an earlier bug made
 	// stop a silent no-op, so stop must observe the socket stop answering before reporting.
-	if err := proc.WaitSocketGone(ctx, addr, stopTimeout); err != nil {
-		return fmt.Errorf("server stop: server (pid %d) on %s did not stop within %s", st.ParentPID, addr, stopTimeout)
+	if err := proc.WaitSocketGone(ctx, addr, proc.StopTimeout); err != nil {
+		return fmt.Errorf("server stop: server (pid %d) on %s did not stop within %s", st.ParentPID, addr, proc.StopTimeout)
 	}
 	if opts.Format != outputText {
 		return emitRecord(opts, serverStopOutput{Stopped: true, PID: st.ParentPID, Address: addr}, []string{addr})

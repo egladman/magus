@@ -109,7 +109,7 @@ which nothing checked on any host before.
 
 ### Generated from @cursor/sdk
 
-`testdata/hosts/cursor/gen/` holds twelve schemas emitted from the zod `@cursor/sdk` exports at its package root,
+`internal/render/testdata/hosts/cursor/gen/` holds twelve schemas emitted from the zod `@cursor/sdk` exports at its package root,
 by `magus run cursor-schemas-generate docs/guides/integrations/agents`. They are the SDK's conversation, message and
 delta shapes, and they are NOT the hook config or the hook stdout envelope; Cursor exports no schema for either, so
 those two stay `derived` from the validator binary above. Read the generated files for what the SDK sends, never for

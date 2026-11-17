@@ -73,7 +73,7 @@ func brokerServe(ctx context.Context, args []string) error {
 		Log:           f.Log,
 		Config:        globalCfg,
 		Version:       version,
-		RedirectStdio: redirectStdio,
+		RedirectStdio: proc.RedirectStdio,
 	})
 }
 
@@ -167,10 +167,10 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	// The hangup, not the socket file going, is the stop: under systemd the supervisor
 	// keeps the socket, and the next connection starts another broker.
-	sctx, cancel := context.WithTimeout(ctx, stopTimeout)
+	sctx, cancel := context.WithTimeout(ctx, proc.StopTimeout)
 	defer cancel()
 	if err := c.Shutdown(sctx); errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("broker stop: broker (pid %d) did not stop within %s", st.PID, stopTimeout)
+		return fmt.Errorf("broker stop: broker (pid %d) did not stop within %s", st.PID, proc.StopTimeout)
 	} else if err != nil {
 		return fmt.Errorf("broker stop: %w", err)
 	}
@@ -183,7 +183,7 @@ func brokerStop(ctx context.Context, args []string) error {
 
 // brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a
 // test can shorten it.
-var brokerDrainWait = stopTimeout
+var brokerDrainWait = proc.StopTimeout
 
 type brokerStopOutput struct {
 	Stopped  bool `json:"stopped"`

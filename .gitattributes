@@ -150,6 +150,7 @@ internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
 internal/queue/provider/gen/types/*.buzz merge=magus linguist-generated
+internal/render/testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
 internal/spell/gen/decls/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
 libs/clikit/MAGUS.md merge=magus linguist-generated
@@ -200,7 +201,6 @@ std/gen/std-api.lock merge=magus linguist-generated
 std/termkit/gen/**/*.go merge=magus linguist-generated
 tapes/core-loop.capture merge=magus linguist-generated
 tapes/showcase.capture merge=magus linguist-generated
-testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
 testdata/latex/onepage/build/** merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_list_test.go !merge !linguist-generated
 internal/interp/bindings/gen/boundary_objects_test.go !merge !linguist-generated

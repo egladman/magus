@@ -28,7 +28,7 @@ func TestRenderCharmsListSummarizesDeclarations(t *testing.T) {
 func TestRenderCharmsDetailShowsTheArgvEdit(t *testing.T) {
 	t.Parallel()
 	charms := []types.CharmEntry{{
-		Name: "rw",
+		Name:         "rw",
 		Declarations: []types.CharmDeclaration{{Project: "api", Target: "lint", Spell: "go", Before: []string{"run"}, After: []string{"run", "--fix"}}},
 	}}
 	var w bytes.Buffer

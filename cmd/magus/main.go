@@ -915,29 +915,7 @@ func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
 	}
 }
 
-func usage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
-	group := ""
-	for _, c := range commands.Root.Spec.Children {
-		if c.Group != group {
-			group = c.Group
-			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
-		}
-		fmt.Fprintf(os.Stderr, "  %-14s %s\n", c.Name, c.Short)
-	}
-	fmt.Fprintf(os.Stderr, "  %-14s %s\n", commands.Help.Name, commands.Help.Short)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
-	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
-	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
-	printRootFlags(os.Stderr)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Run `magus <subcommand> -h` for subcommand-specific flags.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Config file: magus.yaml (CWD or $XDG_CONFIG_HOME/magus/)")
-	fmt.Fprintln(os.Stderr, "Env vars: MAGUS_* (see magus help for the full list).")
-}
+func usage() { commands.WriteRootUsage(os.Stderr, printRootFlags) }
 
 // snapshotGlobals captures globalCfg and global, returning a restore func that puts them
 // back. runTarget/affected write flags straight into these package globals via commandParse

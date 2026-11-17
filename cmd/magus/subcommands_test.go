@@ -299,17 +299,17 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 			"verify", // moved: hard-redirects to `magus doctor`'s agent-skills check
 		}},
 		{"config", []string{"config"}, "config.go", "configCommand", nil},
-		{"config history", []string{"config", "history"}, "config_history.go", "configHistoryCommand", nil},
+		{"config history", []string{"config", "history"}, "config.go", "configHistoryCommand", nil},
 		{"config cache", []string{"config", "cache"}, "config_cache.go", "configCacheCommand", nil},
-		{"config mcp", []string{"config", "mcp"}, "config_mcp.go", "configMCPCommand", []string{
+		{"config mcp", []string{"config", "mcp"}, "config.go", "configMCPCommand", []string{
 			"token", // moved: hard-redirects to `magus config token` (not an MCP credential)
 		}},
-		{"config mcp connector", []string{"config", "mcp", "connector"}, "config_mcp.go", "configMCPConnector", []string{
+		{"config mcp connector", []string{"config", "mcp", "connector"}, "config.go", "configMCPConnector", []string{
 			"list", // renamed to ls in v0.4.0
 		}},
-		{"config console", []string{"config", "console"}, "config_console.go", "configConsoleCommand", nil},
-		{"config console token", []string{"config", "console", "token"}, "config_console.go", "configConsoleToken", nil},
-		{"config token", []string{"config", "token"}, "config_token.go", "configToken", nil},
+		{"config console", []string{"config", "console"}, "config.go", "configConsoleCommand", nil},
+		{"config console token", []string{"config", "console", "token"}, "config.go", "configConsoleToken", nil},
+		{"config token", []string{"config", "token"}, "config.go", "configToken", nil},
 		{"notes", []string{"notes"}, "notes.go", "notesCommand", []string{
 			"put", // deliberately absent: a note is written by a person, not a program
 		}},

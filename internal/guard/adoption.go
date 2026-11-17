@@ -200,7 +200,6 @@ func topPatterns(counts map[string]int, n int) []PatternCount {
 	return out
 }
 
-
 func WriteAdoptionTable(w io.Writer, r AdoptionReport) {
 	fmt.Fprintf(w, "agent adoption over %s commands:\n\n", humanCount(r.Total))
 	fmt.Fprintf(w, "  graph verbs (query/refs/explain/path/graph)   %8s\n", humanCount(r.GraphVerbs))
@@ -251,7 +250,6 @@ func humanCount(n int) string {
 	}
 	return strings.Join(append([]string{s}, parts...), ",")
 }
-
 
 // ReadAdoptionCommands reads one shell command per line from src.
 func ReadAdoptionCommands(src io.Reader) ([]string, error) {

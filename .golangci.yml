@@ -459,7 +459,7 @@ linters:
             - cmd/magus/query.go
             - internal/guard/shell.go
             - internal/guard/write.go
-            - cmd/magus/config_console.go
+            - cmd/magus/config.go
             - internal/doctor/checks.go
             - cmd/magus/init.go
             - internal/config/load.go

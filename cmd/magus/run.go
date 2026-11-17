@@ -481,10 +481,6 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 	return interactive.ResolveTargets(ctx, ws, t, interactive.RunSelection{Projects: sel.projects, Skips: sel.skips, Cwd: sel.cwd})
 }
 
-func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target string) bool {
-	return interactive.DefinesTarget(ctx, m)
-}
-
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per
 // line: the identity of what executed, and the form the next command takes as arguments.
 // Shared by run and affected so the two cannot disagree about what a run is named by.

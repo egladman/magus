@@ -115,5 +115,3 @@ end run`, body, title).Run()
 	}
 	return nil
 }
-
-func normalizeEvent(ev *types.Event) { sessions.NormalizeEvent(ev) }
