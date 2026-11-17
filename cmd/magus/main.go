@@ -722,23 +722,6 @@ func peekSub(args []string) (sub string, subArgs []string) {
 	return "", nil
 }
 
-// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
-// in, whose magus cannot start for root, since a host runs a failed hook's call.
-func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
-	if sub == "shell" {
-		return mapExitCode(shellCommand(withStaleConfig(ctx, cause), subArgs)), true
-	}
-	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
-	if sub != "buzz" || stdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
-		return 0, false
-	}
-	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
-	if reason != "" {
-		fmt.Fprintln(os.Stderr, reason)
-	}
-	return answer.ExitCode(), true
-}
-
 // startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
 // exitCode >= 0 means exit without dispatching; -1 means proceed.
 func startup(rootCtx context.Context, args []string) (context.Context, startupResult, int) {
