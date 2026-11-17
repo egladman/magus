@@ -34,10 +34,10 @@ func TestCallDirIsWhereTheCallLands(t *testing.T) {
 }
 
 // placeStub writes an executable ./magus into root that reports stamp as its commit and
-// answers any other call with say and code.
+// answers any other call with say and code, printing its arguments to stderr one per line.
 func placeStub(t *testing.T, root, stamp, say string, code int) string {
 	t.Helper()
-	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ncat >/dev/null\nprintf '%%s' '%s'\nexit %d\n", stamp, say, code)
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\nprintf '%%s\\n' \"$@\" >&2\ncat >/dev/null\nprintf '%%s' '%s'\nexit %d\n", stamp, say, code)
 	own := filepath.Join(root, "magus")
 	require.NoError(t, os.WriteFile(own, []byte(script), 0o755))
 	return own
@@ -60,6 +60,8 @@ type DelegateToCheckoutSuite struct {
 	session  string
 	cacheDir string
 	env      HookEnv
+	// argv is the command line the session's hook was called with.
+	argv []string
 }
 
 func TestDelegateToCheckoutSuite(t *testing.T) {
@@ -76,6 +78,7 @@ func (s *DelegateToCheckoutSuite) SetupTest() {
 		return job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: s.cacheDir, Root: root, DryRun: true}), nil
 	}
 	s.runAs(filepath.Join(s.session, "magus"))
+	s.argv = []string{"shell", "--transport", "hooks"}
 }
 
 // runAs makes bin the running binary for the rest of the test.
@@ -124,9 +127,15 @@ func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined
 }
 
 func (s *DelegateToCheckoutSuite) delegateWithin(ctx context.Context, input string) (handled bool, declined, out string, err error) {
+	handled, declined, out, _, err = s.delegateCapturing(ctx, input)
+	return handled, declined, out, err
+}
+
+// delegateCapturing is delegateWithin that also returns what the delegate wrote to stderr.
+func (s *DelegateToCheckoutSuite) delegateCapturing(ctx context.Context, input string) (handled bool, declined, out, errOut string, err error) {
 	var stdout, stderr bytes.Buffer
-	handled, decline, err := s.env.delegateToCheckout(ctx, nil, input, output.Options{Format: output.Text}, &stdout, &stderr)
-	return handled, decline.note, stdout.String(), err
+	handled, decline, err := s.env.delegateToCheckout(ctx, s.argv, input, output.Options{Format: output.Text}, &stdout, &stderr)
+	return handled, decline.note, stdout.String(), stderr.String(), err
 }
 
 // delegateToSleeper places a stamped ./magus that prints say and sleeps, and
@@ -179,6 +188,14 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 	s.True(handled)
 	s.Require().NoError(err)
 	s.Equal(strconv.FormatInt(want.UnixMilli(), 10), out)
+}
+
+func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheHooksCommandLine() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	handled, declined, _, errOut, _ := s.delegateCapturing(context.Background(), s.line())
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(strings.Join(s.argv, "\n")+"\n", errOut)
 }
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
