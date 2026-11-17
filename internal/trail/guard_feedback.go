@@ -179,10 +179,10 @@ type agentCommand struct {
 // agentCommands yields the agent-command events among events, in their order, whose
 // request and response blobs both read and decode. An event whose blobs rotated away is
 // skipped; a blob holding a retired guard decision is yielded as a
-// [*RetiredDecisionError], and nothing after it.
+// [*retiredDecisionError], and nothing after it.
 func agentCommands(base string, events []trailtypes.Event) iter.Seq2[agentCommand, error] {
 	return func(yield func(agentCommand, error) bool) {
-		var retired *RetiredDecisionError
+		var retired *retiredDecisionError
 		for _, event := range events {
 			if event.Kind != trailtypes.KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
 				continue

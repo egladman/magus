@@ -155,56 +155,56 @@ type agentCommandResponse struct {
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
 }
 
-// RetiredDecisionError is an agent-command blob holding "pass" or "allow", the names the
+// retiredDecisionError is an agent-command blob holding "pass" or "allow", the names the
 // guard's defer had before its decisions became defer, advise, ask and deny. A reader
 // refuses the store rather than drop the observation from what it counts.
-type RetiredDecisionError struct {
+type retiredDecisionError struct {
 	// Store is the activity directory the blob was read from, and Ref the blob.
 	Store    string
 	Ref      string
 	Decision string
 }
 
-func (e *RetiredDecisionError) Error() string {
+func (e *retiredDecisionError) Error() string {
 	return fmt.Sprintf("activity: %s holds the retired guard decision %q in blob %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
 }
 
-// BlobUndecodableError is an agent-command blob that is there and does not decode. A
+// blobUndecodableError is an agent-command blob that is there and does not decode. A
 // reader returns it beside what the other blobs held, rather than count around it.
-type BlobUndecodableError struct {
+type blobUndecodableError struct {
 	// Store is the activity directory the blob was read from, and Ref the blob.
 	Store string
 	Ref   string
 	Err   error
 }
 
-func (e *BlobUndecodableError) Error() string {
+func (e *blobUndecodableError) Error() string {
 	return fmt.Sprintf("activity: blob %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
 }
 
-func (e *BlobUndecodableError) Unwrap() error { return e.Err }
+func (e *blobUndecodableError) Unwrap() error { return e.Err }
 
 // decodeRequestBlob decodes the request blob ref under base into req. A retired decision
-// is a [*RetiredDecisionError] and any other failure a [*BlobUndecodableError].
+// is a [*retiredDecisionError] and any other failure a [*blobUndecodableError].
 func decodeRequestBlob(base, ref string, raw []byte, req *agentCommandRequest) error {
 	err := decodeAgentBlob(base, ref, raw, req)
-	var retired *RetiredDecisionError
+	var retired *retiredDecisionError
 	if err == nil || errors.As(err, &retired) {
 		return err
 	}
-	return &BlobUndecodableError{Store: filepath.Join(base, dir), Ref: ref, Err: err}
+	return &blobUndecodableError{Store: filepath.Join(base, dir), Ref: ref, Err: err}
 }
 
 // retiredDecisions are the decision names no build after the defer rename writes.
 func retiredDecisions() []string { return []string{"pass", "allow"} }
 
 // decodeAgentBlob decodes the agent-command blob ref under base into v. A retired decision
-// is a [*RetiredDecisionError]; any other failure is returned as is.
+// is a [*retiredDecisionError]; any other failure is returned as is.
 func decodeAgentBlob(base, ref string, raw []byte, v any) error {
 	err := codec.Unmarshal(raw, v)
 	var unknown *verdict.UnknownDecisionError
 	if errors.As(err, &unknown) && slices.Contains(retiredDecisions(), unknown.Decision) {
-		return &RetiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: unknown.Decision}
+		return &retiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: unknown.Decision}
 	}
 	return err
 }

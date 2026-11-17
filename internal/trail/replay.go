@@ -103,7 +103,7 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 // replayTrail reconstructs, for each of paths, which agent sessions the store at base saw
 // write it and what they had read first, reading at most limit recent events. A request
 // blob that does not decode is skipped and returned in the joined error, which is a
-// [*BlobUndecodableError] or a [*RetiredDecisionError] per blob.
+// [*blobUndecodableError] or a [*retiredDecisionError] per blob.
 func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil || len(events) == 0 {
@@ -379,7 +379,7 @@ type SessionSpawn struct {
 // ForSession folds the trail at base for one host session, reading at most limit recent
 // events. A trail that cannot be read is an empty result, never an error: the join is context
 // for a transcript that stands on its own. A blob holding a retired guard decision is the
-// one error, a [*RetiredDecisionError], since reading around it would miscount the session.
+// one error, a [*retiredDecisionError], since reading around it would miscount the session.
 func ForSession(ctx context.Context, base, session string, limit int) (SessionTrail, error) {
 	var out SessionTrail
 	if session == "" {
@@ -389,7 +389,7 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 	if err != nil {
 		return out, nil
 	}
-	var retired *RetiredDecisionError
+	var retired *retiredDecisionError
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
 		if e.Session != session {
@@ -532,7 +532,7 @@ func relativize(root, p string) string {
 // caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
 //
 // A request blob that does not decode is left out of the counts and returned in the
-// joined error, a [*BlobUndecodableError] or a [*RetiredDecisionError] per blob.
+// joined error, a [*blobUndecodableError] or a [*retiredDecisionError] per blob.
 func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {

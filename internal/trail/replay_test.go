@@ -49,7 +49,7 @@ func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
 
 	got, err := replayTrail(t.Context(), "", base, []string{"magus.go"}, 100)
 
-	var undecodable *BlobUndecodableError
+	var undecodable *blobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
 	assert.Equal(t, ref, undecodable.Ref)
 	assert.Len(t, got["magus.go"], 1)
@@ -62,7 +62,7 @@ func TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts(t *testing.T) {
 
 	reads, writes, shell, err := ObservedCounts(t.Context(), base, 100)
 
-	var undecodable *BlobUndecodableError
+	var undecodable *blobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
 	assert.Equal(t, [3]int{1, 0, 0}, [3]int{reads, writes, shell})
 }
@@ -334,9 +334,9 @@ func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	Append(t.Context(), base, trailtypes.Event{Ts: 1, Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}, Action: toolShell, ResponseRef: ref})
 
 	_, err := ForSession(t.Context(), base, "s1", 100)
-	var retired *RetiredDecisionError
+	var retired *retiredDecisionError
 	require.ErrorAs(t, err, &retired)
-	assert.Equal(t, RetiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: "pass"}, *retired)
+	assert.Equal(t, retiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: "pass"}, *retired)
 }
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {

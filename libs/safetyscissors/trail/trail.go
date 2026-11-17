@@ -15,6 +15,7 @@ package trail
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -164,19 +165,15 @@ type Phase struct {
 // it started, and a job whose interval has not elapsed is rerun anyway.
 func (e *Event) UnmarshalJSON(b []byte) error {
 	type event Event // no method set, so this does not recurse
-	var decoded event
+	var decoded struct {
+		event
+		LegacyDurationMs int64 `json:"dur_ms"`
+	}
 	if err := codec.Unmarshal(b, &decoded); err != nil {
 		return err
 	}
-	*e = Event(decoded)
-	if e.DurationMs == 0 {
-		var legacy struct {
-			DurMs int64 `json:"dur_ms"`
-		}
-		if codec.Unmarshal(b, &legacy) == nil {
-			e.DurationMs = legacy.DurMs
-		}
-	}
+	*e = Event(decoded.event)
+	e.DurationMs = cmp.Or(e.DurationMs, decoded.LegacyDurationMs)
 	return nil
 }
 

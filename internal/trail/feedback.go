@@ -128,12 +128,12 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 }
 
 // feedbackObservation reads one agent-command event's blobs. It reports false for an event
-// whose request blob is gone or undecodable, and a [*RetiredDecisionError] for a blob
+// whose request blob is gone or undecodable, and a [*retiredDecisionError] for a blob
 // holding a retired guard decision.
 func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool, error) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
-	var retired *RetiredDecisionError
+	var retired *retiredDecisionError
 	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
 	if err != nil {
 		return trailrecord.Observation{}, false, nil
