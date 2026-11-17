@@ -157,24 +157,38 @@ knowledge:
           scopes:
             cmd/magus: 89
             internal: 14
+            # ADR 0050 moved the harness into libs/safetyscissors, libs/codec and libs/secrets:
+            # each package below imports the module packages, libs/codec and libs/secrets
+            # where it imported types/agent, internal/json and internal/secret, and the
+            # model rows moved to internal/agent/model.
+            internal/agent: 16
+            internal/ci: 16
+            internal/interp/mcpclient: 15
+            internal/queue: 15
+            internal/trail: 16
+            internal/workspace: 16
             # the env and config digests moved out of cmd/magus: the config digest
             # encodes the loaded config through internal/json. config set moved too: it
             # splits a list value on unescaped commas with internal/file/watch.
-            internal/config: 16
+            # 18 since ADR 0050: libs/codec, libs/safetyscissors/budget and internal/agent/model.
+            internal/config: 18
             # detach and the signal lifecycle moved out of cmd/magus: the detached
             # child's environment drops the variables internal/proc/spawn names, the
             # detached-run argv reads the generated --detach flag name, and the
             # lifecycle reads the process-wide signal policy beside its own.
-            internal/proc: 16
+            # 19 since ADR 0050: libs/codec, libs/secrets, internal/auth and the budget and job module packages.
+            internal/proc: 19
             # the broker host, registry, probes and MCP bridge moved out of cmd/magus
             # beside the status rendering already here: the server package wires every
             # service it hosts, so it imports 68 workspace packages.
-            internal/server: 68
+            # 72 since ADR 0050: libs/codec, libs/secrets and the budget, job and trail module packages.
+            internal/server: 72
             # job evidence moved out of cmd/magus: *magus.Magus runs through every
             # signature, the shared boundary names the config.Filename constant, and the
             # callers claim reads occurrences through workspacegraph. It holds the symbol
             # reads internal/job cannot: the knowledge and deps tests import job.
-            internal/job/evidence: 19
+            # 21 since ADR 0050: the job and session module packages.
+            internal/job/evidence: 21
             # the diff input and text moved out of cmd/magus: types is in the
             # RequiredMatcher and diagnosticLine signatures, and the API floor text
             # calls release.Stage.Known. The advisors run through
