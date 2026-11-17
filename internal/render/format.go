@@ -9,8 +9,8 @@ import (
 
 	sprig "github.com/Masterminds/sprig/v3"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,

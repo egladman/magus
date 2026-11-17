@@ -42,11 +42,11 @@ func (s *SourceSuite) TestParseSourceRefusesWhatItCannotRead() {
 
 func (s *SourceSuite) TestRemoteHostNamesTheHostWithoutUserinfo() {
 	for remote, want := range map[string]string{
-		"https://example.invalid/acme/widgets.git":      "example.invalid",
+		"https://example.invalid/acme/widgets.git":     "example.invalid",
 		"https://user:pw@example.invalid:8443/a/b.git": "example.invalid",
-		"git@example.invalid:acme/widgets.git":          "example.invalid",
-		"/srv/git/widgets.git":                          "",
-		"":                                              "",
+		"git@example.invalid:acme/widgets.git":         "example.invalid",
+		"/srv/git/widgets.git":                         "",
+		"":                                             "",
 	} {
 		s.Equal(want, RemoteHost(remote), remote)
 	}
