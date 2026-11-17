@@ -1175,6 +1175,7 @@ var Spec = configuration.ConfigurationSpec{Settings: slices.Concat(settings.Sett
 	{EnvVar: "MAGUS_S3_ENDPOINT", Default: "https://s3.<region>.amazonaws.com", Doc: "Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to"},
 	{EnvVar: "MAGUS_LEVEL", Internal: true, Doc: "The magus recursion depth, like make's MAKELEVEL"},
 	{EnvVar: "MAGUS_INVOCATION_ANCESTORS", Internal: true, Doc: "The comma-separated invocations a nested magus runs underneath"},
+	{EnvVar: "MAGUS_BROKER_SPAWN_TRAP", Internal: true, Doc: "Set by unit tests to a file: SpawnBroker appends a line to it and fails instead of starting a broker"},
 	{EnvVar: "MAGUS_BOOTSTRAP_EXEC_DONE", Internal: true, Doc: "Set when magus replaces itself with a workspace-local ./magus, so the replacement never hops again"},
 	{EnvVar: "MAGUS_SYMBOL_INDEX", Internal: true, Doc: "Set for a spell's symbol indexer op: the path the indexer writes its SCIP index to"},
 	{EnvVar: "MAGUS_WORKSPACE_ROOT", Internal: true, Doc: "Set for a spell's symbol indexer op: the workspace root the index's paths are relative to"},

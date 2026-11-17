@@ -526,6 +526,9 @@ The magus recursion depth, like make's MAKELEVEL
 \fBMAGUS_INVOCATION_ANCESTORS\fR
 The comma\-separated invocations a nested magus runs underneath
 .TP
+\fBMAGUS_BROKER_SPAWN_TRAP\fR
+Set by unit tests to a file: SpawnBroker appends a line to it and fails instead of starting a broker
+.TP
 \fBMAGUS_BOOTSTRAP_EXEC_DONE\fR
 Set when magus replaces itself with a workspace\-local ./magus, so the replacement never hops again
 .TP

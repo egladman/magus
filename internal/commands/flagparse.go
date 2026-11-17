@@ -79,8 +79,8 @@ func PartitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // the subcommand's own commandParse. ok is false when there is no positional target at all.
 //
 // bind registers every flag the invocation accepts, the global and display set and the
-// command's OWN, and is what keeps the prescan from reading a value-taking local flag as
-// a bool: with the flag unknown here its value is hoisted out as a positional, so
+// command's OWN. It keeps the prescan from reading a value-taking local flag as a bool.
+// With the flag unknown here, its value is hoisted out as a positional, so
 // `--skip api --skip web` reorders to `--skip --skip api web` and the first flag
 // swallows the second as its value. A command that binds nothing of its own accepts that
 // limit: one such flag survives it by luck of ordering, two do not.

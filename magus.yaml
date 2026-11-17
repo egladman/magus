@@ -164,7 +164,8 @@ knowledge:
             internal/agent: 16
             internal/ci: 16
             internal/interp/mcpclient: 15
-            internal/queue: 15
+            # 16 since the queue's source and setup parsing moved in from cmd/magus (#781).
+            internal/queue: 16
             internal/trail: 16
             internal/workspace: 16
             # the env and config digests moved out of cmd/magus: the config digest
