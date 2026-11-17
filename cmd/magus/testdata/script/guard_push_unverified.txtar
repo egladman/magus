@@ -1,10 +1,11 @@
 # This repository's push-unverified rule, hack/policy/push.buzz read from the tree rather
 # than copied here, judged through the real `magus shell` a hook invokes, over the real
 # req.push and magus\workspace(dir).unverified(revision). A push of a commit that changed a
-# declared file no passing run read as committed is refused naming the command; a run counts
-# for a file that held, as it ran, what the commit holds, whatever else was uncommitted; a
-# target that declares no inputs reads nothing its command does not name; a file no target
-# declares does not block.
+# declared file no passing run read as committed is advised on, naming the commands that
+# read it, while the rule advises; a run counts for a file that held, as it ran, what the
+# commit holds, whatever else was uncommitted; a target that declares no inputs reads
+# nothing its command does not name; a file no target declares does not block. Each step
+# is its own session, so no advice is held back as already spoken.
 
 env MAGUS_VCS_BASE_REF=main
 mkdir hack/policy
@@ -17,42 +18,43 @@ exec git add .gitignore magus.yaml magusfile.buzz hack src/a.txt
 exec git commit -q -m baseline
 exec git checkout -q -b topic
 
-# A refusal repeated in one session reads "denied again" before the rule's reply.
-
-# (a) A commit changing a.txt, with no run recorded: refused naming the command that reads it.
+# (a) A commit changing a.txt, with no run recorded: advised on, naming the commands to run.
 cp edit-a.txt src/a.txt
 exec git commit -q -am 'change a'
-stdin push.json
-! exec magus shell
-stdout '^deny .*\[workspace:push-unverified\]: pushing [0-9a-f]{12} changes 1 file that no passing run has read as committed; run the command on each line, then push again'
+stdin push-a.json
+exec magus shell
+! stdout 'deny'
+stdout '^advise .*\[workspace:push-unverified\]: pushing [0-9a-f]{12} changes 1 file that no passing run has read as committed; run the command on each line, then push again'
+stdout '  `\./magus run lint \. -- src/a\.txt`'
 
-# (b) A run of a target that declares no inputs and names no path reads nothing.
-exec magus run build .
-stdin push.json
-! exec magus shell
-stdout '^deny .*\[workspace:push-unverified\]: pushing'
+# (b) A run of a target that declares no inputs reads nothing, even over `.`.
+exec magus run build . -- .
+stdin push-b.json
+exec magus shell
+stdout '^advise .*\[workspace:push-unverified\]: pushing'
 
 # (c) A passing run of the target that declares it: allowed.
 exec magus run check .
-stdin push.json
+stdin push-c.json
 exec magus shell
 ! stdout 'deny'
+! stdout 'push-unverified'
 
 # (d) A run while b.txt was still uncommitted counts once b.txt is committed as it ran.
 cp edit-b.txt src/b.txt
 exec magus run check .
 exec git add src/b.txt
 exec git commit -q -m 'add b'
-stdin push.json
+stdin push-d.json
 exec magus shell
-! stdout 'deny'
+! stdout 'push-unverified'
 
-# (e) A file edited after the run is unread: refused.
+# (e) A file edited after the run is unread: advised on.
 cp edit-a2.txt src/a.txt
 exec git commit -q -am 'change a again'
-stdin push.json
-! exec magus shell
-stdout '^deny .*\[workspace:push-unverified\]: pushing'
+stdin push-e.json
+exec magus shell
+stdout '^advise .*\[workspace:push-unverified\]: pushing'
 
 # (f) Run again: allowed. A changed file no target declares is named and does not block.
 exec magus run check .
@@ -60,15 +62,15 @@ cp notes-body NOTES.md
 exec git add NOTES.md
 exec git commit -q -m 'add notes'
 exec magus run check .
-stdin push.json
+stdin push-f.json
 exec magus shell
 ! stdout 'deny'
 stdout 'advise \[workspace:push-unverified\]: 1 file changed here that no target of this workspace declares, so no run can check it: NOTES.md'
 
-# (g) A line whose commit only running it makes is refused as unjudged, naming the fix.
+# (g) A line whose commit only running it makes is advised on as unjudged, naming the fix.
 stdin commit-push.json
-! exec magus shell
-stdout '^deny .*\[workspace:push-unverified\]: this push is refused because magus cannot tell, before the line runs, which commit it publishes'
+exec magus shell
+stdout '^advise .*\[workspace:push-unverified\]: this push is refused because magus cannot tell, before the line runs, which commit it publishes'
 
 # (h) A dry run publishes nothing and a line that pushes nothing is never read.
 stdin dry-run.json
@@ -108,10 +110,20 @@ a, changed again
 b
 -- notes-body --
 notes
--- push.json --
-{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-a.json --
+{"session_id":"s-a","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-b.json --
+{"session_id":"s-b","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-c.json --
+{"session_id":"s-c","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-d.json --
+{"session_id":"s-d","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-e.json --
+{"session_id":"s-e","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- push-f.json --
+{"session_id":"s-f","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
 -- commit-push.json --
-{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git commit --allow-empty -m x && git push origin HEAD:topic","description":"push"}}
+{"session_id":"s-g","tool_name":"Bash","tool_input":{"command":"git commit --allow-empty -m x && git push origin HEAD:topic","description":"push"}}
 -- dry-run.json --
 {"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push --dry-run origin HEAD:topic","description":"push"}}
 -- ls.json --
