@@ -265,8 +265,8 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 
 	var pullRes remotespell.PullResult
 	require.NoError(t, codec.Unmarshal([]byte(runSpell(t, repo, "pull", "magus/spell/go", t.TempDir(), "-o", "json")), &pullRes))
-	assert.Equal(t, "magus/spell/go", pullRes.Override.Import)
-	assert.Equal(t, filepath.ToSlash(pullRes.Dir), pullRes.Override.Path, "a copy outside the workspace is declared by its absolute path")
+	assert.Equal(t, remotespell.ImportOverride{Import: "magus/spell/go", Path: filepath.ToSlash(pullRes.Dir)}, pullRes.Override,
+		"a copy outside the workspace is declared by its absolute path")
 	assert.Equal(t, ref.Digest, pullRes.Digest)
 }
 

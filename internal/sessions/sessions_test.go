@@ -100,7 +100,7 @@ func TestDir(t *testing.T) { suite.Run(t, new(DirSuite)) }
 
 // Worktrees of one repo must resolve to one store, or a fact recorded in one is
 // invisible from the other and the whole feature is pointless.
-func (s *DirSuite) TestIsSharedAcrossWorktreesOfOneRepo() {
+func (s *DirSuite) TestIsSharedAcrossWorktreesOfOneRepository() {
 	t := s.T()
 	testkit.Isolate(t)
 

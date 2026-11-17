@@ -22,8 +22,9 @@ func AttentionTie() session.Tie {
 	return session.Tie{
 		Key: attentionID,
 		Held: func(fold session.Fold) []string {
-			var open []string
-			for _, req := range AttentionQueue(fold) {
+			queue := AttentionQueue(fold)
+			open := make([]string, 0, len(queue))
+			for _, req := range queue {
 				open = append(open, req.ID)
 			}
 			return open

@@ -82,7 +82,7 @@ func (s *CredentialSuite) TestValidateAcceptsEveryValidGrant() {
 	}
 }
 
-func (s *CredentialSuite) TestValidateRefusesLevelsAScopeHasNoMeaningFor() {
+func (s *CredentialSuite) TestValidateRefusesALevelItsScopeGivesNoMeaning() {
 	s.Error(Access{Tokens: LevelRead}.Validate())
 	s.Error(Access{MCP: LevelRead}.Validate())
 	s.Error(Access{Console: 3}.Validate())

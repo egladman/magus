@@ -116,11 +116,11 @@ type PullResult struct {
 	// Override is the magus.yaml entry that makes a copy of a built-in replace it, set
 	// only when pulling one (magus/spell/<name>). Pull never writes magus.yaml: the
 	// declaration is the acknowledgment.
-	Override override `json:"override,omitzero"`
+	Override ImportOverride `json:"override,omitzero"`
 }
 
-// override is one `spells: {<import>: {path: <path>}}` entry.
-type override struct {
+// ImportOverride is one `spells: {<import>: {path: <path>}}` entry.
+type ImportOverride struct {
 	Import string `json:"import"`
 	Path   string `json:"path"`
 }
@@ -151,7 +151,7 @@ func EjectShipped(wsRoot, name, dst string) (res PullResult, next string, err er
 		return res, fmt.Sprintf("%s ships as source only: it imports a host module, so there is no built-in to replace. Import the copy by its path: import %q;\n",
 			spells.ModulePath(name), rel), nil
 	}
-	res.Override = override{Import: spells.ModulePath(name), Path: rel}
+	res.Override = ImportOverride{Import: spells.ModulePath(name), Path: rel}
 	return res, fmt.Sprintf("to run this copy in place of the built-in, declare it in magus.yaml:\n\nspells:\n  %s:\n    path: %s\n",
 		res.Override.Import, res.Override.Path), nil
 }

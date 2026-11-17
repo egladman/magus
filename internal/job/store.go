@@ -339,7 +339,7 @@ func diagnose(err error) error {
 		return refuseRecordVersion(err, version.Path, version.Line, version.Want, version.Got)
 	}
 	if legacy, ok := errors.AsType[*job.LegacyDocumentError](err); ok {
-		return fmt.Errorf("cannot open job plan %s; once no older magus writes it, set it aside with `mv %s %s.old`: %w",
+		return fmt.Errorf("cannot open job plan %s, and once no older magus writes it, set it aside with `mv %s %s.old`: %w",
 			legacy.Path, shellQuote(legacy.Document), shellQuote(legacy.Document), file.StoreDiagnostic(legacy.Err))
 	}
 	if refused, ok := errors.AsType[*job.GrantRefusedError](err); ok {

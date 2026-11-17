@@ -6,11 +6,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type TrailSuite struct{ suite.Suite }
+type trailSuite struct{ suite.Suite }
 
-func TestTrail(t *testing.T) { suite.Run(t, new(TrailSuite)) }
+func TestTrail(t *testing.T) { suite.Run(t, new(trailSuite)) }
 
-func (s *TrailSuite) TestSectionLettersRunInLabelOrder() {
+func (s *trailSuite) TestSectionLettersRunInLabelOrder() {
 	var letters string
 	for _, sec := range Sections() {
 		s.Require().NoError(sec.Validate())
@@ -19,7 +19,7 @@ func (s *TrailSuite) TestSectionLettersRunInLabelOrder() {
 	s.Equal("ABCD", letters, "labels are A refused, B advised, C unguarded, D next-not-taken")
 }
 
-func (s *TrailSuite) TestSectionOutsideTheSetNamesTheOnesThatExist() {
+func (s *trailSuite) TestSectionOutsideTheSetNamesTheOnesThatExist() {
 	s.Empty(Section("passed").letter())
 	err := Section("passed").Validate()
 	var unknown *UnknownValueError
@@ -28,7 +28,7 @@ func (s *TrailSuite) TestSectionOutsideTheSetNamesTheOnesThatExist() {
 	s.ErrorContains(err, "refused, advised, unguarded, next-not-taken")
 }
 
-func (s *TrailSuite) TestVerdictValidate() {
+func (s *trailSuite) TestVerdictValidate() {
 	for _, v := range Verdicts() {
 		s.Require().NoError(v.Validate())
 	}

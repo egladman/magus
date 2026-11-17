@@ -74,7 +74,7 @@ func TestEjectShippedMatchesBuildShipped(t *testing.T) {
 	res, next, err := EjectShipped(ws, "go", filepath.Join(ws, dst))
 	require.NoError(t, err)
 	assert.Equal(t, built.Digest, res.Digest)
-	assert.Equal(t, override{Import: "magus/spell/go", Path: dst}, res.Override, "a copy inside the workspace is declared by its relative path")
+	assert.Equal(t, ImportOverride{Import: "magus/spell/go", Path: dst}, res.Override, "a copy inside the workspace is declared by its relative path")
 	assert.Contains(t, next, "spells:\n  magus/spell/go:\n    path: spells/go\n")
 
 	res, next, err = EjectShipped("", "endoflife-date", t.TempDir())
@@ -111,7 +111,7 @@ func TestABuildOfAShippedCheckoutMatchesBuildShipped(t *testing.T) {
 	dst := t.TempDir()
 	pulled, _, err := EjectShipped(r.Root(), "go", dst)
 	require.NoError(t, err)
-	assert.Equal(t, override{Import: "magus/spell/go", Path: dst}, pulled.Override)
+	assert.Equal(t, ImportOverride{Import: "magus/spell/go", Path: dst}, pulled.Override)
 }
 
 func TestPullReferenceReadsTheLockForABareImportPath(t *testing.T) {
