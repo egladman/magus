@@ -9,7 +9,6 @@ import (
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/testkit"
