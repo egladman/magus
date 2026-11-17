@@ -20,7 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
+	gotypes "go/types"
 	"maps"
 	"os"
 	"path/filepath"
@@ -369,7 +371,32 @@ func jobDecls(records []jobRecord) (*goDecls, error) {
 		return nil, err
 	}
 	d.sets = sets
-	return d, nil
+	return d, versionConsts(records, d)
+}
+
+// versionConsts records each compiled record's version constant by its typed value. The
+// constant may name another (`APIVersion = apigroup.Job`), which no literal in the parsed
+// file spells.
+func versionConsts(records []jobRecord, d *goDecls) error {
+	prog := boundary().prog
+	var errs []error
+	for _, rec := range records {
+		if rec.Type == nil {
+			continue
+		}
+		pkg, err := prog.Package(rec.Type.PkgPath())
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		c, ok := pkg.Types.Scope().Lookup(rec.Version).(*gotypes.Const)
+		if !ok || c.Val().Kind() != constant.String {
+			errs = append(errs, fmt.Errorf("%s declares no string constant %s", rec.Type.PkgPath(), rec.Version))
+			continue
+		}
+		d.consts[rec.Version] = constant.StringVal(c.Val())
+	}
+	return errors.Join(errs...)
 }
 
 func jobSources(records []jobRecord) ([]string, map[string][]string, error) {

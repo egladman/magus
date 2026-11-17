@@ -108,7 +108,7 @@ func emitReturnObjects(e *buzzValueEmitter, m std.Module, meth std.Method) error
 		if ret.Object == "" {
 			continue
 		}
-		if _, err := e.valueFunc(implOut.Out(i), "v"); err != nil {
+		if _, err := e.valueFunc(implOut.Out(i), "v", &argPackages{}); err != nil {
 			return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
 		}
 	}

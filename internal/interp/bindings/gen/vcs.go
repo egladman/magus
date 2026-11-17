@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -60,7 +61,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(ret0, func(v types.RegionChange) vm.Value { return ObjectRegionChange(v, enums) }), nil
+		return ffi.ObjectSlice(ret0, func(v job.RegionChange) vm.Value { return ObjectJobRegionChange(v, enums) }), nil
 	}))
 	m.MapSet("commits", vm.DirectValue("vcs.commits", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := ffi.String(bzArgs, 0)

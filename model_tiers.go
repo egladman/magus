@@ -16,6 +16,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// ModelRow is one model a harness or agents.models lists, as [Magus.Models] reads it.
+type ModelRow = model.Row
+
+// CheckGrader judges a job row's check the way the guard will judge its holder running
+// it, as [Magus.CheckGrader] returns it.
+type CheckGrader = job.CheckGrader
+
 // ModelTiers returns what the root magusfile declared with magus\modelTiers.
 // Else it returns the shipped declaration, and nil when it turned them off.
 // It is nil too when the shipped one does not build, logged as an error.
@@ -43,8 +50,8 @@ func (m *Magus) ModelTierMatrix() types.ModelTierMatrix {
 
 // Models is the lazy reader of the model rows this workspace's wired harnesses
 // publish. The first call loads each harness spell.
-func (m *Magus) Models(ctx context.Context) func() []model.Row {
-	return sync.OnceValue(func() []model.Row {
+func (m *Magus) Models(ctx context.Context) func() []ModelRow {
+	return sync.OnceValue(func() []ModelRow {
 		wired, err := workspace.WiredHarnesses(m)
 		if err != nil {
 			return nil
@@ -57,7 +64,7 @@ func (m *Magus) Models(ctx context.Context) func() []model.Row {
 // it in the checkout at the root it is handed, against that workspace's rules. A door
 // opening a job store hands it over as job.Location.Grader. Each root's rules load on the
 // first check graded there and are reused until a file they were read from changes.
-func (m *Magus) CheckGrader() job.CheckGrader {
+func (m *Magus) CheckGrader() CheckGrader {
 	return guard.NewCheckGrader(func(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
 		return guard.NewDependencies(ctx, guard.Wiring{
 			Root:          root,

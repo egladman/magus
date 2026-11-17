@@ -16,4 +16,4 @@ Query: `magus query project=libs/codec`
 | `lint`           |                                                                                                                          |
 | `build`          |                                                                                                                          |
 | `test`           | Runs the suite on encoding/json, the build without the experiment; the root merges coverage.out into its coverage badge. |
-| `test-jsonv2`    | Runs the same suite on encoding/json/v2: the conformance suite holds only while both builds pass it unchanged.           |
+| `test-jsonv-2`   | Runs the same suite on encoding/json/v2: the conformance suite holds only while both builds pass it unchanged.           |

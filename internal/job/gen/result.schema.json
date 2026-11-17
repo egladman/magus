@@ -1,17 +1,17 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://magus.invalid/job/result.schema.json",
-  "$comment": "Generated from JobResult by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
+  "$comment": "Generated from Result by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
   "title": "magus job result",
-  "description": "JobResult is the result a holder files for a job.",
+  "description": "Result is the result a holder files for a job.",
   "type": "object",
   "additionalProperties": false,
   "required": ["api_version", "changed_paths", "unresolved_risks"],
   "properties": {
     "api_version": {
       "type": "string",
-      "const": "magus.job-result/v1alpha1",
-      "description": "Version is the format this record is written in. A reader refuses any other, so no magus acts on a record it cannot read."
+      "const": "safetyscissors.job-result/v1alpha1",
+      "description": "Version is the format this record is written in. A reader refuses any other, so no reader acts on a record it cannot read."
     },
     "requires": {
       "type": "array",

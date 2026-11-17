@@ -404,7 +404,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		fmt.Fprintln(w, "\t\tif err != nil {")
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
 		fmt.Fprintln(w, "\t\t}")
-		value, err := returnConv(meth.Returns[0], reflect.TypeOf(meth.Impl).Out(0), "ret0", objects)
+		value, err := returnConv(meth.Returns[0], reflect.TypeOf(meth.Impl).Out(0), "ret0", objects, pkgs)
 		if err != nil {
 			return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
 		}
@@ -421,7 +421,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		fmt.Fprintln(w, "\t\t}")
 		items := make([]string, len(meth.Returns))
 		for i, ret := range meth.Returns {
-			value, err := returnConv(ret, reflect.TypeOf(meth.Impl).Out(i), fmt.Sprintf("ret%d", i), objects)
+			value, err := returnConv(ret, reflect.TypeOf(meth.Impl).Out(i), fmt.Sprintf("ret%d", i), objects, pkgs)
 			if err != nil {
 				return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
 			}
@@ -576,7 +576,7 @@ func (p *argPackages) packages() []string {
 // returnConv returns the Go expression that converts a method return to a vm.Value.
 // Object returns are emitted as direct, typed encoders; scalar and deliberately
 // untyped descriptor returns use the small shared primitive helpers.
-func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValueEmitter) (string, error) {
+func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValueEmitter, pkgs *argPackages) (string, error) {
 	if ret.Nullable {
 		if ret.Type != std.TypeString || ret.Object != "" || goType != reflect.TypeFor[*string]() {
 			return "", fmt.Errorf("a nullable return is a str? whose Impl returns *string, not %s returning %s", ret.Type.GoType(), goType)
@@ -584,7 +584,7 @@ func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValue
 		return fmt.Sprintf("ffi.OptStringVal(%s)", src), nil
 	}
 	if ret.Object != "" {
-		return objects.valueFunc(goType, src)
+		return objects.valueFunc(goType, src, pkgs)
 	}
 	return buzzValConv(ret.Type, src), nil
 }
@@ -743,7 +743,9 @@ func newBuzzValueEmitter() *buzzValueEmitter {
 	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}, enumReach: map[reflect.Type]bool{}, pkgs: map[string]bool{}}
 }
 
-func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error) {
+// valueFunc renders the encoder call for an object return. A closure spells the element
+// type in the caller's file, so pkgs records its package for that file's imports.
+func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string, pkgs *argPackages) (string, error) {
 	switch t.Kind() {
 	case reflect.Struct:
 		if err := e.emitStruct(t); err != nil {
@@ -758,6 +760,7 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error)
 			return "", err
 		}
 		if e.reachesEnum(t.Elem()) {
+			pkgs.spell(t.Elem())
 			return fmt.Sprintf("ffi.ObjectSlice(%s, func(v %s) vm.Value { return %s })", src, e.qualify(t.Elem()), e.call(t.Elem(), "v")), nil
 		}
 		return fmt.Sprintf("ffi.ObjectSlice(%s, %s)", src, e.funcName(t.Elem())), nil

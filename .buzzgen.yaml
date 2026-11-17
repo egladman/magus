@@ -35,27 +35,31 @@ packages:
       Unread: {config: {name: DiffUnread}}
       Why: {config: {name: DiffWhy}}
       WhyRelation: {config: {name: DiffWhyRelation}}
-  github.com/egladman/magus/libs/diagnostics:
+  github.com/egladman/magus/libs/apiversion:
     types:
-      Code:
+      APIVersion:
         config:
-          open: a workspace mints its own codes through magus\raise beside magus's catalog
+          open: a reader compares it to the one version it reads and names any other, so the set is every version ever written
   github.com/egladman/magus/libs/safetyscissors/job:
     # Buzz keeps the names the types had in types, and the agent section's in types/agent.
     config: {module: ""}
     types:
-      Access: {config: {name: Grant}}
       Agent: {config: {name: Spec, module: magus/agent, required: [worker]}}
       BaseVerdict: {config: {name: JobBaseVerdict, cases: {"match": matches}}}
       Block: {config: {name: JobBlock}}
       CapturedRun: {config: {name: JobAttempt}}
       Claim: {config: {name: JobClaim}}
+      Code:
+        config:
+          open: the caller names its own problem codes, as magus does with its diagnostic catalog
+      CredentialKind:
+        config:
+          open: the verifier that admits a request defines the kinds, and this module defines none
       Deferred: {config: {name: JobDeferred}}
       Denial: {config: {name: JobDenial}}
       Entry: {config: {name: JobEntry}}
       ForkFacts: {config: {name: JobForkFacts}}
       GateAttempt: {config: {name: JobGateAttempt}}
-      InflightAttention: {config: {zeroCase: unset}}
       Integration: {config: {name: JobIntegration}}
       List: {config: {name: JobList}}
       Model: {config: {module: magus/agent}}
@@ -83,12 +87,11 @@ packages:
     types:
       Request: {config: {name: StepRequest}}
   github.com/egladman/magus/libs/safetyscissors/tier:
-    # Buzz keeps the names the types had in types/agent, and PriceStep stays in magus.
+    # Buzz keeps the names the types had in types/agent.
     config: {module: magus/agent}
     types:
       Assignment: {config: {name: JobModelTier}}
       Bounds: {config: {name: ModelTierBounds}}
-      PriceStep: {config: {module: ""}}
       SkillVariant: {config: {zeroCase: ""}}
       Source: {config: {name: ModelTierSource, zeroCase: ""}}
   github.com/egladman/magus/libs/safetyscissors/trail:

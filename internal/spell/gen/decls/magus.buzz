@@ -36,16 +36,6 @@ export enum<str> ClaimKind {
     dead = "dead",
 }
 
-export enum<str> CredentialKind {
-    none = "",
-    operator = "operator",
-    stored = "stored",
-    share = "share",
-    exchange = "exchange",
-    stdio = "stdio",
-    socketPeer = "socket-peer",
-}
-
 export enum<str> EntryPoint {
     none = "",
     cli = "cli",
@@ -70,6 +60,13 @@ export enum<str> GoalExpect {
     absent = "absent",
     unreferenced = "unreferenced",
     signature = "signature",
+}
+
+export enum<str> Basis {
+    none = "",
+    witnessed = "witnessed",
+    attested = "attested",
+    reported = "reported",
 }
 
 export enum<str> BriefFormat {
@@ -118,14 +115,6 @@ export enum<str> AttemptEnd {
     stop = "stop",
     deadline = "deadline",
     job = "job",
-}
-
-export enum<str> InflightAttention {
-    unset = "",
-    author = "author",
-    review = "review",
-    queue = "queue",
-    none = "none",
 }
 
 export enum<str> JobKind {
@@ -323,8 +312,9 @@ export enum<str> RegionSide {
 
 export enum<str> GuardDecision {
     none = "",
-    allow = "allow",
+    defer = "defer",
     advise = "advise",
+    ask = "ask",
     deny = "deny",
 }
 
@@ -601,17 +591,10 @@ export object ClaimEvidence {
     subject: str = "",
 }
 
-export object Grant {
-    tokens: int = 0,
-    mcp: int = 0,
-    console: int = 0,
-}
-
 export object Credential {
-    class: CredentialKind = CredentialKind.none,
+    class: str = "",
     id: str = "",
     name: str = "",
-    grant: Grant = Grant{},
 }
 
 export object Origin {
@@ -673,6 +656,7 @@ export object Goal {
     paths: [str] = [],
     symbols: [str] = [],
     signature: str = "",
+    accept: [Basis] = [],
 }
 
 export object JobRelease {
@@ -1021,46 +1005,6 @@ export object JobReadOnly {
     lacks: [str] = [],
 }
 
-export object InflightNeighbour {
-    id: str = "",
-    evidence: str = "",
-    paths: [str] = [],
-    declarations: [str] = [],
-    units: [str] = [],
-    base: str = "",
-}
-
-export object InflightChange {
-    id: str = "",
-    title: str = "",
-    author: str = "",
-    head: str = "",
-    branch: str = "",
-    base: str = "",
-    fork: bool = false,
-    jobs: [str] = [],
-    intent: str = "",
-    mark: str = "",
-    decision: str = "",
-    code: str = "",
-    reason: str = "",
-    partition: int = 0,
-    position: int = 0,
-    below: str = "",
-    mine: bool = false,
-    attention: InflightAttention = InflightAttention.unset,
-    neighbours: [InflightNeighbour] = [],
-}
-
-export object InflightFetch {
-    provider: str = "",
-    host: str = "",
-    base: str = "",
-    tip: str = "",
-    at: int = 0,
-    elapsedMS: int = 0,
-}
-
 export object JobUnmerged {
     job: str = "",
     head: str = "",
@@ -1085,9 +1029,6 @@ export object JobList {
     stale: [str] = [],
     blocked: [JobBlock] = [],
     readOnly: [JobReadOnly] = [],
-    changes: [InflightChange] = [],
-    fetched: InflightFetch? = null,
-    unproposed: [str] = [],
     unmerged: JobUnmergedReport? = null,
 }
 
@@ -2809,11 +2750,12 @@ export object ci {
 // Agent-guard rules for this workspace: additive shell, spawn, command and write rules, and the decision each compiled built-in takes.
 export object guard {
     static extern fun advise(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
-    static extern fun allow() > GuardVerdict;
+    static extern fun ask(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun binary() > GuardBinary;
     static extern fun builtins(rules: {str: any}) > void;
     static extern fun command(rule: fun (req: CommandRequest) > GuardVerdict !> any) > void;
     static extern fun count(key: str) > int;
+    static extern fun defer() > GuardVerdict;
     static extern fun deny(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun profile(level: str) > void;

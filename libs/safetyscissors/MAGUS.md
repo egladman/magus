@@ -6,13 +6,18 @@ Up: [workspace index](../../MAGUS.md)
 
 Query: `magus query project=libs/safetyscissors`
 
-| Target           | What it does                                                           |
-| ---------------- | ---------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                  |
-| `format`         |                                                                        |
-| `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl. |
-| `ci`             | The anchor `magus affected ci` keys off.                               |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                       |
-| `lint`           |                                                                        |
-| `build`          |                                                                        |
-| `test`           | Runs the suite; the root merges coverage.out into its coverage badge.  |
+| Target           | What it does                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `generate`       | Regenerates MAGUS.md and draws the mark.                                                                                 |
+| `format`         |                                                                                                                          |
+| `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl.                                                   |
+| `ci`             | The anchor `magus affected ci` keys off.                                                                                 |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                         |
+| `mark-generate`  | mark_generate draws the mark into assets/gen/.                                                                           |
+| `lint`           |                                                                                                                          |
+| `mark-lint`      | mark_lint type-checks the mark's script and fails on any BZZ diagnostic.                                                 |
+| `build`          |                                                                                                                          |
+| `test`           | Runs the suite on encoding/json, the build without the experiment; the root merges coverage.out into its coverage badge. |
+| `test-jsonv-2`   | Runs the same suite on encoding/json/v2: every module type holds only while both builds pass it unchanged.               |
+| `landlock-test`  | Runs the sandbox package's tests with landlock required, so a Linux host without it fails rather than skipping.          |
+| `mark-test`      | mark_test runs the mark script's in-file test blocks.                                                                    |

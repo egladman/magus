@@ -18,7 +18,6 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: libs/embed
 - Project: libs/figure
 - Project: libs/proofread/train
-- Project: libs/safetyscissors
 - Project: libs/ssg
 - Project: libs/train
 - Project: testdata/latex/onepage
@@ -60,7 +59,7 @@ magus graph export -o json  # the whole graph
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                                        |
 | ---------- | -------: | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | project    |      20+ | `magus query kind=project`    | `magus`, `docs`, `libs/train`                                                                                                                                                   |
-| target     |     200+ | `magus query kind=target`     | `conventions`, `buzz-test`, `catalog-docs-generate`                                                                                                                             |
+| target     |     300+ | `magus query kind=target`     | `conventions`, `catalog-docs-generate`, `buzz-test`                                                                                                                             |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                                      |
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-run`                                                                                                                                                 |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                                                                                 |
@@ -81,12 +80,13 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                       |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      73 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                |
+| [.](MAGUS.md)                                                               |      72 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                |
 | [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                        |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint`  |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                   |
 | [libs/apiversion](libs/apiversion/MAGUS.md)                                 |       8 | `magus query project=libs/apiversion`                 | `format`, `ci`, `build`                           |
 | [libs/clikit](libs/clikit/MAGUS.md)                                         |       8 | `magus query project=libs/clikit`                     | `format`, `ci`, `test`                            |
+| [libs/codec](libs/codec/MAGUS.md)                                           |       9 | `magus query project=libs/codec`                      | `format`, `ci`, `test`                            |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                            |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                            |
 | libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `build`, `ci`, `lint`                             |
@@ -95,8 +95,9 @@ magus graph export -o json  # the whole graph
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                            |
-| libs/safetyscissors                                                         |       4 | `magus query project=libs/safetyscissors`             | `ci`, `lint`, `test`                              |
+| [libs/safetyscissors](libs/safetyscissors/MAGUS.md)                         |      13 | `magus query project=libs/safetyscissors`             | `ci`, `format`, `landlock-test`                   |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                            |
+| [libs/secrets](libs/secrets/MAGUS.md)                                       |       8 | `magus query project=libs/secrets`                    | `format`, `ci`, `test`                            |
 | libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                            |
 | [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                            |
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                            |
@@ -183,7 +184,6 @@ magus graph export -o json  # the whole graph
 | `harness-drift`                | Fails when a local host installation lacks what its wired harness spell renders, naming each file and the command that merges it.                                                                                                      |
 | `swegrade-build`               | Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into benchmarks/agent/bin.                                                                                                                                  |
 | `compress-cgo-test`            | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                        |
-| `landlock-test`                | Runs internal/sandbox's tests with landlock required.                                                                                                                                                                                  |
 
 ## Project: libs/embed
 
@@ -217,15 +217,6 @@ magus graph export -o json  # the whole graph
 | `build`    |                                                                                                                             |
 | `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
 | `security` | Fails on a vulnerable symbol this module calls.                                                                             |
-
-## Project: libs/safetyscissors
-
-| Target     | What it does                                                        |
-| ---------- | ------------------------------------------------------------------- |
-| `generate` | generate draws the mark into assets/gen/.                           |
-| `ci`       | ci runs lint, then test.                                            |
-| `test`     | test runs the in-file test blocks.                                  |
-| `lint`     | lint type-checks the mark's script and fails on any BZZ diagnostic. |
 
 ## Project: libs/ssg
 
