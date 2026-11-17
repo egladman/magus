@@ -701,9 +701,6 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 // loopback server (--serve). Either way the graph stays on the machine: the site only
 // serves static assets.
 
-// query.go, which a pending move holds, still names fragmentWarnBytes.
-const fragmentWarnBytes = interactive.FragmentWarnBytes
-
 // Two privacy-first delivery modes:
 //   - default: gzip+base64url the graph into a `#data=` URL fragment. A fragment
 //     is never sent in an HTTP request, so the graph never leaves the machine.
@@ -981,9 +978,6 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	}
 	return nil
 }
-
-// query.go, which a pending move holds, still names openBrowser.
-func openBrowser(raw string) error { return interactive.OpenBrowser(raw) }
 
 // graphDiff reports how the knowledge graph changed relative to a baseline: the nodes
 // and edges added, removed, or changed. It is the PR-review blast-radius artifact: emit

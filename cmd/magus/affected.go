@@ -290,13 +290,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Same check as `magus run ci`: a redundant gate refuses under load and
 	// advises when the machine is idle. See prepareGateRedundancy.
 	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
-	gate.noteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
-	if gateErr := gate.evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
+	gate.NoteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
+	if gateErr := gate.Evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 	// Sized once the gate is going to run. A trivial change is proven to need no gate,
 	// which is a verdict on the change rather than a deferral, so it exits 0.
-	sized := gate.size(ctx, af.Base, !af.RedundancyCheck)
+	sized := gate.Size(ctx, af.Base, !af.RedundancyCheck)
 	if sized != nil {
 		slog.InfoContext(ctx, internalci.RenderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == check.RiskTrivial {
@@ -379,7 +379,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Read the instant the run returns: after this line a cancellation means the signal
 	// arrived once the verdict was already decided, and dropping it would throw away a
 	// gate that genuinely ran.
-	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
+	gate.Record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if err != nil && opts.Format == outputText {
 		internalci.PrintFailedResults(os.Stdout, failed.list())
 	}

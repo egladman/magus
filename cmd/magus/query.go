@@ -748,10 +748,10 @@ func launchRefresh(cmd *exec.Cmd) (bool, error) {
 }
 
 func refreshCommand(exe string, logFile *os.File) *exec.Cmd {
-	cmd := detachedCommand(exe, append(slices.Clone(os.Args[1:]), "--refresh"))
+	cmd := proc.DetachedCommand(exe, append(slices.Clone(os.Args[1:]), "--refresh"))
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	cmd.Env = append(os.Environ(), detachedRefreshEnv+"=1")
-	cmd.SysProcAttr = detachedSysProcAttr()
+	cmd.SysProcAttr = proc.DetachedSysProcAttr()
 	return cmd
 }
 
@@ -1344,7 +1344,7 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 	if err != nil {
 		return err
 	}
-	if len(openURL) > fragmentWarnBytes {
+	if len(openURL) > interactive.FragmentWarnBytes {
 		slog.WarnContext(ctx, fmt.Sprintf("this link is %d KB, near or past what Safari and older\n"+
 			"Firefox accept in a URL (Chrome is fine). If the page does not load, pipe it instead:\n"+
 			"  magus query output %s | less. Continuing.", len(openURL)/1024, desc.Ref), attr.Notice("magus query"))
@@ -1354,7 +1354,7 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 		return nil
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("opening the log viewer for %s; the output rides in the link fragment and never leaves your machine.", desc.Ref), attr.Notice(""))
-	if err := openBrowser(openURL); err != nil {
+	if err := interactive.OpenBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus query"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL."))
 		return exit.Reported(exit.Failure)

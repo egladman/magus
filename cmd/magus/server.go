@@ -1015,9 +1015,6 @@ func leasedBrokerClient(lease string) *broker.Client {
 	return newBrokerClient(false, broker.WithLease(lease))
 }
 
-// describe.go, which this move does not hold, still names these two.
-var loadWorkspaceConfig = server.LoadWorkspaceConfig
-
 func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	return server.ResolveDeclaredWorkspaces(context.Background(), cfgList, envVal)
 }

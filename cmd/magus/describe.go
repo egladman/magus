@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -821,7 +822,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
 	for _, wsRoot := range declared {
-		cfg, err := loadWorkspaceConfig(wsRoot)
+		cfg, err := server.LoadWorkspaceConfig(wsRoot)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
