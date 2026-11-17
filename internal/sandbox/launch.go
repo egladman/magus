@@ -3,13 +3,19 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 
+	"github.com/egladman/magus/internal/log/attr"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
+
+// launcherName is argv[0] of the launcher scissors.Command starts on Linux, so a process
+// listing names magus.
+const launcherName = "magus-sandbox-launch"
 
 // launchFailedExit is the launcher's exit status when it could not confine itself
 // or exec the command: the shell's "found but could not execute".
@@ -20,7 +26,7 @@ const launchFailedExit = 126
 // writes the reason to stderr and exits 126 without running the command. Call it
 // first in main, before any configuration, logging or connection is set up.
 func MaybeLaunch() {
-	handled, err := scissors.Relaunch(os.Args)
+	handled, err := scissors.Relaunch(os.Args, scissors.WithLauncherName(launcherName))
 	if !handled {
 		return
 	}
@@ -85,18 +91,23 @@ func newConfinement(p *Policy) (*scissors.Policy, error) {
 		}
 		binds = append(binds, scissors.Bind{Path: r.Path, Mode: mode, Create: r.Create})
 	}
-	opts := []scissors.Option{scissors.WithLease(p.Lease, p.LeaseFrom)}
+	opts := []scissors.Option{scissors.WithLease(p.Lease, p.LeaseFrom), scissors.WithLauncherName(launcherName)}
 	switch p.Mode.Resolved() {
 	case types.SandboxModeRequired:
 	case types.SandboxModeBestEffort, types.SandboxModeOff:
 		// Off reaches here only on a policy assembled by hand: a workspace whose mode is
 		// off attaches none.
-		opts = append(opts, scissors.WithMode(scissors.BestEffort))
+		opts = append(opts, scissors.WithMode(scissors.BestEffort), scissors.WithUnconfined(warnUnconfined))
 	}
 	if p.probe != nil {
 		opts = append(opts, scissors.WithKernelProbe(p.probe))
 	}
 	return scissors.New(binds, opts...)
+}
+
+// warnUnconfined says that a best-effort child runs without the kernel layer, and why.
+func warnUnconfined(err error) {
+	slog.With(attr.Component("magus")).Warn("a best-effort sandbox started a child unconfined", "reason", err.Error())
 }
 
 // bindMode spells r's flags as a bind mode. Every rule magus builds reads; one that

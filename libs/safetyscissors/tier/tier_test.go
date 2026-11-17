@@ -69,9 +69,15 @@ func (s *modelTierSuite) TestTheSetReadsTheDeclaration() {
 	s.Equal(1, def.Rank())
 
 	routine := s.at(set, 0)
-	s.Equal(Bounds{MaxLive: 4, MaxContext: 100000}, set.Bounds(routine))
-	s.Equal(SkillVariantFull, set.Skills(routine))
-	s.Equal(SkillVariantShort, set.Skills(def))
+	bounds, err := set.Bounds(routine)
+	s.Require().NoError(err)
+	s.Equal(Bounds{MaxLive: 4, MaxContext: 100000}, bounds)
+	skills, err := set.Skills(routine)
+	s.Require().NoError(err)
+	s.Equal(SkillVariantFull, skills)
+	skills, err = set.Skills(def)
+	s.Require().NoError(err)
+	s.Equal(SkillVariantShort, skills)
 
 	_, ok := set.At(4)
 	s.False(ok)
@@ -100,13 +106,10 @@ func (s *modelTierSuite) TestParseOfAnUnknownNameNamesTheCases() {
 	s.Contains(err.Error(), "magusfile.buzz:3")
 }
 
-func (s *modelTierSuite) TestParseReadsEachOldShippedNameAsItsNewOne() {
-	set := s.tiers(fourTiers())
-	for old, renamed := range map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"} {
-		t, err := set.Parse(old)
-		s.Require().NoError(err, old)
-		s.Equal(renamed, t.Name(), "%s reads as %s", old, renamed)
-	}
+func (s *modelTierSuite) TestParseReadsOnlyTheDeclaredSpelling() {
+	_, err := s.tiers(fourTiers()).Parse("economy")
+	var unknown *UnknownTierError
+	s.Require().ErrorAs(err, &unknown, "an old shipped name is not respelled")
 }
 
 func (s *modelTierSuite) TestParseKeepsAnOldNameTheSetDeclares() {
@@ -115,23 +118,6 @@ func (s *modelTierSuite) TestParseKeepsAnOldNameTheSetDeclares() {
 	t, err := s.tiers(decl).Parse("economy")
 	s.Require().NoError(err)
 	s.Equal(0, t.Rank(), "a workspace's own economy is its own case")
-}
-
-func (s *modelTierSuite) TestParseRefusesAnOldNameWhoseNewOneIsUndeclared() {
-	decl := fourTiers()
-	decl.Cases = []string{"cheap", "bounded", "design", "frontier"}
-	_, err := s.tiers(decl).Parse("economy")
-	s.Require().Error(err, "economy reads as routine, which this set does not declare")
-}
-
-func (s *modelTierSuite) TestRenamedNamesOnlyTheOldShippedNames() {
-	renamed, ok := Renamed("principal")
-	s.True(ok)
-	s.Equal("design", renamed)
-	_, ok = Renamed("design")
-	s.False(ok, "a current name is not renamed")
-	_, ok = Renamed("frontier")
-	s.False(ok)
 }
 
 func (s *modelTierSuite) TestAboveComparesOnlyWithinOneSet() {
@@ -184,8 +170,11 @@ func (s *modelTierSuite) TestTheZeroValueIsUnassigned() {
 
 	set := s.tiers(fourTiers())
 	s.False(set.Default().IsZero())
-	s.Equal(Bounds{}, set.Bounds(zero))
-	s.Equal(SkillVariant(""), set.Skills(zero))
+	var foreign *ForeignTierError
+	_, err := set.Bounds(zero)
+	s.Require().ErrorAs(err, &foreign, "the zero value has no caps to read as none")
+	_, err = set.Skills(zero)
+	s.Require().ErrorAs(err, &foreign)
 }
 
 func (s *modelTierSuite) TestATierMarshalsItsName() {
@@ -360,7 +349,12 @@ func (s *modelTierSuite) TestRefusalsAreTyped() {
 	s.Require().ErrorAs(err, &unmapped)
 	s.Equal([]string{testHost}, unmapped.Hosts)
 
-	_, err = set.Alias(testHost, s.at(s.tiers(fourTiers()), 0))
+	other := s.at(s.tiers(fourTiers()), 0)
+	_, err = set.Alias(testHost, other)
 	var foreign *ForeignTierError
+	s.Require().ErrorAs(err, &foreign)
+	_, err = set.Bounds(other)
+	s.Require().ErrorAs(err, &foreign, "a foreign tier's caps are refused, not read as none")
+	_, err = set.Skills(other)
 	s.Require().ErrorAs(err, &foreign)
 }

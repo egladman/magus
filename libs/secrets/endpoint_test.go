@@ -683,8 +683,21 @@ func (s *EndpointSuite) TestScopesGetTheirOwnEndpoint() {
 // to the proxy, and if the proxy's CA is trusted the guarantee is gone.
 func (s *EndpointSuite) TestIgnoresProxyEnvironment() {
 	t := s.T()
-	tr, ok := endpointTransport().(*http.Transport)
-	require.True(t, ok)
+	tr, err := endpointTransport(http.DefaultTransport)
+	require.NoError(t, err)
 	assert.Nil(t, tr.Proxy, "the forwarder would route a credential through HTTPS_PROXY")
 	assert.Equal(t, endpointResponseHeaderTimeout, tr.ResponseHeaderTimeout)
 }
+
+// A default transport replaced by one that is not an *http.Transport is refused, not
+// used as it is with its proxy and no first-byte timeout.
+func (s *EndpointSuite) TestRefusesADefaultTransportItCannotConfigure() {
+	_, err := endpointTransport(roundTripperFunc(func(*http.Request) (*http.Response, error) { return nil, nil }))
+	var refused *TransportError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal("secrets.roundTripperFunc", refused.Type)
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

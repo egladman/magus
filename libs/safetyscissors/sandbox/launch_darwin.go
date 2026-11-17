@@ -31,7 +31,7 @@ func defaultProbe() (int, error) {
 // confine runs path under sandbox-exec with p's profile. sandbox-exec execs path
 // itself, so the command's argv[0] is path and the caller's name is not used.
 func confine(ctx context.Context, p *Policy, path, _ string, args []string) (*exec.Cmd, error) {
-	argv := append([]string{"-p", seatbeltProfile(p.rules.Rules), path}, args...)
+	argv := append([]string{"-p", seatbeltProfile(p.rules.Rules, path), path}, args...)
 	return exec.CommandContext(ctx, sandboxExec, argv...), nil
 }
 

@@ -150,8 +150,8 @@ type TargetResult struct {
 	Target     string `json:"target"`
 	Project    string `json:"project,omitempty"`
 	Outcome    string `json:"outcome"`
-	DurationMs int64  `json:"duration_ms"`
-	Replayed   bool   `json:"replayed"`
+	DurationMs int64  `json:"duration_ms,omitzero"`
+	Replayed   bool   `json:"replayed,omitzero"`
 	// Permitted says a deviation ledger let this pass. Outcome stays pass: a push gate
 	// and a job's owed check compare on it.
 	Permitted bool   `json:"permitted,omitzero"`
@@ -299,8 +299,7 @@ func Open(ctx context.Context, dir, invocation string, start InvocationStart, op
 // A fresh invocation, which is the common case, costs one failed open: the file does not
 // exist until the first fact.
 func (w *Writer) resume() {
-	records, _, _, _, _ := readFile(w.path)
-	for _, rec := range records {
+	for _, rec := range decodeFile(w.path).records {
 		if rec.Seq > w.seq {
 			w.seq = rec.Seq
 		}
@@ -415,20 +414,17 @@ func ReadAll(ctx context.Context, dir string) (Fold, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		records, skipped, legacy, retired, vanished := readFile(path)
-		if vanished {
+		read := decodeFile(path)
+		if read.vanished {
 			continue
 		}
-		if retired != "" {
-			return Fold{}, &RetiredGroupError{Path: path, Version: retired}
-		}
-		if err := refuseRetiredDecision(path, records); err != nil {
+		if err := read.refusal(path); err != nil {
 			return Fold{}, err
 		}
 		fold.Invocations++
-		fold.Records = append(fold.Records, records...)
-		fold.Skipped += skipped
-		fold.Legacy += legacy
+		fold.Records = append(fold.Records, read.records...)
+		fold.Skipped += read.skipped
+		fold.Legacy += read.legacy
 	}
 	sortRecords(fold.Records)
 	return fold, nil
@@ -439,6 +435,10 @@ func ReadAll(ctx context.Context, dir string) (Fold, error) {
 // holds its answer need not fold the store. An id [ValidFileID] refuses, which could name
 // a file outside dir, is an [*InvalidIDError] before anything is opened.
 //
+// It refuses the file as [ReadAll] refuses the store: a [*RetiredGroupError] or a
+// [*RetiredDecisionError]. A file that cannot be opened or read to its end is a
+// [*StoreError]; an undecodable line is skipped, as ReadAll skips it.
+//
 // It stops early and returns ctx.Err() as is once ctx is done.
 func ReadInvocation(ctx context.Context, dir, invocation string) ([]Record, error) {
 	if err := ctx.Err(); err != nil {
@@ -447,8 +447,15 @@ func ReadInvocation(ctx context.Context, dir, invocation string) ([]Record, erro
 	if !ValidFileID(invocation) {
 		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
 	}
-	records, _, _, _, _ := readFile(filepath.Join(dir, invocation+FileExt))
-	return records, nil
+	path := filepath.Join(dir, invocation+FileExt)
+	read := decodeFile(path)
+	if read.err != nil {
+		return nil, &StoreError{Op: "read invocation", Path: path, Err: read.err}
+	}
+	if err := read.refusal(path); err != nil {
+		return nil, err
+	}
+	return read.records, nil
 }
 
 // StoreError is a store operation that failed on the filesystem or in encoding: Op says
@@ -488,7 +495,7 @@ type RetiredGroupError struct {
 }
 
 func (e *RetiredGroupError) Error() string {
-	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s): delete that file, or clear the store, and start a fresh session", e.Path, e.Version, APIVersion)
+	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s)", e.Path, e.Version, APIVersion)
 }
 
 // RetiredDecisionError is a loaded event whose verdict is "pass" or "allow", the names
@@ -502,7 +509,7 @@ type RetiredDecisionError struct {
 }
 
 func (e *RetiredDecisionError) Error() string {
-	return fmt.Sprintf("session: %s holds the retired guard decision %q: delete that file, or clear the store, and run `magus session load` again to re-judge it", e.Path, e.Decision)
+	return fmt.Sprintf("session: %s holds the retired guard decision %q, which this build no longer reads", e.Path, e.Decision)
 }
 
 // retiredDecisions are the decision names no build after the defer rename writes.
@@ -539,36 +546,66 @@ func sortRecords(records []Record) {
 	})
 }
 
-// maxLineBytes is the longest line readFile will try to decode. A record carries no
+// maxLineBytes is the longest line decodeFile will try to decode. A record carries no
 // bodies (a target ref, not its output) and a [Bounder] bounds the free text a producer
 // controls, so a line past this was written by something that did not agree with those
 // rules: an older writer, or a hand-edited file. It is skipped like any other unusable
 // line, and only itself.
 const maxLineBytes = 1 << 20
 
-// readFile decodes one invocation file, returning what it could read, how many lines it
+// fileRead is what [decodeFile] made of one invocation file.
+type fileRead struct {
+	records []Record
+	// skipped counts the lines it could not use.
+	skipped int
+	// legacy counts schema-1 lines keyed `session`, which decode but name no invocation,
+	// and lines stamped with [retiredGroup].
+	legacy int
+	// retired is the first [retiredGroup] stamp, empty when no line carries one.
+	retired apiversion.APIVersion
+	// vanished says the file was not there at all.
+	vanished bool
+	// err is the open or read failure that ended the file early, nil when it was read to
+	// its end. It is also counted in skipped.
+	err error
+}
+
+// refusal is the error a reader refuses the file read from path with, nil when it holds
+// neither a retired group nor a retired decision.
+func (r fileRead) refusal(path string) error {
+	if r.retired != "" {
+		return &RetiredGroupError{Path: path, Version: r.retired}
+	}
+	return refuseRetiredDecision(path, r.records)
+}
+
+// readFile is [decodeFile]'s result as the fold and rotation read it, without the
+// failure that ended the file, which they count as a skipped line.
+func readFile(path string) (records []Record, skipped, legacy int, retired apiversion.APIVersion, vanished bool) {
+	r := decodeFile(path)
+	return r.records, r.skipped, r.legacy, r.retired, r.vanished
+}
+
+// decodeFile decodes one invocation file, returning what it could read, how many lines it
 // could not, and whether the file was not there at all.
 //
 // The vanished case is separated from the unreadable one because pruning can delete a
 // file between a caller's directory listing and this open. Nothing was lost that the
 // caller could have read, so counting it as damage would report corruption every time
-// housekeeping ran. Any OTHER open failure (a permission, a device error) is real and
-// counts as a skipped line, on the same reasoning as a corrupt tail: a partial history
-// beats a refused one.
-//
-// legacy counts schema-1 lines keyed `session`, which decode but name no invocation,
-// and lines stamped with [retiredGroup]. retired is the first such stamp, empty when no
-// line carries one.
-func readFile(path string) (records []Record, skipped, legacy int, retired apiversion.APIVersion, vanished bool) {
+// housekeeping ran. Any OTHER open failure (a permission, a device error) is real: it is
+// err, and it counts as a skipped line, on the same reasoning as a corrupt tail: a fold
+// of the whole store keeps a partial history rather than refusing it.
+func decodeFile(path string) fileRead {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, 0, 0, "", true
+			return fileRead{vanished: true}
 		}
-		return nil, 1, 0, "", false
+		return fileRead{skipped: 1, err: err}
 	}
 	defer func() { _ = f.Close() }()
 
+	var out fileRead
 	br := bufio.NewReader(f)
 	for {
 		line, over, err := readLine(br, maxLineBytes)
@@ -577,28 +614,29 @@ func readFile(path string) (records []Record, skipped, legacy int, retired apive
 			// here (which is what a bufio.Scanner does on ErrTooLong) would hide every
 			// LATER record, and a later record is exactly what a reader pairing records
 			// looks for.
-			skipped++
+			out.skipped++
 		} else if trimmed := readForward(bytes.TrimSpace(line)); len(trimmed) > 0 {
 			var rec Record
 			switch {
 			case retiredStamp(trimmed) != "":
-				legacy++
-				retired = cmp.Or(retired, retiredStamp(trimmed))
+				out.legacy++
+				out.retired = cmp.Or(out.retired, retiredStamp(trimmed))
 			case olderVersion(trimmed):
-				legacy++
+				out.legacy++
 			case codec.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
-				skipped++
+				out.skipped++
 			case rec.Invocation == "":
-				skipped++
+				out.skipped++
 			default:
-				records = append(records, rec)
+				out.records = append(out.records, rec)
 			}
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				skipped++
+				out.skipped++
+				out.err = err
 			}
-			return records, skipped, legacy, retired, false
+			return out
 		}
 	}
 }

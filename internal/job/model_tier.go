@@ -211,29 +211,41 @@ func resolveModelTier(ctx context.Context, set *tier.Set, models []model.Row, ma
 	}
 	switch {
 	case ok && host == "":
+		skills, err := set.Skills(declared)
+		if err != nil {
+			return tier.Assignment{}, fmt.Errorf("job: %s: %w", row.ID, err)
+		}
 		return tier.Assignment{
 			Name:   declared.Name(),
 			Rank:   declared.Rank(),
-			Skills: set.Skills(declared),
+			Skills: skills,
 			Source: tier.SourceJob,
 			Reason: fmt.Sprintf("the job names the tier %s", declared.Name()),
 			Model:  requested.ID,
 		}, nil
 	case ok:
+		skills, err := set.Skills(declared)
+		if err != nil {
+			return tier.Assignment{}, fmt.Errorf("job: %s: %w", row.ID, err)
+		}
 		return tier.Assignment{
 			Name:   declared.Name(),
 			Rank:   declared.Rank(),
-			Skills: set.Skills(declared),
+			Skills: skills,
 			Source: tier.SourceJob,
 			Reason: fmt.Sprintf("the job names the model %s, which %s maps to the tier %s", requested.ID, mapper(host), declared.Name()),
 			Model:  requested.ID,
 		}, nil
 	case requested.ID != "":
 		def := set.Default()
+		skills, err := set.Skills(def)
+		if err != nil {
+			return tier.Assignment{}, fmt.Errorf("job: %s: %w", row.ID, err)
+		}
 		return tier.Assignment{
 			Name:   def.Name(),
 			Rank:   def.Rank(),
-			Skills: set.Skills(def),
+			Skills: skills,
 			Source: tier.SourceJob,
 			Reason: fmt.Sprintf("the job names the model %s, which no model tier maps to", requested.ID),
 			Model:  requested.ID,
@@ -249,10 +261,14 @@ func resolveModelTier(ctx context.Context, set *tier.Set, models []model.Row, ma
 		}
 	}
 	def := set.Default()
+	skills, err := set.Skills(def)
+	if err != nil {
+		return tier.Assignment{}, fmt.Errorf("job: %s: %w", row.ID, err)
+	}
 	return tier.Assignment{
 		Name:   def.Name(),
 		Rank:   def.Rank(),
-		Skills: set.Skills(def),
+		Skills: skills,
 		Source: tier.SourceDefault,
 		Reason: "the declared default",
 		Site:   set.Site(),
@@ -476,7 +492,11 @@ func refuseModelTierLimits(rows []job.Job, assigned tier.Assignment, set *tier.S
 	if err != nil {
 		return fmt.Errorf("job: %w", err)
 	}
-	limit := set.Bounds(named).MaxLive
+	bounds, err := set.Bounds(named)
+	if err != nil {
+		return fmt.Errorf("job: %w", err)
+	}
+	limit := bounds.MaxLive
 	if limit <= 0 {
 		return nil
 	}

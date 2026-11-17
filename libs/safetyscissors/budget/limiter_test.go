@@ -62,7 +62,7 @@ func (s *LimiterSuite) TestYield() {
 	var maxSeen int
 	var mu sync.Mutex
 
-	err := l.Yield(context.Background(), func() error {
+	err := l.Yield(WithSlotHeld(context.Background()), func() error {
 		// We released our slot; a second goroutine can now proceed.
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -275,7 +275,7 @@ func (s *LimiterSuite) TestYieldRestoresSlotOnCancel() {
 	l := NewLimiter(1)
 	_ = l.Acquire(context.Background()) // hold the only slot
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(WithSlotHeld(context.Background()))
 	fnErr := errors.New("fn failed")
 
 	err := l.Yield(ctx, func() error {
@@ -297,7 +297,7 @@ func (s *LimiterSuite) TestYieldNoOverReleaseOnCancel() {
 	l := NewLimiter(2)
 	for range 5 {
 		require.NoError(t, l.Acquire(context.Background()))
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(WithSlotHeld(context.Background()))
 		_ = l.Yield(ctx, func() error { cancel(); return nil })
 		l.Release() // must not panic; balanced because Yield restored the slot
 	}
@@ -306,22 +306,44 @@ func (s *LimiterSuite) TestYieldNoOverReleaseOnCancel() {
 	require.NoError(t, l.AcquireN(context.Background(), 2), "capacity shrank after yield cycles")
 }
 
-// Yield's floor of 1 reads like dead defensive code and is not: proc's server takes its
-// admission slot with a raw Acquire and never marks the context, so an unmarked ctx there
-// means one slot held. Without the floor that slot stays held through the whole forwarded
-// run and every adopted child inflates the shared pool by one.
-func (s *LimiterSuite) TestYieldReleasesOneSlotForAnUnmarkedCaller() {
-	t := s.T()
+// A caller marked as holding no slots is refused rather than guessed at: a guess of one
+// would release a slot some other caller holds.
+func (s *LimiterSuite) TestYieldRefusesACallerHoldingNoSlots() {
 	l := NewLimiter(1)
-	require.NoError(t, l.Acquire(context.Background()))
+	s.Require().NoError(l.Acquire(s.T().Context()))
+	ran := false
+	err := l.Yield(s.T().Context(), func() error { ran = true; return nil })
+	var refused *NoSlotsHeldError
+	s.Require().ErrorAs(err, &refused)
+	s.False(ran, "fn does not run when nothing can be yielded")
+	s.Equal(1, l.Snapshot().Running, "the slot someone else holds stays held")
+}
 
-	inside := -1
-	require.NoError(t, l.Yield(context.Background(), func() error {
-		inside = l.Snapshot().Running
-		return nil
+// A release of more slots than are running frees only those running and reports the
+// rest, so the semaphore is never released past what it handed out.
+func (s *LimiterSuite) TestReleaseNFreesNoMoreThanAreRunning() {
+	var events []PoolEvent
+	l := NewLimiter(3, WithPoolEvents(func(ev PoolEvent) {
+		if ev.Queued == 0 {
+			events = append(events, ev)
+		}
 	}))
-	assert.Equal(t, 0, inside, "an unmarked caller still yields its one slot")
-	assert.Equal(t, 1, l.Snapshot().Running, "and holds it again on return")
+	s.Require().NoError(l.AcquireN(s.T().Context(), 2))
+	l.ReleaseN(3)
+	l.Release()
+	s.Equal(LimiterSnapshot{Capacity: 3}, l.Snapshot())
+	s.Equal([]PoolEvent{{Running: 2}, {Running: -2, Shortfall: 1}, {Shortfall: 1}},
+		clearWaits(events))
+	s.Require().NoError(l.AcquireN(s.T().Context(), 3), "the full capacity is still there")
+}
+
+func clearWaits(events []PoolEvent) []PoolEvent {
+	out := make([]PoolEvent, len(events))
+	for i, ev := range events {
+		ev.Wait = 0
+		out[i] = ev
+	}
+	return out
 }
 
 // A derived limiter shares the pool and reports only what was taken through it.

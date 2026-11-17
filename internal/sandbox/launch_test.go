@@ -73,22 +73,28 @@ func (s *CommandSuite) TestAHostWithoutLandlockIsRefused() {
 	s.Nil(cmd)
 }
 
-func (s *CommandSuite) TestTheModeMapsOntoTheModule() {
-	for mode, refuses := range map[types.SandboxMode]bool{
-		types.SandboxModeRequired:   true,
-		types.SandboxModeBestEffort: false,
-		types.SandboxModeOff:        false,
-	} {
-		confined, err := answering(mode, 0, nil).confinement()
-		s.Require().NoError(err)
-		_, err = confined.Confines()
-		if refuses {
-			var unconfined *scissors.UnconfinedError
-			s.ErrorAs(err, &unconfined, "%s refuses a host it cannot confine", mode)
-		} else {
-			s.NoError(err, "%s runs the child unconfined", mode)
-		}
-	}
+// requireModuleMode checks that mode reaches the module as want, on a host that cannot
+// confine.
+func (s *CommandSuite) requireModuleMode(mode types.SandboxMode, want scissors.Mode) {
+	confined, err := answering(mode, 0, nil).confinement()
+	s.Require().NoError(err)
+	ok, err := confined.Confines()
+	s.False(ok)
+	var unconfined *scissors.UnconfinedError
+	s.Require().ErrorAs(err, &unconfined, "%s says it cannot confine the host", mode)
+	s.Equal(want, unconfined.Mode, mode)
+}
+
+func (s *CommandSuite) TestRequiredStaysRequired() {
+	s.requireModuleMode(types.SandboxModeRequired, scissors.Required)
+}
+
+func (s *CommandSuite) TestBestEffortStaysBestEffort() {
+	s.requireModuleMode(types.SandboxModeBestEffort, scissors.BestEffort)
+}
+
+func (s *CommandSuite) TestOffAssembledByHandIsBestEffort() {
+	s.requireModuleMode(types.SandboxModeOff, scissors.BestEffort)
 }
 
 func (s *CommandSuite) TestEveryRuleMagusBuildsHasABindMode() {

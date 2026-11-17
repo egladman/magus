@@ -7,7 +7,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ExpandSuite struct{ suite.Suite }
+
+func TestExpand(t *testing.T) { suite.Run(t, new(ExpandSuite)) }
 
 func env(vars map[string]string) func(string) (string, bool) {
 	return func(k string) (string, bool) {
@@ -16,25 +21,33 @@ func env(vars map[string]string) func(string) (string, bool) {
 	}
 }
 
-func TestModeRuleSpellsEachGrant(t *testing.T) {
-	for mode, want := range map[string]Rule{
-		"":    {Read: true},
-		"ro":  {Read: true},
-		"rw":  {Read: true, Write: true},
-		"rx":  {Read: true, Exec: true},
-		"rwx": {Read: true, Write: true, Exec: true},
-	} {
-		got, err := ModeRule(mode)
-		require.NoError(t, err, mode)
-		assert.Equal(t, want, got, mode)
-	}
+func (s *ExpandSuite) requireMode(mode string, want Rule) {
+	got, err := ModeRule(mode)
+	s.Require().NoError(err, mode)
+	s.Equal(want, got, mode)
+}
+
+func (s *ExpandSuite) TestTheEmptyModeIsReadOnly() { s.requireMode("", Rule{Read: true}) }
+
+func (s *ExpandSuite) TestRoGrantsRead() { s.requireMode("ro", Rule{Read: true}) }
+
+func (s *ExpandSuite) TestRwGrantsReadAndWrite() { s.requireMode("rw", Rule{Read: true, Write: true}) }
+
+func (s *ExpandSuite) TestRxGrantsReadAndExec() { s.requireMode("rx", Rule{Read: true, Exec: true}) }
+
+func (s *ExpandSuite) TestRwxGrantsEverything() {
+	s.requireMode("rwx", Rule{Read: true, Write: true, Exec: true})
+}
+
+func (s *ExpandSuite) TestModeRuleRefusesATypo() {
 	for _, typo := range []string{"RW", "wr", "x", "r", "rox"} {
 		_, err := ModeRule(typo)
-		assert.ErrorContains(t, err, "unknown mode", typo)
+		s.ErrorContains(err, "unknown mode", typo)
 	}
 }
 
-func TestExpandUserRuleResolvesVariablesAndHome(t *testing.T) {
+func (s *ExpandSuite) TestExpandUserRuleResolvesVariablesAndHome() {
+	t := s.T()
 	dir := ResolveRulePath(t.TempDir())
 	r, err := ExpandUserRule("$TOOLS/bin", "rx", "", env(map[string]string{"TOOLS": dir}))
 	require.NoError(t, err)
@@ -50,14 +63,16 @@ func TestExpandUserRuleResolvesVariablesAndHome(t *testing.T) {
 }
 
 // "$UNSET/" would expand to "/" and grant the whole filesystem.
-func TestExpandUserRuleRefusesAnUnsetOrEmptyVariable(t *testing.T) {
+func (s *ExpandSuite) TestExpandUserRuleRefusesAnUnsetOrEmptyVariable() {
+	t := s.T()
 	for _, raw := range []string{"$UNSET/", "${UNSET}/cache", "$EMPTY/x"} {
 		_, err := ExpandUserRule(raw, "rw", "/home/u", env(map[string]string{"EMPTY": ""}))
 		assert.ErrorIs(t, err, ErrUnsetVariable, raw)
 	}
 }
 
-func TestExpandUserRuleRefusesRelativeAndHomelessPaths(t *testing.T) {
+func (s *ExpandSuite) TestExpandUserRuleRefusesRelativeAndHomelessPaths() {
+	t := s.T()
 	_, err := ExpandUserRule("relative/dir", "ro", "/home/u", env(nil))
 	assert.ErrorContains(t, err, "must be absolute")
 	_, err = ExpandUserRule("~/x", "ro", "", env(nil))
@@ -67,7 +82,8 @@ func TestExpandUserRuleRefusesRelativeAndHomelessPaths(t *testing.T) {
 }
 
 // A rule path is resolved like a checked path, or the two never compare equal.
-func TestExpandUserRuleResolvesSymlinksWhenThePathExists(t *testing.T) {
+func (s *ExpandSuite) TestExpandUserRuleResolvesSymlinksWhenThePathExists() {
+	t := s.T()
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real")
 	link := filepath.Join(dir, "link")
@@ -81,7 +97,8 @@ func TestExpandUserRuleResolvesSymlinksWhenThePathExists(t *testing.T) {
 }
 
 // A rule may name a directory a later step creates.
-func TestExpandUserRuleKeepsAMissingPath(t *testing.T) {
+func (s *ExpandSuite) TestExpandUserRuleKeepsAMissingPath() {
+	t := s.T()
 	missing := filepath.Join(t.TempDir(), "not-created-yet")
 	r, err := ExpandUserRule(missing, "rw", "", env(nil))
 	require.NoError(t, err)

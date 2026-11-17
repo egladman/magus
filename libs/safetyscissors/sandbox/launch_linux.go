@@ -48,7 +48,7 @@ func confine(ctx context.Context, p *Policy, path, name string, args []string) (
 	cmd := exec.CommandContext(ctx, "/proc/self/exe")
 	cmd.ExtraFiles = []*os.File{os.NewFile(uintptr(rulesetFD), "landlock-ruleset")}
 	// ExtraFiles[0] is descriptor 3 in the child.
-	cmd.Args = append([]string{launcherName, "3", encodeRules(self), path, name}, args...)
+	cmd.Args = append([]string{p.launcher, "3", encodeRules(self), path, name}, args...)
 	return cmd, nil
 }
 

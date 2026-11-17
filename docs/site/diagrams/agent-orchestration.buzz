@@ -8,7 +8,7 @@ export fun agentOrchestrationFigure() > figure\Figure !> any {
     final guard = magus\graph().dir("internal/guard");
     final broker = magus\graph().dir("broker");
     final sandbox = magus\graph().dir("internal/sandbox");
-    final landlock = magus\graph().dir("internal/sandbox/filesystem");
+    final landlock = magus\graph().dir("libs/safetyscissors/sandbox/filesystem");
     final vcs = magus\graph().dir("vcs");
     final root = figure\external("Orchestrator", sub: "the root session");
     final worker = figure\external("Worker", sub: "one row, one check");

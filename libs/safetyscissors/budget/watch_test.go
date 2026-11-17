@@ -17,9 +17,13 @@ const testGrace = 50 * time.Millisecond
 
 func newTestLimiter(t *testing.T, n int) *Limiter {
 	t.Helper()
-	grace, err := WithDeadlockGrace(testGrace)
-	require.NoError(t, err)
-	return NewLimiter(n, grace)
+	return NewLimiter(n, withDeadlockGrace(testGrace))
+}
+
+// withDeadlockGrace sets how long the pool must stay wedged before a wait is refused, so
+// the suite need not wait out [DefaultDeadlockGrace].
+func withDeadlockGrace(d time.Duration) LimiterOption {
+	return func(o *limiterOptions) { o.grace = d }
 }
 
 func requireDeadlock(t *testing.T, err error) {
@@ -247,9 +251,7 @@ func (s *WatchSuite) TestRefusalIsTheCallersError() {
 	t := s.T()
 	coded := errors.New("coded refusal")
 	var saw SlotDeadlock
-	grace, err := WithDeadlockGrace(testGrace)
-	require.NoError(t, err)
-	lim := NewLimiter(2, grace, WithRefusal(func(d SlotDeadlock) error {
+	lim := NewLimiter(2, withDeadlockGrace(testGrace), WithRefusal(func(d SlotDeadlock) error {
 		saw = d
 		return coded
 	}))
@@ -290,16 +292,6 @@ func (s *WatchSuite) TestSeatFloorsACountBelowOne() {
 	s.Equal(1, lim.Snapshot().Running)
 	release()
 	s.Equal(LimiterSnapshot{Capacity: 1}, lim.Snapshot())
-}
-
-func (s *WatchSuite) TestDeadlockGraceRefusesANonPositiveGrace() {
-	for _, d := range []time.Duration{0, -time.Second} {
-		opt, err := WithDeadlockGrace(d)
-		s.Nil(opt)
-		var refused *GraceError
-		s.Require().ErrorAs(err, &refused)
-		s.Equal(d, refused.Grace)
-	}
 }
 
 // A timer stopped after it fired still runs its verdict; it must leave the timer armed

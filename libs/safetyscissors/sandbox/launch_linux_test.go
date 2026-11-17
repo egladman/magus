@@ -113,7 +113,7 @@ func testRules(t *testing.T) []filesystem.Rule {
 // confining is a policy over rules that confines wherever the kernel has landlock,
 // whatever its ABI, so the tests run on kernels below RequiredABI too.
 func confining(rules ...filesystem.Rule) *Policy {
-	return &Policy{rules: filesystem.Ruleset{Rules: rules}, mode: BestEffort}
+	return &Policy{rules: filesystem.Ruleset{Rules: rules}, mode: BestEffort, launcher: defaultLauncherName}
 }
 
 // confinedHelper runs the test binary under Command as helper mode with path.
@@ -138,7 +138,8 @@ func runHelper(t *testing.T, cmd *exec.Cmd, mode, path string) (int, string) {
 	return 0, string(out)
 }
 
-func TestCommandConfinesTheChild(t *testing.T) {
+func (s *LaunchSuite) TestCommandConfinesTheChild() {
+	t := s.T()
 	requireLandlock(t)
 
 	inside := t.TempDir()
@@ -167,7 +168,8 @@ func TestCommandConfinesTheChild(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestCommandDoesNotLeakRulesetToTheChild(t *testing.T) {
+func (s *LaunchSuite) TestCommandDoesNotLeakRulesetToTheChild() {
+	t := s.T()
 	requireLandlock(t)
 
 	p := confining(testRules(t)...)
@@ -177,7 +179,8 @@ func TestCommandDoesNotLeakRulesetToTheChild(t *testing.T) {
 
 // A /proc/self grant is the child's own entry, not the entry of the process that built
 // the policy.
-func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
+func (s *LaunchSuite) TestCommandGrantsTheChildItsOwnProcEntries() {
+	t := s.T()
 	requireLandlock(t)
 
 	own := filesystem.Rule{Path: filesystem.ResolveRulePath("/proc/self/status"), Read: true}
@@ -192,7 +195,8 @@ func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
 // A read grant on all of /proc leaves the environment of a process outside the child's
 // landlock domain closed: the kernel checks ptrace access on it, and landlock refuses
 // that across domains. magusfile.buzz grants its test target /proc on this.
-func TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed(t *testing.T) {
+func (s *LaunchSuite) TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed() {
+	t := s.T()
 	requireLandlock(t)
 
 	p := confining(append(testRules(t), filesystem.Rule{Path: "/proc", Read: true})...)
@@ -205,7 +209,8 @@ func TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed(t *testing.T) {
 // A socket path past sun_path is bound through /proc/self/fd/<fd>, and landlock judges
 // that bind on the directory the link resolves to: a granted one allows it and an
 // ungranted one refuses it, with no /proc grant either way.
-func TestCommandJudgesALongSocketBindOnItsRealDirectory(t *testing.T) {
+func (s *LaunchSuite) TestCommandJudgesALongSocketBindOnItsRealDirectory() {
+	t := s.T()
 	requireLandlock(t)
 
 	long := func() string {
@@ -228,7 +233,8 @@ func TestCommandJudgesALongSocketBindOnItsRealDirectory(t *testing.T) {
 
 // A caller's own ExtraFiles, a jobserver pipe say, reach the command after the
 // ruleset's slot, where LauncherFiles says they will.
-func TestCommandPassesAppendedFilesAfterTheRuleset(t *testing.T) {
+func (s *LaunchSuite) TestCommandPassesAppendedFilesAfterTheRuleset() {
+	t := s.T()
 	requireLandlock(t)
 
 	r, w, err := os.Pipe()
@@ -244,7 +250,8 @@ func TestCommandPassesAppendedFilesAfterTheRuleset(t *testing.T) {
 	assert.Equal(t, 0, code, "the ruleset is absent and the appended file is at 3+LauncherFiles: %s", out)
 }
 
-func TestCommandRefusesWithoutItsRuleset(t *testing.T) {
+func (s *LaunchSuite) TestCommandRefusesWithoutItsRuleset() {
+	t := s.T()
 	requireLandlock(t)
 
 	readable := t.TempDir()
@@ -263,7 +270,8 @@ func TestCommandRefusesWithoutItsRuleset(t *testing.T) {
 	assert.Contains(t, out, "landlock_restrict_self")
 }
 
-func TestCommandNilPolicyIsPlain(t *testing.T) {
+func (s *LaunchSuite) TestCommandNilPolicyIsPlain() {
+	t := s.T()
 	cmd, err := Command(context.Background(), nil, "true")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"true"}, cmd.Args)
@@ -272,7 +280,8 @@ func TestCommandNilPolicyIsPlain(t *testing.T) {
 
 // A rule the building process resolved onto its own /proc entries is the child's to
 // grant itself; left in the ruleset it would hand the child the builder's descriptors.
-func TestProcSelfRulesMoveToTheLauncher(t *testing.T) {
+func (s *LaunchSuite) TestProcSelfRulesMoveToTheLauncher() {
+	t := s.T()
 	rules := []filesystem.Rule{
 		{Path: "/proc/42/fd", Read: true, Write: true},
 		{Path: "/proc/42", Read: true},
@@ -295,6 +304,11 @@ func TestProcSelfRulesMoveToTheLauncher(t *testing.T) {
 	_, err = decodeRules("rw:relative")
 	assert.Error(t, err)
 }
+
+// A child Command starts on Linux runs through the launcher under its ruleset.
+type LaunchSuite struct{ suite.Suite }
+
+func TestLaunchSuite(t *testing.T) { suite.Run(t, new(LaunchSuite)) }
 
 // The launcher's rule encoding carries any path back unchanged.
 type RuleEncodingSuite struct{ suite.Suite }

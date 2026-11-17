@@ -86,7 +86,9 @@ func tierContextCap(deps Dependencies, facts hint.Gate, row job.Job) int64 {
 	}
 	var limit int64
 	if forked, ok := tierIn(set, row); ok {
-		limit = forked.set.Bounds(forked.tier).MaxContext
+		// tierIn takes the tier from set itself, so Bounds cannot refuse it as foreign.
+		bounds, _ := forked.set.Bounds(forked.tier)
+		limit = bounds.MaxContext
 	}
 	if path != "" {
 		_ = file.ReplaceFile(path, []byte(strconv.FormatInt(limit, 10)), 0o644)

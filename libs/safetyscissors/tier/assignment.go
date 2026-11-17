@@ -2,7 +2,7 @@ package tier
 
 import "fmt"
 
-// SkillVariant is which body of a magus skill a reader loads. Both come from one
+// SkillVariant is which body of a skill a reader loads. Both come from one
 // curated source, so they share a content digest and go stale together.
 type SkillVariant string
 

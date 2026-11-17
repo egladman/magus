@@ -98,10 +98,10 @@ magus\modelTiers(Level, default: Level.high,
 	require.NoError(t, err)
 	high, err := set.Parse("high")
 	require.NoError(t, err)
-	assert.Equal(t, tier.Bounds{MaxLive: 3, MaxContext: 5000}, set.Bounds(low))
-	assert.Equal(t, tier.Bounds{MaxLive: 1}, set.Bounds(high), "a field the function leaves out is no cap")
-	assert.Equal(t, tier.SkillVariantFull, set.Skills(low))
-	assert.Equal(t, tier.SkillVariantShort, set.Skills(high))
+	assert.Equal(t, tier.Bounds{MaxLive: 3, MaxContext: 5000}, tierBounds(t, set, low))
+	assert.Equal(t, tier.Bounds{MaxLive: 1}, tierBounds(t, set, high), "a field the function leaves out is no cap")
+	assert.Equal(t, tier.SkillVariantFull, tierSkills(t, set, low))
+	assert.Equal(t, tier.SkillVariantShort, tierSkills(t, set, high))
 
 	alias, err := set.Alias("claude-code", high)
 	require.NoError(t, err)
@@ -153,11 +153,11 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	assert.Equal(t, "bounded", set.Default().Name())
 	routine, err := set.Parse("routine")
 	require.NoError(t, err)
-	assert.Equal(t, tier.Bounds{MaxContext: 100000}, set.Bounds(routine))
+	assert.Equal(t, tier.Bounds{MaxContext: 100000}, tierBounds(t, set, routine))
 	bounded, err := set.Parse("bounded")
 	require.NoError(t, err)
-	assert.Zero(t, set.Bounds(bounded).MaxLive, "the default caps no tier's live jobs")
-	assert.Equal(t, tier.SkillVariantFull, set.Skills(routine), "routine workers load the full skill bodies")
+	assert.Zero(t, tierBounds(t, set, bounded).MaxLive, "the default caps no tier's live jobs")
+	assert.Equal(t, tier.SkillVariantFull, tierSkills(t, set, routine), "routine workers load the full skill bodies")
 	assert.Same(t, set, requireTiers(t, tiers), "the default is built once")
 }
 
@@ -492,4 +492,18 @@ magus\modelTiers(Level, default: Level.low,
 	high, err := set.Parse("high")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"claude-code runs low and high on one id, one"}, set.SharedAliases(high))
+}
+
+func tierBounds(t *testing.T, set *tier.Set, of tier.Tier) tier.Bounds {
+	t.Helper()
+	b, err := set.Bounds(of)
+	require.NoError(t, err)
+	return b
+}
+
+func tierSkills(t *testing.T, set *tier.Set, of tier.Tier) tier.SkillVariant {
+	t.Helper()
+	v, err := set.Skills(of)
+	require.NoError(t, err)
+	return v
 }

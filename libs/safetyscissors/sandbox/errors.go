@@ -34,23 +34,37 @@ func (e *DeniedError) Unwrap() error {
 	return e.Err
 }
 
-// UnconfinedError is a Required policy's refusal to start a child on a host that
-// cannot confine it. Either Err says why there is no confinement at all, or Have is
-// the host's level and Need the lowest one Required accepts.
+// UnconfinedError is a host that cannot confine a child: a Required policy's refusal to
+// start it, or what a BestEffort policy reports when it starts it unconfined. Either Err
+// says why there is no confinement at all, or Have is the host's level and Need the
+// lowest one Mode accepts.
 type UnconfinedError struct {
+	Mode       Mode
 	Have, Need int
 	Err        error
 }
 
 func (e *UnconfinedError) Error() string {
-	const optOut = "; WithMode(BestEffort) runs the child unconfined instead"
-	if e.Err != nil {
-		return fmt.Sprintf("sandbox: required mode cannot confine the child: %v%s", e.Err, optOut)
+	head, tail := "sandbox: required mode cannot confine the child", "; WithMode(BestEffort) runs the child unconfined instead"
+	if e.Mode == BestEffort {
+		head, tail = "sandbox: best-effort mode runs the child unconfined", ""
 	}
-	return fmt.Sprintf("sandbox: required mode cannot confine the child: the host's sandbox level (on Linux, its landlock ABI) is %d, below the %d it needs%s", e.Have, e.Need, optOut)
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v%s", head, e.Err, tail)
+	}
+	return fmt.Sprintf("%s: the host's sandbox level (on Linux, its landlock ABI) is %d, below the %d it needs%s", head, e.Have, e.Need, tail)
 }
 
 func (e *UnconfinedError) Unwrap() error { return e.Err }
+
+// OptionError is [New]'s or [Relaunch]'s refusal of an option or a combination of them.
+type OptionError struct {
+	Option, Problem string
+}
+
+func (e *OptionError) Error() string {
+	return fmt.Sprintf("sandbox: option %s: %s", e.Option, e.Problem)
+}
 
 // UnsupportedError is a host with no kernel sandbox: Windows, a kernel without
 // landlock, or a macOS without /usr/bin/sandbox-exec. Err is the host's answer, nil

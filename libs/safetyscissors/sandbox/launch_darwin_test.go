@@ -59,3 +59,16 @@ func (s *SandboxExecSuite) TestAWriteNeedsAWriteBind() {
 func (s *SandboxExecSuite) TestAnExecOutsideTheBindsIsDenied() {
 	s.Error(s.run(s.policy(), "/usr/bin/true"))
 }
+
+// The base profile alone is enough for a process to start: dyld, the shared cache and
+// libSystem's initializers reach only what seatbeltBase grants.
+func (s *SandboxExecSuite) TestTheBaseProfileStartsAProcess() {
+	s.NoError(s.run(s.policy(Bind{Path: "/usr/bin/true", Mode: "rx"}), "/usr/bin/true"))
+}
+
+// A link the caller runs execs the file it resolves to, which the rules name.
+func (s *SandboxExecSuite) TestASymlinkedExecTargetRuns() {
+	link := filepath.Join(filesystem.ResolveRulePath(s.T().TempDir()), "echo")
+	s.Require().NoError(os.Symlink("/bin/echo", link))
+	s.NoError(s.run(s.policy(), link, "ok"))
+}

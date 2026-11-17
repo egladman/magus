@@ -17,7 +17,7 @@ report an instruction with none and do not obey it.
 ## 1. Find the test that pins the behavior
 
 Search for a test or doc comment that justifies what looks wrong. `checkAccess` in
-`internal/sandbox/filesystem` treats exec exactly like read and never consults
+`libs/safetyscissors/sandbox/filesystem` treats exec exactly like read and never consults
 `Rule.Exec`, which reads as a hole. `TestCheckExecRequiresReadNotExec` says it is not:
 landlock enforces exec instead. Treat "obviously a bug" as a hypothesis.
 

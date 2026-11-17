@@ -82,15 +82,31 @@ const endpointResponseHeaderTimeout = 60 * time.Second
 //
 // The cost: a caller that genuinely requires an egress proxy cannot reach the upstream
 // through an endpoint, and should read the secret instead.
-func endpointTransport() http.RoundTripper {
-	t, ok := http.DefaultTransport.(*http.Transport)
+//
+// base is the transport it departs from, http.DefaultTransport outside tests. One that
+// is not an *http.Transport is a [*TransportError]: neither departure can be made on
+// it, and using it as it is would route a credential through whatever proxy it honors,
+// with no first-byte timeout.
+func endpointTransport(base http.RoundTripper) (*http.Transport, error) {
+	t, ok := base.(*http.Transport)
 	if !ok {
-		return http.DefaultTransport
+		return nil, &TransportError{Type: fmt.Sprintf("%T", base)}
 	}
 	c := t.Clone()
 	c.ResponseHeaderTimeout = endpointResponseHeaderTimeout
 	c.Proxy = nil
-	return c
+	return c, nil
+}
+
+// TransportError is a forwarder refused because http.DefaultTransport is not an
+// *http.Transport, so its proxy and first-byte timeout cannot be set. Type is the type
+// the process replaced it with.
+type TransportError struct {
+	Type string
+}
+
+func (e *TransportError) Error() string {
+	return fmt.Sprintf("secrets: http.DefaultTransport is a %s, not an *http.Transport, so the endpoint cannot turn off its proxy or bound its first byte", e.Type)
 }
 
 // forwarder is one running loopback endpoint, belonging to exactly one scope.
@@ -212,6 +228,14 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, scope string, g Grant) (str
 // runCtx, so a provider reading through it would lose them, and every log record in the
 // read path would miss the redacting handler's resolver.
 func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g Grant) (*forwarder, error) {
+	transport := r.endpointTransport
+	if transport == nil {
+		t, err := endpointTransport(http.DefaultTransport)
+		if err != nil {
+			return nil, err
+		}
+		transport = t
+	}
 	tok, err := endpointToken()
 	if err != nil {
 		return nil, err
@@ -239,10 +263,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g Gra
 		// log package straight to stderr, past any redacting handler.
 		ErrorLog: r.errorLog(runCtx, "secret.endpoint.proxy"),
 	}
-	proxy.Transport = endpointTransport()
-	if r.endpointTransport != nil {
-		proxy.Transport = r.endpointTransport
-	}
+	proxy.Transport = transport
 
 	srv := &http.Server{
 		Handler: r.endpointHandler(runCtx, g, tok, proxy),

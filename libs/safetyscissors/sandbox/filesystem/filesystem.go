@@ -14,7 +14,7 @@ import (
 
 // ErrDenied is returned by Ruleset.Check when a requested operation falls outside
 // the configured allowlist.
-var ErrDenied = errors.New("operation denied by the sandbox policy")
+var ErrDenied = errors.New("filesystem: operation denied by the sandbox policy")
 
 // Access is one kind of filesystem access a check asks about.
 type Access int

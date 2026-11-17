@@ -2,11 +2,11 @@
 
 - **Breaking for SDK callers: the model tier set lives in `libs/safetyscissors/tier`.**
   `agent.ModelTier`, `ModelTierSet`, `ModelTierDeclaration`, `ModelTierBounds`,
-  `NewModelTierSet`, `RenamedModelTier`, `JobModelTier`, `ModelTierSource` and its cases,
-  and `SkillVariant` are `tier.Tier`, `Set`, `Declaration`, `Bounds`, `NewSet`, `Renamed`,
-  `Assignment`, `Source` (`SourceJob` and so
-  on) and `SkillVariant`. `tier.Renamed` no longer logs; its caller says the rename. The
-  tier refusals are typed: `*tier.DeclarationError`, `*UnknownTierError`, `*CompareError`,
+  `NewModelTierSet`, `JobModelTier`, `ModelTierSource` and its cases, and `SkillVariant`
+  are `tier.Tier`, `Set`, `Declaration`, `Bounds`, `NewSet`, `Assignment`, `Source`
+  (`SourceJob` and so on) and `SkillVariant`. `RenamedModelTier` has no export: the old
+  tier names are read only on a harness spell's model rows, which warn of the rename.
+  `Set.Bounds` and `Set.Skills` return an error beside the value. The tier refusals are typed: `*tier.DeclarationError`, `*UnknownTierError`, `*CompareError`,
   `*RanksAboveError`, `*ForeignTierError` and `*UnmappedHostError`. `ModelTierState` and
   its context helpers stay in magus as `model.TierState`, `model.WithTierState` and
   `model.TierStateFromContext`, and `Tiers` answers `*model.TiersOffError` where it
@@ -15,8 +15,8 @@
   model's rates are `budget.Price` (`PriceMultiplier` is `Price.Multiplier`), and
   `budget.Pricer` answers them. `types.ModelPricing` is `model.Row`, embedding
   `budget.Price`; `model.Table`, which is a `budget.Pricer`, and `InEffect` stay in magus,
-  and `InEffect` now overlays an override's tier and alias. `magus.TierCeiling` is `tier.Ceiling`: pass
-  `magus.WithSpawnRule(tier.Ceiling)`. It refuses with `*tier.AboveParentError` or
+  and `InEffect` now overlays an override's tier and alias. The spawn rule `magus.TierCeiling` is gone:
+  pass `magus.WithSpawnRule(tier.Ceiling)`. It refuses with `*tier.AboveParentError` or
   `*tier.IncomparableError`, and a fork refused through the job store still carries MGS3055
   or MGS3056. No alias remains; change the import and the name. Buzz names and the JSON
   records are unchanged.

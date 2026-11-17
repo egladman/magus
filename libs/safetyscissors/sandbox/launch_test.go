@@ -12,6 +12,10 @@ type ConfinesSuite struct{ suite.Suite }
 
 func TestConfinesSuite(t *testing.T) { suite.Run(t, new(ConfinesSuite)) }
 
+// unheard is the WithUnconfined a test gives a BestEffort policy whose unconfined
+// children it does not inspect.
+func unheard(error) {}
+
 func (s *ConfinesSuite) policy(level int, err error, opts ...Option) *Policy {
 	p, newErr := New(nil, append(opts, WithKernelProbe(func() (int, error) { return level, err }))...)
 	s.Require().NoError(newErr)
@@ -48,15 +52,35 @@ func (s *ConfinesSuite) TestRequiredConfinesAtTheLevelItNeeds() {
 }
 
 func (s *ConfinesSuite) TestBestEffortTakesAPartialLevel() {
-	ok, err := s.policy(1, nil, WithMode(BestEffort)).Confines()
+	ok, err := s.policy(1, nil, WithMode(BestEffort), WithUnconfined(unheard)).Confines()
 	s.Require().NoError(err)
 	s.True(ok)
 }
 
-func (s *ConfinesSuite) TestBestEffortRunsUnconfinedWithoutASandbox() {
-	ok, err := s.policy(0, &UnsupportedError{}, WithMode(BestEffort)).Confines()
-	s.Require().NoError(err)
+// A BestEffort policy on a host without a sandbox still says why it cannot confine.
+func (s *ConfinesSuite) TestBestEffortReturnsTheProbeError() {
+	ok, err := s.policy(0, &UnsupportedError{}, WithMode(BestEffort), WithUnconfined(unheard)).Confines()
 	s.False(ok)
+	var unconfined *UnconfinedError
+	s.Require().ErrorAs(err, &unconfined)
+	s.Equal(BestEffort, unconfined.Mode)
+	var unsupported *UnsupportedError
+	s.Require().ErrorAs(err, &unsupported, "the host's answer stays reachable")
+	s.NotContains(err.Error(), "WithMode(BestEffort)", "a best-effort policy is not told to opt out")
+}
+
+func (s *ConfinesSuite) TestNewRefusesBestEffortWithoutWithUnconfined() {
+	_, err := New(nil, WithMode(BestEffort))
+	var refused *OptionError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal("WithMode(BestEffort)", refused.Option)
+}
+
+func (s *ConfinesSuite) TestNewRefusesAnEmptyLauncherName() {
+	_, err := New(nil, WithLauncherName(""))
+	var refused *OptionError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal("WithLauncherName", refused.Option)
 }
 
 func (s *ConfinesSuite) TestCommandRefusesARequiredPolicyItCannotConfine() {
@@ -67,10 +91,15 @@ func (s *ConfinesSuite) TestCommandRefusesARequiredPolicyItCannotConfine() {
 }
 
 func (s *ConfinesSuite) TestCommandStartsABestEffortChildPlainWithoutASandbox() {
-	cmd, err := Command(s.T().Context(), s.policy(0, &UnsupportedError{}, WithMode(BestEffort)), "true", "x")
+	var heard []error
+	p := s.policy(0, &UnsupportedError{}, WithMode(BestEffort), WithUnconfined(func(err error) { heard = append(heard, err) }))
+	cmd, err := Command(s.T().Context(), p, "true", "x")
 	s.Require().NoError(err)
 	s.Equal([]string{"true", "x"}, cmd.Args)
 	s.Empty(cmd.ExtraFiles)
+	s.Require().Len(heard, 1, "the caller hears that the child runs unconfined")
+	var unconfined *UnconfinedError
+	s.ErrorAs(heard[0], &unconfined)
 }
 
 func (s *ConfinesSuite) TestCommandStartsANilPolicyPlain() {
@@ -86,7 +115,7 @@ type RelaunchSuite struct{ suite.Suite }
 func TestRelaunchSuite(t *testing.T) { suite.Run(t, new(RelaunchSuite)) }
 
 func (s *RelaunchSuite) TestAnyOtherArgvIsNotHandled() {
-	for _, argv := range [][]string{nil, {"magus"}, {"magus", launcherName}} {
+	for _, argv := range [][]string{nil, {"tool"}, {"tool", defaultLauncherName}} {
 		handled, err := Relaunch(argv)
 		s.Require().NoError(err)
 		s.False(handled, "%q", argv)
@@ -94,7 +123,24 @@ func (s *RelaunchSuite) TestAnyOtherArgvIsNotHandled() {
 }
 
 func (s *RelaunchSuite) TestAMalformedLaunchIsAnError() {
-	handled, err := Relaunch([]string{launcherName})
+	handled, err := Relaunch([]string{defaultLauncherName})
 	s.True(handled)
 	s.Error(err, "the caller exits without running anything")
+}
+
+// A launcher named by WithLauncherName answers to that name alone.
+func (s *RelaunchSuite) TestTheLauncherNameIsAnOption() {
+	handled, err := Relaunch([]string{defaultLauncherName}, WithLauncherName("tool-launch"))
+	s.Require().NoError(err)
+	s.False(handled, "the default name is not the launcher's once another is named")
+	handled, err = Relaunch([]string{"tool-launch"}, WithLauncherName("tool-launch"))
+	s.True(handled)
+	s.Error(err, "the named launcher is handled")
+}
+
+func (s *RelaunchSuite) TestAnEmptyLauncherNameIsRefused() {
+	handled, err := Relaunch([]string{""}, WithLauncherName(""))
+	s.False(handled)
+	var refused *OptionError
+	s.ErrorAs(err, &refused)
 }

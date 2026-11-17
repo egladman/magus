@@ -414,10 +414,12 @@ func encodeTiers(set *tier.Set) string {
 	tiers := set.All()
 	line := tierLine{Enum: set.Enum(), Site: set.Site(), Default: set.Default().Rank()}
 	for _, t := range tiers {
-		b := set.Bounds(t)
+		// Every t comes from set.All, so neither lookup can refuse it as foreign.
+		b, _ := set.Bounds(t)
+		skills, _ := set.Skills(t)
 		line.Cases = append(line.Cases, t.Name())
 		line.Bounds = append(line.Bounds, tierBoundsLine{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
-		line.Skills = append(line.Skills, set.Skills(t))
+		line.Skills = append(line.Skills, skills)
 	}
 	for _, host := range set.Hosts() {
 		if line.Hosts == nil {

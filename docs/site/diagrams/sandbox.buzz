@@ -6,7 +6,7 @@ import "magus/figure";
 export fun sandboxFigure() > figure\Figure !> any {
     final sandbox = magus\graph().dir("internal/sandbox");
     final env = magus\graph().dir("internal/sandbox/env");
-    final fs = magus\graph().dir("internal/sandbox/filesystem");
+    final fs = magus\graph().dir("libs/safetyscissors/sandbox/filesystem");
     final jobs = magus\graph().dir("internal/job");
     final journal = magus\graph().dir("internal/journal");
     final trail = magus\graph().dir("internal/trail");

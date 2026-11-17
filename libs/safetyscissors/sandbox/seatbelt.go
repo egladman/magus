@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
@@ -15,6 +16,12 @@ import (
 // policy handles no network right: denying it on one platform alone would make a run
 // pass on Linux and fail on macOS. Signals and process info are held to the sandbox,
 // as landlock's signal scope holds them to the domain.
+//
+// dyld also maps the shared cache from /System/Volumes/Preboot/Cryptexes and
+// /private/var/db/dyld, and libSystem's initializers read /System/Library and the
+// random and terminal devices; without them a confined process aborts before main.
+// /dev/null is read-write, since a shell redirects to it, and /dev/fd is how a shell
+// names a process substitution.
 //
 // The mach services are the ones a toolchain reaches through libSystem: user and
 // group lookup, notifications, logging, DNS, certificate trust (Go's crypto/x509 on
@@ -33,6 +40,11 @@ const seatbeltBase = `(version 1)
 (allow file-read-metadata)
 (allow file-read-data (literal "/"))
 (allow file-read* (subpath "/usr/lib"))
+(allow file-read* (subpath "/System"))
+(allow file-read* (subpath "/private/var/db/dyld"))
+(allow file-read* file-write* (literal "/dev/null"))
+(allow file-read* (literal "/dev/urandom") (literal "/dev/tty"))
+(allow file-read* (subpath "/dev/fd"))
 (allow mach-lookup
   (global-name "com.apple.system.opendirectoryd.libinfo")
   (global-name "com.apple.system.opendirectoryd.membership")
@@ -55,8 +67,14 @@ const seatbeltBase = `(version 1)
 // write, as on Linux), and process-exec for Exec, each on the rule's subpath. A subpath
 // matches the path itself, so a rule on a file grants that file.
 //
+// exec is the command sandbox-exec starts, empty for none. Rule paths are resolved
+// through their symlinks, so when exec is a link, a rule grants the file it resolves
+// to and not the link sandbox-exec is asked to run; the profile then also grants exec
+// of the link itself, but only when an exec rule covers its target, so the link reaches
+// nothing the rules do not.
+//
 // It is platform-independent so its output is tested on every host, not only macOS.
-func seatbeltProfile(rules []filesystem.Rule) string {
+func seatbeltProfile(rules []filesystem.Rule, exec string) string {
 	var b strings.Builder
 	b.WriteString(seatbeltBase)
 	for _, r := range rules {
@@ -71,7 +89,32 @@ func seatbeltProfile(rules []filesystem.Rule) string {
 			b.WriteString("(allow process-exec (subpath " + path + "))\n")
 		}
 	}
+	if link, ok := execLink(rules, exec); ok {
+		b.WriteString("(allow process-exec (literal ")
+		b.WriteString(seatbeltString(link))
+		b.WriteString("))\n")
+	}
 	return b.String()
+}
+
+// execLink is exec, cleaned, when it is a symlink whose target an exec rule covers.
+// False when exec is empty, resolves to itself or does not resolve: an exec of a
+// missing file fails on its own, naming it.
+func execLink(rules []filesystem.Rule, exec string) (string, bool) {
+	if exec == "" {
+		return "", false
+	}
+	link := filepath.Clean(exec)
+	target, err := filepath.EvalSymlinks(link)
+	if err != nil || target == link {
+		return "", false
+	}
+	for _, r := range rules {
+		if r.Exec && filesystem.Under(target, r.Path) {
+			return link, true
+		}
+	}
+	return "", false
 }
 
 // seatbeltString quotes s as an SBPL string literal. Backslash and double quote are

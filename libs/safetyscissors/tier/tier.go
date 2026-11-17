@@ -252,17 +252,11 @@ func (s *Set) All() []Tier {
 	return out
 }
 
-// Parse returns the tier named name. An unknown name is an [*UnknownTierError]. An old
-// name [Renamed] respells reads as its new one, when the set declares the new name and
-// not the old; a caller that must say so checks Renamed itself.
+// Parse returns the tier named name, exactly as the declaration spells it. An unknown
+// name is an [*UnknownTierError].
 func (s *Set) Parse(name string) (Tier, error) {
 	if i, ok := s.byName[name]; ok {
 		return Tier{set: s, rank: i}, nil
-	}
-	if renamed, ok := Renamed(name); ok {
-		if i, ok := s.byName[renamed]; ok {
-			return Tier{set: s, rank: i}, nil
-		}
 	}
 	return Tier{}, &UnknownTierError{Name: name, Enum: s.enum, Site: s.site, Cases: slices.Clone(s.cases)}
 }
@@ -278,19 +272,6 @@ func (e *UnknownTierError) Error() string {
 	return fmt.Sprintf("%q is not a model tier: enum %s at %s declares %s", e.Name, e.Enum, e.Site, strings.Join(e.Cases, ", "))
 }
 
-// renamedModelTiers maps each old shipped tier name to its new one.
-// compat(until: the next release): a job written before the rename
-// still names economy, standard or principal.
-var renamedModelTiers = map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"}
-
-// Renamed is the new spelling of an old shipped tier name, and false for any other
-// name. It says nothing itself: a caller reading an old name tells its own reader.
-// compat: see renamedModelTiers.
-func Renamed(name string) (string, bool) {
-	renamed, ok := renamedModelTiers[name]
-	return renamed, ok
-}
-
 // At returns the tier at rank, and false when rank is outside the declaration.
 func (s *Set) At(rank int) (Tier, bool) {
 	if rank < 0 || rank >= len(s.cases) {
@@ -302,20 +283,22 @@ func (s *Set) At(rank int) (Tier, bool) {
 // Default is the declared default tier.
 func (s *Set) Default() Tier { return Tier{set: s, rank: s.def} }
 
-// Bounds returns t's caps, or no caps for a tier from another set.
-func (s *Set) Bounds(t Tier) Bounds {
+// Bounds returns t's caps. It errors with a [*ForeignTierError] for a tier from another
+// set or the zero value, since no caps would read as unbounded.
+func (s *Set) Bounds(t Tier) (Bounds, error) {
 	if t.set != s {
-		return Bounds{}
+		return Bounds{}, &ForeignTierError{Tier: t.Name(), Enum: s.enum}
 	}
-	return s.bounds[t.rank]
+	return s.bounds[t.rank], nil
 }
 
-// Skills returns the skill variant t's workers load, or "" for a tier from another set.
-func (s *Set) Skills(t Tier) SkillVariant {
+// Skills returns the skill variant t's workers load. It errors with a
+// [*ForeignTierError] for a tier from another set or the zero value.
+func (s *Set) Skills(t Tier) (SkillVariant, error) {
 	if t.set != s {
-		return ""
+		return "", &ForeignTierError{Tier: t.Name(), Enum: s.enum}
 	}
-	return s.skills[t.rank]
+	return s.skills[t.rank], nil
 }
 
 // Alias returns the model host spawns for t. It errors with a [*ForeignTierError] for a

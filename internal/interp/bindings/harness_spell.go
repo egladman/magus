@@ -283,19 +283,34 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 }
 
 // rowTierModel is the model tiers names for tierName, also under the old name
-// a row may still spell it with, which it warns of. compat: see
-// libs/safetyscissors/tier renamedModelTiers.
+// a row may still spell it with, which it warns of.
 func rowTierModel(ctx context.Context, tiers map[string]string, tierName string) (string, bool) {
 	if model, ok := tiers[tierName]; ok {
 		return model, true
 	}
 	for _, name := range slices.Sorted(maps.Keys(tiers)) {
-		if renamed, ok := tier.Renamed(name); ok && renamed == tierName {
+		if renamed, ok := renamedModelTier(name); ok && renamed == tierName {
 			slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
 				"model tier %s is now spelled %s: magus reads %s as %s until the next release, so write %s",
 				name, renamed, name, renamed, renamed))
 			return tiers[name], true
 		}
+	}
+	return "", false
+}
+
+// renamedModelTier is the new spelling of an old shipped tier name, and false for any
+// other name.
+// compat(until: the next release): a harness spell's model rows written before the
+// rename still name economy, standard or principal.
+func renamedModelTier(name string) (string, bool) {
+	switch name {
+	case "economy":
+		return "routine", true
+	case "standard":
+		return "bounded", true
+	case "principal":
+		return "design", true
 	}
 	return "", false
 }

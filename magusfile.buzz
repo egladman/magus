@@ -2988,9 +2988,11 @@ export fun conventions_test(ctx: magus\Context, args: [str]) > void !> any {
     final names = ["TestNoEnvironmentSniffing", "TestEveryDiagnosticCodeHasARaiseSite",
                    "TestEveryReadMagusEnvVarIsRegistered", "TestStoreMechanicsLiveInInternalFile",
                    "TestStoresAreJSONLines", "TestCommentsNameSymbolsThatExist",
-                   "TestNoDirectEncodingJSONImport", "TestRevealCallsStayCapped"];
+                   "TestNoDirectEncodingJSONImport"];
+    // TestRevealCallsStayCapped is a TestMagusSuite method, so it is picked out at the
+    // second level; none of the other names has a subtest the filter could drop.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-run", "^(" + names.join("|") + ")$", "-count=1", "."] + args});
+        {"args": ["-run", "^(" + names.join("|") + "|TestMagusSuite)$/^TestRevealCallsStayCapped$", "-count=1", "."] + args});
 }
 
 // Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired

@@ -45,26 +45,6 @@ func WithRefusal(fn func(SlotDeadlock) error) LimiterOption {
 	return func(o *limiterOptions) { o.refusal = fn }
 }
 
-// WithDeadlockGrace sets how long the pool must stay wedged before a wait is refused.
-// The default is [DefaultDeadlockGrace]. A grace that is not positive is refused with a
-// [*GraceError]: a pool refused the instant it is sampled wedged would refuse every
-// hand-off the grace exists to outlive.
-func WithDeadlockGrace(d time.Duration) (LimiterOption, error) {
-	if d <= 0 {
-		return nil, &GraceError{Grace: d}
-	}
-	return func(o *limiterOptions) { o.grace = d }, nil
-}
-
-// GraceError is [WithDeadlockGrace]'s refusal of a grace that is not positive.
-type GraceError struct {
-	Grace time.Duration
-}
-
-func (e *GraceError) Error() string {
-	return fmt.Sprintf("budget: deadlock grace %s is not positive", e.Grace)
-}
-
 // WithPoolEvents has fn hear every change to the slots, as [PoolEvent] describes. fn
 // must not block.
 func WithPoolEvents(fn func(PoolEvent)) LimiterOption {
@@ -77,16 +57,19 @@ func WithPoolEvents(fn func(PoolEvent)) LimiterOption {
 // every slot held with nobody running. The grace outlives that window and nothing else.
 const DefaultDeadlockGrace = 3 * time.Second
 
-// PoolEvent is one change to a Limiter's slots; exactly one of Queued and Running is
+// PoolEvent is one change to a Limiter's slots; at most one of Queued and Running is
 // non-zero. Queued is +n the instant a caller begins waiting for n slots (before the
 // blocking acquire) and -n once that acquire returns, whether it acquired or its context
 // was cancelled, so the running sum of Queued tracks [Limiter.Snapshot]'s Queued. Running is
 // +n when a caller acquires n slots and -n when it releases them. Wait is how long the
-// acquire waited, set only with a positive Running.
+// acquire waited, set only with a positive Running. Shortfall is how many slots a
+// [Limiter.ReleaseN] was asked to free beyond those running, which it did not free; an
+// event with only Shortfall set is a release that found nothing running.
 type PoolEvent struct {
-	Queued  int
-	Running int
-	Wait    time.Duration
+	Queued    int
+	Running   int
+	Wait      time.Duration
+	Shortfall int
 }
 
 // fire reports ev to the limiter's events, if any.
@@ -167,33 +150,54 @@ func (l *Limiter) Release() {
 	l.ReleaseN(1)
 }
 
-// ReleaseN frees n previously acquired slots.
+// ReleaseN frees n previously acquired slots. n < 1 is floored to 1, as
+// [Limiter.AcquireN] floors it. It never frees more slots than are running: the excess is
+// left unfreed and reported as the [PoolEvent]'s Shortfall, since freeing a slot nobody
+// took would let a peer run beyond the capacity.
 func (l *Limiter) ReleaseN(n int) {
 	if l.sem == nil {
 		return
 	}
-	l.running.Add(-int64(n))
-	l.sem.Release(int64(n))
-	l.fire(PoolEvent{Running: -n})
+	n = max(n, 1)
+	freed := l.takeRunning(n)
+	if freed > 0 {
+		l.sem.Release(int64(freed))
+	}
+	l.fire(PoolEvent{Running: -freed, Shortfall: n - freed})
+}
+
+// takeRunning lowers the running count by up to n and returns how many it took.
+func (l *Limiter) takeRunning(n int) int {
+	for {
+		cur := l.running.Load()
+		k := min(int64(n), max(cur, 0))
+		if l.running.CompareAndSwap(cur, cur-k) {
+			return int(k)
+		}
+	}
 }
 
 // Yield releases the caller's slots for the duration of fn and re-acquires them before
-// returning. It releases every slot the caller holds ([SlotsHeld], floored at 1 and
-// capped at the capacity): a weighted step that released only one would pin the rest
-// while fn's own AcquireN blocks on them. Re-acquire uses a non-cancellable context so
-// the caller always returns holding its slots, and it re-enters the FIFO queue at the
-// back. A failed re-acquire is returned joined to fn's error.
+// returning. It releases every slot the caller holds ([SlotsHeld], capped at the
+// capacity): a weighted step that released only one would pin the rest while fn's own
+// AcquireN blocks on them. Re-acquire uses a non-cancellable context so the caller always
+// returns holding its slots, and it re-enters the FIFO queue at the back. A failed
+// re-acquire is returned joined to fn's error.
 //
-// Every holder takes its slot through [Limiter.Admit] or [Limiter.Seat], which mark the
-// context, so SlotsHeld names what the caller holds. The floor of 1 covers a caller that
-// acquired with a raw Acquire; callers holding nothing check [SlotHeld] and never reach
-// here, which is what keeps the floor from over-releasing. The cap keeps a context marked
-// with more slots than the pool has from releasing slots nobody took.
+// ctx must be marked as holding slots ([Limiter.Admit], or [WithSlotsHeld] after a
+// [Limiter.Seat] or a raw Acquire). A ctx marked as holding none is refused with a
+// [*NoSlotsHeldError] and fn does not run: there is nothing to hand back, and guessing a
+// count would release slots another caller holds. Check [SlotHeld] first to run fn
+// unchanged instead. The cap keeps a context marked with more slots than the pool has
+// from releasing slots nobody took.
 //
 // Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
 // limiter even after ctx is cancelled, slowing shutdown until peers free the slots.
 func (l *Limiter) Yield(ctx context.Context, fn func() error) (err error) {
-	n := max(SlotsHeld(ctx), 1)
+	n := SlotsHeld(ctx)
+	if n < 1 {
+		return &NoSlotsHeldError{}
+	}
 	if l.cap > 0 {
 		n = min(n, l.cap)
 	}
@@ -204,6 +208,13 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) (err error) {
 	l.ReleaseN(n)
 	defer func() { err = errors.Join(err, l.reacquireYielded(ctx, n)) }()
 	return fn()
+}
+
+// NoSlotsHeldError is [Limiter.Yield]'s refusal of a context marked as holding no slots.
+type NoSlotsHeldError struct{}
+
+func (e *NoSlotsHeldError) Error() string {
+	return "budget: cannot yield slots: the context is marked as holding none"
 }
 
 // reacquireYielded takes back the slots Yield handed out. Non-cancellable, since the

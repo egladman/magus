@@ -8,7 +8,8 @@
 //
 // The zero Mode is Required: Command refuses (an *UnconfinedError) on a host that
 // cannot confine the child, and WithMode(BestEffort) opts into running it unconfined
-// there. Windows has no kernel layer, so Required always refuses there.
+// there, telling the caller each time through WithUnconfined. Windows has no kernel
+// layer, so Required always refuses there.
 //
 // The policy holds paths alone. A child keeps the caller's environment, its temp dir
 // and the network, and may write any file inside a write Bind: scrubbing the
@@ -69,14 +70,38 @@ type Policy struct {
 	leaseFrom job.LeaseSource
 	// probe reports the host's confinement level; nil asks the host (see defaultProbe).
 	probe func() (int, error)
+	// unconfined hears each BestEffort child Command starts unconfined.
+	unconfined func(error)
+	// launcher is argv[0] of the launcher Command starts on Linux.
+	launcher string
 }
 
 // Option configures New.
 type Option func(*Policy)
 
-// WithMode sets what Command does on a host that cannot confine a child.
+// WithMode sets what Command does on a host that cannot confine a child. New refuses
+// BestEffort without [WithUnconfined], so a child never runs unconfined unheard.
 func WithMode(m Mode) Option {
 	return func(p *Policy) { p.mode = m }
+}
+
+// WithUnconfined has fn hear each child a BestEffort Command starts unconfined, with
+// the *UnconfinedError saying why the host could not confine it. fn runs on the
+// goroutine calling Command, before it returns.
+func WithUnconfined(fn func(error)) Option {
+	return func(p *Policy) { p.unconfined = fn }
+}
+
+// defaultLauncherName is argv[0] of the launcher Command starts on Linux when no
+// [WithLauncherName] names another.
+const defaultLauncherName = "safetyscissors-sandbox-launch"
+
+// WithLauncherName sets argv[0] of the launcher Command starts on Linux, and the one
+// Relaunch recognizes, so a caller's process listing names its own tool. The default is
+// safetyscissors-sandbox-launch. Pass the same name to both. argv[0] is never parsed as
+// a verb, so the name adds nothing a user can type.
+func WithLauncherName(name string) Option {
+	return func(p *Policy) { p.launcher = name }
 }
 
 // WithLease names the job lease whose boundary the binds are, and the source that
@@ -94,10 +119,13 @@ func WithKernelProbe(probe func() (int, error)) Option {
 
 // New compiles binds into a Policy. A Bind with an unknown Mode or an empty Path is
 // an error naming it, so a typo cannot quietly grant less, or more, than was meant.
+//
+// It refuses with an [*OptionError] a BestEffort mode without [WithUnconfined] and an
+// empty [WithLauncherName].
 func New(binds []Bind, opts ...Option) (*Policy, error) {
-	p := &Policy{}
-	for _, o := range opts {
-		o(p)
+	p, err := applyOptions(opts)
+	if err != nil {
+		return nil, err
 	}
 	var errs []error
 	rules := make([]filesystem.Rule, 0, len(binds))
@@ -119,6 +147,21 @@ func New(binds []Bind, opts ...Option) (*Policy, error) {
 		return nil, fmt.Errorf("sandbox: %w", errors.Join(errs...))
 	}
 	p.rules = filesystem.Ruleset{Rules: rules}
+	return p, nil
+}
+
+// applyOptions builds a policy holding opts, refusing the combinations New refuses.
+func applyOptions(opts []Option) (*Policy, error) {
+	p := &Policy{launcher: defaultLauncherName}
+	for _, o := range opts {
+		o(p)
+	}
+	switch {
+	case p.mode == BestEffort && p.unconfined == nil:
+		return nil, &OptionError{Option: "WithMode(BestEffort)", Problem: "it needs WithUnconfined to hear each child that runs unconfined"}
+	case p.launcher == "":
+		return nil, &OptionError{Option: "WithLauncherName", Problem: "the name is empty"}
+	}
 	return p, nil
 }
 

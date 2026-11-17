@@ -395,10 +395,13 @@ func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
 		var refused *RetiredDecisionError
 		s.Require().ErrorAs(err, &refused, retired)
 		s.Equal(RetiredDecisionError{Path: path, Decision: retired}, *refused)
-		s.Contains(err.Error(), "magus session load", "the error says how to recover")
+		s.Contains(err.Error(), path, "the error names the file")
 
 		_, err = FoldAgentEvents(s.T().Context(), dir)
 		s.Require().ErrorAs(err, &refused, "the cached fold refuses it too")
+
+		_, err = ReadInvocation(s.T().Context(), dir, "sess1")
+		s.Require().ErrorAs(err, &refused, "reading the one file refuses it too")
 	}
 }
 
@@ -414,10 +417,13 @@ func (s *ReadSuite) TestARetiredGroupRefusesTheStore() {
 	var refused *RetiredGroupError
 	s.Require().ErrorAs(err, &refused)
 	s.Equal(RetiredGroupError{Path: path, Version: "magus.sessions/v1alpha1"}, *refused)
-	s.Contains(err.Error(), "start a fresh session", "the error says how to recover")
+	s.Contains(err.Error(), path, "the error names the file")
 
 	_, err = FoldAgentEvents(s.T().Context(), dir)
 	s.Require().ErrorAs(err, &refused, "the cached fold refuses it too")
+
+	_, err = ReadInvocation(s.T().Context(), dir, "sess1")
+	s.Require().ErrorAs(err, &refused, "reading the one file refuses it too")
 }
 
 func (s *ReadSuite) TestSummarizeOrdersMostRecentFirst() {
@@ -537,6 +543,16 @@ func (s *ReadSuite) TestReadInvocationReadsOneFile() {
 	got, err = ReadInvocation(s.T().Context(), dir, "absent")
 	s.Require().NoError(err)
 	s.Empty(got)
+}
+
+// A file that cannot be read is an error, not an invocation with no records.
+func (s *ReadSuite) TestReadInvocationReturnsAReadFailure() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.Mkdir(filepath.Join(dir, "a"+FileExt), 0o755))
+	_, err := ReadInvocation(s.T().Context(), dir, "a")
+	var store *StoreError
+	s.Require().ErrorAs(err, &store)
+	s.Equal(filepath.Join(dir, "a"+FileExt), store.Path)
 }
 
 // An id that could name a file outside the store is refused before anything opens.

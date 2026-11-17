@@ -1922,10 +1922,23 @@ func (r *runner) ownVersion() string {
 // workspace where no agent has run yet is the ordinary case, and failing it would train
 // people to ignore the check.
 func (r *runner) checkObserverRecording(ctx context.Context) check.Check {
-	const name = "agent-observer"
 	const window = 2000
+	reads, writes, shell, err := trail.ObservedCounts(ctx, r.cacheDir(), window)
+	c := observerCheck(window, reads, writes, shell)
+	if err != nil {
+		// The counts leave out what did not decode, so a verdict on them alone would
+		// say nothing of the records it could not read.
+		if c.Status == check.OK {
+			c.Status = check.Advice
+		}
+		c.Details = append(c.Details, fmt.Sprintf("records left out of the counts: %v", err))
+	}
+	return c
+}
 
-	reads, writes, shell := trail.ObservedCounts(ctx, r.cacheDir(), window)
+// observerCheck judges the observed counts in the newest window events.
+func observerCheck(window, reads, writes, shell int) check.Check {
+	const name = "agent-observer"
 	total := reads + writes + shell
 	switch {
 	case total == 0:
