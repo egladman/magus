@@ -814,7 +814,7 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	assert.Equal(t, "moved", rows[0].Instructions())
 }
 
-// The file is rewritten to one line per row once superseded lines make it file.CompactDue.
+// The file is rewritten to one line per row once superseded lines make it codec.CompactDue.
 func TestStoreCompactsPastTheBound(t *testing.T) {
 	t.Parallel()
 
@@ -1369,7 +1369,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 	for _, tc := range []struct {
 		name   string
 		retain time.Duration
-		// due fills the file with superseded lines up to the bound file.CompactDue sets, the
+		// due fills the file with superseded lines up to the bound codec.CompactDue sets, the
 		// most a read ever decodes.
 		due bool
 	}{

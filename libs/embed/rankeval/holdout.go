@@ -89,7 +89,7 @@ func RecordHoldoutRead(path string, read HoldoutRead) ([]HoldoutRead, error) {
 	return prior, nil
 }
 
-// appendLine copies internal/file.AppendLines, since a lib ships apart from the root
+// appendLine copies libs/codec.AppendLines, since a lib ships apart from the root
 // module: one write, so a reader sees the line whole or not at all, then a sync.
 func appendLine(path string, line []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

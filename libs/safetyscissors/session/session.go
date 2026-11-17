@@ -185,19 +185,15 @@ type TargetResult struct {
 // recorded before the rename as instant, which reads as a session that replayed everything.
 func (r *TargetResult) UnmarshalJSON(b []byte) error {
 	type result TargetResult // no method set, so this does not recurse
-	var decoded result
+	var decoded struct {
+		result
+		LegacyDurationMs int64 `json:"dur_ms"`
+	}
 	if err := codec.Unmarshal(b, &decoded); err != nil {
 		return err
 	}
-	*r = TargetResult(decoded)
-	if r.DurationMs == 0 {
-		var legacy struct {
-			DurMs int64 `json:"dur_ms"`
-		}
-		if codec.Unmarshal(b, &legacy) == nil {
-			r.DurationMs = legacy.DurMs
-		}
-	}
+	*r = TargetResult(decoded.result)
+	r.DurationMs = cmp.Or(r.DurationMs, decoded.LegacyDurationMs)
 	return nil
 }
 

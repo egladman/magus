@@ -738,7 +738,7 @@ func readUnmergedFacts(path string) storedUnmergedFacts {
 }
 
 // writeUnmergedFacts appends next, or rewrites to the latest per row once the
-// file is [file.CompactDue] or an answer keep refuses drops out. It returns the
+// file is [codec.CompactDue] or an answer keep refuses drops out. It returns the
 // write's error, which only costs the stored answers.
 func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string]unmergedFact, keep func(unmergedFact) bool) error {
 	if path == "" {

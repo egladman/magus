@@ -140,7 +140,7 @@ func TestReceiptsAreAppendedAsJSONLines(t *testing.T) {
 }
 
 // Re-acking one path over and over cannot grow the file without bound: once it is
-// file.CompactDue, it is rewritten to the last line for each path.
+// codec.CompactDue, it is rewritten to the last line for each path.
 func TestReceiptsCompactPastTheirBound(t *testing.T) {
 	dir := t.TempDir()
 	for i := range 100 {
