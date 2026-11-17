@@ -835,9 +835,9 @@ func TestEveryReadMagusEnvVarIsRegistered(t *testing.T) {
 		strings.Join(refused, "\n"))
 }
 
-// hostSchemaDir holds the vendored agent-host schemas internal/agent's tests grade
-// hook configs and rendered verdicts against, with the provenance of each in SOURCES.md.
-const hostSchemaDir = "testdata/hosts"
+// hostSchemaDir holds the vendored agent-host schemas internal/agent's and internal/render's
+// tests grade hook configs and rendered verdicts against, with the provenance of each in SOURCES.md.
+const hostSchemaDir = "internal/render/testdata/hosts"
 
 // sourcesEntry matches one entry of the provenance table, which is the only
 // place a vendored schema's origin and digest are written down.
@@ -986,10 +986,11 @@ func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
 // instead of calling file.AppendLines: none of them is a JSON Lines store. It only shrinks:
 // TestStoresAreJSONLines fails on an entry whose site is gone.
 var appendAllowed = map[string]string{
-	"cmd/magus/log_other.go:redirectStdio":                  "a log: the process's stderr, held open as an fd",
-	"cmd/magus/log_windows.go:redirectStdio":                "a log: the process's stderr, held open as an fd",
-	"cmd/magus/output.go:openTeeFile":                       "--tee mirrors a stream into a file held open for the command",
+	"internal/proc/detach_unix.go:RedirectStdio":            "a log: the process's stderr, held open as an fd",
+	"internal/proc/detach_windows.go:RedirectStdio":         "a log: the process's stderr, held open as an fd",
+	"internal/render/output.go:Tee.openFile":                "--tee mirrors a stream into a file held open for the command",
 	"internal/proc/detach.go:SpawnDetached":                 "a log: the daemon's stdio, handed to the child",
+	"internal/server/broker_seam.go:trapBrokerSpawn":        "a test trap's tally of spawn lines, counted by the test that set it",
 	"internal/guard/unfinished.go:judgmentMark.recordLapse": "a one-byte tally read back by its size after the write",
 	"internal/hint/marker.go:Gate.Count":                    "a one-byte tally read back by its offset after the write",
 	"internal/guard/drift.go:scopeDrift.record":             "plain lines of project paths, not JSON Lines",

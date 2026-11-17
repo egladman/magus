@@ -135,9 +135,9 @@ func TestEndpointIsLazy(t *testing.T) {
 	assert.Equal(t, 1, res.resolvedCount(), "the first request through the endpoint did not resolve the credential")
 }
 
-// TestEndpointMemoizesPerGrant: one socket per distinct grant. A magusfile naming the
+// TestEndpointIsKeptPerGrant: one socket per distinct grant. A magusfile naming the
 // same origin in three targets must not bind three listeners.
-func TestEndpointMemoizesPerGrant(t *testing.T) {
+func TestEndpointIsKeptPerGrant(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
 	first, err := res.OpenEndpoint(runContext(t), g)
@@ -260,7 +260,7 @@ func TestEndpointRootPath(t *testing.T) {
 	assert.Equal(t, "/", gotPath)
 }
 
-// TestEndpointRebindsAfterContextEnds is the memo-liveness fix. The Resolver outlives
+// TestEndpointRebindsAfterContextEnds is the kept-endpoint liveness fix. The Resolver outlives
 // a single run (it is per workspace Open), so a cached entry whose context has ended
 // used to hand back a URL on a RELEASED port, which under a local-attacker model
 // means another process can bind it and receive the child's whole request stream.
@@ -288,7 +288,7 @@ func TestEndpointRebindsAfterContextEnds(t *testing.T) {
 
 	base2, err := res.OpenEndpoint(ContextWithInvocationID(t.Context(), "inv-"+t.Name()), g)
 	require.NoError(t, err)
-	assert.NotEqual(t, base1, base2, "a dead endpoint was served from the memo")
+	assert.NotEqual(t, base1, base2, "a dead endpoint was served from the kept endpoints")
 
 	resp, err := http.Get(base2 + "/v1/models")
 	require.NoError(t, err)
@@ -596,7 +596,7 @@ func TestEndpointsAreScopedToOneRun(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, baseA, baseB, "two runs shared one endpoint, so they shared a token")
 
-	// Within ONE run the endpoint is still memoized: three targets naming it bind one
+	// Within ONE run the endpoint is still kept: three targets naming it bind one
 	// socket, not three.
 	again, err := res.OpenEndpoint(runA, g)
 	require.NoError(t, err)

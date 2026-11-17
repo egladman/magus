@@ -1080,9 +1080,9 @@ export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 
 // TestNeedsCycleThroughEntryTargetErrors covers the cycle that comes back around to
 // the target the USER named. The entry target is invoked directly (runBuzz calls its
-// callable), so it entered neither the memo nor the ancestor stack: a dependency that
+// callable), so it entered neither the run entries nor the ancestor stack: a dependency that
 // needed it back re-executed its body, and with two dependencies in flight the second
-// one parked on the first's memo entry while the re-executed entry parked on the
+// one parked on the first's run entry while the re-executed entry parked on the
 // second — a hang, not a diagnostic. The timeout is the assertion; a cycle must
 // always surface as an error.
 func TestNeedsCycleThroughEntryTargetErrors(t *testing.T) {

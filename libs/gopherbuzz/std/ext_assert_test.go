@@ -97,7 +97,7 @@ func TestDeepEqualValue(t *testing.T) {
 // recursion would stack-overflow, a FATAL Go error unsafe to reproduce via
 // recover, so this drives deepEqualValue on a goroutine and bounds it with
 // select + time.After (the repo's hang/crash-test idiom; see pool_test.go
-// TestDispatchRejectsCycleWithMemo) rather than calling it inline.
+// TestDispatchRejectsCycle) rather than calling it inline.
 func TestDeepEqualCircular(t *testing.T) {
 	items := make([]vm.Value, 1)
 	l := vm.ListValue(items)

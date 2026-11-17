@@ -17,7 +17,7 @@
 //
 // The cost is that the server holds an Open for as long as it serves a workspace, so
 // resolved plaintext lives that long. It is still not process-global: a second
-// workspace gets a second Resolver, and the memo is keyed by provider as well.
+// workspace gets a second Resolver, and the kept answers are keyed by provider as well.
 package secret
 
 import (
@@ -45,7 +45,7 @@ import (
 // and magus never parses it. See docs/concepts/secrets.md for why there is no URI scheme.
 type Provider interface {
 	// Fetch returns ref's value, or errors if it cannot. A backend FETCHES; the
-	// [Resolver] READS: it selects the provider, memoizes, and registers the value for
+	// [Resolver] READS: it selects the provider, keeps each answer, and registers the value for
 	// redaction, which is the security-critical part. Two verbs so the two contracts
 	// cannot be confused at a call site.
 	//
@@ -116,17 +116,17 @@ func opener() func(context.Context, string) (Provider, error) {
 	return providerOpener
 }
 
-// memoKey pairs a reference with the provider that resolved it. Keying on the reference
+// resolvedKey pairs a reference with the provider that resolved it. Keying on the reference
 // alone was a real defect: a magusfile that reads before selecting a provider would
-// memoize the built-in env fallback and then keep returning it under a declared
+// settle on the built-in env fallback and then keep returning it under a declared
 // provider: a silently wrong credential rather than an error.
-type memoKey struct {
+type resolvedKey struct {
 	provider string
 	ref      string
 }
 
 // Resolver holds one run's secret state: which provider the magusfile selected, the
-// values read so far, and the memo of what each reference resolved to.
+// values read so far, and what each reference resolved to.
 //
 // One per run, reached through the context, because magus's server outlives any single
 // run. Process-global state here would mean plaintext resident for the server's lifetime
@@ -135,8 +135,8 @@ type Resolver struct {
 	mu sync.RWMutex
 	// providerName is the spell a magusfile selected; empty means the built-in.
 	providerName string
-	// memo avoids re-invoking a provider that shells out (`op read`, `vault kv get`).
-	memo map[memoKey]types.Secret
+	// resolved avoids re-invoking a provider that shells out (`op read`, `vault kv get`).
+	resolved map[resolvedKey]types.Secret
 	// redactable holds every distinct value read, longest first so [Resolver.Redact]
 	// masks a containing secret before one nested inside it.
 	redactable []types.Secret
@@ -150,7 +150,7 @@ type Resolver struct {
 	timeouts Timeouts
 	// group collapses concurrent reads of one key into a single provider invocation.
 	// Without it, N targets resolving the same reference at once means N interactive
-	// unlock prompts, which the memo alone does not prevent; the lookup and the fetch
+	// unlock prompts, which the kept answers alone do not prevent; the lookup and the fetch
 	// cannot share a lock without serializing unrelated references too.
 	group singleflight.Group
 	// grants are the destination-scoped credentials a magusfile declared, keyed by
@@ -324,10 +324,10 @@ func (r *Resolver) Read(ctx context.Context, ref string) (types.Secret, error) {
 	}
 
 	name := r.ProviderName()
-	key := memoKey{provider: name, ref: ref}
+	key := resolvedKey{provider: name, ref: ref}
 
 	r.mu.RLock()
-	v, hit := r.memo[key]
+	v, hit := r.resolved[key]
 	r.mu.RUnlock()
 	if hit {
 		return v, nil
@@ -337,11 +337,11 @@ func (r *Resolver) Read(ctx context.Context, ref string) (types.Secret, error) {
 	// same reference share one provider invocation, while two targets reading DIFFERENT
 	// references still proceed in parallel.
 	got, err, _ := r.group.Do(fmt.Sprintf("%s\x00%s", name, ref), func() (any, error) {
-		// Re-checked INSIDE the flight. A caller that missed the memo just as a previous
+		// Re-checked INSIDE the flight. A caller that missed the kept answers just as a previous
 		// flight was completing would otherwise start a second one and invoke the
 		// provider again, the exact duplicate-unlock-prompt this exists to prevent.
 		r.mu.RLock()
-		v, hit := r.memo[key]
+		v, hit := r.resolved[key]
 		r.mu.RUnlock()
 		if hit {
 			return v, nil
@@ -409,7 +409,7 @@ func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) 
 // is none". Shared so the three entry points cannot word it three ways.
 var errNoResolver = errors.New("secret: no resolver on this context")
 
-// record memoizes a resolved value and, when long enough to mask safely, adds it to the
+// record keeps a resolved value and, when long enough to mask safely, adds it to the
 // redaction set ordered longest first. Longest-first matters: when one secret contains
 // another, masking the shorter first would leave the longer one's remaining bytes in the
 // output.
@@ -424,13 +424,13 @@ var errNoResolver = errors.New("secret: no resolver on this context")
 // the prefix length is a multiple of 3: `us:` matches and `user:` does not, so an
 // `Authorization: Basic` header is covered about one time in three. Closing that needs
 // the value to mask itself before concatenation, which is what a types.Secret is for.
-func (r *Resolver) record(key memoKey, v types.Secret) {
+func (r *Resolver) record(key resolvedKey, v types.Secret) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.memo == nil {
-		r.memo = make(map[memoKey]types.Secret)
+	if r.resolved == nil {
+		r.resolved = make(map[resolvedKey]types.Secret)
 	}
-	r.memo[key] = v
+	r.resolved[key] = v
 	// Gated on the SOURCE length, not each encoded form. Encoding inflates: base64 of a
 	// 1-character value is "MQ==" and hex of "ab" is "6162", both long enough to clear
 	// minRedactLen on their own. Checking per form therefore registered derivatives of
@@ -444,7 +444,7 @@ func (r *Resolver) record(key memoKey, v types.Secret) {
 	}
 }
 
-// Register adds v to the redaction set without memoizing it as a resolved reference. It
+// Register adds v to the redaction set without keeping it as a resolved reference. It
 // exists for credentials magus MINTS or receives outside a provider (an endpoint's path
 // token and base URL, a registry token read from stdin), which need the same masking but
 // belong to no provider and no reference. A nil Resolver ignores it.

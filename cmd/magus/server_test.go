@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/types/diff"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,11 +17,13 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
@@ -128,7 +132,7 @@ func TestEnsureBrokerAdoptsALiveOne(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-served })
 
 	assert.Zero(t, ensureBroker(t.Context()), "no broker was started, so none is announced")
-	assert.Zero(t, *spawned, "a second broker was started over the live one")
+	assert.Zero(t, spawned(), "a second broker was started over the live one")
 }
 
 // TestEnsureBrokerStartsOneWhenAbsent is the other half: with nothing serving, a run does
@@ -141,22 +145,24 @@ func TestEnsureBrokerStartsOneWhenAbsent(t *testing.T) {
 	// The spawn is trapped, so nothing comes up. What is under test is that a start was
 	// ATTEMPTED, and that a run whose broker never arrives is not blocked by it.
 	assert.Zero(t, ensureBroker(t.Context()), "a broker that never came up is not announced")
-	assert.Equal(t, 1, *spawned, "with nothing serving, a run starts the broker")
+	assert.Equal(t, 1, spawned(), "with nothing serving, a run starts the broker")
 }
 
-// trapBrokerSpawn replaces the spawn seam for one test and counts the calls. No process
-// is ever started: a unit test that re-execs the binary leaves a detached broker behind
-// on every failure path.
-func trapBrokerSpawn(t *testing.T) *int {
+// trapBrokerSpawn routes the broker spawn to a file for one test and returns the count of
+// starts it refused. No process is ever started: a unit test that re-execs the binary leaves
+// a detached broker behind on every failure path.
+func trapBrokerSpawn(t *testing.T) func() int {
 	t.Helper()
-	calls := 0
-	old := spawnBroker
-	spawnBroker = func() (int, string, error) {
-		calls++
-		return 0, "", errors.New("spawn trapped by the test")
+	trap := filepath.Join(t.TempDir(), "spawns")
+	t.Setenv(server.BrokerSpawnTrapEnv, trap)
+	return func() int {
+		got, err := os.ReadFile(trap)
+		if errors.Is(err, os.ErrNotExist) {
+			return 0
+		}
+		require.NoError(t, err)
+		return strings.Count(string(got), "\n")
 	}
-	t.Cleanup(func() { spawnBroker = old })
-	return &calls
 }
 
 // TestNoticeBrokerSaysWhatItLeftBehind pins the one line a run prints when it starts the
@@ -490,4 +496,32 @@ func TestResolveServerAddrNeverConsultsTheAdoptionSocket(t *testing.T) {
 	globalCfg.Server.Address = "unix:///tmp/configured.sock"
 	assert.Equal(t, "unix:///tmp/configured.sock", resolveServerAddr(""))
 	assert.Equal(t, "unix:///tmp/flag.sock", resolveServerAddr("unix:///tmp/flag.sock"))
+}
+
+// useTextLogger makes the logger a command builds from its flags a text handler on
+// whatever os.Stderr is then, so captureStderr sees its records. The pretty handler is
+// one per terminal and stays on the real stderr, past the swap.
+func useTextLogger(t *testing.T) {
+	t.Helper()
+	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
+	prevQuiet, prevSilent := global.quiet, global.silent
+	globalCfg.Log.Format, globalCfg.Log.Level = "text", "info"
+	global.quiet, global.silent = false, false
+	t.Cleanup(func() {
+		slog.SetDefault(prevLog)
+		globalCfg.Log.Format, globalCfg.Log.Level = prevFormat, prevLevel
+		global.quiet, global.silent = prevQuiet, prevSilent
+	})
+}
+
+// notices returns what the pretty display prints for the records fn logs through
+// the default logger, the way a notice reaches a person now that it is a record.
+func notices(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(cache.NewLogHandler(&buf, "pretty", &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(prev)
+	fn()
+	return buf.String()
 }

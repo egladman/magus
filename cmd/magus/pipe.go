@@ -5,6 +5,7 @@ import (
 	"flag"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/types"
@@ -58,12 +59,12 @@ func pipeRecordStage(args []string) bool {
 // stage writes: a stage with -o still reads the records written to it.
 func tradesRecords(args []string) bool {
 	sub, subArgs := peekSub(args)
-	own, _ := splitOnDashDash(subArgs)
+	own, _ := commands.SplitOnDashDash(subArgs)
 	switch sub {
 	case "run":
 		// A run reading a saved plan takes stdin as its input, like a buzz script read from
 		// stdin, not as records.
-		if isUsageOnlyInvocation(subArgs) || hasDetachFlag(subArgs) || hasModeFlag(own, "graph") || runReadsPlan(subArgs) {
+		if commands.IsUsageOnlyInvocation(subArgs) || commands.HasDetachFlag(subArgs) || hasModeFlag(own, "graph") || runReadsPlan(subArgs) {
 			return false
 		}
 		raw, _, ok := splitTargetFromArgs(own, func(fs *flag.FlagSet) { bindRunFlags(fs, nil) })
@@ -74,7 +75,7 @@ func tradesRecords(args []string) bool {
 		t, err := types.ParseTarget(name)
 		return err == nil && canonicalTarget(t.Name) != "ls"
 	case "affected":
-		if isUsageOnlyInvocation(subArgs) || hasDetachFlag(subArgs) || isForensicAffected(subArgs) || hasModeFlag(own, "bisect") {
+		if commands.IsUsageOnlyInvocation(subArgs) || commands.HasDetachFlag(subArgs) || isForensicAffected(subArgs) || hasModeFlag(own, "bisect") {
 			return false
 		}
 		target, _, ok := splitTargetFromArgs(own, nil)
@@ -114,7 +115,7 @@ func outputFlagGiven(args []string) bool {
 			return false
 		}
 		for _, name := range []string{"o", "output"} {
-			if isFlagNamed(a, name) || parseFlagValue(a, name) != "" {
+			if commands.IsFlagNamed(a, name) || commands.ParseFlagValue(a, name) != "" {
 				return true
 			}
 		}
@@ -160,7 +161,7 @@ func takesProjectLocks(argv []string) bool {
 	sub, subArgs := peekSub(argv[1:])
 	switch sub {
 	case "affected", "run":
-		return resolveProfile(sub, subArgs).spawnsWork
+		return resolveProfile(sub, subArgs).SpawnsWork
 	case "clean", "x", "graph", "refs":
 		return true
 	}

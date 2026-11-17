@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-209-g3c2d49e1a (commit 3c2d49e1a40e2d7c76ecc831ac7caecc73a38229, 2026-11-16T23:05:25-05:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-219-g3bb2802a7 (commit 3bb2802a7d7e26d313a534f76f27bc382b75d7bd, 2026-11-17T07:07:06-05:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -151,6 +151,7 @@ internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
 internal/queue/provider/gen/types/*.buzz merge=magus linguist-generated
+internal/render/testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
 internal/spell/gen/decls/**/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
 libs/apiversion/MAGUS.md merge=magus linguist-generated
@@ -205,7 +206,6 @@ std/gen/std-api.lock merge=magus linguist-generated
 std/termkit/gen/**/*.go merge=magus linguist-generated
 tapes/core-loop.capture merge=magus linguist-generated
 tapes/showcase.capture merge=magus linguist-generated
-testdata/hosts/cursor/gen/*.schema.json merge=magus linguist-generated
 testdata/latex/onepage/build/** merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_list_test.go !merge !linguist-generated
 internal/interp/bindings/gen/boundary_objects_test.go !merge !linguist-generated

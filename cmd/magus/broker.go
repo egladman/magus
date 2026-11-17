@@ -16,6 +16,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
@@ -72,7 +73,7 @@ func brokerServe(ctx context.Context, args []string) error {
 		Log:           f.Log,
 		Config:        globalCfg,
 		Version:       version,
-		RedirectStdio: redirectStdio,
+		RedirectStdio: proc.RedirectStdio,
 	})
 }
 
@@ -166,10 +167,10 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	// The hangup, not the socket file going, is the stop: under systemd the supervisor
 	// keeps the socket, and the next connection starts another broker.
-	sctx, cancel := context.WithTimeout(ctx, stopTimeout)
+	sctx, cancel := context.WithTimeout(ctx, proc.StopTimeout)
 	defer cancel()
 	if err := c.Shutdown(sctx); errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("broker stop: broker (pid %d) did not stop within %s", st.PID, stopTimeout)
+		return fmt.Errorf("broker stop: broker (pid %d) did not stop within %s", st.PID, proc.StopTimeout)
 	} else if err != nil {
 		return fmt.Errorf("broker stop: %w", err)
 	}
@@ -182,20 +183,12 @@ func brokerStop(ctx context.Context, args []string) error {
 
 // brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a
 // test can shorten it.
-var brokerDrainWait = stopTimeout
+var brokerDrainWait = proc.StopTimeout
 
 type brokerStopOutput struct {
 	Stopped  bool `json:"stopped"`
 	PID      int  `json:"pid"`
 	Services int  `json:"services"`
-}
-
-// spawnBroker is the seam a test replaces to observe that a broker WOULD be started
-// without one being started.
-var spawnBroker = func() (pid int, logPath string, err error) {
-	logPath = server.BrokerLogPath()
-	pid, err = proc.SpawnDetached([]string{"server", "broker", "--" + flaggen.FlagServerBrokerLog, logPath}, logPath)
-	return pid, logPath, err
 }
 
 // ensureBroker starts a broker when none answers and returns the pid of the one it
@@ -210,7 +203,7 @@ func ensureBroker(ctx context.Context) int {
 	if broker.Live(ctx, addr) {
 		return 0
 	}
-	pid, logPath, err := spawnBroker()
+	pid, logPath, err := server.SpawnBroker()
 	if err != nil {
 		slog.With(attr.Component("magus")).Debug("could not start a broker", attr.Error(err))
 		return 0
@@ -289,7 +282,7 @@ var (
 // the lease the process's checkout binds, and whether the process is a gate.
 func processBrokerClient() *broker.Client {
 	processBrokerOnce.Do(func() {
-		processBroker = newBrokerClient(true, broker.WithLease(processLease(extractRootFlag(os.Args[1:]))), broker.WithGate(gateArgv(os.Args[1:])))
+		processBroker = newBrokerClient(true, broker.WithLease(processLease(commands.ExtractRootFlag(os.Args[1:]))), broker.WithGate(gateArgv(os.Args[1:])))
 	})
 	return processBroker
 }

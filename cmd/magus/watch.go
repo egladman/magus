@@ -115,7 +115,7 @@ func watchCommand(ctx context.Context, root string, rc runConfig, args []string)
 
 	// writeBatch converts each absolute path from the watcher to a
 	// workspace-relative slash-separated path before emitting.
-	// Sentinel tokens (e.g. streamAllSentinel) and any path that
+	// Sentinel tokens (e.g. watch.AllSentinel) and any path that
 	// escapes the workspace root are passed through verbatim.
 	//
 	// The flush is the whole point of the function (stdout is block-buffered when
@@ -136,7 +136,7 @@ func watchCommand(ctx context.Context, root string, rc runConfig, args []string)
 
 	if wf.Initial {
 		// Sentinel consumed by `magus affected --stdin` to trigger a full build.
-		if err := writeBatch([]string{streamAllSentinel}); err != nil {
+		if err := writeBatch([]string{watch.AllSentinel}); err != nil {
 			return err
 		}
 	}
