@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ServeSuite struct{ suite.Suite }
+type serveSuite struct{ suite.Suite }
 
-func TestServe(t *testing.T) { suite.Run(t, new(ServeSuite)) }
+func TestServe(t *testing.T) { suite.Run(t, new(serveSuite)) }
 
-func (s *ServeSuite) TestParseVersionReadsTheBuildLine() {
+func (s *serveSuite) TestParseVersionReadsTheBuildLine() {
 	b, err := ParseVersion("version: 0.8.0 (build 11960, commit 8642541b2)\nbuilt with AppleClang\n")
 	s.Require().NoError(err)
 	s.Equal(Build{Version: "0.8.0", Number: 11960, Commit: "8642541b2"}, b)
@@ -24,7 +24,7 @@ func (s *ServeSuite) TestParseVersionReadsTheBuildLine() {
 	s.ErrorContains(err, "not a version")
 }
 
-func (s *ServeSuite) TestArgsOrderTheInfillAndPinTheCache() {
+func (s *serveSuite) TestArgsOrderTheInfillAndPinTheCache() {
 	args := Args(Options{Model: "m.gguf", Ctx: 8192, Slots: 1, SPM: true, CacheReuse: 256, SpecType: "ngram-simple"}, 9000)
 	s.Equal([]string{"-m", "m.gguf", "--host", "127.0.0.1", "--port", "9000", "-c", "8192", "-np", "1", "--no-webui", "--no-warmup",
 		"--cache-reuse", "256", "--metrics", "--spm-infill", "--spec-type", "ngram-simple"}, args)
@@ -35,12 +35,12 @@ func (s *ServeSuite) TestArgsOrderTheInfillAndPinTheCache() {
 	s.NotContains(plain, "--spec-type")
 }
 
-func (s *ServeSuite) TestStartRefusesNoSlots() {
+func (s *serveSuite) TestStartRefusesNoSlots() {
 	_, err := Start(context.Background(), Options{Bin: "llama-server", Model: "m"}, 0)
 	s.ErrorContains(err, "must be positive")
 }
 
-func (s *ServeSuite) TestInfillSendsTheRequestAndReadsTheReply() {
+func (s *serveSuite) TestInfillSendsTheRequestAndReadsTheReply() {
 	var got map[string]any
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.Equal("/infill", r.URL.Path)
@@ -64,7 +64,7 @@ func (s *ServeSuite) TestInfillSendsTheRequestAndReadsTheReply() {
 	s.Equal([]any{map[string]any{"filename": "x.go", "text": "t"}}, got["input_extra"])
 }
 
-func (s *ServeSuite) TestInfillReportsAServerError() {
+func (s *serveSuite) TestInfillReportsAServerError() {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":{"message":"Loading model","code":503}}`))
@@ -74,7 +74,7 @@ func (s *ServeSuite) TestInfillReportsAServerError() {
 	s.ErrorContains(err, "Loading model")
 }
 
-func (s *ServeSuite) TestEraseSlotPostsTheAction() {
+func (s *serveSuite) TestEraseSlotPostsTheAction() {
 	var path string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path = r.Method + " " + r.URL.RequestURI()
@@ -85,7 +85,7 @@ func (s *ServeSuite) TestEraseSlotPostsTheAction() {
 	s.Equal("POST /slots/2?action=erase", path)
 }
 
-func (s *ServeSuite) TestFirstLineConfidenceStopsAtTheFirstNewline() {
+func (s *serveSuite) TestFirstLineConfidenceStopsAtTheFirstNewline() {
 	toks := []Token{{Text: "a", Logprob: math.Log(0.5)}, {Text: "b\n", Logprob: math.Log(0.5)}, {Text: "c", Logprob: math.Log(0.001)}}
 	s.InDelta(0.5, FirstLineConfidence(toks), 1e-9)
 	s.Equal(0.0, FirstLineConfidence(nil))
