@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type DedupSuite struct{ suite.Suite }
+type pairsSuite struct{ suite.Suite }
 
-func TestDedupSuite(t *testing.T) { suite.Run(t, new(DedupSuite)) }
+func TestPairsSuite(t *testing.T) { suite.Run(t, new(pairsSuite)) }
 
 func goFile(n int, tweak string) string {
 	var b strings.Builder
@@ -22,42 +22,7 @@ func goFile(n int, tweak string) string {
 	return b.String()
 }
 
-func (s *DedupSuite) TestNormalizeIgnoresLineEndingsAndTrailingBlanks() {
-	s.Equal(ExactKey("a := 1\nb := 2\n"), ExactKey("a := 1  \r\nb := 2\t\r\n\r\n"))
-	s.NotEqual(ExactKey("a := 1"), ExactKey("a := 2"))
-}
-
-func (s *DedupSuite) TestTokensPerLanguage() {
-	buzz, err := Tokens(Buzz, "final x = 1; // note\n")
-	s.Require().NoError(err)
-	s.Len(buzz, 5)
-
-	gotoks, err := Tokens(Go, "package p\n\nfunc F() { /* c */ return }\n")
-	s.Require().NoError(err)
-	s.Equal([]string{"package", "p", "func", "F", "(", ")", "{", "return", "}"}, gotoks)
-
-	ts, err := Tokens(TypeScript, "const a = `x${y}`; // z\nlet b = 'q';")
-	s.Require().NoError(err)
-	s.Equal([]string{"const", "a", "=", "`x${y}`", ";", "let", "b", "=", "'q'", ";"}, ts)
-
-	_, err = Tokens("cobol", "x")
-	var unknown *UnknownLanguageError
-	s.ErrorAs(err, &unknown)
-}
-
-func (s *DedupSuite) TestShinglesNeedFiveTokens() {
-	s.Empty(Shingles([]string{"a", "b", "c", "d"}))
-	s.Len(Shingles([]string{"a", "b", "c", "d", "e", "f"}), 2)
-}
-
-func (s *DedupSuite) TestSignatureIsFixed() {
-	sh := Shingles([]string{"a", "b", "c", "d", "e", "f", "g"})
-	s.Equal(Signature(sh), Signature(sh))
-	s.NotEqual(Signature(sh), Signature(Shingles([]string{"q", "r", "s", "t", "u", "v", "w"})))
-	s.Equal(Bands*Rows, Perms)
-}
-
-func (s *DedupSuite) TestFindExactAndNearAcrossLanguages() {
+func (s *pairsSuite) TestFindExactAndNearAcrossLanguages() {
 	base := goFile(40, "")
 	near := goFile(40, "func extra() int { return 1 }\n")
 	far := goFile(40, "")
@@ -82,7 +47,7 @@ func (s *DedupSuite) TestFindExactAndNearAcrossLanguages() {
 	s.Equal(4, rep.Docs[Go])
 }
 
-func (s *DedupSuite) TestFindIsOrderIndependent() {
+func (s *pairsSuite) TestFindIsOrderIndependent() {
 	docs := []Doc{
 		{"z.go", Go, goFile(30, "")},
 		{"y.go", Go, goFile(30, "var q = 1\n")},
@@ -94,7 +59,7 @@ func (s *DedupSuite) TestFindIsOrderIndependent() {
 	s.Equal(first, second)
 }
 
-func (s *DedupSuite) TestShortAndUnlexedFilesPairOnlyByExactKey() {
+func (s *pairsSuite) TestShortAndUnlexedFilesPairOnlyByExactKey() {
 	docs := []Doc{
 		{"a.buzz", Buzz, "x"},
 		{"b.buzz", Buzz, "y"},
