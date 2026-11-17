@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -36,7 +37,7 @@ func (s *CommandPushSuite) read(deps Dependencies, line string) *types.CommandPu
 
 // driverAnswering is a VCS driver of the named tool whose FindCommit answers id for any
 // revision, and records the ones asked.
-func (s *CommandPushSuite) driverAnswering(name, id string, asked *[]string) types.VCSDriver {
+func (s *CommandPushSuite) driverAnswering(name, id string, asked *[]string) *typestest.MockVCSDriver {
 	driver := typestest.NewMockVCSDriver(s.T())
 	driver.EXPECT().Name().Return(name).Maybe()
 	driver.EXPECT().Base().Return("main").Maybe()
@@ -76,7 +77,7 @@ func (s *CommandPushSuite) TestARefspecSourceIsTheRevision() {
 
 func (s *CommandPushSuite) TestGitDashCPushesFromTheCheckoutItNames() {
 	other := testkit.NewRepository(s.T(), map[string]string{"o.txt": "o\n"})
-	got := s.read(Dependencies{}, "git -C "+other.Root()+" push")
+	got := s.read(Dependencies{}, fmt.Sprintf("git -C %s push", other.Root()))
 	s.Require().NotNil(got)
 	s.Equal(other.Root(), got.Dir)
 	s.Equal(other.Head(), got.Revision)
@@ -98,10 +99,10 @@ func (s *CommandPushSuite) TestTwoRefspecsAreUnknown() {
 
 func (s *CommandPushSuite) TestPushAllIsUnknown() {
 	for _, flag := range []string{"--all", "--branches", "--mirror", "--tags"} {
-		got := s.read(Dependencies{}, "git push "+flag)
+		got := s.read(Dependencies{}, fmt.Sprintf("git push %s", flag))
 		s.Require().NotNil(got, flag)
 		s.Empty(got.Revision, flag)
-		s.Contains(got.Unknown, "`git push "+flag+"` publishes more than one revision")
+		s.Contains(got.Unknown, fmt.Sprintf("`git push %s` publishes more than one revision", flag))
 	}
 }
 
@@ -173,14 +174,14 @@ func (s *CommandPushSuite) TestAnUnresolvableSourceIsUnknownWithTheError() {
 	s.Require().NotNil(got)
 	s.Equal("nosuch", got.Source)
 	s.Empty(got.Revision)
-	s.Contains(got.Unknown, "`nosuch` names no commit in `"+s.repo.Root()+"`")
+	s.Contains(got.Unknown, fmt.Sprintf("`nosuch` names no commit in `%s`", s.repo.Root()))
 }
 
 func (s *CommandPushSuite) TestNoVersionControlIsUnknown() {
 	off := false
 	got := s.read(Dependencies{VCS: types.VCSOptions{Enabled: &off}}, "git push")
 	s.Require().NotNil(got)
-	s.Contains(got.Unknown, "no version control answers in `"+s.repo.Root()+"`")
+	s.Contains(got.Unknown, fmt.Sprintf("no version control answers in `%s`", s.repo.Root()))
 }
 
 func (s *CommandPushSuite) TestGhPrCreateOpensAPullRequestAtTheCurrentRevision() {
@@ -232,8 +233,7 @@ func (s *CommandPushSuite) TestHgPushNamesItsRevisionOrIsUnknown() {
 	deps := Dependencies{VCS: types.VCSOptions{Driver: s.driverAnswering("hg", "hgcommit", &asked)}}
 	got := s.read(deps, "hg push -r abc123")
 	s.Require().NotNil(got)
-	s.Equal("abc123", got.Source)
-	s.Equal("hgcommit", got.Revision)
+	s.Equal(types.CommandPush{Tool: "hg", Dir: s.repo.Root(), Source: "abc123", Revision: "hgcommit"}, *got)
 
 	bare := s.read(deps, "hg push")
 	s.Require().NotNil(bare)
@@ -268,7 +268,7 @@ func (s *CommandPushSuite) TestAnUnreadableCurrentRevisionIsUnknown() {
 	driver.EXPECT().FindCommit(mock.Anything, mock.Anything, "").Return(types.Commit{}, errors.New("no commits yet"))
 	got := s.read(Dependencies{VCS: types.VCSOptions{Driver: driver}}, "git push")
 	s.Require().NotNil(got)
-	s.Contains(got.Unknown, "the current revision of `"+s.repo.Root()+"` is unread: no commits yet")
+	s.Contains(got.Unknown, fmt.Sprintf("the current revision of `%s` is unread: no commits yet", s.repo.Root()))
 }
 
 func (s *CommandPushSuite) TestNoCommandRuleReadsNoRevision() {

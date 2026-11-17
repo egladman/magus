@@ -24,79 +24,94 @@ import (
 // answer for the built-in push rule, which reads one push and treats a refspec it cannot
 // read as the current revision.
 func commandPush(ctx context.Context, deps Dependencies, in commandRuleInput, at location) *types.CommandPush {
-	type found struct {
-		call locatedCall
-		// moved is the first call before this one that changes the revision it publishes.
-		moved string
+	pushes := publishingCalls(in, cmp.Or(at.dir, at.workspace))
+	if len(pushes) == 0 {
+		return nil
 	}
-	calls, ok := locateCalls(in.command, in.dialect, cmp.Or(at.dir, at.workspace), func(c hint.Invocation) bool {
+	first := pushes[0]
+	push := &types.CommandPush{Tool: filepath.Base(first.call.inv.Name), OpensPullRequest: isPRCreate(first.call.inv)}
+	site, located := placedPush(first.call)
+	switch {
+	case len(pushes) > 1:
+		push.Unknown = manyPushes(pushes)
+	case !located || site.dir == "":
+		push.Unknown = fmt.Sprintf("where `%s` runs is known only by running the line, so the revision it publishes cannot be read first", publishSpelling(first.call.inv))
+	case first.moved != "":
+		push.Dir = site.dir
+		push.Unknown = fmt.Sprintf("this line runs `%s` before it pushes, so the revision it publishes exists only once the line runs", first.moved)
+	default:
+		push.Dir = site.dir
+		resolvePush(ctx, deps, push, first.call)
+	}
+	return push
+}
+
+// foundPush is a publishing call on the line, with the first command before it that
+// changes the revision it publishes.
+type foundPush struct {
+	call  locatedCall
+	moved string
+}
+
+// publishingCalls are the calls on the line that publish, in the order the shell runs them.
+func publishingCalls(in commandRuleInput, start string) []foundPush {
+	calls, ok := locateCalls(in.command, in.dialect, start, func(c hint.Invocation) bool {
 		return publishes(c) || movesRevision(c)
 	}, false)
 	if !ok {
 		return nil
 	}
-	var pushes []found
+	var pushes []foundPush
 	moved := ""
 	for _, c := range calls {
 		switch {
 		case publishes(c.inv):
-			pushes = append(pushes, found{call: c, moved: moved})
+			pushes = append(pushes, foundPush{call: c, moved: moved})
 		case moved == "":
 			moved = moverSpelling(c.inv)
 		}
 	}
-	if len(pushes) == 0 {
-		return nil
+	return pushes
+}
+
+func manyPushes(pushes []foundPush) string {
+	names := make([]string, len(pushes))
+	for i, p := range pushes {
+		names[i] = fmt.Sprintf("`%s`", publishSpelling(p.call.inv))
 	}
-	first := pushes[0].call
-	push := &types.CommandPush{Tool: filepath.Base(first.inv.Name), OpensPullRequest: isPRCreate(first.inv)}
-	if len(pushes) > 1 {
-		names := make([]string, len(pushes))
-		for i, p := range pushes {
-			names[i] = "`" + publishSpelling(p.call.inv) + "`"
-		}
-		push.Unknown = fmt.Sprintf("this line publishes %d times (%s), so no one revision is what it publishes", len(pushes), strings.Join(names, ", "))
-		return push
+	return fmt.Sprintf("this line publishes %d times (%s), so no one revision is what it publishes", len(pushes), strings.Join(names, ", "))
+}
+
+// resolvePush fills push's Source and Revision from the call, or Unknown with the reason
+// neither can be read.
+func resolvePush(ctx context.Context, deps Dependencies, push *types.CommandPush, call locatedCall) {
+	if hasUnreadWord(call) {
+		push.Unknown = fmt.Sprintf("`%s` has a word that is not literal, so what it publishes is known only when the line runs", publishSpelling(call.inv))
+		return
 	}
-	site, located := placedPush(first)
-	switch {
-	case !located || site.dir == "":
-		push.Unknown = fmt.Sprintf("where `%s` runs is known only by running the line, so the revision it publishes cannot be read first", publishSpelling(first.inv))
-		return push
-	case pushes[0].moved != "":
-		push.Dir = site.dir
-		push.Unknown = fmt.Sprintf("this line runs `%s` before it pushes, so the revision it publishes exists only once the line runs", pushes[0].moved)
-		return push
-	}
-	push.Dir = site.dir
-	if hasUnreadWord(first) {
-		push.Unknown = fmt.Sprintf("`%s` has a word that is not literal, so what it publishes is known only when the line runs", publishSpelling(first.inv))
-		return push
-	}
-	source, unknown := pushSource(first.inv)
+	source, unknown := pushSource(call.inv)
 	push.Source = source
 	if unknown != "" {
 		push.Unknown = unknown
-		return push
+		return
 	}
-	res, err := vcs.Resolve(ctx, site.dir, "", deps.VCS)
+	res, err := vcs.Resolve(ctx, push.Dir, "", deps.VCS)
 	if err != nil || res.VCS == nil {
-		push.Unknown = fmt.Sprintf("no version control answers in `%s`: %s", site.dir, cmp.Or(errText(err), "version control is disabled"))
-		return push
+		push.Unknown = fmt.Sprintf("no version control answers in `%s`: %s", push.Dir, cmp.Or(errorMessage(err), "version control is disabled"))
+		return
 	}
-	commit, err := res.VCS.FindCommit(ctx, site.dir, source)
+	commit, err := res.VCS.FindCommit(ctx, push.Dir, source)
 	switch {
 	case err != nil && source == "":
-		push.Unknown = fmt.Sprintf("the current revision of `%s` is unread: %v", site.dir, err)
+		push.Unknown = fmt.Sprintf("the current revision of `%s` is unread: %v", push.Dir, err)
 	case err != nil:
-		push.Unknown = fmt.Sprintf("`%s` names no commit in `%s`: %v", source, site.dir, err)
+		push.Unknown = fmt.Sprintf("`%s` names no commit in `%s`: %v", source, push.Dir, err)
 	default:
 		push.Revision = commit.ID
 	}
-	return push
 }
 
-func errText(err error) string {
+func errorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -158,7 +173,7 @@ func publishSpelling(c hint.Invocation) string {
 // moverSpelling is the command that changes the revision a later push publishes.
 func moverSpelling(c hint.Invocation) string {
 	sub, _ := vcsSubcommand(c)
-	return strings.TrimSpace(c.Name + " " + sub)
+	return strings.TrimSpace(fmt.Sprintf("%s %s", c.Name, sub))
 }
 
 // placedPush is where the call runs, read off the line without running it. False when only

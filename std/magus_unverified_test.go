@@ -28,7 +28,7 @@ func TestUnverifiedMember(t *testing.T) { suite.Run(t, new(unverifiedMemberSuite
 
 func (s *unverifiedMemberSuite) TestAnEmptyRevisionRaises() {
 	_, err := MagusWorkspaceUnverified(s.T().Context(), types.MagusWorkspace{Dir: "/w"}, "")
-	s.Require().ErrorContains(err, "magus\\workspace(`/w`).unverified: revision is empty; pass the commit to read, such as req.push.revision")
+	s.Require().ErrorContains(err, "magus\\workspace(`/w`).unverified: revision is empty, pass the commit to read, such as req.push.revision")
 }
 
 func (s *unverifiedMemberSuite) TestOutsideAWorkspaceRaisesMGS1022() {

@@ -126,7 +126,7 @@ func (s *UnverifiedReaderSuite) TestADirNoWorkspaceHoldsIsUnknown() {
 func (s *UnverifiedReaderSuite) TestTheCommandRuleCanCallTheReader() {
 	pinned := false
 	s.deps.CommandRule = func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
-		_, pinned = unverified.ReaderFrom(ctx)
+		_, pinned = unverified.PinnedReader(ctx)
 		return types.GuardVerdict{}, nil
 	}
 	at := location{dir: s.repo.Root(), workspace: s.repo.Root()}

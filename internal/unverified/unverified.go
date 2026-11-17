@@ -29,8 +29,8 @@ import (
 // maxCommands is how many `magus run` lines a file names.
 const maxCommands = 3
 
-// Input is one read: a checkout and the revision to weigh in it.
-type Input struct {
+// readInput is one read: a checkout and the revision to weigh in it.
+type readInput struct {
 	Driver types.VCSDriver
 	// Root is the checkout's top level and Workspace the workspace root inside it.
 	Root, Workspace string
@@ -43,10 +43,10 @@ type Input struct {
 	Runs     func() ([]cache.OutputDescriptor, error)
 }
 
-// Read weighs the files Revision changed since its merge base with Base against the runs
+// weigh reads the files Revision changed since its merge base with Base against the runs
 // of its checkout. It runs under ctx's deadline and, on the first step that fails or meets
 // an ended ctx, answers Unknown naming that step, with Changed and Unverified empty.
-func Read(ctx context.Context, in Input) types.UnverifiedReport {
+func weigh(ctx context.Context, in readInput) types.UnverifiedReport {
 	short := in.Revision[:min(len(in.Revision), 12)]
 	unknown := func(step string, err error) types.UnverifiedReport {
 		return types.UnverifiedReport{Revision: in.Revision, Base: in.Base, Unknown: fmt.Sprintf("%s: %v", step, err)}
@@ -96,7 +96,7 @@ type Checkout struct {
 	// store's directory.
 	Dir, Workspace, CacheDir string
 	VCS                      types.VCSOptions
-	// Projects opens the workspace, as Input.Projects.
+	// Projects opens the workspace, as readInput.Projects.
 	Projects func(context.Context) (types.WorkspaceRepository, error)
 }
 
@@ -107,20 +107,20 @@ func Open(ctx context.Context, c Checkout, revision string) types.UnverifiedRepo
 	}
 	res, err := vcs.Resolve(ctx, c.Dir, "", c.VCS)
 	if err != nil || res.VCS == nil {
-		return unknown(fmt.Sprintf("no version control answers in `%s`: %s", c.Dir, cmp.Or(errText(err), "version control is disabled")))
+		return unknown(fmt.Sprintf("no version control answers in `%s`: %s", c.Dir, cmp.Or(errorMessage(err), "version control is disabled")))
 	}
 	root, err := res.VCS.Root(ctx, c.Dir)
 	if err != nil {
 		return unknown(fmt.Sprintf("the checkout root of `%s` is unread: %v", c.Dir, err))
 	}
-	return Read(ctx, Input{
+	return weigh(ctx, readInput{
 		Driver: res.VCS, Root: root, Workspace: c.Workspace, Base: res.Base, Revision: revision,
 		Projects: c.Projects,
 		Runs:     func() ([]cache.OutputDescriptor, error) { return cache.NewOutputStore(c.CacheDir).ListDescriptors() },
 	})
 }
 
-func errText(err error) string {
+func errorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -138,8 +138,8 @@ func WithReader(ctx context.Context, r Reader) context.Context {
 	return context.WithValue(ctx, readerKey{}, r)
 }
 
-// ReaderFrom is the Reader pinned on ctx.
-func ReaderFrom(ctx context.Context) (Reader, bool) {
+// PinnedReader is the Reader pinned on ctx.
+func PinnedReader(ctx context.Context) (Reader, bool) {
 	r, ok := ctx.Value(readerKey{}).(Reader)
 	return r, ok
 }
@@ -354,7 +354,10 @@ func (ev *evidence) claimingRuns(changed []string, unverified []types.Unverified
 			}
 		}
 	}
-	var out []types.RunEvidence
+	if len(relevant) == 0 {
+		return nil
+	}
+	out := make([]types.RunEvidence, 0, len(relevant))
 	for _, i := range relevant {
 		d := ev.runs[i]
 		run := types.RunEvidence{

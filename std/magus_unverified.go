@@ -18,9 +18,9 @@ import (
 // it judges; elsewhere it reads the workspace on ctx and refuses a dir outside it.
 func MagusWorkspaceUnverified(ctx context.Context, w types.MagusWorkspace, revision string) (types.UnverifiedReport, error) {
 	if revision == "" {
-		return types.UnverifiedReport{}, fmt.Errorf("magus\\workspace(`%s`).unverified: revision is empty; pass the commit to read, such as req.push.revision", w.Dir)
+		return types.UnverifiedReport{}, fmt.Errorf("magus\\workspace(`%s`).unverified: revision is empty, pass the commit to read, such as req.push.revision", w.Dir)
 	}
-	if read, pinned := unverified.ReaderFrom(ctx); pinned {
+	if read, pinned := unverified.PinnedReader(ctx); pinned {
 		return read(ctx, w.Dir, revision)
 	}
 	ws := types.WorkspaceFromContext(ctx)

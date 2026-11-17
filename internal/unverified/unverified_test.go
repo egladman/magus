@@ -64,10 +64,10 @@ func (s *ReadSuite) record(target, revision string, edit func(*cache.OutputDescr
 	s.Require().NoError(err)
 }
 
-func (s *ReadSuite) input(base, revision string) Input {
+func (s *ReadSuite) input(base, revision string) readInput {
 	res, err := vcs.Resolve(s.T().Context(), s.repo.Root(), "", types.VCSOptions{})
 	s.Require().NoError(err)
-	return Input{
+	return readInput{
 		Driver: res.VCS, Root: s.repo.Root(), Workspace: s.repo.Root(), Base: base, Revision: revision,
 		Projects: func(context.Context) (types.WorkspaceRepository, error) { return s.ws, nil },
 		Runs:     func() ([]cache.OutputDescriptor, error) { return cache.NewOutputStore(s.cacheDir).ListDescriptors() },
@@ -75,7 +75,7 @@ func (s *ReadSuite) input(base, revision string) Input {
 }
 
 func (s *ReadSuite) read(revision string) types.UnverifiedReport {
-	return Read(s.T().Context(), s.input(s.base, revision))
+	return weigh(s.T().Context(), s.input(s.base, revision))
 }
 
 func paths(files []types.UnverifiedFile) []string {
@@ -113,12 +113,15 @@ func (s *ReadSuite) TestACleanRunAtAnOlderRevisionLeavesAFileChangedSinceUnverif
 	head := s.repo.Commit("again", map[string]string{"b.go": "package a\n\nvar B = 2\n"})
 
 	got := s.read(head)
-	s.Require().Len(got.Unverified, 1)
-	s.Equal("b.go", got.Unverified[0].Path)
-	s.Equal(hint.Run.With("test", "."), got.Unverified[0].Commands[0], "the target that ran over it comes first")
+	// The target that ran over the file comes first, then the magusfile targets that claim it.
+	s.Equal([]types.UnverifiedFile{{Path: "b.go", Commands: []string{
+		hint.Run.With("test", "."), hint.Run.With("generate", "."), hint.Run.With("lint", "."),
+	}}}, got.Unverified)
 	s.Require().Len(got.Runs, 1)
-	s.Equal([]string{"a.go", "b.go"}, got.Runs[0].Claims)
-	s.Equal([]string{"a.go"}, got.Runs[0].Reads)
+	s.Equal([]types.RunEvidence{{
+		Ref: got.Runs[0].Ref, Project: ".", Target: "test", Revision: older,
+		Claims: []string{"a.go", "b.go"}, Reads: []string{"a.go"},
+	}}, got.Runs)
 }
 
 func (s *ReadSuite) TestADirtyRunReadsNothingAndIsListedDirty() {
@@ -180,9 +183,7 @@ func (s *ReadSuite) TestARunOfATargetWithoutDeclaredOutputsReadsNoOutput() {
 	s.record("test", head, nil)
 
 	got := s.read(head)
-	s.Require().Len(got.Unverified, 1)
-	s.Equal("gen/out.jsonl", got.Unverified[0].Path)
-	s.Equal([]string{hint.Run.With("generate", ".")}, got.Unverified[0].Commands)
+	s.Equal([]types.UnverifiedFile{{Path: "gen/out.jsonl", Commands: []string{hint.Run.With("generate", ".")}}}, got.Unverified)
 }
 
 func (s *ReadSuite) TestAFileScopedRunReadsOnlyThePathsItNamed() {
@@ -220,9 +221,13 @@ func (s *ReadSuite) TestChangedFilesAreSinceTheMergeBase() {
 	s.repo.Commit("trunk", map[string]string{"b.go": "package a\n\nvar B = 1\n"})
 	s.repo.Git("checkout", "-q", "topic")
 
-	got := Read(s.T().Context(), s.input("trunk", head))
-	s.Equal([]string{"a.go"}, got.Changed)
-	s.Equal("trunk", got.Base)
+	got := weigh(s.T().Context(), s.input("trunk", head))
+	s.Equal(types.UnverifiedReport{
+		Revision: head, Base: "trunk", Changed: []string{"a.go"},
+		Unverified: []types.UnverifiedFile{{Path: "a.go", Commands: []string{
+			hint.Run.With("test", "."), hint.Run.With("generate", "."), hint.Run.With("lint", "."),
+		}}},
+	}, got)
 }
 
 func (s *ReadSuite) TestAPlatformOnlyGoFileNeedsARunLikeAnyOther() {
@@ -239,8 +244,8 @@ func (s *ReadSuite) TestAnEndedContextIsUnknownNamingTheStep() {
 	ctx, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
-	got := Read(ctx, s.input(s.base, head))
-	s.Contains(got.Unknown, "the files `"+head[:12]+"` changed since its merge base with `"+s.base+"` are unread")
+	got := weigh(ctx, s.input(s.base, head))
+	s.Contains(got.Unknown, fmt.Sprintf("the files `%s` changed since its merge base with `%s` are unread", head[:12], s.base))
 	s.Contains(got.Unknown, "context canceled")
 	s.Empty(got.Changed)
 	s.Empty(got.Unverified)
@@ -251,7 +256,7 @@ func (s *ReadSuite) TestAnUnreadableOutputStoreIsUnknown() {
 	in := s.input(s.base, head)
 	in.Runs = func() ([]cache.OutputDescriptor, error) { return nil, errors.New("permission denied") }
 
-	got := Read(s.T().Context(), in)
+	got := weigh(s.T().Context(), in)
 	s.Equal("the output store is unread: permission denied", got.Unknown)
 	s.Empty(got.Changed)
 }
@@ -261,7 +266,7 @@ func (s *ReadSuite) TestAWorkspaceThatDidNotOpenIsUnknown() {
 	in := s.input(s.base, head)
 	in.Projects = func(context.Context) (types.WorkspaceRepository, error) { return nil, errors.New("no magusfile") }
 
-	got := Read(s.T().Context(), in)
+	got := weigh(s.T().Context(), in)
 	s.Equal("the workspace did not open, so no target's inputs are known: no magusfile", got.Unknown)
 }
 
@@ -270,7 +275,7 @@ func (s *ReadSuite) TestNoChangedFilesReadsNeitherTheWorkspaceNorTheStore() {
 	in.Projects = func(context.Context) (types.WorkspaceRepository, error) { return nil, errors.New("opened") }
 	in.Runs = func() ([]cache.OutputDescriptor, error) { return nil, errors.New("read") }
 
-	got := Read(s.T().Context(), in)
+	got := weigh(s.T().Context(), in)
 	s.Empty(got.Unknown)
 	s.Empty(got.Changed)
 }
@@ -399,7 +404,7 @@ func largePush(b *testing.B) (largeWorkspace, []cache.OutputDescriptor, []string
 }
 
 // BenchmarkEvidenceWeighsALargePush weighs each changed file as
-// Read does. The repository holds the commit and no run's
+// weigh does. The repository holds the commit and no run's
 // revision, so the rest measures matching files to runs.
 func BenchmarkEvidenceWeighsALargePush(b *testing.B) {
 	ws, runs, files, dir := largePush(b)
