@@ -198,6 +198,16 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheHooksCommandLine() {
 	s.Equal(strings.Join(s.argv, "\n")+"\n", errOut)
 }
 
+func (s *DelegateToCheckoutSuite) TestACallWithNoCommandLineIsJudgedHereAndSaysWhy() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.argv = nil
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "the hook's command line was not handed to this binary")
+}
+
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
 	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.write(s.repo.Root()))

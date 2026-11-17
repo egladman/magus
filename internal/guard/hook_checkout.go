@@ -163,7 +163,8 @@ func CheckoutBinary(dir, running string) string {
 // delegateToCheckout hands a hook call, argv and input, to the ./magus of the
 // checkout it lands in, when a live row of the session's job store pins it.
 // A ./magus behind HEAD judges too, and its own stale-binary
-// rules name the bootstrap. On handled false this binary judges, and declined
+// rules name the bootstrap. An empty argv is declined, since a bare ./magus
+// answers with its usage. On handled false this binary judges, and declined
 // says why.
 func (e HookEnv) delegateToCheckout(ctx context.Context, argv []string, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if delegatedBy(ctx) != "" {
@@ -183,6 +184,9 @@ func (e HookEnv) delegateToCheckout(ctx context.Context, argv []string, input st
 		d := checkoutDecline{root: root, note: fmt.Sprintf("Judged by %s, not by %s: %s.", running, own, why)}
 		slog.WarnContext(ctx, d.note, attr.Component("magus shell"))
 		return d
+	}
+	if len(argv) == 0 {
+		return false, decline("", "the hook's command line was not handed to this binary, so it has nothing to forward"), nil
 	}
 	session := BinaryCheckout(running)
 	if session == "" {
