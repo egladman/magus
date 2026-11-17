@@ -160,12 +160,12 @@ func CheckoutBinary(dir, running string) string {
 	return own
 }
 
-// delegateToCheckout hands a hook call to the ./magus of the checkout
-// it lands in, when a live row of the session's job store pins it.
+// delegateToCheckout hands a hook call, argv and input, to the ./magus of the
+// checkout it lands in, when a live row of the session's job store pins it.
 // A ./magus behind HEAD judges too, and its own stale-binary
 // rules name the bootstrap. On handled false this binary judges, and declined
 // says why.
-func (e HookEnv) delegateToCheckout(ctx context.Context, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
+func (e HookEnv) delegateToCheckout(ctx context.Context, argv []string, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if delegatedBy(ctx) != "" {
 		return false, checkoutDecline{}, nil
 	}
@@ -196,7 +196,7 @@ func (e HookEnv) delegateToCheckout(ctx context.Context, input string, opts outp
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
 	// directory, which is the binary handing the call over.
 	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), workspace.BootstrapExecSentinelVar+"=1")
-	end, err := RunDelegate(ctx, own, os.Args[1:], env, strings.NewReader(input), out, errOut)
+	end, err := RunDelegate(ctx, own, argv, env, strings.NewReader(input), out, errOut)
 	switch end {
 	case DelegateExited:
 	case DelegateKilledUnanswered:

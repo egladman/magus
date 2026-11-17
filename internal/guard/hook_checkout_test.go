@@ -125,7 +125,7 @@ func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined
 
 func (s *DelegateToCheckoutSuite) delegateWithin(ctx context.Context, input string) (handled bool, declined, out string, err error) {
 	var stdout, stderr bytes.Buffer
-	handled, decline, err := s.env.delegateToCheckout(ctx, input, output.Options{Format: output.Text}, &stdout, &stderr)
+	handled, decline, err := s.env.delegateToCheckout(ctx, nil, input, output.Options{Format: output.Text}, &stdout, &stderr)
 	return handled, decline.note, stdout.String(), err
 }
 

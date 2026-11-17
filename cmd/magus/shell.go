@@ -149,6 +149,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		Flags:    *sf,
 		Output:   opts,
 		Operands: fset.Args(),
+		Argv:     os.Args[1:],
 		Quiet:    global.quiet || global.silent,
 		Window:   terminalWindow(),
 	}
