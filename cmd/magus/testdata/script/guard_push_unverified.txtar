@@ -24,7 +24,7 @@ exec git commit -q -am 'change a'
 stdin push-a.json
 exec magus shell
 ! stdout 'deny'
-stdout '^advise .*\[workspace:push-unverified\]: pushing [0-9a-f]{12} changes 1 file that no passing run has read as committed; run the command on each line, then push again'
+stdout '^advise .*\[workspace:push-unverified\]: pushing [0-9a-f]{12} changes 1 file that no passing run has read as committed; this advises for now and will refuse later: run the command on each line before you push'
 stdout '  `\./magus run lint \. -- src/a\.txt`'
 
 # (b) A run of a target that declares no inputs reads nothing, even over `.`.
@@ -70,7 +70,7 @@ stdout 'advise \[workspace:push-unverified\]: 1 file changed here that no target
 # (g) A line whose commit only running it makes is advised on as unjudged, naming the fix.
 stdin commit-push.json
 exec magus shell
-stdout '^advise .*\[workspace:push-unverified\]: this push is refused because magus cannot tell, before the line runs, which commit it publishes'
+stdout '^advise .*\[workspace:push-unverified\]: magus cannot tell, before the line runs, which commit this push publishes; this advises for now'
 
 # (h) A dry run publishes nothing and a line that pushes nothing is never read.
 stdin dry-run.json

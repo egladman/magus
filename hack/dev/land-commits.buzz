@@ -360,7 +360,7 @@ test "the rule's reply on an unread file is printed and the landing goes on" {
     final push = CommandPush{ tool = "git", dir = "/w", source = "topic", revision = "0123456789abcdef0123" };
     final unread = fun (dir: str, revision: str) > result\Result::<UnverifiedReport> {
         return result\ok::<UnverifiedReport>(UnverifiedReport{ revision = revision, base = "origin/main",
-            unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run test ."] }] });
+            unverified = [UnverifiedFile{ path = "a.go", declared = true, commands = ["magus run test ."] }] });
     };
     final v = pushes\decidePush(push, read: unread);
     assert\equal(v.decision == magus\GuardDecision.advise, want: true, message: v.reason);
