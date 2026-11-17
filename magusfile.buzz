@@ -2928,7 +2928,7 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
     });
 }
 
-// Runs cmd/magus's agent eval, which skips in the ordinary test target because it
+// Runs the bench suite's agent eval, which skips in the ordinary test target because it
 // spends tokens. MAGUS_AGENT_EVAL_VARIANTS, _REPS, _RESULTS and CLAUDE_CODE_EXECPATH pass through.
 export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
     // Each run gets a fresh HOME, where the claude CLI's own login cannot follow, so
@@ -2940,7 +2940,7 @@ export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
         env[name] = os\env(name) ?? "";
     }
     go["go-test"](ctx.withEnv(env),
-        {"args": ["-run=^TestAgentEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
+        {"args": ["-run=^TestBenchSuite$/^TestAgentEval$", "-count=1", "-timeout=2h", "-v", "./benchmarks/agent/internal/bench/"] + args});
 }
 
 // Replays each eval set under testdata/retrieval through query, refs and explain and
