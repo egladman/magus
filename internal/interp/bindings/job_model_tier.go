@@ -112,8 +112,9 @@ func declaredModelTierSet(ctx, callCtx context.Context, sess *buzz.Session, reg 
 //	magus\modelTier(fun(req: ModelTierRequest) > Choice? { ... });
 //
 // A fork calls the function once when the row names neither a tier nor a model; null
-// leaves the declared default to decide. The function is kept, not called, here.
-func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value) {
+// leaves the declared default to decide. The function is kept, not called, here, and only
+// by a parse-mode load.
+func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value, parseMode bool) {
 	registered := false
 	magus.MapSet("modelTier", directVal(obs, "magus.modelTier", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		reg, err := modelTierCallSite(ctx, modelTierMember, "the tier a job is assigned")
@@ -129,6 +130,13 @@ func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.D
 				"already registered in this magusfile, and a workspace has one matrix; fold the second one into the first")
 		}
 		registered = true
+		if !parseMode {
+			if reg.ModelTierMatrix() == nil {
+				return vm.Null, modelTierUnusable(modelTierMember,
+					"registered while a target runs and not when the workspace loaded; register it at the top of the root magusfile")
+			}
+			return vm.Null, nil
+		}
 		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, agent.ModelTierStateFromContext(ctx), args[0], modelTierSite(ctx)))
 		// The fork calls it after this load has closed.
 		reg.Keep(sess.Keep())

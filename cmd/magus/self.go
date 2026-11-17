@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
 
@@ -80,7 +81,7 @@ func selfPlaceCommand(ctx context.Context, args []string) error {
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = selfPlaceUsage
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {

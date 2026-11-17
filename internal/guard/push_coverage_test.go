@@ -212,6 +212,7 @@ func (s *NarrowPushSuite) TestAWorkerWhosePushLapsesIsSentToItsOrchestrator() {
 // The workspace open is a phase of its own, bounded short of the push's
 // budget, so it lapses before the push's own reads are cut.
 func (s *NarrowPushSuite) TestAPushWhoseWorkspaceOpenLapsesIsRefusedNamingTheOpen() {
+	waitForLapsedWork(s.T())
 	s.gateAtFirstCommit()
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	s.passed(strings.Repeat("a", 64), "go-test", head)

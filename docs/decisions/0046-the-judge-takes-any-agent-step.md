@@ -530,6 +530,14 @@ Still proposed: a host's own envelope is handed to no step rule. A `tool` step n
 covers is still judged as its envelope, so `magus\guard.step("tool", ...)` judges only
 the tool steps a row declares.
 
+### 2026-11-15: only a parse-mode load stores a rule
+
+The registry releases the session a rule runs on, and that holds for parse-mode loads:
+the workspace load and the guard's two. A run-mode load (a target body, a pooled worker)
+checks the call, stores nothing and keeps nothing, so its session is released when it
+closes. A rule the workspace load did not register is refused there, MGS1045 (MGS1052 for
+`magus\modelTier`). Script mode refuses `magus\guard.stop` and `step` with MGS1022.
+
 ### 2026-11-13: a domain type says no row
 
 A domain type says no row, so `agent.StepRow` is `agent.StepSpec` and `WithStepRows` is

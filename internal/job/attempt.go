@@ -194,7 +194,7 @@ func refuseAttemptVersion(r attemptRecord) error {
 		return nil
 	}
 	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s: attempt %d of %s is %s %s, and this magus reads %s %s: update magus, or %s",
-		attemptsFileName, r.Spec.N, r.Spec.Job, r.APIVersion, r.Kind, attemptType.APIVersion, attemptType.Kind, staleStoreFix)
+		attemptsFileName, r.Spec.N, r.Spec.Job, r.APIVersion, r.Kind, attemptType.APIVersion, attemptType.Kind, staleStoreFix(attemptsFileName))
 }
 
 // envelopeAttempts rewrites each line of attempts.jsonl an older magus

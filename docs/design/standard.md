@@ -35,8 +35,9 @@ adopting it:
    hold, and the one exception, the release registry, is named there.
 6. **Repairable by its user.** Refusals carry a next step, every diagnostic
    code has a page, the host wiring is a template you own, no generated code
-   sits between you and a running build, and the guard fails open with a
-   notice rather than failing silent. The systematic version is missing; a
+   sits between you and a running build, and a guard that cannot judge
+   refuses the call and names the repair, which alone still runs
+   ([The host wiring is yours](judgment/the-host-wiring-is-yours.md)). The systematic version is missing; a
    debt, in [Where this is strained](strained.md).
 7. **Repairable near home.** The cache is a plain store on your disk, the
    console is loopback-locked, no capability requires a hosted service, the

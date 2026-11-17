@@ -391,13 +391,9 @@ func (a *assessment) scopedGate(rep *types.TierReport, verdicts []verdict) []ste
 	if len(byProject) > 0 {
 		for _, p := range a.in.Affected {
 			if sm := byProject[p]; sm != nil {
-				narrowed, skipped, ok := a.scopedSteps(sm, readers)
+				narrowed, ok := a.scopedSteps(sm, readers)
 				if ok {
 					steps = append(steps, narrowed...)
-					for _, t := range skipped {
-						rep.Evidence = append(rep.Evidence, check.TierEvidence{Project: p, Target: t, Tier: check.RiskScoped,
-							Why: "skipped: the change touches none of the files it declares, so its cache key would not move"})
-					}
 					continue
 				}
 				rep.Evidence = append(rep.Evidence, check.TierEvidence{Project: p, Target: a.in.Target, Tier: check.RiskScoped,
@@ -490,10 +486,9 @@ func (a *assessment) mechanicalSteps(project string) []step {
 // scopedSteps expands the invoked target's chain for the project whose module changed.
 // The test target, when its body runs the placement's Narrows op, runs with that op's
 // packages narrowed to the closure, unless a changed prose path is its input, which
-// needs it whole; every other member runs as declared. A member whose declared inputs
-// the change does not touch is skipped, since its cache key would not move. narrowed is
-// false when there was no test target to narrow.
-func (a *assessment) scopedSteps(sm *scopedModule, readers []reader) (out []step, skipped []string, narrowed bool) {
+// needs it whole; every other member runs as declared, through the cache, which replays
+// it when its key did not move. narrowed is false when there was no test target to narrow.
+func (a *assessment) scopedSteps(sm *scopedModule, readers []reader) (out []step, narrowed bool) {
 	p := sm.project
 	target := types.Normalize(a.in.Target)
 	members := p.TargetChains[target]
@@ -520,9 +515,6 @@ func (a *assessment) scopedSteps(sm *scopedModule, readers []reader) (out []step
 			add(t)
 			narrowed = narrowed || t == "test"
 			continue
-		case !a.reaches(p, t):
-			skipped = append(skipped, t)
-			continue
 		case t != "test" || !runsOp(p, t, sm.placed.Narrows):
 			add(t)
 			continue
@@ -533,7 +525,7 @@ func (a *assessment) scopedSteps(sm *scopedModule, readers []reader) (out []step
 			covered[c] = true
 		}
 	}
-	return out, skipped, narrowed
+	return out, narrowed
 }
 
 // runsOp reports whether target's body invokes op, spelled `spell::op`.
@@ -545,22 +537,6 @@ func runsOp(p *types.Project, target, op string) bool {
 	return slices.ContainsFunc(p.TargetSpellOps[target], func(u types.TargetSpellUse) bool {
 		return u.Spell == spell && slices.Contains(u.Ops, name)
 	})
-}
-
-// reaches reports whether a changed path is among target's declared inputs. A target
-// that declares none keys on the project's sources, so it always runs.
-func (a *assessment) reaches(p *types.Project, target string) bool {
-	if len(p.TargetInputs[target]) == 0 {
-		return true
-	}
-	for _, c := range a.in.Delta.Paths {
-		for _, claim := range a.entries[c.Path].Claims {
-			if claim.Role == "source" && claim.Project == p.Path && types.Normalize(claim.Target) == target {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // chainClosure is target plus every same-project target its chain reaches, normalized

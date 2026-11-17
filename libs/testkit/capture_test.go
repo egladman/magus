@@ -1,7 +1,10 @@
 package testkit
 
 import (
+	"bytes"
 	"fmt"
+	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -93,5 +96,61 @@ func TestCaptureRestoresWhenFnDoesNotReturn(t *testing.T) {
 	t.Run("panic", func(t *testing.T) {
 		assert.Panics(t, func() { CaptureStdout(t, func() { panic("fn") }) })
 		assert.Same(t, orig, os.Stdout)
+	})
+}
+
+func TestCaptureLogReturnsRecordsAtOrAboveTheLevel(t *testing.T) {
+	got := CaptureLog(t, slog.LevelWarn, func() {
+		slog.InfoContext(t.Context(), "quiet")
+		slog.WarnContext(t.Context(), "loud", "key", "v")
+		slog.ErrorContext(t.Context(), "louder")
+		log.Print("plain")
+	})
+
+	assert.NotContains(t, got, "quiet")
+	assert.Contains(t, got, "msg=loud key=v")
+	assert.Contains(t, got, "msg=louder")
+	assert.NotContains(t, got, "plain", "the log package logs at info, below the level")
+}
+
+func TestCaptureLogRestoresTheLoggerAndTheLogPackage(t *testing.T) {
+	prev := slog.Default()
+	var sink bytes.Buffer
+	prevOut, prevFlags := log.Writer(), log.Flags()
+	log.SetOutput(&sink)
+	log.SetFlags(0)
+	t.Cleanup(func() { log.SetOutput(prevOut); log.SetFlags(prevFlags) })
+
+	got := CaptureLog(t, slog.LevelInfo, func() { log.Print("seen") })
+
+	assert.Contains(t, got, "seen")
+	assert.Same(t, prev, slog.Default())
+	assert.Same(t, &sink, log.Writer(), "log output is restored")
+	assert.Equal(t, 0, log.Flags())
+}
+
+// TestCaptureLogRefusesAParallelTest: the default logger is process-wide, so a parallel
+// test would capture its neighbours' records.
+func TestCaptureLogRefusesAParallelTest(t *testing.T) {
+	t.Run("parallel", func(t *testing.T) {
+		t.Parallel()
+		assert.Panics(t, func() { CaptureLog(t, slog.LevelInfo, func() {}) })
+	})
+}
+
+func TestCaptureLogRestoresWhenFnDoesNotReturn(t *testing.T) {
+	orig := slog.Default()
+	t.Run("goexit", func(t *testing.T) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			CaptureLog(t, slog.LevelInfo, runtime.Goexit)
+		}()
+		<-done
+		assert.Same(t, orig, slog.Default())
+	})
+	t.Run("panic", func(t *testing.T) {
+		assert.Panics(t, func() { CaptureLog(t, slog.LevelInfo, func() { panic("fn") }) })
+		assert.Same(t, orig, slog.Default())
 	})
 }

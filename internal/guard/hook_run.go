@@ -17,19 +17,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// staleConfigDependencies loads no rule, since the binary cannot read the
-// workspace's config. The stale-binary rule refuses what changes state.
-func (e HookEnv) staleConfigDependencies(ctx context.Context, rootOverride string, failure error) Dependencies {
-	binary, _ := e.BinaryPath()
-	deps, _ := NewDependencies(ctx, Wiring{BinaryVersion: e.Version, Binary: binary})
-	deps.CacheDir = e.CacheDir(rootOverride)
-	deps.LoadFailure = failure
-	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
-		return nil, failure
-	}
-	return deps
-}
-
 // RunHook judges one hook call whose command line parsed to call. The CLI reports a deny
 // reason on stderr for machine-readable output, while a host adapter has already carried
 // that reason in its host reply and must not leak a second, non-protocol message into the
@@ -42,20 +29,13 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	defer cancelInherited()
 	ctx, cancel := WithHookDeadline(ctx)
 	defer cancel()
-	// Answered as a deny, never as the exit a startup refusal would be: a hook reads a
-	// failed guard as no verdict and fails open, so an environment magus knows is wrong
-	// would disarm every rule for the session. --observe and --message carry no verdict to
-	// deny.
-	envRefusal, _ := ctx.Value(envRefusalKey{}).(error)
-	if refusal := cmp.Or(envRefusal, deadlineErr); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
-		remedy := "Fix the environment the agent host runs in."
-		if envRefusal == nil {
-			remedy = "Retry it; the magus that handed it on sets a fresh deadline."
-		}
+	// A deadline the handing magus spent is answered as a deny, never as an exit: a host
+	// reads a failed guard as no verdict. --observe and --message carry no verdict to deny.
+	if deadlineErr != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   "deny",
-			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. %s", refusal.Error(), remedy),
+			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", deadlineErr.Error()),
 		}
 		if err := e.writeVerdict(out, opts, verdict); err != nil {
 			return err
@@ -97,6 +77,22 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	if by := delegatedBy(ctx); by != "" {
 		self, _ := e.BinaryPath()
 		judge = fmt.Sprintf("Judged by %s, this checkout's own ./magus, which %s handed the call to.", self, by)
+	}
+	// An environment or magus.yaml this magus cannot read loads no policy, so nothing
+	// judges the call: only the workspace's repair passes, as the glue's startup answers.
+	envRefusal, _ := ctx.Value(envRefusalKey{}).(error)
+	staleConfig, _ := ctx.Value(staleConfigKey{}).(error)
+	if cause := cmp.Or(envRefusal, staleConfig); cause != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
+		root, _ := e.FindRoot(judgeRoot)
+		answer, reason := UnjudgedEvent(root, input, cause)
+		verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason, Rule: answer.Rule()}
+		if verdict.Decision == "advise" {
+			verdict.Reason, verdict.Context = "", reason
+		}
+		if err := e.writeVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return verdictExit(errOut, opts, verdict)
 	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := call.Window

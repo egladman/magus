@@ -1403,7 +1403,7 @@ func (r Declaration) Problems() JobProblems {
 	}
 	for i, w := range r.Deviations {
 		at := fmt.Sprintf("deviations[%d]", i)
-		if !Permissible(w.Code) {
+		if !Permissible(w.Code) && !(JobProblem{Code: w.Code, Subject: w.Subject}).Permissible() {
 			invalid(at+".code", fmt.Sprintf("%s permits %q, which is not a permissible code", at, w.Code),
 				fmt.Sprintf("permit only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
 		}

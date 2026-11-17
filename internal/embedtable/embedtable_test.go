@@ -236,5 +236,5 @@ func TestEmbedTablePublishRefusesAFileThatMissesThePin(t *testing.T) {
 
 	_, err = publish(ctx, r.client(), r.ref(pin), filepath.Join(t.TempDir(), fileName), pin)
 	require.ErrorIs(t, err, errAbsent)
-	assert.Contains(t, err.Error(), "magus run table libs/embed/train")
+	assert.Contains(t, err.Error(), "magus run table libs/train")
 }

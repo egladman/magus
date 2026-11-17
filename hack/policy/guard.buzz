@@ -489,7 +489,9 @@ export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
     } catch (e) {
         unreadable = errorText(e);
     }
-    return spawn\decideSpawn(spawnFacts(req), rows: rows, unreadable: unreadable);
+    return spawn\decideSpawn(spawnFacts(req), rows: rows, unreadable: unreadable, once: fun (key: str) > bool {
+        return magus\guard.once(key);
+    });
 }
 
 fun spawnFacts(req: SpawnRequest) > spawn\Spawn {
@@ -516,9 +518,9 @@ test "an integrate spawn for a row bound to another checkout is refused end to e
     final facts = fun (title: str) > spawn\Spawn {
         return spawnFacts(SpawnRequest{ kind = magus\SpawnKind.spawn, description = title, checkout = "/w/main" });
     };
-    final denied = spawn\decideSpawn(facts("orchestrator/integrate land"), rows: rows, unreadable: "");
+    final denied = spawn\decideSpawn(facts("orchestrator/integrate land"), rows: rows, unreadable: "", once: fun (key: str) > bool { return false; });
     std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("`/w/other`") != null, message: denied.decision.value + " " + denied.reason);
-    final allowed = spawn\decideSpawn(facts("orchestrator/integrate here"), rows: rows, unreadable: "");
+    final allowed = spawn\decideSpawn(facts("orchestrator/integrate here"), rows: rows, unreadable: "", once: fun (key: str) > bool { return false; });
     std\assert(allowed.decision == magus\GuardDecision.allow, message: allowed.reason);
 }
 

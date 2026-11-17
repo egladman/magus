@@ -25,6 +25,11 @@ var commonEnvAllow = []string{
 	"LC_MONETARY",
 	"TZ",
 	"TERM",
+	// The repair lines guard.ExportRepairLines hands the hook glue, and the root they
+	// belong to: shell lines and a path, no secret. Stripped, a sandboxed glue could name
+	// no repair, and a hook that cannot judge would refuse its own way out.
+	"__MAGUS_REPAIR_LINES",
+	"__MAGUS_REPAIR_ROOT",
 }
 
 // DefaultAllow returns the base env-var allowlist (cross-platform + platform-specific).

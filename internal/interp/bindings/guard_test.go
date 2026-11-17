@@ -23,7 +23,7 @@ import (
 func TestBuildGuard(t *testing.T) {
 	t.Run("valid shell rule records onto the registry", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil, true)
 
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("no-curl-prod"))
@@ -45,7 +45,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("dialect is kept as written", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil, true)
 
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("x"))
@@ -60,12 +60,12 @@ func TestBuildGuard(t *testing.T) {
 	})
 
 	t.Run("shell is the only rule member", func(t *testing.T) {
-		_, ok := buildGuard(context.Background(), nil, nil).MapGet("bash")
+		_, ok := buildGuard(context.Background(), nil, nil, true).MapGet("bash")
 		assert.False(t, ok)
 	})
 
 	t.Run("invalid dialect is rejected", func(t *testing.T) {
-		guard := buildGuard(context.Background(), nil, nil)
+		guard := buildGuard(context.Background(), nil, nil, true)
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("x"))
 		rule.MapSet("decision", vm.StringValue("deny"))
@@ -79,7 +79,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("builtins records the declared settings onto the registry", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 
 		lines := vm.NewMap()
 		lines.MapSet("decision", vm.StringValue("deny"))
@@ -96,7 +96,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("builtins records declared markers", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 
 		compat := vm.NewMap()
 		compat.MapSet("decision", vm.StringValue("advise"))
@@ -110,7 +110,7 @@ func TestBuildGuard(t *testing.T) {
 	})
 
 	t.Run("bad decision is rejected", func(t *testing.T) {
-		guard := buildGuard(context.Background(), nil, nil)
+		guard := buildGuard(context.Background(), nil, nil, true)
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("x"))
 		rule.MapSet("decision", vm.StringValue("warn"))
@@ -187,7 +187,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := workspace.NewWorkspaceRegistry()
-			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 			err := callVoidDirect(t, requireDirect(t, guard, "builtins"), tc.arg)
 			require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 			assert.ErrorContains(t, err, tc.want)
@@ -196,7 +196,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 	}
 
 	t.Run("every misdeclaration is reported at once", func(t *testing.T) {
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true)
 		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), setting(map[string]vm.Value{
 			"whole-tre":  vm.StringValue("deny"),
 			"stage-all":  vm.StringValue("warn"),
@@ -208,7 +208,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		assert.ErrorContains(t, err, `"whole-tree": want`)
 	})
 	t.Run("declared twice", func(t *testing.T) {
-		builtins := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil), "builtins")
+		builtins := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true), "builtins")
 		require.NoError(t, callVoidDirect(t, builtins, one("whole-tree", vm.StringValue("deny"))))
 		err := callVoidDirect(t, builtins, one("whole-tree", vm.StringValue("deny")))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
@@ -216,12 +216,12 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 	})
 	t.Run("outside the root magusfile", func(t *testing.T) {
 		ctx := interp.WithProjectPath(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), "libs/foo")
-		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil), "builtins"), one("whole-tree", vm.StringValue("deny")))
+		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil, true), "builtins"), one("whole-tree", vm.StringValue("deny")))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "root magusfile")
 	})
 	t.Run("tokens on a rule that takes none", func(t *testing.T) {
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true)
 		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), one("whole-tree", setting(map[string]vm.Value{
 			"decision": vm.StringValue("advise"), "tokens": vm.IntValue(200_000),
 		})))
@@ -229,7 +229,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		assert.ErrorContains(t, err, "takes no tokens parameter")
 	})
 	t.Run("calls below 1 is refused before resolution", func(t *testing.T) {
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true)
 		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), one("whole-tree", setting(map[string]vm.Value{
 			"decision": vm.StringValue("advise"), "calls": vm.IntValue(0),
 		})))
@@ -239,7 +239,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 
 func TestProfileRecordsTheLevel(t *testing.T) {
 	reg := workspace.NewWorkspaceRegistry()
-	guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+	guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 	require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "profile"), vm.StringValue("strict")))
 	assert.Equal(t, types.GuardProfileStrict, reg.Profile())
 }
@@ -260,7 +260,7 @@ func TestProfileMisdeclarationIsCoded(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := workspace.NewWorkspaceRegistry()
-			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 			err := callVoidDirect(t, requireDirect(t, guard, "profile"), tc.args...)
 			require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 			assert.ErrorContains(t, err, tc.want)
@@ -268,7 +268,7 @@ func TestProfileMisdeclarationIsCoded(t *testing.T) {
 		})
 	}
 	t.Run("declared twice", func(t *testing.T) {
-		profile := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil), "profile")
+		profile := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true), "profile")
 		require.NoError(t, callVoidDirect(t, profile, vm.StringValue("strict")))
 		err := callVoidDirect(t, profile, vm.StringValue("off"))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
@@ -277,7 +277,7 @@ func TestProfileMisdeclarationIsCoded(t *testing.T) {
 	t.Run("outside the root magusfile", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		ctx := interp.WithProjectPath(workspace.ContextWithRegistry(t.Context(), reg), "libs/foo")
-		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil), "profile"), vm.StringValue("strict"))
+		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil, true), "profile"), vm.StringValue("strict"))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "root magusfile")
 		assert.Empty(t, reg.Profile())
@@ -413,7 +413,7 @@ magus\guard.command(fun (req: CommandRequest) > any !> any {
 func TestCommandRuleMisdeclarationIsCoded(t *testing.T) {
 	fn := vm.DirectValue("rule", func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil })
 	register := func(ctx context.Context) vm.Value {
-		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil), "command")
+		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil, true), "command")
 	}
 
 	t.Run("not a function", func(t *testing.T) {
@@ -572,7 +572,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict { return magus\guard.al
 func TestSpawnRuleMisdeclarationIsCoded(t *testing.T) {
 	fn := vm.DirectValue("rule", func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil })
 	register := func(ctx context.Context) vm.Value {
-		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil), "spawn")
+		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil, true), "spawn")
 	}
 
 	t.Run("not a function", func(t *testing.T) {

@@ -738,7 +738,7 @@ func auditRead(t *testing.T, path string) string {
 
 // auditIsMagusfile reports whether path is read as a magusfile: by its name, by its
 // magusfiles/ directory, as a std example (a magusfile target body), or because it
-// imports a spell, which only a workspace load binds.
+// imports a spell, as a magusfile or a target definition does.
 func auditIsMagusfile(root, path, src string) bool {
 	base := filepath.Base(path)
 	rel, _ := filepath.Rel(root, path)

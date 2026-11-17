@@ -1092,3 +1092,25 @@ func describeTools(ctx context.Context, root string, args []string) error {
 	}
 	return nil
 }
+
+// emitSchema prints a --schema document. Text is the raw document; any other -o
+// renders the parsed schema, so a template can ask for the few fields it needs
+// instead of paying for all of it. -o name lists the top-level property names.
+func emitSchema(raw string) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format == outputText {
+		fmt.Print(raw)
+		return nil
+	}
+	doc, names, err := describe.ParseSchema(raw)
+	if err != nil {
+		return err
+	}
+	if opts.Format == outputName {
+		return emitNames(os.Stdout, names)
+	}
+	return emitFormatted(opts, doc)
+}

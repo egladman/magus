@@ -348,7 +348,7 @@ final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
 final UNAVAILABLE_TEXT = "magus guard could not judge this call: no magus binary was found";
-final UNREADABLE = "magus guard is NOT running for this call: the hook event on stdin was not JSON, so its deny and advise rules were not applied. Check the Cursor hook configuration and version.";
+final UNREADABLE = "magus guard could not judge this call, so it is refused: the hook event on stdin was not JSON. Check the Cursor hook configuration and version.";
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
 final AGENT_NAME = "--agent-name";
@@ -380,7 +380,7 @@ object Verdict {
     reason: str,
     context: str,
     rule: str = "",
-    // root is the checkout an unjudged call's recovery line rebuilds.
+    // root is the checkout an unjudged call came from.
     root: str = "",
 }
 
@@ -864,7 +864,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
-    if (v.decision == UNJUDGED and (hook\recovers(command, root: v.root) or hook\exitsJob(command))) {
+    if (v.decision == UNJUDGED and hook\recovers(command, root: v.root)) {
         return json\stringify({
             "permission": "allow",
             "user_message": hook\firstLine(v.reason),
@@ -1265,12 +1265,12 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
 fun main(args: [str]) > void {
     final event = json\parse(io\stdin.readAll() catch "") catch null;
     if (event == null) {
-        // No event name to gate on, so this answers with an explicit allow, said
-        // out loud.
+        // No event name to gate on, so this refuses whatever the event was; an event
+        // that reads no permission still logs the reason.
         if (hook\noticeOnce("", family: "unreadable", file: "cursor-hook.buzz")) {
             io\stderr.write(UNREADABLE + "\n") catch void;
         }
-        io\stdout.write(ALLOW) catch void;
+        io\stdout.write(denyBoth(UNREADABLE)) catch void;
         return;
     }
     final eventName = readEventName(event);
@@ -1325,16 +1325,19 @@ test "a call no magus could judge is refused, and the person reads why" {
     std\assert(reply["user_message"] == v.reason, message: "the person reads the whole fix");
 }
 
-test "while no magus judges, Cursor lets the recovery line alone run" {
-    final root = fs\tempDir("cursor-recovery-");
-    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
-    final v = unjudged("v", fix: "f", root: root);
-    final line = hook\recoveryLine(root);
+test "while no magus judges, Cursor lets the repair magus supplied alone run" {
+    final saved = env\get("__MAGUS_REPAIR_LINES") catch "";
+    final savedRoot = env\get("__MAGUS_REPAIR_ROOT") catch "";
+    final line = "magus self update";
+    env\set("__MAGUS_REPAIR_LINES", value: line) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: "/w") catch void;
+    final v = unjudged("v", fix: "f", root: "/w");
     final allowed: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line)) catch {<str: any>};
     std\assert(allowed["permission"] == "allow", message: "{allowed}");
     final refused: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line + " && ls")) catch {<str: any>};
     std\assert(refused["permission"] == "deny", message: "{refused}");
-    fs\removeAll(root);
+    env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
 }
 ```
 
@@ -1511,9 +1514,9 @@ undocumented file format, and `stop` does not fire under `-p`, so it is unverifi
 live.
 
 Cursor fails open on a hook crash or malformed JSON unless the hook sets
-`failClosed`. The script above matches that stance instead of pretending to be
-stricter than the surrounding contract. For strict behavior, set `failClosed` on
-the hook and change its missing-binary branch to a deny.
+`failClosed`, so every entry the harness writes sets it but `stop` and
+`subagentStop`, whose block would resume the agent on work no rule can judge. The
+script refuses a call no magus judged, and an event it cannot read, the same way.
 
 A [session-load adapter](session-load.md#cursor) reads Cursor's transcripts into
 `magus session load`, as the other hosts' adapters do.

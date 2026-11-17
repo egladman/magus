@@ -317,6 +317,7 @@ github.com/egladman/magus.WorkspaceRegistry type struct
 github.com/egladman/magus.WorkspaceRegistry.AddProvider method(ptr) func(spellName string)
 github.com/egladman/magus.WorkspaceRegistry.RegisterProject method(ptr) func(path string, opts ...ProjectOption)
 github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context) *WorkspaceRegistry
+github.com/egladman/magus/libs/testkit.CaptureLog func(tb TB, level log/slog.Leveler, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStderr func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStdout func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.Environ func(root string, keep ...string) ([]string, error)
@@ -1890,6 +1891,7 @@ github.com/egladman/magus/types.DriftResultRecord.Files field []Path
 github.com/egladman/magus/types.DriftResultRecord.Message field string
 github.com/egladman/magus/types.DriftResultRecord.URL field string
 github.com/egladman/magus/types.DriftWarn const DriftPolicy = "warn"
+github.com/egladman/magus/types.DropsSubject const untyped string = "drops "
 github.com/egladman/magus/types.Duplication type struct
 github.com/egladman/magus/types.Duplication.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
 github.com/egladman/magus/types.Duplication.Definition field string "json:\"definition\" yaml:\"definition\""
@@ -1983,9 +1985,11 @@ github.com/egladman/magus/types.ErrUnregisteredDep var error
 github.com/egladman/magus/types.ErrVCSUnknown var error
 github.com/egladman/magus/types.ErrVCSUnsupported var error
 github.com/egladman/magus/types.ErrorDiagnosticEvent func(err error, unit string) (DiagnosticEvent, bool)
-github.com/egladman/magus/types.EvalMemo type struct
-github.com/egladman/magus/types.EvalMemo.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
-github.com/egladman/magus/types.EvalMemoFromContext func(ctx context.Context) *EvalMemo
+github.com/egladman/magus/types.EvalOnce type struct
+github.com/egladman/magus/types.EvalOnce.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
+github.com/egladman/magus/types.EvalOnce.End method(ptr) func()
+github.com/egladman/magus/types.EvalOnce.Ended method(ptr) func() bool
+github.com/egladman/magus/types.EvalOnceFromContext func(ctx context.Context) *EvalOnce
 github.com/egladman/magus/types.EvaluatedProject type struct
 github.com/egladman/magus/types.EvaluatedProject.BuzzObject method func() BuzzObject
 github.com/egladman/magus/types.EvaluatedProject.ProjectEntry embedded ProjectEntry
@@ -2888,6 +2892,7 @@ github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
+github.com/egladman/magus/types.JobProblem.Permissible method func() bool
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
 github.com/egladman/magus/types.JobProblemError type struct
 github.com/egladman/magus/types.JobProblemError.Error method(ptr) func() string
@@ -5306,7 +5311,7 @@ github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path st
 github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []string) context.Context
 github.com/egladman/magus/types.WithDependencyWait func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithDiagnosticSink func(ctx context.Context, s DiagnosticSink) context.Context
-github.com/egladman/magus/types.WithEvalMemo func(ctx context.Context) context.Context
+github.com/egladman/magus/types.WithEvalOnce func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExecCost func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExitCapture func(ctx context.Context) (context.Context, func() (int, bool))
 github.com/egladman/magus/types.WithGraphObserver func(o Observer) GraphOption

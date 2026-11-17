@@ -2810,6 +2810,13 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			return v
 		}
 	}
+	// Before process-poll: a name lookup is refused for what it cannot prove, not for the
+	// poll it may be part of.
+	if parsed && processLookupFires(work) {
+		if v, ok := held.ends(deps, processLookupVerdict); ok {
+			return v
+		}
+	}
 	// Beside busy-wait: both invent a waiter for work magus already tracks. This one is
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(work) {

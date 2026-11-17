@@ -210,8 +210,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // out of it rather than look like a setting magus reads.
 //
 // A call no magus judged fails CLOSED. With magus missing, or unable to
-// answer, every PreToolUse call but a read is refused. Each such call also
-// tells the person how to install or build magus, through systemMessage.
+// answer, every PreToolUse call but the repair line is refused, reads
+// included. Each such call also tells the person how to install or build
+// magus, through systemMessage. A stop is let end, since ending is the one
+// act that leaves nothing unjudged behind.
 //
 // NOTHING here may raise. Claude Code reads a non-zero hook exit other than 2 as a
 // non-blocking error and runs the call anyway, and exit 2 BLOCKS with stderr as the
@@ -309,14 +311,6 @@ final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"Permissi
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
 final PERMISSION_DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson .reason}}}}}{{else if eq .decision "ask"}}`;
 final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}}{{end}}`;
-
-// The Claude Code tools its harness spell lists as reads. Copied: an unjudged
-// call has no magus to ask, and a read may pass it.
-final READ_TOOLS = ["Read", "NotebookRead", "Glob", "Grep", "LS"];
-
-// A subagent files its report through this tool. Refusing it while no magus
-// judges leaves the parent with no word on why the child stopped.
-final HANDBACK_TOOLS = ["SubagentHandback"];
 
 // Nothing arrived, so no rule was ever offered the call. `magus shell`
 // denies an unreadable payload too and leaves this case to its caller.
@@ -567,9 +561,10 @@ fun binDir(bin: str) > str {
 }
 
 // unjudgedReply answers a call no magus judged. Every event shows the person
-// systemMessage. A PreToolUse call that is not a read is refused. A
+// systemMessage. A PreToolUse call is refused, a read or a handback as much
+// as a write: no policy loaded to say which reads it guards. A
 // PermissionRequest leaves the decision to the person's own prompt. The
-// bootstrap line passes, bare or aimed at root: it is the fix the notice names.
+// repair the running magus supplied for root passes: it is the fix the notice names.
 fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix: str, root: str = "") > str {
     final text = "{verdict}\n{fix}";
     if (eventName == "Stop" or eventName == "SubagentStop") {
@@ -579,8 +574,7 @@ fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": eventName}}) catch PERMISSION_NO_DECISION;
     }
-    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null or HANDBACK_TOOLS.indexOf(toolName) != null
-        or hook\recovers(command, root: root) or hook\exitsJob(command)) {
+    if (eventName == "PostToolUse" or hook\recovers(command, root: root)) {
         final named = if (eventName == "PostToolUse") eventName else "PreToolUse";
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": named, "additionalContext": text}}) catch "";
@@ -726,7 +720,7 @@ fun main(args: [str]) > void {
     final note = hook\fallbackNote(cwd);
     var root = hook\workspaceRootAt(cwd);
     if (root == "") { root = hook\binRoot(""); }
-    // Absolute, so the recovery line builds one checkout from anywhere.
+    // Absolute, so a fallback notice names one checkout from anywhere.
     if (root != "") { root = path\abs(root) catch root; }
     var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
@@ -841,21 +835,42 @@ test "an unjudged call that may change state is refused and told to the person" 
     std\assert(reply["systemMessage"] == "v\nf", message: "the person reads the verdict and the fix");
 }
 
-test "the bootstrap line alone passes an unjudged call" {
+test "the repair magus supplied alone passes an unjudged call" {
+    final saved = env\get("__MAGUS_REPAIR_LINES") catch "";
+    final savedRoot = env\get("__MAGUS_REPAIR_ROOT") catch "";
     final line = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
-    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f"));
-    final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-    std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{reply}");
-    final chained = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line + " && ls", verdict: "v", fix: "f"));
-    final chainedSpec: {str: any} = chained["hookSpecificOutput"] ?? {<str: any>};
-    std\assert(chainedSpec["permissionDecision"] == "deny", message: "{chained}");
+    env\set("__MAGUS_REPAIR_LINES", value: line) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: "/w") catch void;
+    foreach (command in [line, " {line} "]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: "/w"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{command}: {reply}");
+    }
+    foreach (command in [line + " && git stash", "git stash", "magus self update"]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: "/w"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == "deny", message: "{command}: {reply}");
+    }
+    env\set("__MAGUS_REPAIR_LINES", value: "") catch void;
+    final none = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: "/w"));
+    final noneSpec: {str: any} = none["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(noneSpec["permissionDecision"] == "deny", message: "no repair supplied, so nothing runs: {none}");
+    final elsewhere = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: "/other"));
+    final elsewhereSpec: {str: any} = elsewhere["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(elsewhereSpec["permissionDecision"] == "deny", message: "another workspace's repair: {elsewhere}");
+    env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
 }
 
-test "an unjudged read passes, and the person still hears of it" {
-    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Read", command: "", verdict: "v", fix: "f"));
-    final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-    std\assert(spec["permissionDecision"] == null, message: "{reply}");
-    std\assert(reply["systemMessage"] == "v\nf", message: "{reply}");
+test "an unjudged read, handback or job exit is refused like any other call" {
+    foreach (tool in ["Read", "Grep", "SubagentHandback"]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: tool, command: "", verdict: "v", fix: "f"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == "deny", message: "{tool}: {reply}");
+    }
+    final exits = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: "./magus job exit x --stdin", verdict: "v", fix: "f"));
+    final exitSpec: {str: any} = exits["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(exitSpec["permissionDecision"] == "deny", message: "{exits}");
 }
 
 test "a stop advise reaches the agent alone" {
@@ -881,23 +896,6 @@ test "a message with no magus to record it says so once per session" {
     final session = "record-{std\random(min: 0, max: 1000000)}";
     std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]).indexOf("systemMessage") != null, message: "first");
     std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]) == "", message: "second");
-}
-
-test "while no magus judges, the recovery line alone runs" {
-    final root = fs\tempDir("command-recovery-");
-    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
-    final line = hook\recoveryLine(root);
-    foreach (command in [line, " {line} "]) {
-        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: root));
-        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-        std\assert(spec["permissionDecision"] == null, message: "{command}: {reply}");
-    }
-    foreach (command in [line + " && git stash", "git stash"]) {
-        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: root));
-        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-        std\assert(spec["permissionDecision"] == "deny", message: "{command}: {reply}");
-    }
-    fs\removeAll(root);
 }
 ```
 
@@ -2526,6 +2524,21 @@ fun output(stop: Stop, host: str, judged: fun (reply: str) > [Finding]) > str {
     return shaped(host, text: text);
 }
 
+// unannounced keeps the findings of rules the session has not been told, and marks
+// each as told. A reply whose every finding repeats yields none, so nothing is sent.
+fun unannounced(found: [Finding], session: str) > [Finding] {
+    final fresh = mut [<Finding>];
+    final told = mut {<str: bool>};
+    foreach (f in found) {
+        if (told[f.rule] == true) { fresh.append(f); continue; }
+        if (hook\noticeOnce(session, family: "reply-rule-{f.rule}", file: "proofread-reply.buzz")) {
+            told[f.rule] = true;
+            fresh.append(f);
+        }
+    }
+    return fresh;
+}
+
 fun main(args: [str]) > void {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_FLAG, DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
     if (parsed == null) { return; }
@@ -2575,7 +2588,7 @@ fun main(args: [str]) > void {
                 fix: "Run `{reader.bin} agent-reply --stdin` on a reply and read why.");
         } else {
             printed = held(pendingStore(), host: host, session: session,
-                printed: output(stop, host: host, judged: judging(judgment.found)));
+                printed: output(stop, host: host, judged: judging(unannounced(judgment.found, session: session))));
         }
     }
     if (printed != "") {
@@ -2701,6 +2714,16 @@ test "a reply made while continuing is not judged, so the agent cannot loop" {
         final printed = output(Stop{ reply = "Done.", again = true }, host: host, judged: judging([offer]));
         std\assert(printed == "", message: "{host}: {printed}");
     }
+}
+
+test "a rule is named once per session and a reply of repeats sends nothing" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    final first = unannounced([offer, offer], session: session);
+    std\assert(first.len() == 2, message: "both findings of a new rule go out: {first.len()}");
+    std\assert(unannounced([offer], session: session).len() == 0, message: "a repeat is held back");
+    final other = Finding{ rule = "bold-label", line = 1, message = "Open." };
+    final mixed = unannounced([offer, other], session: session);
+    std\assert(mixed.len() == 1 and mixed[0].rule == "bold-label", message: "only the new rule: {mixed.len()}");
 }
 
 test "nothing to advise prints nothing" {

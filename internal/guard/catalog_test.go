@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -699,8 +700,12 @@ func (s *remedyContractSuite) TestOutputRedirect() {
 	)
 }
 
+func (s *remedyContractSuite) TestProcessLookup() {
+	s.contract(denyRuleProcessLookup, refused("pgrep -fl magus", "magus server status"))
+}
+
 func (s *remedyContractSuite) TestProcessPoll() {
-	s.contract(denyRuleProcessPoll, refused("pgrep -fl magus", "magus server status"))
+	s.contract(denyRuleProcessPoll, refused("ps -p 4242", "magus server status"))
 }
 
 func (s *remedyContractSuite) TestProcessSignal() {
@@ -749,6 +754,24 @@ func (s *remedyContractSuite) TestStageAll() {
 
 func (s *remedyContractSuite) TestSymbolSearch() {
 	s.contract(denyRuleSymbolSearch, refused("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011"))
+}
+
+// TestUnjudgedStep grades the install line for the one caller it is served to:
+// a host whose tool rows could not be read.
+func (s *remedyContractSuite) TestUnjudgedStep() {
+	t := s.T()
+	ctx, _, deps := servedFleet(t)
+	root := hookLocation(ctx, Dependencies{}).workspace
+	call := Request{
+		Input: toolEnvelope(t, "unjudged-remedy", root, "mcp__browser__click", map[string]any{"ref": "e1"}),
+		Host:  "claude-code", Session: "unjudged-remedy", Dir: root, DryRun: true,
+		Tools: agent.FindToolRows(t.TempDir(), "claude-code"),
+	}
+	v := Judge(ctx, deps, call)
+	require.Equal(t, string(denyRuleUnjudgedStep), v.Rule, v.Reason)
+	require.Len(t, v.NextSteps, 1)
+	assertRunsOnTheTree(t, v.NextSteps[0].Run)
+	gradeServed(t, ctx, deps, call, "unread tool rows", v.NextSteps[0].ID, v.NextSteps[0].Run)
 }
 
 func (s *remedyContractSuite) TestWorktreeRemove() {

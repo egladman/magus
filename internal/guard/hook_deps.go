@@ -47,9 +47,6 @@ func (e HookEnv) LoadDependencies(ctx context.Context, rootOverride string) (Dep
 // loadDependenciesAt is LoadDependencies for a call whose authority
 // resolved: its policy loads from the row's checkout at the row's revision.
 func (e HookEnv) loadDependenciesAt(ctx context.Context, rootOverride string, authority CallAuthority) (Dependencies, *WorkspaceRules) {
-	if failure, ok := ctx.Value(staleConfigKey{}).(error); ok {
-		return e.staleConfigDependencies(ctx, rootOverride, failure), nil
-	}
 	root, err := e.FindRoot(rootOverride)
 	if err != nil {
 		root = ""

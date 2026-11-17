@@ -27,6 +27,12 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 	// String concatenation (OpAdd only)
 	if op == OpAdd {
 		if left.tag() == tagStr {
+			// A short left is interned with right, as appendString would, so
+			// staging right in the scratch first copies it twice and leaves the
+			// scratch at right's size for the VM's life.
+			if l := vm.asString(left); l.buf == nil && len(l.V) < strBufThreshold {
+				return StringValue(l.V + right.String()), nil
+			}
 			vm.strScratch = append(vm.strScratch[:0], right.String()...)
 			return appendString(left, vm.strScratch), nil
 		}

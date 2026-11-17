@@ -27,7 +27,6 @@ final METHODS = ["squash", "rebase", "merge"];
 // the queue's marks before they moved to `queue:`.
 final RETIRED = [
     "merge-queue: queued", "merge-queue: kicked back", "merge-queue: needs regeneration",
-    "magus:regenerate:requested", "magus:regenerate:done",
     "bug", "documentation", "duplicate", "enhancement", "good first issue", "help wanted", "invalid", "question", "wontfix",
 ];
 
@@ -119,7 +118,7 @@ test "the commands delete, then edit the intent labels, then create the answers"
     final got = commands("o/r");
     assert\equal(got.len(), want: RETIRED.len() + METHODS.len() + ANSWERS.len(), message: "one command per label");
     assert\equal(got[0], want: `gh label delete -R o/r "merge-queue: queued" --yes`, message: "an old mark");
-    assert\equal(got[5], want: `gh label delete -R o/r bug --yes`, message: "a bare word stays bare");
+    assert\equal(got[3], want: `gh label delete -R o/r bug --yes`, message: "a bare word stays bare");
     assert\equal(got[RETIRED.len()],
         want: `gh label edit -R o/r "merge-queue: squash" --color 0E8A16 --description "Queue this pull request, or the stack it tops, to merge by squash"`,
         message: "an intent label keeps its name");

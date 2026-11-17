@@ -147,7 +147,13 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 // there is no table. The zero value is a table that was never asked for.
 type ToolRows struct {
 	// Dir is the directory as the wiring named it, "" when it named none.
-	Dir          string
+	Dir string
+	// Host is the host the rows were looked up for, "" when no lookup named one.
+	Host string
+	// FellBackTo is the primary checkout whose installed rows stand in for root's own, ""
+	// when the rows are root's. A linked worktree is made fresh, so it holds none until
+	// the install runs there.
+	FellBackTo   string
 	abs          string
 	capabilities map[string]types.ToolCapability
 	Err          error
@@ -241,9 +247,25 @@ func (r ToolRows) Models() (ModelFacts, error) {
 const toolRowsGlob = ".*/magus/tools/" + types.ToolHostFile
 
 // FindToolRows reads the tool rows directory installed for host under root: the one whose
-// host file names it. None is an Err naming the install that writes it, so the rules that
-// read the rows report the gap rather than judge without them unsaid.
+// host file names it. A linked worktree with none installed reads the primary checkout's, and
+// the result's FellBackTo names it. None anywhere is an Err naming the install that writes
+// them, so the rules that read the rows report the gap rather than judge without them unsaid.
 func FindToolRows(root, host string) ToolRows {
+	rows := findInstalledRows(root, host)
+	if rows.Dir == "" && rows.Err != nil {
+		if primary, ok := primaryCheckoutRoot(root); ok {
+			if fallback := findInstalledRows(primary, host); fallback.Err == nil {
+				fallback.FellBackTo = primary
+				rows = fallback
+			}
+		}
+	}
+	rows.Host = host
+	return rows
+}
+
+// findInstalledRows is FindToolRows over root alone.
+func findInstalledRows(root, host string) ToolRows {
 	matches, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(toolRowsGlob)))
 	for _, m := range matches {
 		body, err := os.ReadFile(m)
@@ -257,6 +279,32 @@ func FindToolRows(root, host string) ToolRows {
 		return readToolRows(root, filepath.ToSlash(dir))
 	}
 	return ToolRows{Err: fmt.Errorf("no tool rows are installed for %s, so write them with `magus agent harness install`", host)}
+}
+
+// primaryCheckoutRoot is the primary checkout of the repository a linked worktree at root
+// belongs to. False when root is the primary checkout or no git worktree.
+func primaryCheckoutRoot(root string) (string, bool) {
+	body, err := os.ReadFile(filepath.Join(root, ".git"))
+	if err != nil {
+		return "", false
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(body)), "gitdir:")
+	if !ok {
+		return "", false
+	}
+	gitdir = strings.TrimSpace(gitdir)
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(root, gitdir)
+	}
+	i := strings.LastIndex(gitdir, fmt.Sprintf("%[1]cworktrees%[1]c", filepath.Separator))
+	if i < 0 {
+		return "", false
+	}
+	common := gitdir[:i]
+	if filepath.Base(common) != ".git" {
+		return "", false
+	}
+	return filepath.Dir(common), true
 }
 
 // Limits reads the host's limits installed beside the rows; the error says why there are

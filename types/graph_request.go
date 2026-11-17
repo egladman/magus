@@ -26,6 +26,7 @@ var (
 
 // SymbolsMentioning loads the shards that mention ref when it is an exact symbol ID or a name
 // defined in the workspace, and every shard for a fuzzy name. An empty ref is AllSymbols.
+// It suits a one-shot lookup.
 func SymbolsMentioning(ref string) SymbolScope {
 	if ref == "" {
 		return AllSymbols

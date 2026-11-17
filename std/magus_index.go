@@ -26,7 +26,7 @@ type symbolIndexWorkspace interface {
 // digest would then claim completeness.
 // languages limits the freshen to those indexes; empty freshens all.
 // One evaluation computes the digest once per languages list, so every
-// graph read sees the index as the evaluation began, as EvalMemo promises.
+// graph read sees the index as the evaluation began, as EvalOnce promises.
 //
 // optimization: one freshen and digest per languages list.
 //
@@ -34,11 +34,11 @@ type symbolIndexWorkspace interface {
 //	trade-off: an evaluation never sees an index move it caused.
 //	assumes: heldGraph compares digests within one evaluation.
 func MagusSymbolIndexDigest(ctx context.Context, languages []string) (types.SymbolIndexDigest, error) {
-	memo := types.EvalMemoFromContext(ctx)
-	if memo == nil {
+	once := types.EvalOnceFromContext(ctx)
+	if once == nil {
 		return symbolIndexDigest(ctx, languages)
 	}
-	v, err := memo.Do("symbol-index-digest:"+strings.Join(languages, ","), func() (any, error) {
+	v, err := once.Do("symbol-index-digest:"+strings.Join(languages, ","), func() (any, error) {
 		return symbolIndexDigest(ctx, languages)
 	})
 	if err != nil {
@@ -61,9 +61,11 @@ func symbolIndexDigest(ctx context.Context, languages []string) (types.SymbolInd
 		return types.SymbolIndexDigest{}, err
 	}
 	// The build writes the shards the digest reads. It runs on a fresh
-	// memo, since a graph this evaluation built before the freshen
+	// EvalOnce, since a graph this evaluation built before the freshen
 	// predates the shards the freshen moved.
-	if _, err := w.KnowledgeGraph(types.WithEvalMemo(ctx), types.GraphRequest{}); err != nil {
+	build := types.WithEvalOnce(ctx)
+	defer types.EvalOnceFromContext(build).End()
+	if _, err := w.KnowledgeGraph(build, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	d, err := knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()

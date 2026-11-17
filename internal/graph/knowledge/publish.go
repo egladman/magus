@@ -183,7 +183,7 @@ func GraphReference(ref, tag string) (oci.Reference, error) {
 }
 
 // TablePush publishes the cached embedding table under its pin. The release runs it
-// after `magus run table libs/embed/train`; a table that does not hash to the pin is
+// after `magus run table libs/train`; a table that does not hash to the pin is
 // refused, never published under a tag of its own.
 func TablePush(ctx context.Context, repo, user string, registry *http.Client) (RegistryOutput, error) {
 	var none RegistryOutput

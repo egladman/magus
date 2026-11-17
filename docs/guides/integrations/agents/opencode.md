@@ -252,9 +252,10 @@ is running read-only magus commands.
   throws that reason as the tool error. Reads and the rebuild still pass. The
   orchestrator or the person rebuilds `./magus` (`./magus run go-build .`, or the
   bootstrap the deny names); a leased worker asks the orchestrator to place one.
-- The plugin fails open when magus cannot be run at all, and says so in the log.
-  Throwing is OpenCode's only way to stop a call, so a guard that threw on a
-  missing binary would block every tool call and make the session unusable.
+- The plugin refuses a call when magus cannot be run at all, and says why in the
+  thrown error, as every host's wiring does for a guard that cannot judge. Unlike
+  the hook wirings it lets no repair line through, so the person builds or
+  installs magus from their own terminal.
 - Tool identifiers were read from live calls on OpenCode 1.18.30: `bash` carries
   `command`; `edit` carries `filePath`, `oldString` and `newString`; `task` carries
   `subagent_type`, `prompt` and `description`. An MCP tool arrives as

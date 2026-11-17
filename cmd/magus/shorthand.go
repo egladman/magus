@@ -7,6 +7,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // installShorthandCommand implements `magus self install-shorthand`.
@@ -16,7 +17,7 @@ func installShorthandCommand(args []string) error {
 	fs.SetOutput(os.Stderr)
 	fs.Usage = installShorthandUsage
 	sf := flaggen.BindSelfInstallShorthand(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {

@@ -57,7 +57,7 @@ const RegeneratedLimit = 12
 //
 // It sees declarations only. A coupling nobody declares, such as a version constant a test
 // pins, is not here.
-func RegeneratedOutside(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []RegeneratedOutput {
+func RegeneratedOutside(root string, row types.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []RegeneratedOutput {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
 	}
@@ -114,7 +114,10 @@ func RegeneratedOutside(root string, row types.Job, projects []*types.Project, i
 			all = append(all, probes[i]...)
 		}
 		gone := map[string]bool{}
-		for _, p := range ignored(all) {
+		// A failed query ignores nothing: listing an output the VCS would have hidden costs a
+		// line, while hiding a committed one is the miss this exists to prevent.
+		hidden, _ := ignored(all)
+		for _, p := range hidden {
 			gone[filepath.ToSlash(p)] = true
 		}
 		kept := found[:0]
@@ -143,23 +146,22 @@ func RegeneratedOutside(root string, row types.Job, projects []*types.Project, i
 }
 
 // VCSIgnored answers RegeneratedOutside's ignored question from the VCS at root, or returns
-// nil when there is none to ask. A query that fails ignores nothing: listing an output the
-// VCS would have hidden costs a line, while hiding a committed one is the miss this exists
-// to prevent.
-func VCSIgnored(ctx context.Context, root string) func([]string) []string {
+// nil when there is none to ask. A query that fails returns its error, and each caller
+// decides what an unanswered question means.
+func VCSIgnored(ctx context.Context, root string) func([]string) ([]string, error) {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
 		return nil
 	}
-	return func(paths []string) []string {
+	return func(paths []string) ([]string, error) {
 		if len(paths) == 0 {
-			return nil
+			return nil, nil
 		}
 		ignored, err := res.VCS.IgnoredFiles(ctx, root, paths)
 		if err != nil {
-			return nil
+			return nil, fmt.Errorf("%s could not say which paths it ignores: %w", res.Name, err)
 		}
-		return ignored
+		return ignored, nil
 	}
 }
 

@@ -19,7 +19,9 @@ Changelog group heading, a blank line, and one or more entries.
 - Each entry opens with a bold headline, ends with a period, continues on lines
   indented two spaces, and stays within 60 words.
 - A breaking change starts its headline with `Breaking:` (or `Breaking for SDK
-  callers:`).
+  callers:`). The pull request title then carries `!` after its type, and a `!`
+  title that owes a fragment needs one such entry; `pr-changelog` refuses either
+  marker without the other.
 - Name the file after the branch, `unreleased/<branch>.md`. Entries under two
   groups are two files. Within a group, entries render in file-name order, then in
   the order written.

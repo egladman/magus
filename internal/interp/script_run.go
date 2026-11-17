@@ -36,6 +36,9 @@ type ScriptHost struct {
 	RegisterSpellDecls     func(sess *buzz.Session)
 	RegisterMagusNamespace func(ctx context.Context, sess *buzz.Session)
 	DeclareMagusTypes      func(sess *buzz.Session) error
+	// RegisterSpellImports binds `magus/spell/*` to the spells this build ships, as a
+	// magusfile load does, for a check that opens no workspace.
+	RegisterSpellImports func(sess *buzz.Session)
 }
 
 // ScriptOptions are the switches that shape one script run.
@@ -451,7 +454,7 @@ func (r *ScriptRunner) Context(ctx context.Context, root string) (context.Contex
 	return trail.ContextWithBase(sctx, ws.CacheDir), nil
 }
 
-// RunContext is Context plus one memo for the run.
+// RunContext is Context plus one EvalOnce for the run.
 // So every magus\graph() read answers from one build, as a spell's do.
 // Without it each refs call rebuilt the symbol graph, about 12s apiece here.
 func (r *ScriptRunner) RunContext(ctx context.Context, root string) (context.Context, error) {
@@ -459,5 +462,5 @@ func (r *ScriptRunner) RunContext(ctx context.Context, root string) (context.Con
 	if err != nil {
 		return nil, err
 	}
-	return types.WithEvalMemo(ctx), nil
+	return types.WithEvalOnce(ctx), nil
 }

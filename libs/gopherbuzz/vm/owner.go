@@ -42,7 +42,7 @@ func (o *Owner) Claim(vals ...Value) {
 // method merged into a module table, an enum set on a namespace) is found only
 // by this deeper walk, which looks through the owner's own slots; Session.Close
 // passes its globals and native modules. Slots another owner holds still bound
-// it. Releasing twice does nothing. Any Value into a released slot is dangling:
+// it. A second pass would take what a reused slot now holds, so Session releases once. Any Value into a released slot is dangling:
 // the slot reads as nil until an allocation reuses it.
 func (o *Owner) Release(roots ...Value) {
 	if o != nil {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/clikit/command"
 	"io"
 	"os"
 	"strings"
@@ -60,7 +61,7 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	}
 	// -y and --yes are one switch, which the registry expresses with AliasOf.
 	uf := flaggen.BindSelfUpdate(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	format, err := outputOptionsOrDefault()

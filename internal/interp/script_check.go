@@ -30,7 +30,6 @@ func (r *ScriptRunner) Check(ctx context.Context, files []string, embedded bool)
 	// reused session would report the second file against the first file's scope and
 	// skip its imports as already-loaded.
 	failed := 0
-	noted := false
 	for _, path := range files {
 		diags, err := r.CheckFile(ctx, path, embedded)
 		if err != nil {
@@ -43,9 +42,10 @@ func (r *ScriptRunner) Check(ctx context.Context, files []string, embedded bool)
 			}
 			failed++
 			slog.LogAttrs(ctx, level, d.String(), attr.Notice(""))
-			if !noted && spellImportUnresolved(d) {
-				slog.InfoContext(ctx, spellImportNote, attr.Notice("note"))
-				noted = true
+			if handle, ok := unresolvedSpellHandle(d); ok {
+				if err := CheckSpellImports([]string{handle}); err != nil {
+					slog.InfoContext(ctx, "unresolved spell import", attr.Hint(), attr.Error(err))
+				}
 			}
 		}
 	}
@@ -68,7 +68,9 @@ func (r *ScriptRunner) CheckFile(ctx context.Context, path string, embedded bool
 		return nil, err
 	}
 	var opts []buzz.Option
-	if embedded {
+	// A file importing a spell module is only ever loaded by the workspace loader,
+	// which reads it embedded, so --check judges it by those rules and not upstream's.
+	if embedded || ImportsSpell(string(data)) {
 		opts = append(opts, buzz.WithEmbedded())
 	}
 	sess := buzz.NewSession(ctx, opts...)
@@ -85,6 +87,10 @@ func (r *ScriptRunner) CheckFile(ctx context.Context, path string, embedded bool
 	if err != nil {
 		return nil, err
 	}
+	// The bindings a magusfile load gives `magus/spell/*`, so a magusfile or a
+	// target definition checks as a standalone file. No workspace is open, so no
+	// magus.yaml override applies: every import binds the spell this build ships.
+	r.Host.RegisterSpellImports(sess)
 
 	diags := sess.Diagnostics(string(data))
 	if err := lateErr(); err != nil {
@@ -106,40 +112,26 @@ func (r *ScriptRunner) CheckFile(ctx context.Context, path string, embedded bool
 	return diags, nil
 }
 
-// spellImportUnresolved reports whether d is the one diagnostic --check raises
-// that does not mean what it says: a magusfile's `import "magus/spell/<name>"`.
-//
-// Those paths are bound by the workspace loader from the resolved spell registry
-// (internal/interp/runtime.go), so a bare session has nothing to resolve them
-// against and reports BZZ2001. The import is fine; this mode just cannot see it.
+// unresolvedSpellHandle returns the <handle> of an unresolved
+// `import "magus/spell/<handle>"` d reports. Every spell this build ships is bound
+// during a check, so such a diagnostic is a genuine miss, and the caller names the
+// spells that do resolve.
 //
 // The code is matched in EITHER position, because an unresolved import arrives by two
 // routes that disagree about where it lands. A checker error carries it in Code; an
 // import that fails during resolution surfaces as a parse error, and that path
-// (Session.Diagnostics) renders the whole thing into Msg and leaves Code empty. Reading
-// only Code silently missed every real instance, since resolution is the route this
-// one actually takes.
-func spellImportUnresolved(d buzz.Diagnostic) bool {
-	if !strings.Contains(d.Msg, spellModulePrefix) {
-		return false
+// (Session.Diagnostics) renders the whole thing into Msg and leaves Code empty.
+func unresolvedSpellHandle(d buzz.Diagnostic) (string, bool) {
+	if string(d.Code) != unresolvedImportCode && !strings.Contains(d.Msg, unresolvedImportCode) {
+		return "", false
 	}
-	return string(d.Code) == unresolvedImportCode || strings.Contains(d.Msg, unresolvedImportCode)
+	_, rest, ok := strings.Cut(d.Msg, `"`+spellModulePrefix)
+	if !ok {
+		return "", false
+	}
+	handle, _, ok := strings.Cut(rest, `"`)
+	return handle, ok && handle != ""
 }
-
-// spellImportNote follows an unresolved spell import.
-//
-// It is printed rather than suppressed, and the diagnostic still fails, because the
-// same code covers a genuine typo (`magus/spell/gooo`) and this mode cannot tell
-// the two apart. What it CAN do is name the check that does settle it.
-//
-// That check is reassuring, and it bounds what this verb is for. A file importing a
-// spell module is loaded by magus itself, and loading reports exactly these errors, so
-// a magusfile and a target definition are the Buzz files that already had a check. The
-// ones that did not are the ones nothing loads: a standalone script, and hook glue
-// whose whole job is a side effect.
-const spellImportNote = "magus/spell/* is bound by the workspace loader, so --check cannot resolve it. " +
-	"A file that imports one (a magusfile, a target definition) is checked by loading it: " +
-	"any magus command reports its errors."
 
 const (
 	// unresolvedImportCode is gopherbuzz's unresolved-import code, spelled here rather

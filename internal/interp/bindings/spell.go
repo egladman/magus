@@ -328,12 +328,12 @@ func noResult() (any, error) {
 // declared command as a subprocess. An unknown target is a no-op, matching the
 // fan-out-and-skip dispatch model. Every op is a command; in-VM work (a cache
 // backend) is dispatched separately (see newBuzzSpellInvoker), not through here.
-// readinessMemo records the outcome of each readiness probe per (bin, dir) for the
+// readinessOnce records the outcome of each readiness probe per (bin, dir) for the
 // life of the process. A probe forks, so re-running it for every op of every project
 // would cost more than the failure it prevents; and its answer cannot change mid-run
 // in a way magus could act on: a daemon that dies after the check fails the op
 // anyway, with the tool's own message.
-var readinessMemo sync.Map // key "bin\x00dir" -> error (nil when ready)
+var readinessOnce sync.Map // key "bin\x00dir" -> error (nil when ready)
 
 // checkReady gates an op on its tool being usable, when the spell declared a probe
 // for that tool. Resolved through the op's own Bin, so no op restates which tool it
@@ -355,7 +355,7 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 func toolReady(ctx context.Context, tool string, t spells.Tool, dir string) error {
 	probe := t.Ready
 	key := fmt.Sprintf("%s\x00%s", tool, dir)
-	if cached, hit := readinessMemo.Load(key); hit {
+	if cached, hit := readinessOnce.Load(key); hit {
 		if cached == nil {
 			return nil
 		}
@@ -364,12 +364,12 @@ func toolReady(ctx context.Context, tool string, t spells.Tool, dir string) erro
 	}
 	out := probeUntilReady(ctx, probe, tool, dir)
 	// A context error means THIS run was interrupted (Ctrl-C, a deadline), not that
-	// the tool is unready: the memo's "cannot change mid-run" justification above
+	// the tool is unready: readinessOnce's "cannot change mid-run" justification above
 	// assumes one process per run, but the server is one process spanning many runs,
 	// so storing it here would fail every later run's probe on this (bin, dir) with a
 	// stale "context canceled" for as long as the server lives.
 	if !errors.Is(out, context.Canceled) && !errors.Is(out, context.DeadlineExceeded) {
-		readinessMemo.Store(key, out)
+		readinessOnce.Store(key, out)
 	}
 	return out
 }
@@ -818,8 +818,9 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 	if err != nil {
 		// A plain Buzz library imported by name (not a spell) is expected here:
 		// resolution falls through to a normal module import. Only a genuinely
-		// malformed spell is worth logging.
-		if !errors.Is(err, spell.ErrNotASpell) {
+		// malformed spell is worth logging; a file that vanished after the directory
+		// listing is not malformed.
+		if !errors.Is(err, spell.ErrNotASpell) && !errors.Is(err, fs.ErrNotExist) {
 			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not load a local Buzz spell", slog.String("path", path), attr.Error(err))
 		}
 		return spells.Descriptor{}, false

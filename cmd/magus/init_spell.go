@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/scaffold"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // initSpellCommand implements `magus init spell <name>`: scaffold a new spell at
@@ -28,7 +29,7 @@ func initSpellCommand(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {

@@ -1682,20 +1682,20 @@ func (s *evaluationKnowledgeGraphSuite) read(ctx context.Context, refresh bool) 
 }
 
 func (s *evaluationKnowledgeGraphSuite) TestOneEvaluationReadsTheWarmGraphOnce() {
-	ctx := types.WithEvalMemo(s.T().Context())
+	ctx := types.WithEvalOnce(s.T().Context())
 	first := s.read(ctx, false)
 	s.Same(first, s.read(ctx, false))
 	s.Equal(1, s.rebuilds)
 }
 
 func (s *evaluationKnowledgeGraphSuite) TestANewEvaluationReadsItAgain() {
-	s.read(types.WithEvalMemo(s.T().Context()), false)
-	s.read(types.WithEvalMemo(s.T().Context()), false)
+	s.read(types.WithEvalOnce(s.T().Context()), false)
+	s.read(types.WithEvalOnce(s.T().Context()), false)
 	s.Equal(2, s.rebuilds)
 }
 
 func (s *evaluationKnowledgeGraphSuite) TestARefreshRebuildsInsideAnEvaluation() {
-	ctx := types.WithEvalMemo(s.T().Context())
+	ctx := types.WithEvalOnce(s.T().Context())
 	s.read(ctx, false)
 	s.read(ctx, true)
 	s.Equal(2, s.rebuilds)
