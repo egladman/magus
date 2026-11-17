@@ -1988,11 +1988,11 @@ func envelopeWritePath(input map[string]any) string {
 // The tool labels recorded on an activity event. They are magus's OWN vocabulary, chosen by
 // the call's shape and the flags the wrapper passed, never a host's tool name.
 //
-// A host's words for its tools live in one place, knownTools in tools.go, the table a
+// A host's words for its tools live in its harness spell's mgs_listTools rows, the table a
 // catch-all hook entry needs because it cannot say per tool what the tool does. The
-// hostvocab linter keeps them there: a host's word for a tool may not appear as a string
-// literal anywhere else in guard code, since a switch over "Read"/"Bash" is a per-host
-// branch the hostagnostic linter cannot see.
+// hostvocab linter keeps them out of guard code: a host's word for a tool may not appear as
+// a string literal there, since a switch over "Read"/"Bash" is a per-host branch the
+// hostagnostic linter cannot see.
 const (
 	hookToolCommand = "shell.command"
 	hookToolWrite   = "file.write"
