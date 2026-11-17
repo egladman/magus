@@ -289,11 +289,3 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 	global.output = string(outputJSON)
 	assert.Error(t, queryCommand(context.Background(), "", []string{"output", "--stdin"}), "-o json with --stdin")
 }
-
-func jsonMarshalLine(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := renderJSONL(&buf, []any{v}); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}

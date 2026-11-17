@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"time"
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
@@ -32,7 +31,3 @@ func printSessionContact(w io.Writer, root string, node types.KnowledgeNode) {
 func sessionContact(root string, node types.KnowledgeNode) *sessions.PathContact {
 	return sessions.ContactForNode(node, func() (string, error) { return sessions.Dir(resolveRootOrEmpty(root)) })
 }
-
-func countNoun(n int, noun string) string { return sessions.CountNoun(n, noun) }
-
-func humanAge(t time.Time) string { return sessions.HumanAge(t) }

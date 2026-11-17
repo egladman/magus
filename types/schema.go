@@ -1,7 +1,6 @@
 package types
 
 import (
-	"maps"
 	"reflect"
 	"slices"
 
@@ -39,12 +38,6 @@ func (s Schema) Unmet(known []string) []string {
 		}
 	}
 	return out
-}
-
-func (s Schema) clone() Schema {
-	s.Requires = slices.Clone(s.Requires)
-	s.Unknown = maps.Clone(s.Unknown)
-	return s
 }
 
 // FormatLedger is the evolution record of one versioned type, read by the conventions

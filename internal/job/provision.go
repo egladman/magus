@@ -129,7 +129,7 @@ func bootstrapCheckout(ctx context.Context, disk Disk, exe, forker, dir string, 
 		return fmt.Errorf("magus job fork: %s holds a hook to build its own ./magus, and %s has %s", dir, forker, NoCheckoutHook)
 	}
 	args := append([]string{"buzz", hook, "--", "--checkout", dir}, flags...)
-	cmd := exec.CommandContext(ctx, exe, args...) //nolint:gosec // exe is the running magus binary or its own placed copy
+	cmd := exec.CommandContext(ctx, exe, args...)
 	var output bytes.Buffer
 	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
 	if err := cmd.Run(); err != nil {
