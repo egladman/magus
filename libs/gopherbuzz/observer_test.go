@@ -71,9 +71,9 @@ func TestPoolObserverFiresPerTarget(t *testing.T) {
 	assert.Contains(t, got["boom"].Error(), "kaboom")
 }
 
-// TestPoolObserverDedupedByMemo verifies a target needed twice under one memo runs —
+// TestPoolObserverSeesASharedTargetOnce verifies a target needed twice under one TargetRuns runs —
 // and is observed — exactly once.
-func TestPoolObserverDedupedByMemo(t *testing.T) {
+func TestPoolObserverSeesASharedTargetOnce(t *testing.T) {
 	p := observerTestPool(t)
 	defer func() { _ = p.Close() }()
 
@@ -81,9 +81,9 @@ func TestPoolObserverDedupedByMemo(t *testing.T) {
 	ctx := WithObserver(WithTargetRuns(context.Background(), NewTargetRuns()), obs)
 
 	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil))
-	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil)) // second need: memo serves the cached result
+	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil)) // second need: the run entry serves the cached result
 
-	assert.Equal(t, 1, obs.count(), "a memo-deduped target is observed exactly once")
+	assert.Equal(t, 1, obs.count(), "a target shared through TargetRuns is observed exactly once")
 }
 
 type countingObserver struct {
@@ -141,7 +141,7 @@ func TestPoolObserverColdThenReuse(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	obs := &recordingPoolObserver{}
-	// No memo: each Dispatch must actually run "ok" (a shared memo would dedupe the
+	// No TargetRuns: each Dispatch must actually run "ok" (a shared TargetRuns would dedupe the
 	// second call and skip its checkout, hiding the reuse we want to observe).
 	ctx := WithPoolObserver(context.Background(), obs)
 
