@@ -73,4 +73,3 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 
 	assert.Equal(t, exit.Usage, mapExitCode(err))
 }
-

@@ -144,4 +144,3 @@ func heldRequests(row Job) []ReleaseRequest {
 		})
 	})
 }
-

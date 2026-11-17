@@ -130,7 +130,7 @@ and the module's trail both import; decided by Eli on 2026-11-16.
 The root package holds only the package doc. Call sites read `verdict.Deny` or
 `job.Covers`, never a themed name.
 
-The trail's writer will live in `libs/safetyscissors/internal`, so only the module's own
+This decision puts the trail's writer in `libs/safetyscissors/internal`, so only the module's own
 packages append to it, and the public `trail` package exports reading only. The writer
 moves with the guard, which is the first of the module's packages to record anything. magus keeps
 its own events in its own trail. This is part 7's refusal of a caller writing the trail,
@@ -644,7 +644,7 @@ the text above:
 
 The text above is kept as written, and the State column says what exists.
 
-### 2026-11-16: decisions for steps 9 and 11, Eli to confirm
+### 2026-11-16: decisions for steps 9 and 11, for the owner to confirm
 
 The orchestrator took these while Eli was away, for the job store and sandbox briefs.
 None is built yet.

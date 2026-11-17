@@ -33,7 +33,7 @@
   `safetyscissors-sandbox-launch`, where it was `magus-sandbox-launch`. magus passes
   `magus-sandbox-launch`.
 - **The macOS seatbelt base lets a confined process start.** It reads `/System`,
-  `/private/var/db/dyld`, `/dev/urandom`, `/dev/tty` and `/dev/fd`, and reads and writes
+  the dyld shared cache, `/dev/urandom`, `/dev/tty` and `/dev/fd`, and reads and writes
   `/dev/null`. An exec of a symlink is granted when an exec rule covers its target.
 - **`sandbox/filesystem` errors start with `filesystem:`.**
 - **Breaking: `libs/secrets` refuses an endpoint when `http.DefaultTransport` is not an

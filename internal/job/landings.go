@@ -163,7 +163,7 @@ func (s *Store) readLandingProbes() probeLog {
 
 // writeLandingProbes records next against log, the history it was decided from: the
 // entries that changed are appended, and the file is rewritten to next alone when next
-// drops an entry or the log is [file.CompactDue]. It returns the write's error.
+// drops an entry or the log is [codec.CompactDue]. It returns the write's error.
 // The caller checks that the store has a path and no error.
 func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) error {
 	dropped := false

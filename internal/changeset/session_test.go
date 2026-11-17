@@ -163,7 +163,7 @@ func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 	assert.Equal(t, want, restored)
 }
 
-// Compaction is the one rewrite: once the file is file.CompactDue, it is rewritten to its last
+// Compaction is the one rewrite: once the file is codec.CompactDue, it is rewritten to its last
 // line per key, by rename, and an ended key leaves it.
 func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 	dir := t.TempDir()

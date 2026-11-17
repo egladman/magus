@@ -39,7 +39,6 @@ type failedResults struct{ internalci.FailedResults }
 
 func (c *failedResults) list() []journal.Event { return c.List() }
 
-
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target

@@ -4,28 +4,15 @@
 //
 // This package holds only this doc. Each subpackage has one job:
 //
-//   - budget: the slot limiter, machine-wide memory and slot claims, and the verdicts
-//     an arbiter answers them with.
-//   - job: the job record a caller declares and the row a store keeps, its write paths,
-//     goals, states, results, grants and attempts, the claim grammar, the origin every
-//     record stamps, and the faults a record shows on its own. The store opens on a
-//     directory the caller names and grades a check goal from a run on one of three
-//     bases: witnessed, a command the caller runs that the store watched; attested, a
-//     statement the caller's verifier accepts the signature of; and reported, the
-//     caller's word, which grades only a goal that accepts it.
-//   - sandbox: read, write and exec confinement narrowed to a lease, landlock on Linux and
-//     sandbox-exec on macOS, refused on Windows. Confinement is required by default, so a
-//     host that cannot confine a child refuses to start it.
-//   - session: the append-only record of what invocations did, its fold, and the
-//     pruning that bounds it, opened on a directory the caller names.
-//   - step: one thing a program is about to do, as data, and the spec that declares
-//     each kind of step.
-//   - tier: the model tier set a caller declares, the assignment a job records, the
-//     reference spawn ceiling, and a price table built from rows the caller supplies.
-//   - trail: the append-only activity events and the guard trail's records, opened on a
-//     directory the caller names. It exports reading only.
-//   - verdict: what a rule answers about a call, the stricter-of merge, and the
-//     judgment a caller reads.
+//   - budget: the slot limiter, machine-wide memory and slot claims, and their verdicts.
+//   - job: the job record a caller declares, the row a store keeps, and the store, which
+//     grades a check goal from a run that is witnessed, attested or reported.
+//   - sandbox: read, write and exec confinement narrowed to a lease, required by default.
+//   - session: the append-only record of what invocations did, its fold and its pruning.
+//   - step: one thing a program is about to do, as data, and the spec of each kind.
+//   - tier: the model tier set, a job's assignment, the spawn ceiling and a price table.
+//   - trail: the append-only activity events and the guard's records. It exports reading only.
+//   - verdict: what a rule answers about a call, and the stricter-of merge.
 //
 // Nothing in the module reads the environment, writes to stdout or stderr, or keeps
 // process-wide state; each store opens on a directory its caller names. The module
