@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -155,27 +154,6 @@ func JudgedMerge(row types.Declaration, defaultTimeout time.Duration) func(*type
 		merge(u)
 		u.Worktree = &types.JobWorktree{Root: row.Checkout}
 	}
-}
-
-// FixForkNoted is [FixFork] over the merge a fork validates, noting each edit it made.
-func FixForkNoted(ctx context.Context, store *Store, row types.Declaration, limits config.Jobs, read SymbolReader) (types.Declaration, error) {
-	merge := func(r types.Declaration) func(*types.Job) { return JudgedMerge(r, limits.DefaultTimeout) }
-	fixed, edits, err := FixFork(ctx, store, row, merge, limits, read)
-	for _, e := range edits {
-		slog.InfoContext(ctx, e.String(), attr.Notice("fixed"))
-	}
-	return fixed, err
-}
-
-// FixApplyNoted is [FixApply], noting each edit it made under its record's id.
-func FixApplyNoted(ctx context.Context, store *Store, records []types.Declaration, limits config.Jobs, read SymbolReader, checkpoint func() string) []types.Declaration {
-	fixed, edits := FixApply(ctx, store, records, limits, read, checkpoint)
-	for _, rec := range fixed {
-		for _, e := range edits[rec.ID] {
-			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", rec.ID, e.String()), attr.Notice("fixed"))
-		}
-	}
-	return fixed
 }
 
 // listedProblems is a refusal whose text is its problems as [RenderValidation] lists

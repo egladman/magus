@@ -41,7 +41,6 @@ magus agent install .claude/skills --dry-run  # list what would be written and r
 magus agent install --tar                   # stream a tar of every skill to stdout
 magus agent starter                         # print a whole starter AGENTS.md
 magus doctor                                # are the installed skills current? (per location)
-magus doctor --fix                          # reinstall whatever it reports stale
 ```
 
 Commit what install writes, so every teammate's agent shares the same

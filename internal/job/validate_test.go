@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -738,4 +739,107 @@ func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNames
 	s.Equal([]string{"skills/kept/a.md"}, args)
 	s.Contains(note, "keeps every written file")
 	s.Contains(note, "git check-ignore: exit status 128")
+}
+
+func unrunGate() UnrunGate {
+	return UnrunGate{
+		Target: "unit", Project: ".", Source: "**/*.go",
+		Goal: types.Goal{ID: "unit", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "unit", Project: "."}},
+	}
+}
+
+func TestUnrunGateFixAddsTheGoalWithoutAnOwner(t *testing.T) {
+	t.Parallel()
+
+	ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{})
+
+	require.Len(t, ps, 1)
+	assert.Equal(t, `add the goal {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to goals, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`, ps[0].Fix)
+}
+
+func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
+	t.Parallel()
+
+	for _, runs := range []string{"github-actions runs it", integratorRuns} {
+		ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{runs: runs})
+
+		require.Len(t, ps, 1)
+		assert.Equal(t, fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs), ps[0].Fix)
+	}
+}
+
+func TestUnrunLintGateFixStaysTheGoalWhoeverOwnsTheRest(t *testing.T) {
+	t.Parallel()
+
+	lint := unrunGate()
+	lint.Target = lintTarget
+
+	ps := unrunGateProblems([]UnrunGate{lint}, gateOwner{runs: "github-actions runs it"})
+
+	require.Len(t, ps, 1)
+	assert.Contains(t, ps[0].Fix, "add the goal ")
+	assert.NotContains(t, ps[0].Fix, "since github-actions")
+}
+
+func TestIntegratorGatesAskForNoFix(t *testing.T) {
+	t.Parallel()
+
+	gate := unrunGate()
+	gate.IntegratorGates = true
+
+	assert.Empty(t, unrunGateProblems([]UnrunGate{gate}, gateOwner{}))
+}
+
+func TestRegeneratedOutputFixOffersTheWritePathOrADeviation(t *testing.T) {
+	t.Parallel()
+
+	ps := regeneratedProblems([]RegeneratedOutput{{Target: ".:man-generate", Output: "manpage/*.1", Source: "cli/registry.go"}})
+
+	require.Len(t, ps, 1)
+	assert.Equal(t, `add "manpage/*.1" to paths.write, or permit it in deviations: {"code":"MGS3044","subject":"manpage/*.1","reason":"the root regenerates it"}`, ps[0].Fix)
+}
+
+// declaredGateSuite pins which owner the workspace declares for a worker's gates.
+type declaredGateSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestDeclaredGate(t *testing.T) { suite.Run(t, new(declaredGateSuite)) }
+
+func (s *declaredGateSuite) SetupTest() {
+	store, _ := validateWorkspace(s.T())
+	s.store = store
+}
+
+func (s *declaredGateSuite) writeConfig(body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.store.root, "magus.yaml"), []byte(body), 0o644))
+}
+
+func (s *declaredGateSuite) TestRemoteGateOwnsIt() {
+	s.writeConfig("ci:\n  remote_gate: github-actions\n")
+
+	s.Equal(gateOwner{runs: "github-actions runs it"}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+}
+
+func (s *declaredGateSuite) TestNoOwnerWithoutAConfigOrParent() {
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+}
+
+func (s *declaredGateSuite) TestIntegratingParentOwnsIt() {
+	parent := types.Job{ID: "integrate", State: types.StateRunning, Integrates: []string{"a-branch"}}
+
+	s.Equal(gateOwner{runs: integratorRuns}, declaredGateOwner(s.store.root, []types.Job{parent}, types.Job{ID: "w", Parent: "integrate"}))
+}
+
+func (s *declaredGateSuite) TestAnIntegrationJobOwnsItsOwnGates() {
+	s.writeConfig("ci:\n  remote_gate: github-actions\n")
+
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "integrate", Integrates: []string{"a-branch"}}))
+}
+
+func (s *declaredGateSuite) TestUnreadableConfigDeclaresNoOwner() {
+	s.writeConfig("ci: [\n")
+
+	s.Equal(gateOwner{}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
 }

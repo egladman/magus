@@ -219,21 +219,27 @@ workspace does not merely answer badly; it never runs the script at all.
 Claude Code treats a hook that exits non-zero with any code other than 2 as a
 [non-blocking error](https://code.claude.com/docs/en/hooks): the first line of its
 stderr appears in the transcript as a `<hook name> hook error` notice, and the tool
-call goes ahead UNJUDGED. A bare `magus` with none on PATH exits 127 that way, and
-a whole session once ran with every guard rule open.
+call goes ahead unjudged. One session logged 2,158 of them, every rule open, while its
+`./magus` could not read its magus.yaml.
 
-So with no magus on PATH every hook runs open: each exits 127, Claude Code shows
-the notice, and the call goes ahead unjudged. Start Claude Code from a shell whose
-PATH finds one. This repository's `mise.toml` puts the checkout root first on PATH,
+So the wiring fails closed. Each entry runs the glue under a watchdog one second
+short of the entry's timeout, and turns any exit but 0 or 2, or a run past the
+watchdog, into exit 2: the call is refused with the reason on stderr. A bare `magus`
+with none on PATH exits 127 and is refused that way. A magus that starts but cannot
+read magus.yaml or a `MAGUS_*` value answers the hook itself with exit 2, naming the
+repair, and lets that one line run: the bootstrap in a checkout of magus,
+`magus self update` anywhere else. A stop that cannot be judged ends instead, with
+exit 1, since refusing it would send the agent back to work no rule can judge.
+Start Claude Code from a shell whose PATH finds a magus. This repository's `mise.toml` puts the checkout root first on PATH,
 so an activated shell finds the checkout's own `./magus` once
 `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` has
 built it.
 
-A magus that is present but too old to run `magus shell` at all fails open the same
+A magus that is present but too old to run `magus shell` at all is refused the same
 way, with its own error as the notice. `magus doctor` and `magus agent harness verify
 --id claude-code` report that before a session starts; verify runs each wired command
-against a synthetic event and checks the verdict comes back. The glue never blocks on a
-failure of its own: a verdict it cannot obtain is reported and the call proceeds.
+against a synthetic event and checks the verdict comes back. A verdict the glue cannot
+obtain refuses the call; only the repair line passes.
 
 A magus that runs but cannot load the workspace is different, because the verdict it
 renders comes from the built-in rules alone and the workspace's own rules judged
@@ -820,7 +826,7 @@ magus doctor
 fails when it is older than your working tree; **guard wiring** probes it with a
 known-denied command and then looks for a host config that invokes a current
 template; **agent skills** grades the installed copies against the running binary
-and `--fix` reinstalls whatever it reports stale.
+and names the reinstall command for whatever it reports stale.
 
 Commit `.claude/settings.json` once you are happy with it. Until a checkout has
 that file, its guard rules are correct and entirely unenforced, with nothing in

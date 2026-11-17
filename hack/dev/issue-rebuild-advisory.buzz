@@ -6,7 +6,7 @@
 // `magus session retract`. --expect names the command every acting session runs, so
 // `magus session advisories` can count how many did.
 //
-//	magus buzz hack/dev/advise-rebuild.buzz -- [--revision <rev>] [--reason "<why>"] [--apply]
+//	magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason "<why>"] [--apply]
 //
 // --revision defaults to origin/main as this repository holds it now. The script never
 // fetches: run `git fetch` first if the tip it should name is not local yet. Without --apply
@@ -27,7 +27,7 @@ import "assert";
 final SUMMARY = "advise every session to move onto a revision and rebuild ./magus";
 final SERVES = ["replaces:magus session advise"];
 
-final USAGE = "usage: magus buzz hack/dev/advise-rebuild.buzz -- [--revision <rev>] [--reason \"<why>\"] [--apply]";
+final USAGE = "usage: magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason \"<why>\"] [--apply]";
 final HELP = "cost: one commit lookup; with --apply, one advisory posted\n{USAGE}\n\nThe default revision is the local origin/main; nothing is fetched. Without --apply nothing is posted.";
 
 final DEFAULT_REVISION = "origin/main";
@@ -55,7 +55,7 @@ export fun advisoryText(short: str, full: str, reason: str) > str {
 // checkFits fails when text is longer than a post keeps.
 export fun checkFits(text: str) > result\Result::<str> {
     if (text.len() > MAX_MESSAGE_BYTES) {
-        return result\fail::<str>("advise-rebuild: the advisory is {text.len()} bytes, past the {MAX_MESSAGE_BYTES} a post keeps; shorten --reason by {text.len() - MAX_MESSAGE_BYTES} bytes");
+        return result\fail::<str>("issue-rebuild-advisory: the advisory is {text.len()} bytes, past the {MAX_MESSAGE_BYTES} a post keeps; shorten --reason by {text.len() - MAX_MESSAGE_BYTES} bytes");
     }
     return result\ok::<str>(text);
 }
@@ -94,7 +94,7 @@ export fun appliedReport(id: str) > [str] {
 export fun postedId(stdout: str) > result\Result::<str> {
     final words = stdout.trim().split("\n")[0].split(" ");
     if (words.len() < 2 or words[0] != "posted") {
-        return result\fail::<str>("advise-rebuild: `magus session advise` printed no advisory id: {stdout.trim()}");
+        return result\fail::<str>("issue-rebuild-advisory: `magus session advise` printed no advisory id: {stdout.trim()}");
     }
     return result\ok::<str>(words[1]);
 }
@@ -111,7 +111,7 @@ export fun lookup(rev: str) > result\Result::<Rev> {
         final c = vcs\commit(rev);
         return result\ok::<Rev>(Rev{ id = c.id, short = c.short });
     } catch (err: any) {
-        return result\caught::<Rev>(err, doing: "advise-rebuild: {rev} does not resolve in this repository (this script never fetches)");
+        return result\caught::<Rev>(err, doing: "issue-rebuild-advisory: {rev} does not resolve in this repository (this script never fetches)");
     }
 }
 
@@ -122,10 +122,10 @@ export fun post(text: str) > result\Result::<str> {
     try {
         ran = magus\cmd("session", args: ["advise", text, "--expect", EXPECT], opts: magus\CommandOptions{ allowFailure = true });
     } catch (err: any) {
-        return result\caught::<str>(err, doing: "advise-rebuild: run magus session advise");
+        return result\caught::<str>(err, doing: "issue-rebuild-advisory: run magus session advise");
     }
     if (!ran!.ok) {
-        return result\fail::<str>("advise-rebuild: magus session advise refused (exit {ran!.code}): {ran!.stderr.trim()}");
+        return result\fail::<str>("issue-rebuild-advisory: magus session advise refused (exit {ran!.code}): {ran!.stderr.trim()}");
     }
     return postedId(ran!.stdout);
 }
@@ -137,7 +137,7 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "advise-rebuild: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+        throw "issue-rebuild-advisory: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final rev = parsed.values["--revision"] ?? DEFAULT_REVISION;
     final commit = lookup(rev);

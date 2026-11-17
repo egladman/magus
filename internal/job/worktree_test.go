@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -266,7 +267,9 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	s.notices = &notes
 	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
-	_, err := validateDryFork(t.Context(), s.Quiet(), "w", merge)
+	quiet := s.view()
+	quiet.notices = io.Discard
+	_, err := validateDryFork(t.Context(), quiet, "w", merge)
 	require.NoError(t, err)
 	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
 	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())

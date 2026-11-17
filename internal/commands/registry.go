@@ -934,7 +934,6 @@ without running any, so the name can be looked up rather than provoked.`,
 	Usage: "magus doctor [flags]",
 	Flags: []command.Flag{
 		{Name: "probe", Kind: command.Bool, Default: false, Doc: "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)"},
-		{Name: "fix", Kind: command.Bool, Effect: command.EffectLocalWrite, Default: false, Doc: "Run the remedy each finding names, where one exists (see --dry-run to list them first)"},
 		{Name: "list", Kind: command.Bool, Default: false, Doc: "Print every check magus would run (name, subject, and MGS code) without running any of them"},
 	},
 	Examples: []command.Example{
@@ -2429,7 +2428,6 @@ them and magus describe job prints one job's terms.`,
 				{Name: "delivery", Kind: command.String, Doc: "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"},
 				{Name: "read-only", Kind: command.Bool, Default: false, Doc: "A job that gathers evidence and writes nothing"},
 				{Name: "checkout", Kind: command.String, Doc: "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work"},
-				{Name: "fix", Kind: command.Bool, Default: false, Doc: "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain"},
 			},
 		},
 		{
@@ -2456,8 +2454,6 @@ a record naming a checkout or an entry is refused, since only fork makes those.
 Every record is checked before any is written, with fork's rules for what it
 adds, and every record's problems are listed at once with their codes. It prints
 what changed per job; the global --dry-run prints it and writes nothing.
---fix makes the edits a problem names without judgment, as job fork --fix does,
-and says each one it made; the problems that need a person are still listed.
 ` + "`magus job fork --schema`" + ` prints the record, deviations included.
 
 Widening is the orchestrator's: a session holding a lease may apply only a spec
@@ -2473,7 +2469,7 @@ of the job's spec, goals and check included. A path may be a ` + "`<file>#<decla
 claim, which runs to the end of its value.
 
 A record that removes a write path and drops goals the job carries is refused;
---fix restores each dropped goal.
+each problem names the goal to keep.
 
 The one claim a holder applies is proved: a record carrying only id and
 claim, [{"path": ..., "because": ...}], where because is refs:<symbol>,
@@ -2483,7 +2479,6 @@ record when it refuses a write it can prove. It applies alone.`,
 			Flags: []command.Flag{
 				{Name: "f", Kind: command.String, Doc: "The records to apply from a `file`: one JSON job, a JSON array, or one job per line"},
 				{Name: "stdin", Kind: command.Bool, Default: false, Doc: "Read the records from stdin instead of a file, as job fork --stdin does"},
-				{Name: "fix", Kind: command.Bool, Default: false, Doc: "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records"},
 				{Name: "add-write-path", Kind: command.StringList, Doc: "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated"},
 				{Name: "release-write-path", Kind: command.StringList, Doc: "A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path"},
 			},
