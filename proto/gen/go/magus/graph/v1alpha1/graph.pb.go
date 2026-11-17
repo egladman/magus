@@ -369,11 +369,20 @@ func (x *Edge) GetAttrs() map[string]string {
 }
 
 type QueryNodesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`    // the magus query grammar, verbatim
-	Budget        int32                  `protobuf:"varint,2,opt,name=budget,proto3" json:"budget,omitempty"` // neighborhood node budget; 0 = server default
-	Offset        int32                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
-	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 = every match from offset on
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the magus query grammar, verbatim. Required unless position is set; with a position it
+	// may carry field filters only, since the window is the text.
+	Query    string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Budget   int32  `protobuf:"varint,2,opt,name=budget,proto3" json:"budget,omitempty"` // neighborhood node budget; 0 = server default
+	Offset   int32  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	PageSize int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 = every match from offset on
+	// position seeds the ranking from a cursor: the defined symbols its prefix and suffix name,
+	// reranked by a walk that never enters its own file. The server refuses with
+	// FAILED_PRECONDITION when the symbol index cannot vouch for the position's file.
+	Position *Position `protobuf:"bytes,5,opt,name=position,proto3" json:"position,omitempty"`
+	// exclude_paths are workspace-relative paths dropped before ranking: no node at or under
+	// one is matched, seeds the walk, or is walked through.
+	ExcludePaths  []string `protobuf:"bytes,6,rep,name=exclude_paths,json=excludePaths,proto3" json:"exclude_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -436,23 +445,110 @@ func (x *QueryNodesRequest) GetPageSize() int32 {
 	return 0
 }
 
-type QueryNodesResponse struct {
+func (x *QueryNodesRequest) GetPosition() *Position {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
+func (x *QueryNodesRequest) GetExcludePaths() []string {
+	if x != nil {
+		return x.ExcludePaths
+	}
+	return nil
+}
+
+// Position is a cursor in a file with its middle masked. Only prefix and suffix seed a
+// ranking, so nothing in the middle can come back as context.
+type Position struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	Budget        int32                  `protobuf:"varint,2,opt,name=budget,proto3" json:"budget,omitempty"`
-	MatchCount    int32                  `protobuf:"varint,3,opt,name=match_count,json=matchCount,proto3" json:"match_count,omitempty"` // TOTAL matches, not this page
-	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
-	Matches       []*Match               `protobuf:"bytes,5,rep,name=matches,proto3" json:"matches,omitempty"`
-	Nodes         []*Node                `protobuf:"bytes,6,rep,name=nodes,proto3" json:"nodes,omitempty"`
-	Links         []*Edge                `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
-	Answer        *Answer                `protobuf:"bytes,8,opt,name=answer,proto3" json:"answer,omitempty"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`      // workspace-relative, slash-separated
+	Offset        uint32                 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"` // the cursor's byte offset in the file
+	Prefix        string                 `protobuf:"bytes,3,opt,name=prefix,proto3" json:"prefix,omitempty"`  // the text before the middle
+	Suffix        string                 `protobuf:"bytes,4,opt,name=suffix,proto3" json:"suffix,omitempty"`  // the text after the middle
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Position) Reset() {
+	*x = Position{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Position) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Position) ProtoMessage() {}
+
+func (x *Position) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Position.ProtoReflect.Descriptor instead.
+func (*Position) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Position) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *Position) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *Position) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *Position) GetSuffix() string {
+	if x != nil {
+		return x.Suffix
+	}
+	return ""
+}
+
+type QueryNodesResponse struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Query      string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Budget     int32                  `protobuf:"varint,2,opt,name=budget,proto3" json:"budget,omitempty"`
+	MatchCount int32                  `protobuf:"varint,3,opt,name=match_count,json=matchCount,proto3" json:"match_count,omitempty"` // TOTAL matches, not this page
+	Offset     int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Matches    []*Match               `protobuf:"bytes,5,rep,name=matches,proto3" json:"matches,omitempty"`
+	Nodes      []*Node                `protobuf:"bytes,6,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	Links      []*Edge                `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
+	Answer     *Answer                `protobuf:"bytes,8,opt,name=answer,proto3" json:"answer,omitempty"`
+	// context is the source of the page's symbol matches under a position query, in match order
+	// and at most budget of them. Empty for a query with no position.
+	Context       []*DefinitionSite `protobuf:"bytes,9,rep,name=context,proto3" json:"context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueryNodesResponse) Reset() {
 	*x = QueryNodesResponse{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[4]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -464,7 +560,7 @@ func (x *QueryNodesResponse) String() string {
 func (*QueryNodesResponse) ProtoMessage() {}
 
 func (x *QueryNodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[4]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -477,7 +573,7 @@ func (x *QueryNodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryNodesResponse.ProtoReflect.Descriptor instead.
 func (*QueryNodesResponse) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{4}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *QueryNodesResponse) GetQuery() string {
@@ -536,6 +632,115 @@ func (x *QueryNodesResponse) GetAnswer() *Answer {
 	return nil
 }
 
+func (x *QueryNodesResponse) GetContext() []*DefinitionSite {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+// DefinitionSite is one symbol's doc comment and declaration line as the tree holds them, kept
+// only when its indexed range verified. It mirrors types.KnowledgeDefinitionSite.
+type DefinitionSite struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	File            string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`                             // workspace-relative
+	StartLine       int32                  `protobuf:"varint,2,opt,name=start_line,json=startLine,proto3" json:"start_line,omitempty"` // the declaration line, 1-based
+	EndLine         int32                  `protobuf:"varint,3,opt,name=end_line,json=endLine,proto3" json:"end_line,omitempty"`       // the end of the indexed range; 0 when the index recorded none
+	Status          string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`                         // always "verified" in a context
+	Source          string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`                         // the lines, from source_start_line through start_line
+	SourceStartLine int32                  `protobuf:"varint,6,opt,name=source_start_line,json=sourceStartLine,proto3" json:"source_start_line,omitempty"`
+	Symbol          string                 `protobuf:"bytes,7,opt,name=symbol,proto3" json:"symbol,omitempty"`                  // the symbol's label
+	MatchId         string                 `protobuf:"bytes,8,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"` // the match this site is the source of
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DefinitionSite) Reset() {
+	*x = DefinitionSite{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DefinitionSite) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DefinitionSite) ProtoMessage() {}
+
+func (x *DefinitionSite) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DefinitionSite.ProtoReflect.Descriptor instead.
+func (*DefinitionSite) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DefinitionSite) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *DefinitionSite) GetStartLine() int32 {
+	if x != nil {
+		return x.StartLine
+	}
+	return 0
+}
+
+func (x *DefinitionSite) GetEndLine() int32 {
+	if x != nil {
+		return x.EndLine
+	}
+	return 0
+}
+
+func (x *DefinitionSite) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *DefinitionSite) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *DefinitionSite) GetSourceStartLine() int32 {
+	if x != nil {
+		return x.SourceStartLine
+	}
+	return 0
+}
+
+func (x *DefinitionSite) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *DefinitionSite) GetMatchId() string {
+	if x != nil {
+		return x.MatchId
+	}
+	return ""
+}
+
 type ResolveNodesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Reference     string                 `protobuf:"bytes,1,opt,name=reference,proto3" json:"reference,omitempty"`
@@ -546,7 +751,7 @@ type ResolveNodesRequest struct {
 
 func (x *ResolveNodesRequest) Reset() {
 	*x = ResolveNodesRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[5]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -558,7 +763,7 @@ func (x *ResolveNodesRequest) String() string {
 func (*ResolveNodesRequest) ProtoMessage() {}
 
 func (x *ResolveNodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[5]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -571,7 +776,7 @@ func (x *ResolveNodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveNodesRequest.ProtoReflect.Descriptor instead.
 func (*ResolveNodesRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{5}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResolveNodesRequest) GetReference() string {
@@ -597,7 +802,7 @@ type ResolveNodesResponse struct {
 
 func (x *ResolveNodesResponse) Reset() {
 	*x = ResolveNodesResponse{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[6]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +814,7 @@ func (x *ResolveNodesResponse) String() string {
 func (*ResolveNodesResponse) ProtoMessage() {}
 
 func (x *ResolveNodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[6]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +827,7 @@ func (x *ResolveNodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveNodesResponse.ProtoReflect.Descriptor instead.
 func (*ResolveNodesResponse) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{6}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResolveNodesResponse) GetMatches() []*Match {
@@ -649,7 +854,7 @@ type Match struct {
 
 func (x *Match) Reset() {
 	*x = Match{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[7]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -661,7 +866,7 @@ func (x *Match) String() string {
 func (*Match) ProtoMessage() {}
 
 func (x *Match) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[7]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -674,7 +879,7 @@ func (x *Match) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Match.ProtoReflect.Descriptor instead.
 func (*Match) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{7}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Match) GetId() string {
@@ -728,7 +933,7 @@ type ExplainNodeRequest struct {
 
 func (x *ExplainNodeRequest) Reset() {
 	*x = ExplainNodeRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[8]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -740,7 +945,7 @@ func (x *ExplainNodeRequest) String() string {
 func (*ExplainNodeRequest) ProtoMessage() {}
 
 func (x *ExplainNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[8]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -753,7 +958,7 @@ func (x *ExplainNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainNodeRequest.ProtoReflect.Descriptor instead.
 func (*ExplainNodeRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{8}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ExplainNodeRequest) GetName() string {
@@ -779,7 +984,7 @@ type NodeContext struct {
 
 func (x *NodeContext) Reset() {
 	*x = NodeContext{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[9]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +996,7 @@ func (x *NodeContext) String() string {
 func (*NodeContext) ProtoMessage() {}
 
 func (x *NodeContext) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[9]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1009,7 @@ func (x *NodeContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeContext.ProtoReflect.Descriptor instead.
 func (*NodeContext) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{9}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *NodeContext) GetNode() *Node {
@@ -850,7 +1055,7 @@ type EdgeRef struct {
 
 func (x *EdgeRef) Reset() {
 	*x = EdgeRef{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[10]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -862,7 +1067,7 @@ func (x *EdgeRef) String() string {
 func (*EdgeRef) ProtoMessage() {}
 
 func (x *EdgeRef) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[10]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -875,7 +1080,7 @@ func (x *EdgeRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgeRef.ProtoReflect.Descriptor instead.
 func (*EdgeRef) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{10}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *EdgeRef) GetRelation() string {
@@ -930,7 +1135,7 @@ type FindPathRequest struct {
 
 func (x *FindPathRequest) Reset() {
 	*x = FindPathRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[11]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -942,7 +1147,7 @@ func (x *FindPathRequest) String() string {
 func (*FindPathRequest) ProtoMessage() {}
 
 func (x *FindPathRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[11]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -955,7 +1160,7 @@ func (x *FindPathRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindPathRequest.ProtoReflect.Descriptor instead.
 func (*FindPathRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{11}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FindPathRequest) GetFrom() string {
@@ -981,7 +1186,7 @@ type FindDependentsRequest struct {
 
 func (x *FindDependentsRequest) Reset() {
 	*x = FindDependentsRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[12]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -993,7 +1198,7 @@ func (x *FindDependentsRequest) String() string {
 func (*FindDependentsRequest) ProtoMessage() {}
 
 func (x *FindDependentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[12]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1006,7 +1211,7 @@ func (x *FindDependentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindDependentsRequest.ProtoReflect.Descriptor instead.
 func (*FindDependentsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{12}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *FindDependentsRequest) GetName() string {
@@ -1028,7 +1233,7 @@ type Dependents struct {
 
 func (x *Dependents) Reset() {
 	*x = Dependents{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[13]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1040,7 +1245,7 @@ func (x *Dependents) String() string {
 func (*Dependents) ProtoMessage() {}
 
 func (x *Dependents) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[13]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1053,7 +1258,7 @@ func (x *Dependents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Dependents.ProtoReflect.Descriptor instead.
 func (*Dependents) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{13}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Dependents) GetNode() string {
@@ -1082,7 +1287,7 @@ type FindAffectedRequest struct {
 
 func (x *FindAffectedRequest) Reset() {
 	*x = FindAffectedRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[14]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1094,7 +1299,7 @@ func (x *FindAffectedRequest) String() string {
 func (*FindAffectedRequest) ProtoMessage() {}
 
 func (x *FindAffectedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[14]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1107,7 +1312,7 @@ func (x *FindAffectedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindAffectedRequest.ProtoReflect.Descriptor instead.
 func (*FindAffectedRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{14}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *FindAffectedRequest) GetBase() string {
@@ -1133,7 +1338,7 @@ type Affected struct {
 
 func (x *Affected) Reset() {
 	*x = Affected{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[15]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1145,7 +1350,7 @@ func (x *Affected) String() string {
 func (*Affected) ProtoMessage() {}
 
 func (x *Affected) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[15]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1158,7 +1363,7 @@ func (x *Affected) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Affected.ProtoReflect.Descriptor instead.
 func (*Affected) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{15}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Affected) GetBase() string {
@@ -1201,7 +1406,7 @@ type Path struct {
 
 func (x *Path) Reset() {
 	*x = Path{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[16]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1213,7 +1418,7 @@ func (x *Path) String() string {
 func (*Path) ProtoMessage() {}
 
 func (x *Path) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[16]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1226,7 +1431,7 @@ func (x *Path) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Path.ProtoReflect.Descriptor instead.
 func (*Path) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{16}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Path) GetFrom() string {
@@ -1271,7 +1476,7 @@ type PathStep struct {
 
 func (x *PathStep) Reset() {
 	*x = PathStep{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[17]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1283,7 +1488,7 @@ func (x *PathStep) String() string {
 func (*PathStep) ProtoMessage() {}
 
 func (x *PathStep) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[17]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1296,7 +1501,7 @@ func (x *PathStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PathStep.ProtoReflect.Descriptor instead.
 func (*PathStep) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{17}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PathStep) GetFrom() string {
@@ -1336,7 +1541,7 @@ type GetGraphStatsRequest struct {
 
 func (x *GetGraphStatsRequest) Reset() {
 	*x = GetGraphStatsRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1348,7 +1553,7 @@ func (x *GetGraphStatsRequest) String() string {
 func (*GetGraphStatsRequest) ProtoMessage() {}
 
 func (x *GetGraphStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1361,7 +1566,7 @@ func (x *GetGraphStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGraphStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetGraphStatsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{18}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetGraphStatsRequest) GetKind() string {
@@ -1387,7 +1592,7 @@ type GraphStats struct {
 
 func (x *GraphStats) Reset() {
 	*x = GraphStats{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1399,7 +1604,7 @@ func (x *GraphStats) String() string {
 func (*GraphStats) ProtoMessage() {}
 
 func (x *GraphStats) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1412,7 +1617,7 @@ func (x *GraphStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphStats.ProtoReflect.Descriptor instead.
 func (*GraphStats) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{19}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GraphStats) GetNodeCount() int32 {
@@ -1485,7 +1690,7 @@ type GodNode struct {
 
 func (x *GodNode) Reset() {
 	*x = GodNode{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1702,7 @@ func (x *GodNode) String() string {
 func (*GodNode) ProtoMessage() {}
 
 func (x *GodNode) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1715,7 @@ func (x *GodNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GodNode.ProtoReflect.Descriptor instead.
 func (*GodNode) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{20}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GodNode) GetId() string {
@@ -1570,7 +1775,7 @@ type Orphan struct {
 
 func (x *Orphan) Reset() {
 	*x = Orphan{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1582,7 +1787,7 @@ func (x *Orphan) String() string {
 func (*Orphan) ProtoMessage() {}
 
 func (x *Orphan) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1595,7 +1800,7 @@ func (x *Orphan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Orphan.ProtoReflect.Descriptor instead.
 func (*Orphan) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{21}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Orphan) GetId() string {
@@ -1641,7 +1846,7 @@ type DocCoverage struct {
 
 func (x *DocCoverage) Reset() {
 	*x = DocCoverage{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1653,7 +1858,7 @@ func (x *DocCoverage) String() string {
 func (*DocCoverage) ProtoMessage() {}
 
 func (x *DocCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1871,7 @@ func (x *DocCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocCoverage.ProtoReflect.Descriptor instead.
 func (*DocCoverage) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{22}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DocCoverage) GetKind() string {
@@ -1719,7 +1924,7 @@ type Answer struct {
 
 func (x *Answer) Reset() {
 	*x = Answer{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1936,7 @@ func (x *Answer) String() string {
 func (*Answer) ProtoMessage() {}
 
 func (x *Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1949,7 @@ func (x *Answer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Answer.ProtoReflect.Descriptor instead.
 func (*Answer) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{23}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Answer) GetVerdict() string {
@@ -1783,7 +1988,7 @@ type SymbolGap struct {
 
 func (x *SymbolGap) Reset() {
 	*x = SymbolGap{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1795,7 +2000,7 @@ func (x *SymbolGap) String() string {
 func (*SymbolGap) ProtoMessage() {}
 
 func (x *SymbolGap) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1808,7 +2013,7 @@ func (x *SymbolGap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SymbolGap.ProtoReflect.Descriptor instead.
 func (*SymbolGap) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{24}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SymbolGap) GetProjectPath() string {
@@ -1889,12 +2094,19 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\n" +
 	"AttrsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"v\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd7\x01\n" +
 	"\x11QueryNodesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x16\n" +
 	"\x06budget\x18\x02 \x01(\x05R\x06budget\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x05R\x06offset\x12\x1b\n" +
-	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\"\xcc\x02\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12:\n" +
+	"\bposition\x18\x05 \x01(\v2\x1e.magus.graph.v1alpha1.PositionR\bposition\x12#\n" +
+	"\rexclude_paths\x18\x06 \x03(\tR\fexcludePaths\"f\n" +
+	"\bPosition\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x16\n" +
+	"\x06prefix\x18\x03 \x01(\tR\x06prefix\x12\x16\n" +
+	"\x06suffix\x18\x04 \x01(\tR\x06suffix\"\x8c\x03\n" +
 	"\x12QueryNodesResponse\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x16\n" +
 	"\x06budget\x18\x02 \x01(\x05R\x06budget\x12\x1f\n" +
@@ -1904,7 +2116,18 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\amatches\x18\x05 \x03(\v2\x1b.magus.graph.v1alpha1.MatchR\amatches\x120\n" +
 	"\x05nodes\x18\x06 \x03(\v2\x1a.magus.graph.v1alpha1.NodeR\x05nodes\x120\n" +
 	"\x05links\x18\a \x03(\v2\x1a.magus.graph.v1alpha1.EdgeR\x05links\x124\n" +
-	"\x06answer\x18\b \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answer\"I\n" +
+	"\x06answer\x18\b \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answer\x12>\n" +
+	"\acontext\x18\t \x03(\v2$.magus.graph.v1alpha1.DefinitionSiteR\acontext\"\xed\x01\n" +
+	"\x0eDefinitionSite\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\tR\x04file\x12\x1d\n" +
+	"\n" +
+	"start_line\x18\x02 \x01(\x05R\tstartLine\x12\x19\n" +
+	"\bend_line\x18\x03 \x01(\x05R\aendLine\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12\x16\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\x12*\n" +
+	"\x11source_start_line\x18\x06 \x01(\x05R\x0fsourceStartLine\x12\x16\n" +
+	"\x06symbol\x18\a \x01(\tR\x06symbol\x12\x19\n" +
+	"\bmatch_id\x18\b \x01(\tR\amatchId\"I\n" +
 	"\x13ResolveNodesRequest\x12\x1c\n" +
 	"\treference\x18\x01 \x01(\tR\treference\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\"M\n" +
@@ -2034,75 +2257,79 @@ func file_magus_graph_v1alpha1_graph_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_graph_v1alpha1_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_magus_graph_v1alpha1_graph_proto_goTypes = []any{
 	(EdgeDirection)(0),            // 0: magus.graph.v1alpha1.EdgeDirection
 	(*Graph)(nil),                 // 1: magus.graph.v1alpha1.Graph
 	(*Node)(nil),                  // 2: magus.graph.v1alpha1.Node
 	(*Edge)(nil),                  // 3: magus.graph.v1alpha1.Edge
 	(*QueryNodesRequest)(nil),     // 4: magus.graph.v1alpha1.QueryNodesRequest
-	(*QueryNodesResponse)(nil),    // 5: magus.graph.v1alpha1.QueryNodesResponse
-	(*ResolveNodesRequest)(nil),   // 6: magus.graph.v1alpha1.ResolveNodesRequest
-	(*ResolveNodesResponse)(nil),  // 7: magus.graph.v1alpha1.ResolveNodesResponse
-	(*Match)(nil),                 // 8: magus.graph.v1alpha1.Match
-	(*ExplainNodeRequest)(nil),    // 9: magus.graph.v1alpha1.ExplainNodeRequest
-	(*NodeContext)(nil),           // 10: magus.graph.v1alpha1.NodeContext
-	(*EdgeRef)(nil),               // 11: magus.graph.v1alpha1.EdgeRef
-	(*FindPathRequest)(nil),       // 12: magus.graph.v1alpha1.FindPathRequest
-	(*FindDependentsRequest)(nil), // 13: magus.graph.v1alpha1.FindDependentsRequest
-	(*Dependents)(nil),            // 14: magus.graph.v1alpha1.Dependents
-	(*FindAffectedRequest)(nil),   // 15: magus.graph.v1alpha1.FindAffectedRequest
-	(*Affected)(nil),              // 16: magus.graph.v1alpha1.Affected
-	(*Path)(nil),                  // 17: magus.graph.v1alpha1.Path
-	(*PathStep)(nil),              // 18: magus.graph.v1alpha1.PathStep
-	(*GetGraphStatsRequest)(nil),  // 19: magus.graph.v1alpha1.GetGraphStatsRequest
-	(*GraphStats)(nil),            // 20: magus.graph.v1alpha1.GraphStats
-	(*GodNode)(nil),               // 21: magus.graph.v1alpha1.GodNode
-	(*Orphan)(nil),                // 22: magus.graph.v1alpha1.Orphan
-	(*DocCoverage)(nil),           // 23: magus.graph.v1alpha1.DocCoverage
-	(*Answer)(nil),                // 24: magus.graph.v1alpha1.Answer
-	(*SymbolGap)(nil),             // 25: magus.graph.v1alpha1.SymbolGap
-	nil,                           // 26: magus.graph.v1alpha1.Node.AttrsEntry
-	nil,                           // 27: magus.graph.v1alpha1.Edge.AttrsEntry
+	(*Position)(nil),              // 5: magus.graph.v1alpha1.Position
+	(*QueryNodesResponse)(nil),    // 6: magus.graph.v1alpha1.QueryNodesResponse
+	(*DefinitionSite)(nil),        // 7: magus.graph.v1alpha1.DefinitionSite
+	(*ResolveNodesRequest)(nil),   // 8: magus.graph.v1alpha1.ResolveNodesRequest
+	(*ResolveNodesResponse)(nil),  // 9: magus.graph.v1alpha1.ResolveNodesResponse
+	(*Match)(nil),                 // 10: magus.graph.v1alpha1.Match
+	(*ExplainNodeRequest)(nil),    // 11: magus.graph.v1alpha1.ExplainNodeRequest
+	(*NodeContext)(nil),           // 12: magus.graph.v1alpha1.NodeContext
+	(*EdgeRef)(nil),               // 13: magus.graph.v1alpha1.EdgeRef
+	(*FindPathRequest)(nil),       // 14: magus.graph.v1alpha1.FindPathRequest
+	(*FindDependentsRequest)(nil), // 15: magus.graph.v1alpha1.FindDependentsRequest
+	(*Dependents)(nil),            // 16: magus.graph.v1alpha1.Dependents
+	(*FindAffectedRequest)(nil),   // 17: magus.graph.v1alpha1.FindAffectedRequest
+	(*Affected)(nil),              // 18: magus.graph.v1alpha1.Affected
+	(*Path)(nil),                  // 19: magus.graph.v1alpha1.Path
+	(*PathStep)(nil),              // 20: magus.graph.v1alpha1.PathStep
+	(*GetGraphStatsRequest)(nil),  // 21: magus.graph.v1alpha1.GetGraphStatsRequest
+	(*GraphStats)(nil),            // 22: magus.graph.v1alpha1.GraphStats
+	(*GodNode)(nil),               // 23: magus.graph.v1alpha1.GodNode
+	(*Orphan)(nil),                // 24: magus.graph.v1alpha1.Orphan
+	(*DocCoverage)(nil),           // 25: magus.graph.v1alpha1.DocCoverage
+	(*Answer)(nil),                // 26: magus.graph.v1alpha1.Answer
+	(*SymbolGap)(nil),             // 27: magus.graph.v1alpha1.SymbolGap
+	nil,                           // 28: magus.graph.v1alpha1.Node.AttrsEntry
+	nil,                           // 29: magus.graph.v1alpha1.Edge.AttrsEntry
 }
 var file_magus_graph_v1alpha1_graph_proto_depIdxs = []int32{
 	2,  // 0: magus.graph.v1alpha1.Graph.nodes:type_name -> magus.graph.v1alpha1.Node
 	3,  // 1: magus.graph.v1alpha1.Graph.links:type_name -> magus.graph.v1alpha1.Edge
-	26, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
-	27, // 3: magus.graph.v1alpha1.Edge.attrs:type_name -> magus.graph.v1alpha1.Edge.AttrsEntry
-	8,  // 4: magus.graph.v1alpha1.QueryNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
-	2,  // 5: magus.graph.v1alpha1.QueryNodesResponse.nodes:type_name -> magus.graph.v1alpha1.Node
-	3,  // 6: magus.graph.v1alpha1.QueryNodesResponse.links:type_name -> magus.graph.v1alpha1.Edge
-	24, // 7: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
-	8,  // 8: magus.graph.v1alpha1.ResolveNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
-	2,  // 9: magus.graph.v1alpha1.NodeContext.node:type_name -> magus.graph.v1alpha1.Node
-	11, // 10: magus.graph.v1alpha1.NodeContext.out:type_name -> magus.graph.v1alpha1.EdgeRef
-	11, // 11: magus.graph.v1alpha1.NodeContext.in:type_name -> magus.graph.v1alpha1.EdgeRef
-	0,  // 12: magus.graph.v1alpha1.EdgeRef.direction:type_name -> magus.graph.v1alpha1.EdgeDirection
-	18, // 13: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
-	21, // 14: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
-	22, // 15: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
-	23, // 16: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
-	25, // 17: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
-	4,  // 18: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
-	6,  // 19: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
-	9,  // 20: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
-	12, // 21: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
-	13, // 22: magus.graph.v1alpha1.GraphService.FindDependents:input_type -> magus.graph.v1alpha1.FindDependentsRequest
-	15, // 23: magus.graph.v1alpha1.GraphService.FindAffected:input_type -> magus.graph.v1alpha1.FindAffectedRequest
-	19, // 24: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
-	5,  // 25: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
-	7,  // 26: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
-	10, // 27: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
-	17, // 28: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
-	14, // 29: magus.graph.v1alpha1.GraphService.FindDependents:output_type -> magus.graph.v1alpha1.Dependents
-	16, // 30: magus.graph.v1alpha1.GraphService.FindAffected:output_type -> magus.graph.v1alpha1.Affected
-	20, // 31: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
-	25, // [25:32] is the sub-list for method output_type
-	18, // [18:25] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	28, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
+	29, // 3: magus.graph.v1alpha1.Edge.attrs:type_name -> magus.graph.v1alpha1.Edge.AttrsEntry
+	5,  // 4: magus.graph.v1alpha1.QueryNodesRequest.position:type_name -> magus.graph.v1alpha1.Position
+	10, // 5: magus.graph.v1alpha1.QueryNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
+	2,  // 6: magus.graph.v1alpha1.QueryNodesResponse.nodes:type_name -> magus.graph.v1alpha1.Node
+	3,  // 7: magus.graph.v1alpha1.QueryNodesResponse.links:type_name -> magus.graph.v1alpha1.Edge
+	26, // 8: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
+	7,  // 9: magus.graph.v1alpha1.QueryNodesResponse.context:type_name -> magus.graph.v1alpha1.DefinitionSite
+	10, // 10: magus.graph.v1alpha1.ResolveNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
+	2,  // 11: magus.graph.v1alpha1.NodeContext.node:type_name -> magus.graph.v1alpha1.Node
+	13, // 12: magus.graph.v1alpha1.NodeContext.out:type_name -> magus.graph.v1alpha1.EdgeRef
+	13, // 13: magus.graph.v1alpha1.NodeContext.in:type_name -> magus.graph.v1alpha1.EdgeRef
+	0,  // 14: magus.graph.v1alpha1.EdgeRef.direction:type_name -> magus.graph.v1alpha1.EdgeDirection
+	20, // 15: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
+	23, // 16: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
+	24, // 17: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
+	25, // 18: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
+	27, // 19: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
+	4,  // 20: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
+	8,  // 21: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
+	11, // 22: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
+	14, // 23: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
+	15, // 24: magus.graph.v1alpha1.GraphService.FindDependents:input_type -> magus.graph.v1alpha1.FindDependentsRequest
+	17, // 25: magus.graph.v1alpha1.GraphService.FindAffected:input_type -> magus.graph.v1alpha1.FindAffectedRequest
+	21, // 26: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
+	6,  // 27: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
+	9,  // 28: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
+	12, // 29: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
+	19, // 30: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
+	16, // 31: magus.graph.v1alpha1.GraphService.FindDependents:output_type -> magus.graph.v1alpha1.Dependents
+	18, // 32: magus.graph.v1alpha1.GraphService.FindAffected:output_type -> magus.graph.v1alpha1.Affected
+	22, // 33: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
+	27, // [27:34] is the sub-list for method output_type
+	20, // [20:27] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_magus_graph_v1alpha1_graph_proto_init() }
@@ -2116,7 +2343,7 @@ func file_magus_graph_v1alpha1_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_graph_v1alpha1_graph_proto_rawDesc), len(file_magus_graph_v1alpha1_graph_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   27,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

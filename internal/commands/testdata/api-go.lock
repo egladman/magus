@@ -317,7 +317,6 @@ github.com/egladman/magus.WorkspaceRegistry type struct
 github.com/egladman/magus.WorkspaceRegistry.AddProvider method(ptr) func(spellName string)
 github.com/egladman/magus.WorkspaceRegistry.RegisterProject method(ptr) func(path string, opts ...ProjectOption)
 github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context) *WorkspaceRegistry
-github.com/egladman/magus/libs/testkit.CaptureLog func(tb TB, level log/slog.Leveler, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStderr func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStdout func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.Environ func(root string, keep ...string) ([]string, error)
@@ -1985,11 +1984,9 @@ github.com/egladman/magus/types.ErrUnregisteredDep var error
 github.com/egladman/magus/types.ErrVCSUnknown var error
 github.com/egladman/magus/types.ErrVCSUnsupported var error
 github.com/egladman/magus/types.ErrorDiagnosticEvent func(err error, unit string) (DiagnosticEvent, bool)
-github.com/egladman/magus/types.EvalOnce type struct
-github.com/egladman/magus/types.EvalOnce.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
-github.com/egladman/magus/types.EvalOnce.End method(ptr) func()
-github.com/egladman/magus/types.EvalOnce.Ended method(ptr) func() bool
-github.com/egladman/magus/types.EvalOnceFromContext func(ctx context.Context) *EvalOnce
+github.com/egladman/magus/types.EvalMemo type struct
+github.com/egladman/magus/types.EvalMemo.Do method(ptr) func(key string, compute func() (any, error)) (any, error)
+github.com/egladman/magus/types.EvalMemoFromContext func(ctx context.Context) *EvalMemo
 github.com/egladman/magus/types.EvaluatedProject type struct
 github.com/egladman/magus/types.EvaluatedProject.BuzzObject method func() BuzzObject
 github.com/egladman/magus/types.EvaluatedProject.ProjectEntry embedded ProjectEntry
@@ -2773,6 +2770,12 @@ github.com/egladman/magus/types.JobDenial.Rule field string "json:\"rule\"      
 github.com/egladman/magus/types.JobDenial.Ts field int64 "json:\"ts\"                    yaml:\"ts\""
 github.com/egladman/magus/types.JobDenial.VerdictRef field string "json:\"verdict_ref,omitempty\" yaml:\"verdict_ref,omitempty\""
 github.com/egladman/magus/types.JobDescendants func(rows []Job, id string) []Job
+github.com/egladman/magus/types.JobEdit type struct
+github.com/egladman/magus/types.JobEdit.AddDeviation field *Deviation "json:\"add_deviation,omitempty\""
+github.com/egladman/magus/types.JobEdit.AddGoal field *Goal "json:\"add_goal,omitempty\""
+github.com/egladman/magus/types.JobEdit.AddWritePath field string "json:\"add_write_path,omitempty\""
+github.com/egladman/magus/types.JobEdit.Apply method func(d *Declaration) bool
+github.com/egladman/magus/types.JobEdit.String method func() string
 github.com/egladman/magus/types.JobEntry type struct
 github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\""
 github.com/egladman/magus/types.JobEntry.By field Origin "json:\"by\" yaml:\"by\""
@@ -2881,14 +2884,20 @@ github.com/egladman/magus/types.JobPathsPut.Read field *[]string "json:\"read,om
 github.com/egladman/magus/types.JobPathsPut.Write field *[]string "json:\"write,omitempty\""
 github.com/egladman/magus/types.JobProblem type struct
 github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"code\""
+github.com/egladman/magus/types.JobProblem.Edit field *JobEdit "json:\"edit,omitempty\""
 github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
 github.com/egladman/magus/types.JobProblem.Permissible method func() bool
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
+github.com/egladman/magus/types.JobProblemError type struct
+github.com/egladman/magus/types.JobProblemError.Error method(ptr) func() string
+github.com/egladman/magus/types.JobProblemError.Problem field JobProblem
+github.com/egladman/magus/types.JobProblemError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.JobProblems type []JobProblem
 github.com/egladman/magus/types.JobProblems.Error method func() error
+github.com/egladman/magus/types.JobProblems.Fixable method func() int
 github.com/egladman/magus/types.JobProblems.Permit method func(ds []Deviation) (kept JobProblems, permitted JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Agent field *github.com/egladman/magus/types/agent.Spec "json:\"agent,omitempty\""
@@ -3287,6 +3296,7 @@ github.com/egladman/magus/types.KnowledgeQueryOutput type struct
 github.com/egladman/magus/types.KnowledgeQueryOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Answer field KnowledgeAnswer "json:\"answer\" yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Budget field int "json:\"budget\"         yaml:\"budget\""
+github.com/egladman/magus/types.KnowledgeQueryOutput.Context field []KnowledgeDefinitionSite "json:\"context,omitempty\" yaml:\"context,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Links field []KnowledgeEdge "json:\"links\"          yaml:\"links\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.MatchCount field int "json:\"match_count\"    yaml:\"match_count\""
@@ -5299,7 +5309,7 @@ github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path st
 github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []string) context.Context
 github.com/egladman/magus/types.WithDependencyWait func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithDiagnosticSink func(ctx context.Context, s DiagnosticSink) context.Context
-github.com/egladman/magus/types.WithEvalOnce func(ctx context.Context) context.Context
+github.com/egladman/magus/types.WithEvalMemo func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExecCost func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithExitCapture func(ctx context.Context) (context.Context, func() (int, bool))
 github.com/egladman/magus/types.WithGraphObserver func(o Observer) GraphOption

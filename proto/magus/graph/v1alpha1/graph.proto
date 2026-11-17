@@ -97,10 +97,28 @@ service GraphService {
 }
 
 message QueryNodesRequest {
-  string query = 1; // the magus query grammar, verbatim
+  // the magus query grammar, verbatim. Required unless position is set; with a position it
+  // may carry field filters only, since the window is the text.
+  string query = 1;
   int32 budget = 2; // neighborhood node budget; 0 = server default
   int32 offset = 3;
   int32 page_size = 4; // 0 = every match from offset on
+  // position seeds the ranking from a cursor: the defined symbols its prefix and suffix name,
+  // reranked by a walk that never enters its own file. The server refuses with
+  // FAILED_PRECONDITION when the symbol index cannot vouch for the position's file.
+  Position position = 5;
+  // exclude_paths are workspace-relative paths dropped before ranking: no node at or under
+  // one is matched, seeds the walk, or is walked through.
+  repeated string exclude_paths = 6;
+}
+
+// Position is a cursor in a file with its middle masked. Only prefix and suffix seed a
+// ranking, so nothing in the middle can come back as context.
+message Position {
+  string path = 1; // workspace-relative, slash-separated
+  uint32 offset = 2; // the cursor's byte offset in the file
+  string prefix = 3; // the text before the middle
+  string suffix = 4; // the text after the middle
 }
 
 message QueryNodesResponse {
@@ -112,6 +130,22 @@ message QueryNodesResponse {
   repeated Node nodes = 6;
   repeated Edge links = 7;
   Answer answer = 8;
+  // context is the source of the page's symbol matches under a position query, in match order
+  // and at most budget of them. Empty for a query with no position.
+  repeated DefinitionSite context = 9;
+}
+
+// DefinitionSite is one symbol's doc comment and declaration line as the tree holds them, kept
+// only when its indexed range verified. It mirrors types.KnowledgeDefinitionSite.
+message DefinitionSite {
+  string file = 1; // workspace-relative
+  int32 start_line = 2; // the declaration line, 1-based
+  int32 end_line = 3; // the end of the indexed range; 0 when the index recorded none
+  string status = 4; // always "verified" in a context
+  string source = 5; // the lines, from source_start_line through start_line
+  int32 source_start_line = 6;
+  string symbol = 7; // the symbol's label
+  string match_id = 8; // the match this site is the source of
 }
 
 message ResolveNodesRequest {

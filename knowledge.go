@@ -2493,12 +2493,26 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 // With symbols, it merges the @symbols shards into a clone.
 // So the warm graph other MCP tools read never holds a huge symbol set.
 // A scope that targets one symbol merges only the shards that mention it.
+//
+// optimization: in the server, hold the all-symbols merge beside the warm graph.
+//
+//	measured: a position query over the wire, 1.1-1.3 s to the p95 the report names;
+//	the merge and the symbol shard walk were 0.7 s of it.
+//	trade-off: the server keeps one symbol-merged graph alive between requests.
+//	assumes: the SymbolIndexStatus memo is replaced on every source change and index run,
+//	which symbolIndexer.onChange does, and lives only while a watcher invalidates it.
 func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	g, err := m.evaluationKnowledgeGraph(ctx, req.Refresh)
 	if err != nil || !req.Symbols.Loaded() {
 		return g, err
 	}
-	return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
+	memo, watched := m.symbolStatus.get()
+	if req.Symbols != types.AllSymbols || req.Refresh || !watched || len(memo) == 0 {
+		return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
+	}
+	return m.warmKnowledgeGraph().symbolGraph(g, &memo[0], func() (*knowledge.Graph, error) {
+		return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
+	})
 }
 
 // optimization: read the warm graph once per evaluation, not per scope.

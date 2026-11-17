@@ -110,6 +110,25 @@ Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/gr
 
 Used by: [GetHistoryMetrics (response)](../../historymetrics/v1alpha1/historymetrics.md#gethistorymetrics), [QueryNodes (response)](graph.md#querynodes).
 
+### DefinitionSite
+
+DefinitionSite is one symbol's doc comment and declaration line as the tree holds them, kept only when its indexed range verified. It mirrors types.KnowledgeDefinitionSite.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field               | Type   | # | Description                                                  |
+| ------------------- | ------ | - | ------------------------------------------------------------ |
+| `file`              | string | 1 | workspace-relative                                           |
+| `start_line`        | int32  | 2 | the declaration line, 1-based                                |
+| `end_line`          | int32  | 3 | the end of the indexed range; 0 when the index recorded none |
+| `status`            | string | 4 | always "verified" in a context                               |
+| `source`            | string | 5 | the lines, from source\_start\_line through start\_line      |
+| `source_start_line` | int32  | 6 |                                                              |
+| `symbol`            | string | 7 | the symbol's label                                           |
+| `match_id`          | string | 8 | the match this site is the source of                         |
+
+Used by: [QueryNodes (response)](graph.md#querynodes).
+
 ### Dependents
 
 Dependents is the transitive depends\_on fan-in of one node. Ids only: a caller that wants a label already has the node, or can ask ExplainNode for the one it cares about.
@@ -347,16 +366,33 @@ Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/gr
 
 Used by: [FindPath (response)](graph.md#findpath).
 
+### Position
+
+Position is a cursor in a file with its middle masked. Only prefix and suffix seed a ranking, so nothing in the middle can come back as context.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field    | Type   | # | Description                          |
+| -------- | ------ | - | ------------------------------------ |
+| `path`   | string | 1 | workspace-relative, slash-separated  |
+| `offset` | uint32 | 2 | the cursor's byte offset in the file |
+| `prefix` | string | 3 | the text before the middle           |
+| `suffix` | string | 4 | the text after the middle            |
+
+Used by: [QueryNodes (request)](graph.md#querynodes).
+
 ### QueryNodesRequest
 
 Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
 
-| Field       | Type   | # | Description                                  |
-| ----------- | ------ | - | -------------------------------------------- |
-| `query`     | string | 1 | the magus query grammar, verbatim            |
-| `budget`    | int32  | 2 | neighborhood node budget; 0 = server default |
-| `offset`    | int32  | 3 |                                              |
-| `page_size` | int32  | 4 | 0 = every match from offset on               |
+| Field           | Type                  | # | Description                                                                                                                                                                                                                                           |
+| --------------- | --------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`         | string                | 1 | the magus query grammar, verbatim. Required unless position is set; with a position it may carry field filters only, since the window is the text.                                                                                                    |
+| `budget`        | int32                 | 2 | neighborhood node budget; 0 = server default                                                                                                                                                                                                          |
+| `offset`        | int32                 | 3 |                                                                                                                                                                                                                                                       |
+| `page_size`     | int32                 | 4 | 0 = every match from offset on                                                                                                                                                                                                                        |
+| `position`      | [Position](#position) | 5 | position seeds the ranking from a cursor: the defined symbols its prefix and suffix name, reranked by a walk that never enters its own file. The server refuses with FAILED\_PRECONDITION when the symbol index cannot vouch for the position's file. |
+| `exclude_paths` | repeated string       | 6 | exclude\_paths are workspace-relative paths dropped before ranking: no node at or under one is matched, seeds the walk, or is walked through.                                                                                                         |
 
 Used by: [QueryNodes (request)](graph.md#querynodes).
 
@@ -364,16 +400,17 @@ Used by: [QueryNodes (request)](graph.md#querynodes).
 
 Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
 
-| Field         | Type                     | # | Description                  |
-| ------------- | ------------------------ | - | ---------------------------- |
-| `query`       | string                   | 1 |                              |
-| `budget`      | int32                    | 2 |                              |
-| `match_count` | int32                    | 3 | TOTAL matches, not this page |
-| `offset`      | int32                    | 4 |                              |
-| `matches`     | [repeated Match](#match) | 5 |                              |
-| `nodes`       | [repeated Node](#node)   | 6 |                              |
-| `links`       | [repeated Edge](#edge)   | 7 |                              |
-| `answer`      | [Answer](#answer)        | 8 |                              |
+| Field         | Type                                       | # | Description                                                                                                                                               |
+| ------------- | ------------------------------------------ | - | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`       | string                                     | 1 |                                                                                                                                                           |
+| `budget`      | int32                                      | 2 |                                                                                                                                                           |
+| `match_count` | int32                                      | 3 | TOTAL matches, not this page                                                                                                                              |
+| `offset`      | int32                                      | 4 |                                                                                                                                                           |
+| `matches`     | [repeated Match](#match)                   | 5 |                                                                                                                                                           |
+| `nodes`       | [repeated Node](#node)                     | 6 |                                                                                                                                                           |
+| `links`       | [repeated Edge](#edge)                     | 7 |                                                                                                                                                           |
+| `answer`      | [Answer](#answer)                          | 8 |                                                                                                                                                           |
+| `context`     | [repeated DefinitionSite](#definitionsite) | 9 | context is the source of the page's symbol matches under a position query, in match order and at most budget of them. Empty for a query with no position. |
 
 Used by: [QueryNodes (response)](graph.md#querynodes).
 
