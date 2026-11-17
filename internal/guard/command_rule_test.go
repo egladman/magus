@@ -98,6 +98,7 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 		Thread:     types.AgentThreadSub,
 		ThreadFrom: types.ThreadReported,
 		Checkout:   sub.Checkout, // read from the fixture's own checkout, which this test does not shape
+		Push:       sub.Push,     // the same; TestCommandRuleIsHandedThePush pins what a push reads
 		Dir:        sub.Dir,
 		Workspace:  sub.Workspace,
 	}, sub, "the subagent reports the main session's id; magus never saw it spawned, so no Parent or Lease")

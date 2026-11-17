@@ -361,6 +361,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			worker: "root/feat footprint", decision: decisionDeny, reason: "only the main session pushes or opens a pull request"},
 		{rule: "unplaced-call", name: "a push after a cd to a variable", input: bash(`cd "$X" && git push origin HEAD:pin-key`),
 			decision: decisionDeny, reason: "spell the directory as a literal path"},
+		{rule: "push-unverified", name: "a push of the commit the same line rebases to", input: bash(`git rebase origin/main && git push origin HEAD:pin-key`),
+			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: decisionAdvise,
+			reason: "magus cannot tell, before the line runs, which commit this push publishes"},
 		{rule: "branch-name", name: "the main session pushes an uppercase, underscored name", input: bash("git push origin HEAD:Pin_Key"),
 			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "`Pin_Key` is not a branch name to publish"},
 		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
@@ -440,10 +443,15 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				input["agent_id"] = "a1"
 				writeSpawnedAgent(hint.NewGate(cacheDir, FactsKey("claude-code", "8f2c6a1e")), "a1", spawnedAgent{Description: tc.worker})
 			}
-			// busy-wait off, so the policy's own loop rules (ci-watch, pr-watch) decide and say why.
+			// The built-ins as the policy declares them, so push-gate stays off where push.buzz
+			// judges a push, and busy-wait off, so the policy's own loop rules (ci-watch,
+			// pr-watch) decide and say why.
+			builtins := map[string]builtin.Setting{}
+			maps.Copy(builtins, m.Builtins())
+			builtins[string(denyRuleBusyWait)] = builtin.Setting{Decision: builtin.Off}
 			deps := Dependencies{
 				CommandRule: m.CommandRule(), SpawnRule: m.SpawnRule(), WriteRule: m.WriteRule(),
-				Builtins: map[string]builtin.Setting{string(denyRuleBusyWait): {Decision: builtin.Off}},
+				Builtins: builtins,
 			}
 			if tc.checkout != nil {
 				deps.CheckoutState = func(context.Context, string) *types.CheckoutState { return tc.checkout }
@@ -456,7 +464,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				// advice leads and the policy's is added to it.
 				assert.Contains(t, v.Context, "the lease store did not read")
 			case tc.decision != decisionPass:
-				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")
+				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule, workspaceShellPrefix + tc.rule}, v.Rule, "the policy decided, not a built-in")
 			}
 			if tc.reason != "" {
 				assert.Contains(t, v.Reason+v.Context, tc.reason)
