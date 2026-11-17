@@ -12,14 +12,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
-
-	"mvdan.cc/sh/v3/syntax"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
@@ -42,6 +38,10 @@ var queueDownloads *http.Client
 
 // queueOpenVCS opens the checkout every verb works in.
 var queueOpenVCS = client.OpenVCS
+
+// describeRerunFlags are the describe flags a retry line carries over.
+var describeRerunFlags = []string{flaggen.FlagQueueDescribeProvider, flaggen.FlagQueueDescribeBase, flaggen.FlagQueueDescribeStatusContext,
+	flaggen.FlagQueueDescribeRemote, flaggen.FlagQueueDescribeVCS}
 
 // queueEnv is what every verb shares: the checkout and the standard streams.
 type queueEnv struct {
@@ -116,56 +116,6 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "Run `magus queue <subcommand> -h` for its own flags.")
 }
 
-// queueSourceUsage documents apply's operand; parseQueueSource implements it.
-const queueSourceUsage = `<source> is where apply reads the plan and the verdicts:
-  <dir>        the directory validate --verdicts wrote
-  run:<run>    the artifacts of a validation run, <run> as the provider names it
-               (github: <owner>/<name>/runs/<id>)
-Text before the first ":" that reads as a URL scheme of two or more characters is
-one, and an unknown scheme is an error; write ./<dir> for a directory named like one.
-`
-
-const queueRunScheme = "run"
-
-// queueSource is apply's operand: a verdict directory, or a validation run whose
-// artifacts hold one. Exactly one of dir and run is set.
-type queueSource struct {
-	dir string
-	run string // what the provider's list_artifacts reads
-}
-
-// parseQueueSource reads arg by the grammar in queueSourceUsage. A one-letter scheme is
-// a Windows drive, as git reads it, so C:\queue stays a path.
-func parseQueueSource(arg string) (queueSource, error) {
-	if arg == "" {
-		return queueSource{}, errors.New("<source> is empty")
-	}
-	scheme, spec, ok := strings.Cut(arg, ":")
-	if !ok || len(scheme) < 2 || !isURLScheme(scheme) {
-		return queueSource{dir: arg}, nil
-	}
-	if scheme != queueRunScheme {
-		return queueSource{}, fmt.Errorf("source %q: unknown scheme %q, write ./%s for a directory", arg, scheme, arg)
-	}
-	if strings.TrimSpace(spec) == "" {
-		return queueSource{}, fmt.Errorf("source %q: want %s:<run>", arg, queueRunScheme)
-	}
-	return queueSource{run: spec}, nil
-}
-
-// isURLScheme applies RFC 3986's scheme syntax.
-func isURLScheme(s string) bool {
-	for i, r := range s {
-		switch {
-		case 'a' <= r && r <= 'z', 'A' <= r && r <= 'Z':
-		case i > 0 && ('0' <= r && r <= '9' || r == '+' || r == '-' || r == '.'):
-		default:
-			return false
-		}
-	}
-	return s != ""
-}
-
 // path resolves a relative path argument against the checkout, as --root promises.
 func (e *queueEnv) path(p string) string {
 	if p == "" || p == "-" || filepath.IsAbs(p) {
@@ -195,7 +145,7 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 			fmt.Fprintln(e.stderr, "\nFlags (magus's global flags apply too; see magus -h):")
 			printOwnDefaults(own)
 			if verb == "apply" {
-				fmt.Fprint(e.stderr, "\n"+queueSourceUsage)
+				fmt.Fprint(e.stderr, "\n"+queue.SourceUsage)
 			}
 		}
 	})
@@ -210,16 +160,6 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 		return flags, nil, nil, exit.Usagef("magus queue %s: missing <%s>", verb, operands[len(got)])
 	}
 	return flags, got, set, nil
-}
-
-// required reports the first flag given no value, in the order given.
-func queueRequired(verb string, flags ...[2]string) error {
-	for _, f := range flags {
-		if f[1] == "" {
-			return exit.Usagef("magus queue %s: --%s is required", verb, f[0])
-		}
-	}
-	return nil
 }
 
 func flagGiven(fs *flag.FlagSet, name string) bool {
@@ -280,7 +220,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
+	if err := queue.Required("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
 	opts, err := output.Parse(global.output)
@@ -305,7 +245,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: remote, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
 	var refused *types.SetupRefusedError
 	if errors.As(err, &refused) {
-		return fmt.Errorf("retry with %s: %w", renderRerun(e.root, fs, refused.App), err)
+		return fmt.Errorf("retry with %s: %w", queue.RenderRerun(e.root, fs, describeRerunFlags, refused.App), err)
 	}
 	if err != nil {
 		return err
@@ -320,71 +260,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err := caps.Check(); err != nil {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
 	}
-	return writeQueueSetup(e.stdout, f.Provider, f.Base, caps)
-}
-
-// writeQueueSetup renders what describe read as a script a person reads and then runs
-// step by step: every fact is a comment, every step a command or a link to open.
-func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities) error {
-	var b strings.Builder
-	methods := make([]string, len(caps.Methods))
-	for i, m := range caps.Methods {
-		methods[i] = string(m)
-	}
-	fmt.Fprintf(&b, "# %s on %s: merge methods %s; stacks merge %s", provider, base, strings.Join(methods, ", "), caps.StackMerge)
-	if caps.QueueLabel != "" {
-		fmt.Fprintf(&b, "; a stack queues by the label %q", caps.QueueLabel+"<method>")
-	}
-	b.WriteString("\n")
-	if caps.RequiredApprovals == 0 {
-		fmt.Fprintf(&b, "# %s requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own\n", base)
-	} else {
-		fmt.Fprintf(&b, "# %s requires %d approving reviews at the commit a review of a change's head covers\n", base, caps.RequiredApprovals)
-	}
-	s := caps.Setup
-	if s == nil {
-		fmt.Fprintf(&b, "# no setup: --status-context is empty, or provider %s reports none\n", provider)
-		_, err := io.WriteString(w, b.String())
-		return err
-	}
-	fmt.Fprintf(&b, "# the queue posts %q as %s\n", s.StatusContext, s.Credential)
-	if len(s.RequiredChecks) == 0 {
-		fmt.Fprintf(&b, "# %s requires no check\n", base)
-	}
-	for _, rc := range s.RequiredChecks {
-		from := "any source"
-		if rc.Integration != "" {
-			from = "integration " + rc.Integration
-		}
-		seen := "not seen reported"
-		if len(rc.Events) > 0 {
-			seen = "seen on " + strings.Join(rc.Events, ", ")
-		}
-		fmt.Fprintf(&b, "# %s requires %q from %s (%s)\n", base, rc.Context, from, seen)
-	}
-	for _, st := range s.Settings {
-		fmt.Fprintf(&b, "# %s is %s; the queue needs %s\n", st.Name, st.Value, st.Want)
-	}
-	if a := s.App; a != nil {
-		fmt.Fprintf(&b, "# app %s is integration %s", a.Slug, a.ID)
-		if a.ClientID != "" {
-			fmt.Fprintf(&b, ", client id %s", a.ClientID)
-		}
-		b.WriteString("\n")
-	}
-	if len(s.Steps) == 0 {
-		b.WriteString("# nothing left to set up\n")
-	}
-	for i, st := range s.Steps {
-		fmt.Fprintf(&b, "\n# %d. %s\n", i+1, st.Title)
-		if st.URL != "" {
-			fmt.Fprintf(&b, "# open %s\n", st.URL)
-			continue
-		}
-		b.WriteString(strings.TrimRight(st.Command, "\n") + "\n")
-	}
-	_, err := io.WriteString(w, b.String())
-	return err
+	return queue.WriteSetup(e.stdout, f.Provider, f.Base, caps)
 }
 
 func queueLs(ctx context.Context, e *queueEnv, args []string) error {
@@ -392,7 +268,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("ls", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
+	if err := queue.Required("ls", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
 	opts, err := output.Parse(global.output)
@@ -418,7 +294,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	fetch := magustypes.InflightFetch{
-		Provider: f.Provider, Host: remoteHost(remote), Base: f.Base,
+		Provider: f.Provider, Host: queue.RemoteHost(remote), Base: f.Base,
 		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
 	}
 	// One line, so a document on stdout is itself a JSONL record.
@@ -455,13 +331,13 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("plan", [2]string{"out", f.Out}, [2]string{"provider", f.Provider}); err != nil {
+	if err := queue.Required("plan", [2]string{"out", f.Out}, [2]string{"provider", f.Provider}); err != nil {
 		return err
 	}
 	if f.Depth < 1 || f.Parallel < 0 {
 		return exit.Usagef("magus queue plan: --depth must be at least 1 and --parallel must not be negative")
 	}
-	in, err := readQueueChanges(e.path(f.Changes), e.stdin)
+	in, err := queue.ReadChangesFile(e.path(f.Changes), e.stdin)
 	if err != nil {
 		return err
 	}
@@ -502,7 +378,7 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("reviews", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}, [2]string{"change", f.Change}); err != nil {
+	if err := queue.Required("reviews", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}, [2]string{"change", f.Change}); err != nil {
 		return err
 	}
 	opts, err := output.Parse(global.output)
@@ -570,32 +446,6 @@ func (e *queueEnv) writeDocument(opts output.Options, doc []byte, shape any, nam
 	return writeFormatted(e.stdout, opts, record)
 }
 
-// remoteHost is the host a remote URL names, "" when it names none. It reads URL forms
-// and git's scp form (user@host:path), and never returns the userinfo a URL may carry.
-func remoteHost(remote string) string {
-	if u, err := url.Parse(remote); err == nil && u.Host != "" {
-		return u.Hostname()
-	}
-	if _, rest, ok := strings.Cut(remote, "@"); ok {
-		if host, _, ok := strings.Cut(rest, ":"); ok {
-			return host
-		}
-	}
-	return ""
-}
-
-func readQueueChanges(file string, stdin io.Reader) (types.Changes, error) {
-	if file == "-" {
-		return queue.ReadChanges(stdin)
-	}
-	f, err := os.Open(file)
-	if err != nil {
-		return types.Changes{}, err
-	}
-	defer f.Close()
-	return queue.ReadChanges(f)
-}
-
 func writeQueueFile(file string, write func(io.Writer) error) error {
 	f, err := os.Create(file)
 	if err != nil {
@@ -628,7 +478,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if !f.Stdin {
 		return exit.Usagef("magus queue validate: --stdin is required; the plan is read from stdin (< plan.json)")
 	}
-	if err := queueRequired("validate", [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
+	if err := queue.Required("validate", [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
 		return err
 	}
 	if f.Parallel < 0 {
@@ -665,7 +515,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	}
 	defer func() { _ = closeFacts() }()
 	hookEnv.Spells = grants
-	if hookEnv, err = passEnv(hookEnv, f.Env, "validate"); err != nil {
+	if hookEnv, err = queue.PassEnv(hookEnv, f.Env, "validate"); err != nil {
 		return err
 	}
 	dir := &queue.VerdictDir{Path: e.path(f.Verdicts)}
@@ -727,19 +577,6 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 	), nil
 }
 
-// passEnv adds the variables list names, comma-separated, to env: validate and
-// gate share the --env that takes them. A name the box owns is a usage error.
-func passEnv(env queue.HookEnv, list, verb string) (queue.HookEnv, error) {
-	if list == "" {
-		return env, nil
-	}
-	env, err := env.Pass(strings.Split(list, ","))
-	if err != nil {
-		return env, exit.Usagef("magus queue %s: --env: %v", verb, err)
-	}
-	return env, nil
-}
-
 // queueGate runs its command in a candidate box of HEAD through queue.GateCommit, the
 // path validate's gate takes, with the sandbox and grants validate would give it, read
 // by the same openFacts.
@@ -764,7 +601,7 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	if err := closeFacts(); err != nil {
 		return err
 	}
-	env, err := passEnv(queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}, f.Env, "gate")
+	env, err := queue.PassEnv(queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}, f.Env, "gate")
 	if err != nil {
 		return err
 	}
@@ -781,18 +618,12 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	return err
 }
 
-// queuePlanSource is a verdict source that also carries the plan its verdicts answer to.
-type queuePlanSource interface {
-	types.VerdictSource
-	Plan(ctx context.Context) (types.Plan, bool, error)
-}
-
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, flaggen.BindQueueApply, "source")
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("apply", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
+	if err := queue.Required("apply", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
 	switch {
@@ -801,17 +632,17 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	case f.Once && flagGiven(fs, flaggen.FlagQueueApplyInterval):
 		return exit.Usagef("magus queue apply: --interval has no effect with --once")
 	}
-	src, err := parseQueueSource(operands[0])
+	src, err := queue.ParseSource(operands[0])
 	if err != nil {
 		return exit.Usagef("magus queue apply: %v", err)
 	}
 	switch {
-	case src.run != "" && f.Workflow == "":
+	case src.Run != "" && f.Workflow == "":
 		return exit.Usagef("magus queue apply: a run: source needs --workflow, the definition the run must have run")
-	case src.dir != "" && f.Workflow != "":
+	case src.Dir != "" && f.Workflow != "":
 		return exit.Usagef("magus queue apply: --workflow has no effect on a directory source")
 	}
-	who, err := parseCommitter(f.Committer)
+	who, err := queue.ParseCommitter(f.Committer)
 	if err != nil {
 		return exit.Usagef("magus queue apply: --committer: %v", err)
 	}
@@ -838,8 +669,8 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	if src.run != "" && !p.ListsArtifacts() {
-		return fmt.Errorf("provider %q does not export list_artifacts, which reading run:%s needs", f.Provider, src.run)
+	if src.Run != "" && !p.ListsArtifacts() {
+		return fmt.Errorf("provider %q does not export list_artifacts, which reading run:%s needs", f.Provider, src.Run)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
@@ -855,9 +686,9 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	}
 	defer func() { _ = closeFacts() }()
 	events := queue.NewEvents(e.stdout)
-	var from queuePlanSource
-	if src.dir != "" {
-		from = &queue.VerdictDir{Path: e.path(src.dir), Follow: !f.Once, Interval: f.Interval}
+	var from queue.PlanSource
+	if src.Dir != "" {
+		from = &queue.VerdictDir{Path: e.path(src.Dir), Follow: !f.Once, Interval: f.Interval}
 	} else {
 		// The unpacked run lives only as long as applying does.
 		tmp, err := os.MkdirTemp("", "mergequeue-run-")
@@ -865,7 +696,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 			return err
 		}
 		defer func() { _ = os.RemoveAll(tmp) }()
-		from = &queue.ArtifactFollower{Lister: p, Source: src.run, Path: tmp, Branch: f.Base, Definition: f.Workflow,
+		from = &queue.ArtifactFollower{Lister: p, Source: src.Run, Path: tmp, Branch: f.Base, Definition: f.Workflow,
 			Follow: !f.Once, Interval: f.Interval, Client: queueDownloads, Events: events}
 	}
 	pl, planned, err := from.Plan(ctx)
@@ -874,13 +705,13 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	}
 	switch {
 	case planned:
-	case src.dir != "":
-		return fmt.Errorf("%s holds no %s", e.path(src.dir), queue.PlanFile)
+	case src.Dir != "":
+		return fmt.Errorf("%s holds no %s", e.path(src.Dir), queue.PlanFile)
 	case f.Once:
-		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: fmt.Sprintf("run %s has uploaded no plan yet; nothing to apply", src.run)})
+		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: fmt.Sprintf("run %s has uploaded no plan yet; nothing to apply", src.Run)})
 		return nil
 	default:
-		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: fmt.Sprintf("run %s completed without a plan; nothing to apply", src.run)})
+		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: fmt.Sprintf("run %s completed without a plan; nothing to apply", src.Run)})
 		return nil
 	}
 	scratch, cleanup, err := queueScratch("merge-queue-apply")
@@ -893,7 +724,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	a.Base, a.RemoteURL = f.Base, remoteURL
-	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
+	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.Run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if a.CarryPolicy, err = e.carryPolicy(); err != nil {
 		return err
@@ -902,45 +733,4 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants}, queue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
-}
-
-// renderRerun is the describe command line fs was parsed from, quoted for a shell, with
-// app, the provider's own value, in place of the --app it was given.
-func renderRerun(root string, fs *flag.FlagSet, app string) string {
-	words := []string{"magus"}
-	if root != "" {
-		words = append(words, "--root", shellWord(root))
-	}
-	words = append(words, "queue", "describe")
-	for _, name := range []string{flaggen.FlagQueueDescribeProvider, flaggen.FlagQueueDescribeBase, flaggen.FlagQueueDescribeStatusContext,
-		flaggen.FlagQueueDescribeRemote, flaggen.FlagQueueDescribeVCS} {
-		if flagGiven(fs, name) {
-			words = append(words, "--"+name, shellWord(fs.Lookup(name).Value.String()))
-		}
-	}
-	return strings.Join(append(words, "--app", shellWord(app)), " ")
-}
-
-// shellWord quotes s as one word for bash, or Go-quotes it when it holds a byte no shell
-// quote can carry.
-func shellWord(s string) string {
-	q, err := syntax.Quote(s, syntax.LangBash)
-	if err != nil {
-		return strconv.Quote(s)
-	}
-	return q
-}
-
-// parsePerson reads "Name <email>"; empty is the zero Person.
-func parseCommitter(s string) (magustypes.Person, error) {
-	if s == "" {
-		return magustypes.Person{}, nil
-	}
-	name, rest, ok := strings.Cut(s, " <")
-	email, closed := strings.CutSuffix(rest, ">")
-	name = strings.TrimSpace(name)
-	if !ok || !closed || name == "" || email == "" || strings.ContainsAny(email, "<> ") {
-		return magustypes.Person{}, fmt.Errorf("%q is not \"Name <email>\"", s)
-	}
-	return magustypes.Person{Name: name, Email: email}, nil
 }
