@@ -936,7 +936,7 @@ linters:
       # test file.
       - path: ^broker/(activation_unix|activation_unix_test)\.go$
         linters: [testpairing]
-      - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
+      - path: ^cmd/magus/bootstrap_exec_unix\.go$
         linters: [testpairing]
       - path: ^internal/audit/inode_unix\.go$
         linters: [testpairing]
