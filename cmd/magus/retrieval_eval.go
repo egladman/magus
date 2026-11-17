@@ -74,7 +74,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 		answer = res.Out.Answer
 		err = writeQueryText(ctx, &printed, r.next, r.next.served(hint.NextForQuery(res.Out)), res)
 	case readExplain:
-		res := workspacegraph.ExplainLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
+		res := graphReads.ExplainLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
 		run.Latency = time.Since(start)
 		answer = res.Answer
 		// A miss prints to stderr only.

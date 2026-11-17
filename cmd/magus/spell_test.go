@@ -231,9 +231,8 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 }
 
 // Pulling a spell magus ships prints what a registry pull of its published artifact
-// prints, and that artifact is what `spell build` makes of a checkout of the same
-// directory: the same layer bytes, and the same manifest once the provenance is the
-// shipped one, which carries no revision or creation time.
+// prints, and `spell build` of a checkout of the same directory packs that artifact's
+// layer. remote's tests pin the whole manifest.
 func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	r := testkit.NewRepository(t, map[string]string{"magus.yaml": ""})
 	repo := r.Root()
@@ -250,17 +249,13 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	assert.Equal(t, "ghcr.io/egladman/magus/spells/go", fmt.Sprintf("%s/%s", ref.Registry, ref.Repository))
 	assert.Equal(t, dst, pulled[1])
 
-	driver, err := remotespell.ResolveVCS(t.Context(), types.VCSOptions{}, dir)
+	_, shipped, err := remotespell.BuildShipped("go")
 	require.NoError(t, err)
-	built, err := remotespell.Build(t.Context(), dir, driver, remotespell.ShippedProvenance("golang"))
-	require.NoError(t, err)
-	m, err := built.Manifest()
-	require.NoError(t, err)
-	assert.Equal(t, m.Digest, ref.Digest, "the stamped digest is the manifest a build of the checkout makes")
+	assert.Equal(t, shipped.Digest, ref.Digest, "the stamped digest is the artifact a release publishes")
 
 	var res remotespell.BuildResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
-	assert.Equal(t, digest.FromBytes(built.Blobs[0].Data), res.Layer, "`spell build` packs the same layer")
+	assert.Equal(t, shipped.Layer, res.Layer, "`spell build` packs the same layer")
 
 	spellBuzz, err := os.ReadFile(filepath.Join(dst, "spell.buzz"))
 	require.NoError(t, err)
@@ -270,8 +265,8 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 
 	var pullRes remotespell.PullResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "pull", "magus/spell/go", t.TempDir(), "-o", "json")), &pullRes))
-	assert.Equal(t, remotespell.Override{Import: "magus/spell/go", Path: filepath.ToSlash(pullRes.Dir)}, pullRes.Override,
-		"a copy outside the workspace is declared by its absolute path")
+	assert.Equal(t, "magus/spell/go", pullRes.Override.Import)
+	assert.Equal(t, filepath.ToSlash(pullRes.Dir), pullRes.Override.Path, "a copy outside the workspace is declared by its absolute path")
 	assert.Equal(t, ref.Digest, pullRes.Digest)
 }
 

@@ -1531,7 +1531,7 @@ func (s *BuzzRunnerTestSuite) TestATestRunIsRecordedWithItsTestLines() {
 
 	s.Require().Len(s.records, 2)
 	s.True(s.records[0].Test)
-	s.NoError(s.records[0].Err)
+	s.Require().NoError(s.records[0].Err)
 	s.Contains(string(s.records[0].Out), `ok    test "a.buzz"`)
 	s.Contains(string(s.records[0].Out), "1 passed, 0 failed, 0 skipped")
 	s.Require().Error(s.records[1].Err)

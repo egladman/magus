@@ -47,7 +47,7 @@ func (s *ReadSuite) TestExplainLoadedAMissCarriesTheVerdictAndTheNearestNode() {
 	var asked []string
 	g := knowledge.NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "target:build", Kind: "target", Label: "build"})
-	res := ExplainLoaded(context.Background(), g, knowledge.GraphRead{Input: "target:buld"}, recordedCoverage(knowledge.Coverage{}, &asked))
+	res := Reads{}.ExplainLoaded(context.Background(), g, knowledge.GraphRead{Input: "target:buld"}, recordedCoverage(knowledge.Coverage{}, &asked))
 	s.False(res.Found)
 	s.Equal([]string{"target:buld"}, asked)
 	s.Equal(g.NearestNode("target:buld"), res.Nearest)

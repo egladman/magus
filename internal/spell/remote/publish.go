@@ -39,7 +39,7 @@ func BuildDir(ctx context.Context, opts types.VCSOptions, dir, source string) (o
 	if err != nil {
 		return oci.Artifact{}, BuildResult{}, err
 	}
-	driver, err := ResolveVCS(ctx, opts, abs)
+	driver, err := resolveVCS(ctx, opts, abs)
 	if err != nil {
 		return oci.Artifact{}, BuildResult{}, err
 	}
@@ -92,14 +92,20 @@ func describe(content oci.Artifact) (BuildResult, error) {
 func shippedDir(name string) (string, error) {
 	dir, ok := spell.ShippedDir(name)
 	if !ok {
-		return "", fmt.Errorf("magus ships no spell %q, `magus spell ls %s` lists them", name, ShippedPath)
+		return "", fmt.Errorf("magus ships no spell %q, `magus spell ls %s` lists them", name, shippedPath)
 	}
 	return dir, nil
 }
 
-// ShippedPath is what `spell ls` takes to list the spells magus ships: the
+// shippedPath is what `spell ls` takes to list the spells magus ships: the
 // magus/spell/<name> import form with no name.
-var ShippedPath = strings.TrimSuffix(spells.ModulePrefix, "/")
+var shippedPath = strings.TrimSuffix(spells.ModulePrefix, "/")
+
+// ListsShipped reports whether arg, a `spell ls` argument, asks for the spells magus
+// ships rather than a registry repository. A trailing slash is ignored.
+func ListsShipped(arg string) bool {
+	return strings.TrimSuffix(arg, "/") == shippedPath
+}
 
 // PullResult is what pull reports: the pinned reference it verified, and where the
 // verified files are.
@@ -110,11 +116,11 @@ type PullResult struct {
 	// Override is the magus.yaml entry that makes a copy of a built-in replace it, set
 	// only when pulling one (magus/spell/<name>). Pull never writes magus.yaml: the
 	// declaration is the acknowledgment.
-	Override Override `json:"override,omitzero"`
+	Override override `json:"override,omitzero"`
 }
 
-// Override is one `spells: {<import>: {path: <path>}}` entry.
-type Override struct {
+// override is one `spells: {<import>: {path: <path>}}` entry.
+type override struct {
 	Import string `json:"import"`
 	Path   string `json:"path"`
 }
@@ -145,7 +151,7 @@ func EjectShipped(wsRoot, name, dst string) (res PullResult, next string, err er
 		return res, fmt.Sprintf("%s ships as source only: it imports a host module, so there is no built-in to replace. Import the copy by its path: import %q;\n",
 			spells.ModulePath(name), rel), nil
 	}
-	res.Override = Override{Import: spells.ModulePath(name), Path: rel}
+	res.Override = override{Import: spells.ModulePath(name), Path: rel}
 	return res, fmt.Sprintf("to run this copy in place of the built-in, declare it in magus.yaml:\n\nspells:\n  %s:\n    path: %s\n",
 		res.Override.Import, res.Override.Path), nil
 }
@@ -268,10 +274,10 @@ func ListShipped() ([]ShippedSpell, error) {
 	return out, err
 }
 
-// ResolveVCS resolves the VCS that holds dir, with the workspace's VCS options when a
+// resolveVCS resolves the VCS that holds dir, with the workspace's VCS options when a
 // workspace loads. A tree no VCS answers for is an error: packing every file on disk
 // would make the digest depend on the machine.
-func ResolveVCS(ctx context.Context, opts types.VCSOptions, dir string) (types.VCSDriver, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
+func resolveVCS(ctx context.Context, opts types.VCSOptions, dir string) (types.VCSDriver, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	res, err := vcs.Resolve(ctx, dir, "", opts)
 	if err != nil {
 		return nil, err

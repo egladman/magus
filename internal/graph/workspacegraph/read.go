@@ -128,13 +128,13 @@ func (r Reads) ExplainNode(ctx context.Context, ws ReadWorkspace, cfg config.Con
 	if err != nil {
 		return knowledge.ExplainResult{}, err
 	}
-	return ExplainLoaded(ctx, g, read, r.MeasuredCoverage(ctx, ws, cfg)), nil
+	return r.ExplainLoaded(ctx, g, read, r.MeasuredCoverage(ctx, ws, cfg)), nil
 }
 
 // ExplainLoaded is ExplainNode over g, a graph loaded once for many reads: it must hold
 // every symbol shard when read seeds the symbol layer, and only the default graph
 // otherwise.
-func ExplainLoaded(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, coverage CoverageFunc) knowledge.ExplainResult {
+func (Reads) ExplainLoaded(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, coverage CoverageFunc) knowledge.ExplainResult {
 	tr := observability.TraceFromContext(ctx)
 	seeded := knowledge.SeedsLazyLayer(read.Input)
 	stop := tr.Phase("explain.search")

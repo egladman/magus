@@ -350,13 +350,13 @@ func spellLs(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return exit.Usagef("magus spell ls: want <registry>/<repository> or %s, got %d argument(s)", remotespell.ShippedPath, len(pos))
+		return exit.Usagef("magus spell ls: want <registry>/<repository> or magus/spell, got %d argument(s)", len(pos))
 	}
 	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSuffix(pos[0], "/") == remotespell.ShippedPath {
+	if remotespell.ListsShipped(pos[0]) {
 		shipped, err := remotespell.ListShipped()
 		if err != nil {
 			return fmt.Errorf("spell ls: %w", err)

@@ -580,7 +580,7 @@ func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb stri
 	case readQuery:
 		return workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, gs.coverage)
 	case readExplain:
-		return workspacegraph.ExplainLoaded(ctx, g, read, gs.coverage)
+		return graphReads.ExplainLoaded(ctx, g, read, gs.coverage)
 	case readRefs:
 		return lookupRefs(ctx, f.local, f.cfg, gs.symbols, read, gs.coverage)
 	}

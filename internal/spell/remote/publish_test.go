@@ -3,15 +3,18 @@ package remote
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -71,13 +74,44 @@ func TestEjectShippedMatchesBuildShipped(t *testing.T) {
 	res, next, err := EjectShipped(ws, "go", filepath.Join(ws, dst))
 	require.NoError(t, err)
 	assert.Equal(t, built.Digest, res.Digest)
-	assert.Equal(t, Override{Import: "magus/spell/go", Path: dst}, res.Override, "a copy inside the workspace is declared by its relative path")
+	assert.Equal(t, override{Import: "magus/spell/go", Path: dst}, res.Override, "a copy inside the workspace is declared by its relative path")
 	assert.Contains(t, next, "spells:\n  magus/spell/go:\n    path: spells/go\n")
 
 	res, next, err = EjectShipped("", "endoflife-date", t.TempDir())
 	require.NoError(t, err)
 	assert.Zero(t, res.Override)
 	assert.Contains(t, next, "ships as source only")
+}
+
+// A checkout of the directory a shipped spell comes from, built with the shipped
+// provenance, which carries no revision or creation time, makes the manifest a release
+// publishes; BuildDir of it packs the same layer. A copy ejected outside the workspace
+// is declared by its absolute path.
+func TestABuildOfAShippedCheckoutMatchesBuildShipped(t *testing.T) {
+	r := testkit.NewRepository(t, map[string]string{"magus.yaml": ""})
+	dir := r.Path("spells", "golang")
+	require.NoError(t, os.CopyFS(dir, os.DirFS(filepath.Join("..", "..", "..", "spells", "golang"))))
+	r.Git("remote", "add", "origin", "https://github.com/egladman/magus.git")
+	r.Commit("the go spell", nil)
+
+	driver, err := resolveVCS(t.Context(), types.VCSOptions{}, dir)
+	require.NoError(t, err)
+	built, err := Build(t.Context(), dir, driver, ShippedProvenance("golang"))
+	require.NoError(t, err)
+	m, err := built.Manifest()
+	require.NoError(t, err)
+	_, shipped, err := BuildShipped("go")
+	require.NoError(t, err)
+	assert.Equal(t, shipped.Digest, m.Digest)
+
+	_, res, err := BuildDir(t.Context(), types.VCSOptions{}, dir, "")
+	require.NoError(t, err)
+	assert.Equal(t, digest.FromBytes(built.Blobs[0].Data), res.Layer)
+
+	dst := t.TempDir()
+	pulled, _, err := EjectShipped(r.Root(), "go", dst)
+	require.NoError(t, err)
+	assert.Equal(t, override{Import: "magus/spell/go", Path: dst}, pulled.Override)
 }
 
 func TestPullReferenceReadsTheLockForABareImportPath(t *testing.T) {
