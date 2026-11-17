@@ -28,10 +28,11 @@
 //   unplaced-call (deny): a push, pull request call or relink after a cd magus
 //     cannot follow, which the other rules would judge in the wrong checkout.
 //   push-unverified (deny): a push or `gh pr create` whose commit changed a file, since its
-//     merge base, that no clean passing run in the pushing checkout read as that commit holds
-//     it, and one whose read could not finish. A changed file no target declares is named and
-//     does not block. It runs after push-authority and the cadence rules, before the branch
-//     name rules.
+//     merge base, that a target declares and no passing run in the pushing checkout read as
+//     that commit holds it, and one whose read could not finish. A changed file no target
+//     declares is named and does not block, beside whatever else advises. It runs after
+//     push-authority and the cadence rules, before the branch name rules, and
+//     hack/dev/land-commits.buzz asks it again just before it pushes.
 //   branch-name (deny, or advise on a topic miss alone): a pushed branch or bookmark, or a
 //     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
@@ -590,7 +591,8 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // decide is judge over plain records. The order is the verdict: push authority first, then
 // the gate and push denials, then push-unverified, then the branch name denials, then the gh
 // denials, then the commit and pull request text denials, then the gh advisories, then the pull request text
-// advisories, then the branch name advisories. baseBranch is the checkout's branch when it
+// advisories, then the branch name advisories; push-unverified's note on undeclared files
+// joins whichever advisory answers. baseBranch is the checkout's branch when it
 // is the base branch, "" otherwise; line is the shell line as sent, files the description
 // files it names, diff reads the branch's diff for a description's budget, judge runs
 // proofread over a pull request's text of a kind, and reads gives the host rule a task
@@ -619,12 +621,22 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     }
     final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
     if (rest.decision != magus\GuardDecision.allow) {
-        return rest;
+        return withNote(rest, note: verified);
     }
-    if (names.decision == magus\GuardDecision.allow) {
-        return verified;
+    return withNote(names, note: verified);
+}
+
+// withNote is v with note's advice added: note alone when v allows, both texts under v's rule
+// when v advises too, and v unchanged when it denies, since a refusal is what the caller
+// acts on first.
+fun withNote(v: GuardVerdict, note: GuardVerdict) > GuardVerdict {
+    if (note.decision != magus\GuardDecision.advise or v.decision == magus\GuardDecision.deny) {
+        return v;
     }
-    return names;
+    if (v.decision == magus\GuardDecision.allow) {
+        return note;
+    }
+    return GuardVerdict{ decision = magus\GuardDecision.advise, reason = v.reason + "\n\n" + note.reason, rule = v.rule };
 }
 
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
@@ -736,18 +748,15 @@ test "the main session's cat of a task capture outside the workspace is denied n
     fs\removeAll(host);
 }
 
-test "a worker's push is refused by push-authority before push-unverified reads" {
-    final asked = mut [<str>];
-    final programs = helpers\vcsRequest([["git", "push", "origin", "HEAD:x"]]);
+// decidePushAs is decide over `git push origin HEAD:x` from a caller of role, with verified
+// standing in for push-unverified.
+fun decidePushAs(role: magus\AgentRole, title: str, lease: str, verified: fun () > GuardVerdict) > GuardVerdict {
     final publishing = Publishing{
-        pusher = branches\Pusher{ role = magus\AgentRole.worker, title = "orchestrator/job", session = "s1", lease = "job" },
+        pusher = branches\Pusher{ role = role, title = title, session = "s1", lease = lease },
         current = "topic",
         remote = branches\Remote{ base = "main", branches = [<str>] },
         topic = fun (source: str) > branches\Topic { return branches\unknownTopic(); },
-        verified = fun () > GuardVerdict {
-            asked.append("read");
-            return magus\guard.allow();
-        },
+        verified = verified,
     };
     final facts = fun (head: str, base: str, number: str) > pullRequests\Facts {
         return pullRequests\Facts{ known = true, fragments = 0, shipped = 0, lines = 1 };
@@ -756,10 +765,47 @@ test "a worker's push is refused by push-authority before push-unverified reads"
         return [<pullRequests\Judged>];
     };
     final reads = host\Reads{ text = fun (path: str) > str { return ""; }, binary = fun () > bool { return false; } };
-    final v = decide(programs, caller: cadence\Caller{ role = magus\AgentRole.worker, title = "orchestrator/job" }, checkout: null,
+    return decide(helpers\vcsRequest([["git", "push", "origin", "HEAD:x"]]), caller: cadence\Caller{ role = role, title = title }, checkout: null,
         baseBranch: "", line: "git push origin HEAD:x", files: {<str: str>}, diff: facts, judge: none,
         once: fun (key: str) > bool { return false; }, publishing: publishing, reads: reads);
+}
+
+test "a worker's push is refused by push-authority before push-unverified reads" {
+    final asked = mut [<str>];
+    final v = decidePushAs(magus\AgentRole.worker, title: "orchestrator/job", lease: "job", verified: fun () > GuardVerdict {
+        asked.append("read");
+        return magus\guard.allow();
+    });
     std\assert(v.decision == magus\GuardDecision.deny, message: v.decision.value);
     std\assert(v.reason.indexOf("lease job") != null, message: "push-authority answered: " + v.reason);
     std\assert(asked.len() == 0, message: "push-unverified read {asked.len()} times");
+}
+
+test "a root push push-unverified refuses is refused with its reply" {
+    final v = decidePushAs(magus\AgentRole.root, title: "", lease: "", verified: fun () > GuardVerdict {
+        return magus\guard.deny("unread a.go", opts: {"rule": "push-unverified"});
+    });
+    std\assert(v.decision == magus\GuardDecision.deny and v.reason == "unread a.go", message: v.reason);
+}
+
+test "push-unverified's note on undeclared files reaches a root push" {
+    final v = decidePushAs(magus\AgentRole.root, title: "", lease: "", verified: fun () > GuardVerdict {
+        return magus\guard.advise("LICENSE is declared by no target", opts: {"rule": "push-unverified"});
+    });
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.decision.value + " " + v.reason);
+    std\assert(v.reason.indexOf("LICENSE is declared by no target") != null, message: v.reason);
+}
+
+test "a note joins another advisory under that advisory's rule" {
+    final other = GuardVerdict{ decision = magus\GuardDecision.advise, reason = "a topic miss", rule = "branch-name" };
+    final note = GuardVerdict{ decision = magus\GuardDecision.advise, reason = "LICENSE", rule = "push-unverified" };
+    final v = withNote(other, note: note);
+    std\assert(v.decision == magus\GuardDecision.advise and v.rule == "branch-name", message: v.rule);
+    std\assert(v.reason == "a topic miss\n\nLICENSE", message: v.reason);
+}
+
+test "a note never softens a refusal" {
+    final denied = GuardVerdict{ decision = magus\GuardDecision.deny, reason = "no", rule = "gh" };
+    final note = GuardVerdict{ decision = magus\GuardDecision.advise, reason = "LICENSE", rule = "push-unverified" };
+    std\assert(withNote(denied, note: note).reason == "no", message: "the deny stands alone");
 }
