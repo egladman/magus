@@ -177,7 +177,7 @@ func ScoreComplete(sys System, set Set, preds map[string]Pred, checks map[string
 		}
 		if t.name == "p80" {
 			r := sys.Row(set.Name, "tau@p80", run)
-			r.Value, r.N, r.Of, r.Sample = ptr(t.at), len(scored), set.Of, set.Sample
+			r.Value, r.N, r.Of, r.Sample = pointer(t.at), len(scored), set.Of, set.Sample
 			m.Rows = append(m.Rows, r)
 		}
 		for _, row := range atTau(scored, t.at) {
