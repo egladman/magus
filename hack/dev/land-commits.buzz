@@ -2,9 +2,10 @@
 //
 // Lands commits as a pull request on a new branch from a fresh origin/main.
 // It cherry-picks the commits and makes the checkout verify-ready.
-// Then it runs CI's three hygiene checks, asks hack/policy/push.buzz whether the
-// branch's commit may be pushed (the rule the hook asks of a typed push, which
-// does not see this script's own), pushes and runs `gh pr create`.
+// Then it runs CI's three hygiene checks, asks hack/policy/push.buzz about the
+// branch's commit (the rule the hook asks of a typed push, which does not see
+// this script's own), prints its advice, pushes and runs `gh pr create`. While
+// that rule advises, nothing it says stops the landing.
 // It refuses a branch name on origin, or local with other commits. It stops
 // at the first failed step, leaving the branch where it stood. A rerun switches
 // to that branch and checks again. --dry-run prints the steps and runs none.
@@ -353,4 +354,15 @@ test "a push-unverified refusal stops the landing with the rule's own reply; adv
     final advised = GuardVerdict{ decision = magus\GuardDecision.advise, reason = "1 file no target declares", rule = "push-unverified" };
     assert\equal(pushRefusal(advised, branch: "topic"), want: "", message: "advice");
     assert\equal(pushRefusal(magus\guard.allow(), branch: "topic"), want: "", message: "allowed");
+}
+
+test "the rule's reply on an unread file is printed and the landing goes on" {
+    final push = CommandPush{ tool = "git", dir = "/w", source = "topic", revision = "0123456789abcdef0123" };
+    final unread = fun (dir: str, revision: str) > result\Result::<UnverifiedReport> {
+        return result\ok::<UnverifiedReport>(UnverifiedReport{ revision = revision, base = "origin/main",
+            unverified = [UnverifiedFile{ path = "a.go", commands = ["magus run test ."] }] });
+    };
+    final v = pushes\decidePush(push, read: unread);
+    assert\equal(v.decision == magus\GuardDecision.advise, want: true, message: v.reason);
+    assert\equal(pushRefusal(v, branch: "topic"), want: "", message: "advice does not stop the landing");
 }
