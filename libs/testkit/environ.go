@@ -36,6 +36,13 @@ var goSettings = []string{
 	"GOWORK",
 }
 
+// brokerSpawnTrap is internal/server's BrokerSpawnTrapEnv, named here because testkit
+// cannot import that package. A test binary's TestMain sets it so SpawnBroker starts
+// nothing, and every Environ keeps it so a per-test Isolate cannot undo that. Without it
+// an in-process run spawns the test binary as a broker, which reruns the whole suite
+// detached, and waits out the broker's start.
+const brokerSpawnTrap = "BROKER_SPAWN_TRAP"
+
 // goDirs are the Go toolchain's directories that default to somewhere under HOME or
 // XDG_*. Environ pins each to the value `go env` reports before the redirect, so a
 // child `go build` stays on the warm build and module caches and still reads the
@@ -65,7 +72,7 @@ var redirects = map[string]string{
 // the Go toolchain's settings, with every per-user location moved under root.
 //
 // Kept: the sandbox's DefaultAllow names (PATH, LANG, TMPDIR, ...), the Go settings
-// above, and each keep entry: an exact name, or a prefix pattern such as "LOCKTEST_*" in
+// above, the broker spawn trap, and each keep entry: an exact name, or a prefix pattern such as "LOCKTEST_*" in
 // internal/sandbox/env's syntax. Every other variable is dropped, so MAGUS_*
 // configuration, BAGGAGE, tokens and GIT_DIR from a hook never reach the test. A keep
 // entry cannot undo a redirect or a set value below. A malformed pattern is an error.
@@ -94,6 +101,7 @@ func Environ(root string, keep ...string) ([]string, error) {
 		return nil, fmt.Errorf("testkit: keep: %w", err)
 	}
 	allow.Names = append(append(allow.Names, env.DefaultAllow()...), goSettings...)
+	allow.Names = append(allow.Names, brokerSpawnTrap)
 	kept, _ := allow.Scrub(os.Environ())
 	vars := make(map[string]string, len(kept)+len(redirects)+len(goDirs)+5)
 	for _, kv := range kept {
