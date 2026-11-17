@@ -16,11 +16,18 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+
+	"github.com/rogpeppe/go-internal/testscript"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
@@ -30,10 +37,6 @@ import (
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/rogpeppe/go-internal/testscript"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // Every catalog the binary ships registers without a clash, so two built-in prefixes that
@@ -1376,4 +1379,219 @@ func (s *ForwardFallbackSuite) TestTransportFailureWarnsWithoutMGS3048() {
 	logForwardFallback(context.Background(), s.log, errors.New("dial unix: connection refused"))
 	s.Contains(s.buf.String(), "level=WARN")
 	s.NotContains(s.buf.String(), string(types.PeerFromAnotherBuild))
+}
+
+// TestStartupNoSubcommandExitsUsage locks the shape of startup(): with no
+// subcommand it prints usage and returns exit.Usage WITHOUT dispatching. This is the
+// cheapest assertion that exercises the full pre-dispatch path without a workspace
+// fixture, so it doubles as a guard against the refactor accidentally calling
+// os.Exit directly.
+//
+// It asserted 0 until the exit-code contract in helpers.go was applied here: no
+// subcommand is a wrong invocation, not work that succeeded, and returning 0 made
+// `magus $CMD` with an empty CMD a green step in anything that builds its argv
+// dynamically. An EXPLICIT help flag still exits 0 (see the subtest), because there
+// the usage text IS what was asked for, and conflating the two is the easy mistake:
+// both reach this branch with no subcommand left to run.
+func TestStartupNoSubcommandExitsUsage(t *testing.T) {
+	// Isolate socket discovery from the host: clearing MAGUS_PROC_SOCKET is not
+	// enough, because startup still scans proc.SockDir() for the stable server
+	// socket. Point that dir (XDG_RUNTIME_DIR/magus) at an empty temp dir so a real
+	// `magus server start` server running on the developer's machine is not found
+	// and forwarded to; otherwise its exit code, not this path's, is returned.
+	t.Setenv("MAGUS_PROC_SOCKET", "")
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	_, res, code := startup(context.Background(), nil)
+	if res.cleanup != nil {
+		t.Cleanup(res.cleanup)
+	}
+	require.Equal(t, exit.Usage, code, "startup(nil) exit code")
+	assert.Empty(t, res.sub, "startup(nil) sub should be empty (no dispatch)")
+
+	// An explicit global help flag lands in the SAME no-subcommand branch and must
+	// still exit 0: the flag package has already printed usage, and that is the work
+	// the caller asked for.
+	for _, flagName := range []string{"-h", "--help"} {
+		t.Run(flagName, func(t *testing.T) {
+			t.Setenv("MAGUS_PROC_SOCKET", "")
+			t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+			_, res, code := startup(context.Background(), []string{flagName})
+			if res.cleanup != nil {
+				t.Cleanup(res.cleanup)
+			}
+			assert.Equal(t, 0, code, "an explicit %s exits 0, not exit.Usage", flagName)
+		})
+	}
+}
+
+// TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
+// is a satisfied request (0), a misuse is 2, and a genuine runtime failure stays 1.
+func TestUsageErrorsExitTwo(t *testing.T) {
+	assert.Equal(t, 0, mapExitCode(nil), "success")
+	assert.Equal(t, 0, mapExitCode(flag.ErrHelp), "an explicit -h is a request that was satisfied")
+	assert.Equal(t, exit.Usage, mapExitCode(exit.Usagef("bad invocation")), "misuse")
+	assert.Equal(t, 1, mapExitCode(errors.New("the work failed")), "runtime failure")
+}
+
+// TestSelfDescribedExitStatusSurvives pins that a failure carrying its own status keeps
+// it locally, matching what the server already forwards for an adopted run. A contended
+// lock exits 75 (EX_TEMPFAIL); collapsing it to 1 is what made a busy machine read as a
+// broken build.
+func TestSelfDescribedExitStatusSurvives(t *testing.T) {
+	assert.Equal(t, 75, mapExitCode(selfStatusErr{code: 75}))
+	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", selfStatusErr{code: 75})), "survives wrapping")
+}
+
+// TestRunAffectedFlagParity ensures that `magus run` and `magus affected`
+// expose the same flags, minus the documented exceptions above. When a new
+// flag lands on one subcommand it must either also land on the other, or be
+// added to the appropriate exception map here with a one-line rationale.
+//
+// To debug a failure:
+//
+//	go test ./cmd/magus/ -run TestRunAffectedFlagParity -v
+func TestRunAffectedFlagParity(t *testing.T) {
+	// This file's own name, so the error messages below can point back to it
+	// without runtime.Caller, which returns a module path under -trimpath.
+	const thisFile = "config_test.go"
+
+	runFlags := registryFlagNames(t, "run")
+	affectedFlags := registryFlagNames(t, "affected")
+
+	// Stale exception check: every entry in an exception map must correspond
+	// to a flag that actually exists in the owning file.
+	for name := range runOnlyFlags {
+		assert.Contains(t, runFlags, name,
+			"runOnlyFlags entry %q no longer exists in run.go — remove it from the exception map", name)
+	}
+	for name := range affectedOnlyFlags {
+		assert.Contains(t, affectedFlags, name,
+			"affectedOnlyFlags entry %q no longer exists in affected.go — remove it from the exception map", name)
+	}
+
+	runShared := subtract(runFlags, runOnlyFlags)
+	affectedShared := subtract(affectedFlags, affectedOnlyFlags)
+
+	for name := range runShared {
+		assert.Contains(t, affectedShared, name,
+			"flag --%s exists in `magus run` (run.go) but not `magus affected` (affected.go)\n"+
+				"\tAdd it to affected.go, or add an entry to affectedOnlyFlags in %s",
+			name, thisFile)
+	}
+	for name := range affectedShared {
+		assert.Contains(t, runShared, name,
+			"flag --%s exists in `magus affected` (affected.go) but not `magus run` (run.go)\n"+
+				"\tAdd it to run.go, or add an entry to runOnlyFlags in %s",
+			name, thisFile)
+	}
+}
+
+// selfStatusErr is any failure that names its own process status, the shape a contended
+// workspace lock arrives in. Declared here rather than imported because the package that
+// returns it keeps the type unexported; what mapExitCode reads is the method.
+type selfStatusErr struct{ code int }
+
+func (selfStatusErr) Error() string   { return "the machine is busy" }
+func (e selfStatusErr) ExitCode() int { return e.code }
+
+// runOnlyFlags lists flags that intentionally exist on `magus run` but not
+// `magus affected`. Each entry must cite the reason; the corresponding
+// declaration in run.go carries a matching "run-only:" comment.
+var runOnlyFlags = map[string]string{
+	"shard":            "CI matrix sharding targets an explicit project set; affected's scope is already minimal",
+	"n-shards":         "pairs with --shard",
+	"stdin":            "reads a saved shard plan; affected's --stdin reads changed paths, so the two share the input idiom and not a meaning",
+	"volatility-retry": "consumed by `magus ci bisect` which dispatches through run, not affected",
+	"skip":             "subtracts from a selection the caller named; affected's set is derived from the diff, and dropping a project the diff put there un-gates exactly what affected exists to gate",
+}
+
+// affectedOnlyFlags lists flags that intentionally exist on `magus affected`
+// but not `magus run`. Each entry must cite the reason; the corresponding
+// declaration in affected.go carries a matching "affected-only:" comment.
+var affectedOnlyFlags = map[string]string{
+	"base":  "VCS diff base ref; `magus run` has no diff",
+	"b":     "short for --base",
+	"stdin": "reads changed paths from a pipe (watch loop); `magus run` takes explicit project paths",
+	"null":  "pairs with --stdin",
+
+	// The sub-modes. These select a different command path rather than configure
+	// the run, and each is documented on affected's page because that is where a
+	// reader meets it. They were absent from this map while the comparison read
+	// run.go and affected.go as SOURCE: the scan looked only inside the affected
+	// function, so everything bound by affectedPlan, affectedImpact and bisect was
+	// invisible to it. Comparing the documented flags instead makes them visible,
+	// which is the point: they are exceptions, not omissions.
+	"explain":             "mode selector: reports why a project is in the set instead of running",
+	"plan":                "mode selector: emits a CI shard plan for the affected set",
+	"max-shards":          "pairs with --plan",
+	"max-parallel-budget": "pairs with --plan",
+	"detail":              "pairs with --plan",
+	"bisect":              "mode selector: drives VCS bisect over the diff, which `magus run` has no notion of",
+	"good":                "pairs with --bisect",
+	"target":              "pairs with --bisect",
+
+	"impact": "mode selector: reports the changeset's blast radius instead of running",
+}
+
+// registryFlagNames returns the flags one command declares, as a set.
+//
+// Read from the command registry rather than parsed out of the Go source. The
+// source scan this replaced walked run.go and affected.go for fs.Bool-style calls,
+// which was the only way to ask "what does this command bind" while each command
+// bound its own list by hand. Both now bind from the registry via a generated
+// binder, so there is nothing to scrape, and a scan would find zero and pass
+// vacuously if it were not for its own emptiness check.
+func registryFlagNames(t *testing.T, command string) map[string]struct{} {
+	t.Helper()
+	for _, c := range commands.Root.Spec.Children {
+		if c.Name != command {
+			continue
+		}
+		require.NotEmpty(t, c.Flags, "command %q declares no flags", command)
+		out := make(map[string]struct{}, len(c.Flags))
+		for _, f := range c.Flags {
+			out[f.Name] = struct{}{}
+		}
+		return out
+	}
+	t.Fatalf("command %q is not in the man-page registry", command)
+	return nil
+}
+
+// subtract returns a copy of flags with all keys in exceptions removed.
+func subtract(flags map[string]struct{}, exceptions map[string]string) map[string]struct{} {
+	out := make(map[string]struct{}, len(flags))
+	for k, v := range flags {
+		out[k] = v
+	}
+	for k := range exceptions {
+		delete(out, k)
+	}
+	return out
+}
+
+// TestWithInterruptPrefersASpecificCode keeps 128+N from flattening a code the
+// command already chose.
+func TestWithInterruptPrefersASpecificCode(t *testing.T) {
+	t.Parallel()
+
+	none := func() (syscall.Signal, bool) { return 0, false }
+	term := func() (syscall.Signal, bool) { return syscall.SIGTERM, true }
+	intr := func() (syscall.Signal, bool) { return syscall.SIGINT, true }
+
+	assert.Equal(t, 0, withInterrupt(0, nil, none), "an uninterrupted success stays 0")
+	assert.Equal(t, 1, withInterrupt(1, nil, none), "an ordinary failure is untouched")
+	assert.Equal(t, 130, withInterrupt(0, nil, intr), "SIGINT reports 128+2")
+	assert.Equal(t, 143, withInterrupt(0, nil, term), "SIGTERM reports 128+15")
+	assert.Equal(t, exit.Usage, withInterrupt(exit.Usage, nil, term),
+		"a usage error keeps its own code rather than being flattened to 143")
+
+	// A command that RETURNS the cancellation instead of swallowing it (awaitInvocation
+	// returns ctx.Err()) reached mapExitCode as a generic failure and reported 1, which
+	// says the work failed about a run the user stopped.
+	cancelled := fmt.Errorf("--wait: %w", context.Canceled)
+	assert.Equal(t, 130, withInterrupt(1, cancelled, intr), "a surfaced cancellation is the signal")
+	assert.Equal(t, 1, withInterrupt(1, cancelled, none),
+		"without a signal it is an ordinary cancellation and keeps its code")
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // KnownApps is every clean /console/<app>/ segment magus may mint a link to or present
-// (Link, GraphLink, JobLink, Present). The console's app manifests decide the set: each app's path
+// (Link, graphLink, JobLink, Present). The console's app manifests decide the set: each app's path
 // plus the segments that open one of its modes, and console/src/apps/apps.test.ts fails when this
 // list and theirs differ in either direction. It stays a list because the CLI mints links where no
 // console bundle exists to read; the server's routes come from the bundle it serves (appRoute).
@@ -122,7 +122,7 @@ func Root(host string) string {
 // document GET) and is emitted LAST, after any content directives.
 // It is single use and lives seconds: a link in a process list or log is dead.
 //
-// This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
+// This is the ONE home for the grammar: graphLink composes it rather than hand-building
 // the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
 // policy (encodeComponent, the encodeURIComponent equivalent the page's hash parser reverses).
 func Link(opts LinkOpts) string {
@@ -209,7 +209,7 @@ func OpenCommandAs(link, goos, bin string) string {
 // application/x-www-form-urlencoded, which encodes a space as "+"; decodeURIComponent would leave
 // that "+" literal, so the "+"->"%20" fixup is required. A literal "+" in s is already emitted as
 // "%2B" by QueryEscape, so the fixup never corrupts it. It is the single escaping policy shared by
-// every producer of the console URL grammar (Link here, and url.GraphLink through it).
+// every producer of the console URL grammar (Link here, and graphLink through it).
 func encodeComponent(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }

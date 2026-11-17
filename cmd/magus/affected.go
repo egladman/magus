@@ -1,43 +1,51 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/agent"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
 )
+
+// The plan types and helpers live in internal/ci; run.go and session_load_next.go still
+// call them by these names.
+type (
+	planOutput = internalci.PlanOutput
+	planShard  = internalci.PlanShard
+)
+
+// failedResults wraps internalci.FailedResults so run.go keeps its unexported accessor.
+type failedResults struct{ internalci.FailedResults }
+
+func (c *failedResults) list() []journal.Event { return c.List() }
+
+func planSummaryMarkdown(out planOutput) string { return internalci.PlanSummaryMarkdown(out) }
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
@@ -117,17 +125,17 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.Step && af.Stdin {
 		return fmt.Errorf("magus affected: --step and --stdin are mutually exclusive")
 	}
-	if af.Step && !isInteractiveTTY() {
+	if af.Step && !interactive.IsInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return exit.Reported(exit.Usage)
 	}
 	if af.Step {
-		ctx = withStepGate(ctx)
+		ctx = interp.WithStepGate(ctx, workspaceReplCandidates)
 	}
 
 	if af.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, af.Timeout, "affected:"+target)
+		ctx, cancel = proc.WithTimeout(ctx, af.Timeout, "affected:"+target)
 		defer cancel()
 	}
 
@@ -262,7 +270,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	sink.EmitScope(ctx, scopeLabel, "", scopePaths(targets))
+	sink.EmitScope(ctx, scopeLabel, "", pipe.ScopePaths(targets))
 	sink.EmitBase(ctx, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
@@ -284,7 +292,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	// MGS1028 where it is paid for: --impact and --explain report the same condition
 	// forensically, and this is the invocation that buys the rerun.
-	undeclaredOnly := trackedUndeclaredSeeds(ctx, m.Root(), m.VCSOptions(), undeclaredOnlySeeds(affectedSet))
+	undeclaredOnly := internalci.TrackedUndeclaredSeeds(ctx, m.Root(), m.VCSOptions(), internalci.UndeclaredOnlySeeds(affectedSet))
 
 	// Same check as `magus run ci`: a redundant gate refuses under load and
 	// advises when the machine is idle. See prepareGateRedundancy.
@@ -310,14 +318,14 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if isGateInvocation(target, false) {
 		runOpts = append(runOpts, magus.WithGate())
 	}
-	race, err := resolveRace(af.Race)
+	raceOpts, err := race.Resolve(af.Race)
 	if err != nil {
 		return err
 	}
 	switch {
-	case race.Replay:
+	case raceOpts.Replay:
 		runOpts = append(runOpts, magus.WithRaceReplay())
-	case race.Enabled:
+	case raceOpts.Enabled:
 		runOpts = append(runOpts, magus.WithRace())
 	}
 	if globalCfg.DryRun {
@@ -380,10 +388,10 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// gate that genuinely ran.
 	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if err != nil && opts.Format == outputText {
-		printFailedResults(os.Stdout, failed.list())
+		internalci.PrintFailedResults(os.Stdout, failed.list())
 	}
 	if opts.Format == outputText {
-		printRunRef(os.Stdout, journal.InvocationIDFromContext(invCtx))
+		internalci.PrintRunRef(os.Stdout, journal.InvocationIDFromContext(invCtx))
 	}
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
@@ -413,79 +421,6 @@ func withCharms(opts []magus.RunOption, charms []string) []magus.RunOption {
 		return opts
 	}
 	return append(slices.Clip(opts), magus.WithCharms(charms...))
-}
-
-// failedResults collects the failed target results the invocation's journal records, in
-// the order they arrive, so a gate that scrolled its failures away can name them again.
-// A ci run under rw verifies more than once, so a later pass clears a
-// failure.
-type failedResults struct {
-	mu     sync.Mutex
-	events []journal.Event
-}
-
-func (c *failedResults) Enabled(context.Context, slog.Level) bool { return true }
-
-func (c *failedResults) Handle(_ context.Context, r slog.Record) error {
-	if e, ok := journal.EventFromRecord(r); ok {
-		c.add(e)
-	}
-	return nil
-}
-
-// add keeps each target's newest result when it failed.
-func (c *failedResults) add(e journal.Event) {
-	if e.Kind != journal.KindResult {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.events = slices.DeleteFunc(c.events, func(f journal.Event) bool {
-		return f.Project == e.Project && f.Target == e.Target
-	})
-	if e.Status == journal.StatusFail {
-		c.events = append(c.events, e)
-	}
-}
-
-func (c *failedResults) WithAttrs([]slog.Attr) slog.Handler { return c }
-func (c *failedResults) WithGroup(string) slog.Handler      { return c }
-
-func (c *failedResults) list() []journal.Event {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return slices.Clone(c.events)
-}
-
-// printFailedResults closes a failed run with one line per failed target: its output ref,
-// its project and target, and the first line of its cause. The excerpt of each log was
-// printed when the target failed; the ref is what reaches the rest of it. A refusal has no
-// ref, since nothing ran, and names its MGS code instead.
-func printFailedResults(w io.Writer, events []journal.Event) {
-	if len(events) == 0 {
-		return
-	}
-	_, _ = fmt.Fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", plural.Count(len(events), "target", "targets"))
-	for _, e := range events {
-		ref := e.Ref
-		if ref == "" {
-			ref = cmp.Or(e.DiagnosticCode, "no-ref")
-		}
-		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
-		_, _ = fmt.Fprintf(w, "  %s %s:%s", ref, e.Project, e.Target)
-		if cause != "" {
-			_, _ = fmt.Fprintf(w, "  %s", cause)
-		}
-		_, _ = fmt.Fprintln(w)
-	}
-}
-
-// printRunRef names the whole run, which no per-target ref reaches.
-func printRunRef(w io.Writer, inv string) {
-	if inv == "" {
-		return
-	}
-	_, _ = fmt.Fprintf(w, "\nrun: %s; `%s` prints the whole run\n", inv, hint.QueryInvocation.With(inv))
 }
 
 func affectedMissingTargetUsage() {
@@ -529,290 +464,6 @@ func hasModeFlag(args []string, name string) bool {
 		}
 	}
 	return false
-}
-
-// planOutput is the provider-neutral JSON shape from `magus affected --plan`.
-type planOutput struct {
-	// Target is what every shard runs, so `magus run --stdin` needs nothing beside the
-	// document to know what to run.
-	Target string `json:"target"`
-	// Charms and Args are what the target's body was evaluated under. A shard
-	// run under others is refused, since its steps would differ.
-	Charms []string `json:"charms,omitempty"`
-	Args   []string `json:"args,omitempty"`
-	// Machine is the class the shards were packed for; Fallbacks says each
-	// default the plan fell back to.
-	Machine     *types.Machine   `json:"machine,omitempty"`
-	Fallbacks   []types.Fallback `json:"fallbacks,omitempty"`
-	Count       int              `json:"count"`
-	MaxParallel int              `json:"max_parallel"`
-	Source      string           `json:"source"`
-	Matrix      []planShard      `json:"matrix"`
-	// StageZero runs before every shard of Matrix and computes, once, the
-	// prerequisites two or more of them share. Absent when none is shared.
-	// It stays out of Outputs, so a plan without it renders as before;
-	// `magus run --stdin --shard <id>` runs one of its shards. Count and
-	// MaxParallel describe Matrix alone.
-	StageZero []planShard `json:"stage_zero,omitempty"`
-	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
-	// why it is not a proof when it is not. Together they are the answer a merge queue's
-	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
-	// Affected stays the closure even when an inherited verdict empties the matrix.
-	Affected    []string `json:"affected"`
-	UnboundedBy string   `json:"unbounded_by,omitempty"`
-	// Unmeasured are the units and prerequisites the shards were
-	// weighed by the workspace fallback for, having no history.
-	Unmeasured []types.Unit `json:"unmeasured,omitempty"`
-	// Unreached are the affected projects' units no changed path reaches
-	// through declared reads. Each replays from the cache, so no shard runs it.
-	Unreached []types.Unit `json:"unreached,omitempty"`
-	// Inherit is present only when the plan inherited a green run's verdict;
-	// see planInherit. The matrix beside it is then empty on purpose.
-	Inherit *planInherit `json:"inherit,omitempty"`
-	// Risk is present only when the change tiers trivial; see planRisk. The matrix
-	// beside it is then empty on purpose.
-	Risk *planRisk `json:"risk,omitempty"`
-	// Detail is keyed by shard id and present only under --detail.
-	//
-	// A SIBLING of Matrix rather than fields on its entries, and that is a hard
-	// constraint rather than a preference: the matrix is consumed as a GitHub Actions
-	// job matrix (`fromJSON(needs.plan.outputs.matrix)`), where every key in an entry
-	// becomes a job DIMENSION. Adding spells or write globs there would multiply the
-	// job count or fail the workflow outright, so the detail hangs beside it and
-	// the matrix keeps the exact two keys the workflow dereferences.
-	Detail map[string]shardDetail `json:"detail,omitempty"`
-	// Outputs is the complete set of name/value pairs a CI provider publishes as
-	// job outputs, in a stable order. A provider target forwards the list; it does
-	// not decide the membership.
-	//
-	// The membership is the part that has to live here. It used to live in this
-	// repo's magusfile, which hand-listed three names and so silently dropped the
-	// fourth when a bad merge reverted that function: ci.yaml went on reading an
-	// `inherit` output nothing wrote, read the empty string, and skipped a feature
-	// for every run in between. Nothing failed, because a hand-written translator
-	// agreeing with a workflow is not a thing either side can check. A plan that
-	// states its own outputs makes the next field arrive everywhere at once.
-	Outputs []planPublish `json:"outputs"`
-	// Summary is filled only for `-o template`; the JSON plan carries the typed
-	// inputs above, not Markdown.
-	Summary string `json:"summary,omitempty"`
-}
-
-type planShard struct {
-	Shard    string `json:"shard"    yaml:"shard"`
-	Projects string `json:"projects" yaml:"projects"`
-	// JobName is Projects shortened for a CI job name.
-	JobName string `json:"job_name" yaml:"job_name"`
-	// Digest is a digest of Units, the same for the same units on any plan, so a
-	// provider keys a per-shard cache by it.
-	Digest string `json:"digest" yaml:"digest"`
-	// Duties are the workspace-wide steps this shard runs, space-separated.
-	Duties string `json:"duties" yaml:"duties"`
-	// Units are what `magus run --stdin --shard` runs for this shard.
-	Units []types.Unit `json:"units,omitempty" yaml:"units,omitempty"`
-}
-
-func joinDuties(duties []types.Duty) string {
-	names := make([]string, len(duties))
-	for i, d := range duties {
-		names[i] = string(d)
-	}
-	return strings.Join(names, " ")
-}
-
-// shardName names a shard by what is in it. A CI job list is scanned, not
-// studied, so this shows the first few paths and counts the rest.
-func shardName(paths []string) string {
-	const shown = 3
-	switch {
-	case len(paths) == 0:
-		return "no projects"
-	case len(paths) <= shown:
-		return strings.Join(paths, " ")
-	}
-	return fmt.Sprintf("%s +%d", strings.Join(paths[:shown], " "), len(paths)-shown)
-}
-
-// planPublish is one CI job output. Value is always single-line: providers write
-// these into line-oriented files ($GITHUB_OUTPUT), where an embedded newline is a
-// forged entry rather than a formatting bug. planOutputs keeps that true at the
-// source, so no provider needs escaping logic to be safe.
-type planPublish struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-// planInherit is the --plan inheritance block: the delta since the branch's
-// last green CI run classified entirely low-risk, so that run's verdict stands
-// and the emitted matrix is empty. Never a silent skip: every changed path rides
-// along with its class and the fact that classified it.
-type planInherit struct {
-	Run    string            `json:"run"`
-	Commit string            `json:"commit"`
-	Paths  []planInheritPath `json:"paths"`
-}
-
-type planInheritPath struct {
-	Path  string `json:"path"`
-	Tier  string `json:"tier"`
-	Class string `json:"class"`
-	Why   string `json:"why"`
-}
-
-// planRisk is the --plan block of a change that tiers trivial against the plan's base:
-// no gate step can observe it, so the matrix is empty, and every changed path rides
-// along with its tier and what decided it.
-type planRisk struct {
-	Tier  check.Tier           `json:"tier"`
-	Base  string               `json:"base"`
-	Paths []check.TierEvidence `json:"paths"`
-}
-
-func newPlanRisk(rep types.TierReport) *planRisk {
-	return &planRisk{Tier: rep.Tier, Base: rep.Base, Paths: rep.Evidence}
-}
-
-func planRiskSummaryMarkdown(r *planRisk) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, `### Gate sized %s
-
-`, string(r.Tier))
-	fmt.Fprintf(&b, "No shard runs: the change against `%s` tiers %s, so no step of the gate can observe it.\n\n", shortCommit(r.Base), string(r.Tier))
-	if len(r.Paths) == 0 {
-		b.WriteString("No paths changed.\n")
-	} else {
-		b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
-		for _, e := range r.Paths {
-			fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", e.Path, string(e.Tier), e.Class, e.Why)
-		}
-	}
-	b.WriteString("\nTo run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n")
-	return b.String()
-}
-
-// planOutputs renders the plan's CI job outputs. The matrix is wrapped in the
-// `include` key a job matrix expects, so a provider forwards the value verbatim
-// instead of knowing that shape.
-//
-// Adding a name here reaches every provider at once, which is the whole point of
-// the field; the workflow keys that consume these live in .github/workflows/ci.yaml
-// and TestPlanOutputsCoverWorkflowKeys pins the two together.
-func planOutputs(out planOutput) ([]planPublish, error) {
-	// Units stay in the plan document: every matrix key is a job dimension.
-	include := slices.Clone(out.Matrix)
-	for i := range include {
-		include[i].Units = nil
-	}
-	matrix, err := json.Marshal(map[string]any{"include": include})
-	if err != nil {
-		return nil, fmt.Errorf("magus affected --plan: encode matrix: %w", err)
-	}
-	return []planPublish{
-		{Name: "matrix", Value: string(matrix)},
-		{Name: "count", Value: strconv.Itoa(out.Count)},
-		{Name: "max_parallel", Value: strconv.Itoa(out.MaxParallel)},
-		{Name: "inherit", Value: strconv.FormatBool(out.Inherit != nil)},
-	}, nil
-}
-
-// planSummaryMarkdown renders the job summary: the inheritance report when a green
-// run's verdict stands, otherwise the shard table.
-//
-// An inherited plan carries no shards, so the table would describe an empty fan-out
-// and bury the one thing a reader needs, which is why the run it inherited vouched
-// for the delta.
-func planSummaryMarkdown(out planOutput) string {
-	if out.Inherit != nil {
-		evidence := make([]check.TierEvidence, 0, len(out.Inherit.Paths))
-		for _, p := range out.Inherit.Paths {
-			evidence = append(evidence, check.TierEvidence{Path: p.Path, Tier: check.Tier(p.Tier), Class: p.Class, Why: p.Why})
-		}
-		return (internalci.InheritFinding{
-			Run: out.Inherit.Run, Commit: out.Inherit.Commit,
-			Report: types.TierReport{Evidence: evidence},
-		}).SummaryMarkdown()
-	}
-	if out.Risk != nil {
-		return planRiskSummaryMarkdown(out.Risk)
-	}
-	var b strings.Builder
-	shards := len(out.StageZero) + len(out.Matrix)
-	if len(out.StageZero) > 0 {
-		fmt.Fprintf(&b, "## CI plan: %s in 2 stages\n\n", shardCount(shards))
-		b.WriteString("Stage 0 computes, once, what two or more stage 1 shards share. " +
-			"Each stage 1 shard then replays it from the cache.\n\n")
-	} else {
-		fmt.Fprintf(&b, "## CI plan: %s\n\n", shardCount(shards))
-	}
-	b.WriteString("| Shard | Projects |\n| --- | --- |\n")
-	for _, s := range slices.Concat(out.StageZero, out.Matrix) {
-		// The workspace root is "." on the wire and nowhere else; a reader scanning
-		// the table for the project that failed is looking for its name.
-		projects := s.Projects
-		if projects == "." {
-			projects = "magus"
-		} else if after, ok := strings.CutPrefix(projects, ". "); ok {
-			projects = "magus " + after
-		}
-		fmt.Fprintf(&b, "| `%s` | %s |\n", s.Shard, projects)
-	}
-	fmt.Fprintf(&b, "\nUp to %s of stage 1 run at once. "+
-		"Each shard's job starts with its ID, and a red one uploads its logs as `magus-logs-<ID>`.\n",
-		shardCount(out.MaxParallel))
-	if len(out.Fallbacks) > 0 {
-		b.WriteString("\n### The plan used defaults\n\n" +
-			"An input was missing, so the plan chose for it. Each row says what that costs this run.\n\n" +
-			"| Default | Because | What it means |\n| --- | --- | --- |\n")
-		for _, f := range out.Fallbacks {
-			fmt.Fprintf(&b, "| %s | %s | %s |\n", f.What, f.Why, f.Effect)
-		}
-	}
-	b.WriteString("\n<details><summary>Why these projects</summary>\n\n" +
-		"Run `magus affected ci --explain` locally to see which changed path reached each project. " +
-		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/), " +
-		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n\n</details>\n")
-	return b.String()
-}
-
-// shardCount is n shards, singular for one.
-func shardCount(n int) string {
-	return fmt.Sprintf("%d %s", n, plural.Word(n, "shard", "shards"))
-}
-
-// shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
-// writes. The plan has always known which projects may run concurrently (the hard half)
-// while saying nothing about their content, leaving any reader to infer it from paths.
-//
-// Every field is JOINED from declarations magus already holds; none of it is new analysis.
-// It is plain plan metadata and reads that way for a person, which is why only the one
-// genuinely agent-shaped part is nested under Agents rather than spread through it.
-type shardDetail struct {
-	// Command is the invocation this shard is, spelled the way a person would run it.
-	Command string `json:"command"`
-	// Spells say what the shard will actually execute, so the environment it needs can
-	// be checked before it starts rather than after it fails.
-	Spells []string `json:"spells,omitempty"`
-	// Writes is the write set shards collide on: the declared output globs of every project in
-	// the shard. This is the field that earns the briefing. Two shards are safe to run
-	// together exactly when these do not overlap, and magus is the only party that knows
-	// them: whoever splits the work up otherwise hands out units and hopes.
-	Writes []string `json:"writes,omitempty"`
-	// Agents is the only agent-specific part, kept in its own object so the rest reads as
-	// what it is: ordinary plan metadata a person wants too.
-	Agents *shardAgents `json:"agents,omitempty"`
-}
-
-// shardAgents is the one part of a shard record that is specific to an agent reader, kept
-// in its own object for that reason. Everything beside it is ordinary plan metadata: this
-// plan exists to fan CI jobs across runners, and it long predates anything agentic. That an
-// agent can use the same record is a consequence of the record being correct, not a
-// feature added for one.
-type shardAgents struct {
-	// Skills names the skills this shard's work routes to; Why states the derivation.
-	// Derived rather than declared so it cannot drift from what the shard does, and
-	// stated, because a routing decision an agent cannot audit is one it should not trust.
-	Skills []string `json:"skills"`
-	Why    []string `json:"why,omitempty"`
 }
 
 // affectedPlan emits a provider-neutral JSON shard plan for the affected set of a
@@ -905,7 +556,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Args:             anchorArgs,
 	}
 	if pf.Stdin {
-		planOpts.ChangedPaths, err = readAffectedPlanPaths(os.Stdin, pf.Null)
+		planOpts.ChangedPaths, err = internalci.ReadAffectedPlanPaths(os.Stdin, pf.Null)
 		if err != nil {
 			return err
 		}
@@ -922,7 +573,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	if len(only) > 0 {
 		// Stage zero stays whole: the shards kept may still share its
 		// prerequisites, and a stage-zero shard nobody needs only costs a runner.
-		if plan.Shards, err = filterShards(ctx, m, plan.Shards, only); err != nil {
+		if plan.Shards, err = internalci.FilterShards(ctx, m, plan.Shards, only); err != nil {
 			return err
 		}
 		// The concurrency ceiling describes the plan being emitted, not the one it was
@@ -949,10 +600,10 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// A change that tiers trivial against the plan's base needs no shard. Any other tier
 	// keeps the whole matrix: a shard runs `magus run ci <projects>`, and narrowing one
 	// waits on a multi-target run.
-	var trivial *planRisk
+	var trivial *internalci.PlanRisk
 	if target == types.TargetCI && !pf.Stdin && len(only) == 0 && inherit == nil {
 		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == check.RiskTrivial {
-			trivial = newPlanRisk(rep)
+			trivial = internalci.NewPlanRisk(rep)
 			plan.StageZero, plan.Shards = nil, nil
 			plan.MaxParallel = 0
 			slog.InfoContext(ctx, "ci plan sized trivial", slog.String("base", rep.Base))
@@ -984,12 +635,12 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	if len(plan.Unmeasured) > 0 && len(plan.Shards) > 0 {
 		slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf(
 			"%d of the plan's targets have no recorded duration, so the plan weighed them with the workspace fallback: %s",
-			len(plan.Unmeasured), cappedUnits(plan.Unmeasured)), attr.Notice("note"))
+			len(plan.Unmeasured), internalci.CappedUnits(plan.Unmeasured)), attr.Notice("note"))
 	}
 	if len(plan.Unreached) > 0 {
 		slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf(
 			"%d of the affected projects' targets read no changed path, so the plan leaves them to the cache: %s",
-			len(plan.Unreached), cappedUnits(plan.Unreached)), attr.Notice("note"))
+			len(plan.Unreached), internalci.CappedUnits(plan.Unreached)), attr.Notice("note"))
 	}
 
 	if len(plan.Fallbacks) > 0 {
@@ -1015,26 +666,22 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Unreached:   plan.Unreached,
 	}
 	for i, s := range plan.Shards {
-		out.Matrix[i] = newPlanShard(s)
+		out.Matrix[i] = internalci.NewPlanShard(s)
 	}
 	for _, s := range plan.StageZero {
-		out.StageZero = append(out.StageZero, newPlanShard(s))
+		out.StageZero = append(out.StageZero, internalci.NewPlanShard(s))
 	}
 	if inherit != nil {
-		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit}
-		for _, e := range inherit.Report.Evidence {
-			pi.Paths = append(pi.Paths, planInheritPath{Path: e.Path, Tier: string(e.Tier), Class: e.Class, Why: e.Why})
-		}
-		out.Inherit = pi
+		out.Inherit = internalci.NewPlanInherit(inherit)
 	}
 	out.Risk = trivial
 	if pf.Detail {
-		out.Detail, err = planDetail(ctx, m, target, slices.Concat(plan.StageZero, plan.Shards))
+		out.Detail, err = internalci.PlanDetail(ctx, m, target, slices.Concat(plan.StageZero, plan.Shards))
 		if err != nil {
 			return err
 		}
 	}
-	if out.Outputs, err = planOutputs(out); err != nil {
+	if out.Outputs, err = internalci.PlanOutputs(out); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()
@@ -1042,18 +689,6 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	return emitPlan(opts, out)
-}
-
-// newPlanShard is s as the plan document lists it.
-func newPlanShard(s types.Shard) planShard {
-	return planShard{
-		Shard:    s.ID,
-		Projects: strings.Join(s.ProjectPaths, " "),
-		JobName:  shardName(s.ProjectPaths),
-		Digest:   s.Digest,
-		Duties:   joinDuties(s.Duties),
-		Units:    s.Units,
-	}
 }
 
 // emitPlan renders a --plan through the shared renderer like every other structured
@@ -1077,33 +712,6 @@ func emitPlan(opts output.Options, out planOutput) error {
 	}
 }
 
-func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
-	var paths []string
-	if null {
-		body, err := io.ReadAll(r)
-		if err != nil {
-			return nil, fmt.Errorf("magus affected --plan: read stdin: %w", err)
-		}
-		for _, path := range bytes.Split(body, []byte{0}) {
-			if len(path) > 0 {
-				paths = append(paths, string(path))
-			}
-		}
-	} else {
-		scanner := bufio.NewScanner(r)
-		for scanner.Scan() {
-			if path := scanner.Text(); path != "" {
-				paths = append(paths, path)
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			return nil, fmt.Errorf("magus affected --plan: read stdin: %w", err)
-		}
-	}
-	slices.Sort(paths)
-	return slices.Compact(paths), nil
-}
-
 // noteUndeclaredSeeds reports MGS1028: changed files that seeded a project through
 // directory containment while that project declares none of them, so the targets they
 // rerun were already correct.
@@ -1121,7 +729,7 @@ func noteUndeclaredSeeds(ctx context.Context, undeclaredBySeed map[string][]stri
 	if len(undeclaredBySeed) == 0 {
 		return
 	}
-	interactive.Hint(ctx, fmt.Sprintf("[%s] %s", string(types.UndeclaredSeedingFile), undeclaredSeedNotice(undeclaredBySeed, false)))
+	interactive.Hint(ctx, fmt.Sprintf("[%s] %s", string(types.UndeclaredSeedingFile), internalci.UndeclaredSeedNotice(undeclaredBySeed, false)))
 }
 
 // noteUndeclaredSeedCost reports MGS1028 on the run that PAYS for it: `magus affected
@@ -1142,99 +750,7 @@ func noteUndeclaredSeedCost(ctx context.Context, sink *magus.Sink, undeclaredOnl
 	if len(undeclaredOnly) == 0 {
 		return
 	}
-	sink.EmitNotice(ctx, slog.LevelWarn, types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
-}
-
-// undeclaredSeedNotice renders MGS1028's message, without the code, for the seed
-// projects in undeclaredBySeed. With withFiles each project carries its undeclared files,
-// for a reader that cannot see them anywhere else; both lists are capped by cappedList.
-func undeclaredSeedNotice(undeclaredBySeed map[string][]string, withFiles bool) string {
-	seeds := slices.Sorted(maps.Keys(undeclaredBySeed))
-	named := make([]string, 0, len(seeds))
-	for _, seed := range seeds {
-		if withFiles {
-			seed += fmt.Sprintf(" (%s)", strings.Join(cappedList(undeclaredBySeed[seed]), ", "))
-		}
-		named = append(named, seed)
-	}
-	return fmt.Sprintf(
-		"projects seeded by changed files nothing declares: %s. Directory containment "+
-			"selected them, so the targets they rerun were already correct. Declare the files "+
-			"in the owning project's sources, or leave them undeclared deliberately (see %s)",
-		strings.Join(cappedList(named), ", "),
-		types.CodeURL(types.UndeclaredSeedingFile))
-}
-
-// undeclaredOnlySeeds narrows an affected result to the seeds selected ONLY by files no
-// project declares: every changed file under them is undeclared, so nothing that moved a
-// cache key put them in the set. A seed with one declared file among them had a keyed
-// reason to run and is not what this reports.
-func undeclaredOnlySeeds(res *types.AffectedResult) map[string][]string {
-	if res == nil {
-		return nil
-	}
-	out := map[string][]string{}
-	for seed, undeclared := range res.UndeclaredBySeed {
-		if len(undeclared) > 0 && len(undeclared) == len(res.FilesBySeed[seed]) {
-			out[seed] = undeclared
-		}
-	}
-	return out
-}
-
-// trackedUndeclaredSeeds narrows undeclaredOnly to files the VCS TRACKS, dropping any
-// seed left with none.
-//
-// The same rule, for the same reason, as the standing twin of this diagnostic in
-// internal/doctor/checks.go (checkUndeclaredSeedingFiles): an untracked file that seeds
-// a rerun is a missing ignore rule, not a missing declaration, and a fresh clone must
-// not read differently from a working one. Without it the run named its OWN leavings
-// back at the reader. A workspace whose .gitignore does not cover the cache directory
-// got 45 lock files under .magus/locks/, written by the very run that then advised
-// declaring them, alongside the binary that run had just linked: advice nobody can act
-// on, in the one hint a -s gate still prints.
-//
-// A backend that cannot answer reports NOTHING rather than guessing, the way the doctor
-// twin skips the question. Stricter than the drift gate's "leave the set alone" in
-// run.go, and deliberately: this is advice, so silence costs one unsaid hint while a
-// guess costs the reader's trust in every hint after it.
-func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOptions, undeclaredOnly map[string][]string) map[string][]string {
-	if len(undeclaredOnly) == 0 {
-		return undeclaredOnly
-	}
-	res, err := vcs.Resolve(ctx, root, "", opts)
-	if err != nil || res.VCS == nil {
-		return nil
-	}
-	// One pathspec for every seed's files: TrackedFiles is a subprocess per call, and a
-	// changeset spanning a dozen projects would otherwise fork a dozen times to answer
-	// one hint.
-	var ask []string
-	for _, files := range undeclaredOnly {
-		ask = append(ask, files...)
-	}
-	slices.Sort(ask)
-	known, err := res.VCS.TrackedFiles(ctx, root, slices.Compact(ask))
-	if err != nil {
-		return nil
-	}
-	tracked := make(map[string]bool, len(known))
-	for _, p := range known {
-		tracked[filepath.ToSlash(p)] = true
-	}
-	out := map[string][]string{}
-	for seed, files := range undeclaredOnly {
-		var kept []string
-		for _, f := range files {
-			if tracked[f] {
-				kept = append(kept, f)
-			}
-		}
-		if len(kept) > 0 {
-			out[seed] = kept
-		}
-	}
-	return out
+	sink.EmitNotice(ctx, slog.LevelWarn, types.UndeclaredSeedingFile, internalci.UndeclaredSeedNotice(undeclaredOnly, true))
 }
 
 // reportUndeclaredSeeds carries MGS1028 as one coded event per project, the shape the
@@ -1244,28 +760,9 @@ func reportUndeclaredSeeds(ctx context.Context, sink *magus.Sink, undeclaredOnly
 	for _, seed := range slices.Sorted(maps.Keys(undeclaredOnly)) {
 		sink.EmitDiagnostic(ctx, seed, types.UndeclaredSeedingFile,
 			"seeded only by changed files no project declares: "+
-				strings.Join(cappedList(undeclaredOnly[seed]), ", "))
+				strings.Join(internalci.CappedList(undeclaredOnly[seed]), ", "))
 	}
 }
-
-// cappedList bounds an inline list at undeclaredSeedHintCap, replacing the tail with a
-// count of what it left out.
-func cappedList(items []string) []string {
-	if len(items) <= undeclaredSeedHintCap {
-		return items
-	}
-	return append(items[:undeclaredSeedHintCap:undeclaredSeedHintCap],
-		fmt.Sprintf("and %d more", len(items)-undeclaredSeedHintCap))
-}
-
-// cappedUnits is units as project:target, bounded by cappedList.
-func cappedUnits(units []types.Unit) string {
-	return strings.Join(cappedList(types.UnitNames(units)), ", ")
-}
-
-// undeclaredSeedHintCap bounds how many seed projects (and how many of one project's
-// files) MGS1028 names inline.
-const undeclaredSeedHintCap = 5
 
 // affectedImpact reports the blast radius of the current changeset (the --impact
 // forensic mode of `magus affected`). It is strictly read-only: it maps changed files
@@ -1337,173 +834,10 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, names)
 	}
 
-	return printImpactText(out)
-}
-
-// impactFileCap bounds how many changed files are listed per seed project in text
-// mode; a large changeset stays readable while the full set is still one -o json away.
-const impactFileCap = 12
-
-// printImpactText renders the impact report in the `magus graph explain` house style:
-// counts before lists, verbs not arrows, full ids, plain ASCII. Changed files are
-// grouped under the seed project that owns them (not dumped as one flat list) so a
-// large changeset stays legible.
-func printImpactText(out *types.ImpactResult) error {
-	// Notes carry graceful degradation (a knowledge graph that failed to load, a
-	// missing symbol index), so they must survive the early returns below. Without
-	// this, an empty changeset rendered as a clean "nothing is affected" while the
-	// reason the overlays were absent went unsaid, which is the worst shape a silent
-	// failure can take in a gate command.
-	defer func() {
-		for _, n := range out.Notes {
-			fmt.Printf("\nnote: %s\n", n)
-		}
-	}()
-
-	if out.ChangedFileCount == 0 {
-		fmt.Printf("No changed files against %s; nothing is affected.\n", out.Base)
-		return nil
-	}
-
-	fmt.Printf("Changeset impact (base: %s)\n", out.Base)
-	fmt.Printf("%s changed, seeding %s, affecting %s.\n",
-		plural.Count(out.ChangedFileCount, "file", "files"),
-		plural.Count(len(out.SeedProjects), "project", "projects"),
-		plural.Count(len(out.AffectedProjects), "project", "projects"))
-
-	if len(out.AffectedProjects) == 0 {
-		fmt.Printf("\nNo projects are affected (every changed file sits outside a project).\n")
-		return nil
-	}
-
-	// Seeds first (they carry the changed files), then the projects reached only
-	// through the dependency closure. Counting seeds here also yields the number of
-	// changed files that landed inside a project, for an outside-any-project note.
-	seeded := 0
-	fmt.Printf("\nAffected projects (%d):\n", len(out.AffectedProjects))
-	for _, p := range out.AffectedProjects {
-		if !p.Seed {
-			continue
-		}
-		seeded += len(p.Files)
-		// "seeded by 12 changed files" reads as twelve files this project is built
-		// from. Some of them may be seeding it by directory containment alone, which
-		// is a rerun whose result was already correct, so the count says how many,
-		// and the listing below marks which.
-		label := plural.Count(len(p.Files), "changed file", "changed files")
-		if n := len(p.UndeclaredFiles); n > 0 {
-			label += fmt.Sprintf(", %d declared by no project", n)
-		}
-		fmt.Printf("  %s (seeded by %s)\n", p.Path, label)
-		if len(p.Targets) > 0 {
-			fmt.Printf("    targets: %s\n", strings.Join(p.Targets, ", "))
-		}
-		shown := p.Files
-		if len(shown) > impactFileCap {
-			shown = shown[:impactFileCap]
-		}
-		for _, f := range shown {
-			if slices.Contains(p.UndeclaredFiles, f) {
-				fmt.Printf("    %s (undeclared)\n", f)
-				continue
-			}
-			fmt.Printf("    %s\n", f)
-		}
-		if extra := len(p.Files) - len(shown); extra > 0 {
-			fmt.Printf("    ... and %d more\n", extra)
-		}
-	}
-	for _, p := range out.AffectedProjects {
-		if p.Seed {
-			continue
-		}
-		fmt.Printf("  %s (via dependencies)\n", p.Path)
-		if len(p.Targets) > 0 {
-			fmt.Printf("    targets: %s\n", strings.Join(p.Targets, ", "))
-		}
-	}
-
-	if outside := out.ChangedFileCount - seeded; outside > 0 {
-		fmt.Printf("\n%s changed outside any project (seeded nothing).\n", plural.Count(outside, "file", "files"))
-	}
-
-	printImpactOverlays(out)
-
-	// Complementary deep-link into the live Graph Explorer, focused on a single
-	// representative seed with a blast view (what depends on it: the closure the
-	// change ripples out to). The query grammar ANDs its terms with no OR, so the
-	// full affected set cannot be selected in one query. Always printed; the server
-	// may not be up when the browser opens it, hence the hint.
-	if len(out.SeedProjects) > 0 {
-		seed := out.SeedProjects[0]
-		label := seed
-		if len(out.SeedProjects) > 1 {
-			label = fmt.Sprintf("%s (1 of %d seeds)", seed, len(out.SeedProjects))
-		}
+	return internalci.PrintImpactText(os.Stdout, out, func(seed string) (string, string) {
 		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
-		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
-		fmt.Printf("%s\n", authHint(link))
-		fmt.Printf("(start the magus server if the graph does not load)\n")
-	}
-
-	fmt.Printf("\nRun the full pipeline over this set with: %s\n", hint.Affected.With("ci"))
-	return nil
-}
-
-// impactSymbolCap bounds how many changed symbols the caller overlay lists in text
-// mode; the widest-reach symbols lead (the list is sorted by descending caller count),
-// so a large changeset stays readable while the full set is one -o json away.
-const impactSymbolCap = 20
-
-// printImpactOverlays renders the differentiated overlay sections (changed-symbol
-// callers and coverage on changed code) beneath the blast radius. Each is additive and
-// self-suppressing: an overlay with no data prints nothing here (its honest output is
-// the Note the enrichment appended). Same house style as the blast radius: counts before
-// lists, verbs not arrows, plain ASCII.
-func printImpactOverlays(out *types.ImpactResult) {
-	if len(out.ChangedSymbols) > 0 {
-		files := map[string]struct{}{}
-		for _, s := range out.ChangedSymbols {
-			files[s.File] = struct{}{}
-		}
-		fmt.Printf("\nChanged-symbol callers (%s across %s):\n",
-			plural.Count(len(out.ChangedSymbols), "symbol", "symbols"),
-			plural.Count(len(files), "changed file", "changed files"))
-		shown := out.ChangedSymbols
-		if len(shown) > impactSymbolCap {
-			shown = shown[:impactSymbolCap]
-		}
-		for _, s := range shown {
-			name := s.Label
-			if name == "" {
-				name = s.Symbol
-			}
-			line := fmt.Sprintf("  %s (%s): %s across %s", name, s.File,
-				plural.Count(s.RefCount, "caller", "callers"),
-				plural.Count(s.FileCount, "file", "files"))
-			if s.Coverage.Total > 0 {
-				line += fmt.Sprintf(" [coverage %s]", impactPct(s.Coverage.Ratio))
-			}
-			fmt.Println(line)
-		}
-		if extra := len(out.ChangedSymbols) - len(shown); extra > 0 {
-			fmt.Printf("  ... and %d more\n", extra)
-		}
-	}
-
-	if len(out.ChangedFileCoverage) > 0 {
-		fmt.Printf("\nCoverage on changed files (%s):\n",
-			plural.Count(len(out.ChangedFileCoverage), "file", "files"))
-		for _, c := range out.ChangedFileCoverage {
-			fmt.Printf("  %s: %s (%d/%d stmts)\n", c.File,
-				impactPct(c.Coverage.Ratio), c.Coverage.Covered, c.Coverage.Total)
-		}
-	}
-}
-
-// impactPct renders a 0..1 coverage ratio as a whole-percent string ("80%").
-func impactPct(ratio float64) string {
-	return fmt.Sprintf("%.0f%%", ratio*100)
+		return link, authHint(link)
+	})
 }
 
 // parseExplainArgs scans args for --explain[=<project>] and optionally --base.
@@ -1526,23 +860,6 @@ func parseExplainArgs(args []string) (project, base string, ok bool) {
 		}
 	}
 	return project, base, ok
-}
-
-// affectedExplainOutput is the structured result for --explain.
-type affectedExplainOutput struct {
-	Project  string                `json:"project"         yaml:"project"`
-	Affected bool                  `json:"affected"        yaml:"affected"`
-	Base     string                `json:"base"            yaml:"base"`
-	Paths    []affectedExplainPath `json:"paths,omitempty" yaml:"paths,omitempty"`
-}
-
-type affectedExplainPath struct {
-	Seed  string   `json:"seed"  yaml:"seed"`
-	Chain []string `json:"chain" yaml:"chain"`
-	Files []string `json:"files" yaml:"files"`
-	// Undeclared is the subset of Files that no project declares: the ones whose
-	// answer to "why did this run" is directory containment rather than a cache key.
-	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
 }
 
 func affectedExplain(ctx context.Context, root, target, base string) error {
@@ -1571,7 +888,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		return err
 	}
 
-	out := affectedExplainOutput{Project: target, Base: r.Base}
+	out := internalci.AffectedExplainOutput{Project: target, Base: r.Base}
 	for _, a := range r.Affected {
 		if a == target {
 			out.Affected = true
@@ -1582,7 +899,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	if out.Affected {
 		paths := g.PathsFromSeeds(r.Seed, target)
 		for _, ap := range paths {
-			out.Paths = append(out.Paths, affectedExplainPath{
+			out.Paths = append(out.Paths, internalci.AffectedExplainPath{
 				Seed:       ap.Seed,
 				Chain:      ap.Chain,
 				Files:      r.FilesBySeed[ap.Seed],
@@ -1605,7 +922,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	}
 
 	// text and wide
-	if !printAffectedExplainText(out) {
+	if !internalci.PrintAffectedExplainText(os.Stdout, out) {
 		return nil
 	}
 
@@ -1619,183 +936,4 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		}
 	}
 	return nil
-}
-
-// printAffectedExplainText renders the text and wide forms of `magus affected --explain`,
-// reporting whether the project is affected at all; the caller appends the VCS diff
-// hints only when it is. Split out for the same reason printImpactText is: the rendering
-// is a pure function of the result, and the I/O around it is not.
-func printAffectedExplainText(out affectedExplainOutput) bool {
-	if !out.Affected {
-		fmt.Printf("%s is not affected (base: %s)\n", out.Project, out.Base)
-		return false
-	}
-	fmt.Printf("%s\n", out.Project)
-	for _, ap := range out.Paths {
-		if len(ap.Chain) == 1 {
-			fmt.Printf("  changed files:\n")
-		} else {
-			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " -> "))
-		}
-		for _, f := range ap.Files {
-			// The marker answers the question the file list raises but cannot settle:
-			// whether this path is an input the seed is built from, or one that only
-			// happens to sit inside it.
-			if slices.Contains(ap.Undeclared, f) {
-				fmt.Printf("    %s (undeclared: seeds by directory containment, keys nothing)\n", f)
-				continue
-			}
-			fmt.Printf("    %s\n", f)
-		}
-	}
-	return true
-}
-
-// planDetail joins the shard partition against what magus already declares about each
-// project, producing one detail record per shard.
-//
-// This is assembly, not analysis. The plan knew which projects may run concurrently; the
-// project list knows each one's spell, declared outputs, and exclusivity; the skills are
-// derived from those two. Nothing here inspects a file or runs a target.
-func planDetail(ctx context.Context, m *magus.Magus, target string, shards []types.Shard) (map[string]shardDetail, error) {
-	projects, err := m.ListProjects(ctx)
-	if err != nil {
-		return nil, err
-	}
-	byPath := make(map[string]types.ProjectEntry, len(projects.Projects))
-	for _, p := range projects.Projects {
-		byPath[p.Path] = p
-	}
-
-	// Per-TARGET writes as well as project-wide ones. A project that declares its outputs
-	// per target (ctx.writesFiles(...)) has an EMPTY project-level Outputs, so a
-	// project-only join reported this workspace's root shard as writing nothing while it
-	// rewrites MAGUS.md and gen/*.json. A write set that omits the busiest writer
-	// is worse than none: it reads as a cleared shard.
-	writesByProject := map[string][]string{}
-	if graph, gerr := m.TargetGraph(ctx); gerr == nil {
-		for _, proj := range graph.Projects {
-			for _, node := range proj.Nodes {
-				for _, ref := range node.WritesFiles {
-					writesByProject[proj.Path] = appendUnique(writesByProject[proj.Path], ref.Rooted(proj.Path).String())
-				}
-			}
-		}
-	}
-
-	out := make(map[string]shardDetail, len(shards))
-	for _, s := range shards {
-		b := shardDetail{Command: hint.Run.With(target, strings.Join(s.ProjectPaths, " "))}
-		for _, path := range s.ProjectPaths {
-			p, ok := byPath[path]
-			if !ok {
-				continue // a shard naming a project the workspace no longer lists: nothing to say
-			}
-			b.Spells = appendUnique(b.Spells, p.Spells...)
-			if p.Spell != "" {
-				b.Spells = appendUnique(b.Spells, p.Spell)
-			}
-			// Project-relative as declared, rooted at the project, so two briefings can be
-			// compared for overlap without the reader re-deriving where each one sits.
-			if proj := m.Get(path); proj != nil {
-				for _, g := range proj.Outputs {
-					b.Writes = appendUnique(b.Writes, g.Root(path).String())
-				}
-			}
-			b.Writes = appendUnique(b.Writes, writesByProject[path]...)
-		}
-		skills, why := shardSkills(b)
-		b.Agents = &shardAgents{Skills: skills, Why: why}
-		out[s.ID] = b
-	}
-	return out, nil
-}
-
-// shardSkills derives the agent skills a shard's work routes to, and says why.
-//
-// Derived from what the shard DOES rather than declared in a table, so it cannot drift
-// from the shard it describes: a second copy of the routing table would rot the first
-// time a project changed spells. Each reason is returned alongside, because a routing
-// decision an agent cannot audit is one it should not act on.
-func shardSkills(b shardDetail) (skills, why []string) {
-	// The always-full twin, not the primary. The primary entry is the curated shorter
-	// form, a bet that the reader who INSTALLED it can re-derive the steps it drops.
-	// A record like this is read by someone who did not make that bet and would inherit it
-	// with no say, so the twin is the name that survives being passed along.
-	skills = append(skills, agent.FullTwinName("magus-run"))
-	why = append(why, "magus-run: the shard is a target invocation, and the raw language tool would bypass the cache and the affected set")
-	if len(b.Writes) > 0 {
-		skills = append(skills, agent.FullTwinName("magus-vcs-hygiene"))
-		why = append(why, "magus-vcs-hygiene: this shard declares outputs, so its run leaves generated files that must be classified before they are committed or reverted")
-	}
-	why = append(why, "variant: each skill is named as its always-full twin, because the reader of this record is not the session that chose the install")
-	return skills, why
-}
-
-// appendUnique appends each value not already present, preserving order.
-func appendUnique(dst []string, values ...string) []string {
-	for _, v := range values {
-		if v != "" && !slices.Contains(dst, v) {
-			dst = append(dst, v)
-		}
-	}
-	return dst
-}
-
-// filterShards narrows a plan to the named projects, INTERSECTING them with the affected
-// set rather than replacing it.
-//
-// The distinction is the whole point: `magus run ci docs` runs docs whether or not the diff
-// touched it, while this answers "of the work this change actually implies, give me the
-// docs part". Splitting a large affected set into units wants the second; the first would
-// hand out work the change never justified.
-//
-// Shard IDs are preserved rather than renumbered, so a filtered plan can be read against
-// the unfiltered one it came from; a shard left empty drops out.
-//
-// A name that matches no project in the WORKSPACE is an error, because it is a typo and
-// silently planning nothing is how a typo turns into "the change affected nothing". A name
-// that is a real project but outside the affected set is not an error: that is the honest
-// empty answer, and it is the question being asked.
-func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, only []string) ([]types.Shard, error) {
-	projects, err := m.ListProjects(ctx)
-	if err != nil {
-		return nil, err
-	}
-	known := make(map[string]bool, len(projects.Projects))
-	for _, p := range projects.Projects {
-		known[p.Path] = true
-	}
-	want := make(map[string]bool, len(only))
-	for _, name := range only {
-		clean := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(name)), "/")
-		if !known[clean] {
-			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace, run `%s` to list them", name, hint.Ls)
-		}
-		want[clean] = true
-	}
-
-	return filterShardPaths(shards, want), nil
-}
-
-// filterShardPaths is the pure half of filterShards: the intersection itself, with the
-// workspace lookup and its typo check left to the caller.
-func filterShardPaths(shards []types.Shard, want map[string]bool) []types.Shard {
-	out := make([]types.Shard, 0, len(shards))
-	for _, sh := range shards {
-		kept := make([]string, 0, len(sh.ProjectPaths))
-		for _, path := range sh.ProjectPaths {
-			if want[path] {
-				kept = append(kept, path)
-			}
-		}
-		if len(kept) == 0 {
-			continue
-		}
-		sh.ProjectPaths = kept
-		sh.Units = slices.DeleteFunc(slices.Clone(sh.Units), func(u types.Unit) bool { return !want[u.Project] })
-		sh.Digest = types.UnitsDigest(sh.Units)
-		out = append(out, sh)
-	}
-	return out
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -1131,6 +1132,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 // loaded workspace is not the one the host reported.
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
+	resetWorkspaceMemo(t)
 	t.Setenv(trail.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
@@ -2436,7 +2438,7 @@ func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 }
 
 func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildJudges() {
-	s.placePinned(unknownVersion, `{"decision":"deny"}`, 2)
+	s.placePinned(buildinfo.UnknownVersion, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)

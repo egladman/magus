@@ -434,7 +434,7 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 		}
 		return "", fmt.Errorf("init: unknown --vcs %q (choose one of: %s)", vcsFlag, strings.Join(choices, ", "))
 	}
-	if !isInteractiveTTY() {
+	if !interactive.IsInteractiveTTY() {
 		return "", nil
 	}
 	initial := 0

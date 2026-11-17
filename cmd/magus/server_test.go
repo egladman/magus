@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/types/diff"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,8 +25,6 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -175,111 +171,6 @@ func TestNoticeBrokerSaysWhatItLeftBehind(t *testing.T) {
 	assert.Empty(t, none, "a broker this run did not start is not announced")
 }
 
-// TestServerChildArgsDropsStart pins the detached server's argv: its role, with no
-// `start` in ps, and every flag the person passed so it binds where the parent waits.
-func TestServerChildArgsDropsStart(t *testing.T) {
-	assert.Equal(t, []string{"server", "--foreground"}, serverChildArgs([]string{"server", "start"}))
-	assert.Equal(t,
-		[]string{"--server-address", "unix:///tmp/m.sock", "server", "--foreground", "-v"},
-		serverChildArgs([]string{"--server-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
-}
-
-func TestIsServerRun(t *testing.T) {
-	assert.True(t, isServerRun([]string{"start"}))
-	assert.True(t, isServerRun([]string{"start", "--foreground"}))
-	assert.True(t, isServerRun([]string{"--foreground"}), "the detached child runs the server")
-	assert.False(t, isServerRun([]string{"start", "-h"}), "help prints usage and builds nothing")
-	assert.False(t, isServerRun([]string{"stop"}))
-	assert.False(t, isServerRun(nil))
-}
-
-// TestDetachedChildEnvDropsInheritedInvocationState pins that A BACKGROUND PROCESS
-// DESCENDS FROM NOBODY. A run is what starts the broker, so without the scrub its
-// environment permanently records that one run's ancestry, and a server started from
-// inside a run would read those refs as its own, excusing claims from an invocation that
-// ended hours ago and judging an unstamped run to be a nested magus that lost its
-// ancestry. The same rule submitJob already applies to a job's context.
-func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
-	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/parent.sock")
-	t.Setenv("MAGUS_PROC_TOKEN", "parent-secret")
-	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
-	t.Setenv("MAGUS_LEVEL", "1")
-	t.Setenv("MAGUS_KEEP_ME", "yes")
-
-	got := map[string]string{}
-	for _, kv := range detachedChildEnv() {
-		if name, value, ok := strings.Cut(kv, "="); ok {
-			got[name] = value
-		}
-	}
-	assert.NotContains(t, got, "MAGUS_PROC_SOCKET", "a child inheriting it binds no socket of its own")
-	assert.NotContains(t, got, "MAGUS_PROC_TOKEN", "the parent socket's secret leaves with its address")
-	assert.NotContains(t, got, "MAGUS_INVOCATION_ANCESTORS", "a background process is nobody's descendant")
-	assert.NotContains(t, got, "MAGUS_LEVEL", "nor is it nested inside the run that happened to start it")
-	assert.Equal(t, "yes", got["MAGUS_KEEP_ME"], "everything else is inherited as before")
-}
-
-// TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt pins the fix for the v0.4.1 windows
-// release, where auto-starting a background process failed with
-//
-//	exec: "C:\hostedtoolcache\windows\magus\bin\magus": executable file not found in %PATH%
-//
-// exec.Command resolves an absolute path on Windows through lookExtensions, which needs a
-// PATHEXT sibling; setup-magus installs an extensionless `magus`, so the running binary
-// could not re-exec itself. Nothing here should consult PATH: the caller passes
-// os.Executable().
-//
-// The assertion is contract-shaped rather than reproducing the failure, which needs a
-// Windows runtime. exec.Command sets Err on exactly this input there and nowhere else, so
-// the case is stated on every platform and enforced where it bites.
-func TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
-	for _, tc := range []struct{ name, exe string }{
-		{"extensionless, as setup-magus installs it", filepath.Join(t.TempDir(), "magus")},
-		{"with the windows extension", filepath.Join(t.TempDir(), "magus.exe")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd := detachedCommand(tc.exe, []string{"broker"})
-
-			require.NoError(t, cmd.Err, "re-execing a known absolute path performs no lookup that could fail")
-			assert.Equal(t, tc.exe, cmd.Path, "the path is used verbatim, never a PATHEXT sibling")
-			assert.Equal(t, []string{tc.exe, "broker"}, cmd.Args,
-				"argv[0] is the executable, with the caller's arguments after it")
-		})
-	}
-}
-
-// TestDetachedCmdIgnoresPATH proves the resolution is absent rather than merely succeeding:
-// a name that also exists on PATH must not be picked up in place of the path given.
-func TestDetachedCmdIgnoresPATH(t *testing.T) {
-	decoyWS := testkit.NewWorkspace(t)
-	decoyWS.WriteExecutable("magus", "#!/bin/sh\n")
-	decoy := decoyWS.Root()
-	t.Setenv("PATH", decoy)
-
-	want := filepath.Join(t.TempDir(), "magus")
-	cmd := detachedCommand(want, nil)
-
-	assert.Equal(t, want, cmd.Path, "the decoy on PATH is not consulted")
-	assert.NotEqual(t, filepath.Join(decoy, "magus"), cmd.Path)
-}
-
-func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
-	assert.True(t, isServerStartHelp([]string{"start", "-h"}))
-	assert.True(t, isServerStartHelp([]string{"start", "--foreground", "--help"}))
-	assert.True(t, isServerStartHelp([]string{"start", "help"}))
-	assert.False(t, isServerStartHelp([]string{"start"}))
-	assert.False(t, isServerStartHelp([]string{"start", "--foreground"}))
-	assert.False(t, isServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
-}
-
-func TestWantsForeground(t *testing.T) {
-	assert.True(t, wantsForeground([]string{"start", "--foreground"}))
-	assert.True(t, wantsForeground([]string{"start", "-foreground"}))
-	// A pre-parse scanner takes only the bare spellings; an =value form is not a bool.
-	assert.False(t, wantsForeground([]string{"start", "--foreground=true"}))
-	assert.False(t, wantsForeground([]string{"start"}))
-}
-
 func TestConsoleURLsDegradeToEmpty(t *testing.T) {
 	prev := globalCfg.Console.Enabled
 	t.Cleanup(func() { globalCfg.Console.Enabled = prev })
@@ -288,23 +179,6 @@ func TestConsoleURLsDegradeToEmpty(t *testing.T) {
 	globalCfg.Console.Enabled = &off
 	assert.Equal(t, "", consoleWatchURL())
 	assert.Equal(t, "", consoleDiffURL())
-}
-
-// The message exists because "already running" answered a question nobody asked. A second
-// worktree's `server start` returns 0 having loaded nothing from that tree, and the console then
-// shows the tree the server was started in, which reads as success.
-func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
-	st := &proc.StatusReply{Workspaces: []proc.Workspace{
-		{Root: "/repo/worktrees/b"},
-		{Root: "/repo"},
-	}}
-
-	// Sorted, so two runs of the same server do not print the list two ways.
-	assert.Equal(t, ", serving /repo, /repo/worktrees/b", servingSuffix(st))
-
-	// A server that has loaded nothing yet says nothing rather than "serving " with an empty
-	// list, which would read as a server that is serving something unnameable.
-	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
 }
 
 // TestEnsureConsoleServerReturnsWithoutSpawning pins the early return: a console that is
@@ -594,143 +468,26 @@ func TestCheckReviewCountsNoReadingWhenNobodyWasReading(t *testing.T) {
 	assert.Empty(t, rec.secs)
 }
 
-// TestDetachedChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits
-// MAGUS_PROC_SOCKET decides it is already adopted, binds no socket of its own, and then
-// reports the parent's, leaving a server `server stop` cannot find.
-func TestDetachedChildEnvDropsTheInheritedSocket(t *testing.T) {
-	t.Setenv("MAGUS_PROC_SOCKET", "/tmp/magus-parent.sock")
-	t.Setenv("MAGUS_KEEP_ME", "1")
-
-	env := detachedChildEnv()
-
-	for _, kv := range env {
-		assert.False(t, strings.HasPrefix(kv, "MAGUS_PROC_SOCKET="), "child inherited %q", kv)
-	}
-	assert.Contains(t, env, "MAGUS_KEEP_ME=1", "the scrub must drop one variable, not the environment")
+// TestServerAndBrokerSocketsSitApart pins the two addresses: each a unix socket in the
+// private socket directory, named for what listens there, and never the same file.
+func TestServerAndBrokerSocketsSitApart(t *testing.T) {
+	server, brk := proc.ServerDefaultAddr(), broker.DefaultAddr()
+	assert.True(t, strings.HasPrefix(server, "unix://"), server)
+	assert.True(t, strings.HasSuffix(server, "/server.sock"), server)
+	assert.True(t, strings.HasPrefix(brk, "unix://"), brk)
+	assert.True(t, strings.HasSuffix(brk, "/"+broker.SocketName), brk)
+	assert.Equal(t, filepath.Dir(server), filepath.Dir(brk))
 }
 
-func hookSections(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	out := map[string]string{}
-	entries, err := os.ReadDir(filepath.Join(dir, ".git", "hooks"))
-	require.NoError(t, err)
-	for _, e := range entries {
-		data, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", e.Name()))
-		require.NoError(t, err)
-		if strings.Contains(string(data), "# BEGIN magus-") {
-			out[e.Name()] = string(data)
-		}
-	}
-	return out
-}
-
-func captureNotices(t *testing.T) *strings.Builder {
-	t.Helper()
-	var buf strings.Builder
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
-func TestRefreshVCSHooksInstallsNothingWithoutAFirstInstall(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
-	t.Chdir(dir)
-	logs := captureNotices(t)
-
-	refreshVCSHooks(t.Context())
-
-	assert.Empty(t, hookSections(t, dir), "server start wrote a hook into a repository that had none")
-	assert.Equal(t, 1, strings.Count(logs.String(), "magus init --vcs git"), "want one notice naming the command:\n%s", logs)
-}
-
-func TestRefreshVCSHooksRewritesAnOlderSection(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
-	t.Chdir(dir)
-	hook := filepath.Join(dir, ".git", "hooks", "post-checkout")
-	older := "#!/bin/sh\n\n# BEGIN magus-refresh - do not edit this section manually\n" +
-		"[ \"$3\" = \"1\" ] || exit 0\nold-magus job run sync-graph >/dev/null 2>&1 || true\n# END magus-refresh\n"
-	require.NoError(t, os.WriteFile(hook, []byte(older), 0o755))
-	logs := captureNotices(t)
-
-	refreshVCSHooks(t.Context())
-
-	data, err := os.ReadFile(hook)
-	require.NoError(t, err)
-	assert.NotContains(t, string(data), "old-magus", "the older refresh command survived")
-	assert.Contains(t, string(data), "# BEGIN magus-refresh")
-	assert.NotContains(t, hookSections(t, dir), "post-commit", "server start first-installed the drift hook")
-	assert.NotContains(t, logs.String(), "magus init --vcs", "a repository with hooks gets no first-install notice")
-}
-
-func TestRefreshVCSHooksRewritesADriftSectionAlone(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
-	t.Chdir(dir)
-	res, err := vcs.Resolve(t.Context(), dir, "", types.VCSOptions{})
-	require.NoError(t, err)
-	_, err = res.VCS.InstallDriftHook(t.Context(), dir, "old-magus job run check-drift")
-	require.NoError(t, err)
-	_, ok, err := vcs.ReadGitDriftHook(t.Context(), dir)
-	require.NoError(t, err)
-	require.True(t, ok, "the fixture must read as an installed drift section")
-	logs := captureNotices(t)
-
-	refreshVCSHooks(t.Context())
-
-	data, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "post-commit"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(data), "old-magus", "the older drift command survived")
-	assert.NotContains(t, hookSections(t, dir), "post-checkout", "server start first-installed the refresh hook")
-	assert.NotContains(t, logs.String(), "magus init --vcs", "a repository with hooks gets no first-install notice")
-}
-
-func TestRefreshVCSHooksRefreshesHgFamilySections(t *testing.T) {
-	for _, tc := range []struct {
-		prog, config           string
-		readRefresh, readDrift func(string) (string, bool, error)
-	}{
-		{"hg", filepath.Join(".hg", "hgrc"), vcs.ReadHgRefreshHook, vcs.ReadHgDriftHook},
-		{"sl", filepath.Join(".sl", "config"), vcs.ReadSaplingRefreshHook, vcs.ReadSaplingDriftHook},
-	} {
-		t.Run(tc.prog, func(t *testing.T) {
-			if _, err := exec.LookPath(tc.prog); err != nil {
-				t.Skip(tc.prog + " not available")
-			}
-			t.Setenv("HGRCPATH", "")
-			t.Setenv("HGPLAIN", "1")
-			dir := t.TempDir()
-			require.NoError(t, exec.Command(tc.prog, "init", dir).Run())
-			t.Chdir(dir)
-			logs := captureNotices(t)
-
-			refreshVCSHooks(t.Context())
-
-			_, refresh, err := tc.readRefresh(dir)
-			require.NoError(t, err)
-			_, drift, err := tc.readDrift(dir)
-			require.NoError(t, err)
-			assert.False(t, refresh || drift, "server start first-installed a hook")
-			assert.Equal(t, 1, strings.Count(logs.String(), "magus init --vcs "+tc.prog), "want one notice naming the command:\n%s", logs)
-
-			res, err := vcs.Resolve(t.Context(), dir, "", types.VCSOptions{})
-			require.NoError(t, err)
-			_, err = res.VCS.InstallDriftHook(t.Context(), dir, "old-magus job run check-drift")
-			require.NoError(t, err)
-			_, drift, err = tc.readDrift(dir)
-			require.NoError(t, err)
-			require.True(t, drift, "the fixture must read as an installed drift section")
-
-			refreshVCSHooks(t.Context())
-
-			data, err := os.ReadFile(filepath.Join(dir, tc.config))
-			require.NoError(t, err)
-			assert.NotContains(t, string(data), "old-magus", "the older drift command survived")
-			_, refresh, err = tc.readRefresh(dir)
-			require.NoError(t, err)
-			assert.False(t, refresh, "server start first-installed the refresh hook")
-		})
-	}
+// TestResolveServerAddrNeverConsultsTheAdoptionSocket pins that the server's address is
+// config or server.sock, never MAGUS_PROC_SOCKET: inside a run that variable names the
+// run's own per-process pool, which dies with it.
+func TestResolveServerAddrNeverConsultsTheAdoptionSocket(t *testing.T) {
+	defer snapshotGlobals()()
+	t.Setenv(proc.SocketEnv, "unix:///tmp/magus-1-abc.sock")
+	globalCfg.Server.Address = ""
+	assert.Equal(t, proc.ServerDefaultAddr(), resolveServerAddr(""))
+	globalCfg.Server.Address = "unix:///tmp/configured.sock"
+	assert.Equal(t, "unix:///tmp/configured.sock", resolveServerAddr(""))
+	assert.Equal(t, "unix:///tmp/flag.sock", resolveServerAddr("unix:///tmp/flag.sock"))
 }

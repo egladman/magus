@@ -2,15 +2,21 @@ package sessions
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/vcs"
+	driver "github.com/egladman/magus/vcs"
 )
 
 // KindCheckpoint is the fact a session writes when it stops with work unfinished.
@@ -188,4 +194,118 @@ func decodeCheckpoint(rec Record) (Checkpoint, bool) {
 		return Checkpoint{}, false
 	}
 	return c, true
+}
+
+// checkpointsShown bounds the block. A checkpoint from three weeks ago is still where that
+// work sits, so the list is bounded by count rather than by age, and the tail is pointed at
+// rather than dropped silently.
+//
+// It is NOT unbounded in time, whatever this comment used to say: Prune drops a
+// whole session file 30 days after its newest record, with an exemption for open attention
+// requests and none for checkpoints. A line of work parked for a month loses every
+// checkpoint it had, silently. Either that exemption is owed or this block should say so.
+const checkpointsShown = 3
+
+// renderCheckpoints prints unfinished work above the history, because "where was I" is
+// the question a person opens this listing with, and the history answers a different one.
+//
+// It is deliberately not filtered by --since. That flag bounds what RAN recently; a
+// checkpoint records what has not finished, and hiding an old one would hide the case
+// this exists for.
+func renderCheckpoints(ctx context.Context, root string, w io.Writer, checkpoints []CheckpointRecord) {
+	if len(checkpoints) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Checkpoints, most recent first:")
+	for _, r := range checkpoints[:min(len(checkpoints), checkpointsShown)] {
+		fmt.Fprintf(w, "  %s  %s\n", r.At.Format("2006-01-02 15:04:05"), checkpointWhere(r.Checkpoint))
+		if r.Note != "" {
+			fmt.Fprintf(w, "    %s\n", r.Note)
+		}
+		if r.HostSession != "" {
+			fmt.Fprintf(w, "    session %s\n", r.HostSession)
+		}
+		if r.Transcript != "" {
+			fmt.Fprintf(w, "    transcript %s\n", r.Transcript)
+		}
+	}
+	if extra := len(checkpoints) - checkpointsShown; extra > 0 {
+		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.Session.With("-o", "json"))
+	}
+	printCheckpointInspect(ctx, root, w, checkpoints[0].Checkpoint)
+	fmt.Fprintln(w)
+}
+
+// printCheckpointInspect prints the command that shows what changed since the newest
+// checkpoint, already substituted, for THIS repository's backend.
+//
+// Composed by the DRIVER, never here. magus drives git, Mercurial, Sapling and Jujutsu,
+// and each spells this differently; a reader who assembles one from memory is guessing
+// which of the four they are in, and the same guess is what a skill hardcoding `git
+// diff` teaches them to make. DiffCommands is the one method that already knows, and
+// until now it had a single caller.
+//
+// Best-effort and silent on failure: a revisionless checkpoint has no base to diff from,
+// and a listing that refuses to print because a VCS probe failed would be worse than one
+// that prints what it has. Only for the newest, because that is the one a reader acts on
+// and each call costs a subprocess.
+func printCheckpointInspect(ctx context.Context, root string, w io.Writer, c Checkpoint) {
+	if root == "" || c.Tree.Revision == "" {
+		return
+	}
+	res, err := driver.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return
+	}
+	hints, err := res.VCS.DiffCommands(ctx, root, c.Tree.Revision)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "  what changed since the newest:\n    %s\n", hints.CLI)
+	if hints.GUI != "" {
+		fmt.Fprintf(w, "    %s\n", hints.GUI)
+	}
+}
+
+// checkpointWhere reads one back as a phrase. The revision leads because it is the fact
+// a reader acts on: a checkout that cannot resolve it is looking at work that was never
+// pushed, which no branch name would have revealed.
+//
+// A checkpoint with no revision is not a broken record. A tree before its first commit,
+// or under no VCS at all, still has a location worth naming, and the workspace is it.
+func checkpointWhere(c Checkpoint) string {
+	var b strings.Builder
+	if c.Host != "" {
+		fmt.Fprintf(&b, "%s ", c.Host)
+	}
+	if c.Tree.Revision == "" {
+		b.WriteString(c.Workspace)
+		return b.String()
+	}
+	b.WriteString(c.Tree.Revision[:min(len(c.Tree.Revision), 12)])
+	if c.Tree.Branch != "" {
+		fmt.Fprintf(&b, " on %s", c.Tree.Branch)
+	}
+	if c.Tree.Dirty {
+		b.WriteString(", uncommitted changes")
+	}
+	return b.String()
+}
+
+// CheckpointRecordedLine is the terminal reading of one write: where the work sits, and
+// whether this call changed anything. The location is rendered by the same function the
+// listing uses, so recording a checkpoint and reading one back describe it identically.
+//
+// Distinct from vcs.go's checkpointLine, which renders the VCS triple alone in fixed
+// columns for `magus vcs checkpoint`. Same noun, two audiences.
+func CheckpointRecordedLine(c Checkpoint, recorded bool) string {
+	verb := "checkpoint at"
+	if !recorded {
+		verb = "unchanged since the last checkpoint at"
+	}
+	line := fmt.Sprintf("%s %s", verb, checkpointWhere(c))
+	if c.Note != "" {
+		line += ": " + c.Note
+	}
+	return line
 }

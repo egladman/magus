@@ -58,8 +58,10 @@ import (
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
@@ -101,7 +103,7 @@ func runCLI() int {
 	}
 	// Before the worker branches: a worker runs magus\workspace().putJob.
 	// That opens its own Store inside std and grades the check through this.
-	job.SetCheckGrader(newCheckGrader())
+	job.SetCheckGrader(guard.NewCheckGrader(loadGuardDependencies))
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
@@ -153,11 +155,11 @@ func runCLI() int {
 	// A broker or a foreground server answers its own signals (see lifecycle); a run's
 	// Ctrl+C policy would cancel it on the first SIGTERM it means to drain on.
 	if ownsItsSignals(args) {
-		captureSignals()
+		proc.CaptureSignals()
 		rootCtx, stopSignals = context.WithCancel(context.Background())
 		interrupted = func() (syscall.Signal, bool) { return 0, false }
 	} else {
-		rootCtx, stopSignals, interrupted = watchInterrupts(context.Background())
+		rootCtx, stopSignals, interrupted = cache.WatchInterrupts(context.Background())
 	}
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
@@ -198,8 +200,8 @@ func runCLI() int {
 	if exitCode >= 0 {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
-		pipeStageFromContext(rootCtx).linger()
-		recordPipeExit(args, code, interrupted)
+		pipe.StageFromContext(rootCtx).Linger()
+		pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 		return code
 	}
 
@@ -230,14 +232,14 @@ func runCLI() int {
 	// Only a stage that succeeded settles: one that failed reports its own failure,
 	// never an upstream's.
 	if code == 0 {
-		if err := settlePipeline(dispatchCtx, args); err != nil {
+		if err := pipe.SettleProcess(dispatchCtx, extractRootFlag(args), globalCfg); err != nil {
 			dispatchErr, code = err, mapExitCode(err)
 		}
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
-	pipeStageFromContext(rootCtx).linger()
-	recordPipeExit(args, code, interrupted)
+	pipe.StageFromContext(rootCtx).Linger()
+	pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 	return code
 }
 
@@ -720,23 +722,6 @@ func peekSub(args []string) (sub string, subArgs []string) {
 	return "", nil
 }
 
-// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
-// in, whose magus cannot start for root, since a host runs a failed hook's call.
-func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
-	if sub == "shell" {
-		return mapExitCode(shellCommand(withStaleConfig(ctx, cause), subArgs)), true
-	}
-	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
-	if sub != "buzz" || stdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
-		return 0, false
-	}
-	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
-	if reason != "" {
-		fmt.Fprintln(os.Stderr, reason)
-	}
-	return answer.ExitCode(), true
-}
-
 // startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
 // exitCode >= 0 means exit without dispatching; -1 means proceed.
 func startup(rootCtx context.Context, args []string) (context.Context, startupResult, int) {
@@ -989,7 +974,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		noticeBroker(rootCtx, pid)
 	}
 
-	runsServer := sub == "server" && isServerRun(subArgs)
+	runsServer := sub == "server" && server.IsServerRun(subArgs)
 	if runsServer && cfg.Server.Address == "" {
 		cfg.Server.Address = proc.ServerDefaultAddr()
 	}
@@ -1001,7 +986,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// `server --foreground` and returns once it is accepting. done==true means we are
 		// that parent (or a server was already running, or spawning failed); only a
 		// foreground server falls through to build and run it in this process.
-		if code, done := startServerBackground(rootCtx, cfg, subArgs); done {
+		if code, done := server.StartBackground(rootCtx, cfg, subArgs, server.LogPath(), os.Args[1:]); done {
 			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		startServer(rootCtx, cfg, rc)

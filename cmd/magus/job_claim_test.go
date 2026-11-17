@@ -1,17 +1,16 @@
 package main
 
 import (
-	"context"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestCallersSymbolRefusesAnAmbiguousName(t *testing.T) {
+// A callers claim resolves its name with the picker the callers env wires, so a name two
+// symbols share reaches job.ApplyClaim as both ids and a name the index lacks as itself.
+func TestJobClaimEnvPicksEverySymbolAnAmbiguousNameNames(t *testing.T) {
 	const a, b = "symbol:x `a`/Parse().", "symbol:x `b`/Parse()."
 	defines := func(file, id string) types.KnowledgeEdge {
 		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1}
@@ -19,22 +18,13 @@ func TestCallersSymbolRefusesAnAmbiguousName(t *testing.T) {
 	g := knowledge.NewGraph()
 	g.Merge([]types.KnowledgeNode{{ID: a, Kind: types.KindSymbol, Label: "Parse"}, {ID: b, Kind: types.KindSymbol, Label: "Parse"}},
 		[]types.KnowledgeEdge{defines("a/a.go", a), defines("b/b.go", b)})
+	pick := jobCallersEnv().PickSymbol
 
-	_, err := callersSymbol(g, "Parse")
-	require.Error(t, err)
-	assert.ErrorContains(t, err, a)
-	assert.ErrorContains(t, err, b)
+	id, ambiguous := pick(g, "Parse")
+	assert.Empty(t, id)
+	assert.ElementsMatch(t, []string{a, b}, ambiguous)
 
-	_, err = callersSymbol(g, "Missing")
-	assert.ErrorContains(t, err, `callers "Missing" names no symbol the index holds`)
-}
-
-func TestApplyClaimRefusesPathBesideCallers(t *testing.T) {
-	rec := types.Declaration{
-		Schema: types.Schema{Version: types.JobAPIVersion},
-		ID:     "fix-parser",
-		Claim:  []types.JobClaimRequest{{Path: "lib/lib.go", Callers: "Parse"}},
-	}
-	err := applyClaim(context.Background(), t.TempDir(), []types.Declaration{rec})
-	assert.ErrorContains(t, err, "names callers of Parse and also a path or a proof")
+	id, ambiguous = pick(g, "Missing")
+	assert.Equal(t, "Missing", id)
+	assert.Empty(t, ambiguous)
 }

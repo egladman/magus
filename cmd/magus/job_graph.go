@@ -1,833 +1,115 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"flag"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
-	"path"
-	"path/filepath"
-	"slices"
-	"strings"
-	"sync"
 	"time"
+
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/job/evidence"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/types"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/cache"
-	internalci "github.com/egladman/magus/internal/ci"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/libs/figure"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
-// deletionCandidates is the unreferenced symbols in row's write paths, or nil when the
-// symbol index is not there to ask: no index is not the same as nothing to delete, and the
-// fork must not fail for it.
-func deletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row types.Job) []types.UnreferencedEntry {
-	if row.ReadOnly || len(row.Paths.Write) == 0 {
-		return nil
-	}
-	g := load(ctx)
-	if g == nil {
-		return nil
-	}
-	return job.UnreferencedInPaths(row, g.Unreferenced())
-}
-
-// referencedOutside is the files outside row's write paths that use what they define, and
-// the gap that makes the list unknown. With no graph, or one holding no symbols, Referrers
-// answers nil for every file, which reads the same as nothing outside using them.
-func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) (files []job.ReferencedFile, gap string) {
-	if row.ReadOnly || len(row.Paths.Write) == 0 {
-		return nil, ""
-	}
-	g := load(ctx)
-	if g == nil || !g.HasSymbols() {
-		return nil, job.NoSymbolIndex()
-	}
-	return job.ReferencedOutside(root, row, projects, g.Referrers), ""
-}
-
-// leaseAffinityCommits is how far back the co-change scan reads. Wide enough that a
-// coupling has to be a habit rather than one refactor, narrow enough that a boundary
-// two owners ago does not warn about a partition nobody runs any more.
-const leaseAffinityCommits = 200
-
-// leaseBoundary derives what the WORKSPACE says about one lease: the projects its write
-// paths reach, the paths its own declarations put out of reach, and the projects that
-// change alongside the leased ones.
-//
-// This is the half a hand-written ledger row cannot carry. An orchestrator writes down
-// the deny paths it REMEMBERED; the generated outputs of every project a lease
-// invalidates, and the paths a sibling lease is holding right now, hold whether anybody
-// remembered them or not.
-//
-// A read-only lease has no write set, so it gets none of this: the skill puts such a row
-// outside the collision analysis entirely.
-//
-// A workspace that will not load DEGRADES rather than failing, the way the graph evidence
-// already does: the row alone carries the criteria, the boundary and the check, and a worker
-// in a tree whose magusfile is mid-edit is exactly who needs to read them.
-func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
-	if len(row.Paths.Write) == 0 {
-		return job.TermsFacts{}
-	}
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return job.TermsFacts{WorkspaceCold: true}
-	}
-	affected, err := m.AffectedFromPaths(ctx, row.Paths.Write)
-	if err != nil {
-		return job.TermsFacts{WorkspaceCold: true}
-	}
-	derived := generatedBoundary(m, affected.Affected, row.Paths.Write)
-	here := job.WorkingCheckout(cmp.Or(row.CheckoutRoot, m.Root()), row)
-	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" })...)
-	derived = append(derived, sharedBoundary(m, affected.Seed)...)
-	notes := collectNotes(ctx, m, row)
-	facts := job.TermsFacts{
-		Projects:           affected.Affected,
-		DerivedDenyPaths:   derived,
-		RegeneratedOutside: notes.RegeneratedOutside,
-		UnrunGates:         notes.UnrunGates,
-		Affinity:           leaseAffinity(ctx, m, affected.Seed),
-		Stage:              workspaceStage(ctx, m),
-		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.Paths.Write), row),
-		TestScope:          job.NarrowTestScope(m.All(), row.Paths.Write, here),
-	}
-	facts.ReferencedOutside, facts.ReferencedOutsideGap = referencedOutside(ctx, graph.loadScoped(row.Paths.Write), m.Root(), row, m.All())
-	// A history file that does not read leaves the section out, the way Affinity's scan does.
-	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
-		facts.Grouping = &grouping
-	}
-	return facts
-}
-
-// generatedBoundary is the declared output globs, across every project the lease
-// invalidates, that land INSIDE its write paths.
-//
-// The intersection is what makes this a boundary rather than an inventory. This
-// workspace declares around a hundred output globs; listing them all buries the two or
-// three a given worker could actually hand-edit, and the worker is already fenced out of
-// everything beyond its write paths. What it cannot know without being told is that a
-// file it legitimately owns the directory of is generated.
-//
-// The AFFECTED set rather than the seeds, because a project writes outputs into trees it
-// does not own: a glob from a downstream project can land in this lease's paths.
-func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoundary {
-	var out []job.TermsBoundary
-	seen := map[string]bool{}
-	for _, path := range projects {
-		p := m.Get(path)
-		if p == nil {
-			continue
-		}
-		for _, glob := range p.AllOutputs() {
-			rooted := glob.Root(p.Path)
-			if seen[rooted.String()] || !slices.ContainsFunc(owned, func(o string) bool { return types.PathsIntersect(o, rooted.Pattern) }) {
-				continue
-			}
-			seen[rooted.String()] = true
-			reason := fmt.Sprintf("generated by %s: regenerate it, never hand-edit", types.ProjectLabel(p.Path, p.Name))
-			if len(rooted.Except) > 0 {
-				// The carved-out files are hand-maintained, and a worker must not read
-				// the pattern as a fence around them.
-				reason = fmt.Sprintf("generated by %s, except %s: regenerate it, never hand-edit",
-					types.ProjectLabel(p.Path, p.Name), strings.Join(rooted.Except, ", "))
-			}
-			out = append(out, job.TermsBoundary{Path: rooted.Pattern, Reason: reason})
-		}
-	}
-	return out
-}
-
-// leasedBoundary is every path another [job.Editing] lease owns ([types.Job.HardPaths]). A
-// terminal or exited row claims nothing: that is the same rule the overlap report follows,
-// and the reason a worker releasing a path early lets a waiter start against it.
-//
-// An ANCESTOR claims nothing against its descendant either: a child is forked inside its
-// parent's boundary, so listing the parent's paths would put the child's own out of reach.
-//
-// Nor does a lease in another checkout claim a generated output ([job.HeldApart]): row's
-// holder, working in here, regenerates its own copy.
-func leasedBoundary(row types.Job, leases []types.Job, here string, projects job.Projects) []job.TermsBoundary {
-	ancestors := types.JobAncestors(leases, row.ID)
-	var out []job.TermsBoundary
-	for _, other := range leases {
-		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !job.Editing(other) || blocked ||
-			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
-			continue
-		}
-		for _, p := range other.HardPaths() {
-			if apart, _ := job.HeldApart(here, other, projects, p); apart {
-				continue
-			}
-			out = append(out, job.TermsBoundary{
-				Path:   p,
-				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),
-			})
-		}
-	}
-	return out
-}
-
-// sharedBoundary is the files in the workspace root and the lease's own project
-// directories that decide what every tool DOES: dependency locks, rule sets, toolchain
-// pins, the workspace config, and the files magus maintains itself.
-//
-// One owner each, which is the skill's collision rule. They are named from what is on
-// disk rather than from a list of every manifest a monorepo could hold, so the boundary
-// describes this workspace instead of a catalogue.
-func sharedBoundary(m *magus.Magus, seeds []string) []job.TermsBoundary {
-	var out []job.TermsBoundary
-	seen := map[string]bool{}
-	for _, dir := range append([]string{"."}, seeds...) {
-		entries, err := os.ReadDir(filepath.Join(m.Root(), filepath.FromSlash(dir)))
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			rel := path.Join(dir, e.Name())
-			if e.IsDir() || seen[rel] {
-				continue
-			}
-			reason := sharedReason(rel, e.Name())
-			if reason == "" {
-				continue
-			}
-			seen[rel] = true
-			out = append(out, job.TermsBoundary{Path: rel, Reason: reason})
-		}
-	}
-	return out
-}
-
-// sharedReason says why a file has one owner, or "" for one that does not.
-func sharedReason(rel, name string) string {
-	switch {
-	case name == config.Filename:
-		return "workspace configuration: changing it changes the plan every lease is running"
-	case types.IsMagusMaintained(rel):
-		return "magus maintains this file itself"
-	case types.LooksLikeBuildInput(rel):
-		return "shared build input: it decides what the tools do, so it has one owner"
-	default:
-		return ""
+// jobEvidenceEnv is what internal/job/evidence asks of the command line.
+func jobEvidenceEnv() evidence.Env {
+	return evidence.Env{
+		Config:  globalCfg,
+		Version: version,
+		Options: cliOptions(),
+		LoadMagus: func(ctx context.Context, root string) (*magus.Magus, error) {
+			return loadMagus(ctx, root)
+		},
+		RootStale: staleIndexes,
+		FindStale: func(ctx context.Context, m *magus.Magus) []types.KnowledgeStaleIndex {
+			return findStaleIndexes(ctx, m)
+		},
+		RootRefsGraph: func(ctx context.Context, root string) (*knowledge.Graph, error) {
+			return loadKnowledgeGraphForRefs(ctx, root, false, "")
+		},
+		RootDomainGraph: func(ctx context.Context, root string) (*knowledge.Graph, error) {
+			return loadKnowledgeGraph(ctx, root, false, false, false)
+		},
+		RefsGraph: func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error) {
+			return loadRefsGraph(ctx, m, globalCfg, false, "")
+		},
+		DomainGraph: func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error) {
+			return loadWorkspaceGraph(ctx, m, globalCfg, false, false, false)
+		},
+		Notes: func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate) {
+			notes := collectNotes(ctx, m, row)
+			return notes.RegeneratedOutside, notes.UnrunGates
+		},
+		HolderCell:         jobHolderCell,
+		GateMergeScanLimit: gateMergeScanLimit,
 	}
 }
 
-// leaseAffinity reports the undeclared couplings between a leased project and one outside
-// the lease, loudest first.
-//
-// A pair INSIDE the lease is dropped: two projects one worker owns move together by
-// assignment, and saying so is not evidence about anything. A pair that declares its
-// dependency is dropped for the reason job.TermsAffinity documents.
-//
-// Best-effort. A repository with no readable history yields nothing, and a partition
-// decided without this evidence is the ordinary case rather than a failure.
-func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []job.TermsAffinity {
-	if len(seeds) == 0 {
-		return nil
-	}
-	out, err := m.Affinity(ctx, types.HistoryMetricsOptions{Commits: leaseAffinityCommits})
-	if err != nil {
-		return nil
-	}
-	var pairs []job.TermsAffinity
-	for _, pair := range out.Pairs {
-		if !pair.Hidden {
-			continue
-		}
-		mine, theirs := pair.A, pair.B
-		if !slices.Contains(seeds, mine) {
-			mine, theirs = pair.B, pair.A
-		}
-		if !slices.Contains(seeds, mine) || slices.Contains(seeds, theirs) {
-			continue
-		}
-		pairs = append(pairs, job.TermsAffinity{Project: mine, With: theirs, Commits: pair.Count})
-	}
-	return pairs
+// jobGraph is evidence.Graph under the lower-case names other cmd files call.
+type jobGraph struct{ *evidence.Graph }
+
+func (r *jobGraph) load(ctx context.Context) *knowledge.Graph { return r.Load(ctx) }
+
+func (r *jobGraph) loadScoped(paths []string) func(context.Context) *knowledge.Graph {
+	return r.LoadScoped(paths)
 }
 
-// briefRefusesTheGate reports why this row must not be briefed, or nil to render it.
-//
-// The ONE verdict this command makes, and it is here rather than in job.Terms because
-// the brief renders context and never a verdict. The gate runs once, in the orchestrator's
-// tree, after every unit lands; seven workers ran the whole pipeline concurrently on one
-// machine (2026-09-09) because every hand-typed brief ended with it. The guard already
-// denies the gate to a worker that binds a narrower row, and this closes the half the
-// guard cannot reach: a row whose validation IS the gate, which the guard reads as a lease
-// that legitimately owns it.
-//
-// A COMPOSITE reaching the gate is refused too. Naming the pipeline indirectly buys the
-// same seven concurrent runs, and it is the likelier mistake once this refuses the obvious
-// spelling.
-func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
-	// The holder of a row forked with --checkout gates in that checkout, as the guard lets it.
-	if row.State.Live() && row.Worktree.Standing() {
-		return nil
-	}
-	fix := fmt.Sprintf(" The gate runs ONCE, in the forking session's tree, after every job lands."+
-		" Give this job the narrowest target covering its paths (`%s` decomposes what the gate chains) with `%s`, then ask for the terms again.",
-		hint.DescribeTarget.With(types.TargetCI+" <project>"), hint.JobFork)
-
-	if source, owns := guard.LeaseGateSource(row); owns {
-		return fmt.Errorf("magus describe job: job %s is assigned %s, which names the `%s` gate.%s", row.ID, source, types.TargetCI, fix)
-	}
-	if chain := validationReachesGate(ctx, root, row.Validation); len(chain) > 0 {
-		return fmt.Errorf("magus describe job: job %s is assigned %q, and that target reaches the `%s` gate through %s.%s",
-			row.ID, row.Validation, types.TargetCI, strings.Join(chain, " -> "), fix)
-	}
-	return nil
-}
-
-// validationReachesGate walks the ctx.needs graph from each target a validation field
-// names and returns the first chain that arrives at the gate, or nil.
-//
-// WITHIN one project's graph. A cross-project edge is a ref rather than a bare node name,
-// so the walk stops at one instead of guessing which project it meant; that under-reports
-// and never over-reports, which is the direction a refusal has to fail in. A workspace
-// that cannot be inspected also reports nothing: this rule must not be the reason a brief
-// is unavailable.
-func validationReachesGate(ctx context.Context, root, validation string) []string {
-	if strings.TrimSpace(validation) == "" {
-		return nil
-	}
-	// The boundary loads the full workspace next; an inspection first would load it twice.
-	ws, err := loadMagus(ctx, root)
-	if err != nil {
-		return nil
-	}
-	graph, err := ws.TargetGraph(ctx)
-	if err != nil {
-		return nil
-	}
-	for _, word := range strings.Fields(validation) {
-		t, err := types.ParseTarget(word)
-		if err != nil {
-			continue
-		}
-		for _, p := range graph.Projects {
-			deps := map[string][]string{}
-			for _, n := range p.Nodes {
-				deps[n.Name] = n.Dependencies
-			}
-			if chain := chainToGate(t.Name, deps); len(chain) > 0 {
-				return chain
-			}
-		}
-	}
-	return nil
-}
-
-// chainToGate is the path from start to the gate through a project's target dependencies,
-// or nil when there is none. Depth-first with a visited set, so a cyclic graph terminates
-// rather than being trusted to be acyclic: `magus describe graph` reports cycles instead
-// of rejecting them, so one can reach here.
-func chainToGate(start string, deps map[string][]string) []string {
-	// A start nobody declares is not a chain of length one: every bare word in the
-	// validation field reaches here, project paths and flags included.
-	if _, ok := deps[start]; !ok {
-		return nil
-	}
-	return gateWalk(start, deps, map[string]bool{})
-}
-
-func gateWalk(name string, deps map[string][]string, seen map[string]bool) []string {
-	if seen[name] {
-		return nil
-	}
-	seen[name] = true
-	if name == types.TargetCI {
-		return []string{name}
-	}
-	for _, next := range deps[name] {
-		if chain := gateWalk(next, deps, seen); len(chain) > 0 {
-			return append([]string{name}, chain...)
-		}
-	}
-	return nil
-}
-
-// leaseGraphEvidence resolves each write path against the knowledge graph, one line per
-// path the graph knows. cold reports a graph that would not load at all.
-//
-// A path the graph cannot resolve is skipped SILENTLY, because most write paths are
-// ordinary source directories the containment tree does not carry, and a "no node" line
-// per path would bury the ones that do resolve. A cold graph is different and is
-// reported once: "not asked" must not read as "nothing depends on this". It takes the domain
-// graph through graph, so a graph that must not build answers cold while a stale symbol
-// index may hold changes inside paths.
-func leaseGraphEvidence(ctx context.Context, graph *jobGraph, paths []string) (evidence []job.TermsEvidence, cold bool) {
-	if len(paths) == 0 {
-		return nil, false
-	}
-	g := graph.loadDomain(ctx, paths)
-	if g == nil {
-		return nil, true
-	}
-	for _, p := range paths {
-		if e, ok := pathEvidence(g, p); ok {
-			evidence = append(evidence, e)
-		}
-	}
-	return evidence, false
-}
-
-// pathEvidence answers for one declared path, trying the node ids a path can carry in the
-// containment tree.
-//
-// It accepts only a node whose id IS the ref it asked for. Explain resolves a bare name
-// fuzzily, which is right for a person typing `magus explain build` and wrong here: asked
-// for "cmd/magus" it answered target:.:release-sign, and a brief that hands a worker the
-// blast radius of an unrelated node is worse than one that stays quiet.
-func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool) {
-	for _, ref := range []string{fmt.Sprintf("%s:%s", types.KindDir, declared), fmt.Sprintf("%s:%s", types.KindFile, declared), declared} {
-		out, ok := g.Explain(ref)
-		if !ok || out.Node.ID != ref {
-			continue
-		}
-		return job.TermsEvidence{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}, true
-	}
-	return job.TermsEvidence{}, false
-}
-
-// jobSymbolReader loads the knowledge graph ONCE and answers every symbol a job's gates
-// name from it.
-//
-// Lazy and memoized because a verification reads several names and the graph is the
-// expensive part; loading per name would reopen it once per symbol. A load failure is
-// remembered too, so a verification does not retry a graph that is not there once per
-// gate and report the same failure five times. Without rebuild, a stale symbol index
-// answers no name at all: this reader has no write paths to clear it against (see jobGraph).
-func jobSymbolReader(root string, rebuild bool) job.SymbolReader {
-	return graphSymbolReader(newJobGraph(root, rebuild).load)
-}
-
-func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolReader {
-	return func(ctx context.Context, name, signature string) (job.SymbolFact, bool) {
-		g := load(ctx)
-		if g == nil {
-			return job.SymbolFact{}, false
-		}
-		return job.GraphSymbols(g)(ctx, name, signature)
-	}
-}
-
-// jobGraph is one command's knowledge graph, loaded on first use and handed to every later
-// caller, or the same nil when the load failed.
-//
-// A read that must not build (rebuild false, which is `describe job`) asks first whether a
-// stale symbol index could hold a change to the row's write paths. While one could, it
-// loads nothing: bringing the graph up to date is a build of seconds, and the symbol goals
-// graded against it would answer from an index that misses that change. They print as not
-// graded, beside the stale-index line that names the rebuild. An index whose changed files
-// all fall outside the write paths does not stop the read: the files the row writes are as
-// the index saw them. An index that names no changed files, or only some of them, stops it
-// as before. With nothing stopping it, it reads the graph as built, so it and
-// `job wait` grade alike. A deleted source names no file, so a deletion inside the write
-// paths does not stop the read.
-//
-// One jobGraph serves one row: the first read that names write paths scopes every later one.
-type jobGraph struct {
-	rebuild bool
-	// workspace opens the workspace this graph reads.
-	workspace func(context.Context) (*magus.Magus, error)
-	stale     func(context.Context) []types.KnowledgeStaleIndex
-	build     func(context.Context) (*knowledge.Graph, error)
-	// domain loads the graph without its symbol shards, the graph whose blast radius
-	// `magus explain` prints.
-	domain func(context.Context) (*knowledge.Graph, error)
-
-	staleOnce   sync.Once
-	staleIdx    []types.KnowledgeStaleIndex
-	scopeOnce   sync.Once
-	scope       []string
-	graph       lazyGraph
-	domainGraph lazyGraph
-}
-
-// lazyGraph is one graph loaded on the first get and handed to every later one, or the
-// same nil when skip declined the load or it failed, so a failure is not retried per ask.
-type lazyGraph struct {
-	once sync.Once
-	g    *knowledge.Graph
-}
-
-func (l *lazyGraph) get(ctx context.Context, skip func(context.Context) bool, build func(context.Context) (*knowledge.Graph, error)) *knowledge.Graph {
-	l.once.Do(func() {
-		if skip(ctx) {
-			return
-		}
-		if loaded, err := build(ctx); err == nil {
-			l.g = loaded
-		}
-	})
-	return l.g
+func (r *jobGraph) staleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
+	return r.StaleIndexes(ctx)
 }
 
 func newJobGraph(root string, rebuild bool) *jobGraph {
-	return &jobGraph{
-		rebuild: rebuild,
-		workspace: func(ctx context.Context) (*magus.Magus, error) {
-			return loadMagus(ctx, root)
-		},
-		stale: func(ctx context.Context) []types.KnowledgeStaleIndex {
-			return rootStaleIndexes(ctx, root)
-		},
-		build: func(ctx context.Context) (*knowledge.Graph, error) {
-			return loadKnowledgeGraphForRefs(ctx, root, false, "")
-		},
-		domain: func(ctx context.Context) (*knowledge.Graph, error) {
-			return loadKnowledgeGraph(ctx, root, false, false, false)
-		},
-	}
+	return &jobGraph{evidence.New(root, rebuild, jobEvidenceEnv())}
 }
 
-// rootStaleIndexes judges afresh from the opened workspace, which names the
-// changed files a recorded verdict does not carry.
-func rootStaleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex {
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return staleIndexes(ctx, root)
-	}
-	return findStaleIndexes(ctx, m)
+func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
+	return evidence.RefusesTheGate(ctx, root, row, jobEvidenceEnv())
 }
 
-// newTreeJobGraph is newJobGraph for a checkout the process did not open at startup. It
-// opens tree's own workspace, once, beside the process-wide singleton rather than through
-// it, which names a single workspace and panics on a second. The settings are the process's:
-// a checkout reads the config the invoking tree loaded.
-func newTreeJobGraph(tree string, rebuild bool) *jobGraph {
-	var (
-		once sync.Once
-		m    *magus.Magus
-		err  error
-	)
-	open := func(ctx context.Context) (*magus.Magus, error) {
-		once.Do(func() {
-			var root string
-			if root, err = workspace.FindRoot(tree); err != nil {
-				return
-			}
-			opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
-			m, err = magus.Open(ctx, root, opts...)
-		})
-		return m, err
-	}
-	return &jobGraph{
-		rebuild:   rebuild,
-		workspace: open,
-		stale: func(ctx context.Context) []types.KnowledgeStaleIndex {
-			m, err := open(ctx)
-			if err != nil {
-				return nil
-			}
-			return findStaleIndexes(ctx, m)
-		},
-		build: func(ctx context.Context) (*knowledge.Graph, error) {
-			m, err := open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return loadRefsGraph(ctx, m, globalCfg, false, "")
-		},
-		domain: func(ctx context.Context) (*knowledge.Graph, error) {
-			m, err := open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return loadWorkspaceGraph(ctx, m, globalCfg, false, false, false)
-		},
-	}
+func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
+	return evidence.LeaseBoundary(ctx, root, store, row, leases, graph.Graph, jobEvidenceEnv())
 }
 
-func (r *jobGraph) load(ctx context.Context) *knowledge.Graph {
-	return r.graph.get(ctx, r.mustNotRead, announcedLoad("the symbol graph", r.build))
+func leaseGraphEvidence(ctx context.Context, graph *jobGraph, paths []string) ([]job.TermsEvidence, bool) {
+	return evidence.LeaseGraphEvidence(ctx, graph.Graph, paths)
 }
 
-// announcedLoad says what a load waits on, then what it took. The load
-// rebuilds a stale index for minutes, and lazyGraph hides its failure.
-func announcedLoad(what string, load func(context.Context) (*knowledge.Graph, error)) func(context.Context) (*knowledge.Graph, error) {
-	return func(ctx context.Context) (*knowledge.Graph, error) {
-		slog.InfoContext(ctx, fmt.Sprintf("loading %s; a missing or stale symbol index is rebuilt first, which can take minutes", what), attr.Notice("note"))
-		began := time.Now()
-		g, err := load(ctx)
-		took := cache.FormatDuration(time.Since(began))
-		if err != nil {
-			slog.InfoContext(ctx, fmt.Sprintf("could not load %s after %s", what, took), attr.Error(err), attr.Notice("note"))
-			return g, err
-		}
-		slog.InfoContext(ctx, fmt.Sprintf("loaded %s in %s", what, took), attr.Notice("note"))
-		return g, nil
-	}
+func deletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row types.Job) []types.UnreferencedEntry {
+	return evidence.DeletionCandidates(ctx, load, row)
 }
 
-// loadScoped is load for a row writing paths.
-func (r *jobGraph) loadScoped(paths []string) func(context.Context) *knowledge.Graph {
-	return func(ctx context.Context) *knowledge.Graph {
-		r.setScope(paths)
-		return r.load(ctx)
-	}
+func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) ([]job.ReferencedFile, string) {
+	return evidence.ReferencedOutside(ctx, load, root, row, projects)
 }
 
-// loadDomain is loadScoped for the domain graph, under the same rule.
-func (r *jobGraph) loadDomain(ctx context.Context, paths []string) *knowledge.Graph {
-	r.setScope(paths)
-	return r.domainGraph.get(ctx, r.mustNotRead, announcedLoad("the domain graph", r.domain))
-}
-
-func (r *jobGraph) setScope(paths []string) {
-	r.scopeOnce.Do(func() { r.scope = paths })
-}
-
-// mustNotRead reports whether a read that must not build faces a stale symbol index that
-// could hold a change inside the write paths.
-func (r *jobGraph) mustNotRead(ctx context.Context) bool {
-	return !r.rebuild && len(r.staleIndexes(ctx)) > 0
-}
-
-// staleIndexes is the stale symbol indexes that keep a read from the graph, judged once
-// against the write paths the first scoped read named; with none named, every stale index.
-func (r *jobGraph) staleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
-	r.staleOnce.Do(func() {
-		r.setScope(nil)
-		for _, s := range r.stale(ctx) {
-			if staleIndexHits(s, r.scope) {
-				r.staleIdx = append(r.staleIdx, s)
-			}
-		}
-	})
-	return r.staleIdx
-}
-
-// staleIndexHits reports whether s could hold a change inside paths: it names no changed
-// file or only some, paths is empty, or a file it names falls inside one of them.
-func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
-	if len(paths) == 0 || s.ChangedCount == 0 || len(s.Changed) < s.ChangedCount {
-		return true
-	}
-	return slices.ContainsFunc(s.Changed, func(file string) bool {
-		return slices.ContainsFunc(paths, func(p string) bool { return types.PathsIntersect(p, file) })
-	})
-}
-
-// extendedFootprint adds to rec's write paths the tests beside what it writes.
-// It permits the outputs they regenerate as the integrator's. Each kind gets a
-// count line. It skips a bound caller and a workspace that did not load.
 func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
-	if store.Actor().Bound() || ws.Unavailable != "" {
-		return rec, nil
-	}
-	var declared types.Job
-	rec.Apply(&declared)
-	// Merging every symbol shard costs a GB of heap, so it waits for a row whose
-	// footprint referrers could extend.
-	var referrers func(file, declaration string) map[string]int
-	if job.FootprintMayExtend(root, declared) {
-		if g := graph.loadScoped(declared.Paths.Write)(ctx); g != nil && g.HasSymbols() {
-			referrers = g.Referrers
-		}
-	}
-	paths, _ := job.ExtendFootprint(root, declared, ws.Projects, referrers)
-	rec.Paths.Write = append(rec.Paths.Write, paths...)
-	rec.Paths.Soft = append(rec.Paths.Soft, paths...)
-	declared.Paths.Write = append(declared.Paths.Write, paths...)
-	deviations := job.IntegratorDeviations(root, declared, ws.Projects, ws.Ignored)
-	rec.Deviations = append(rec.Deviations, deviations...)
-	var notes []string
-	if len(paths) > 0 {
-		notes = append(notes, fmt.Sprintf("%d test file(s) beside the write paths were added to them: -o json lists each", len(paths)))
-	}
-	if len(deviations) > 0 {
-		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are permitted: the integrator owns them", len(deviations)))
-	}
-	return rec, notes
+	return evidence.ExtendedFootprint(ctx, store, graph.Graph, root, rec, ws)
 }
 
-// graphsByTree answers a graph per checkout, root's being rootGraph and any other built on
-// first ask under the same rebuild rule.
+func gradesSymbols(rows []types.Job, id string) bool { return evidence.GradesSymbols(rows, id) }
+
+func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolReader {
+	return evidence.GraphSymbolReader(load)
+}
+
+func jobSymbolReader(root string, rebuild bool) job.SymbolReader {
+	return evidence.JobSymbolReader(root, rebuild, jobEvidenceEnv())
+}
+
 func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree string) *jobGraph {
-	g := &treeGraphs{root: filepath.Clean(root), rootGraph: rootGraph, rebuild: rebuild, others: map[string]*jobGraph{}}
-	return g.in
+	in := evidence.ByTree(root, rootGraph.Graph, rebuild, jobEvidenceEnv())
+	return func(tree string) *jobGraph { return &jobGraph{in(tree)} }
 }
 
-type treeGraphs struct {
-	root      string
-	rootGraph *jobGraph
-	rebuild   bool
-	mu        sync.Mutex
-	others    map[string]*jobGraph
-}
-
-func (t *treeGraphs) in(tree string) *jobGraph {
-	tree = filepath.Clean(tree)
-	if tree == t.root {
-		return t.rootGraph
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if _, ok := t.others[tree]; !ok {
-		t.others[tree] = newTreeJobGraph(tree, t.rebuild)
-	}
-	return t.others[tree]
-}
-
-// runsAtCurrentKey answers whether a recorded run is current in tree: the cache key its
-// check would mint there now is the key the run was stored under. Any lookup that fails
-// answers no, so the clock judges the run as it would without this.
-func runsAtCurrentKey(graphIn func(tree string) *jobGraph) job.CurrentRun {
-	return func(ctx context.Context, tree string, run types.JobAttempt) bool {
-		if run.Ref == "" || run.Failed {
-			return false
-		}
-		dir, err := magus.ResolveCacheDir(tree, workspace.WithLoadedConfig(globalCfg))
-		if err != nil {
-			return false
-		}
-		desc, err := cache.NewOutputStore(dir).DescriptorByRef(run.Ref)
-		if err != nil || desc.Key == "" {
-			return false
-		}
-		graph := graphIn(tree)
-		if graph == nil || graph.workspace == nil {
-			return false
-		}
-		m, err := graph.workspace(ctx)
-		if err != nil {
-			return false
-		}
-		target, charms, _ := strings.Cut(desc.Target, ":")
-		var names []string
-		if charms != "" {
-			names = strings.Split(charms, ",")
-		}
-		key, _, err := m.ComputeTargetKey(ctx, desc.Project, target, names)
-		return err == nil && key == desc.Key
-	}
-}
-
-// jobObserver is the checkpoint observer plus the symbol delta of the job's diff and, for a
-// job with a check gate on ci, the newest green ci gate on this checkout's branch and the
-// tier of the change since it. One graph load serves the symbol goals and the delta, and it
-// is the graph of the checkout the job's work lives in: a worker's unintegrated branch is
-// invisible to the waiter's.
 func jobObserver(root string, graphIn func(tree string) *jobGraph) job.Observer {
-	return func(ctx context.Context, row types.Job) (job.Observed, error) {
-		tree := job.WorkTree(root, row)
-		graph := graphIn(tree)
-		seen, err := job.CheckpointObserver(root, graphSymbolReader(graph.loadScoped(row.Paths.Write)))(ctx, row)
-		if err != nil {
-			return seen, err
-		}
-		seen.CurrentRun = runsAtCurrentKey(graphIn)
-		if delta, ok := observeSymbolDelta(ctx, tree, row, seen, graph); ok {
-			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
-		}
-		if root == "" || !gatesOnCI(row) {
-			return seen, nil
-		}
-		seen.GreenGate = latestGreenGate(ctx, root)
-		return seen, nil
-	}
-}
-
-// observeSymbolDelta reads the delta of the diff seen was graded on, in tree, the checkout
-// that diff was read in, against graph, which is that tree's. A graph that will not load
-// leaves the delta unknown, as does a stale index when graph must not build.
-func observeSymbolDelta(ctx context.Context, tree string, row types.Job, seen job.Observed, graph *jobGraph) (symbolDelta, bool) {
-	if row.ReadOnly || tree == "" || !seen.ChangedKnown || seen.ChangedRevision == "" {
-		return symbolDelta{}, false
-	}
-	if len(seen.Changed) == 0 {
-		return symbolDelta{}, true
-	}
-	g := graph.loadScoped(row.Paths.Write)(ctx)
-	res, err := vcs.Resolve(ctx, tree, "", types.VCSOptions{})
-	if err != nil || res.Source == types.VCSSourceDisabled {
-		return symbolDelta{}, false
-	}
-	return readSymbolDelta(ctx, tree, g, res.VCS, seen.ChangedRevision, seen.Changed)
-}
-
-func gatesOnCI(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool {
-		return g.Kind == types.GoalKindCheck && g.Check.Target == types.TargetCI
-	})
-}
-
-// latestGreenGate is the newest green ci gate on root's branch and the tier of the change
-// since it. It is zero when there is none, a merge lies between it and HEAD, or the
-// change cannot be assessed, the same conditions the redundancy check declines on.
-func latestGreenGate(ctx context.Context, root string) job.GreenGate {
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return job.GreenGate{}
-	}
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
-		return job.GreenGate{}
-	}
-	meta, err := res.VCS.Metadata(ctx, m.Root())
-	if err != nil || meta.Ref == "" {
-		return job.GreenGate{}
-	}
-	dir, err := sessions.Dir(m.Root())
-	if err != nil {
-		return job.GreenGate{}
-	}
-	fold, err := sessions.ReadAll(dir)
-	if err != nil {
-		return job.GreenGate{}
-	}
-	rec, ok := sessions.LatestGate(fold, meta.Ref, types.TargetCI)
-	if !ok || rec.Outcome != sessions.OutcomePass || rec.Commit == "" {
-		return job.GreenGate{}
-	}
-	if meta.ID != rec.Commit {
-		history, err := res.VCS.History(ctx, m.Root(), types.HistoryQuery{Limit: gateMergeScanLimit})
-		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
-			return job.GreenGate{}
-		}
-	}
-	rep, err := m.AssessChange(ctx, types.TargetCI, magus.AssessOptions{Base: rec.Commit})
-	if err != nil {
-		return job.GreenGate{}
-	}
-	return job.GreenGate{Commit: rec.Commit, Projects: rec.Projects, Tier: rep.Tier}
-}
-
-// gradesSymbols reports whether grading id reads the symbol graph: a symbol gate of its
-// own, or one inherited from an ancestor.
-func gradesSymbols(rows []types.Job, id string) bool {
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
-	if i < 0 {
-		return false
-	}
-	for _, r := range append([]types.Job{rows[i]}, types.JobAncestors(rows, id)...) {
-		if slices.ContainsFunc(r.Goals, func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindSymbol }) {
-			return true
-		}
-	}
-	return false
+	return evidence.Observer(root, func(tree string) *evidence.Graph { return graphIn(tree).Graph }, jobEvidenceEnv())
 }
 
 // jobGraphCommand is `magus job graph`: the live plan as figures that fit
@@ -865,11 +147,11 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	figs := plan.Figures()
 	switch opts.Format {
 	case outputSVG:
-		dir, err := planSVGDir(root, gf.Dir)
+		dir, err := evidence.PlanSVGDir(root, gf.Dir, globalCfg)
 		if err != nil {
 			return err
 		}
-		paths, err := writePlanSVGs(ctx, plan, figs, dir)
+		paths, err := evidence.WritePlanSVGs(ctx, plan, figs, dir, jobHolderCell)
 		if err != nil {
 			return err
 		}
@@ -907,57 +189,5 @@ func jobGraphUsage(fs *flag.FlagSet) {
 	printOwnDefaults(fs)
 }
 
-// planSVGDir is dir, else the job-graph folder of the cache.
-func planSVGDir(root, dir string) (string, error) {
-	if dir == "" {
-		cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-		if err != nil {
-			return "", err
-		}
-		dir = filepath.Join(cacheDir, "job-graph")
-	}
-	return filepath.Abs(dir)
-}
-
 // outputSVG is `magus job graph`'s own -o format.
 const outputSVG output.Format = "svg"
-
-// drawPlanFigure paints rec in a session of its own, as Draw needs.
-func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	defer sess.Close()
-	buzzstd.RegisterWithOutput(sess, io.Discard)
-	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
-		return "", err
-	}
-	figure.DeclareModules(sess)
-	svg, err := figure.Draw(ctx, sess, rec, "")
-	if err != nil {
-		return "", err
-	}
-	return figure.Standalone(svg), nil
-}
-
-// writePlanSVGs writes each figure to dir as <id>.svg. It draws every
-// figure before writing any, so a refusal writes nothing.
-func writePlanSVGs(ctx context.Context, p *job.Plan, figs []*job.PlanFigure, dir string) ([]string, error) {
-	svgs := make([]string, len(figs))
-	for i, f := range figs {
-		svg, err := drawPlanFigure(ctx, p.FigureRecord(f, jobHolderCell))
-		if err != nil {
-			return nil, fmt.Errorf("magus job graph: draw %s: %w", f.ID, err)
-		}
-		svgs[i] = svg
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("magus job graph: %w", err)
-	}
-	paths := make([]string, len(figs))
-	for i, f := range figs {
-		paths[i] = filepath.Join(dir, f.ID+".svg")
-		if err := os.WriteFile(paths[i], []byte(svgs[i]), 0o644); err != nil {
-			return nil, fmt.Errorf("magus job graph: %w", err)
-		}
-	}
-	return paths, nil
-}

@@ -127,7 +127,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
-	// No signal handling here: watchInterrupts already cancels this ctx and turns
+	// No signal handling here: cache.WatchInterrupts already cancels this ctx and turns
 	// the signal into magus's conventional 128+N exit. Registering a second
 	// handler for the same signals would fight it for no gain.
 	return f.Follow(ctx, ef.Interval, emit)

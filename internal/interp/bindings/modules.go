@@ -1,11 +1,14 @@
 package bindings
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/egladman/magus/internal/interp"
@@ -292,10 +295,10 @@ func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOpti
 // function path (execSpellSource), so both paths stay in lock-step.
 func registerMagusModules(ctx context.Context, sess *buzz.Session) error {
 	RegisterModules(ctx, sess)
-	return RegisterSpellSourceModules(sess)
+	return registerSpellSourceModules(sess)
 }
 
-// RegisterSpellSourceModules installs every source-only Buzz module a spell (or
+// registerSpellSourceModules installs every source-only Buzz module a spell (or
 // magusfile) imports for its value types:
 //
 //   - magus/spell (spell.SpellModulePath): the canonical Target/Command/Service/
@@ -312,7 +315,7 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) error {
 // It is layered on top of RegisterModules by the magusfile runtime and,
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
 // under `magus buzz -t` with the same modules the engine loads them with.
-func RegisterSpellSourceModules(sess *buzz.Session) error {
+func registerSpellSourceModules(sess *buzz.Session) error {
 	RegisterSpellDecls(sess)
 	return DeclareMagusTypes(sess)
 }
@@ -379,4 +382,62 @@ func MagusNamespaceKeys(name string) []string {
 		return nil
 	}
 	return nested.MapKeys()
+}
+
+// RunScriptMain evaluates file in dir in-process and calls its main, returning what it
+// printed, the warnings its compilation raised, and the error that ended it. Nothing here
+// writes or exits: all three are the caller's to report. A main that returns a non-zero
+// int is an error, as it is an exit status under `magus buzz`.
+//
+// The session is built as `magus buzz <file>` builds one (same modules, same strict parse
+// mode, warnings drained after Exec and before main, `fun main() > int` read rather than
+// discarded), so a script cannot behave one way there and another way here. Two
+// differences remain, both deliberate:
+//
+//   - std.print goes to a buffer, not stdout. That is the transport for a caller such as
+//     magus diff's advisors, which reads sections back out of the lines a script printed.
+//   - the include path is set on the session rather than through BUZZ_INCLUDE_PATH, so
+//     the script's view of the filesystem stays out of the process environment.
+//
+// Not safe for concurrent use with anything that reads the process environment the
+// script's caller set up for it.
+func RunScriptMain(ctx context.Context, dir, file string) (string, []string, error) {
+	src, err := os.ReadFile(filepath.Join(dir, file))
+	if err != nil {
+		return "", nil, err
+	}
+	sess := buzz.NewSession(ctx)
+	defer func() { _ = sess.Close() }()
+	sess.SetIncludeDirs([]string{dir})
+
+	var out bytes.Buffer
+	RegisterModules(ctx, sess, WithScriptOutput(&out))
+	RegisterMagusNamespace(ctx, sess)
+	if err := registerSpellSourceModules(sess); err != nil {
+		return "", nil, err
+	}
+
+	if err := sess.Exec(ctx, string(src)); err != nil {
+		return out.String(), nil, err
+	}
+	// Exec never fails on a parse or check diagnostic (BZZ3001 unused import, and the
+	// rest), so they are collected here rather than trusted to a green run.
+	var warnings []string
+	for _, w := range sess.Warnings() {
+		w.File = file
+		warnings = append(warnings, w.String())
+	}
+
+	mainFn := sess.GetGlobal("main")
+	if !mainFn.IsFun() {
+		return out.String(), warnings, fmt.Errorf("no main() to run (define `fun main() > void` or `fun main() > int`)")
+	}
+	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
+	if err != nil {
+		return out.String(), warnings, err
+	}
+	if ret.IsInt() && ret.AsInt() != 0 {
+		return out.String(), warnings, fmt.Errorf("main() returned %d (non-zero means the script failed)", ret.AsInt())
+	}
+	return out.String(), warnings, nil
 }

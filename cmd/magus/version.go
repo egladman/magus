@@ -5,14 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,29 +21,11 @@ func selfBuild() types.MagusBuild {
 	return types.MagusBuild{Version: version, Commit: id, Date: date}
 }
 
-// builtDirty reports whether b was built from a modified tree, whose source exists only
-// on the machine that built it. go-build marks that in the version (describe's -dirty
-// suffix); a bare `go build` leaves it in the VCS stamp instead.
-func builtDirty(b types.MagusBuild) bool {
-	if strings.HasSuffix(b.Version, "-dirty") {
-		return true
-	}
-	return b.Version == unknownVersion && buildinfo.Modified()
-}
-
-// sourceRepository is where this binary's commit can be fetched, provided it was pushed.
-const sourceRepository = "https://github.com/egladman/magus"
-
-// unknownVersion is the unstamped-build default, and the dev-build sentinel the proc
-// adoption gate keys on to fingerprint one (proc.devVersionSentinel); keep the two in
-// sync. Named because a server reports it too, and the two must not be compared.
-const unknownVersion = "unknown"
-
 // version is injected by the linker at build time, beside buildinfo's commit stamp:
 //
 //	go build -ldflags "-X main.version=v0.1.0"
 var (
-	version = unknownVersion
+	version = buildinfo.UnknownVersion
 	// builtBy is the CI workflow that produced this binary, as the build was told it
 	// (release.yaml passes its workflow ref in BUILT_BY), empty for a local build. A CLAIM, not proof (a signature is what proves
 	// provenance), but empty is the honest default, so a local build never asserts a
@@ -53,64 +33,6 @@ var (
 	// job_workflow_ref in the certificate, which is what makes the two cross-checkable.
 	builtBy = ""
 )
-
-// versionOutput is the structured view of the build stamp. Engine is unconditional
-// here even though the text form gates it behind -v: a verbosity flag is a reading
-// convenience for a human, and a caller parsing json should not have to discover that
-// a field exists only at a higher verbosity.
-type versionOutput struct {
-	Version string `json:"version"    yaml:"version"`
-	// Commit is the full revision: a forge serves a shallow fetch only by the whole id.
-	Commit string `json:"commit"     yaml:"commit"`
-	// Dirty means the tree held uncommitted changes, so Commit is not this binary's source.
-	Dirty      bool   `json:"dirty"      yaml:"dirty"`
-	Repository string `json:"repository" yaml:"repository"`
-	BuildDate  string `json:"build_date" yaml:"build_date"`
-	// No omitempty: a local build reports built_by as "" rather than dropping the key,
-	// so `-o json` and `-o template` see one record shape either way.
-	BuiltBy string `json:"built_by"   yaml:"built_by"`
-	Engine  string `json:"engine"     yaml:"engine"`
-	// Embedded is the identity of the Buzz modules compiled into this binary. Two builds
-	// at one commit share a version string even when their embedded sources differ.
-	Embedded versionEmbedded `json:"embedded" yaml:"embedded"`
-	// ServerVersion is what the server reported. A POINTER because the field has two
-	// different silences and one spelling for both: NIL is "the probe never ran"
-	// (--client, or an output format that does not render it) and the key is dropped,
-	// while a non-nil empty string is "the probe ran and nothing answered".
-	//
-	// omitzero, not omitempty: under json/v2 omitempty drops a pointer to "" as well as
-	// a nil one, which is exactly the collapse this pointer exists to undo. omitzero
-	// drops only the nil.
-	ServerVersion *string `json:"server,omitzero" yaml:"server,omitempty"`
-}
-
-// versionEmbedded digests the embedded sources a generated output can depend on.
-type versionEmbedded struct {
-	// FigureSHA256 is the hex SHA-256 of the magus/figure source; diagrams-generate in
-	// docs keys on it, since the figures render from this copy and not the checkout's.
-	FigureSHA256 string `json:"figure_sha256" yaml:"figure_sha256"`
-	// ContractSHA256 is the digest of the contract it was built with, which
-	// a checkout of magus it judges must carry. See internal/contract.
-	ContractSHA256 string `json:"contract_sha256" yaml:"contract_sha256"`
-}
-
-// newVersionOutput is this binary's stamp, without the server half and without
-// the contract digest, which can fail to hash: runVersion adds it.
-func newVersionOutput() versionOutput {
-	b := selfBuild()
-	return versionOutput{
-		Version: b.Version, Commit: b.Commit, Dirty: builtDirty(b), Repository: sourceRepository,
-		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
-		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256()},
-	}
-}
-
-// serverProbe is the server half of `magus version`: what, if anything, the server said
-// when asked.
-type serverProbe struct {
-	// version is what it reported, "" when nothing answered.
-	version string
-}
 
 // serverProbeTimeout bounds the whole server half. Far under proc's own 5s status
 // deadline because `magus version` is a scriptable command: an absent or wedged server
@@ -139,18 +61,18 @@ func runVersion(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	out := newVersionOutput()
+	out := buildinfo.NewVersionOutput(selfBuild(), builtBy)
 	if out.Embedded.ContractSHA256, err = contract.Binary(); err != nil {
 		return err
 	}
 	// -o name prints the bare version and nothing else, so the round-trip would be paid
 	// for a field nothing renders, and that form is what a CI step compares against a
 	// pin, which is exactly where a server that is slow to answer must not be felt.
-	var probe serverProbe
+	var probe buildinfo.ServerProbe
 	probed := !vf.Client && opts.Format != outputName
 	if probed {
 		probe = probeServerVersion(ctx)
-		out.ServerVersion = &probe.version
+		out.ServerVersion = &probe.Version
 	}
 
 	switch opts.Format {
@@ -167,9 +89,9 @@ func runVersion(ctx context.Context, args []string) error {
 		fmt.Printf("built by: %s\n", out.BuiltBy)
 	}
 	if probed {
-		fmt.Println(serverLine(probe, out.Version))
+		fmt.Println(buildinfo.ServerLine(probe, out.Version))
 	}
-	if hasVerboseFlag(args) {
+	if buildinfo.HasVerboseFlag(args) {
 		fmt.Printf("engine: %s\n", out.Engine)
 	}
 	return nil
@@ -182,47 +104,19 @@ func runVersion(ctx context.Context, args []string) error {
 // Only the server's own socket is asked, never a scanned per-process proc server: one of
 // those belongs to whatever invocation spawned it (very possibly an unrelated checkout's
 // in-flight run), and reporting it as the server would state something false.
-func probeServerVersion(ctx context.Context) serverProbe {
+func probeServerVersion(ctx context.Context) buildinfo.ServerProbe {
 	ctx, cancel := context.WithTimeout(ctx, serverProbeTimeout)
 	defer cancel()
 
 	reply, err := proc.QueryStatus(ctx, resolveServerAddr(""))
 	if err != nil {
-		return serverProbe{}
+		return buildinfo.ServerProbe{}
 	}
 	if reply.Version == "" {
 		// A server predating the field still answered, so it is running and did not say
 		// which version it is. Kept distinct from the client's own "unknown" sentinel by
-		// serverLine, which never compares this case against the client.
-		return serverProbe{version: unknownVersion}
+		// buildinfo.ServerLine, which never compares this case against the client.
+		return buildinfo.ServerProbe{Version: buildinfo.UnknownVersion}
 	}
-	return serverProbe{version: reply.Version}
-}
-
-// serverLine renders the server half of the text form, against the client's own version.
-//
-// The unknown case is its own line rather than a comparison: an unstamped client also
-// reports "unknown", so an unstamped client talking to an unstamped server would have
-// read as "server: unknown", the same line two matching stamped builds print.
-func serverLine(p serverProbe, client string) string {
-	switch {
-	case p.version == "":
-		return "server: not running"
-	case p.version == unknownVersion:
-		return "server: running, version not reported"
-	case p.version != client:
-		return fmt.Sprintf("server: %s (differs from this client)", p.version)
-	default:
-		return "server: " + p.version
-	}
-}
-
-// hasVerboseFlag reports whether args contains -v or --verbose.
-func hasVerboseFlag(args []string) bool {
-	for _, a := range args {
-		if a == "-v" || a == "--verbose" {
-			return true
-		}
-	}
-	return false
+	return buildinfo.ServerProbe{Version: reply.Version}
 }

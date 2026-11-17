@@ -515,3 +515,113 @@ func TestTwoDisposalsRecordTwoSessions(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, a.DisposedBy, b.DisposedBy)
 }
+
+func TestRenderAttentionTextRendersAnUnattributedRequestWithADash(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	require.NoError(t, RenderAttentionText(&out, []AttentionRequest{
+		{ID: "att-0123456789ab", Outcome: "waiting", Source: "agent/claude", Where: "/repo", Message: "needs a decision"},
+	}, t.TempDir()))
+
+	// ID, AGE, OUTCOME, SOURCE, LEASE, WHERE, FILES, MESSAGE...
+	var cells []string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(line, "att-") {
+			cells = strings.Fields(line)
+			break
+		}
+	}
+	require.Greater(t, len(cells), 4, "no request row in:\n%s", out.String())
+	assert.Equal(t, "-", cells[4], "an unattributed request reads like an unknown LEASE, not like a blank")
+}
+
+func TestRenderAttentionTextLeadsWithTheFilesTheEventNamed(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	require.NoError(t, RenderAttentionText(&out, []AttentionRequest{{
+		ID:      "att-0123456789ab",
+		Message: "needs a decision on the schema",
+		Files:   []types.FileRef{{Value: "cmd/magus/notify.go"}, {Value: "cmd/magus/attention.go"}},
+	}}, t.TempDir()))
+
+	assert.Contains(t, out.String(), "FILES")
+	assert.Contains(t, out.String(), "cmd/magus/notify.go, cmd/magus/attention.go")
+	assert.Contains(t, out.String(), "needs a decision on the schema", "the message stays on the row, after the paths")
+	assert.Contains(t, out.String(), "magus session dispose", "the listing names the one command that closes a request")
+	assert.Contains(t, out.String(), "Nothing here closes on its own.")
+}
+
+func TestAttentionWhereNarrowsToTheProject(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, AttentionWhere(nil))
+	assert.Equal(t, "/repo", AttentionWhere(&types.EventLocation{Workspace: types.Path{Value: "/repo", IsDir: true}}))
+	assert.Equal(t, "/repo", AttentionWhere(&types.EventLocation{
+		Workspace: types.Path{Value: "/repo", IsDir: true},
+		Project:   &types.ProjectRef{Path: ".", Name: "repo"},
+	}))
+	assert.Equal(t, "/repo [apps/web]", AttentionWhere(&types.EventLocation{
+		Workspace: types.Path{Value: "/repo", IsDir: true},
+		Project:   &types.ProjectRef{Path: "apps/web", Name: "apps/web"},
+	}))
+}
+
+func TestDisposeErrorNamesTheStoreAndTheListingForAnUnknownID(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := DisposeRequest(dir, "att-doesnotexist", "", InvocationStart{})
+	err = DisposeError(err, "att-doesnotexist", dir)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "att-doesnotexist")
+	assert.Contains(t, err.Error(), dir, "the error names the store it looked in")
+	assert.Contains(t, err.Error(), "magus session attention", "and the command that lists the ids that do exist")
+}
+
+func TestDisposeErrorRefusesASecondClosureAndPointsAtTheListing(t *testing.T) {
+	dir := t.TempDir()
+	id, _, err := OpenRequest(dir, "sess-1", blocked("needs approval to push"), InvocationStart{})
+	require.NoError(t, err)
+	_, err = DisposeRequest(dir, id, "pushed it myself", InvocationStart{})
+	require.NoError(t, err)
+
+	_, err = DisposeRequest(dir, id, "", InvocationStart{})
+	err = DisposeError(err, id, dir)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already disposed")
+	assert.Contains(t, err.Error(), "magus session attention")
+	assert.Empty(t, queueIDs(t, dir), "a disposed request leaves the queue")
+}
+
+func TestDisposeErrorRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testing.T) {
+	dir := t.TempDir()
+	first, _, err := OpenRequest(dir, "sess-1", blocked("one"), InvocationStart{})
+	require.NoError(t, err)
+	second, _, err := OpenRequest(dir, "sess-2", blocked("two"), InvocationStart{})
+	require.NoError(t, err)
+
+	_, err = DisposeRequest(dir, "att-", "", InvocationStart{})
+	err = DisposeError(err, "att-", dir)
+
+	require.Error(t, err)
+	for _, id := range []string{first, second} {
+		assert.Contains(t, err.Error(), id, "a person cannot choose between candidates the error does not name")
+	}
+	assert.Len(t, queueIDs(t, dir), 2, "an ambiguous prefix closes nothing")
+}
+
+func TestDisposeErrorReportsAPrefixThatMatchesNothing(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
+	require.NoError(t, err)
+
+	_, err = DisposeRequest(dir, "att-zzzz", "", InvocationStart{})
+	err = DisposeError(err, "att-zzzz", dir)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no request matches")
+	assert.Contains(t, err.Error(), "magus session attention", "the refusal names how to see the open ids")
+}

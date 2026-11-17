@@ -2,377 +2,24 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// emitJournalEvent pushes one event through h along the real capture path, rather than
-// hand-building the slog.Record. The attribute key that carries an Event is private
-// to internal/journal, so a hand-built record would be testing a copy of it.
-func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
-	t.Helper()
-	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(h)), e)
-}
+// The helpers below are shared by test files that other groups still own:
+// agent_harness_test, graph_test, diff_test and verbosity_test. The tests that once sat
+// beside them moved to the packages that own the behavior.
 
-// recordSession writes one session's worth of facts through the shared wiring, which is
-// the only producer the CLI has. It returns the session id so a row can be found by it.
-func recordSession(t *testing.T, root, verb string, args []string, inv string) string {
-	t.Helper()
-	handlers := withInvocationJournal(context.Background(), nil, root, verb, args)
-	require.Len(t, handlers, 1)
-	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: inv, Target: "build", Status: journal.StatusPass})
-	return inv
-}
-
-func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
-	t.Parallel()
-	got := summarizeTargets([]sessions.TargetResult{
-		{Target: "build", Project: "api", Outcome: sessions.OutcomePass},
-		{Target: "build", Project: "api", Outcome: sessions.OutcomePass},
-		{Target: "build", Project: "web", Outcome: sessions.OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: sessions.OutcomePass, Replayed: true},
-	})
-	assert.Equal(t, "build api (pass), build web (fail), lint web (pass, cached)", got)
-}
-
-// sessionsLeaseCell returns the LEASE cell of the row for session, which is the column the console
-// drawer's join is waiting on. Reading it positionally rather than searching the whole listing is
-// what makes the "-" case assertable: a dash appears in every unattributed column.
-func sessionsLeaseCell(t *testing.T, out, session string) string {
-	t.Helper()
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		// INVOCATION, date, time, SESSION, USER, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
-		if len(fields) > 6 && fields[0] == session {
-			return fields[6]
-		}
-	}
-	t.Fatalf("no row for session %q in:\n%s", session, out)
-	return ""
-}
-
-func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
-	recordSession(t, root, "run", []string{"build"}, "invLease")
-
-	// A person at a keyboard carries no lease, and the same store has to render both.
-	t.Setenv(trail.EnvBaggage, "")
-	recordSession(t, root, "run", []string{"test"}, "invBare")
-
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, nil))
-	})
-
-	assert.Contains(t, out, "LEASE")
-	assert.Equal(t, "fleet/f3", sessionsLeaseCell(t, out, "invLease"))
-	assert.Equal(t, "-", sessionsLeaseCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
-}
-
-// A store written before the invocation rename is told as that, not as a killed process: a
-// reader who sees "killed mid-write" goes looking for a crash that never happened.
-func TestSessionsNamesLinesWrittenBeforeTheRename(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-	recordSession(t, root, "run", []string{"build"}, "invNew")
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	old := `{"v":1,"session":"0123456789abcdef","seq":1,"kind":"session_start","ts":1,"payload":{}}` + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "0123456789abcdef.jsonl"), []byte(old), 0o644))
-
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, nil))
-	})
-	assert.Contains(t, out, "1 line(s) not shown: written before magus called a per-process id an invocation")
-	assert.NotContains(t, out, "killed mid-write")
-}
-
-// What the environment CLAIMED reaches the listing verbatim: the spawner label a person reads,
-// and the parent span a later session can be joined to.
-func TestSessionsRendersTheSpawnerAndParentFromTheEnvironment(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	t.Setenv(trail.EnvTraceparent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3,"+trail.BaggageSpawner+"=claude%20code")
-	recordSession(t, root, "run", []string{"build"}, "invSpawned")
-
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, nil))
-	})
-
-	assert.Contains(t, out, "SPAWNER")
-	assert.Contains(t, out, "PARENT")
-	assert.Contains(t, out, "claude code", "the label is percent-decoded and shown as claimed")
-	assert.Contains(t, out, "00f067aa0ba902b7", "an unknown parent shows as the span id rather than as a blank")
-	assert.Equal(t, "fleet/f3", sessionsLeaseCell(t, out, "invSpawned"))
-}
-
-// A parent span this store has a record of reads as that session's name; one it does not is
-// still shown, because "magus has no record of it" and "spawned by nobody" are different facts.
-func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
-	t.Parallel()
-	bySpan := map[string]string{"00f067aa0ba902b7": "invParent"}
-
-	assert.Equal(t, "invParent", invocationParent(bySpan, "00f067aa0ba902b7"))
-	assert.Equal(t, "a1b2c3d4e5f60718", invocationParent(bySpan, "a1b2c3d4e5f60718"))
-	assert.Empty(t, invocationParent(bySpan, ""), "a session that claimed no parent has nothing to resolve")
-}
-
-// The listing answers "what happened", but its reader is often looking for "what needs
-// me", so an open queue gets one cross-reference line, and a quiet queue gets silence
-// rather than a reassurance nobody asked for.
-func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-	recordSession(t, root, "run", []string{"build"}, "invQuiet")
-
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, nil))
-	})
-	assert.NotContains(t, out, "attention request", "a quiet queue earns no footer")
-
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	_, opened, err := sessions.OpenRequest(dir, "agent-1", sessions.AttentionOpen{
-		Outcome: "waiting",
-		Source:  "claude/Notification",
-		Where:   root,
-		Message: "needs the deploy key",
-	}, sessions.InvocationStart{Workspace: root})
-	require.NoError(t, err)
-	require.True(t, opened)
-
-	out = captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, nil))
-	})
-	assert.Contains(t, out, "1 attention request(s) open; `magus session attention` lists them")
-}
-
-// `session ls -o json` exposes the pair on the invocation Summary a loaded session
-// summarizes to, which is how a reader scripts "what ran under an old model"
-// without opening every session by hand.
-func TestSessionsJSONExposesTheModelAndHostVersionPair(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","agent":{"model":"claude-opus-5-5","host_version":"2.1.280"}}`)
-	require.NoError(t, err)
-
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, []string{"-o", "json"}))
-	})
-
-	assert.Contains(t, out, `"agent": {`)
-	assert.Contains(t, out, `"model": "claude-opus-5-5"`)
-	assert.Contains(t, out, `"host_version": "2.1.280"`)
-}
-
-// `session -o json` carries what each target claimed and cost, so sizing can be learned
-// from the store; a replay claims nothing and says so.
-func TestSessionsJSONCarriesEachTargetsClaimAndCost(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"build"})
-	require.Len(t, handlers, 1)
-	emitJournalEvent(t, handlers[0], journal.Event{
-		Kind: journal.KindResult, Inv: "invClaim", Target: "build", Status: journal.StatusPass,
-		StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: journal.SizingMeasured,
-		WaitedMs: 40, MaxRSSBytes: 3 << 20, CPUMs: 900,
-	})
-	emitJournalEvent(t, handlers[0], journal.Event{
-		Kind: journal.KindResult, Inv: "invClaim", Target: "lint", Status: journal.StatusCached, Sizing: journal.SizingNone,
-	})
-
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, []string{"-o", "json"}))
-	})
-
-	for _, field := range []string{
-		`"started_ms": 1700000000000`,
-		`"slots": 2`,
-		`"memory_mb": 512`,
-		`"sizing": "measured"`,
-		`"waited_ms": 40`,
-		`"max_rss_bytes": 3145728`,
-		`"cpu_ms": 900`,
-		`"sizing": "none"`,
-	} {
-		assert.Contains(t, out, field)
-	}
-	assert.Equal(t, 1, strings.Count(out, `"slots"`), "the replay claims no slots, so it carries none")
-}
-
-func TestSessionsRejectsPositionalArguments(t *testing.T) {
-	err := sessionCommand(context.Background(), t.TempDir(), []string{"yesterday"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--limit")
-	assert.Contains(t, err.Error(), "--since", "the rejected word is a time, so the error names the flag that takes one")
-}
-
-func TestSessionsRejectsANegativeLimit(t *testing.T) {
-	err := sessionCommand(context.Background(), t.TempDir(), []string{"--limit=-1"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "zero or more")
-	assert.Contains(t, err.Error(), "0 lists every invocation", "the error names the value that means what -1 was reaching for")
-}
-
-func TestParseSinceAcceptsBothSpellings(t *testing.T) {
-	t.Parallel()
-
-	empty, err := parseSince("")
-	require.NoError(t, err)
-	assert.True(t, empty.IsZero(), "no cutoff admits every session")
-
-	back, err := parseSince("2h")
-	require.NoError(t, err)
-	assert.WithinDuration(t, time.Now().Add(-2*time.Hour), back, time.Minute)
-
-	// A caller who writes the minus sign means the same window, not the future.
-	negated, err := parseSince("-2h")
-	require.NoError(t, err)
-	assert.WithinDuration(t, back, negated, time.Minute)
-
-	instant, err := parseSince("2026-08-20T09:00:00Z")
-	require.NoError(t, err)
-	assert.Equal(t, time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC), instant.UTC())
-}
-
-func TestParseSinceRejectsAValueThatIsNeitherForm(t *testing.T) {
-	t.Parallel()
-
-	_, err := parseSince("last tuesday")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "neither a duration nor an RFC3339 timestamp")
-	assert.Contains(t, err.Error(), "2h", "the error shows a value that would work")
-}
-
-// The filter turns on the LAST fact rather than the first, so a session that began
-// before the window and is still working stays listed. Hiding it is exactly the wrong
-// answer for the question --since asks.
-func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-	old := sessions.Summary{Invocation: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
-	long := sessions.Summary{Invocation: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
-
-	got := invocationsSince([]sessions.Summary{old, long}, now.Add(-2*time.Hour))
-	require.Len(t, got, 1)
-	assert.Equal(t, "long", got[0].Invocation)
-}
-
-func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
-	t.Parallel()
-
-	all := []sessions.Summary{{Invocation: "a"}, {Invocation: "b"}}
-	assert.Equal(t, all, invocationsSince(all, time.Time{}))
-}
-
-func TestInvocationsInCheckoutKeepsThisCheckoutAndFactsWithNoWorkspace(t *testing.T) {
-	t.Parallel()
-
-	here, elsewhere := t.TempDir(), t.TempDir()
-	all := []sessions.Summary{
-		{Invocation: "here", Workspace: here},
-		{Invocation: "elsewhere", Workspace: elsewhere},
-		{Invocation: "legacy"},
-	}
-	got := invocationsInCheckout(all, here)
-	require.Len(t, got, 2)
-	assert.Equal(t, "here", got[0].Invocation)
-	assert.Equal(t, "legacy", got[1].Invocation, "a fact written before the workspace was recorded cannot be placed, so it stays")
-}
-
-// recordSessionIn files one passing session under the repository's shared store but
-// attributed to workspace, which is how another worktree's run looks from here.
-func recordSessionIn(t *testing.T, root, workspace, inv string) {
-	t.Helper()
-	h := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: workspace, Command: "run build"})
-	require.NotNil(t, h)
-	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: inv, Target: "build", Status: journal.StatusPass})
-}
-
-// The store is the repository's, shared by every worktree, so a bare `magus session` read
-// every checkout's invocations and a person could not tell which one was theirs.
-func TestSessionsListsThisCheckoutUnlessAll(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-	recordSessionIn(t, root, root, "invHere")
-	recordSessionIn(t, root, filepath.Join(root, "sibling-worktree"), "invElsewhere")
-
-	here := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, nil))
-	})
-	assert.Contains(t, here, "invHere")
-	assert.NotContains(t, here, "invElsewhere")
-
-	every := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, []string{"--all"}))
-	})
-	assert.Contains(t, every, "invHere")
-	assert.Contains(t, every, "invElsewhere")
-}
-
-// A store with sessions in it, all older than the window, must not read as a store
-// nothing has ever written to: the second sends a person looking for a broken producer.
-func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-	recordSession(t, root, "run", []string{"build"}, "invOld")
-
-	// A cutoff ahead of the recorded fact is the deterministic way to empty the window;
-	// a short duration would race the millisecond the fact was stamped in.
-	out := captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
-	})
-	assert.Contains(t, out, "no invocations in that window")
-	assert.NotContains(t, out, "no invocations recorded yet")
-
-	out = captureStdout(t, func() {
-		require.NoError(t, sessionCommand(context.Background(), root, []string{"--since", "24h"}))
-	})
-	assert.Contains(t, out, "invOld", "an invocation inside the window is still listed")
-}
-
-// loadStream writes lines to a file and loads them, returning what the command
-// printed. --file rather than stdin because the flag is the path an adapter uses and
-// swapping os.Stdin would test the plumbing rather than the load.
 func loadStream(t *testing.T, root string, lines ...string) (string, error) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "events.ndjson")
@@ -383,376 +30,89 @@ func loadStream(t *testing.T, root string, lines ...string) (string, error) {
 	return out, err
 }
 
-// storeBytes is every byte the store holds, which is what the never-store-a-command
-// rule has to hold over: a field that leaks the text leaks it into one of these files.
-func storeBytes(t *testing.T, root string) string {
-	t.Helper()
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-
-	var b strings.Builder
-	for _, e := range entries {
-		body, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		require.NoError(t, err)
-		b.Write(body)
-	}
-	return b.String()
-}
-
-func loadedEvent(t *testing.T, root, session string, i int) sessions.AgentEvent {
-	t.Helper()
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
-	events := sessions.AgentEvents(fold, session)
-	require.Greater(t, len(events), i)
-	return events[i]
-}
-
-// TestSessionLoadIsIdempotent is the property every adapter is built on: an adapter
-// re-reads whole transcript files rather than tracking where it stopped, so the
-// second pass over the same file has to be free.
-func TestSessionLoadIsIdempotent(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	lines := []string{
-		`{"host":"h1","session":"s1","ts":1757430000000,"kind":"shell.command","ref":"r1","text":"ls -la"}`,
-		`{"host":"h1","session":"s1","ts":1757430001000,"kind":"skill.load","ref":"r2","text":"magus-run"}`,
-		`{"host":"h1","session":"s1","ts":1757430002000,"kind":"file.write","ref":"r3","text":"internal/foo.go"}`,
-	}
-	out, err := loadStream(t, root, lines...)
-	require.NoError(t, err)
-	assert.Contains(t, out, "loaded 3, deduped 0")
-
-	out, err = loadStream(t, root, lines...)
-	require.NoError(t, err)
-	assert.Contains(t, out, "loaded 0, deduped 3")
-
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
-	assert.Len(t, sessions.AgentEvents(fold, "s1"), 3, "a second load must not double the history")
-}
-
-func TestSessionLoadDropsAnotherRepositorysEvents(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-	elsewhere := t.TempDir()
-
-	out, err := loadStream(t, root,
-		fmt.Sprintf("{\"host\":\"h1\",\"session\":\"s1\",\"ts\":1,\"cwd\":\"%s\",\"kind\":\"file.read\",\"ref\":\"r1\",\"text\":\"a.go\"}", root),
-		fmt.Sprintf("{\"host\":\"h1\",\"session\":\"s1\",\"ts\":2,\"cwd\":\"%s\",\"kind\":\"file.read\",\"ref\":\"r2\",\"text\":\"b.go\"}", elsewhere))
-	require.NoError(t, err)
-	assert.Contains(t, out, "loaded 1, deduped 0, dropped 1")
-}
-
-// TestSessionLoadNeverStoresTheCommandText pins the rule the trail already settled:
-// a command line is content, and content stays in the host's own transcript. The
-// assertion is over the FILES rather than over the struct, because a field added
-// later would satisfy a struct-shaped test and still write the line to disk.
-func TestSessionLoadNeverStoresTheCommandText(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	const secret = "curl -H 'Authorization: Bearer sk-not-a-real-token' https://example.com"
-	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"`+secret+`"}`)
-	require.NoError(t, err)
-
-	body := storeBytes(t, root)
-	assert.NotContains(t, body, "Bearer", "a stored command line is a stored credential")
-	assert.NotContains(t, body, "example.com")
-
-	ev := loadedEvent(t, root, "s1", 0)
-	assert.Equal(t, "curl", ev.Program)
-	assert.Len(t, ev.Digest, 64, "the digest is what compares two commands nobody may read")
-	assert.Empty(t, ev.Text)
-}
-
-// TestSessionLoadRejudgesADeniedCommand is the feature the trail cannot have: would
-// TODAY's rules have caught a command that ran weeks ago, under whatever rules
-// existed then, or under none at all.
-func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"go build ./..."}`,
-		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"ls"}`)
-	require.NoError(t, err)
-
-	// A workspace that declares nothing gets raw-tool's default, a deny; the rejudge reads
-	// no workspace built-in settings, so a softer workspace is not reflected here.
-	denied := loadedEvent(t, root, "s1", 0)
-	// "raw-tool" is the wire value the guard reports; denyRuleRawTool is unexported to
-	// internal/guard now, so this package asserts the string.
-	assert.Equal(t, sessions.AgentEvent{
-		Host:    "h1",
-		Kind:    sessions.EventShellCommand,
-		Ref:     "r1",
-		AtMs:    1,
-		Program: "go",
-		Verdict: "deny",
-		Rule:    "raw-tool",
-		Digest:  denied.Digest, // pinned as a 64-character hash by the test above
-	}, denied)
-
-	plain := loadedEvent(t, root, "s1", 1)
-	assert.Equal(t, "pass", plain.Verdict)
-	assert.Empty(t, plain.Rule)
-}
-
-// A rejected line names what is wrong with it and does not take the rest of the
-// stream down: an adapter emitting one bad shape emits it for a whole transcript.
-func TestSessionLoadRejectsAnUnknownKind(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	out, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"tool.use","ref":"r1","text":"x"}`,
-		`{"host":"h1","session":"s1","ts":2,"kind":"file.read","ref":"r2","text":"a.go"}`,
-		`{"host":"h1","ts":3,"kind":"file.read","ref":"r3","text":"b.go"}`)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "shell.command", "the diagnostic names the set it accepts")
-	assert.Contains(t, err.Error(), "no session")
-	assert.Contains(t, out, "loaded 1", "the usable lines still load")
-}
-
-func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"go build ./...","outcome":{"denied":true}}`,
-		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"go test ./..."}`,
-		`{"host":"h1","session":"s1","ts":3,"kind":"skill.load","ref":"r3","text":"magus-run"}`,
-		`{"host":"h1","session":"s1","ts":4,"kind":"file.write","ref":"r4","text":"internal/foo.go"}`,
-		`{"host":"h1","session":"s1","ts":5,"kind":"hook.output","ref":"r5","text":"deny: use magus"}`)
-	require.NoError(t, err)
-
-	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
-
-	assert.Contains(t, out, "host h1")
-	assert.Contains(t, out, "go ")
-	assert.Contains(t, out, "deny 2", "raw-tool denies when the workspace sets nothing")
-	assert.Contains(t, out, "host recorded 1 denied")
-	assert.Contains(t, out, "magus-run")
-	assert.Contains(t, out, "internal/foo.go")
-	assert.Contains(t, out, "hook outputs: 1")
-}
-
-// The pair `show` prints is the NEWEST one a loaded event named, not the first: a
-// session that ran under one model and switched mid-session is checked against
-// what it ended on.
-func TestSessionShowPrintsTheModelAndHostVersionPair(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","agent":{"model":"claude-opus-5","host_version":"2.1.260"}}`,
-		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"pwd","agent":{"model":"claude-opus-5-5","host_version":"2.1.280"}}`)
-	require.NoError(t, err)
-
-	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
-
-	assert.Contains(t, out, "model claude-opus-5-5  host version 2.1.280")
-}
-
-// An adapter that cannot know the model or the host version omits the field
-// (or sends it null); `show` reports the pair as absent rather than printing an
-// empty line nobody asked for.
-func TestSessionShowOmitsThePairLineWhenNoEventNamesOne(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-
-	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
-	require.NoError(t, err)
-
-	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
-
-	assert.NotContains(t, out, "host version")
-}
-
-func TestSessionShowNamesTheLoadWhenNothingIsThere(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-
-	err := sessionShow(t.TempDir(), []string{"nope"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "magus session load")
-}
-
-// TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory is the bound: a line longer than
-// any event is rejected by number and skipped, and the lines after it still load.
-func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
-	long := fmt.Sprintf("{\"event\":\"command\",\"host\":\"claude-code\",\"session\":\"s1\",\"cwd\":\"/nowhere\",\"command\":\"%s\"}", strings.Repeat("x", loadMaxLineBytes+1))
-
-	summary, err := readLoadStream(strings.NewReader(fmt.Sprintf(`%s
-
-%s
-`, long, long)), t.TempDir(), newRejudge(t.Context(), ""))
-
-	require.NoError(t, err)
-	require.Len(t, summary.Rejects, 2)
-	assert.Contains(t, summary.Rejects[0], "line 1: longer than any event")
-	assert.Contains(t, summary.Rejects[1], "line 3: longer than any event")
-}
-
-// `magus --root A session load` run from inside checkout B rejudges each command by A's
-// shell rules, the workspace whose store it writes.
-func TestRejudgeReadsTheLoadedRootsShellRules(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	loaded := rootElsewhere(t)
-	global = globalFlags{}
-	require.NoError(t, os.WriteFile(filepath.Join(loaded, "magusfile.buzz"), []byte(`import "magus";
-
-magus\guard.shell({"name": "no-frobnicate", "decision": "deny", "program": "frobnicate", "reason": "Not here."});
-`), 0o644))
-
-	_, err := loadStream(t, loaded,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"frobnicate --now"}`)
-	require.NoError(t, err)
-
-	ev := loadedEvent(t, loaded, "s1", 0)
-	assert.Equal(t, sessions.AgentEvent{
-		Host:    "h1",
-		Kind:    sessions.EventShellCommand,
-		Ref:     "r1",
-		AtMs:    1,
-		Program: "frobnicate",
-		Verdict: "deny",
-		Rule:    "workspace:no-frobnicate",
-		Digest:  ev.Digest, // the hash of a command nobody may read
-	}, ev)
-}
-
-func TestCommandProgramReadsThroughAWrapper(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "go", commandProgram("env GOFLAGS=-mod=mod go build ./..."))
-	assert.Equal(t, "ls", commandProgram("ls -la"))
-	assert.Empty(t, commandProgram(""))
-	// The unparsable fallback must not store a leading assignment as the program: that
-	// token is where a pasted credential sits.
-	assert.Equal(t, "curl", commandProgram(`TOKEN=hunter2 curl -H "Authorization: Bearer $TOKEN`))
-}
-
-// TestSessionShowJoinsThisCheckoutsTrail is the lineage join: a loaded transcript and the
-// guard's live observations share the host session id, so `show` reports what the trail in
-// this checkout saw the session do, under which lease, and whom it spawned.
-func TestSessionShowJoinsThisCheckoutsTrail(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	testkit.Isolate(t)
-	global = globalFlags{}
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	require.NoError(t, err)
-
-	_, err = loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
-	require.NoError(t, err)
-	trail.AppendAgentCommand(t.Context(), cacheDir, trail.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass", Lease: "fleet/w1"})
-	trail.AppendAgentCommand(t.Context(), cacheDir, trail.AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
-	trail.AppendAgentSpawn(t.Context(), cacheDir, trail.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
-
-	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
-
-	assert.Contains(t, out, "Guard trail in this checkout: 2 command(s) observed, 1 denied, under lease fleet/w1, fleet/w1-child")
-	assert.Contains(t, out, "spawned Explore (lease fleet/w1-child)")
-}
-
-// sessionAdapterCases is the testscript that executes a session adapter against a
-// synthetic transcript. Synthetic on purpose: a real one carries a person's own
-// commands and prompts, and a fixture is committed forever.
-const sessionAdapterCases = "testdata/script/session_load_adapters.txtar"
-
-// TestSessionAdapterCasesCoverEveryKind ties the executed cases to the contract
-// the declarations answer to.
+// attentionTestRoot isolates one test's queue: the store is keyed by repository
+// identity under the user state dir, so without both of these a test would file
+// requests into whatever repo the test binary happens to be running in.
 //
-// Coverage parity asks an adapter to DECLARE what its host supplies; this asks that
-// somebody ran it and looked at what came out. Without it, adding a kind would
-// demand new declarations while the test cases quietly kept asserting the old ones,
-// which is exactly how a shell artifact ships broken with a correct declaration
-// on top of it.
-//
-// A kind no adapter can currently produce is declared rather than skipped:
-// `# kind: file.read unreachable - <why>` satisfies this in the file where the
-// next person will look.
-func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
-	body, err := os.ReadFile(sessionAdapterCases)
-	require.NoError(t, err, "read %s", sessionAdapterCases)
-	cases := string(body)
-
-	for _, kind := range agent.SessionKinds() {
-		label := "# kind: " + kind
-		assert.Contains(t, cases, label,
-			"%s has no case labeled %q.\n"+
-				"Every kind in the session contract needs one executed case, or an explicit\n"+
-				"`%s unreachable - <why>` line when no adapter can produce it.",
-			sessionAdapterCases, label, label)
-	}
-}
-
-func TestRenderPromptCacheShowsEveryProvider(t *testing.T) {
-	t.Parallel()
-
-	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	now := last.Add(7 * time.Minute)
-	var out strings.Builder
-	renderPromptCache(&out, sessions.PromptCacheAt("s1", last, now), now)
-	text := out.String()
-
-	assert.Contains(t, text, "last tool call here 7m ago, session s1")
-	for _, want := range []string{"Anthropic", "OpenAI", "Google Gemini"} {
-		assert.Containsf(t, text, want, "a reader cannot tell which provider they are on, so every row has to be here")
-	}
-	assert.Contains(t, text, "closed 2m ago", "the 5m window is behind a 7m gap")
-	assert.Contains(t, text, "closes in 53m")
-	// The word magus has no standing to use: it sees a clock, never the provider's cache.
-	assert.NotContains(t, text, "expire")
-}
-
-func TestPromptCacheForCheckoutReadsThisCheckoutsTrail(t *testing.T) {
+// Dispose refuses without an interactive terminal, and the test binary's own
+// stdin/stderr are not one, so every test is given a fake terminal by default.
+func attentionTestRoot(t *testing.T) string {
+	t.Helper()
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
-	previous := global
-	t.Cleanup(func() { global = previous })
+	global = globalFlags{}
+	withInteractiveTTY(t)
+	return t.TempDir()
+}
+
+// withInteractiveTTY makes interactive.IsInteractiveTTY() report true for the duration of t.
+// FixedProbe answers every descriptor as a terminal, so it stands in for both stdin and
+// stderr's checks at once.
+func withInteractiveTTY(t *testing.T) {
+	t.Helper()
+	prev := termkit.SystemProbe
+	termkit.SystemProbe = termkit.FixedProbe(80, 24)
+	t.Cleanup(func() { termkit.SystemProbe = prev })
+}
+
+type neverTerminalProbe struct{}
+
+func (neverTerminalProbe) IsTerminal(uintptr) bool        { return false }
+func (neverTerminalProbe) Size(uintptr) (int, int, error) { return 0, 0, nil }
+
+// journalRecordSink keeps the slog.Record journal.Emit builds, so a test can replay the
+// real encoding into another handler and see what that handler RETURNS. Going through
+// journal.NewLogger instead would drop the error: the fan-out swallows child errors by
+// contract, which is the very thing under test here.
+type journalRecordSink struct{ records []slog.Record }
+
+func (s *journalRecordSink) Enabled(context.Context, slog.Level) bool { return true }
+
+func (s *journalRecordSink) Handle(_ context.Context, r slog.Record) error {
+	s.records = append(s.records, r.Clone())
+	return nil
+}
+
+func (s *journalRecordSink) WithAttrs([]slog.Attr) slog.Handler { return s }
+func (s *journalRecordSink) WithGroup(string) slog.Handler      { return s }
+
+// TestBriefRefusalHelperProcess is the process TestTheCLIPrintsTheBriefRefusal
+// starts. A fresh process builds its own stderr display handler, which an
+// earlier in-process runCLI would otherwise have bound to another stderr.
+func TestBriefRefusalHelperProcess(t *testing.T) {
+	root := os.Getenv(briefRefusalRootVar)
+	if root == "" {
+		t.Skip("not invoked as the brief refusal helper process")
+	}
+	t.Setenv("MAGUS_BROKER", "required")
+	os.Args = []string{"magus", "--root", root, "session", "--brief"}
+	os.Exit(runCLI())
+}
+
+func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
-
-	assert.Empty(t, promptCacheForCheckout(root, time.Now()).Providers,
-		"a checkout no agent has run against has no activity to clock")
-
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	_, err := loadStream(t, root, `{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
 	require.NoError(t, err)
-	trail.AppendAgentCommand(t.Context(), cacheDir, trail.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass"})
 
-	clock := promptCacheForCheckout(root, time.Now())
-	assert.Equal(t, "s1", clock.Session)
-	assert.Len(t, clock.Providers, len(sessions.PromptCacheProviders))
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+
+	assert.Contains(t, out, "Cost, with the root as the main thread:")
+	assert.Contains(t, out, "root context     not measured: this checkout's trail holds nothing for the session")
+	assert.NotContains(t, out, "$0.00")
+}
+
+func TestHarnessModelRowsOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
+	opened := 0
+	rows := harnessModelRows(t.Context(), t.TempDir(), func(context.Context) (types.WorkspaceRepository, error) {
+		opened++
+		return nil, errors.New("magusfile.buzz does not load")
+	})
+
+	assert.Zero(t, opened, "building the reader reads nothing")
+	assert.Empty(t, rows(), "a workspace that will not load has no rows")
+	assert.Empty(t, rows())
+	assert.Equal(t, 1, opened)
 }

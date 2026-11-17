@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -92,16 +93,6 @@ func (s *indexesBehindSuite) TestAStaleIndexIsBehind() {
 		StaleIndexes:      []string{"libs/a"},
 		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go", Op: "scip"}},
 	}.IndexBehind())
-}
-
-func (s *indexesBehindSuite) TestTheStaleNoticeSaysWhatTheReadDidAboutIt() {
-	got := staleIndexNotice(types.KnowledgeAnswer{
-		StaleIndexes:      []string{"libs/a"},
-		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go"}},
-		IndexCause:        &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again"},
-	})
-	s.Contains(got, "a refresh started in the background\n  ask again\n")
-	s.NotContains(got, "refresh and ask again")
 }
 
 func (s *indexesBehindSuite) TestAnAnswerKeepsTheCauseTheReadGaveIt() {
@@ -403,14 +394,18 @@ func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
 	assert.Empty(t, out, "an IdentifyRef error must skip the suggestion entirely, including the trailing --publish hint")
 }
 
+// readCacheBytes is the knowledge read cache the server keeps, as the tests that compare a
+// cached answer with an uncached one size it.
+const readCacheBytes = 512 << 20
+
 // graphReadFixture is a workspace holding a magusfile, a doc and a Go source, the
 // configuration a CLI run in it reads under, a locally opened handle on it, and an
-// in-process server answering reads through the graphReads handler `magus server` mounts.
+// server answering reads through the handler `magus server` mounts.
 type graphReadFixture struct {
 	root  string
 	cfg   config.Config
 	local *magus.Magus
-	reg   *wsRegistry
+	host  *server.Host
 	addr  string
 }
 
@@ -447,28 +442,40 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	require.NoError(tb, err)
 	tb.Cleanup(func() { _ = local.Close() })
 
-	reg := newWSRegistry(ctx, cache.NewLimiter(2), nil, time.Hour, nil)
-	tb.Cleanup(reg.close)
-	srv, err := proc.New(tb.Context(), proc.Options{
-		Handler: func(context.Context, []string) error { return nil },
-		Read:    graphReads(reg),
-		Version: version,
+	tb.Setenv("MAGUS_BROKER", "off")
+	tb.Setenv(proc.SocketEnv, "")
+	tb.Setenv(proc.TokenEnv, "")
+	host := server.NewHost(server.HostDeps{
+		Config:       cfg,
+		Version:      version,
+		Build:        selfBuild,
+		StatusBase:   buildStatusBase,
+		Load:         loadMagus,
+		Place:        jobPlace,
+		BrokerClient: newBrokerClient,
+		ServeRead:    serveGraphRead,
+		Registry:     server.RegistryDeps{Open: openWorkspace, LeaseOf: boundLease, LeasedBroker: leasedBrokerClient},
 	})
-	require.NoError(tb, err)
-	tb.Cleanup(srv.Close)
-	require.NoError(tb, srv.Start(tb.Context()))
-	return graphReadFixture{root: root, cfg: cfg, local: local, reg: reg, addr: srv.Addr()}
+	host.Start(tb.Context())
+	tb.Cleanup(func() {
+		host.Stop()
+		<-host.Stopped()
+		knowledge.SetReadCacheLimit(0)
+	})
+	addr := os.Getenv(proc.SocketEnv)
+	require.NotEmpty(tb, addr, "the server did not bind its socket")
+	return graphReadFixture{root: root, cfg: cfg, local: local, host: host, addr: addr}
 }
 
 // answers returns the local answer to read and the server's, each as the JSON the CLI's
 // structured output is built from. The server's goes through the same decode the CLI
 // runs on it, so a field that does not survive the trip shows up as a difference.
-func (f graphReadFixture) answers(t *testing.T, verb string, read graphRead) (local, served string) {
+func (f graphReadFixture) answers(t *testing.T, verb string, read knowledge.GraphRead) (local, served string) {
 	t.Helper()
 	return f.localAnswer(t, verb, read), f.servedAnswer(t, verb, read)
 }
 
-func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read graphRead) string {
+func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read knowledge.GraphRead) string {
 	tb.Helper()
 	ctx := context.Background()
 	var res any
@@ -491,16 +498,16 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read graphRead
 	return string(b)
 }
 
-func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read graphRead) string {
+func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read knowledge.GraphRead) string {
 	tb.Helper()
-	read.Config = readConfigDigest(f.cfg)
-	read.Env = envDigests()
+	read.Config = config.ReadDigest(f.cfg)
+	read.Env = config.EnvDigests()
 	var res any
 	switch verb {
 	case readQuery:
-		res = &queryResult{}
+		res = &knowledge.QueryResult{}
 	case readExplain:
-		res = &explainResult{}
+		res = &knowledge.ExplainResult{}
 	case readRefs:
 		res = &refsResult{}
 	}
@@ -512,7 +519,7 @@ func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read graphRea
 
 // mergedSearch is searchGraph as it answered a symbol-seeded read before ranking from the
 // symbol names index: every symbol shard merged into the default graph, then queried.
-func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config, read graphRead) string {
+func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config, read knowledge.GraphRead) string {
 	tb.Helper()
 	ctx := context.Background()
 	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
@@ -561,7 +568,7 @@ func (f graphReadFixture) loadGraphs(tb testing.TB) loadedGraphs {
 }
 
 // loadedAnswer is localAnswer from graphs loaded once rather than per read.
-func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb string, read graphRead) any {
+func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb string, read knowledge.GraphRead) any {
 	tb.Helper()
 	ctx := context.Background()
 	g := gs.domain
@@ -619,13 +626,13 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 			var cmdErr error
 			want := captureStdout(t, func() { cmdErr = tc.cmd(ctx, f.root, []string{tc.input}) })
 
-			read := graphRead{Input: tc.input, Nearest: tc.verb == readQuery}
+			read := knowledge.GraphRead{Input: tc.input, Nearest: tc.verb == readQuery}
 			var got strings.Builder
 			var err error
 			switch res := f.loadedAnswer(t, gs, tc.verb, read).(type) {
-			case queryResult:
+			case knowledge.QueryResult:
 				err = writeQueryText(ctx, &got, nx, nx.served(hint.NextForQuery(res.Out)), res)
-			case explainResult:
+			case knowledge.ExplainResult:
 				require.True(t, res.Found)
 				err = writeExplainText(&got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
 			}
@@ -640,7 +647,7 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 func TestQuerySymbolSeededAnswersAsTheFullMergeDid(t *testing.T) {
 	f := newGraphReadFixture(t)
 	for _, input := range []string{"SearchVerdict kind=symbol", "kind=symbol", "pkg/verdict.go", "zzzunmatched kind=symbol"} {
-		read := graphRead{Input: input, Budget: knowledge.DefaultBudget, Nearest: true}
+		read := knowledge.GraphRead{Input: input, Budget: knowledge.DefaultBudget, Nearest: true}
 		assert.Equalf(t, mergedSearch(t, f.local, f.cfg, read), f.localAnswer(t, readQuery, read), "query %q", input)
 	}
 }
@@ -653,7 +660,7 @@ func TestServerGraphReadsAnswerFromTheReadCacheAsWithout(t *testing.T) {
 	for i, tc := range graphReadCases {
 		want[i] = f.localAnswer(t, tc.verb, tc.read)
 	}
-	knowledge.SetReadCacheLimit(serverReadCacheBytes)
+	knowledge.SetReadCacheLimit(readCacheBytes)
 	t.Cleanup(func() { knowledge.SetReadCacheLimit(0) })
 	for range 2 {
 		for i, tc := range graphReadCases {
@@ -665,14 +672,14 @@ func TestServerGraphReadsAnswerFromTheReadCacheAsWithout(t *testing.T) {
 var graphReadCases = []struct {
 	name string
 	verb string
-	read graphRead
+	read knowledge.GraphRead
 }{
-	{"query a domain term", readQuery, graphRead{Input: "guide", Budget: knowledge.DefaultBudget, Nearest: true}},
-	{"query a symbol", readQuery, graphRead{Input: "SearchVerdict kind=symbol", Budget: knowledge.DefaultBudget, Nearest: true}},
-	{"query nothing", readQuery, graphRead{Input: "zzzunmatched", Budget: knowledge.DefaultBudget, Nearest: true}},
-	{"explain a dir", readExplain, graphRead{Input: "docs"}},
-	{"explain nothing", readExplain, graphRead{Input: "zzzunmatched"}},
-	{"refs with occurrences", readRefs, graphRead{Input: "SearchVerdict", Occurrences: true}},
+	{"query a domain term", readQuery, knowledge.GraphRead{Input: "guide", Budget: knowledge.DefaultBudget, Nearest: true}},
+	{"query a symbol", readQuery, knowledge.GraphRead{Input: "SearchVerdict kind=symbol", Budget: knowledge.DefaultBudget, Nearest: true}},
+	{"query nothing", readQuery, knowledge.GraphRead{Input: "zzzunmatched", Budget: knowledge.DefaultBudget, Nearest: true}},
+	{"explain a dir", readExplain, knowledge.GraphRead{Input: "docs"}},
+	{"explain nothing", readExplain, knowledge.GraphRead{Input: "zzzunmatched"}},
+	{"refs with occurrences", readRefs, knowledge.GraphRead{Input: "SearchVerdict", Occurrences: true}},
 }
 
 // Accuracy is the edge over a text search, so a server answer is worth having only if
@@ -694,16 +701,16 @@ func TestServerGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
 func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
 	f := newGraphReadFixture(t)
 	ctx := context.Background()
-	e, err := f.reg.acquire(f.root)
+	held, release, err := f.host.Hold(f.root)
 	require.NoError(t, err)
-	stopWatch, err := e.m.WatchKnowledgeGraph(ctx)
+	stopWatch, err := held.WatchKnowledgeGraph(ctx)
 	require.NoError(t, err)
 	t.Cleanup(stopWatch)
-	_, err = viewInternals(e.m).KnowledgeGraph(ctx, types.GraphRequest{})
+	_, err = viewInternals(held).KnowledgeGraph(ctx, types.GraphRequest{})
 	require.NoError(t, err, "warm the watched graph before the edit")
-	f.reg.release(e)
+	release()
 
-	read := graphRead{Input: "kind=dir", Budget: knowledge.DefaultBudget, Nearest: true}
+	read := knowledge.GraphRead{Input: "kind=dir", Budget: knowledge.DefaultBudget, Nearest: true}
 	_, before := f.answers(t, readQuery, read)
 	require.NotContains(t, before, `"dir:lib"`)
 	require.NoError(t, os.MkdirAll(filepath.Join(f.root, "lib"), 0o755))
@@ -716,8 +723,8 @@ func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
 
 func TestServerGraphReadsDeclineAnotherConfiguration(t *testing.T) {
 	f := newGraphReadFixture(t)
-	read := graphRead{Input: "guide", Config: "a configuration the server does not read under"}
-	err := proc.Read(context.Background(), f.addr, version, f.root, readQuery, read, &queryResult{})
+	read := knowledge.GraphRead{Input: "guide", Config: "a configuration the server does not read under"}
+	err := proc.Read(context.Background(), f.addr, version, f.root, readQuery, read, &knowledge.QueryResult{})
 	require.Error(t, err)
 	assert.True(t, proc.NotAdopted(err), "a declined read is answered locally, quietly: %v", err)
 }
@@ -726,10 +733,10 @@ func TestServerGraphReadsDeclineAnotherConfiguration(t *testing.T) {
 // another shell can be right about its PATH and wrong about the client's.
 func TestServerGraphReadsDeclineAnotherEnvironment(t *testing.T) {
 	f := newGraphReadFixture(t)
-	env := envDigests()
-	env["PATH"] = envDigest("/somewhere/else/bin")
-	read := graphRead{Input: "guide", Config: readConfigDigest(f.cfg), Env: env}
-	err := proc.Read(context.Background(), f.addr, version, f.root, readQuery, read, &queryResult{})
+	env := config.EnvDigests()
+	env["PATH"] = config.EnvDigest("/somewhere/else/bin")
+	read := knowledge.GraphRead{Input: "guide", Config: config.ReadDigest(f.cfg), Env: env}
+	err := proc.Read(context.Background(), f.addr, version, f.root, readQuery, read, &knowledge.QueryResult{})
 	require.Error(t, err)
 	assert.True(t, proc.NotAdopted(err), "%v", err)
 	assert.Contains(t, err.Error(), "PATH")
@@ -737,8 +744,8 @@ func TestServerGraphReadsDeclineAnotherEnvironment(t *testing.T) {
 
 func TestServerGraphReadsDeclineAnotherBuild(t *testing.T) {
 	f := newGraphReadFixture(t)
-	read := graphRead{Input: "guide", Config: readConfigDigest(f.cfg)}
-	err := proc.Read(context.Background(), f.addr, "v0.0.0-another-build", f.root, readQuery, read, &queryResult{})
+	read := knowledge.GraphRead{Input: "guide", Config: config.ReadDigest(f.cfg)}
+	err := proc.Read(context.Background(), f.addr, "v0.0.0-another-build", f.root, readQuery, read, &knowledge.QueryResult{})
 	require.Error(t, err)
 	assert.True(t, proc.NotAdopted(err), "another build's answer is another program's answer: %v", err)
 }
@@ -749,16 +756,16 @@ func TestAskServerFallsBackWhenTheServerDeclines(t *testing.T) {
 	t.Setenv(proc.SocketEnv, f.addr)
 	globalCfg.Server.Enabled = true
 
-	var res queryResult
-	require.True(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide", Budget: knowledge.DefaultBudget}, &res))
+	var res knowledge.QueryResult
+	require.True(t, askServer(context.Background(), f.root, readQuery, &knowledge.GraphRead{Input: "guide", Budget: knowledge.DefaultBudget}, &res))
 	assert.Positive(t, res.Out.MatchCount)
 
 	globalCfg.Knowledge.Notes.Shared = "elsewhere.md"
-	assert.False(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide"}, &queryResult{}),
+	assert.False(t, askServer(context.Background(), f.root, readQuery, &knowledge.GraphRead{Input: "guide"}, &knowledge.QueryResult{}),
 		"a client reading under other settings gets no server answer")
 
 	globalCfg.Server.Enabled = false
-	assert.False(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide"}, &queryResult{}),
+	assert.False(t, askServer(context.Background(), f.root, readQuery, &knowledge.GraphRead{Input: "guide"}, &knowledge.QueryResult{}),
 		"--server-enabled=false never asks")
 }
 
@@ -774,23 +781,23 @@ func BenchmarkServerGraphReads(b *testing.B) {
 	f := openGraphReadFixture(b, root)
 	for _, name := range []string{"searchVerdict", "SetReadCacheLimit", "QueryKnowledgeGraph", "ensureAdj"} {
 		// -o json, which asks for no nearest suggestion.
-		read := graphRead{Input: name + " kind=symbol", Budget: knowledge.DefaultBudget}
+		read := knowledge.GraphRead{Input: name + " kind=symbol", Budget: knowledge.DefaultBudget}
 		require.Equal(b, mergedSearch(b, f.local, f.cfg, read), f.localAnswer(b, readQuery, read), "query %s --kind symbol -o json", name)
 	}
 	reads := []struct {
 		name string
 		verb string
-		read graphRead
+		read knowledge.GraphRead
 	}{
-		{"query guard", readQuery, graphRead{Input: "guard", Budget: knowledge.DefaultBudget, Nearest: true}},
-		{"query searchVerdict --kind symbol", readQuery, graphRead{Input: "searchVerdict kind=symbol", Budget: knowledge.DefaultBudget, Nearest: true}},
-		{"refs searchVerdict --occurrences", readRefs, graphRead{Input: "searchVerdict", Occurrences: true}},
-		{"explain internal/guard", readExplain, graphRead{Input: "internal/guard"}},
+		{"query guard", readQuery, knowledge.GraphRead{Input: "guard", Budget: knowledge.DefaultBudget, Nearest: true}},
+		{"query searchVerdict --kind symbol", readQuery, knowledge.GraphRead{Input: "searchVerdict kind=symbol", Budget: knowledge.DefaultBudget, Nearest: true}},
+		{"refs searchVerdict --occurrences", readRefs, knowledge.GraphRead{Input: "searchVerdict", Occurrences: true}},
+		{"explain internal/guard", readExplain, knowledge.GraphRead{Input: "internal/guard"}},
 	}
 	for _, mode := range []struct {
 		name  string
 		limit int64
-	}{{"kept", serverReadCacheBytes}, {"not kept", 0}} {
+	}{{"kept", readCacheBytes}, {"not kept", 0}} {
 		b.Run(mode.name, func(b *testing.B) {
 			knowledge.SetReadCacheLimit(mode.limit)
 			b.Cleanup(func() { knowledge.SetReadCacheLimit(0) })

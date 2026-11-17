@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -77,7 +78,7 @@ func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() err
 		stdout = io.MultiWriter(structuredStdout(os.Stdout), tee)
 	}
 	sinkOpts := []magus.SinkOption{magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter)}
-	if opts.Format == outputText && pipeStageFromContext(ctx).writesRecords() {
+	if opts.Format == outputText && pipe.StageFromContext(ctx).WritesRecords() {
 		sinkOpts = append(sinkOpts, magus.WithSinkRecords(stdout))
 	}
 	sink, err := magus.NewSink(opts.Format, stdout, os.Stderr, sinkOpts...)

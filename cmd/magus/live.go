@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 )
@@ -41,7 +42,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 		slog.WarnContext(ctx, "--open could not derive the viewer origin; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return nil, func() {}
 	}
-	if err := checkHostedPageOrigin(base, globalCfg.MCP.AllowedOrigins); err != nil {
+	if err := httpx.CheckHostedPageOrigin(base, globalCfg.MCP.AllowedOrigins); err != nil {
 		slog.WarnContext(ctx, "--open will not stream this run to the log viewer; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err),
 			attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, or set MAGUS_LOG_VIEWER_URL to a loopback mirror."))
 		return nil, func() {}
@@ -58,7 +59,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	// cost the reader the link, so the link goes out first and the launch is
 	// best-effort on top of it. --open never blocks or fails a run.
 	slog.InfoContext(ctx, "watch this run (loopback, stays on your machine):\n  "+url, attr.Notice(""))
-	if err := openBrowser(url); err != nil {
+	if err := interactive.OpenBrowser(url); err != nil {
 		slog.WarnContext(ctx, "--open could not launch a browser; open the link above yourself", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 	}
 	return bc, func() {

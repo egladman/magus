@@ -24,6 +24,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -516,24 +517,6 @@ func TestResolveOutput_MermaidIsUnknown(t *testing.T) {
 	assert.Contains(t, err.Error(), `unknown output format "mermaid"`)
 }
 
-func TestParseTarget(t *testing.T) {
-	t.Parallel()
-	assertTarget := func(input, wantPack, wantName string) {
-		t.Run(input, func(t *testing.T) {
-			pack, target := parseTarget(input)
-			assert.Equal(t, wantPack, pack)
-			assert.Equal(t, wantName, target)
-		})
-	}
-
-	assertTarget("build", "", "build")
-	assertTarget("lint", "", "lint")
-	assertTarget("typescript::lint", "typescript", "lint")
-	assertTarget("go::test", "go", "test")
-	assertTarget("rust::build", "rust", "build")
-	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
-}
-
 func TestOutputDestinationSilentTee(t *testing.T) {
 	const record = "{\n  \"N\": 7\n}\n"
 	cases := []struct {
@@ -995,7 +978,7 @@ func (s *outputFormatsSuite) TestCommandPathStopsAtTheDeepestChild() {
 }
 
 func (s *outputFormatsSuite) TestEmitRecordRendersEveryFormat() {
-	record := whereOutput{Workspace: "/w", Count: 1, Matches: []whereMatch{{Path: "a"}}}
+	record := interactive.WhereOutput{Workspace: "/w", Count: 1, Matches: []interactive.WhereMatch{{Path: "a"}}}
 	render := func(format string) string {
 		opts, err := output.Parse(format)
 		s.Require().NoError(err)
@@ -1214,4 +1197,42 @@ func (s *outputMetadataSuite) TestAnAmbientDefaultDoesNotCountAsAnExplicitFlag()
 
 	s.NoError(checkOutputSupported("raw-example", fs))
 	s.NoError(refuseOutputOnPath("", []string{"raw-example"}))
+}
+
+func TestWriteYAMLIndentsTwo(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeFormatted(&buf, output.Options{Format: outputYAML}, map[string]any{"outer": map[string]any{"inner": 1}}))
+	assert.Equal(t, "outer:\n  inner: 1\n", buf.String())
+}
+
+// TestTemplateFuncsExcludesTheNonHermetic pins the curated sprig subset: a build-tool
+// template must not read the clock, the environment, or a crypto source, because any of
+// them makes an otherwise cacheable render non-reproducible.
+func TestTemplateFuncsExcludesTheNonHermetic(t *testing.T) {
+	f := templateFuncs()
+
+	for _, name := range excludedSprigFuncs {
+		assert.NotContains(t, f, name)
+	}
+	for _, name := range []string{"env", "expandenv", "getHostByName"} {
+		assert.NotContains(t, f, name)
+	}
+	for _, name := range []string{"join", "upper", "lower", "trim", "quote", "b64enc"} {
+		assert.Contains(t, f, name)
+	}
+}
+func TestEmitFormattedWritesToStdout(t *testing.T) {
+	prev := global.tee
+	t.Cleanup(func() { global.tee = prev })
+	global.tee = ""
+
+	out := captureStdout(t, func() {
+		require.NoError(t, emitFormatted(output.Options{Format: outputYAML}, types.ProjectRef{Path: "web", Name: "web"}))
+	})
+	assert.Contains(t, out, "path: web")
+
+	out = captureStdout(t, func() {
+		require.NoError(t, emitFormatted(output.Options{Format: outputTemplate, Template: "{{.path}}"}, types.ProjectRef{Path: "web"}))
+	})
+	assert.Equal(t, "web", out)
 }

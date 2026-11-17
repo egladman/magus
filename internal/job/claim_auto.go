@@ -2,6 +2,7 @@ package job
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -238,4 +240,89 @@ func declarationWords(decl string) []string {
 		words = append(words, fmt.Sprintf("%s) %s", m[1], m[2]))
 	}
 	return append(words, decl)
+}
+
+// ClaimEnv is what applying a claim record asks of the command line: the config the store
+// judges a claim under, the workspace a claim is proved on, and the callers lookup.
+type ClaimEnv struct {
+	Config config.Config
+	// Workspace is the workspace at root, for the projects a claim is proved on.
+	Workspace func(ctx context.Context, root string) Workspace
+	// Callers is one request per declaration holding an occurrence of the symbol name
+	// names, read from the symbol index this package does not import.
+	Callers func(ctx context.Context, root, name string) ([]types.JobClaimRequest, error)
+}
+
+// ApplyClaim applies the one claim record records holds: each path proved against the
+// job's diff before the store's lock and again under it. It returns the stored row and how
+// many claims it added. open is called once the record is valid, so a refused record opens
+// no store.
+func ApplyClaim(ctx context.Context, root string, records []types.Declaration, open func() (*Store, error), dryRun bool, env ClaimEnv) (types.Job, int, error) {
+	if len(records) != 1 {
+		return types.Job{}, 0, exit.Usagef("magus job apply: a claim record applies alone, and this input holds %d records", len(records))
+	}
+	rec := records[0]
+	if err := rec.Validate(); err != nil {
+		return types.Job{}, 0, exit.Usagef("magus job apply: %s", err)
+	}
+	store, err := open()
+	if err != nil {
+		return types.Job{}, 0, err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.Job{}, 0, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
+	if i < 0 {
+		return types.Job{}, 0, exit.Usagef("magus job apply: nothing declares job %s, so nothing claims", rec.ID)
+	}
+	reqs, err := expandCallerClaims(ctx, root, rows[i], rec.Claim, env)
+	if err != nil {
+		return types.Job{}, 0, err
+	}
+	if len(reqs) == 0 {
+		return types.Job{}, 0, exit.Usagef("magus job apply: %s already holds every declaration the callers name, so nothing claims", rec.ID)
+	}
+	asked := make([]string, len(reqs))
+	for k, w := range reqs {
+		asked[k], _ = types.SplitClaim(w.Path)
+	}
+	facts := ObserveClaim(ctx, root, rows[i], asked, env.Workspace(ctx, root).Projects)
+	stored, err := store.Claim(ctx, rec.ID, reqs, facts, env.Config.Jobs, dryRun)
+	return stored, len(reqs), err
+}
+
+// expandCallerClaims replaces each callers request with one request per declaration
+// holding an occurrence of the symbol, leaving out one row already holds, which the store
+// would refuse. The store never reads the symbol index; it still proves every request
+// this returns.
+func expandCallerClaims(ctx context.Context, root string, row types.Job, reqs []types.JobClaimRequest, env ClaimEnv) ([]types.JobClaimRequest, error) {
+	var out []types.JobClaimRequest
+	for _, req := range reqs {
+		if req.Callers == "" {
+			out = append(out, req)
+			continue
+		}
+		expanded, err := env.Callers(ctx, root, strings.TrimSpace(req.Callers))
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range expanded {
+			if !heldClaim(row, e.Path) {
+				out = append(out, e)
+			}
+		}
+	}
+	return out, nil
+}
+
+// heldClaim says row already holds claim: by the claim itself, or by a write path covering
+// its whole file.
+func heldClaim(row types.Job, claim string) bool {
+	file, _ := types.SplitClaim(claim)
+	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
+		_, word := types.SplitClaim(w)
+		return w == claim || word == "" && Covers(w, file)
+	})
 }

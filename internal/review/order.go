@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"github.com/egladman/magus/types/diff"
+	"io"
 	"slices"
 	"strings"
 
@@ -11,11 +12,11 @@ import (
 	"github.com/egladman/magus/types/check"
 )
 
-// OrderLines renders the reading order for a terminal: each group, each step with its hunks
+// orderLines renders the reading order for a terminal: each group, each step with its hunks
 // and the sentence that placed them, then the completeness line. A generated group is folded
 // to one line unless showGenerated. Nothing for a diff with no order, because the note it
 // carries says why.
-func OrderLines(rev diff.Diff, showGenerated bool) []string {
+func orderLines(rev diff.Diff, showGenerated bool) []string {
 	order := rev.Order
 	if order == nil {
 		return nil
@@ -183,4 +184,23 @@ func hunkRanges(rev diff.Diff) map[string]string {
 		}
 	}
 	return out
+}
+
+// printOrder writes the reading order under the file summary.
+func printOrder(w io.Writer, rev diff.Diff, showGenerated bool) {
+	for _, line := range orderLines(rev, showGenerated) {
+		fmt.Fprintln(w, line)
+	}
+}
+
+// OrderSteps is the order's step count: its highest step number, since steps are numbered from
+// 1 across the whole order and the unread filter drops steps without renumbering the rest.
+func OrderSteps(o *diff.Order) int {
+	n := 0
+	for _, g := range o.Groups {
+		for _, s := range g.Steps {
+			n = max(n, s.Number)
+		}
+	}
+	return n
 }

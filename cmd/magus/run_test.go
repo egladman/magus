@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,270 +11,16 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 )
-
-// resolveWS is a minimal types.WorkspaceRepository for resolveTargets tests. It
-// models only what resolution touches: the set of projects (for fan-out) and which
-// project contains a given directory (cwd-scope). Everything else panics so a test
-// that leans on unmodeled behavior fails loud rather than passing vacuously.
-type resolveWS struct {
-	root     string
-	projects []string          // project paths, e.g. ".", "api"
-	contains map[string]string // absolute dir -> project path it is inside
-}
-
-var _ types.WorkspaceRepository = (*resolveWS)(nil)
-
-func (w *resolveWS) Root() string { return w.root }
-
-func (w *resolveWS) All() []*types.Project {
-	out := make([]*types.Project, len(w.projects))
-	for i, p := range w.projects {
-		out[i] = &types.Project{Path: p}
-	}
-	return out
-}
-
-func (w *resolveWS) Where(dir string) (*types.Project, bool) {
-	if p, ok := w.contains[dir]; ok {
-		return &types.Project{Path: p}, true
-	}
-	return nil, false
-}
-
-// ExpandPath mirrors magus.ExpandPath for the empty/"/" fan-out and a concrete path.
-func (w *resolveWS) ExpandPath(t types.Target) ([]types.Target, error) {
-	if t.Path == "" || t.Path == "/" {
-		out := make([]types.Target, len(w.projects))
-		for i, p := range w.projects {
-			out[i] = types.Target{Path: p, Name: t.Name}
-		}
-		return out, nil
-	}
-	for _, p := range w.projects {
-		if p == t.Path {
-			return []types.Target{{Path: p, Name: t.Name}}, nil
-		}
-	}
-	return nil, types.ErrUnknownProject
-}
-
-func (w *resolveWS) Get(string) *types.Project { panic("not used") }
-func (w *resolveWS) Graph() (*types.Graph, error) {
-	panic("not used")
-}
-func (w *resolveWS) VCSOptions() types.VCSOptions { panic("not used") }
-func (w *resolveWS) ExpandAffected(context.Context, string, string) ([]types.Target, string, bool, error) {
-	panic("not used")
-}
-func (w *resolveWS) Affected(context.Context, string) (*types.AffectedResult, error) {
-	panic("not used")
-}
-func (w *resolveWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
-	panic("not used")
-}
-func (w *resolveWS) ListCharms(context.Context) ([]types.CharmEntry, error) {
-	panic("not used")
-}
-func (w *resolveWS) ListTargets(context.Context) ([]types.TargetEntry, error) {
-	panic("not used")
-}
-func (w *resolveWS) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
-	panic("not used")
-}
-func (w *resolveWS) ListProjects(context.Context) (types.ProjectsOutput, error) {
-	panic("not used")
-}
-func (w *resolveWS) Workspace(context.Context, types.WorkspaceConfig) (types.WorkspaceEntry, error) {
-	panic("not used")
-}
-func (w *resolveWS) EvaluateTarget(context.Context, types.Target) ([]types.EvaluatedTarget, error) {
-	panic("not used")
-}
-func (w *resolveWS) EvaluateProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
-	panic("not used")
-}
-func (w *resolveWS) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
-	panic("not used")
-}
-
-// TestResolveTargetsCwdScope proves resolveTargets keys the cwd-scope on the explicit
-// cwd argument (the client's, for an adopted run) rather than the process's os.Getwd.
-func TestResolveTargetsCwdScope(t *testing.T) {
-	ws := &resolveWS{
-		root:     "/ws/b",
-		projects: []string{".", "api"},
-		contains: map[string]string{"/ws/b/api": "api"},
-	}
-
-	t.Run("cwd inside a project scopes to it", func(t *testing.T) {
-		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/ws/b/api"})
-		require.NoError(t, err)
-		assert.Equal(t, "cwd", source)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
-	})
-
-	t.Run("cwd outside every project fans out to all", func(t *testing.T) {
-		// A server's own cwd (unrelated to workspace B) must not scope B's run: it
-		// falls through to the full fan-out, not a mis-scoped or empty result.
-		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/tmp/server-cwd"})
-		require.NoError(t, err)
-		assert.Empty(t, source)
-		assert.Len(t, targets, 2)
-	})
-
-	t.Run("empty cwd fans out to all without touching Where", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: ""})
-		require.NoError(t, err)
-		assert.Len(t, targets, 2)
-	})
-}
-
-// TestResolveTargetsRootOverride proves a relative project arg is measured from the
-// workspace `--root` named, not from the cwd the caller happens to be standing in.
-// The trap: filepath.Rel answers an outside cwd with a "../"-prefixed anchor, which
-// reads as an escape unless re-anchored at the root.
-func TestResolveTargetsRootOverride(t *testing.T) {
-	ws := &resolveWS{
-		root:     "/ws/b",
-		projects: []string{".", "api"},
-		contains: map[string]string{"/ws/b/api": "api"},
-	}
-
-	t.Run("dot from outside means the workspace root project", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"."}, skips: nil, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
-	})
-
-	t.Run("dot-relative from outside means the workspace root project", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"./api"}, skips: nil, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
-	})
-
-	// Unchanged: an inside cwd still anchors dot-relative refs at that cwd.
-	t.Run("dot from inside a project still means that project", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"."}, skips: nil, cwd: "/ws/b/api"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
-	})
-
-	// An escape is still an escape: re-anchoring at the root does not widen what resolves.
-	t.Run("escape from outside is still rejected", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"../up"}, skips: nil, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "escapes workspace root")
-	})
-}
-
-// TestResolveTargetsEmptyWorkspace proves a fan-out over a workspace with no projects
-// yields zero targets (which runTarget then turns into a loud failure, not a vacuous pass).
-func TestResolveTargetsEmptyWorkspace(t *testing.T) {
-	ws := &resolveWS{root: "/ws/empty", projects: nil, contains: nil}
-	targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/ws/empty"})
-	require.NoError(t, err)
-	assert.Empty(t, targets, "an empty workspace resolves no targets; runTarget must fail loudly on this")
-}
-
-// TestResolveTargetsSkip covers --skip: it subtracts from whatever the positionals
-// resolved to, and refuses anything that would leave the caller believing a project was
-// gated when it was not.
-func TestResolveTargetsSkip(t *testing.T) {
-	ws := &resolveWS{
-		root:     "/ws/b",
-		projects: []string{".", "api", "web"},
-		contains: map[string]string{"/ws/b/api": "api"},
-	}
-
-	t.Run("bare invocation skips from the full fan-out", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"api"}, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
-	})
-
-	t.Run("repeatable", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"api", "web"}, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
-	})
-
-	// The same grammar as a positional, resolver included: "." from outside the
-	// workspace is the root project, not the cwd.
-	t.Run("dot reference resolves like a positional", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"."}, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}, {Path: "web", Name: "test"}}, targets)
-	})
-
-	// A real project outside an explicit selection is not a contradiction (it was
-	// never going to run), so it subtracts nothing and stays silent.
-	t.Run("skipping an unselected project is a no-op", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			runSelection{projects: []string{"api"}, skips: []string{"web"}, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
-	})
-
-	t.Run("a reference no project matches is an error", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"apo"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "--skip apo")
-		require.ErrorIs(t, err, types.ErrUnknownProject)
-	})
-
-	t.Run("skipping a project the command line named is contradictory", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			runSelection{projects: []string{"api"}, skips: []string{"api"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "--skip api contradicts naming it on the command line")
-	})
-
-	t.Run("skipping every project is an error, not an empty pass", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			runSelection{skips: []string{".", "api", "web"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "removed every selected project")
-	})
-
-	// "/" is the all-projects sentinel ResolveProject passes through untouched; matched
-	// against project paths it would skip nothing at all.
-	t.Run("the all-projects sentinel is refused", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"/"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "there is no all-projects skip")
-	})
-
-	t.Run("a glob subtracts every project it matches", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"a*"}, cwd: "/ws/other"})
-		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
-	})
-
-	t.Run("a glob matching no project is an error", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"z*"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "no project matches the glob")
-	})
-
-	t.Run("a glob covering an explicitly named project is contradictory", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			runSelection{projects: []string{"api"}, skips: []string{"a*"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "contradicts naming it on the command line")
-	})
-
-	// "*" legitimately matches every single-segment path including ".", so it falls to
-	// the emptied-selection refusal rather than a special case.
-	t.Run("a glob skipping everything is the emptied-selection error", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"*"}, cwd: "/ws/other"})
-		require.ErrorContains(t, err, "removed every selected project")
-	})
-}
 
 // TestSkipFlag proves the hand-bound repeatable flag accumulates, splits a
 // comma-separated value, and rejects an empty ref in either spelling.
@@ -310,54 +55,6 @@ func TestClientCwd(t *testing.T) {
 		require.NotEmpty(t, got)
 		assert.True(t, strings.HasSuffix(got, dir) || strings.HasSuffix(dir, got) || got == dir,
 			"fallback cwd %q should relate to %q", got, dir)
-	})
-}
-
-// TestApplyTargetFilter locks the run fault-tolerance matrix: tolerant across the
-// workspace / multiple projects, strict for a single named project and for a name no
-// project serves.
-func TestApplyTargetFilter(t *testing.T) {
-	// "go-vet" is defined only in the go projects.
-	defines := func(path, target string) bool {
-		return target == "go-vet" && (path == "." || path == "gopherbuzz")
-	}
-	label := func(path string) string { return path }
-	tgt := func(paths ...string) []types.Target {
-		out := make([]types.Target, len(paths))
-		for i, p := range paths {
-			out[i] = types.Target{Path: p, Name: "go-vet"}
-		}
-		return out
-	}
-
-	t.Run("multi partial: skip the undefined, keep the defined", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt(".", "gopherbuzz", "docs", "proto"), "go-vet", defines, label)
-		require.NoError(t, err)
-		assert.Equal(t, tgt(".", "gopherbuzz"), got, "undefined projects are dropped, not errored")
-	})
-
-	t.Run("single project undefined: error", func(t *testing.T) {
-		_, err := applyTargetFilter(tgt("docs"), "go-vet", defines, label)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "docs", "names the single project")
-	})
-
-	t.Run("single project defined: runs", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt("gopherbuzz"), "go-vet", defines, label)
-		require.NoError(t, err)
-		assert.Equal(t, tgt("gopherbuzz"), got)
-	})
-
-	t.Run("none serve across many: unknown-target error", func(t *testing.T) {
-		_, err := applyTargetFilter(tgt("docs", "proto"), "bogus", func(string, string) bool { return false }, label)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "any of the 2 selected projects")
-	})
-
-	t.Run("all defined: pass through", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt(".", "gopherbuzz"), "go-vet", defines, label)
-		require.NoError(t, err)
-		assert.Len(t, got, 2)
 	})
 }
 
@@ -459,20 +156,6 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	assert.NoFileExists(t, filepath.Join(m.Root(), "site", "generated.txt"))
 }
 
-// TestWithoutDetachFlagStripsEverySpelling pins the loop guard on --detach. The detached
-// child runs the rest of the argv, so a --detach left in it would detach again, forever.
-func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
-	got := withoutDetachFlag([]string{"ci", "-detach", "docs", "--detach", "--detach=true", "--detach-me"})
-	assert.Equal(t, []string{"ci", "docs", "--detach-me"}, got,
-		"every spelling the flag package accepts is dropped; a different flag that merely starts the same is not")
-
-	assert.Equal(t, []string{"ci", "."}, withoutDetachFlag([]string{"ci", "."}),
-		"an argv without the flag is unchanged")
-
-	assert.Equal(t, []string{"ci", "--", "--detach"}, withoutDetachFlag([]string{"ci", "--", "--detach"}),
-		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
-}
-
 func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {
 	newFS := func() *flag.FlagSet {
 		fs := flag.NewFlagSet("t", flag.ContinueOnError)
@@ -553,169 +236,6 @@ func TestRunReadingAPlanStaysInThisProcess(t *testing.T) {
 	assert.True(t, tradesRecords([]string{"run", "ci:gha"}))
 }
 
-func TestDecodeSavedPlan(t *testing.T) {
-	t.Parallel()
-
-	one := []types.Unit{{Project: ".", Target: "test"}, {Project: "docs", Target: "lint"}}
-	two := []types.Unit{{Project: "console", Target: "lint"}}
-	got, err := decodeSavedPlan(fmt.Appendf(nil, `{"target":"ci","count":2,"max_parallel":2,"future_key":true,
-		"matrix":[{"shard":"1","projects":". docs","digest":%q,"units":[{"project":".","target":"test"},{"project":"docs","target":"lint"}]},
-			{"shard":"2","projects":"console","digest":%q,"units":[{"project":"console","target":"lint"}]}],
-		"outputs":[{"name":"count","value":"2"}]}`, types.UnitsDigest(one), types.UnitsDigest(two)))
-	require.NoError(t, err)
-	assert.Equal(t, planOutput{
-		Target:      "ci",
-		Count:       2,
-		MaxParallel: 2,
-		Matrix: []planShard{
-			{Shard: "1", Projects: ". docs", Digest: types.UnitsDigest(one), Units: one},
-			{Shard: "2", Projects: "console", Digest: types.UnitsDigest(two), Units: two},
-		},
-		Outputs: []planPublish{{Name: "count", Value: "2"}},
-	}, got)
-
-	refused := []struct {
-		name, input, want string
-	}{
-		{"not json", `nope`, "the plan on stdin is not a shard plan"},
-		{"empty stdin", ``, "the plan on stdin is not a shard plan"},
-		{"no target", `{"count":0,"matrix":[]}`, "names no target"},
-		{"count disagrees", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."}]}`, "states 2 shard(s) but lists 1"},
-		{"shard without id", `{"target":"ci","count":1,"matrix":[{"projects":"."}]}`, "a shard with no id"},
-		{"duplicate id", fmt.Sprintf(`{"target":"ci","count":2,"matrix":[{"shard":"1","projects":".","digest":"%s","units":[{"project":".","target":"test"}]},{"shard":"1","projects":"docs"}]}`, types.UnitsDigest([]types.Unit{{Project: ".", Target: "test"}})), "lists shard 1 twice"},
-		{"no projects", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"  "}]}`, "shard 1 has no projects"},
-		{"no units", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"."}]}`, "shard 1 lists no units"},
-	}
-	for _, tt := range refused {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := decodeSavedPlan([]byte(tt.input))
-			require.ErrorIs(t, err, types.SavedPlanRefused)
-			assert.ErrorContains(t, err, tt.want)
-			assert.Equal(t, exit.Usage, mapExitCode(err))
-		})
-	}
-}
-
-type SelectPlanShardsSuite struct {
-	suite.Suite
-	plan planOutput
-}
-
-func TestSelectPlanShardsSuite(t *testing.T) { suite.Run(t, new(SelectPlanShardsSuite)) }
-
-func (s *SelectPlanShardsSuite) SetupTest() {
-	s.plan = planOutput{Target: "ci", Count: 2, Matrix: []planShard{
-		{Shard: "1", Projects: ". docs"},
-		{Shard: "2", Projects: "console"},
-	}}
-}
-
-func (s *SelectPlanShardsSuite) TestAShardRunsOnlyItsOwnUnits() {
-	got, err := selectPlanShards(s.plan, "ci", "2", 0)
-	s.Require().NoError(err)
-	s.Equal([]planShard{{Shard: "2", Projects: "console"}}, got)
-}
-
-func (s *SelectPlanShardsSuite) TestAMultiShardPlanWithNoSelectionRefuses() {
-	got, err := selectPlanShards(s.plan, "ci", "", 0)
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, "the plan has 2 shards and no --shard selects one")
-	s.ErrorContains(err, "--shard <id> (1, 2)")
-	s.ErrorContains(err, "--shard all")
-	s.Nil(got)
-}
-
-func (s *SelectPlanShardsSuite) TestAllRunsEveryShard() {
-	got, err := selectPlanShards(s.plan, "ci", "all", 0)
-	s.Require().NoError(err)
-	s.Equal(s.plan.Matrix, got)
-}
-
-func (s *SelectPlanShardsSuite) TestAOneShardPlanRunsWithNoSelection() {
-	s.plan.Count, s.plan.Matrix = 1, s.plan.Matrix[:1]
-	got, err := selectPlanShards(s.plan, "ci", "", 0)
-	s.Require().NoError(err)
-	s.Equal(s.plan.Matrix, got)
-}
-
-func (s *SelectPlanShardsSuite) TestAnUnknownShardRefuses() {
-	_, err := selectPlanShards(s.plan, "ci", "3", 0)
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, "--shard 3: the plan has no such shard (it has 1, 2)")
-}
-
-func (s *SelectPlanShardsSuite) TestAnotherTargetRefuses() {
-	_, err := selectPlanShards(s.plan, "test", "1", 0)
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, "the plan is for ci, not test")
-}
-
-func (s *SelectPlanShardsSuite) TestADisagreeingShardCountRefuses() {
-	_, err := selectPlanShards(s.plan, "ci", "1", 3)
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, "--n-shards 3, but the plan has 2 shard(s)")
-}
-
-func (s *SelectPlanShardsSuite) TestAPlanWithNoShardsRunsWholeAndRefusesASelection() {
-	empty := planOutput{Target: "ci"}
-	got, err := selectPlanShards(empty, "ci", "", 0)
-	s.Require().NoError(err)
-	s.Empty(got)
-	_, err = selectPlanShards(empty, "ci", "1", 0)
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, "the plan has no shards, so there is nothing to select")
-}
-
-func TestPlanProjectsKeepPlanOrder(t *testing.T) {
-	t.Parallel()
-
-	got := planProjects([]planShard{{Projects: ". docs"}, {Projects: "console  libs/a"}})
-	assert.Equal(t, []string{".", "docs", "console", "libs/a"}, got)
-}
-
-type SavedPlanAgreementSuite struct{ suite.Suite }
-
-func TestSavedPlanAgreementSuite(t *testing.T) { suite.Run(t, new(SavedPlanAgreementSuite)) }
-
-func (s *SavedPlanAgreementSuite) decode(projects, label string) error {
-	_, err := decodeSavedPlan(fmt.Appendf(nil,
-		`{"target":"ci","count":1,"matrix":[{"shard":"0","projects":%q,"digest":%q,"units":[{"project":"docs","target":"lint"}]}]}`,
-		projects, label))
-	return err
-}
-
-func (s *SavedPlanAgreementSuite) TestRefusesProjectsTheUnitsDoNotRunIn() {
-	err := s.decode(". docs", types.UnitsDigest([]types.Unit{{Project: "docs", Target: "lint"}}))
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, `shard 0 lists projects ". docs", but its units run in "docs"`)
-}
-
-func (s *SavedPlanAgreementSuite) TestRefusesADigestThatIsNotTheUnitsDigest() {
-	err := s.decode("docs", "docs")
-	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, `shard 0 has digest "docs", but its units digest to`)
-}
-
-func (s *SavedPlanAgreementSuite) TestAcceptsAShardWhoseProjectsAndDigestAgree() {
-	s.NoError(s.decode("docs", types.UnitsDigest([]types.Unit{{Project: "docs", Target: "lint"}})))
-}
-
-type PlanTargetsSuite struct{ suite.Suite }
-
-func TestPlanTargetsSuite(t *testing.T) { suite.Run(t, new(PlanTargetsSuite)) }
-
-func (s *PlanTargetsSuite) TestRunsEachShardUnitAsItsOwnTarget() {
-	got := planTargets([]planShard{{Units: []types.Unit{{Project: ".", Target: "test"}, {Project: "libs/a", Target: "format"}}}})
-	s.Equal([]types.Target{{Path: ".", Name: "test"}, {Path: "libs/a", Name: "format"}}, got)
-}
-
-func (s *PlanTargetsSuite) TestAUnitTwoShardsHoldRunsOnce() {
-	u := types.Unit{Project: ".", Target: "lint"}
-	got := planTargets([]planShard{{Units: []types.Unit{u}}, {Units: []types.Unit{u}}})
-	s.Equal([]types.Target{{Path: ".", Name: "lint"}}, got)
-}
-
 // ci.yaml publishes the plan with two templates rendered from one saved plan. They are
 // executed here, from the workflow's own text, so a template that stops matching the plan
 // document fails a test rather than a pull request's plan job.
@@ -733,7 +253,7 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 
 	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1,
 		Matrix: []planShard{{Shard: "1", Projects: ". docs", JobName: ". docs", Digest: "d", Duties: "notes-verify"}}}
-	out.Outputs, err = planOutputs(out)
+	out.Outputs, err = internalci.PlanOutputs(out)
 	require.NoError(t, err)
 	out.Summary = planSummaryMarkdown(out)
 
@@ -871,103 +391,20 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	}
 }
 
-func TestResultRefsLine(t *testing.T) {
-	cases := []struct {
-		name    string
-		events  []journal.Event
-		wantOut string
-	}{
-		{"no results prints nothing", nil, ""},
-		{
-			"one result prints its ref",
-			[]journal.Event{{Kind: journal.KindResult, Ref: "out1a2b3c4d5e6f"}},
-			"ref  out1a2b3c4d5e6f",
-		},
-		{
-			"several results print one line",
-			[]journal.Event{
-				{Kind: journal.KindResult, Ref: "out111111111111"},
-				{Kind: journal.KindResult, Ref: "out222222222222"},
-				{Kind: journal.KindResult, Ref: "out111111111111"},
-			},
-			"refs  out111111111111 out222222222222",
-		},
-		{
-			"events that are not results or carry no ref are skipped",
-			[]journal.Event{
-				{Kind: journal.KindOutput, Ref: "out333333333333"},
-				{Kind: journal.KindResult},
-			},
-			"",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			refs := &resultRefs{}
-			ctx := journal.WithLogger(context.Background(), journal.NewLogger(refs))
-			for _, e := range tc.events {
-				journal.Emit(ctx, e)
-			}
-
-			assert.Equal(t, tc.wantOut, refLine(refs.list()))
+func TestParseTarget(t *testing.T) {
+	t.Parallel()
+	assertTarget := func(input, wantPack, wantName string) {
+		t.Run(input, func(t *testing.T) {
+			pack, target := parseTarget(input)
+			assert.Equal(t, wantPack, pack)
+			assert.Equal(t, wantName, target)
 		})
 	}
-}
 
-type ResultStatusesSuite struct{ suite.Suite }
-
-func TestResultStatusesSuite(t *testing.T) { suite.Run(t, new(ResultStatusesSuite)) }
-
-func (s *ResultStatusesSuite) record(target string, events ...journal.Event) *resultStatuses {
-	statuses := newResultStatuses(target)
-	ctx := journal.WithLogger(context.Background(), journal.NewLogger(statuses))
-	for _, e := range events {
-		journal.Emit(ctx, e)
-	}
-	return statuses
-}
-
-func (s *ResultStatusesSuite) TestKeepsEachProjectsStatus() {
-	statuses := s.record("ci",
-		journal.Event{Kind: journal.KindResult, Project: "proto", Target: "ci", Status: journal.StatusPermitted},
-		journal.Event{Kind: journal.KindResult, Project: "console", Target: "ci", Status: journal.StatusCached},
-	)
-	s.Equal(journal.StatusPermitted, statuses.of("proto"))
-	s.Equal(journal.StatusCached, statuses.of("console"))
-}
-
-func (s *ResultStatusesSuite) TestMatchesACharmedStep() {
-	statuses := s.record("bundle", journal.Event{Kind: journal.KindResult, Project: ".", Target: "bundle:rw", Status: journal.StatusPass})
-	s.Equal(journal.StatusPass, statuses.of("."))
-}
-
-func (s *ResultStatusesSuite) TestLeavesOutADependencysResult() {
-	statuses := s.record("ci", journal.Event{Kind: journal.KindResult, Project: "proto", Target: "lint", Status: journal.StatusFail})
-	s.Empty(statuses.of("proto"))
-}
-
-func (s *ResultStatusesSuite) TestSkipsEventsThatAreNotResults() {
-	statuses := s.record("ci", journal.Event{Kind: journal.KindOutput, Project: "proto", Target: "ci", Status: journal.StatusPass})
-	s.Empty(statuses.of("proto"))
-}
-
-func (s *ResultStatusesSuite) TestANilCollectorReportsNothing() {
-	var statuses *resultStatuses
-	s.Empty(statuses.of("proto"))
-}
-
-type SameCharmsSuite struct{ suite.Suite }
-
-func TestSameCharmsSuite(t *testing.T) { suite.Run(t, new(SameCharmsSuite)) }
-
-func (s *SameCharmsSuite) TestOrderDoesNotMatter() {
-	s.True(sameCharms([]string{"gha", "ci"}, []string{"ci", "gha"}))
-}
-
-func (s *SameCharmsSuite) TestADifferentCharmDiffers() {
-	s.False(sameCharms([]string{"gha"}, []string{"ci"}))
-}
-
-func (s *SameCharmsSuite) TestNoCharmsEqualsNoCharms() {
-	s.True(sameCharms(nil, []string{}))
+	assertTarget("build", "", "build")
+	assertTarget("lint", "", "lint")
+	assertTarget("typescript::lint", "typescript", "lint")
+	assertTarget("go::test", "go", "test")
+	assertTarget("rust::build", "rust", "build")
+	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
 }

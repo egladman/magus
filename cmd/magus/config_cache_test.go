@@ -289,3 +289,11 @@ func TestConfigCacheExportAndImportTakeNoCacheSelector(t *testing.T) {
 	_, err = s.run(t, "import", "--remote", "x")
 	require.ErrorContains(t, err, "--remote reads no file")
 }
+
+func TestFmtBytes(t *testing.T) {
+	assert.Equal(t, "0 B", fmtBytes(0))
+	assert.Equal(t, "512 B", fmtBytes(512))
+	assert.Equal(t, "1.0 KiB", fmtBytes(1<<10))
+	assert.Equal(t, "1.5 MiB", fmtBytes(3<<19))
+	assert.Equal(t, "2.0 GiB", fmtBytes(2<<30))
+}
