@@ -156,8 +156,8 @@ func (b *buzzTokens) at(p buzzast.Pos) int {
 	return -1
 }
 
-// endOf is the byte offset after token i, known for the closers that end a statement.
-func (b *buzzTokens) endOf(i int) (int, bool) {
+// statementEnd is the byte offset after token i, known for the closers that end a statement.
+func (b *buzzTokens) statementEnd(i int) (int, bool) {
 	switch b.toks[i].Kind {
 	case buzztoken.Semicolon, buzztoken.RBrace, buzztoken.RParen, buzztoken.RBracket:
 		return b.starts[i] + 1, true
@@ -193,7 +193,7 @@ func buzzConstructs(src string) []Range {
 			if next <= st {
 				continue
 			}
-			if end, ok := b.endOf(next - 1); ok {
+			if end, ok := b.statementEnd(next - 1); ok {
 				rs = append(rs, Range{b.starts[st], end})
 			}
 		}

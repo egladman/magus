@@ -543,6 +543,7 @@ linters:
             - worktree  # git's own term
             - identity  # one word, as internal/cache and internal/file already spell it; not id + entity
             - baseline  # one word, proofread's own; not base + line
+            - datasets  # one word, the plural of dataset; not data + sets
 
       nameoutput:
         type: module

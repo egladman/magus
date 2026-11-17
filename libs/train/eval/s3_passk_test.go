@@ -75,3 +75,7 @@ func (s *PassKScoreSuite) TestTaskPromptClipsToTheEditorWindows() {
 	s.True(strings.HasSuffix(p, "fun f() {"))
 	s.True(strings.HasPrefix(sfx, "}"))
 }
+
+func (s *evalSuite) TestTextIsTheMiddle() {
+	s.Equal("MID", Text(fim.Sample{Prefix: "a\nb", Middle: "MID", Suffix: "f\ng"}))
+}

@@ -471,9 +471,9 @@ func (w *setWriter) close() (int, int, error) {
 	return len(w.rows), len(w.groups), w.e.pin("fim-"+w.name, sum, len(w.rows), rev)
 }
 
-// EvalTexts are the texts the 13-gram check holds training text against: every FIM span
+// HeldOutTexts are the texts the 13-gram check holds training text against: every FIM span
 // of every set, and every pass@k task.
-func EvalTexts(e Env) ([]string, error) {
+func HeldOutTexts(e Env) ([]string, error) {
 	var out []string
 	for _, lang := range Languages {
 		for _, side := range []string{"test", "dev"} {
@@ -550,7 +550,7 @@ func trainText(en Entry, data []byte) string {
 func RunFIM(e Env) (TrainCounts, error) {
 	c := TrainCounts{Files: map[string]int{}, Touched: map[string]int{}, Removed: map[string]int{}, Scanned: map[string]int{},
 		Emptied: map[string]int{}, NotReparsed: map[string]int{}, Samples: map[string]int{}}
-	texts, err := EvalTexts(e)
+	texts, err := HeldOutTexts(e)
 	if err != nil {
 		return c, err
 	}
@@ -639,7 +639,7 @@ func CutoffTree(e Env) (string, error) {
 		return dir, overlayConfig(e, dir)
 	}
 	if out, err := exec.Command("git", "-C", e.Root, "worktree", "add", "--detach", dir, e.Cutoff).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git worktree add %s: %w: %s", dir, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("git worktree add %s: %s: %w", dir, strings.TrimSpace(string(out)), err)
 	}
 	return dir, overlayConfig(e, dir)
 }
