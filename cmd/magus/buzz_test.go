@@ -781,7 +781,7 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
 			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
 			if event == "preToolUse" {
-				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
+				assert.Equal(t, "ask", glueDecode(t, event, out).(map[string]any)["permission"], "an advise is Cursor's ask")
 			} else {
 				assert.Contains(t, out, "use magus refs HandleRequest --source")
 			}

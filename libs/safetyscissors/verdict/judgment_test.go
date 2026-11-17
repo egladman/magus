@@ -17,7 +17,7 @@ func TestJudgment(t *testing.T) { suite.Run(t, new(JudgmentSuite)) }
 // contract.
 func (s *JudgmentSuite) TestWireShapeKeepsEveryKeyInOrder() {
 	full := Judgment{
-		APIVersion: "magus.guard/v1alpha3",
+		APIVersion: "safetyscissors.verdict/v1alpha2",
 		Decision:   Deny,
 		Reason:     "no <b>",
 		Context:    "fyi",
@@ -34,7 +34,7 @@ func (s *JudgmentSuite) TestWireShapeKeepsEveryKeyInOrder() {
 	}
 	got, err := codec.Marshal(full)
 	s.Require().NoError(err)
-	s.Equal(`{"api_version":"magus.guard/v1alpha3","decision":"deny","reason":"no <b>","context":"fyi","rule":"some-rule",`+
+	s.Equal(`{"api_version":"safetyscissors.verdict/v1alpha2","decision":"deny","reason":"no <b>","context":"fyi","rule":"some-rule",`+
 		`"lease":"job-a","lease_from":"flag","next_steps":[{"id":"deny-remedy-some-rule","run":"magus run test . && echo done",`+
 		`"argv":["magus","run","test","."],"why":"because","reads":true}]}`, string(got))
 
@@ -46,7 +46,7 @@ func (s *JudgmentSuite) TestWireShapeKeepsEveryKeyInOrder() {
 func (s *JudgmentSuite) TestADeferNamesOnlyItsDecision() {
 	deferred, err := codec.Marshal(Judgment{APIVersion: APIVersion, Decision: Defer})
 	s.Require().NoError(err)
-	s.Equal(`{"api_version":"magus.guard/v1alpha2","decision":"defer"}`, string(deferred))
+	s.Equal(`{"api_version":"safetyscissors.verdict/v1alpha1","decision":"defer"}`, string(deferred))
 }
 
 // The retired names are refused on the way in, so an envelope from an older build fails
@@ -54,7 +54,7 @@ func (s *JudgmentSuite) TestADeferNamesOnlyItsDecision() {
 func (s *JudgmentSuite) TestUnmarshalRefusesTheRetiredDecisions() {
 	for _, name := range []string{"pass", "allow"} {
 		var back Judgment
-		err := codec.Unmarshal([]byte(`{"api_version":"magus.guard/v1alpha1","decision":"`+name+`"}`), &back)
+		err := codec.Unmarshal([]byte(`{"api_version":"safetyscissors.verdict/v1alpha1","decision":"`+name+`"}`), &back)
 		var unknown *UnknownDecisionError
 		s.Require().ErrorAs(err, &unknown, name)
 		s.Equal(name, unknown.Decision)

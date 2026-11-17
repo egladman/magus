@@ -75,7 +75,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 		Action: "graph build", Outcome: trailtypes.OutcomeError, Error: "boom", DurationMs: 40,
 	})
 	agentReqBody := []byte(`{"api_version":"magus.agent-command/v1alpha1","tool":"Bash","command":"go test ./..."}`)
-	agentRespBody := []byte(`{"api_version":"magus.guard/v1alpha1","decision":"deny","reason":"use magus"}`)
+	agentRespBody := []byte(`{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"use magus"}`)
 	agentReq, _ := trail.WriteBlob(t.Context(), dir, "agent", agentReqBody)
 	agentResp, _ := trail.WriteBlob(t.Context(), dir, "agent", agentRespBody)
 	trail.Append(t.Context(), dir, trailtypes.Event{

@@ -171,16 +171,35 @@ func writeEntries[T any](to func(string, [][]byte, os.FileMode) error, path stri
 }
 
 // StoreDiagnostic gives a store error from libs/codec its magus code: MGS3049 for a store
-// an older magus left beside its replacement, MGS3050 for a line that does not decode. Any
-// other error comes back as it is.
+// an older magus left beside its replacement, MGS3050 for a line that does not decode. An
+// error that already carries a code, and any other error, comes back as it is.
 func StoreDiagnostic(err error) error {
+	var coded *types.DiagnosticError
 	var legacy *codec.LegacyStoreError
 	var line *codec.LineError
 	switch {
+	case errors.As(err, &coded):
+		return err
 	case errors.As(err, &legacy):
 		return types.WrapDiagnostic(types.LegacyStorePresent, err, "%v", err)
 	case errors.As(err, &line):
 		return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%v", err)
 	}
 	return err
+}
+
+// JSONL is a keyed [codec.JSONL] store whose Load and Update errors carry their magus code,
+// as [StoreDiagnostic] gives it. Every magus store on codec.JSONL is one of these, so no
+// caller maps the codes itself.
+type JSONL[T any] struct{ codec.JSONL[T] }
+
+// Load is [codec.JSONL.Load], its error given a code by [StoreDiagnostic].
+func (l JSONL[T]) Load() ([]T, error) {
+	entries, err := l.JSONL.Load()
+	return entries, StoreDiagnostic(err)
+}
+
+// Update is [codec.JSONL.Update], its error given a code by [StoreDiagnostic].
+func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
+	return StoreDiagnostic(l.JSONL.Update(ctx, fn))
 }

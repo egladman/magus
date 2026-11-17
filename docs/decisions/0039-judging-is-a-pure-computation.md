@@ -558,3 +558,14 @@ What follows for the moves above:
   `types.ToolCapability` values as strings.
 
 The text above is kept as written.
+
+### 2026-11-16: `defer` replaces both `allow` and `pass`
+
+Part 5 renamed the rule side's `allow` to `pass`. Neither name survives. The guard's
+decisions are `defer`, `advise`, `ask` and `deny`, and `defer` means no objection: the
+host's own permission flow decides the call, and no decision reads as yes. A rule's zero
+value is `defer`, `magus\guard.allow()` is `magus\guard.defer()`, and a record holding
+`pass` or `allow` is refused rather than read (ADR 0050, Amendments). Eli ruled this on
+2026-11-16.
+
+The text above is kept as written.

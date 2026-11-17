@@ -355,7 +355,7 @@ func verdictEnvelope(stdout string) (map[string]codec.RawMessage, string) {
 
 // guardAPIVersion is agent.GuardAPIVersion. The wasm build imports
 // neither package, so a test in each pins the same literal.
-const guardAPIVersion = "magus.guard/v1alpha2"
+const guardAPIVersion = "safetyscissors.verdict/v1alpha1"
 
 func schemaMismatch(envelope map[string]codec.RawMessage) string {
 	var version string

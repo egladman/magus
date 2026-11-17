@@ -247,10 +247,11 @@ var guardInputs = []string{"command", "path", "mcp"}
 // beforeMCPExecution. A 34 copy can let either run with no prompt.
 //
 // 37: the guard never answers yes. Its decisions are defer, advise, ask and deny, and the
-// envelope is magus.guard/v1alpha2. magus-command.buzz, magus-path.buzz and the OpenCode
-// plugin write no permission decision for a defer, so the host's own flow decides, and
-// cursor-hook.buzz answers a defer with Cursor's ask. A 36 copy meets "defer" as an
-// unknown decision and refuses every call until it is re-installed.
+// envelope is safetyscissors.verdict/v1alpha1. magus-command.buzz, magus-path.buzz and
+// the OpenCode plugin write no permission decision for a defer, so the host's own flow
+// decides, and cursor-hook.buzz answers a defer, and every gating event no guard judged,
+// with Cursor's ask. A 36 copy meets "defer" as an unknown decision and refuses every
+// call until it is re-installed.
 const GuardTemplateVersion = 37
 
 // GuardTemplateMarker introduces the version line each template carries, and is

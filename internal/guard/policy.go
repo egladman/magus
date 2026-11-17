@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
@@ -103,9 +104,9 @@ type policyMarker struct {
 
 // policyMarkerLog is the marker's file: a line for each change of the rule set, the last one
 // being the marker. The file is the guard's own state, private to its owner.
-func policyMarkerLog(path string) codec.JSONL[policyMarker] {
-	return codec.JSONL[policyMarker]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
-		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}
+func policyMarkerLog(path string) file.JSONL[policyMarker] {
+	return file.JSONL[policyMarker]{JSONL: codec.JSONL[policyMarker]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
+		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}}
 }
 
 // policyAPIVersion is the guard_policy blob's format.
@@ -397,10 +398,10 @@ type snapshotSite struct {
 	authority headPolicy
 }
 
-func (s snapshotSite) log() codec.JSONL[policySnapshot] {
+func (s snapshotSite) log() file.JSONL[policySnapshot] {
 	// One entry per store: a store is one workspace, and only its current
 	// state is worth keeping.
-	return codec.JSONL[policySnapshot]{Log: slog.With(attr.Component("magus")), Path: s.store.Path, Perm: 0o600, Key: func(policySnapshot) string { return "" }}
+	return file.JSONL[policySnapshot]{JSONL: codec.JSONL[policySnapshot]{Log: slog.With(attr.Component("magus")), Path: s.store.Path, Perm: 0o600, Key: func(policySnapshot) string { return "" }}}
 }
 
 // openSnapshot resolves the snapshot site for w.Root. The error says why the

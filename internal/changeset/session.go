@@ -41,6 +41,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
 )
@@ -552,19 +553,19 @@ type (
 	}
 )
 
-func (s *Store) viewedLog() codec.JSONL[viewedLine] {
-	return codec.JSONL[viewedLine]{Log: slog.With(attr.Component("magus")), Path: s.viewedPath, Old: oldFile(s.viewedPath, "viewed.json"),
-		Key: func(l viewedLine) string { return l.Digest }, Live: func(l viewedLine) bool { return l.Viewed }}
+func (s *Store) viewedLog() file.JSONL[viewedLine] {
+	return file.JSONL[viewedLine]{JSONL: codec.JSONL[viewedLine]{Log: slog.With(attr.Component("magus")), Path: s.viewedPath, Old: oldFile(s.viewedPath, "viewed.json"),
+		Key: func(l viewedLine) string { return l.Digest }, Live: func(l viewedLine) bool { return l.Viewed }}}
 }
 
-func (s *Store) seenLog() codec.JSONL[seenLine] {
-	return codec.JSONL[seenLine]{Log: slog.With(attr.Component("magus")), Path: s.seenPath, Old: oldFile(s.seenPath, "seen-threads.json"),
-		Key: func(l seenLine) string { return l.ID }}
+func (s *Store) seenLog() file.JSONL[seenLine] {
+	return file.JSONL[seenLine]{JSONL: codec.JSONL[seenLine]{Log: slog.With(attr.Component("magus")), Path: s.seenPath, Old: oldFile(s.seenPath, "seen-threads.json"),
+		Key: func(l seenLine) string { return l.ID }}}
 }
 
-func (s *Store) draftsLog() codec.JSONL[draftLine] {
-	return codec.JSONL[draftLine]{Log: slog.With(attr.Component("magus")), Path: s.draftsPath, Old: oldFile(s.draftsPath, "drafts.json"),
-		Key: func(l draftLine) string { return l.ID }, Live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }}
+func (s *Store) draftsLog() file.JSONL[draftLine] {
+	return file.JSONL[draftLine]{JSONL: codec.JSONL[draftLine]{Log: slog.With(attr.Component("magus")), Path: s.draftsPath, Old: oldFile(s.draftsPath, "drafts.json"),
+		Key: func(l draftLine) string { return l.ID }, Live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }}}
 }
 
 // oldFile is name, the JSON document an older magus kept beside path, or "" when the store

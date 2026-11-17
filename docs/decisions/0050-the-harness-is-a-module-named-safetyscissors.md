@@ -275,7 +275,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 1    | `budget`: `internal/cache/limiter.go` and its slot watch, the machine budget, the claim types and the memory curve and sizing types they carry  | ~2,000 lines                  | no; breaks the Go API lock                                                                                                             | done                     |
 | 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go`                                            | ~700 lines                    | yes: breaks the Go API lock                                                                                                            | done                     |
 | 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                   | ~650 lines                    | no                                                                                                                                     | done                     |
-| 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done                     |
+| 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done; now `libs/codec`   |
 | 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | reads done; writer owed  |
 | 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | done                     |
 | 7    | secrets into their own module, `libs/secrets`, from `internal/secret` and `types/secret.go`                                                     | ~1,300 lines                  | no                                                                                                                                     | done                     |
@@ -543,3 +543,84 @@ decided.
 - The record's new API group. Job rows carry `batch.magus/v1alpha1` today
   (`internal/job/store.go:338`). It stops naming magus everywhere it is written, and the
   string is still to pick.
+
+## Amendments
+
+### 2026-11-17: what landed against the proposal
+
+The build reached steps 1 to 8 and stopped short of 9, 10 and 11. Where it departs from
+the text above:
+
+- Two modules split out beside this one. `libs/secrets` holds step 7, and `libs/codec` is
+  the JSON and JSON Lines leaf both magus and this module import. `libs/codec` replaced
+  step 4's `internal/jsonl` copy and magus's `internal/json`, so magus keeps no store
+  helpers of its own. It builds with or without `GOEXPERIMENT=jsonv2`, which answers part
+  2's encoding line differently than written: without the experiment it runs on
+  `encoding/json` and refuses a type that build would write differently. The magus
+  package refuses to compile without the experiment (`requires_jsonv2.go`).
+- `job` is a harness core: the record types and the claim grammar. `Origin` keeps a
+  neutral `Credential`, its kind, id and name; the token scheme and its access grant
+  are magus's `internal/auth`. `Inflight` stays in `internal/job`. `Worktree.Binary` and
+  `BinaryDigest` stay in the core, documented without magus. The package table's `job`
+  row still names step 9's store, which has not moved.
+- `tier` holds the set and its assignment, and no prices or state. Prices are
+  `budget.Price` and `budget.Pricer`, primitives no spend limit consumes yet, shipped
+  because Eli asked for them. The price table (`model.Table`, `model.Row`) and
+  `model.TierState` are magus's `internal/agent/model`.
+- `trail` exports its event and readers only. The guard's record types stayed in
+  `types/trail`, since only magus's Buzz API makes them, and the writer moves with the
+  guard. The coming fold (ADR 0051) renames the package and its event.
+- The module never answers yes: its decisions are defer, advise, ask and deny, and a host
+  adapter writes no permission decision for a defer (Cursor, which must answer, gets its
+  ask). `defer` replaces both of ADR 0039's names, `allow` and `pass`, and a record
+  holding either is refused rather than read.
+- The records carry the module's own API groups, which answers the last open question:
+  `safetyscissors.job/v1alpha1`, `safetyscissors.job-result/v1alpha1`,
+  `safetyscissors.step/v1alpha1`, `safetyscissors.verdict/v1alpha1` and
+  `safetyscissors.session/v1alpha1`, declared once in
+  `libs/safetyscissors/internal/apigroup`. There is no shim: a record stamped with the
+  magus group it carried before is refused, naming the record and saying to fork the job
+  again or start a fresh session. Picked by Eli on 2026-11-16.
+- No setters. `secrets.SetProviderName` and `Limiter.SetHooks` are gone:
+  `Resolver.WithProvider` derives a resolver that shares the cache, and the limiter takes
+  `WithPoolEvents` when cmd/magus builds it after telemetry exists.
+- Evaluating a magusfile returns its provider and remote-backend choices as data, and the
+  registry setters that held them are gone.
+- The session fold cache is one JSON document rewritten whole, not JSON Lines. It is the
+  one exception to [everything is a file](../design/principles/everything-is-a-file.md)
+  in the module: the cache is derived and never the authority, keyed by each invocation
+  file's identity, and a torn or undecodable one refolds from the files. An append history
+  of folds would hold nothing a reader wants.
+- `doc_test.go` allows a `libs/` requirement resolved by a `replace`, and the release
+  refuses one that is untagged.
+- The briefs that built the steps were numbered apart from the table: ss-0 is step 1,
+  ss-1 step 2, ss-2 step 3, ss-3 step 8, ss-4 steps 6 and 7, ss-5 step 5, ss-6 step 9,
+  ss-7 step 11 and goal grading, ss-8 and ss-9 step 10, and ss-10 the docs and the API
+  lock.
+
+The text above is kept as written, and the State column says what exists.
+
+### 2026-11-16: decisions for steps 9 and 11, Eli to confirm
+
+The orchestrator took these while Eli was away, for the job store and sandbox briefs.
+None is built yet.
+
+1. The module's job store holds only the row store and its write pipeline: the store,
+   its versions, the lock, the authorization core, grants, the mutation pipeline, the
+   wire record and the pure narrowing predicates. magus keeps grading and validation in
+   an adapter `Store` that embeds it, `NewStore(Location)` keeps its signature, and magus
+   wires the rest as functional options.
+2. The check grader stays in magus. The process-global `SetCheckGrader` is deleted for
+   `Location.Grader`.
+3. The module sandbox refuses Windows loudly in required mode. magus keeps its current
+   Windows best-effort.
+4. macOS `sandbox-exec` ships in the module, but magus's existing modes do not start
+   confining children on macOS in that change. magus opts in later, with Eli's yes.
+5. `internal/store/migrate` stays in magus, since package names are Eli's pick. The
+   module store takes its migrations through an option.
+6. The sandbox's grant gets a name that collides with neither `job.Grant` nor
+   `filesystem.Rule` and never uses the allow vocabulary.
+7. `launch_linux.go`'s `//nolint:gosec` is restructured away, through `unix.Exec`, and
+   no exclusion replaces it.
+8. The grading migration that writes `accept: [witnessed]` onto stored check goals is a
+   one-time rewrite by compaction, not a dual reader.

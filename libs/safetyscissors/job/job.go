@@ -15,6 +15,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/internal/apigroup"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -466,11 +467,11 @@ func idRule(id string) string {
 // client may send. An added field does not move it, since [Schema].Unknown
 // carries unknown members through a rewrite. It is untyped so that a
 // caller's own version type, as magus's types.APIVersion, takes it as it is.
-const APIVersion = "magus.job/v1alpha1"
+const APIVersion = apigroup.Job
 
 // ResultAPIVersion is the result shape a holder files, the only one
 // the decoder accepts.
-const ResultAPIVersion = "magus.job-result/v1alpha1"
+const ResultAPIVersion = apigroup.JobResult
 
 // WriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT, or not bound to any yet, at the moment it was

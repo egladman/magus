@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
@@ -141,16 +142,16 @@ type Capture struct {
 	At              int64  `json:"at"`
 }
 
-func capturesLedger() (codec.JSONL[Capture], error) {
+func capturesLedger() (file.JSONL[Capture], error) {
 	state, err := xdg.StateDir()
 	if err != nil {
-		return codec.JSONL[Capture]{}, fmt.Errorf("vcs preserve: no state directory for the capture ledger: %w", err)
+		return file.JSONL[Capture]{}, fmt.Errorf("vcs preserve: no state directory for the capture ledger: %w", err)
 	}
-	return codec.JSONL[Capture]{
+	return file.JSONL[Capture]{JSONL: codec.JSONL[Capture]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(state, "magus", "captures.jsonl"),
 		Key:  func(c Capture) string { return c.Dir },
-	}, nil
+	}}, nil
 }
 
 // PreserveChanged captures the uncommitted work in dir unless the last

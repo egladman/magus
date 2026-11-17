@@ -44,14 +44,16 @@ import (
 
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/internal/apigroup"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // APIVersion stamps every record this build writes. Readers IGNORE what they cannot
 // interpret rather than failing, so an old binary reading a newer store shows less
-// instead of refusing. An older record is counted in [Fold.Legacy] and never read.
-const APIVersion apiversion.APIVersion = "magus.sessions/v1alpha1"
+// instead of refusing. An older record is counted in [Fold.Legacy] and never read, but
+// one stamped with [retiredGroup] refuses the store as a [*RetiredGroupError].
+const APIVersion apiversion.APIVersion = apigroup.Session
 
 // olderVersion reports whether line is a record stamped older than APIVersion, an
 // integer from an older writer included, but for preFoldVersion.
@@ -297,7 +299,7 @@ func Open(ctx context.Context, dir, invocation string, start InvocationStart, op
 // A fresh invocation, which is the common case, costs one failed open: the file does not
 // exist until the first fact.
 func (w *Writer) resume() {
-	records, _, _, _ := readFile(w.path)
+	records, _, _, _, _ := readFile(w.path)
 	for _, rec := range records {
 		if rec.Seq > w.seq {
 			w.seq = rec.Seq
@@ -390,8 +392,10 @@ type Fold struct {
 // line is skipped and counted in Skipped rather than failing the read, so one killed
 // process cannot make the whole history unreadable. A file listed by the directory but
 // gone by the time it is opened was pruned by another process mid-fold; it counts as
-// neither an invocation nor damage. Only an unreadable DIRECTORY is an error, and a
-// loaded event holding a retired guard decision, which is a [*RetiredDecisionError].
+// neither an invocation nor damage. Only an unreadable DIRECTORY is an error, a line
+// stamped with the group these records had before the module took them, which is a
+// [*RetiredGroupError], and a loaded event holding a retired guard decision, which is a
+// [*RetiredDecisionError].
 //
 // It stops early and returns ctx.Err() as is once ctx is done.
 func ReadAll(ctx context.Context, dir string) (Fold, error) {
@@ -411,9 +415,12 @@ func ReadAll(ctx context.Context, dir string) (Fold, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		records, skipped, legacy, vanished := readFile(path)
+		records, skipped, legacy, retired, vanished := readFile(path)
 		if vanished {
 			continue
+		}
+		if retired != "" {
+			return Fold{}, &RetiredGroupError{Path: path, Version: retired}
 		}
 		if err := refuseRetiredDecision(path, records); err != nil {
 			return Fold{}, err
@@ -440,7 +447,7 @@ func ReadInvocation(ctx context.Context, dir, invocation string) ([]Record, erro
 	if !ValidFileID(invocation) {
 		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
 	}
-	records, _, _, _ := readFile(filepath.Join(dir, invocation+FileExt))
+	records, _, _, _, _ := readFile(filepath.Join(dir, invocation+FileExt))
 	return records, nil
 }
 
@@ -455,6 +462,34 @@ type StoreError struct {
 func (e *StoreError) Error() string { return fmt.Sprintf("session: %s %s: %v", e.Op, e.Path, e.Err) }
 
 func (e *StoreError) Unwrap() error { return e.Err }
+
+// retiredGroup is the API group a session record carried before the module took the
+// store. A record stamped with it is refused, never read forward.
+const retiredGroup = "magus.sessions"
+
+// retiredStamp is line's version when its group is [retiredGroup], and empty otherwise.
+func retiredStamp(line []byte) apiversion.APIVersion {
+	var stamp struct {
+		V apiversion.APIVersion `json:"v"`
+	}
+	if codec.Unmarshal(line, &stamp) != nil || stamp.V.Group() != retiredGroup {
+		return ""
+	}
+	return stamp.V
+}
+
+// RetiredGroupError is an invocation file holding a record stamped with the group session
+// records had before they moved to the module, as magus.sessions/v1alpha1. The store is
+// refused rather than read around it, since every record before the rename carries it.
+type RetiredGroupError struct {
+	// Path is the invocation file holding the record.
+	Path    string
+	Version apiversion.APIVersion
+}
+
+func (e *RetiredGroupError) Error() string {
+	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s): delete that file, or clear the store, and start a fresh session", e.Path, e.Version, APIVersion)
+}
 
 // RetiredDecisionError is a loaded event whose verdict is "pass" or "allow", the names
 // the guard's defer had before its decisions became defer, advise, ask and deny. The
@@ -521,14 +556,16 @@ const maxLineBytes = 1 << 20
 // counts as a skipped line, on the same reasoning as a corrupt tail: a partial history
 // beats a refused one.
 //
-// legacy counts schema-1 lines keyed `session`, which decode but name no invocation.
-func readFile(path string) (records []Record, skipped, legacy int, vanished bool) {
+// legacy counts schema-1 lines keyed `session`, which decode but name no invocation,
+// and lines stamped with [retiredGroup]. retired is the first such stamp, empty when no
+// line carries one.
+func readFile(path string) (records []Record, skipped, legacy int, retired apiversion.APIVersion, vanished bool) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, 0, 0, true
+			return nil, 0, 0, "", true
 		}
-		return nil, 1, 0, false
+		return nil, 1, 0, "", false
 	}
 	defer func() { _ = f.Close() }()
 
@@ -544,6 +581,9 @@ func readFile(path string) (records []Record, skipped, legacy int, vanished bool
 		} else if trimmed := readForward(bytes.TrimSpace(line)); len(trimmed) > 0 {
 			var rec Record
 			switch {
+			case retiredStamp(trimmed) != "":
+				legacy++
+				retired = cmp.Or(retired, retiredStamp(trimmed))
 			case olderVersion(trimmed):
 				legacy++
 			case codec.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
@@ -558,7 +598,7 @@ func readFile(path string) (records []Record, skipped, legacy int, vanished bool
 			if !errors.Is(err, io.EOF) {
 				skipped++
 			}
-			return records, skipped, legacy, false
+			return records, skipped, legacy, retired, false
 		}
 	}
 }
@@ -608,12 +648,12 @@ type Summary struct {
 	Facts        int             `json:"facts"`
 	Events       int             `json:"events"` // of Facts, the ones a load put here
 	Targets      []TargetResult  `json:"targets,omitempty"`
-	// Producer is the [Agent] pair off the NEWEST loaded [AgentEvent] that named one, so a
+	// Model is the [Agent] pair off the NEWEST loaded [AgentEvent] that named one, so a
 	// session spanning a model or host switch reports what it ended on rather than what it
 	// began with. Zero when no loaded event named either. Its key is not "agent", which the
 	// inlined Origin's subagent id already spells.
-	Producer Agent `json:"producer,omitzero"`
-	// pairAtMs is the AtMs of the event Producer came from, kept only to decide whether a
+	Model Agent `json:"model,omitzero"`
+	// pairAtMs is the AtMs of the event Model came from, kept only to decide whether a
 	// later event's pair should replace it; never serialized.
 	pairAtMs int64
 }
@@ -655,7 +695,7 @@ func Summarize(fold Fold) []Summary {
 			s.Events++
 			var ev AgentEvent
 			if codec.Unmarshal(rec.Payload, &ev) == nil && ev.Agent != (Agent{}) && ev.AtMs >= s.pairAtMs {
-				s.Producer, s.pairAtMs = ev.Agent, ev.AtMs
+				s.Model, s.pairAtMs = ev.Agent, ev.AtMs
 			}
 		}
 	}

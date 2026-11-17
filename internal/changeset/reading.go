@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
 )
@@ -66,10 +67,10 @@ func (s *Store) readingPath() string {
 
 // readingLog is the mark's file: each line is a mark, the last one is the mark, and a line
 // without a review (what clearing appends) is no mark.
-func (s *Store) readingLog() codec.JSONL[ReadingMark] {
+func (s *Store) readingLog() file.JSONL[ReadingMark] {
 	path := s.readingPath()
-	return codec.JSONL[ReadingMark]{Log: slog.With(attr.Component("magus")), Path: path, Old: oldFile(path, "reading.json"),
-		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active}
+	return file.JSONL[ReadingMark]{JSONL: codec.JSONL[ReadingMark]{Log: slog.With(attr.Component("magus")), Path: path, Old: oldFile(path, "reading.json"),
+		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active}}
 }
 
 // errorNoReadingDir is [ErrNoStateDir] with the consequence spelled out. Every other persisted mark

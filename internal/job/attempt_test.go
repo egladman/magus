@@ -202,7 +202,7 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	current, err := codec.Marshal(recordAttempt(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}))
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(path, []byte(fmt.Sprintf("%s\n%s\n",
-		`{"api_version":"magus.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`, current)), 0o600))
+		`{"api_version":"safetyscissors.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`, current)), 0o600))
 
 	s.Require().NoError(s.store.envelopeAttempts())
 	s.Require().NoError(s.store.envelopeAttempts())
@@ -266,7 +266,7 @@ func (s *attemptStoreSuite) storePath() string {
 
 // triesMovedFrom is a store at migration 2 holding row a as an older magus
 // wrote it, with its tries on the row.
-const triesMovedFrom = `{"api_version":"magus.job/v1alpha1","migration":2}
+const triesMovedFrom = `{"api_version":"safetyscissors.job/v1alpha1","migration":2}
 {"id":"a","state":"running","created":1,"updated":1,"attempts":3,` +
 	`"result":{"job":"a","changed_paths":["a.go"]},` +
 	`"prior":[{"n":1,"state":"no_return","ended":5,"retry":{"retryable":true}},` +
@@ -309,7 +309,7 @@ func (s *attemptStoreSuite) TestMovingTriesTwiceReadsThemOnce() {
 }
 
 func (s *attemptStoreSuite) TestARowWithNoTriesMovesNothing() {
-	plantRaw(s.T(), s.store, `{"api_version":"magus.job/v1alpha1","migration":2}
+	plantRaw(s.T(), s.store, `{"api_version":"safetyscissors.job/v1alpha1","migration":2}
 {"id":"a","state":"running","created":1,"updated":1}`)
 
 	_, err := s.store.List()

@@ -702,6 +702,6 @@ func TestHookOutputSchemasRejectAWrongEventName(t *testing.T) {
 }
 
 func TestGuardAPIVersionMatchesTheOpenCodePin(t *testing.T) {
-	assert.Equal(t, "magus.guard/v1alpha2", string(GuardAPIVersion),
+	assert.Equal(t, "safetyscissors.verdict/v1alpha1", string(GuardAPIVersion),
 		"internal/interp/bindings/opencode pins this literal; change both")
 }

@@ -80,8 +80,8 @@ func (s *MessageBoundSuite) TestOversizedOpenDoesNotHideALaterOne() {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		fmt.Sprintf(`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"%s"}}`, strings.Repeat("x", 2<<20)),
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
+		fmt.Sprintf(`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"%s"}}`, strings.Repeat("x", 2<<20)),
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 

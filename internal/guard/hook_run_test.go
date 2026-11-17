@@ -163,7 +163,7 @@ func TestHookCmd(t *testing.T) {
 	// A repeat in the same session, so the structured form carries the short reason.
 	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
-	assert.Contains(t, got, `"api_version": "magus.guard/v1alpha2"`)
+	assert.Contains(t, got, `"api_version": "safetyscissors.verdict/v1alpha1"`)
 	assert.Contains(t, got, `"reason": "denied again [whole-tree]: `)
 
 	// A template renders a host dialect; defer renders empty, deny fills it.

@@ -103,8 +103,8 @@ test('structuredOf reads JSON Lines and refuses prose and scalars', () => {
 })
 
 test('headerOf names the envelope, skipping an empty api_version', () => {
-  const envelope = { api_version: 'magus.job/v1alpha1', kind: 'Job', metadata: { name: 'a/b' }, spec: {} }
-  expect(headerOf(envelope)).toBe('magus.job/v1alpha1 · Job · a/b')
+  const envelope = { api_version: 'safetyscissors.job/v1alpha1', kind: 'Job', metadata: { name: 'a/b' }, spec: {} }
+  expect(headerOf(envelope)).toBe('safetyscissors.job/v1alpha1 · Job · a/b')
   expect(headerOf({ api_version: '', id: 'x' })).toBeNull()
 })
 
@@ -142,13 +142,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: JSON Lines draws one closed row per record`, async ($, on) => {
     engine(on)
     await $.session.start({ cwd: '/w', surface, isInteractive: true })
-    const rows = ['{"api_version":"magus.job/v1alpha1","id":"a"}', '{"api_version":"magus.job/v1alpha1","id":"b"}']
+    const rows = ['{"api_version":"safetyscissors.job/v1alpha1","id":"a"}', '{"api_version":"safetyscissors.job/v1alpha1","id":"b"}']
     const ui = await mount($, surface, 't3', BASH(rows.join('\n')))
     expect(await ui.find({ type: 'Text', text: 'JSON Lines · 2 records' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'json#0' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'json#1' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'magus.job/v1alpha1 · a' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'magus.job/v1alpha1 · b' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'safetyscissors.job/v1alpha1 · a' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'safetyscissors.job/v1alpha1 · b' })).toBeDefined()
   })
 
   test(`${surface}: prose output is the engine's own`, async ($, on) => {

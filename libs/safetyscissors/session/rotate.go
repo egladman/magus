@@ -182,7 +182,7 @@ func prune(ctx context.Context, dir string, retain time.Duration, maxFiles int, 
 			return err
 		}
 		path := filepath.Join(dir, name)
-		records, _, legacy, vanished := readFile(path)
+		records, _, legacy, _, vanished := readFile(path)
 		if vanished {
 			continue
 		}

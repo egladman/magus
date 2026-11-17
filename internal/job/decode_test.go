@@ -65,7 +65,7 @@ func TestDecodeRejectsFieldsNobodyAskedFor(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeResult(strings.NewReader(
-		`{"api_version":"magus.job-result/v1alpha1","changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
+		`{"api_version":"safetyscissors.job-result/v1alpha1","changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
 			`"unresolved_risks":[],"confidence":"high"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "confidence")
@@ -77,7 +77,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"a version from the future": `{"api_version":"magus.job-result/v1alpha3","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
+		"a version from the future": `{"api_version":"safetyscissors.job-result/v1alpha3","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
 		"no version at all":         `{"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`,
 	}
 	for name, raw := range cases {
@@ -86,7 +86,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 
 			_, err := DecodeResult(strings.NewReader(raw))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "magus.job-result/v1alpha1")
+			assert.Contains(t, err.Error(), "safetyscissors.job-result/v1alpha1")
 			assert.NotContains(t, err.Error(), "next_field", "the version is the reason, not the field")
 		})
 	}
@@ -97,11 +97,11 @@ func TestDecodeReadsItsOwnVersion(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
-		`{"api_version":"magus.job-result/v1alpha1","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
+		`{"api_version":"safetyscissors.job-result/v1alpha1","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
 	require.NoError(t, err)
 	assert.Equal(t, job.ResultAPIVersion, rep.Version)
 
-	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"magus.job/v1alpha1","id":"adj/store"}`))
+	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"safetyscissors.job/v1alpha1","id":"adj/store"}`))
 	require.NoError(t, err)
 	assert.Equal(t, job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "adj/store"}, row)
 }
@@ -124,7 +124,7 @@ func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
-		`{"api_version":"magus.job-result/v1alpha1","job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
+		`{"api_version":"safetyscissors.job-result/v1alpha1","job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
 			`"validation":{"command":"magus run test internal/ledger","output_ref":"out1a2b"},` +
 			`"unresolved_risks":["the archive is never read back"]}`))
 	require.NoError(t, err)

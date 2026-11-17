@@ -2,11 +2,11 @@ package trail
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
@@ -108,22 +108,24 @@ const (
 // over MCP is never recorded: it reaches a server serving many callers, which stamps no lease for
 // the same reason it records no ancestry (see internal/handler/mcp).
 //
-// Best-effort throughout, like [Replay]: a missing trail, an unreadable blob, or an agent whose
-// host wires no hook all contribute less.
-func Consulted(ctx context.Context, root, base string, paths []string, limit int) ([]Consultation, ConsultGap) {
+// A missing store, a missing blob, or an agent whose host wires no hook all contribute less.
+// A request blob that does not decode is skipped and returned in the joined error, a
+// [*BlobUndecodableError] or a [*RetiredDecisionError] per blob, beside what the rest gave.
+func Consulted(ctx context.Context, root, base string, paths []string, limit int) ([]Consultation, ConsultGap, error) {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		want[p] = true
 	}
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
-		return nil, ConsultGapUnobserved
+		return nil, ConsultGapUnobserved, nil
 	}
 
 	type question struct{ lease, verb, subject string }
 	leases := map[string]bool{}
 	var asked []question
 	var observed, leased int
+	var errs []error
 
 	for _, e := range events {
 		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
@@ -141,7 +143,8 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 			continue
 		}
 		var req agentCommandRequest
-		if codec.Unmarshal(raw, &req) != nil {
+		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		switch req.Tool {
@@ -179,18 +182,19 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 		}
 		return out[i].Subject < out[j].Subject
 	})
+	undecoded := errors.Join(errs...)
 	if len(out) > 0 {
-		return out, ConsultGapNone
+		return out, ConsultGapNone, undecoded
 	}
 	switch {
 	case observed == 0:
-		return nil, ConsultGapUnobserved
+		return nil, ConsultGapUnobserved, undecoded
 	case leased == 0:
-		return nil, ConsultGapUnleased
+		return nil, ConsultGapUnleased, undecoded
 	case len(leases) == 0:
-		return nil, ConsultGapUnmatched
+		return nil, ConsultGapUnmatched, undecoded
 	default:
-		return nil, ConsultGapNoQuestions
+		return nil, ConsultGapNoQuestions, undecoded
 	}
 }
 

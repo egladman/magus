@@ -12,6 +12,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -40,8 +41,8 @@ type heldReporter interface {
 // and never touches the work itself.
 type ledger struct {
 	repo  string
-	items codec.JSONL[types.WorkItem]
-	facts codec.JSONL[fact]
+	items file.JSONL[types.WorkItem]
+	facts file.JSONL[fact]
 	now   func() time.Time
 }
 
@@ -61,17 +62,17 @@ func open(repo string) (*ledger, error) {
 	}
 	return &ledger{
 		repo: repo,
-		items: codec.JSONL[types.WorkItem]{
+		items: file.JSONL[types.WorkItem]{JSONL: codec.JSONL[types.WorkItem]{
 			Log:  slog.With(attr.Component("magus")),
 			Path: filepath.Join(dir, "work.jsonl"),
 			Key:  types.WorkItem.Key,
 			Live: func(w types.WorkItem) bool { return !w.Dropped },
-		},
-		facts: codec.JSONL[fact]{
+		}},
+		facts: file.JSONL[fact]{JSONL: codec.JSONL[fact]{
 			Log:  slog.With(attr.Component("magus")),
 			Path: filepath.Join(dir, "facts.jsonl"),
 			Key:  fact.key,
-		},
+		}},
 		now: time.Now,
 	}, nil
 }

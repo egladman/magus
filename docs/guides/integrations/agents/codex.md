@@ -333,7 +333,7 @@ same command template answers it: no decision for every call the guard does not
 deny, so the person answers Codex's prompt, and deny for a session bound to a job
 lease, because workers do not publish. The guard never answers yes, so a push a
 gate covers and a run of a `human_only` target now prompt the person too; before
-`magus.guard/v1alpha2` the template approved a covered push itself. Project rules load
+`safetyscissors.verdict/v1alpha1` the template approved a covered push itself. Project rules load
 only when the project's `.codex` layer is trusted, the same trust that loads its
 hooks. Where no prompt can happen (no rules file, a `permission_mode` other than
 `default`, `acceptEdits` or `auto`, or a push written as anything but a plain

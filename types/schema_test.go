@@ -300,11 +300,11 @@ func TestLedgerViolations(t *testing.T) {
 func TestSchemaUnknownRoundTrips(t *testing.T) {
 	t.Parallel()
 
-	in := `{"api_version":"magus.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
+	in := `{"api_version":"safetyscissors.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
 	var result job.Result
 	require.NoError(t, codec.Unmarshal([]byte(in), &result))
 	// The bag's raw values are the decoder's own; its keys are checked below.
-	assert.Equal(t, job.Result{Schema: job.Schema{Version: "magus.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
+	assert.Equal(t, job.Result{Schema: job.Schema{Version: "safetyscissors.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
 	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(result.Unknown)))
 
 	out, err := codec.Marshal(result)
@@ -312,7 +312,7 @@ func TestSchemaUnknownRoundTrips(t *testing.T) {
 	var back map[string]any
 	require.NoError(t, codec.Unmarshal(out, &back))
 	assert.Equal(t, map[string]any{"x": float64(1)}, back["future_field"])
-	assert.Equal(t, "magus.job-result/v1alpha99", back["api_version"])
+	assert.Equal(t, "safetyscissors.job-result/v1alpha99", back["api_version"])
 }
 
 func TestSchemaUnmet(t *testing.T) {

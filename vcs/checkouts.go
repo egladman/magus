@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
 )
@@ -42,13 +43,13 @@ type checkoutRecord struct {
 	Removed  bool   `json:"removed,omitempty"`
 }
 
-func madeCheckouts(meta string) codec.JSONL[checkoutRecord] {
-	return codec.JSONL[checkoutRecord]{
+func madeCheckouts(meta string) file.JSONL[checkoutRecord] {
+	return file.JSONL[checkoutRecord]{JSONL: codec.JSONL[checkoutRecord]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(meta, madeCheckoutsFile),
 		Key:  func(r checkoutRecord) string { return r.Resolved },
 		Live: func(r checkoutRecord) bool { return !r.Removed },
-	}
+	}}
 }
 
 func recordMadeCheckout(ctx context.Context, meta string, r checkoutRecord) error {

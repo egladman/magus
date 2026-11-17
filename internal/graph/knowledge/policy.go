@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/libs/codec"
@@ -23,12 +24,12 @@ type PolicyRecord struct {
 }
 
 // policyRecords is the store of PolicyRecord: one entry, the last open's.
-func policyRecords(cacheDir string) codec.JSONL[PolicyRecord] {
-	return codec.JSONL[PolicyRecord]{
+func policyRecords(cacheDir string) file.JSONL[PolicyRecord] {
+	return file.JSONL[PolicyRecord]{JSONL: codec.JSONL[PolicyRecord]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(StoreDir(cacheDir), "target-policies.jsonl"),
 		Key:  func(PolicyRecord) string { return "workspace" },
-	}
+	}}
 }
 
 // RecordTargetPolicies appends r as the record under cacheDir. ctx bounds

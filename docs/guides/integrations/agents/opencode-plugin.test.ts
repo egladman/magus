@@ -184,16 +184,16 @@ async function hooks(sessions: Sessions = {}) {
 }
 
 const deny: Canned = {
-  api_version: "magus.guard/v1alpha2",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "deny",
   reason: "whole-tree git stash",
 };
 const advise: Canned = {
-  api_version: "magus.guard/v1alpha2",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "advise",
   context: "that file is generated",
 };
-const deferred: Canned = { api_version: "magus.guard/v1alpha2", decision: "defer" };
+const deferred: Canned = { api_version: "safetyscissors.verdict/v1alpha1", decision: "defer" };
 
 test("a shell command is judged over stdin by the top-level shell subcommand", async () => {
   const calls = stubBun(() => deny);
@@ -340,7 +340,7 @@ test("an unrunnable magus refuses every call and says how to get one", async () 
 });
 
 test("a verdict from an unknown schema is refused rather than obeyed", async () => {
-  stubBun(() => ({ ...deny, api_version: "magus.guard/v1alpha99" }));
+  stubBun(() => ({ ...deny, api_version: "safetyscissors.verdict/v1alpha99" }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -349,7 +349,7 @@ test("a verdict from an unknown schema is refused rather than obeyed", async () 
 });
 
 const ask: Canned = {
-  api_version: "magus.guard/v1alpha2",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "ask",
   reason: "pushing abc1234, which no passing gate covers",
 };
@@ -357,7 +357,7 @@ const pushPrompt = { permission: { bash: { "git push": "ask", "git push *": "ask
 type Status = "ask" | "deny" | "allow";
 
 test("an unknown decision refuses the call, never allows it", async () => {
-  stubBun(() => ({ api_version: "magus.guard/v1alpha2", decision: "maybe", reason: "?" }));
+  stubBun(() => ({ api_version: "safetyscissors.verdict/v1alpha1", decision: "maybe", reason: "?" }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -409,11 +409,11 @@ test("an ask no push prompt can match refuses", async () => {
 test("permission.ask answers a push prompt from the verdict", async () => {
   const cases: Array<[Canned, Status]> = [
     [deferred, "ask"],
-    [{ api_version: "magus.guard/v1alpha2", decision: "advise", context: "gate ran" }, "ask"],
-    [{ api_version: "magus.guard/v1alpha2", decision: "pass" }, "deny"],
+    [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "advise", context: "gate ran" }, "ask"],
+    [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "pass" }, "deny"],
     [ask, "ask"],
     [deny, "deny"],
-    [{ api_version: "magus.guard/v1alpha2", decision: "maybe" }, "deny"],
+    [{ api_version: "safetyscissors.verdict/v1alpha1", decision: "maybe" }, "deny"],
   ];
   for (const [verdict, want] of cases) {
     const calls = stubBun(() => verdict);
@@ -528,7 +528,7 @@ const humanOnlyPrompt = {
 };
 
 const humanOnlyAsk: Canned = {
-  api_version: "magus.guard/v1alpha2",
+  api_version: "safetyscissors.verdict/v1alpha1",
   decision: "ask",
   reason: "`magus run agent-bench-run .` is run by a person: launches paid sessions",
 };
@@ -1214,7 +1214,7 @@ test("a tree with no magus.yaml falls back to the nearest magusfile", async () =
 test("a deny on a root session's stop goes back as one follow-up prompt", async () => {
   await withoutReplyScript(async () => {
     const stop = {
-      api_version: "magus.guard/v1alpha2",
+      api_version: "safetyscissors.verdict/v1alpha1",
       decision: "deny",
       reason: "a background task still runs",
     };
@@ -1268,7 +1268,7 @@ const isSubagentStop = (call: SpawnCall): boolean =>
 
 test("a foreground task's end is its child's stop, and a deny rides the parent's result", async () => {
   const stop = {
-    api_version: "magus.guard/v1alpha2",
+    api_version: "safetyscissors.verdict/v1alpha1",
     decision: "deny",
     reason: "the child left its job open",
   };
@@ -1307,7 +1307,7 @@ test("a passed child's stop leaves the parent's result alone", async () => {
 test("a backgrounded child's stop is its idle, and a deny is prompted back to the child", async () => {
   await withoutReplyScript(async () => {
     const stop = {
-      api_version: "magus.guard/v1alpha2",
+      api_version: "safetyscissors.verdict/v1alpha1",
       decision: "deny",
       reason: "the child left its job open",
     };

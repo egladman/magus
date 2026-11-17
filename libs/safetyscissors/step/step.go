@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/internal/apigroup"
 )
 
 // APIVersion is the version of the Step record, carried as api_version. A Step that
 // names another version is refused.
-const APIVersion = "magus.step/v1alpha1"
+const APIVersion = apigroup.Step
 
 // Step is one thing a program is about to do, as data. Kind is a name its program
 // declared with a Spec, and Input holds the step's own arguments. The judge reads them

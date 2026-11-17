@@ -871,13 +871,13 @@ func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsAR
 	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 }
 
-func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
+func (s *unjudgedHookSuite) TestCursorAsksBeforeTheRepairLine() {
 	root := s.suppliedRepair()
 	encoded, err := codec.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
 		"command": "magus self update", "cwd": root})
 	s.Require().NoError(err)
 	reply := s.reply("cursor-hook.buzz", "cursor", string(encoded))
-	s.Equal("allow", reply["permission"])
+	s.Equal("ask", reply["permission"])
 	s.Contains(reply["user_message"], "could not judge this call")
 }
 

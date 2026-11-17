@@ -176,7 +176,7 @@ func (s *stepRecordSuite) TestANamelessToolStepIsJudgedAsAStep() {
 }
 
 func (s *stepRecordSuite) TestAHostEnvelopeIsNoStepRecord() {
-	_, ok := stepRecord(`{"tool_name":"Bash","tool_input":{"command":"echo magus.step/v1alpha1"}}`)
+	_, ok := stepRecord(`{"tool_name":"Bash","tool_input":{"command":"echo safetyscissors.step/v1alpha1"}}`)
 
 	s.False(ok)
 }
@@ -195,12 +195,12 @@ func (s *stepRecordSuite) TestAnUndeclaredKindSentToJudgeIsDenied() {
 func (s *stepRecordSuite) TestAStepJudgeCannotReadIsDenied() {
 	ctx, _ := spawnFixture(s.T())
 	step := s.toolStep("Bash", nil)
-	step.APIVersion = "magus.step/v9"
+	step.APIVersion = "safetyscissors.step/v9"
 
 	j := Judge(ctx, Dependencies{}, Request{Input: s.record(step)})
 
 	s.Equal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Deny, Reason: j.Reason, Rule: string(denyRuleStepInput)}, j)
-	s.Contains(j.Reason, "api_version")
+	s.Contains(j.Reason, "safetyscissors.step/v9")
 }
 
 func (s *stepTableSuite) TestARunsRowWithoutACommandIsRefused() {

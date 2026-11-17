@@ -1,9 +1,12 @@
 package verdict
 
-import "github.com/egladman/magus/libs/apiversion"
+import (
+	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/internal/apigroup"
+)
 
 // APIVersion is the version of the Judgment envelope, carried as api_version.
-const APIVersion = apiversion.APIVersion("magus.guard/v1alpha2")
+const APIVersion apiversion.APIVersion = apigroup.Verdict
 
 // Judgment is the neutral result of judging one call (a shell command, a write, a spawn,
 // a tool call): exactly one decision, carrying the field that decision needs. This

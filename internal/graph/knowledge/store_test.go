@@ -493,7 +493,7 @@ func TestProjectPaths(t *testing.T) {
 				"pkg/a": {},
 			}}),
 		},
-		{name: "truncated json reads as no projects", man: []byte(`{"api_version":"magus.job/v1alpha1","shards":{"pkg/a":`)},
+		{name: "truncated json reads as no projects", man: []byte(`{"api_version":"safetyscissors.job/v1alpha1","shards":{"pkg/a":`)},
 		{name: "non-json reads as no projects", man: []byte("not json at all")},
 		{
 			name: "a manifest of nothing but filtered shards",

@@ -11,7 +11,7 @@ const runtime = {
       asked = true;
     }
     return {
-      stdout: new Response(JSON.stringify({api_version: "magus.guard/v1alpha2", decision: "deny", reason: "magus-install-probe"})).body,
+      stdout: new Response(JSON.stringify({api_version: "safetyscissors.verdict/v1alpha1", decision: "deny", reason: "magus-install-probe"})).body,
       stderr: new Response("").body,
       exited: Promise.resolve(0),
     };

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
@@ -19,16 +20,16 @@ import (
 // names.
 const grantsFileName = "grants.jsonl"
 
-func (s *Store) grantsLog() (codec.JSONL[job.Grant], error) {
+func (s *Store) grantsLog() (file.JSONL[job.Grant], error) {
 	path, err := s.Path()
 	if err != nil {
-		return codec.JSONL[job.Grant]{}, err
+		return file.JSONL[job.Grant]{}, err
 	}
-	return codec.JSONL[job.Grant]{
+	return file.JSONL[job.Grant]{JSONL: codec.JSONL[job.Grant]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(path), grantsFileName),
 		Key:  job.Grant.Key,
-	}, nil
+	}}, nil
 }
 
 // Grant records a person's approval lowering rule to advice for job id's calls until the

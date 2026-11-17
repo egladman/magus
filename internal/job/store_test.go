@@ -758,7 +758,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	path := plantRaw(t, s, `{"api_version":"magus.job/v1alpha99","requires":["jobs-v2"]}`)
+	path := plantRaw(t, s, `{"api_version":"safetyscissors.job/v1alpha99","requires":["jobs-v2"]}`)
 
 	_, err := s.List()
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
@@ -775,7 +775,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	s.clock = func() time.Time { return time.Unix(1_700_000_000, 0) }
-	path := plantRaw(t, s, `{"api_version":"magus.job/v1alpha99","plan":"p1"}`)
+	path := plantRaw(t, s, `{"api_version":"safetyscissors.job/v1alpha99","plan":"p1"}`)
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
@@ -1678,7 +1678,7 @@ func TestAgentSectionMigration(t *testing.T) {
 func (s *agentSectionSuite) migrated(line string) job.Job {
 	st := tempStore(s.T(), s.T().TempDir())
 	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1"}`, line))
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1"}`, line))
 	f, err := st.read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
@@ -1742,7 +1742,7 @@ func TestWorkerResumedMigration(t *testing.T) {
 func (s *workerResumedSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
 	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1","migration":1}`, line))
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":1}`, line))
 	f, err := st.read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)

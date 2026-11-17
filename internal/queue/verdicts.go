@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/codec"
@@ -236,8 +237,8 @@ func (w *faultWait) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (d *VerdictDir) faultWaits() codec.JSONL[faultWait] {
-	return codec.JSONL[faultWait]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(d.Path, faultWaitsFile), Key: func(w faultWait) string { return w.Change }}
+func (d *VerdictDir) faultWaits() file.JSONL[faultWait] {
+	return file.JSONL[faultWait]{JSONL: codec.JSONL[faultWait]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(d.Path, faultWaitsFile), Key: func(w faultWait) string { return w.Change }}}
 }
 
 // FaultWaits is how many runs in a row waited on a machine fault for c at its

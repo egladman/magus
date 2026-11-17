@@ -528,7 +528,7 @@ job ended. Enter the path first, then write it:
 
 ```sh
 # client tool: magus\workspace().putJob("<job>", opts: {"enter": "<path>"})
-echo '{"api_version": "magus.job/v1alpha1", "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
+echo '{"api_version": "safetyscissors.job/v1alpha1", "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
 ```
 
 The store records the entry on the job's `entries` and refuses one it cannot
@@ -700,7 +700,7 @@ it by; a `read_only` job is exempt.
 
 ```sh
 magus job fork --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "api/migrate",
+{"api_version": "safetyscissors.job/v1alpha1", "id": "api/migrate",
  "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
  "paths": {"write": ["db", "api"]}, "check": {"target": "go-test", "project": "api"},
  "goals": [

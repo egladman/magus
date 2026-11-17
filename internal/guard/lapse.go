@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -137,14 +138,14 @@ type settingLine struct {
 	Setting *builtin.Setting `json:"setting,omitempty"`
 }
 
-func settingsLog(cacheDir string) codec.JSONL[settingLine] {
-	return codec.JSONL[settingLine]{
+func settingsLog(cacheDir string) file.JSONL[settingLine] {
+	return file.JSONL[settingLine]{JSONL: codec.JSONL[settingLine]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(cacheDir, settingsFile),
 		Key:  func(l settingLine) string { return l.Rule },
 		Live: func(l settingLine) bool { return !l.Removed && l.Setting != nil },
 		Old:  filepath.Join(cacheDir, oldSettingsFile),
-	}
+	}}
 }
 
 // rememberSettings records settings as the cache dir's last applied ones, appending a line

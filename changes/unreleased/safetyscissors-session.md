@@ -13,9 +13,9 @@
   `WithClock`, returns an `*InvalidIDError` for an id that cannot name a file, and reads
   one invocation's file with `ReadInvocation`, which refuses such an id with the same
   error. A failed store operation is a `*session.StoreError`. Breaking for `magus session
-  -o json` readers: an invocation's model and host-version pair is keyed `producer`, not
-  `agent`, which the inlined origin's subagent id already used, so both builds of
-  encoding/json dropped one of the two. magus keeps `sessions.Dir`, `NewID`, `ReadGateResults`,
+  -o json` readers: an invocation's model and host-version pair is `Summary.Model`, keyed
+  `model`, not `agent`, which the inlined origin's subagent id already used, so both
+  builds of encoding/json dropped one of the two. magus keeps `sessions.Dir`, `NewID`, `ReadGateResults`,
   attention, gates, checkpoints, advice, contact, the prompt cache and the adapters, and
   every magus writer prunes through `sessions.AttentionTie` so a request is never split.
   No alias remains. The store's files and records are unchanged, except that a stored

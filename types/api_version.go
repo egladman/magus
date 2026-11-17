@@ -11,7 +11,7 @@ import (
 )
 
 // APIVersion names a versioned format Kubernetes-style, as
-// `magus.job/v1alpha1`: a group, a slash, then v<major> with an
+// `safetyscissors.job/v1alpha1`: a group, a slash, then v<major> with an
 // optional alpha<n> or beta<n>. Within a group the versions order
 // v1alpha1 < v1alpha2 < v1beta1 < v1 < v2alpha1.
 //
@@ -46,11 +46,11 @@ func (v APIVersion) Valid() bool { return apiVersionRe.MatchString(string(v)) }
 
 func (v APIVersion) String() string { return string(v) }
 
-// Group is `magus.job` in `magus.job/v1alpha1`. It is "" when v is
+// Group is `magus.job` in `safetyscissors.job/v1alpha1`. It is "" when v is
 // malformed.
 func (v APIVersion) Group() string { return apiversion.APIVersion(v).Group() }
 
-// Version is `v1alpha1` in `magus.job/v1alpha1`. It is "" when v is
+// Version is `v1alpha1` in `safetyscissors.job/v1alpha1`. It is "" when v is
 // malformed.
 func (v APIVersion) Version() string {
 	if !v.Valid() {

@@ -41,20 +41,20 @@ stderr 'a holder claims only its own job'
 stderr 'a claim record applies alone'
 
 -- wave.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh", "pricing/tax.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh", "pricing/tax.sh"]}, "check": {"target": "test", "project": "."}}
 -- other.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/other", "paths": {"write": ["pricing/rates.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/other", "paths": {"write": ["pricing/rates.sh"]}, "check": {"target": "test", "project": "."}}
 -- narrow.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "paths": {"write": ["pricing/total.sh"]}, "check": {"target": "test", "project": "."}}
 -- claim.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- unproved.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/rates.sh", "because": "released"}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/rates.sh", "because": "released"}]}
 -- theirs.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/other", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/other", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- mixed.jsonl --
-{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
-{"api_version": "magus.job/v1alpha1", "id": "wave/other", "paths": {"write": ["pricing/rates.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/other", "paths": {"write": ["pricing/rates.sh"]}, "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/
 -- magus.yaml --

@@ -231,9 +231,9 @@ func (s *ReadSuite) TestReadAllSkipsAnOversizedLineAndKeepsReading() {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
-		fmt.Sprintf(`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
+		fmt.Sprintf(`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -319,7 +319,7 @@ func (s *ReadSuite) TestReadAllToleratesACorruptTail() {
 	path := filepath.Join(dir, "sess1.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	s.Require().NoError(err)
-	_, err = f.WriteString(`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"kind":"target_res`)
+	_, err = f.WriteString(`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":3,"kind":"target_res`)
 	s.Require().NoError(err)
 	s.Require().NoError(f.Close())
 
@@ -338,11 +338,11 @@ func (s *ReadSuite) TestReadAllCountsEveryUnusableLine() {
 	dir := s.T().TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
 		`not json at all`,
 		``, // a blank line is not damage; it is skipped without counting
-		`{"v":"magus.sessions/v1alpha1","seq":2,"kind":"target_result","ts":2}`, // no invocation: unattributable
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
+		`{"v":"safetyscissors.session/v1alpha1","seq":2,"kind":"target_result","ts":2}`, // no invocation: unattributable
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -358,9 +358,9 @@ func (s *ReadSuite) TestUnknownKindsAndFieldsAreIgnoredNotRejected() {
 	dir := s.T().TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
-		`{"v":"magus.sessions/v1alpha9","invocation":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
+		`{"v":"safetyscissors.session/v1alpha9","invocation":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -387,7 +387,7 @@ func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
 	for _, retired := range []string{"pass", "allow"} {
 		dir := s.T().TempDir()
 		path := filepath.Join(dir, "sess1.jsonl")
-		body := `{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"agent_event","ts":10,` +
+		body := `{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"agent_event","ts":10,` +
 			`"payload":{"host":"h1","event":"shell.command","ref":"r1","at":10,"verdict":"` + retired + `"}}`
 		s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -400,6 +400,24 @@ func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
 		_, err = FoldAgentEvents(s.T().Context(), dir)
 		s.Require().ErrorAs(err, &refused, "the cached fold refuses it too")
 	}
+}
+
+// A record from before the module took the store carries magus.sessions, and the store
+// is refused with the file named rather than read with that record missing.
+func (s *ReadSuite) TestARetiredGroupRefusesTheStore() {
+	dir := s.T().TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+	body := `{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":10,"payload":{"target":"build","outcome":"pass"}}`
+	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
+
+	_, err := ReadAll(s.T().Context(), dir)
+	var refused *RetiredGroupError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal(RetiredGroupError{Path: path, Version: "magus.sessions/v1alpha1"}, *refused)
+	s.Contains(err.Error(), "start a fresh session", "the error says how to recover")
+
+	_, err = FoldAgentEvents(s.T().Context(), dir)
+	s.Require().ErrorAs(err, &refused, "the cached fold refuses it too")
 }
 
 func (s *ReadSuite) TestSummarizeOrdersMostRecentFirst() {
@@ -485,8 +503,8 @@ func (s *ReadSuite) TestAnInvocationWrittenWithoutALeaseStillReads() {
 	dir := s.T().TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo"}}`,
-		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":2,"kind":"target_result","ts":20,"payload":{"target":"build","outcome":"pass"}}`,
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo"}}`,
+		`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":2,"kind":"target_result","ts":20,"payload":{"target":"build","outcome":"pass"}}`,
 	}, "\n")
 	s.Require().NoError(os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -633,7 +651,7 @@ func (s *LoadSuite) TestLoadEventsRecordsTheHostOnTheInvocationStart() {
 		LastMs:     got.LastMs,
 		Facts:      got.Facts,
 		Events:     1,
-		Producer:   got.Producer,
+		Model:      got.Model,
 		pairAtMs:   got.pairAtMs,
 	}, got)
 }
@@ -652,20 +670,20 @@ func (s *LoadSuite) TestSummarizeReadsTheNewestModelAndHostVersionPair() {
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
-	s.Equal(Agent{Model: "claude-opus-5-5", HostVersion: "2.1.280"}, summaries[0].Producer, "the newest event's pair wins, not the first")
+	s.Equal(Agent{Model: "claude-opus-5-5", HostVersion: "2.1.280"}, summaries[0].Model, "the newest event's pair wins, not the first")
 }
 
 // The pair and the inlined Origin's subagent id are two keys: a shared one drops both
 // under either JSON build.
 func (s *LoadSuite) TestSummaryKeepsTheSubagentAndThePairApart() {
-	sum := Summary{Invocation: "i", Producer: Agent{Model: "m"}}
+	sum := Summary{Invocation: "i", Model: Agent{Model: "m"}}
 	sum.Agent = "sub-1"
 	raw, err := codec.Marshal(sum)
 	s.Require().NoError(err)
 	var back map[string]any
 	s.Require().NoError(codec.Unmarshal(raw, &back))
 	s.Equal("sub-1", back["agent"])
-	s.Equal(map[string]any{"model": "m"}, back["producer"])
+	s.Equal(map[string]any{"model": "m"}, back["model"])
 }
 
 // A host that never names a model or its own version summarizes with both empty: a
@@ -679,7 +697,7 @@ func (s *LoadSuite) TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne() {
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
-	s.Zero(summaries[0].Producer)
+	s.Zero(summaries[0].Model)
 }
 
 // NewestEventMs reads the HOST's timestamp: a store loaded today from a month-old

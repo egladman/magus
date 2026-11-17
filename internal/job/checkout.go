@@ -309,9 +309,9 @@ type recordsPass struct {
 }
 
 // recordsSweptLog keys every pass alike, so the last one is the log's one entry.
-func (s *Store) recordsSweptLog() codec.JSONL[recordsPass] {
-	return codec.JSONL[recordsPass]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
-		Key: func(recordsPass) string { return "" }}
+func (s *Store) recordsSweptLog() file.JSONL[recordsPass] {
+	return file.JSONL[recordsPass]{JSONL: codec.JSONL[recordsPass]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
+		Key: func(recordsPass) string { return "" }}}
 }
 
 // recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that

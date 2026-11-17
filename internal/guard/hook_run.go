@@ -136,7 +136,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 				Decision:   verdict.Deny,
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
 					refusal.err.Error(), refusal.next.Run),
-				NextSteps: []types.NextStep{refusal.next},
+				NextSteps: remedies([]types.NextStep{refusal.next}),
 			}
 			if err := e.writeVerdict(out, opts, verdict); err != nil {
 				return err

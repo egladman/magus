@@ -2994,7 +2994,7 @@ export fun conventions_test(ctx: magus\Context, args: [str]) > void !> any {
                    "TestStoresAreJSONLines", "TestCommentsNameSymbolsThatExist",
                    "TestNoDirectEncodingJSONImport", "TestRevealCallsStayCapped"];
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-run", "^(" + names.join("|") + ")$", "-count=1", ".", "./internal/json", "./internal/secret"] + args});
+        {"args": ["-run", "^(" + names.join("|") + ")$", "-count=1", "."] + args});
 }
 
 // Runs internal/sandbox's tests with landlock required. test skips the

@@ -147,7 +147,7 @@ func (s *DigestSuite) TestMovingBytesBetweenFilesChangesTheDigest() {
 }
 
 func (s *DigestSuite) TestReadsFormatReadsTheStoreLines() {
-	s.write(lockPath, []byte("config a\nstore magus.job/v1alpha1\n"))
+	s.write(lockPath, []byte("config a\nstore safetyscissors.job/v1alpha1\n"))
 	reads, err := ReadsFormat(s.root, job.APIVersion)
 	s.Require().NoError(err)
 	s.True(reads)

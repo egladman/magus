@@ -246,7 +246,7 @@ func (s *JobSuite) TestApplyLeavesValidationToTheStore() {
 	s.Equal("kept", row.Validation)
 }
 
-const declared = `{"api_version":"magus.job/v1alpha1","id":"a","later":{"x":[1]}}`
+const declared = `{"api_version":"safetyscissors.job/v1alpha1","id":"a","later":{"x":[1]}}`
 
 func (s *JobSuite) TestADeclarationKeepsUnknownMembersThroughEncodingJSON() {
 	var d Declaration
@@ -264,9 +264,9 @@ func (s *JobSuite) TestADeclarationKeepsUnknownMembersThroughEncodingJSON() {
 func (s *JobSuite) TestAStrictDecodeRefusesAnAuthoredDeclarationsUnknownMember() {
 	var d Declaration
 	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(declared), &d), codec.ErrUnknownField)
-	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(`{"api_version":"magus.job/v1alpha1","id":"a","check":{"target":"t","x":1}}`), &d),
+	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a","check":{"target":"t","x":1}}`), &d),
 		codec.ErrUnknownField, "and a nested one")
-	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"magus.job/v1alpha1","id":"a"}`), &d))
+	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a"}`), &d))
 	s.Nil(d.Unknown)
 }
 

@@ -351,7 +351,7 @@ func TestVerifyNotesAMagusMaintainedPathOutsideTheWritePaths(t *testing.T) {
 func TestVerifyRefusesTheFabricatedResult(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"api_version":"magus.job-result/v1alpha1","job":"harness/ledger-accept","changed_paths":[],` +
+	raw := `{"api_version":"safetyscissors.job-result/v1alpha1","job":"harness/ledger-accept","changed_paths":[],` +
 		`"validation":{"command":"magus run go::go-test .","output_ref":"deadbeef","passed":true},` +
 		`"unresolved_risks":[],"confidence":"high"}`
 

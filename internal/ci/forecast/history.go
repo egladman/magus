@@ -957,18 +957,18 @@ func (l historyLine) key() string {
 	return ""
 }
 
-func historyLog(path string) codec.JSONL[historyLine] {
+func historyLog(path string) file.JSONL[historyLine] {
 	old := filepath.Join(filepath.Dir(path), oldHistoryFile)
 	if old == filepath.Clean(path) {
 		old = ""
 	}
-	return codec.JSONL[historyLine]{
+	return file.JSONL[historyLine]{JSONL: codec.JSONL[historyLine]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: path,
 		Key:  historyLine.key,
 		Live: func(l historyLine) bool { return !l.Removed },
 		Old:  old,
-	}
+	}}
 }
 
 // UnsupportedVersionError is a history file a newer magus wrote. Load leaves the file

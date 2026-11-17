@@ -218,8 +218,8 @@ func (t StepTable) covering(kind, name string) (stepSpec, bool) {
 // judged: a wrong api_version, no kind, an empty Dir its row needs, or a
 // failed rule.
 func JudgeStep(ctx context.Context, deps Dependencies, req Request, st step.Step) (verdict.Judgment, error) {
-	if st.APIVersion != step.APIVersion {
-		return verdict.Judgment{}, fmt.Errorf("step api_version is %q, want %q", st.APIVersion, step.APIVersion)
+	if err := types.RefuseVersion(step.APIVersion, types.APIVersion(st.APIVersion), "the step", "send api_version "+step.APIVersion); err != nil {
+		return verdict.Judgment{}, err
 	}
 	if st.Kind == "" {
 		return verdict.Judgment{}, errors.New("step has no kind")
@@ -512,7 +512,7 @@ func stricterStep(a, b verdict.Judgment) verdict.Judgment {
 const hostToolKind = "tool"
 
 // stepGroup prefixes every Step record's api_version, whatever its
-// version: "magus.step/".
+// version: "safetyscissors.step/".
 var stepGroup = step.APIVersion[:strings.IndexByte(step.APIVersion, '/')+1]
 
 // judgingStepKey marks a context JudgeStep judges a step's parts under.

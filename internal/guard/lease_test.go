@@ -3280,7 +3280,7 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 		"the checkout a child works in grants it nothing")
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "", "script": "probe.buzz"}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "", "script": "probe.buzz"}}
 EOF`, me.ID, me.ID)),
 		"a script check grants nothing, and it is how a read-only scout passes job wait")
 	for _, command := range []string{
@@ -3288,7 +3288,7 @@ EOF`, me.ID, me.ID)),
 		fmt.Sprintf("magus job fork %s/scout --parent %s --read-only --read-paths **", me.ID, me.ID),
 		fmt.Sprintf("client op=put id=%s/scout parent=%s read_only=true state=pass", me.ID, me.ID),
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "go-test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "go-test", "project": "."}}
 EOF`, me.ID, me.ID),
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command).Say, "nothing would grade", "%q", command)

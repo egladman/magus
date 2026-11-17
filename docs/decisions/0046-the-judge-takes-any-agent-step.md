@@ -207,13 +207,13 @@ type Step struct { // replaces ADR 0039's ToolCall
 }
 
 type StepRow struct { // replaces ADR 0039's ToolRow
-    Kind                  string       `json:"kind"`
-    Name                  string       `json:"name,omitempty"`
-    Capabilities          []Capability `json:"capabilities"`
-    Paths                 []string     `json:"paths,omitempty"`
-    Command               string       `json:"command,omitempty"`
-    SpawnDescriptionField string       `json:"spawn_description_field,omitempty"`
-    InputSchema           []byte       `json:"input_schema,omitempty"` // JSON Schema; unset leaves the input untyped
+    Kind                  string           `json:"kind"`
+    Name                  string           `json:"name,omitempty"`
+    Capabilities          []Capability     `json:"capabilities"`
+    Paths                 []string         `json:"paths,omitempty"`
+    Command               string           `json:"command,omitempty"`
+    SpawnDescriptionField string           `json:"spawn_description_field,omitempty"`
+    InputSchema           codec.RawMessage `json:"input_schema,omitzero"` // JSON Schema as the JSON it is, not base64; unset leaves the input untyped
 }
 
 type StepRequest struct { // replaces ADR 0039's ToolRequest: what a rule reads

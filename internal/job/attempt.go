@@ -178,17 +178,17 @@ func (r *resultRecord) result() *job.Result {
 	return out
 }
 
-func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
+func (s *Store) attemptsLog() (file.JSONL[attemptRecord], error) {
 	if s.err != nil {
-		return codec.JSONL[attemptRecord]{}, s.err
+		return file.JSONL[attemptRecord]{}, s.err
 	}
-	return codec.JSONL[attemptRecord]{
+	return file.JSONL[attemptRecord]{JSONL: codec.JSONL[attemptRecord]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(s.path), attemptsFileName),
 		Perm: 0o600,
 		Key:  attemptRecord.key,
 		Live: func(r attemptRecord) bool { return !r.Status.Dropped },
-	}, nil
+	}}, nil
 }
 
 // refuseAttemptVersion refuses a line another version of magus wrote,

@@ -542,7 +542,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
+	writeStdin(t, `{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -1450,7 +1450,7 @@ func (s *jobApplyContractSuite) TestAnInvalidFiledResultExitsUsageAndKeepsTheJob
 	root, store, _ := s.integration()
 	before, err := store.List()
 	s.Require().NoError(err)
-	writeStdin(s.T(), `{"api_version":"magus.job-result/v1alpha1","unexpected":"field"}`)
+	writeStdin(s.T(), `{"api_version":"safetyscissors.job-result/v1alpha1","unexpected":"field"}`)
 	err = jobExit(s.T().Context(), root, []string{"integration", "--stdin"})
 	s.Require().ErrorContains(err, "File this shape:")
 	s.Equal(exit.Usage, exit.Code(err))

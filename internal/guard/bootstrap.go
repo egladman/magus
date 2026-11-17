@@ -85,10 +85,10 @@ func (g goCall) buildRoot(cwd string) string {
 func bootstrapArgv() []string { return strings.Fields(ward.BootstrapCommand) }
 
 // bootstrapParts splits bootstrapArgv into its one environment prefix and the go command
-// after it. internal/json refuses to compile without the experiment the prefix sets, and a
-// fresh checkout cannot count on mise to set it; the go-build target sets it for the builds
-// it runs. ok is false when ward.BootstrapCommand no longer has that shape, and then no
-// line is the bootstrap.
+// after it. The magus package refuses to compile without the experiment the prefix sets,
+// and a fresh checkout cannot count on mise to set it; the go-build target sets it for the
+// builds it runs. ok is false when ward.BootstrapCommand no longer has that shape, and
+// then no line is the bootstrap.
 func bootstrapParts() (env string, goArgv []string, ok bool) {
 	argv := bootstrapArgv()
 	if len(argv) < 2 || !strings.Contains(argv[0], "=") || argv[1] != "go" {

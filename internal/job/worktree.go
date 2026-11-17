@@ -929,8 +929,8 @@ func (s *Store) cachedDigest(bin string) (string, error) {
 }
 
 // digestCache is the JSON Lines store at path, keyed by binary path.
-func digestCache(path string) codec.JSONL[binaryDigest] {
-	return codec.JSONL[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Key: func(d binaryDigest) string { return d.Path }}
+func digestCache(path string) file.JSONL[binaryDigest] {
+	return file.JSONL[binaryDigest]{JSONL: codec.JSONL[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Key: func(d binaryDigest) string { return d.Path }}}
 }
 
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it

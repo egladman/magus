@@ -304,10 +304,11 @@ func (s *PruneSuite) TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent() {
 }
 
 func (s *PruneSuite) TestReadFileReportsAMissingFileAsVanishedNotSkipped() {
-	records, skipped, legacy, vanished := readFile(filepath.Join(s.dir, "never-existed"+FileExt))
+	records, skipped, legacy, retired, vanished := readFile(filepath.Join(s.dir, "never-existed"+FileExt))
 	s.Empty(records)
 	s.Zero(skipped)
 	s.Zero(legacy)
+	s.Empty(retired)
 	s.True(vanished)
 }
 

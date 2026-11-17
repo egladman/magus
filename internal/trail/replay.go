@@ -66,18 +66,23 @@ type observation struct {
 // stores hold, since it saw the write happen; a loaded transcript adds the sessions no hook
 // was wired for.
 //
-// Best-effort throughout: an unreadable blob, a missing trail, an absent session store, or
-// a host that supplied no session id all just contribute less. A review must still open when
-// nothing was recorded, which is the normal case for a workspace whose agents have no guard
-// hook wired, and a file nobody touched keeps a nil Touches.
-func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) {
+// A missing blob, a missing store, an absent session store, or a host that supplied no
+// session id all just contribute less. A review must still open when nothing was recorded,
+// which is the normal case for a workspace whose agents have no guard hook wired, and a
+// file nobody touched keeps a nil Touches. A blob that does not decode and a session store
+// that refuses its read are returned, joined, after every touch the rest could give is
+// attached.
+func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error {
 	paths := make([]string, len(rev.Files))
 	for i, f := range rev.Files {
 		paths[i] = f.Path
 	}
-	byPath := replayTrail(ctx, root, base, paths, DefaultReplayEvents)
+	byPath, errs := replayTrail(ctx, root, base, paths, DefaultReplayEvents)
 	if dir, err := sessions.Dir(root); err == nil {
-		if fold, err := session.ReadAll(ctx, dir); err == nil {
+		fold, err := session.ReadAll(ctx, dir)
+		if err != nil {
+			errs = errors.Join(errs, err)
+		} else {
 			for path, touches := range replayLoaded(fold, paths) {
 				for _, t := range touches {
 					if !slices.ContainsFunc(byPath[path], func(h diff.Touch) bool { return h.Host == t.Host && h.Session == t.Session }) {
@@ -92,14 +97,17 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) {
 			rev.Files[i].Touches = touches
 		}
 	}
+	return errs
 }
 
-// replayTrail reconstructs, for each of paths, which agent sessions the trail at base saw
-// write it and what they had read first, reading at most limit recent events.
-func replayTrail(ctx context.Context, root, base string, paths []string, limit int) map[string][]diff.Touch {
+// replayTrail reconstructs, for each of paths, which agent sessions the store at base saw
+// write it and what they had read first, reading at most limit recent events. A request
+// blob that does not decode is skipped and returned in the joined error, which is a
+// [*BlobUndecodableError] or a [*RetiredDecisionError] per blob.
+func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil || len(events) == 0 {
-		return map[string][]diff.Touch{}
+		return map[string][]diff.Touch{}, nil
 	}
 
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
@@ -114,6 +122,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 	}
 
 	obs := make([]observation, 0, len(events))
+	var errs []error
 	for _, e := range events {
 		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
@@ -123,7 +132,8 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 			continue
 		}
 		var req agentCommandRequest
-		if codec.Unmarshal(raw, &req) != nil {
+		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		// A hook records the path exactly as its host supplied it, which is an ABSOLUTE path
@@ -141,7 +151,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 			At: time.UnixMilli(e.Ts),
 		})
 	}
-	return touchesRead(obs, paths)
+	return touchesRead(obs, paths), errors.Join(errs...)
 }
 
 // replayLoaded answers replayTrail's question from the loaded transcripts in fold: which
@@ -520,11 +530,15 @@ func relativize(root, p string) string {
 //
 // Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
 // caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
-func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int) {
+//
+// A request blob that does not decode is left out of the counts and returned in the
+// joined error, a [*BlobUndecodableError] or a [*RetiredDecisionError] per blob.
+func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
 	events, err := trailtypes.ReadRecent(ctx, base, limit)
 	if err != nil {
-		return 0, 0, 0
+		return 0, 0, 0, nil
 	}
+	var errs []error
 	for _, e := range events {
 		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
@@ -534,7 +548,8 @@ func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes,
 			continue
 		}
 		var req agentCommandRequest
-		if codec.Unmarshal(raw, &req) != nil {
+		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		switch req.Tool {
@@ -546,7 +561,7 @@ func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes,
 			shell++
 		}
 	}
-	return reads, writes, shell
+	return reads, writes, shell, errors.Join(errs...)
 }
 
 // CommandProgram reduces a recorded command line to the program it invoked, dropping every

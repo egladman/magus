@@ -68,18 +68,18 @@ func (h heartbeat) key() string { return fmt.Sprintf("%s\x00%s", h.Session, h.Le
 // heartbeatStore is the stamps of the workspace at root, one file per workspace under the
 // user state dir: a stamp is a fact about a live session, which no cache wipe should
 // invent or erase, and a lease id is unique only within its workspace.
-func heartbeatStore(root string) (codec.JSONL[heartbeat], error) {
+func heartbeatStore(root string) (file.JSONL[heartbeat], error) {
 	stateBase, err := xdg.StateDir()
 	if err != nil {
-		return codec.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
+		return file.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
 	}
 	sum := sha256.Sum256([]byte(root))
-	return codec.JSONL[heartbeat]{
+	return file.JSONL[heartbeat]{JSONL: codec.JSONL[heartbeat]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(stateBase, "magus", "heartbeat", fmt.Sprintf("%s.jsonl", hex.EncodeToString(sum[:8]))),
 		Perm: 0o600,
 		Key:  heartbeat.key,
-	}, nil
+	}}, nil
 }
 
 // stampHeartbeat records that session was judged on a call under lease at now, at most
@@ -138,7 +138,7 @@ const heartbeatRetain = 7 * 24 * time.Hour
 // compactHeartbeats rewrites the store by rename to its last line per pair, dropping each
 // stamp older than [heartbeatRetain] before now and then the oldest past
 // [heartbeatMaxEntries].
-func compactHeartbeats(ctx context.Context, store codec.JSONL[heartbeat], now time.Time) error {
+func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now time.Time) error {
 	return file.WithLock(ctx, fmt.Sprintf("%s.lock", store.Path), file.LockWait, func() error {
 		entries, err := store.Load()
 		if err != nil {

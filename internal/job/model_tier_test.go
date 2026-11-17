@@ -906,7 +906,7 @@ func TestFourModelTiersMigration(t *testing.T) {
 func (s *fourModelTiersSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
 	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1","migration":3}`, line))
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":3}`, line))
 	f, err := st.read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)

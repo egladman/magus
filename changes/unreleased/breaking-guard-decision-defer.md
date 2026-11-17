@@ -2,7 +2,7 @@
 
 - **Breaking: the guard never answers yes; its decisions are `defer`, `advise`, `ask` and
   `deny`.** `defer` replaces both `pass` and `allow`, and means no objection: the host's
-  own permission flow decides the call. The envelope is `magus.guard/v1alpha2`,
+  own permission flow decides the call. The envelope is `safetyscissors.verdict/v1alpha1`,
   `magus shell` prints `defer` where it printed `pass`, and the hook templates are
   version 37. Claude Code, Codex and OpenCode glue write no permission decision for a
   defer, and Cursor's glue answers it with Cursor's `ask`, never `allow`. On Codex a

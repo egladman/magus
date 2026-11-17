@@ -65,8 +65,9 @@ func FoldAgentEvents(ctx context.Context, dir string) (Fold, error) {
 // the files it folded changed. A kind [ValidFileID] refuses is an [*InvalidIDError],
 // since the kind names the cache file.
 //
-// A loaded event holding a retired guard decision is a [*RetiredDecisionError], whatever
-// kind is folded.
+// A line stamped with the group session records had before the module took them is a
+// [*RetiredGroupError], and a loaded event holding a retired guard decision is a
+// [*RetiredDecisionError], whatever kind is folded.
 //
 // It reads only the invocation files that changed since the last call for that kind. The
 // fold is cached under dir, keyed by each file's name, size, modification time and inode,
@@ -113,9 +114,12 @@ func FoldKind(ctx context.Context, dir, kind string) (Fold, error) {
 		entry, ok := prev.Files[e.Name()]
 		if !ok || !entry.sameFile(fi) {
 			path := filepath.Join(dir, e.Name())
-			records, skipped, legacy, vanished := readFile(path)
+			records, skipped, legacy, retired, vanished := readFile(path)
 			if vanished {
 				continue
+			}
+			if retired != "" {
+				return Fold{}, &RetiredGroupError{Path: path, Version: retired}
 			}
 			if err := refuseRetiredDecision(path, records); err != nil {
 				return Fold{}, err

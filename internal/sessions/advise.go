@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
@@ -119,18 +120,18 @@ func (a Directive) Open() bool { return a.RetractedMs == 0 }
 
 // DirectiveStore is the advisories store of one repository.
 type DirectiveStore struct {
-	lines codec.JSONL[directiveEntry]
+	lines file.JSONL[directiveEntry]
 }
 
 const directiveFile = "advisories.jsonl"
 
 // newDirectiveStore is the store in dir. It touches nothing until used.
 func newDirectiveStore(dir string) DirectiveStore {
-	return DirectiveStore{lines: codec.JSONL[directiveEntry]{
+	return DirectiveStore{lines: file.JSONL[directiveEntry]{JSONL: codec.JSONL[directiveEntry]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(dir, directiveFile),
 		Key:  directiveEntry.key,
-	}}
+	}}}
 }
 
 // OpenDirectiveStore is the store of the repository at root, in

@@ -838,7 +838,7 @@ nothing was judged, so the call is blocked rather than cleared.
 The guard never answers yes. A defer is no objection: the shipped glue writes no
 permission decision for it, so the host's own permission flow decides the call.
 Cursor, which must answer every gating event, gets its own `ask`. The envelope is
-`magus.guard/v1alpha2`; `pass` and `allow` are retired, and a template that meets
+`safetyscissors.verdict/v1alpha1`; `pass` and `allow` are retired, and a template that meets
 `defer` before it is re-installed refuses the call as an unknown decision.
 
 A fourth decision, `ask`, is the [human in the loop](../../../design/principles/human-in-the-loop.md)

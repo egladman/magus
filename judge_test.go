@@ -414,11 +414,21 @@ func (s *judgeStepSuite) TestAnInertSpecPasses() {
 
 func (s *judgeStepSuite) TestAWrongAPIVersionIsAnError() {
 	step := s.step("plan", "todo", nil)
-	step.APIVersion = "magus.step/v9"
+	step.APIVersion = "safetyscissors.step/v9"
 
 	_, err := s.open().Judge(s.T().Context(), step)
 
-	s.ErrorContains(err, "api_version")
+	s.ErrorContains(err, "safetyscissors.step/v9")
+}
+
+func (s *judgeStepSuite) TestTheRetiredStepGroupIsRefusedWithItsFix() {
+	step := s.step("plan", "todo", nil)
+	step.APIVersion = "magus.step/v1alpha1"
+
+	_, err := s.open().Judge(s.T().Context(), step)
+
+	s.ErrorContains(err, "record is magus.step/v1alpha1")
+	s.ErrorContains(err, "send api_version safetyscissors.step/v1alpha1")
 }
 
 func (s *judgeStepSuite) TestAnEmptyDirIsAnErrorWhenTheSpecReadsACommand() {
