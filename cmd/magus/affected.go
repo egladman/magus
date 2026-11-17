@@ -16,6 +16,8 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	internalci "github.com/egladman/magus/internal/ci"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
@@ -38,7 +40,6 @@ import (
 type failedResults struct{ internalci.FailedResults }
 
 func (c *failedResults) list() []journal.Event { return c.List() }
-
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
@@ -93,7 +94,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	target := canonicalTarget(parsed.Name) // expand short aliases at the CLI edge, mirroring `magus run`
 
 	// Split on "--" before flag parsing so passthrough args aren't consumed by flag.
-	flagArgs, extraArgs := splitOnDashDash(rest)
+	flagArgs, extraArgs := commands.SplitOnDashDash(rest)
 
 	var af *flaggen.AffectedFlags
 	_, err := commandParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
@@ -202,7 +203,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		listTargets("affected:ls", targets, source)
+		describe.ListTargets("affected:ls", targets, source)
 		// The listing is one path per line whatever -o says, so the breadcrumbs print
 		// only for the text reader; a caller parsing names must not find a next: block.
 		// The plan breadcrumb names ci, not ls: ls is the listing verb and has no shard
@@ -838,18 +839,18 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 func parseExplainArgs(args []string) (project, base string, ok bool) {
 	for i, a := range args {
 		switch {
-		case isFlagNamed(a, "explain"):
+		case commands.IsFlagNamed(a, "explain"):
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				project = args[i+1]
 			}
 			ok = true
-		case parseFlagValue(a, "explain") != "":
-			project = parseFlagValue(a, "explain")
+		case commands.ParseFlagValue(a, "explain") != "":
+			project = commands.ParseFlagValue(a, "explain")
 			ok = true
-		case isFlagNamed(a, "base") && i+1 < len(args):
+		case commands.IsFlagNamed(a, "base") && i+1 < len(args):
 			base = args[i+1]
-		case parseFlagValue(a, "base") != "":
-			base = parseFlagValue(a, "base")
+		case commands.ParseFlagValue(a, "base") != "":
+			base = commands.ParseFlagValue(a, "base")
 		}
 	}
 	return project, base, ok

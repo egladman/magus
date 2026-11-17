@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/difftui"
@@ -31,7 +32,7 @@ import (
 // not an omission: `edit` opens $EDITOR and gets out of the way.
 func notesCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		notesUsage()
+		commands.WriteNotesUsage(os.Stderr)
 		return nil
 	}
 	switch args[0] {
@@ -53,27 +54,6 @@ func notesCommand(ctx context.Context, root string, args []string) error {
 	default:
 		return exit.Usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, or capture)", args[0])
 	}
-}
-
-func notesUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus notes <subcommand> [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Read the workspace's human-authored notes: prose a person wrote about the code,")
-	fmt.Fprintln(os.Stderr, "anchored to graph entities but derived from none of them. Notes are committed to")
-	fmt.Fprintln(os.Stderr, "the repository, so git attributes them and review sees them.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  ls       show notes and any repair warnings")
-	fmt.Fprintln(os.Stderr, "  get      show one note")
-	fmt.Fprintln(os.Stderr, "  edit     open one note in $VISUAL or $EDITOR (creates it if absent)")
-	fmt.Fprintln(os.Stderr, "  verify   check malformed notes and anchors that no longer resolve")
-	fmt.Fprintln(os.Stderr, "  capture  keep the review conversation, yours and the host's, as a note")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Set knowledge.notes.shared (in the repo, your team gets it) or knowledge.notes.private")
-	fmt.Fprintln(os.Stderr, "(anywhere, this machine only) in magus.yaml to enable a store. There is no `put`:")
-	fmt.Fprintln(os.Stderr, "notes are written by people, in an editor, and committed under their own name.")
-	fmt.Fprintln(os.Stderr, "`capture` is not an exception to that - it takes a conversation that already")
-	fmt.Fprintln(os.Stderr, "happened and quotes it, and the note it writes says so in its own frontmatter.")
 }
 
 // notesScopeFlags binds the pair of filters every subcommand accepts.
@@ -690,4 +670,3 @@ func reviewServerGet(ctx context.Context, path string) ([]byte, bool) {
 	raw, err := io.ReadAll(resp.Body)
 	return raw, err == nil
 }
-

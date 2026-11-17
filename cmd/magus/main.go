@@ -39,7 +39,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -50,6 +49,7 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -57,16 +57,17 @@ import (
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
@@ -75,21 +76,13 @@ func main() {
 	// First of all: a sandboxed child starts as this binary re-executed as its
 	// launcher, which must confine itself and exec the child before anything else runs.
 	magus.MaybeLaunchSandbox()
-	relaxStartupGC(startupGCWindow)
+	gcpolicy.RelaxStartup(gcpolicy.StartupWindow)
 	// Here and not in runCLI: testscript drives runCLI in process, where the width is the
 	// test binary's own.
-	if schedulesSteps(os.Args[1:]) {
+	if commands.SchedulesSteps(os.Args[1:], globalValueFlags()) {
 		spawn.RestoreGoWidth()
 	}
 	os.Exit(runCLI())
-}
-
-// schedulesSteps reports whether args name a verb that seats its own steps, and so takes
-// claims of its own rather than running inside the parent step's seat. `ci` is a target
-// these verbs reach, not a verb.
-func schedulesSteps(args []string) bool {
-	sub, _ := peekSub(expandVerbosityArgs(args))
-	return sub == "run" || sub == "affected"
 }
 
 // runCLI is the CLI entry point as a function returning an exit code, so both main
@@ -97,7 +90,7 @@ func schedulesSteps(args []string) bool {
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
 	// First: every worker and command below reads code origins off this registry.
-	if err := registerDiagnosticCatalogs(); err != nil {
+	if err := commands.RegisterDiagnosticCatalogs(); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return 1
 	}
@@ -117,7 +110,7 @@ func runCLI() int {
 	// bootstrap_exec.go.
 	maybeBootstrapExec(os.Args)
 
-	args := expandVerbosityArgs(os.Args[1:])
+	args := quiet.ExpandVerbosityArgs(os.Args[1:])
 
 	// After the bootstrap exec, so the workspace's own binary judges the environment: a
 	// variable a newer ./magus reads is unknown to the older PATH binary that found it.
@@ -201,7 +194,7 @@ func runCLI() int {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
 		pipe.StageFromContext(rootCtx).Linger()
-		pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
+		pipe.RecordProcessExit(commands.ExtractRootFlag(args), globalCfg, code, interrupted)
 		return code
 	}
 
@@ -232,14 +225,14 @@ func runCLI() int {
 	// Only a stage that succeeded settles: one that failed reports its own failure,
 	// never an upstream's.
 	if code == 0 {
-		if err := pipe.SettleProcess(dispatchCtx, extractRootFlag(args), globalCfg); err != nil {
+		if err := pipe.SettleProcess(dispatchCtx, commands.ExtractRootFlag(args), globalCfg); err != nil {
 			dispatchErr, code = err, mapExitCode(err)
 		}
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
 	pipe.StageFromContext(rootCtx).Linger()
-	pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
+	pipe.RecordProcessExit(commands.ExtractRootFlag(args), globalCfg, code, interrupted)
 	return code
 }
 
@@ -276,108 +269,13 @@ type startupResult struct {
 	cleanup func()
 }
 
-// dispatchProfile describes which pre-dispatch phases a subcommand needs.
-type dispatchProfile struct {
-	needsConfig    bool // load magus.yaml + env vars
-	needsForward   bool // attempt forward to a running server
-	needsWorkspace bool // call loadMagus + start per-process proc server
-	// spawnsWork marks the invocations that spend host capacity: target runs, and the
-	// few non-run paths that load a workspace the same way (session --brief). Only these
-	// start the broker and claim the machine budget: `magus ls` costs the same however
-	// loaded the machine is, and starting a broker for one would make every read command
-	// spawn a background process.
-	spawnsWork bool
-	// hostOnly marks a command whose stderr only a host's glue reads, never a person, so
-	// its display is quiet (see quietDisplay).
-	hostOnly bool
-}
-
-// isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
-// text: no target given, or the first token is a help flag. It mirrors the guards at
-// the top of runTarget and affected exactly, so the forward decision agrees with what
-// those handlers do locally.
-func isUsageOnlyInvocation(subArgs []string) bool {
-	if len(subArgs) == 0 {
-		return true
-	}
-	switch subArgs[0] {
-	case "-h", "--help", "help":
-		return true
-	}
-	return false
-}
-
-// wantsUsage reports whether a subcommand's args ask for its help text.
-//
-// Distinct from isUsageOnlyInvocation, which additionally treats NO arguments as a usage
-// request. That is right for run and affected, whose first positional is required, and wrong
-// for everything else: bare `magus diff` is a real invocation.
-//
-// Scanning stops at "--", past which the tokens belong to a forwarded tool: a run that
-// forwards `-h` after the marker is asking the test binary for help, not magus.
-func wantsUsage(subArgs []string) bool {
-	for i, a := range subArgs {
-		if a == "--" {
-			return false
-		}
-		// -h and --help are unambiguous: no subcommand takes either as a positional, so
-		// they mean help wherever they sit. `magus diff --impact -h` is the case worth
-		// catching.
-		if a == "-h" || a == "--help" {
-			return true
-		}
-		// The bare word is only a help request in the FIRST position. Elsewhere it is
-		// ordinary data: `magus notes get help` shows a note named help. Treating it as
-		// usage would skip the workspace preload for a real invocation.
-		if a == "help" && i == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// hasDetachFlag reports whether argv carries --detach, in every spelling the flag
-// package accepts. Scanning stops at "--", past which the tokens belong to a forwarded
-// tool rather than to magus.
-func hasDetachFlag(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		if !strings.HasPrefix(a, "-") {
-			continue
-		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == flaggen.FlagRunDetach {
-			return true
-		}
-	}
-	return false
-}
-
-// hasBriefFlag reports whether a session invocation selected --brief. The profile
-// decision runs before commandParse, so the flag is peeked the same way --detach is.
-func hasBriefFlag(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		if !strings.HasPrefix(a, "-") {
-			continue
-		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == "brief" {
-			return true
-		}
-	}
-	return false
-}
-
 // isForensicAffected reports whether an `affected` invocation selects one of the forensic
 // modes affectedUsage lists that reason about the set without executing a target:
 // --explain, --plan, --impact. --bisect is excluded deliberately: it runs the target once
 // per candidate commit, so it wants the shared pool a forward buys.
 //
 // It reuses affected()'s own routing predicates rather than restating them, so the forward
-// decision agrees with what the handler does locally; the property isUsageOnlyInvocation
+// decision agrees with what the handler does locally; the property commands.IsUsageOnlyInvocation
 // exists for one layer up. That includes NOT stopping at "--": affected() routes on a
 // bare scan too, and a guard here that disagreed would forward an invocation the handler
 // then answers as a forensic mode.
@@ -389,7 +287,7 @@ func isForensicAffected(subArgs []string) bool {
 }
 
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
-func resolveProfile(sub string, subArgs []string) dispatchProfile {
+func resolveProfile(sub string, subArgs []string) commands.DispatchProfile {
 	// Asking a command what it does must not do anything. Every subcommand's own parser
 	// already prints usage and returns before it loads a workspace, but the preload here
 	// runs FIRST, so `magus diff -h` opened the workspace, and opening one refreshes the
@@ -401,10 +299,10 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	// and reading magus.yaml writes nothing.
 	if sub == "self" {
 		// self update fixes a stale binary that cannot decode magus.yaml.
-		return dispatchProfile{}
+		return commands.DispatchProfile{}
 	}
-	if wantsUsage(subArgs) {
-		return dispatchProfile{needsConfig: true}
+	if commands.WantsUsage(subArgs) {
+		return commands.DispatchProfile{NeedsConfig: true}
 	}
 	switch sub {
 	case "help", "version":
@@ -412,7 +310,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// binary, the other a stamp. version dials the server for the server half, but
 		// must never FORWARD: a forwarded version would report the server's binary as
 		// the client's, which is exactly the difference it exists to show.
-		return dispatchProfile{}
+		return commands.DispatchProfile{}
 	case "buzz":
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
 		// it needs no workspace RESOLUTION and is never forwarded to a server. It does
@@ -423,17 +321,17 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// came up with no trust set and the load failed with a message naming the very
 		// setting the environment had set. That was invisible locally, where the trust
 		// set is not what the yaml is consulted for, and fatal in CI.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
 		// workspace resolution and must not forward to a server (the install is
 		// local to the caller's directory).
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "queue":
 		// Never forwarded, never preloaded. The queue works in the caller's checkout, a
 		// server serving another workspace must not act on it, and the verbs that need a
 		// workspace open it themselves, on the base's declarations.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "vcs":
 		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
 		// working tree, so a server serving another workspace must not adopt one.
@@ -445,7 +343,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// write each verb defers: merge-driver would dirty the tree against what git
 		// staged and stop `git rebase --continue`, resolve would splice a section between
 		// conflict markers. Each verb opens what it needs under its own guard.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "session":
 		// The whole family reads or writes a file store keyed by repository identity:
 		// it needs the root PATH but never the magusfile, and it must stay usable when
@@ -461,21 +359,21 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// step declares with memory_mb. Starting the broker and claiming capacity keeps
 		// a stack of sessionStart hooks from outspending the machine the way a stack of
 		// runs cannot. The listing stays config-only.
-		if hasBriefFlag(subArgs) {
-			return dispatchProfile{needsConfig: true, spawnsWork: true}
+		if commands.HasBriefFlag(subArgs) {
+			return commands.DispatchProfile{NeedsConfig: true, SpawnsWork: true}
 		}
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "shell":
 		// The guard an agent host calls before every tool call. It reads the root magusfile's
 		// guard rules itself (loadGuardRules), and the few rules that need the workspace open
 		// it lazily, so a preload would put a full workspace load in front of every tool
 		// call for nothing. Never forwarded: a verdict is not adoptable work.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "events":
 		// Reads the run-log directory; the magusfile never. Loading the workspace would
 		// refresh the merge-driver registration, and a subscriber an editor spawns must
 		// not write .gitattributes.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "job":
 		// Never forwarded, never preloaded. The job store answers most of what a job verb
 		// asks, the server adopts none of them, and the verbs that need the workspace (a
@@ -486,20 +384,20 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// VCS hook, where it promises to be a silent no-op when no server answers, and a
 		// checkout carrying one unparsable local spell would log the load error on every
 		// hook.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "ls":
 		// `ls jobs` reads the job store alone; the other nouns list the workspace.
 		if i := slices.IndexFunc(subArgs, func(a string) bool { return slices.Contains(lsNouns, a) }); i >= 0 && strings.HasPrefix(subArgs[i], "job") {
-			return dispatchProfile{needsConfig: true}
+			return commands.DispatchProfile{NeedsConfig: true}
 		}
-		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true, NeedsWorkspace: true}
 	case "describe":
 		// As `job`: `describe job` opens the workspace and the knowledge graph itself, only
 		// for the sections that read them.
 		if len(subArgs) > 0 && describeAlias[subArgs[0]] == "job" {
-			return dispatchProfile{needsConfig: true}
+			return commands.DispatchProfile{NeedsConfig: true}
 		}
-		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true, NeedsWorkspace: true}
 	case "server":
 		// server subcommands manage the server directly and must never forward or host
 		// their own per-process proc server. start IS the server (special-cased in startup);
@@ -510,15 +408,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// no-op stop. The rotate-* job workers that need a workspace load one themselves.
 		if len(subArgs) > 0 && subArgs[0] == hint.ServerStatus.Leaf() {
 			// It reads a running parent's pool. Forwarding starts no server.
-			return dispatchProfile{needsConfig: true, needsForward: true}
+			return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true}
 		}
 		// The broker's config tier is only for concurrency_profile.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "mcp":
 		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
 		// that adopted the call would serve its own. The preload opens the workspace the
 		// host launched it in and hosts the proc server the tools' runs share.
-		return dispatchProfile{needsConfig: true, needsWorkspace: true, hostOnly: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsWorkspace: true, HostOnly: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -526,15 +424,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// usage path inside the server: usage lands on the server's stderr (invisible
 		// here) and the client is left with a bare, silent non-zero exit. Skip both the
 		// forward and the workspace load so the local dispatch prints usage directly.
-		if isUsageOnlyInvocation(subArgs) {
-			return dispatchProfile{needsConfig: true}
+		if commands.IsUsageOnlyInvocation(subArgs) {
+			return commands.DispatchProfile{NeedsConfig: true}
 		}
 		// --detach starts a copy of this invocation in the background and returns, so the
 		// work, the workspace load and the broker all belong to that copy. Forwarded to a
 		// server, the pid and log path it prints would land in the server's log instead
 		// of in front of the person who asked.
-		if hasDetachFlag(subArgs) {
-			return dispatchProfile{needsConfig: true}
+		if commands.HasDetachFlag(subArgs) {
+			return commands.DispatchProfile{NeedsConfig: true}
 		}
 		// A forensic mode runs nothing, so there is no pool to share, and its report IS
 		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
@@ -543,32 +441,32 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// A caller capturing the child reads an empty stdout at exit 0.
 		// magus\change().impact is one: the usage bug above, a layer down.
 		if sub == "affected" && isForensicAffected(subArgs) {
-			return dispatchProfile{needsConfig: true}
+			return commands.DispatchProfile{NeedsConfig: true}
 		}
 		// The saved plan is on THIS process's stdin, which a forward does not carry. Under
 		// --dry-run it only renders the plan, so it loads nothing.
 		if sub == "run" && runReadsPlan(subArgs) {
 			if globalCfg.DryRun {
-				return dispatchProfile{needsConfig: true}
+				return commands.DispatchProfile{NeedsConfig: true}
 			}
-			return dispatchProfile{needsConfig: true, needsWorkspace: true, spawnsWork: true}
+			return commands.DispatchProfile{NeedsConfig: true, NeedsWorkspace: true, SpawnsWork: true}
 		}
-		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true, spawnsWork: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true, NeedsWorkspace: true, SpawnsWork: true}
 	case "config":
 		// config history/cache need the workspace; view/set/help do not.
 		if len(subArgs) > 0 {
 			switch subArgs[0] {
 			case "view", "set", "help", "-h", "--help", "":
-				return dispatchProfile{needsConfig: true, needsForward: true}
+				return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true}
 			}
 		}
-		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true, NeedsWorkspace: true}
 	case "query", "explain", "path", "refs":
 		// A graph read asks a running server first and opens the workspace itself only
 		// when none answers, so a preload and a per-process pool would be paid for a read
 		// that spawns no child, and a forward would only be refused: the server adopts run
 		// and affected alone.
-		return dispatchProfile{needsConfig: true}
+		return commands.DispatchProfile{NeedsConfig: true}
 	case "graph":
 		// stats and export are graph reads too: the stored graph answers them, and the
 		// workspace opens lazily only if that graph is stale (see inspectForRead), so a
@@ -576,11 +474,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// build runs the symbol indexers, which need the pool the preload hosts, and the
 		// other subcommands keep the default with it.
 		if len(subArgs) > 0 && (subArgs[0] == hint.GraphStats.Leaf() || subArgs[0] == hint.GraphExport.Leaf()) {
-			return dispatchProfile{needsConfig: true}
+			return commands.DispatchProfile{NeedsConfig: true}
 		}
-		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true, NeedsWorkspace: true}
 	default:
-		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+		return commands.DispatchProfile{NeedsConfig: true, NeedsForward: true, NeedsWorkspace: true}
 	}
 }
 
@@ -594,7 +492,7 @@ func finalizeConfig() error {
 		return err
 	}
 	// -o jsonl has to decide the CACHE logger's format here, before dispatch: a
-	// command with needsWorkspace preloads the workspace (loadMagus, a sync.Once
+	// command with NeedsWorkspace preloads the workspace (loadMagus, a sync.Once
 	// singleton) ahead of the verb's own handler, which builds the cache from
 	// globalCfg.Log.Format at that moment. Setting it inside runTarget/runAffected
 	// was too late -- the preload had already won the race and built a pretty
@@ -629,7 +527,7 @@ func bindGlobalsAfterSubcommand(subArgs []string) {
 	fs.SetOutput(io.Discard)
 	flaggen.BindFlags(fs, &globalCfg)
 	takesValue := map[string]bool{}
-	fs.VisitAll(func(f *flag.Flag) { takesValue[f.Name] = !flagIsBool(f) })
+	fs.VisitAll(func(f *flag.Flag) { takesValue[f.Name] = !commands.FlagIsBool(f) })
 
 	var keep []string
 	for i := 0; i < len(subArgs); i++ {
@@ -656,70 +554,18 @@ func bindGlobalsAfterSubcommand(subArgs []string) {
 	_ = fs.Parse(keep)
 }
 
-// globalValueFlags is the set of "-name"/"--name" tokens for every value-taking
-// global flag, derived once from the real bindings (the config-generated
-// flaggen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
-// never drift from them. Two bootstrap flags are added explicitly: root and config
-// precede config loading, so they are not part of the generated set. Deriving it
-// closes the latent gap where a value global flag missing from the old hand-kept
-// list made `magus --cache-dir x run` misread x as the subcommand.
+// globalValueFlags is the set of value-taking global flags, derived from the bindings
+// this package makes (see commands.GlobalValueFlags).
 var globalValueFlags = sync.OnceValue(func() map[string]bool {
-	fs := flag.NewFlagSet("global", flag.ContinueOnError)
-	flaggen.BindFlags(fs, &globalCfg)
-	bindDisplayFlags(fs)
-	// Both short forms belong here beside their long names: peekSub reads this set to
-	// know a token consumes the next one, and a missing -C made `magus -C /ws run`
-	// misread the path as the subcommand.
-	out := map[string]bool{
-		"-root": true, "--root": true, "-C": true, "--C": true,
-		"-config": true, "--config": true, "-c": true, "--c": true,
-	}
-	fs.VisitAll(func(f *flag.Flag) {
-		if !flagIsBool(f) {
-			out["-"+f.Name] = true
-			out["--"+f.Name] = true
-		}
+	return commands.GlobalValueFlags(func(fs *flag.FlagSet) {
+		flaggen.BindFlags(fs, &globalCfg)
+		bindDisplayFlags(fs)
 	})
-	return out
 })
 
-// peekSub returns the subcommand and trailing args, scanning past global flags.
-// Intentionally approximate: disagreement with fs.Parse costs extra work, not correctness.
+// peekSub is commands.PeekSub over the global flags this package binds.
 func peekSub(args []string) (sub string, subArgs []string) {
-	i := 0
-	for i < len(args) {
-		a := args[i]
-		if len(a) == 0 {
-			i++
-			continue
-		}
-		// --flag=value form: consume the whole token.
-		if a[0] == '-' && strings.ContainsRune(a, '=') {
-			i++
-			continue
-		}
-		// -version/--version is a subcommand in a flag's clothing: the stdlib flag
-		// package special-cases -h/-help this way already (fs.Parse itself returns
-		// ErrHelp for those), but has nothing built in for version, so without this
-		// `magus --version` fell through to the generic dash-skip below, peekSub
-		// returned no subcommand at all, and the later fs.Parse died on an
-		// unregistered flag ("flag parse failed") instead of printing the version.
-		if a == "-version" || a == "--version" {
-			return "version", args[i+1:]
-		}
-		// --flag value form: consume both tokens.
-		if globalValueFlags()[a] && i+1 < len(args) {
-			i += 2
-			continue
-		}
-		// Any other dash-prefixed token is a boolean/counted flag (-v, -vv).
-		if a[0] == '-' {
-			i++
-			continue
-		}
-		return a, args[i+1:]
-	}
-	return "", nil
+	return commands.PeekSub(args, globalValueFlags())
 }
 
 // startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
@@ -731,11 +577,11 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	peekedSub, peekedSubArgs := peekSub(args)
 	profile := resolveProfile(peekedSub, peekedSubArgs)
 	// Before the first applyDisplay below, so the workspace preload already logs under it.
-	if profile.hostOnly {
+	if profile.HostOnly {
 		quietForced.Store(true)
 	}
 
-	if !profile.needsConfig {
+	if !profile.NeedsConfig {
 		// This branch skips the main flag parse entirely, so anything written BEFORE
 		// the subcommand was silently dropped: `magus -o json version` printed text
 		// and exited 0, while `magus version -o json` worked. The top-level usage
@@ -755,7 +601,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	}
 
 	stopEarlyRoot := trace.Phase("startup.find_root_early")
-	earlyRoot, _ := workspace.FindRoot(extractRootFlag(args))
+	earlyRoot, _ := workspace.FindRoot(commands.ExtractRootFlag(args))
 	stopEarlyRoot()
 
 	stopCfgLoad := trace.Phase("startup.config_load")
@@ -802,17 +648,17 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	// The shared-server discovery below runs before the main flag parse, so peek the
 	// --server-enabled flag early (like --root/--quiet) to let it override yaml/env for
 	// this invocation. yaml/env already land via LoadWithRoot + ApplyEnv above.
-	if v, set := extractServerEnabledFlag(args); set {
+	if v, set := commands.ExtractServerEnabledFlag(args); set {
 		globalCfg.Server.Enabled = v
 	}
 	// Hints default on when Hints.Enabled is nil.
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
 	interactive.SetHintsEnabled(hintsOn)
 
-	global.quiet = extractQuietFlag(args)
-	global.silent = extractSilentFlag(args)
-	if v := extractVerbosityCount(args); v > 0 {
-		global.verbose = verbosity(v)
+	global.quiet = commands.ExtractQuietFlag(args)
+	global.silent = commands.ExtractSilentFlag(args)
+	if v := commands.ExtractVerbosityCount(args); v > 0 {
+		global.verbose = quiet.Verbosity(v)
 	}
 	applyDisplay()
 
@@ -826,7 +672,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	// It gates leaf behavior below: a nested process suppresses its own server
 	// only while it has a live parent to forward to.
 	parentLive := false
-	if profile.needsForward {
+	if profile.NeedsForward {
 		stopSock := trace.Phase("startup.socket_lookup")
 		sock := os.Getenv(proc.SocketEnv)
 		// topLevel: no parent exported a socket, so this process is the head of its own
@@ -843,7 +689,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// never adopts it and runs self-contained. It does NOT disable recursion: a child
 		// with MAGUS_PROC_SOCKET already set still forwards to its parent, and a
 		// top-level still stands up its own per-process pool for its children.
-		if topLevel && !profile.spawnsWork && globalCfg.Server.Enabled {
+		if topLevel && !profile.SpawnsWork && globalCfg.Server.Enabled {
 			if s, ok := proc.LookupServerSocket(rootCtx); ok {
 				sock = s
 				// Propagate to child processes spawned by this invocation.
@@ -855,7 +701,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		if sock != "" {
 			stopFwd := trace.Phase("startup.forward")
 			// Flags are unparsed, so this is magus.yaml and the environment.
-			// A --sandbox flag rides in args (see adoptedSandbox).
+			// A --sandbox flag rides in args (see sandbox.Adoption).
 			fwdCtx := rootCtx
 			if globalCfg.Sandbox.Mode.Enabled() {
 				fwdCtx = proc.WithSandboxFloor(rootCtx, globalCfg.Sandbox.Mode)
@@ -917,7 +763,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		slog.ErrorContext(rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return rootCtx, startupResult{cleanup: cleanup}, exit.Usage
 	}
-	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
+	if err := errors.Join(finalizeConfig(), sandbox.RefuseInheritedWeakened(globalCfg.Sandbox.Mode, spawn.CurrentLevel() != 0, types.SandboxMode(os.Getenv(spawn.SandboxEnvVar)))); err != nil {
 		stopFlags()
 		if code, answered := refuseUnjudgedHook(rootCtx, earlyRoot, peekedSub, peekedSubArgs, fmt.Errorf("invalid configuration from flags: %w", err)); answered {
 			return rootCtx, startupResult{cleanup: cleanup}, code
@@ -966,7 +812,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	// Work that claims host capacity needs the broker before it starts. Only now,
 	// after the flag parse, so --broker off
 	// is honored and -o decides the notice's shape.
-	if profile.spawnsWork && globalCfg.Broker.Resolved() != types.BrokerOff {
+	if profile.SpawnsWork && globalCfg.Broker.Resolved() != types.BrokerOff {
 		stopBroker := trace.Phase("startup.broker")
 		pid := ensureBroker(rootCtx)
 		stopBroker()
@@ -989,7 +835,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		startServer(rootCtx, cfg, rc)
-	case !profile.needsWorkspace:
+	case !profile.NeedsWorkspace:
 		// skip loadMagus + proc server for subcommands that need no workspace
 	default:
 		concurrency := cfg.Concurrency
@@ -1079,29 +925,7 @@ func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
 	}
 }
 
-func usage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
-	group := ""
-	for _, c := range commands.Root.Spec.Children {
-		if c.Group != group {
-			group = c.Group
-			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
-		}
-		fmt.Fprintf(os.Stderr, "  %-14s %s\n", c.Name, c.Short)
-	}
-	fmt.Fprintf(os.Stderr, "  %-14s %s\n", commands.Help.Name, commands.Help.Short)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
-	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
-	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
-	printRootFlags(os.Stderr)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Run `magus <subcommand> -h` for subcommand-specific flags.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Config file: magus.yaml (CWD or $XDG_CONFIG_HOME/magus/)")
-	fmt.Fprintln(os.Stderr, "Env vars: MAGUS_* (see magus help for the full list).")
-}
+func usage() { commands.WriteRootUsage(os.Stderr, printRootFlags) }
 
 // snapshotGlobals captures globalCfg and global, returning a restore func that puts them
 // back. runTarget/affected write flags straight into these package globals via commandParse
@@ -1157,7 +981,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 		ignoredCfg    string
 		ignoredOutput string
 		ignoredConc   int
-		ignoredV      verbosity
+		ignoredV      quiet.Verbosity
 		ignoredQ      bool
 	)
 	// nodisplayflags: this FlagSet exists to ABSORB and discard the global flags
@@ -1177,7 +1001,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 	fs.BoolVar(&ignoredQ, "quiet", false, "")
 	fs.BoolVar(&ignoredQ, "q", false, "")
 	fs.SetOutput(io.Discard)
-	_ = fs.Parse(expandVerbosityArgs(args))
+	_ = fs.Parse(quiet.ExpandVerbosityArgs(args))
 	rest := fs.Args()
 	if len(rest) == 0 {
 		return fmt.Errorf("no subcommand after global flags in forwarded args")
@@ -1186,114 +1010,18 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 	if sub != "run" && sub != "affected" {
 		return fmt.Errorf("%w: %q (only run, affected)", proc.ErrNotAdoptable, sub)
 	}
-	if err := adoptedSandbox(ctx, root, subArgs); err != nil {
+	adoption := sandbox.Adoption{
+		Floor:     proc.SandboxFloorFromContext(ctx),
+		Workspace: func() (types.SandboxMode, error) { return workspaceSandboxMode(ctx, root) },
+		Declined:  proc.ErrNotAdoptable,
+	}
+	if err := adoption.Check(subArgs); err != nil {
 		return err
 	}
 	if sub == "run" {
 		return runTarget(ctx, root, rc, subArgs)
 	}
 	return affected(ctx, root, rc, subArgs)
-}
-
-// adoptedSandbox holds an adopted run to the sandbox mode its client runs under, or a
-// stronger one.
-//
-// The forwarded flags bind into this process's globalCfg, but the run is sandboxed by
-// the workspace this process already opened, so a client's --sandbox reached nothing in
-// either direction. A client asking for less than its floor or than this workspace's
-// mode is refused (MGS2010). A client whose floor this workspace does not meet is
-// declined (ErrNotAdoptable), so it runs the work itself under its own mode; executing
-// it here would run a confined client's work under less.
-func adoptedSandbox(ctx context.Context, root string, subArgs []string) error {
-	floor := proc.SandboxFloorFromContext(ctx)
-	flag, set := sandboxFlag(subArgs)
-	if set && flag.WeakerThan(floor) {
-		return errorSandboxWeakened("a forwarded run", flag, floor)
-	}
-	want := floor
-	if set && want.WeakerThan(flag) {
-		want = flag
-	}
-	if !want.Enabled() && !set {
-		return nil
-	}
-	have, err := workspaceSandboxMode(ctx, root)
-	if err != nil {
-		return err
-	}
-	if set && flag.WeakerThan(have) {
-		return errorSandboxWeakened("a forwarded run", flag, have)
-	}
-	if have.WeakerThan(want) {
-		return fmt.Errorf("%w: the client runs under sandbox mode %s and this workspace's server runs it under %s",
-			proc.ErrNotAdoptable, want, have)
-	}
-	return nil
-}
-
-// workspaceSandboxMode is the mode a run of the workspace at root in this process runs
-// under. The sandbox is applied as the run itself is about to, so a mode this host
-// cannot honor (required without landlock) is the error the run would have met.
-func workspaceSandboxMode(ctx context.Context, root string) (types.SandboxMode, error) {
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return "", err
-	}
-	if _, err := m.ApplySandbox(ctx); err != nil {
-		return "", err
-	}
-	return m.SandboxMode(), nil
-}
-
-// sandboxFlag reads --sandbox=<mode> (or --sandbox <mode>) from a subcommand's args, the
-// way the flag package would, the last one winning. It stops at "--", past which args
-// belong to a tool. A value that names no mode is not a setting: the subcommand's own
-// parse rejects it.
-func sandboxFlag(args []string) (mode types.SandboxMode, set bool) {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if a == "--" {
-			break
-		}
-		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		if !strings.HasPrefix(a, "-") || name != "sandbox" {
-			continue
-		}
-		if !hasValue {
-			if i+1 >= len(args) {
-				continue
-			}
-			i++
-			value = args[i]
-		}
-		var m types.SandboxMode
-		if err := m.UnmarshalText([]byte(value)); err == nil && value != "" {
-			mode, set = m, true
-		}
-	}
-	return mode, set
-}
-
-// refuseInheritedSandboxWeakened refuses a nested magus that would run under a weaker
-// sandbox mode than the run that started it. The parent hands every child its mode
-// (spawn.SandboxEnvVar, the setting's own variable), and only a flag can lower it, so this
-// is the flag's check.
-func refuseInheritedSandboxWeakened(mode types.SandboxMode) error {
-	if spawn.CurrentLevel() == 0 {
-		return nil
-	}
-	// An unknown value never reaches here: loading the config already refused it.
-	inherited := types.SandboxMode(os.Getenv(spawn.SandboxEnvVar))
-	if !inherited.Valid() || !mode.WeakerThan(inherited) {
-		return nil
-	}
-	return errorSandboxWeakened("this magus, started inside a sandboxed run,", mode, inherited)
-}
-
-// errorSandboxWeakened is the MGS2010 refusal of who asking for mode under floor.
-func errorSandboxWeakened(who string, mode, floor types.SandboxMode) error {
-	return types.DiagnosticErrorf(types.SandboxWeakened,
-		"%s asked for sandbox mode %s, weaker than the %s it runs under; a nested or forwarded run may only strengthen the sandbox", who, mode, floor)
 }
 
 // dispatchJob routes a background job submitted through proc.SubmitJob. Unlike an adopted run
@@ -1304,35 +1032,10 @@ func errorSandboxWeakened(who string, mode, floor types.SandboxMode) error {
 // dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
 // as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
 func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
-	if !job.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
+	if !job.IsWorkerArgv(args) && !commands.IsDeclaredRun(ctx, args, declaredTargets(ctx)) {
 		return fmt.Errorf("%w: %q is not a registered job worker", proc.ErrNotAdoptable, strings.Join(args, " "))
 	}
 	return dispatchSub(ctx, root, rc, args[0], args[1:])
-}
-
-// isDeclaredRun is the second, deliberately narrow admission path into dispatchJob: a plain
-// `run <target> <project>` whose target the workspace's own magusfile declares for that project.
-// The review app submits these so a reader can run a project's tests against the code they
-// are looking at.
-//
-// It admits strictly less than a terminal's `magus run`: exactly three tokens, no flags, no
-// charms, no `spell::op` form, and a target name that has to appear in the generated target graph
-// rather than being taken from the caller. So the property dispatchJob exists to hold (a job RPC
-// can never name an arbitrary command) still holds by construction: the allowlist is the
-// magusfile, not the request.
-func isDeclaredRun(ctx context.Context, args []string) bool {
-	if len(args) != 3 || args[0] != "run" {
-		return false
-	}
-	target, project := args[1], args[2]
-	if strings.HasPrefix(target, "-") || strings.Contains(target, ":") {
-		return false
-	}
-	m, ok := magusFromContext(ctx)
-	if !ok {
-		return false
-	}
-	return slices.Contains(m.ProjectTargets(ctx, project), target)
 }
 
 // applyPreSubDisplayFlags binds the global display flags that appear BEFORE the
@@ -1373,112 +1076,33 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	return nil
 }
 
-// extractRootFlag peeks the workspace root before the main flag parse. -C is the
-// bound short form of --root and has to be read here too: skipping it loaded THIS
-// workspace's magus.yaml while the magusfile came from the one -C names. Matching
-// is exact and case-sensitive, so -c stays the short form of --config
-// (config.ExtractFlag owns that one).
-func extractRootFlag(args []string) string {
-	for i, a := range args {
-		if a == "--" {
-			return ""
-		}
-		switch {
-		case a == "-root" || a == "--root" || a == "-C" || a == "--C":
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		case strings.HasPrefix(a, "-root="):
-			return strings.TrimPrefix(a, "-root=")
-		case strings.HasPrefix(a, "--root="):
-			return strings.TrimPrefix(a, "--root=")
-		case strings.HasPrefix(a, "-C="):
-			return strings.TrimPrefix(a, "-C=")
-		case strings.HasPrefix(a, "--C="):
-			return strings.TrimPrefix(a, "--C=")
-		}
-	}
-	return ""
-}
-
-// extractQuietFlag peeks --quiet/--silent before the main flag parse, because
-// applyDisplay runs during early startup and decides progress suppression from
-// global.quiet. --silent counts here: it is documented as "like --quiet, but
-// ...", and reading only --quiet made -s byte-identical to no flag on a passing
-// run: the flag parse set global.silent long after the display was configured.
-func extractQuietFlag(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		switch a {
-		case "-q", "--quiet", "-quiet", "-s", "--silent", "-silent":
-			return true
-		}
-	}
-	return false
-}
-
-// extractSilentFlag peeks --silent for the same reason, so the bounded-dump and
-// notice-bubbling behavior is configured in the same early pass.
-func extractSilentFlag(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		switch a {
-		case "-s", "--silent", "-silent":
-			return true
-		}
-	}
-	return false
-}
-
-// extractServerEnabledFlag peeks the --server-enabled bool flag before the main flag
-// parse, so it can gate the shared-server discovery that runs during early startup
-// (mirrors extractRootFlag/extractQuietFlag). Returns the parsed value and whether the
-// flag was present; a bare --server-enabled means true (Go bool-flag convention).
-func extractServerEnabledFlag(args []string) (val, set bool) {
-	for _, a := range args {
-		if a == "--" {
-			return false, false
-		}
-		switch {
-		case a == "-server-enabled" || a == "--server-enabled":
-			return true, true
-		case strings.HasPrefix(a, "-server-enabled="), strings.HasPrefix(a, "--server-enabled="):
-			_, v, _ := strings.Cut(a, "=")
-			if b, err := strconv.ParseBool(v); err == nil {
-				return b, true
-			}
-			return false, false
-		}
-	}
-	return false, false
-}
-
-func extractVerbosityCount(args []string) int {
-	n := 0
-	for _, a := range expandVerbosityArgs(args) {
-		if a == "--" {
-			break
-		}
-		if a == "-v" {
-			n++
-		}
-	}
-	return n
-}
-
 func startupTraceEnabled(args []string) bool {
 	if strings.EqualFold(os.Getenv("MAGUS_LOG_LEVEL"), "trace") {
 		return true
 	}
-	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
+	return quiet.EffectiveLevel(quiet.Verbosity(commands.ExtractVerbosityCount(args)), commands.ExtractQuietFlag(args)) <= config.LevelTrace
 }
 
-// registerDiagnosticCatalogs reserves each shipped catalog's prefix; a clash is a build defect.
-func registerDiagnosticCatalogs() error {
-	return errors.Join(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()),
-		diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()))
+// declaredTargets lists the targets the workspace on ctx declares for a project, or nothing
+// when ctx carries none.
+func declaredTargets(ctx context.Context) func(context.Context, string) []string {
+	m, ok := magusFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	return m.ProjectTargets
+}
+
+// workspaceSandboxMode is the mode a run of the workspace at root in this process runs
+// under. The sandbox is applied as the run itself is about to, so a mode this host
+// cannot honor (required without landlock) is the error the run would have met.
+func workspaceSandboxMode(ctx context.Context, root string) (types.SandboxMode, error) {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	if _, err := m.ApplySandbox(ctx); err != nil {
+		return "", err
+	}
+	return m.SandboxMode(), nil
 }

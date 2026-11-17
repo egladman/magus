@@ -1,10 +1,10 @@
 // Generates JSON Schema from the zod schemas @cursor/sdk publishes, into
-// testdata/hosts/cursor/gen/.
+// internal/render/testdata/hosts/cursor/gen/.
 //
-// WHY THIS EXISTS. Every other Cursor schema in testdata/hosts is `derived`: a person read
+// WHY THIS EXISTS. Every other Cursor schema in internal/render/testdata/hosts is `derived`: a person read
 // Cursor's minified validator and wrote JSON Schema by hand. A hand transcription is
 // partial by construction and silently stale, and it already cost this repository a wrong
-// fact recorded as checked (see the CORRECTION in testdata/hosts/SOURCES.md). These
+// fact recorded as checked (see the CORRECTION in internal/render/testdata/hosts/SOURCES.md). These
 // schemas are not transcribed. They are emitted from the declarations Cursor ships, so the
 // only way they go stale is the version pin moving, which the lockfile records and the
 // drift gate catches.
@@ -64,7 +64,7 @@ const SCHEMAS = {
   ShellOutput: ShellOutputSchema,
 } as const;
 
-// draft-07 to match every other schema under testdata/hosts, so one validator reads them
+// draft-07 to match every other schema under internal/render/testdata/hosts, so one validator reads them
 // all. The repo's checker is draft-07 and a mixed directory would need two.
 const TARGET = "jsonSchema7";
 
@@ -72,7 +72,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // `gen`, not `generated`: this workspace's rule is that generated output lives in a gen/
 // directory and carries no suffix, so the DIRECTORY is the signal that nothing here is
 // hand-edited.
-const OUT = join(HERE, "..", "..", "..", "..", "testdata", "hosts", "cursor", "gen");
+const OUT = join(HERE, "..", "..", "..", "..", "internal", "render", "testdata", "hosts", "cursor", "gen");
 
 async function main(): Promise<void> {
   await mkdir(OUT, { recursive: true });
