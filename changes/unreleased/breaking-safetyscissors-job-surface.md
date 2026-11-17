@@ -15,7 +15,8 @@
   in its text: magus adds it.
 - **Breaking for SDK callers: the module unexported what only it reads.** `Store.View` is
   gone (`Store.As` still derives a view), and `ValidateID`, `WidensInPlace`, `Features`,
-  `States`, `GoalKinds`, `GoalExpects` and `MaxUnattributedWrites` are unexported.
+  `States`, `GoalKinds`, `GoalExpects` and `MaxUnattributedWrites` are unexported, and so
+  is `IDError`: a refused job id is an error whose text names the rule it breaks.
 - A check renders once: `CheckCommand` is the check's argv joined, led by the binary as
   invoked, where it used to spell `magus` while the run spelled the invoked binary.
 - attempts.jsonl, grants.jsonl and grades.jsonl report a rewrite that dropped a line no

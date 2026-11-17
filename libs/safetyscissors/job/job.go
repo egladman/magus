@@ -135,25 +135,25 @@ const MaxIDLen = 128
 // the trail both read the id.
 func ValidID(id string) bool { return idRule(id) == "" }
 
-// validateID refuses an id that may not name a job, as an [*IDError] naming the rule it
+// validateID refuses an id that may not name a job, as an [*idError] naming the rule it
 // breaks. The id is also the branch a checkout of the job is made on, so it is held to
 // what every VCS accepts as one: lowercase letters, digits, '-' and '.', with '/' only
 // between segments, no segment empty or starting with '.' or '-', never ':' or '..', at
 // most [MaxIDLen] characters.
 func validateID(id string) error {
 	if rule := idRule(id); rule != "" {
-		return &IDError{ID: id, Rule: rule}
+		return &idError{ID: id, Rule: rule}
 	}
 	return nil
 }
 
-// IDError is an id validateID refuses, and the rule it breaks.
-type IDError struct {
+// idError is an id validateID refuses, and the rule it breaks.
+type idError struct {
 	ID   string
 	Rule string
 }
 
-func (e *IDError) Error() string { return fmt.Sprintf("%q is not a job id: %s", e.ID, e.Rule) }
+func (e *idError) Error() string { return fmt.Sprintf("%q is not a job id: %s", e.ID, e.Rule) }
 
 // idRule names the rule id breaks, or returns "" for a valid id.
 func idRule(id string) string {

@@ -19,7 +19,7 @@ func TestJob(t *testing.T) { suite.Run(t, new(JobSuite)) }
 
 func (s *JobSuite) refusesID(id, rule string) {
 	s.T().Helper()
-	var refused *IDError
+	var refused *idError
 	s.Require().ErrorAs(validateID(id), &refused, id)
 	s.Equal(rule, refused.Rule, id)
 	s.False(ValidID(id), id)
