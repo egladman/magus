@@ -238,6 +238,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)
 	}},
+	{Name: "KnowledgeDefinitionSite", Zero: types.KnowledgeDefinitionSite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectKnowledgeDefinitionSite(v.(types.KnowledgeDefinitionSite), enums)
+	}},
 	{Name: "KnowledgeDocCoverage", Zero: types.KnowledgeDocCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeDocCoverage(v.(types.KnowledgeDocCoverage))
 	}},

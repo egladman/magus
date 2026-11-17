@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -319,4 +321,89 @@ func TestGraphRelevant(t *testing.T) {
 	assert.True(t, graphRelevant([]string{"a/magusfiles"}))
 	assert.False(t, graphRelevant([]string{"main.go", "assets/logo.png", "go.mod"}))
 	assert.False(t, graphRelevant(nil))
+}
+
+type symbolGraphSuite struct {
+	suite.Suite
+	w      *warmGraph
+	base   *knowledge.Graph
+	memo   *types.SymbolIndexStatus
+	merges atomic.Int64
+}
+
+func TestSymbolGraph(t *testing.T) { suite.Run(t, new(symbolGraphSuite)) }
+
+func (s *symbolGraphSuite) SetupTest() {
+	s.w = newWarmGraph(func(context.Context, bool) (*knowledge.Graph, error) { return knowledge.NewGraph(), nil }, nil)
+	s.base = knowledge.NewGraph()
+	s.memo = &[]types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}}[0]
+	s.merges.Store(0)
+}
+
+func (s *symbolGraphSuite) merge() (*knowledge.Graph, error) {
+	s.merges.Add(1)
+	return knowledge.NewGraph(), nil
+}
+
+func (s *symbolGraphSuite) get(base *knowledge.Graph, memo *types.SymbolIndexStatus) *knowledge.Graph {
+	g, err := s.w.symbolGraph(base, memo, s.merge)
+	s.Require().NoError(err)
+	return g
+}
+
+func (s *symbolGraphSuite) TestAnUnchangedBaseAndMemoHit() {
+	first := s.get(s.base, s.memo)
+	s.Same(first, s.get(s.base, s.memo))
+	s.Equal(int64(1), s.merges.Load())
+}
+
+func (s *symbolGraphSuite) TestANewBaseMergesAgain() {
+	first := s.get(s.base, s.memo)
+	s.NotSame(first, s.get(knowledge.NewGraph(), s.memo))
+	s.Equal(int64(2), s.merges.Load())
+}
+
+// A source change or an index run replaces the memo, though the warm graph stands.
+func (s *symbolGraphSuite) TestANewMemoMergesAgain() {
+	first := s.get(s.base, s.memo)
+	next := &[]types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}}[0]
+	s.NotSame(first, s.get(s.base, next))
+	s.Equal(int64(2), s.merges.Load())
+}
+
+func (s *symbolGraphSuite) TestInvalidateDropsTheMergedGraph() {
+	s.get(s.base, s.memo)
+	s.w.invalidate()
+	s.Nil(s.w.symbols)
+	s.get(s.base, s.memo)
+	s.Equal(int64(2), s.merges.Load())
+}
+
+func (s *symbolGraphSuite) TestAFailedMergeKeepsNothing() {
+	_, err := s.w.symbolGraph(s.base, s.memo, func() (*knowledge.Graph, error) { return nil, errors.New("shard unreadable") })
+	s.ErrorContains(err, "shard unreadable")
+	s.get(s.base, s.memo)
+	s.Equal(int64(1), s.merges.Load())
+}
+
+func (s *symbolGraphSuite) TestConcurrentMissesMergeOnce() {
+	release := make(chan struct{})
+	merge := func() (*knowledge.Graph, error) {
+		s.merges.Add(1)
+		<-release
+		return knowledge.NewGraph(), nil
+	}
+	got := make([]*knowledge.Graph, 8)
+	var wg sync.WaitGroup
+	for i := range got {
+		wg.Go(func() { got[i], _ = s.w.symbolGraph(s.base, s.memo, merge) })
+	}
+	// Let the first caller enter merge, then release it; the rest wait on symMu.
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	s.Equal(int64(1), s.merges.Load())
+	for _, g := range got {
+		s.Same(got[0], g)
+	}
 }

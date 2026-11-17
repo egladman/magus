@@ -84,6 +84,12 @@ func TestBrokerOpensNoInternetSocket(t *testing.T) {
 	assert.Empty(t, bytes.TrimSpace(out), "the broker holds an AF_INET/AF_INET6 socket:\n%s", out)
 }
 
+// reportedExit is what errors.As finds in an exit.Reported failure.
+type reportedExit interface {
+	AlreadyReported() bool
+	ExitCode() int
+}
+
 // TestBrokerStatusExitsNonZeroWithNoneRunning pins the chaining contract `server status`
 // already keeps.
 func TestBrokerStatusExitsNonZeroWithNoneRunning(t *testing.T) {

@@ -39,12 +39,12 @@ func TestRenameGradeInspectsTheLoadedRoot(t *testing.T) {
 }
 
 // rootElsewhere stands up two workspaces, moves the test into the second, and returns the
-// first: the --root a command loads from inside another checkout. The memoized workspace
-// load is the test's own.
+// first: the --root a command loads from inside another checkout. The workspace
+// load kept for the process is the test's own.
 func rootElsewhere(t *testing.T) string {
 	t.Helper()
 	testkit.Isolate(t)
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	checkout := func() string {
 		w := testkit.NewWorkspace(t)
 		w.Write("magus.yaml", "")
@@ -344,7 +344,7 @@ func TestRefsTextScopeOutsideWorkspaceExitsTwo(t *testing.T) {
 // silent under-report is the one failure that makes this worse than grep.
 //
 // classify comes from a real opened workspace (magus.Open), not inspectWorkspace:
-// that helper memoizes its root globally for the process (see helpers.go), which
+// that helper keeps its root globally for the process (see helpers.go), which
 // only holds for one CLI invocation, not a test binary exercising many roots.
 func TestRefsTextNoGeneratedFiltersAndReportsTheCount(t *testing.T) {
 	w := testkit.NewWorkspace(t)

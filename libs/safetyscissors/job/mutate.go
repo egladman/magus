@@ -260,19 +260,14 @@ func (w *rowWrite) carryRecord(ctx context.Context) error {
 			row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
 			row.CheckoutRoot = prev.CheckoutRoot
 		}
-		// An ended row declared again is handed out afresh: a checkout left
-		// on it would refuse every new taker.
-		if w.refork {
-			if err := w.fold(ctx); err != nil {
-				return err
-			}
-			row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
-		}
 		if w.kind != AsObservation {
 			row.Unattributed, row.ReleaseRequests = prev.Unattributed, prev.ReleaseRequests
 		}
 		if w.refork {
-			row.ReleaseRequests = nil
+			if err := w.fold(ctx); err != nil {
+				return err
+			}
+			*row = row.HandedOutAfresh()
 		}
 		if w.kind != AsObservation && !w.entering {
 			row.Entries = prev.Entries

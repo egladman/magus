@@ -4,12 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/libs/secrets"
@@ -26,7 +23,8 @@ import (
 // longer be traced to the project that emitted it; this restores that correlation
 // for every slog.*Context call. An explicit "dir" attribute on the record wins, so
 // callers that already know a more specific directory (e.g. a subprocess cwd) are
-// left untouched.
+// left untouched. It stays here: it reads std, which quiet cannot import without a cycle
+// through internal/cache.
 type dirHandler struct{ slog.Handler }
 
 func (h dirHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -55,71 +53,6 @@ func (h dirHandler) WithAttrs(as []slog.Attr) slog.Handler {
 
 func (h dirHandler) WithGroup(name string) slog.Handler {
 	return dirHandler{h.Handler.WithGroup(name)}
-}
-
-// verbosity is a counted flag value (flag.Value); IsBoolFlag lets -v be used without an argument.
-type verbosity int
-
-func (v *verbosity) String() string   { return strconv.Itoa(int(*v)) }
-func (v *verbosity) Set(string) error { *v++; return nil }
-func (*verbosity) IsBoolFlag() bool   { return true }
-
-func expandVerbosityArgs(args []string) []string {
-	out := make([]string, 0, len(args))
-	for i, a := range args {
-		if a == "--" {
-			// Past the separator the tokens belong to a forwarded tool, not to magus;
-			// this builds the master argv startup() parses, so copy the rest through
-			// unchanged instead of expanding -vvv-lookalikes meant for the tool.
-			out = append(out, args[i:]...)
-			break
-		}
-		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
-			allV := true
-			for _, c := range a[1:] {
-				if c != 'v' {
-					allV = false
-					break
-				}
-			}
-			if allV {
-				for range a[1:] {
-					out = append(out, "-v")
-				}
-				continue
-			}
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
-// effectiveLevel maps verbosity/quiet flags to a slog.Level; quiet wins over -v.
-//
-// -v and -vv share the debug level on purpose: they differ in whether each
-// target's own output streams (Log.Stream, set in applyDisplay), not in which
-// records are admitted. Splitting them by level instead would mean -v silently
-// dropping debug records, which is the opposite of what the flag is for.
-func effectiveLevel(v verbosity, quiet bool) slog.Level {
-	switch {
-	case quiet:
-		return slog.LevelError
-	case v >= 3:
-		return config.LevelTrace
-	case v >= 1:
-		return slog.LevelDebug
-	default:
-		return slog.LevelInfo
-	}
-}
-
-func levelName(lvl slog.Level) string {
-	if lvl == config.LevelTrace {
-		return "trace"
-	}
-	// Lowercase, the spelling log.level accepts: this value is written back into the
-	// config and validated with it, and slog spells its own levels in capitals.
-	return strings.ToLower(lvl.String())
 }
 
 // displayHandler is the pretty handler currently installed as the process-wide
@@ -205,7 +138,7 @@ func applyDisplay() {
 
 	// Only a flag overrides log.level; with none given, yaml, env and --log-level stand.
 	if hushed || global.verbose > 0 {
-		globalCfg.Log.Level = levelName(effectiveLevel(global.verbose, hushed))
+		globalCfg.Log.Level = quiet.LevelName(quiet.EffectiveLevel(global.verbose, hushed))
 	}
 	lvl := globalCfg.Log.SlogLevel()
 	if global.silent {

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/log/attr"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/libs/clikit/command"
@@ -57,7 +58,7 @@ func spellUsage() {
 
 // registryHTTP is the transport every spell verb uses. A variable so a test can point it
 // at a TLS fixture whose certificate the default transport does not trust.
-var registryHTTP = func() *http.Client { return &http.Client{Timeout: graphRegistryTimeout} }
+var registryHTTP = func() *http.Client { return &http.Client{Timeout: knowledge.RegistryTimeout} }
 
 func spellBuild(ctx context.Context, root string, args []string) error {
 	var out, source string
@@ -162,7 +163,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell push: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, knowledge.RegistryTimeout)
 	defer cancel()
 	repo := oci.Reference{Registry: dest.Registry, Repository: dest.Repository}
 	d, err := client.PushArtifact(ctx, repo, content, append([]string{dest.Tag}, tags...)...)
@@ -241,7 +242,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("spell pull: %w", err)
 		}
 	}
-	res, err := remotespell.PullSpell(ctx, client, graphRegistryTimeout, ref, "", dst)
+	res, err := remotespell.PullSpell(ctx, client, knowledge.RegistryTimeout, ref, "", dst)
 	if err != nil {
 		return fmt.Errorf("spell pull: %w", err)
 	}
@@ -374,7 +375,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell ls: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, knowledge.RegistryTimeout)
 	defer cancel()
 	tags, err := client.Tags(ctx, repo)
 	if err != nil {
@@ -397,7 +398,7 @@ type shippedSpellsResult struct {
 // stdin and workspace.
 func registryClient(ctx context.Context, root, host, username string) (*oci.Client, error) {
 	return remotespell.NewClient(ctx, registryHTTP(), globalCfg.Spells, host, username, remotespell.Login{
-		ReadToken: readToken,
+		ReadToken: knowledge.ReadToken,
 		Secrets: func(ctx context.Context) (context.Context, *secrets.Resolver, error) {
 			m, err := loadMagus(ctx, root)
 			if err != nil {

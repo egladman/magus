@@ -19,7 +19,7 @@ import (
 
 // ForkGraderSuite pins that the fork's grader over the CLI's rules opens its workspace
 // once however many checks it grades, and that its verdicts are the ones the installed
-// grader reaches judging each afresh. The guard's own suite covers the memo with a
+// grader reaches judging each afresh. The guard's own suite covers the kept verdicts with a
 // synthetic loader; only the CLI's loader opens a real workspace to count.
 type ForkGraderSuite struct {
 	suite.Suite
@@ -36,7 +36,7 @@ func (s *ForkGraderSuite) SetupTest() {
 	testkit.Isolate(s.T())
 	global = globalFlags{}
 	s.root = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	s.T().Chdir(s.root)
 	s.opens.Store(0)
 }

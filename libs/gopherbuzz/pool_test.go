@@ -14,12 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDispatchRejectsCycleWithMemo is the regression for the cyclic-magusfile
+// TestDispatchRejectsCycle is the regression for the cyclic-magusfile
 // deadlock: with a TargetRuns active (as on every `magus run`), a target that
 // dispatches one of its own ancestors must error promptly rather than subscribe
 // to the ancestor's in-flight result and deadlock. The factory must never run —
 // the cycle is caught before any session is checked out.
-func TestDispatchRejectsCycleWithMemo(t *testing.T) {
+func TestDispatchRejectsCycle(t *testing.T) {
 	p := newPool(func(context.Context) (*WorkerSession, error) {
 		t.Fatal("factory ran; the cycle should be caught before execution")
 		return nil, nil
@@ -44,7 +44,7 @@ func TestDispatchRejectsCycleWithMemo(t *testing.T) {
 }
 
 // TestDispatchKeepsSiblingAncestorsPrivate is the true-negative twin of
-// TestDispatchRejectsCycleWithMemo: an ACYCLIC fan-out must not be reported as a
+// TestDispatchRejectsCycle: an ACYCLIC fan-out must not be reported as a
 // cycle. Only asserting the true positive is what let the aliasing bug ship —
 // dispatchInner hands every concurrently-submitted sibling the SAME ancestors slice
 // header, so when that header has spare capacity (make([]string, 3, 4), exactly the
@@ -116,13 +116,13 @@ func TestDispatchKeepsSiblingAncestorsPrivate(t *testing.T) {
 	assert.Empty(t, ancestors[:cap(ancestors)][3], "a child appended into the caller's backing array")
 }
 
-// TestMemoSubscribersShareOneRun exercises the memo's in-flight subscribe/resolve path
+// TestConcurrentNeedsShareOneRun exercises the in-flight subscribe/resolve path of TargetRuns
 // under real contention: every caller of one target either starts it or parks on its
 // entry, so the target runs once and every caller sees that run's result. The existing
-// memo coverage dispatches sequentially, where the second call always resolves an
+// coverage dispatches sequentially, where the second call always resolves an
 // already-CLOSED entry: the cheap half of the path, and the half a cache hit would
 // hide.
-func TestMemoSubscribersShareOneRun(t *testing.T) {
+func TestConcurrentNeedsShareOneRun(t *testing.T) {
 	const callers = 8
 	var runs atomic.Int32
 	wantErr := errors.New("kaboom")
@@ -153,7 +153,7 @@ func TestMemoSubscribersShareOneRun(t *testing.T) {
 	start.Done()
 	finished.Wait()
 
-	assert.Equal(t, int32(1), runs.Load(), "the memo must collapse concurrent needs into one run")
+	assert.Equal(t, int32(1), runs.Load(), "concurrent needs must collapse concurrent needs into one run")
 	for i, err := range errs {
 		assert.ErrorIs(t, err, wantErr, "caller %d saw a different result than the single run", i)
 	}
@@ -161,7 +161,7 @@ func TestMemoSubscribersShareOneRun(t *testing.T) {
 
 // TestDispatchSiblingFailureLetsPeersFinish covers the error path of a fan-out: one
 // sibling failing must not abandon the peers already in flight, and must still record
-// its outcome in the memo. A Complete skipped on the error path leaves a permanently
+// its outcome in its run entry. A Complete skipped on the error path leaves a permanently
 // in-flight entry, which is silent until some later need subscribes to it and hangs,
 // so the second Dispatch below, not the first, is the assertion that matters.
 func TestDispatchSiblingFailureLetsPeersFinish(t *testing.T) {
@@ -201,9 +201,9 @@ func TestDispatchSiblingFailureLetsPeersFinish(t *testing.T) {
 	go func() { done <- p.Dispatch(ctx, []string{"boom", "peer"}, nil) }()
 	select {
 	case second := <-done:
-		assert.ErrorIs(t, second, wantErr, "the memo must replay the failure, not re-run it")
+		assert.ErrorIs(t, second, wantErr, "the recorded failure must replay the failure, not re-run it")
 	case <-time.After(10 * time.Second):
-		t.Fatal("a later need of a failed target hung; its memo entry was never completed")
+		t.Fatal("a later need of a failed target hung; its run entry was never completed")
 	}
 }
 
@@ -242,7 +242,7 @@ func TestTargetRunsWaiterUnblocksOnCtxCancel(t *testing.T) {
 // other. A dispatches [b, c]; b then needs c (ancestors [a, b], c not among
 // them — the ancestor check passes) and c needs b (ancestors [a, c], symmetric).
 // Before TargetRuns tracked the dynamic wait-for graph, both TryRun calls
-// returned a waitFn subscribing to the other's still-running memoEntry, and
+// returned a waitFn subscribing to the other's still-running runEntry, and
 // neither entry could ever complete — a permanent hang. Both dispatches must
 // now report a cycle within the bound instead.
 func TestDispatchDetectsSiblingWaitCycle(t *testing.T) {

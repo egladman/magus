@@ -299,17 +299,17 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 			"verify", // moved: hard-redirects to `magus doctor`'s agent-skills check
 		}},
 		{"config", []string{"config"}, "config.go", "configCommand", nil},
-		{"config history", []string{"config", "history"}, "config_history.go", "configHistoryCommand", nil},
+		{"config history", []string{"config", "history"}, "config.go", "configHistoryCommand", nil},
 		{"config cache", []string{"config", "cache"}, "config_cache.go", "configCacheCommand", nil},
-		{"config mcp", []string{"config", "mcp"}, "config_mcp.go", "configMCPCommand", []string{
+		{"config mcp", []string{"config", "mcp"}, "config.go", "configMCPCommand", []string{
 			"token", // moved: hard-redirects to `magus config token` (not an MCP credential)
 		}},
-		{"config mcp connector", []string{"config", "mcp", "connector"}, "config_mcp.go", "configMCPConnector", []string{
+		{"config mcp connector", []string{"config", "mcp", "connector"}, "config.go", "configMCPConnector", []string{
 			"list", // renamed to ls in v0.4.0
 		}},
-		{"config console", []string{"config", "console"}, "config_console.go", "configConsoleCommand", nil},
-		{"config console token", []string{"config", "console", "token"}, "config_console.go", "configConsoleToken", nil},
-		{"config token", []string{"config", "token"}, "config_token.go", "configToken", nil},
+		{"config console", []string{"config", "console"}, "config.go", "configConsoleCommand", nil},
+		{"config console token", []string{"config", "console", "token"}, "config.go", "configConsoleToken", nil},
+		{"config token", []string{"config", "token"}, "config.go", "configToken", nil},
 		{"notes", []string{"notes"}, "notes.go", "notesCommand", []string{
 			"put", // deliberately absent: a note is written by a person, not a program
 		}},
@@ -436,7 +436,7 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []command.
 				break
 			}
 			i++
-			if !flagIsBool(f) && !strings.Contains(tok, "=") && i < len(args) {
+			if !commands.FlagIsBool(f) && !strings.Contains(tok, "=") && i < len(args) {
 				i++ // value-taking flag consumes the next token too
 			}
 			continue
@@ -550,7 +550,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 						// negation terms (-kind:op) from flag parsing before commandParse.
 						parseArgs, _ = splitQueryNegations(parseArgs)
 					}
-					if err := fs.Parse(reorderFlagsFirst(fs, parseArgs)); err != nil {
+					if err := fs.Parse(commands.ReorderFlagsFirst(fs, parseArgs)); err != nil {
 						t.Errorf("example %q: %q fails to parse under %q's own flag set: %v",
 							ex.Command, strings.Join(gc.Args, " "), strings.Join(path, " "), err)
 					}

@@ -82,7 +82,7 @@ var templateDirScaffolding = map[string]bool{
 	"magusfile.buzz":               true,
 	"opencode-plugin.test.ts":      true,
 	"opencode-plugin.installed.ts": true,
-	// Emits testdata/hosts/cursor/gen from @cursor/sdk's published zod. A generator
+	// Emits internal/render/testdata/hosts/cursor/gen from @cursor/sdk's published zod. A generator
 	// magus runs, not an artifact a reader installs into a host, so it owes the parity
 	// gates nothing: no guide embeds it and no host wires it.
 	"cursor-schemas.ts": true,
@@ -654,7 +654,7 @@ func TestRehydrateTemplateInvokesTheBrief(t *testing.T) {
 
 // hostOutputSchema names the schema a host's hook stdout is graded against. Codex's is
 // OpenAI's own generated one; Claude Code's and Cursor's are ours, because neither
-// publishes a schema for hook stdout. testdata/hosts/SOURCES.md says which is
+// publishes a schema for hook stdout. internal/render/testdata/hosts/SOURCES.md says which is
 // which and refuses to let that distinction blur. The glue's rendered replies are
 // graded against these in cmd/magus/buzz_test.go, which can run the Buzz glue.
 var hostOutputSchema = map[string]string{

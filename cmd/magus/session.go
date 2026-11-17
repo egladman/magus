@@ -14,6 +14,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -50,7 +51,7 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	}
 	switch verb {
 	case "help":
-		sessionUsage()
+		commands.WriteSessionUsage(os.Stderr)
 		return nil
 	case "ls":
 		return invocationList(ctx, root, rest)
@@ -84,37 +85,6 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 	default:
 		return exit.Usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, advise, advisories, retract, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
-}
-
-func sessionUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--all] [--limit <n>] [--since <when>]")
-	fmt.Fprintln(os.Stderr, "       magus session --brief             # this checkout's state, for a session that lost its history")
-	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
-	fmt.Fprintln(os.Stderr, "       magus session hints               # uptake per hint id, over the loaded sessions")
-	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
-	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
-	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
-	fmt.Fprintln(os.Stderr, "       magus session advise <text> [--expect <command prefix>]")
-	fmt.Fprintln(os.Stderr, "       magus session advisories [--all]")
-	fmt.Fprintln(os.Stderr, "       magus session retract <id>")
-	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
-	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent magus")
-	fmt.Fprintln(os.Stderr, "invocations did in this checkout (--all: every checkout of this repository),")
-	fmt.Fprintln(os.Stderr, "each with the host session it ran in when a host delivered one; `session show` reports one host")
-	fmt.Fprintln(os.Stderr, "session in full, `session attention` lists the blocks agents raised, and")
-	fmt.Fprintln(os.Stderr, "`session dispose` closes one - nothing closes a request automatically.")
-	fmt.Fprintln(os.Stderr, "Humans write it too: `session checkpoint` records where work stands before")
-	fmt.Fprintln(os.Stderr, "you put it down. Agent hosts write it from hooks, through `session notify`,")
-	fmt.Fprintln(os.Stderr, "and `session load` takes a normalized event stream extracted from a host's")
-	fmt.Fprintln(os.Stderr, "own transcript.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "`session --brief` answers the same question the listing opens with, for a")
-	fmt.Fprintln(os.Stderr, "session rather than a person: where this checkout stands, read off disk, for")
-	fmt.Fprintln(os.Stderr, "a model whose history a host replaced with a summary.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
 
 // invocationList shows what recent magus invocations did in this checkout, or in every
@@ -202,32 +172,14 @@ func localOrigin(ctx context.Context, e jobtypes.EntryPoint) jobtypes.Origin {
 	return trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: e})
 }
 
-func sessionLoadUsage(fs *flag.FlagSet) func() {
-	return func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus session load [--file <path>]   # the event stream arrives on stdin")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Load a normalized agent-session event stream into this repository's session")
-		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
-		fmt.Fprintf(os.Stderr, "Every line needs host, session, kind and ref; kind is one of %s.\n", strings.Join(session.EventKinds(), ", "))
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running an adapter over the same")
-		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
-		fmt.Fprintln(os.Stderr, "are dropped; worktrees of this one are kept.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "A shell command's text is never stored. It is re-judged against today's guard")
-		fmt.Fprintln(os.Stderr, "rules and kept as its program, the verdict, the rule behind it, and a digest.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-		printOwnDefaults(fs)
-	}
-}
-
 // sessionLoad implements `magus session load`.
 func sessionLoad(ctx context.Context, root string, args []string) error {
 	var file string
 	rest, err := commandParse("session load", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "file", "", "Read the event stream from this file instead of stdin")
-		fs.Usage = sessionLoadUsage(fs)
+		fs.Usage = func() {
+			commands.WriteSessionLoadUsage(os.Stderr, session.EventKinds(), func() { printOwnDefaults(fs) })
+		}
 	})
 	if err != nil {
 		return err
@@ -531,26 +483,12 @@ func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheCloc
 
 func orDash(s string) string { return sessions.OrDash(s) }
 
-func sessionHintsUsage(fs *flag.FlagSet) func() {
-	return func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus session hints")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Per hint id: how many times it was served, how often the command was run")
-		fmt.Fprintf(os.Stderr, "within the next %d calls, how often another magus verb was run instead, and\n", sessions.NextLookahead)
-		fmt.Fprintln(os.Stderr, "how often the same command was repeated.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "It reads the sessions this repository has loaded, so a store with no")
-		fmt.Fprintln(os.Stderr, "transcripts in it reports nothing. Load one with `magus session load`.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-		printOwnDefaults(fs)
-	}
-}
-
 // sessionHints implements `magus session hints`.
 func sessionHints(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("session hints", args, func(fs *flag.FlagSet) {
-		fs.Usage = sessionHintsUsage(fs)
+		fs.Usage = func() {
+			commands.WriteSessionHintsUsage(os.Stderr, sessions.NextLookahead, func() { printOwnDefaults(fs) })
+		}
 	})
 	if err != nil {
 		return err

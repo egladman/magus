@@ -379,6 +379,67 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	}
 }
 
+// ReforkGradeSuite pins that a refork is graded as the row it writes, with no checkout
+// attached: the checkout its last holder took is gone or not the next holder's.
+type ReforkGradeSuite struct {
+	suite.Suite
+	store  *Store
+	worker *Store
+	head   string
+	graded []job.Job
+}
+
+func TestReforkGradeSuite(t *testing.T) { suite.Run(t, new(ReforkGradeSuite)) }
+
+func (s *ReforkGradeSuite) SetupTest() {
+	main, worktree, head := twoCheckouts(s.T())
+	main.Grader, worktree.Grader = s.grade, s.grade
+	s.store, s.worker, s.head, s.graded = NewStore(main), NewStore(worktree), head, nil
+}
+
+// grade stands in for the guard, which places the check in the checkout the row names and
+// denies the check and its compiling baseline alike where that checkout has no ./magus.
+func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row job.Job) CheckVerdict {
+	s.graded = append(s.graded, row)
+	if row.CheckoutRoot == "" {
+		return CheckVerdict{}
+	}
+	if _, err := os.Stat(filepath.Join(row.CheckoutRoot, "magus")); err != nil {
+		return CheckVerdict{NotGraded: fmt.Sprintf("%s has no ./magus yet", row.CheckoutRoot)}
+	}
+	return CheckVerdict{}
+}
+
+func (s *ReforkGradeSuite) declare(u *job.Job) {
+	u.State, u.Checkpoint = job.StateDeclared, s.head
+	u.Paths.Write, u.Check = []string{"a.txt"}, goTestCheck()
+}
+
+func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
+	ctx := s.T().Context()
+	_, err := ForkMerge(ctx, s.store, "w", s.declare, config.Jobs{}, nil)
+	s.Require().NoError(err)
+	taken, err := s.worker.Exec(ctx, "w")
+	s.Require().NoError(err)
+	s.Require().NotEmpty(taken.CheckoutRoot)
+	_, err = s.store.Update(ctx, "w", func(u *job.Job) { u.State = job.StateFail })
+	s.Require().NoError(err)
+
+	again, err := ForkMerge(ctx, s.store, "w", s.declare, config.Jobs{}, nil)
+
+	s.Require().NoError(err, "a refork is not graded in the checkout its last holder took")
+	s.Require().Len(s.graded, 2)
+	graded := s.graded[1]
+	s.Equal(job.Job{}, handout(graded), "the grade reads the row the refork writes")
+	s.Equal(job.Job{}, handout(again))
+	s.Equal(job.StateDeclared, again.State)
+}
+
+// handout is what exec stamps on a row for the holder that took it.
+func handout(row job.Job) job.Job {
+	return job.Job{ReportedBase: row.ReportedBase, BaseVerdict: row.BaseVerdict, Registered: row.Registered, CheckoutRoot: row.CheckoutRoot}
+}
+
 func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	t.Parallel()
 

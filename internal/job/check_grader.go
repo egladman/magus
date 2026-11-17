@@ -56,7 +56,7 @@ func noGrader(context.Context, string, job.Job) CheckVerdict {
 }
 
 // WithGrader returns a Store over s's file that grades a declared check with g in place of
-// s's own: a fork wraps the grader it validates with in memos
+// s's own: a fork wraps the grader it validates with in kept verdicts
 // that live as long as that fork. The view takes its own mutex, as [Store.As] does.
 func (s *Store) WithGrader(g CheckGrader) *Store {
 	v := s.view()
@@ -64,25 +64,25 @@ func (s *Store) WithGrader(g CheckGrader) *Store {
 	return v
 }
 
-// GradeMemo keeps the verdicts a grader reached, under a key the caller derives from
+// KeptVerdicts keeps the verdicts a grader reached, under a key the caller derives from
 // everything the verdict reads, for a caller that grades the same checks again and again
 // against a tree it holds still. It keeps no deferred verdict: a deferral is the clock's or
 // the binary's, and the next grade may reach one. Safe for concurrent use.
-type GradeMemo struct {
+type KeptVerdicts struct {
 	mu       sync.Mutex
 	verdicts map[string]CheckVerdict
 	judged   int
 }
 
-// NewGradeMemo is an empty memo.
-func NewGradeMemo() *GradeMemo {
-	return &GradeMemo{verdicts: map[string]CheckVerdict{}}
+// NewKeptVerdicts is an empty KeptVerdicts.
+func NewKeptVerdicts() *KeptVerdicts {
+	return &KeptVerdicts{verdicts: map[string]CheckVerdict{}}
 }
 
 // Grade answers the verdict kept under key, else the one judge reaches, kept unless it is
 // deferred. An empty key keeps nothing and always judges. Two grades of one key at once may
 // both judge.
-func (m *GradeMemo) Grade(key string, judge func() CheckVerdict) CheckVerdict {
+func (m *KeptVerdicts) Grade(key string, judge func() CheckVerdict) CheckVerdict {
 	if key != "" {
 		m.mu.Lock()
 		v, ok := m.verdicts[key]
@@ -102,7 +102,7 @@ func (m *GradeMemo) Grade(key string, judge func() CheckVerdict) CheckVerdict {
 }
 
 // Judged is how many grades reached judge.
-func (m *GradeMemo) Judged() int {
+func (m *KeptVerdicts) Judged() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.judged

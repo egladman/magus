@@ -174,7 +174,7 @@ func (e *EndpointError) Unwrap() error { return e.Err }
 // scope names the unit of work the endpoint belongs to, such as a run's id: it confines
 // the endpoint's token to that scope, and an empty one is refused with [ErrNoScope]. The
 // listener closes when ctx ends, so ctx must end with the scope. Within one scope the
-// endpoint is memoized per grant, and liveness-checked, because a cached entry whose
+// endpoint is kept per grant, and liveness-checked, because a cached entry whose
 // context has ended would hand back a dead URL on a RELEASED port that another local
 // process could then bind.
 //

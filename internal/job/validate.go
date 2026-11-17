@@ -59,9 +59,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	// A new row is not one HardenWritten changes, so its base reads the same before it runs.
 	prev, updates := mergeBase(rows, id, merge)
 	if !updates {
-		merged := prev.Clone()
-		merge(&merged)
-		if v, refused := contendedFork(ctx, store, rows, id, merged, limits); refused {
+		if v, refused := contendedFork(ctx, store, rows, id, mergeOnto(prev, merge), limits); refused {
 			return v
 		}
 	}
@@ -73,8 +71,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	}
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows, Attempts: tries, Err: triesErr})
 	prev, updates = mergeBase(rows, id, merge)
-	merged := prev.Clone()
-	merge(&merged)
+	merged := mergeOnto(prev, merge)
 	v := types.JobValidation{Job: merged}
 	var ps types.JobProblems
 	// judged is the row the workspace checks read: merged whole for a new row, its added
@@ -139,6 +136,17 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	v.Unchecked = unchecked
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
 	return v
+}
+
+// mergeOnto is merge applied to prev as the write stores it: an ended prev the merge brings
+// back is [job.Job.HandedOutAfresh], so a refork is graded without its last holder's checkout.
+func mergeOnto(prev job.Job, merge func(*job.Job)) job.Job {
+	merged := prev.Clone()
+	merge(&merged)
+	if prev.State.Terminal() && merged.State.Live() {
+		return merged.HandedOutAfresh()
+	}
+	return merged
 }
 
 // droppedProblems is each declared field of the live row prev that merged leaves empty:

@@ -131,7 +131,7 @@ func fixtureCamelKeys(v any) any {
 // A deny path naming a declaration of a file no diff driver reads is refused at fork
 // (MGS3031): the guard could only honor it by denying the whole file.
 func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	repo.WriteTree(map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"})
@@ -154,7 +154,7 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 // A retry names the id alone and forks the job again as it was declared. A spec flag
 // declares an ended job anew, but may not erase a live job's write paths or check.
 func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	repo.WriteTree(map[string]string{"run.go": "package run\n"})
@@ -195,7 +195,7 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
 // refuses it even with a check, and the refusal teaches the script check a scout passes by.
 func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	root, cacheDir := execFixture(t)
 	fork := func(args ...string) error { return jobFork(t.Context(), root, args) }
 
@@ -221,7 +221,7 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 // be declared, and the open names the tier it left unassigned: a tier declaration that
 // failed to load must not read as one that declared nothing.
 func TestOpenJobsOpensTheStoreWhenTheWorkspaceWillNotLoad(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	root, _ := execFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nmagus\\project({\n"), 0o644))
 
@@ -242,7 +242,7 @@ func TestOpenJobsOpensTheStoreWhenTheWorkspaceWillNotLoad(t *testing.T) {
 // A fork resolves the checkpoint it is handed: a full-length revision the repository
 // never held is refused and writes no row, and a real abbreviated one is stored in full.
 func TestJobForkResolvesItsCheckpoint(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	head := repo.Head()
@@ -268,7 +268,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 // The same record without the flag is still refused, and a record naming another checkout
 // is refused rather than one of the two being dropped.
 func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t, jobtypes.Job{
 		ID: "live", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"a.go"}},
 		Check: &jobtypes.LeaseCheck{Target: "test", Project: "."},
@@ -309,7 +309,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 // its holder's magus there as a sibling; an integration row forked from the forker's own
 // linked checkout bound its integrator to the forker's tree.
 func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
@@ -350,7 +350,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 // The checkpoint of an integration fork into a standing checkout is that checkout's
 // revision, not the forker's, so the integrator's merge is judged from where it starts.
 func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
@@ -389,7 +389,7 @@ func TestIntegrationStandingCheckoutSuite(t *testing.T) {
 
 func (s *IntegrationStandingCheckoutSuite) SetupTest() {
 	t := s.T()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	s.root = repo.Root()
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: s.root})
@@ -426,7 +426,7 @@ func (s *IntegrationStandingCheckoutSuite) TestTheCheckpointIsTheCheckoutsRevisi
 // An integration row that exited red was refused a same-id re-fork once its branch was
 // merged ("nothing to merge"), so a small follow-up needed a second row.
 func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
@@ -503,7 +503,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 		{"no wired host", "import \"magus\";\n" + testTarget, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			resetWorkspaceMemo(t)
+			resetOpenedWorkspaces(t)
 			root, _ := execFixture(t)
 			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(tt.magusfile), 0o644))
 			require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
@@ -539,7 +539,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 		Config:     types.HarnessConfig{Path: "hooks.json"},
 		Models:     []model.Row{{ID: "claude-opus-test", Alias: "opus", Tier: "routine"}},
 	})
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	root, _ := execFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
@@ -574,7 +574,7 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 			wired := harness
 			wired.Tools = &types.HarnessTools{Dir: tt.toolsDir}
 			fixture.WireHarness(t, wired)
-			resetWorkspaceMemo(t)
+			resetOpenedWorkspaces(t)
 			t.Cleanup(snapshotGlobals())
 			testkit.Isolate(t)
 			global = globalFlags{}
@@ -696,7 +696,7 @@ func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 // A workspace with no symbol index cannot say what references the write paths, so a fork
 // says the list is unknown instead of printing nothing.
 func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) {
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	root, _ := execFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"+testTarget), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc A() {}\n"), 0o644))
@@ -959,7 +959,7 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 		"pkg/a.go":       "package pkg\n",
 		"pkg/a_test.go":  "package pkg\n\nimport \"testing\"\n\nfunc TestAlpha(t *testing.T) {}\nfunc TestBeta(t *testing.T) {}\n",
 	}).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	root, cacheDir := seedJobStore(t, root)
 	fork := func(check string) error {
@@ -1005,7 +1005,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
@@ -1054,7 +1054,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
 	require.NoError(t, os.MkdirAll(elsewhere, 0o755))
@@ -1106,7 +1106,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 	grade := gradingWith(nil)
@@ -1134,7 +1134,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	root := repo.Root()
 	own := filepath.Join(t.TempDir(), "own")
 	repo.Git("worktree", "add", "-q", "--detach", own)
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	ci := &jobtypes.LeaseCheck{Target: types.TargetCI, Project: "."}
 	held := jobtypes.Job{ID: "w", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: ci, Worktree: &jobtypes.Worktree{Root: own}}
@@ -1184,7 +1184,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 
@@ -1219,14 +1219,14 @@ func gradingWith(mutate func(*guard.Dependencies)) job.CheckGrader {
 }
 
 // `magus job fork` grades with a forkGrader of its own, not the store's grader, so its
-// memos live no longer than the fork. The store's grader serves the doors that put a row
+// kept verdicts live no longer than the fork. The store's grader serves the doors that put a row
 // without forking: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
 func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(t)
+	resetOpenedWorkspaces(t)
 	t.Chdir(root)
 
 	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
@@ -1249,7 +1249,7 @@ func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
 	testkit.Isolate(s.T())
 	global = globalFlags{}
 	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 	ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
 	defer cancel()
@@ -1350,7 +1350,7 @@ func (s *jobApplyContractSuite) apply(root string, record jobtypes.Declaration) 
 
 func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.Store, jobtypes.Declaration) {
 	s.T().Helper()
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	row := leaseRow("integration", "")
 	row.Paths.Write = []string{"magus.yaml"}
 	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
@@ -1419,7 +1419,7 @@ func (s *jobApplyContractSuite) TestOmittingIntegratesClearsTheStoredSpec() {
 }
 
 func (s *jobApplyContractSuite) TestAnUnknownSettlementExitsFailureAndWritesNothing() {
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	root, cacheDir := execFixture(s.T())
 	_, err := s.apply(root, jobtypes.Declaration{
 		Schema: jobtypes.Schema{Version: jobtypes.APIVersion}, ID: "absent",
@@ -1446,7 +1446,7 @@ func (s *jobApplyContractSuite) TestAnInvalidFiledResultExitsUsageAndKeepsTheJob
 }
 
 func (s *jobApplyContractSuite) TestAMalformedRecordExitsUsage() {
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	root, _ := execFixture(s.T())
 	path := filepath.Join(s.T().TempDir(), "broken.jsonl")
 	s.Require().NoError(os.WriteFile(path, []byte("{\n"), 0o600))
@@ -1482,7 +1482,7 @@ func (s *forkErrorsSuite) TestUsageFormattingPreservesTypedCauses() {
 }
 
 func (s *forkErrorsSuite) TestForkPreservesTheStackedHeadCancellation() {
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	repo, _ := execRepositoryFixture(s.T())
 	ctx, cancel := context.WithCancel(s.T().Context())
 	cancel()
@@ -1495,7 +1495,7 @@ func (s *forkErrorsSuite) TestForkPreservesTheStackedHeadCancellation() {
 }
 
 func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
-	resetWorkspaceMemo(s.T())
+	resetOpenedWorkspaces(s.T())
 	repo, _ := execRepositoryFixture(s.T())
 	store, err := openJobs(s.T().Context(), repo.Root(), jobOpen{})
 	s.Require().NoError(err)

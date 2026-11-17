@@ -625,7 +625,7 @@ while (i < 50000000) { i = i + 1; }
 // s.ctx (never expires), so the deadline on Exec's own ctx had no effect on the
 // import and the call ran the loop to completion instead of aborting. Run via
 // `select` + `time.After` per the repo's hang-test idiom (pool_test.go
-// TestDispatchRejectsCycleWithMemo) so a regression fails rather than wedging
+// TestDispatchRejectsCycle) so a regression fails rather than wedging
 // the suite.
 func TestExecCtxBoundsImportExecution(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())

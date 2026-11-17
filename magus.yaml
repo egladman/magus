@@ -180,9 +180,10 @@ knowledge:
             internal/proc: 19
             # the broker host, registry, probes and MCP bridge moved out of cmd/magus
             # beside the status rendering already here: the server package wires every
-            # service it hosts, so it imports 68 workspace packages.
-            # 72 since ADR 0050: libs/codec, libs/secrets and the budget, job and trail module packages.
-            internal/server: 72
+            # service it hosts, so it imports 68 workspace packages. The broker spawn seam
+            # also imports cmd/magus/gen (flaggen) for the broker's --log flag name: 69.
+            # 73 since ADR 0050: libs/codec, libs/secrets and the budget, job and trail module packages.
+            internal/server: 73
             # job evidence moved out of cmd/magus: *magus.Magus runs through every
             # signature, the shared boundary names the config.Filename constant, and the
             # callers claim reads occurrences through workspacegraph. It holds the symbol

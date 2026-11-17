@@ -597,7 +597,10 @@ func (s *Server) Serve(ctx context.Context) error {
 			// either: unlike notes and memory, nothing here is attributable to a person, and the
 			// same facts are already served unaudited over /api/v1/graph. The two doors onto that
 			// one body of data hold the same need, console=read.
-			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(viewInternals(opts.Magus)), connectReadMax)
+			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(viewInternals(opts.Magus)), connectReadMax,
+				// gzip cost 2.3 ms of a 14 ms position query and saves nothing on a socket this
+				// close; only a response past 1 MiB is worth compressing.
+				connect.WithCompressMinBytes(1<<20))
 			f.service(graphPath, graphServiceHandler)
 			bridgeLog.InfoContext(ctx, "graph service mounted", slog.String("path", graphPath))
 

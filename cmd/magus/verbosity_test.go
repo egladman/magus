@@ -4,20 +4,13 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
-	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/log/quiet"
-	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestCtxAttrHandlerInjectsDir verifies the working directory carried on the
@@ -76,166 +69,4 @@ func TestDirHandlerRendersComponentByFormat(t *testing.T) {
 		With(attr.ComponentKey, "knowledge").
 		WarnContext(ctx, "cannot decode symbol index", "index", "a.scip")
 	assert.Contains(t, text.String(), `msg="cannot decode symbol index" component=knowledge index=a.scip dir=/ws/api`)
-}
-
-// TestExpandVerbosityArgsStopsAtSeparator pins the transformer half of the "--"
-// guard: expandVerbosityArgs builds the master argv startup() parses (main.go's
-// startup calls extractVerbosityCount(args), which itself calls this), so a token
-// meant verbatim for a forwarded tool (e.g. `-vvv` as a literal positional the tool
-// expects) must survive past "--" unchanged rather than being expanded into a run
-// of "-v" tokens or dropped.
-func TestExpandVerbosityArgsStopsAtSeparator(t *testing.T) {
-	got := expandVerbosityArgs([]string{"run", "-vv", "build", "--", "-vvv", "--other"})
-	want := []string{"run", "-v", "-v", "build", "--", "-vvv", "--other"}
-	if len(got) != len(want) {
-		t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
-		}
-	}
-}
-
-// TestExpandVerbosityArgsNoSeparator confirms the ordinary expansion still works
-// when there is no "--" at all.
-func TestExpandVerbosityArgsNoSeparator(t *testing.T) {
-	got := expandVerbosityArgs([]string{"run", "-vvv", "build"})
-	want := []string{"run", "-v", "-v", "-v", "build"}
-	if len(got) != len(want) {
-		t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
-		}
-	}
-}
-
-func TestEffectiveLevelQuietWinsOverVerbose(t *testing.T) {
-	assert.Equal(t, slog.LevelError, effectiveLevel(0, true))
-	assert.Equal(t, slog.LevelError, effectiveLevel(3, true))
-	assert.Equal(t, slog.LevelInfo, effectiveLevel(0, false))
-	assert.Equal(t, slog.LevelDebug, effectiveLevel(1, false))
-	assert.Equal(t, slog.LevelDebug, effectiveLevel(2, false))
-	assert.Equal(t, config.LevelTrace, effectiveLevel(3, false))
-}
-
-// levelName writes back into log.level, so it spells levels the way that setting's
-// validator accepts them.
-func TestLevelNameSpellsTheConfigVocabulary(t *testing.T) {
-	assert.Equal(t, "trace", levelName(config.LevelTrace))
-	assert.Equal(t, "debug", levelName(slog.LevelDebug))
-	assert.Equal(t, "info", levelName(slog.LevelInfo))
-	assert.Equal(t, "error", levelName(slog.LevelError))
-}
-
-// log.level from yaml, env or --log-level governs the process logger; only a verbosity
-// flag overrides it.
-func TestApplyDisplayHonorsConfiguredLevel(t *testing.T) {
-	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
-	t.Cleanup(func() {
-		globalCfg, global = savedCfg, savedGlobal
-		slog.SetDefault(savedLogger)
-	})
-
-	globalCfg, global = config.Config{Log: config.Log{Level: "debug", Format: "text"}}, globalFlags{}
-	applyDisplay()
-	assert.Equal(t, "debug", globalCfg.Log.Level)
-	assert.True(t, slog.Default().Enabled(context.Background(), slog.LevelDebug))
-
-	global.quiet = true
-	applyDisplay()
-	assert.Equal(t, "error", globalCfg.Log.Level)
-	// A warning still reaches the quiet filter, which keeps only an unchecked one.
-	assert.False(t, slog.Default().Enabled(context.Background(), slog.LevelDebug))
-}
-
-// A quiet display drops a failure's reasoning and a short wait; the run log's capture
-// chain keeps both.
-func TestApplyDisplayQuietFiltersTheDisplayNotTheCapture(t *testing.T) {
-	silent := true
-	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
-	t.Cleanup(func() {
-		globalCfg, global = savedCfg, savedGlobal
-		slog.SetDefault(savedLogger)
-	})
-
-	globalCfg, global = config.Config{Log: config.Log{Format: "text", Silent: &silent}}, globalFlags{}
-	ctx := context.Background()
-	reasoned := slog.NewRecord(time.Now(), slog.LevelWarn, "index stale", 0)
-	reasoned.AddAttrs(attr.Why("stale symbols mislead"))
-	wait := slog.NewRecord(time.Now(), slog.LevelInfo, "waiting for the broker", 0)
-	wait.AddAttrs(attr.Elapsed(5 * time.Second))
-
-	// The display handler binds to os.Stderr when applyDisplay builds it.
-	capture := &journalRecordSink{}
-	shown := testkit.CaptureStderr(t, func() {
-		applyDisplay()
-		for _, r := range []slog.Record{reasoned, wait} {
-			require.NoError(t, slog.Default().Handler().Handle(ctx, r))
-			require.NoError(t, journal.NewLogger(capture).Handler().Handle(ctx, r))
-		}
-	})
-
-	assert.Contains(t, shown, `msg="index stale"`)
-	assert.NotContains(t, shown, "why=")
-	assert.NotContains(t, shown, "waiting for the broker")
-
-	require.Len(t, capture.records, 2)
-	var kept []string
-	for _, r := range capture.records {
-		r.Attrs(func(a slog.Attr) bool {
-			kept = append(kept, a.Key)
-			return true
-		})
-	}
-	assert.Equal(t, []string{attr.WhyKey, attr.ElapsedKey}, kept)
-}
-
-// -o jsonl hands a parser every notice whole, so no quiet filter applies. Its notices
-// go through an encoder bound to the process's stderr at init, which a test cannot
-// redirect, so this pins the installed chain instead of the bytes.
-func TestApplyDisplayQuietLeavesJSONLNoticesWhole(t *testing.T) {
-	silent := true
-	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
-	t.Cleanup(func() {
-		globalCfg, global = savedCfg, savedGlobal
-		slog.SetDefault(savedLogger)
-	})
-	filtered := reflect.TypeOf(quiet.Wrap(slog.DiscardHandler, false))
-
-	globalCfg, global = config.Config{Log: config.Log{Format: "text", Silent: &silent}}, globalFlags{}
-	applyDisplay()
-	require.IsType(t, dirHandler{}, slog.Default().Handler())
-	assert.Equal(t, filtered, reflect.TypeOf(slog.Default().Handler().(dirHandler).Handler), "text display")
-
-	global.output = string(outputJSONL)
-	applyDisplay()
-	assert.NotEqual(t, filtered, reflect.TypeOf(slog.Default().Handler().(dirHandler).Handler), "-o jsonl notices")
-}
-
-// With no -q, -s or log.silent, a person sees a failure's reasoning and every wait note.
-func TestApplyDisplayDefaultKeepsTheReasoning(t *testing.T) {
-	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
-	t.Cleanup(func() {
-		globalCfg, global = savedCfg, savedGlobal
-		slog.SetDefault(savedLogger)
-	})
-
-	globalCfg, global = config.Config{Log: config.Log{Format: "text"}}, globalFlags{}
-	ctx := context.Background()
-	reasoned := slog.NewRecord(time.Now(), slog.LevelWarn, "index stale", 0)
-	reasoned.AddAttrs(attr.Why("stale symbols mislead"))
-	wait := slog.NewRecord(time.Now(), slog.LevelInfo, "waiting for the broker", 0)
-	wait.AddAttrs(attr.Elapsed(5 * time.Second))
-	shown := testkit.CaptureStderr(t, func() {
-		applyDisplay()
-		for _, r := range []slog.Record{reasoned, wait} {
-			require.NoError(t, slog.Default().Handler().Handle(ctx, r))
-		}
-	})
-
-	assert.Contains(t, shown, `why="stale symbols mislead"`)
-	assert.Contains(t, shown, "waiting for the broker")
 }

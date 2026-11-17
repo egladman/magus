@@ -21,7 +21,7 @@ import (
 // never parses it.
 type Provider interface {
 	// Fetch returns ref's value, or errors if it cannot. A backend FETCHES; the
-	// [Resolver] READS: it selects the provider, memoizes, and registers the value for
+	// [Resolver] READS: it selects the provider, keeps each answer, and registers the value for
 	// redaction, which is the security-critical part. Two verbs so the two contracts
 	// cannot be confused at a call site.
 	//
@@ -54,16 +54,16 @@ func (envProvider) Fetch(_ context.Context, ref string) (Secret, error) {
 	return New(v), nil
 }
 
-// memoKey pairs a reference with the provider that resolved it. Keying on the reference
-// alone would let a caller that reads before selecting a provider memoize the built-in
+// resolvedKey pairs a reference with the provider that resolved it. Keying on the reference
+// alone would let a caller that reads before selecting a provider settle on the built-in
 // env fallback and keep returning it under the declared provider: a silently wrong
 // credential rather than an error.
-type memoKey struct {
+type resolvedKey struct {
 	provider string
 	ref      string
 }
 
-// Resolver holds one scope's secret state: the values read so far, the memo of what each
+// Resolver holds one scope's secret state: the values read so far, what each
 // reference resolved to, and the endpoints opened for grants. A Resolver reads through
 // one provider, fixed for the value; [Resolver.WithProvider] derives a Resolver that
 // reads through another and shares this one's state. It is safe for concurrent use. A
@@ -79,14 +79,14 @@ type Resolver struct {
 // through any of them is masked by all of them.
 type state struct {
 	mu sync.RWMutex
-	// memo avoids re-invoking a provider that shells out (`op read`, `vault kv get`).
-	memo map[memoKey]Secret
+	// resolved avoids re-invoking a provider that shells out (`op read`, `vault kv get`).
+	resolved map[resolvedKey]Secret
 	// redactable holds every distinct value read, longest first so [Resolver.Redact]
 	// masks a containing secret before one nested inside it.
 	redactable []Secret
 	// group collapses concurrent reads of one key into a single provider invocation.
 	// Without it, N readers of the same reference at once means N interactive unlock
-	// prompts, which the memo alone does not prevent; the lookup and the fetch cannot
+	// prompts, which the kept answers alone do not prevent; the lookup and the fetch cannot
 	// share a lock without serializing unrelated references too.
 	group singleflight.Group
 
@@ -154,7 +154,7 @@ func ResolverFromContext(ctx context.Context) *Resolver {
 
 // WithProvider returns a Resolver that reads through the provider named name, built by
 // the [Opener]; an empty name selects the built-in environment provider. It shares r's
-// memo, redaction set and endpoints, so a value either reads is masked by both. r is
+// kept answers, redaction set and endpoints, so a value either reads is masked by both. r is
 // unchanged. A nil Resolver returns nil.
 func (r *Resolver) WithProvider(name string) *Resolver {
 	if r == nil {
@@ -229,8 +229,8 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Secret, error) {
 		return Secret{}, &ReadError{Provider: r.provider, Err: errEmptyRef}
 	}
 
-	key := memoKey{provider: r.provider, ref: ref}
-	if v, hit := r.memoized(key); hit {
+	key := resolvedKey{provider: r.provider, ref: ref}
+	if v, hit := r.kept(key); hit {
 		return v, nil
 	}
 
@@ -255,22 +255,22 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Secret, error) {
 	}
 }
 
-// memoized returns the value key already resolved to.
-func (r *Resolver) memoized(key memoKey) (Secret, bool) {
+// kept returns the value key already resolved to.
+func (r *Resolver) kept(key resolvedKey) (Secret, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	v, hit := r.memo[key]
+	v, hit := r.resolved[key]
 	return v, hit
 }
 
 // fetch is one flight of [Resolver.Read]. Detached from the caller's cancellation
 // because the flight is shared: the caller that happened to start it giving up must not
 // fail every other waiter.
-func (r *Resolver) fetch(callerCtx context.Context, key memoKey) (Secret, error) {
-	// Re-checked INSIDE the flight. A caller that missed the memo just as a previous
+func (r *Resolver) fetch(callerCtx context.Context, key resolvedKey) (Secret, error) {
+	// Re-checked INSIDE the flight. A caller that missed the kept answers just as a previous
 	// flight was completing would otherwise start a second one and invoke the provider
 	// again, the exact duplicate unlock prompt this exists to prevent.
-	if v, hit := r.memoized(key); hit {
+	if v, hit := r.kept(key); hit {
 		return v, nil
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(callerCtx), r.timeouts.longest())
@@ -292,7 +292,7 @@ func (r *Resolver) fetch(callerCtx context.Context, key memoKey) (Secret, error)
 
 // fetchFrom asks key's provider for its reference, falling back to the built-in when
 // none is selected, which keeps an unconfigured caller working off its environment.
-func (r *Resolver) fetchFrom(ctx context.Context, key memoKey) (Secret, error) {
+func (r *Resolver) fetchFrom(ctx context.Context, key resolvedKey) (Secret, error) {
 	if key.provider == "" {
 		return envProvider{}.Fetch(ctx, key.ref)
 	}
@@ -306,7 +306,7 @@ func (r *Resolver) fetchFrom(ctx context.Context, key memoKey) (Secret, error) {
 	return p.Fetch(ctx, key.ref)
 }
 
-// record memoizes a resolved value and, when long enough to mask safely, adds it to the
+// record keeps a resolved value and, when long enough to mask safely, adds it to the
 // redaction set.
 //
 // The common ENCODINGS are registered alongside the raw form, because redaction is
@@ -319,13 +319,13 @@ func (r *Resolver) fetchFrom(ctx context.Context, key memoKey) (Secret, error) {
 // the prefix length is a multiple of 3: an `Authorization: Basic` header is covered about
 // one time in three. Closing that needs the value to mask itself before concatenation,
 // which is what a [Secret] is for.
-func (r *Resolver) record(key memoKey, v Secret) {
+func (r *Resolver) record(key resolvedKey, v Secret) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.memo == nil {
-		r.memo = make(map[memoKey]Secret)
+	if r.resolved == nil {
+		r.resolved = make(map[resolvedKey]Secret)
 	}
-	r.memo[key] = v
+	r.resolved[key] = v
 	// Gated on the SOURCE length, not each encoded form. Encoding inflates: base64 of a
 	// 1-character value is "MQ==" and hex of "ab" is "6162", both long enough to clear
 	// MinMaskLen on their own, so a per-form check would register derivatives of exactly
@@ -338,7 +338,7 @@ func (r *Resolver) record(key memoKey, v Secret) {
 	}
 }
 
-// Register adds v and its encoded forms to the redaction set without memoizing it as a
+// Register adds v and its encoded forms to the redaction set without keeping it as a
 // resolved reference: for a credential the caller mints or receives outside a provider (a
 // token read from stdin). A value shorter than [MinMaskLen] and a nil Resolver are
 // ignored.

@@ -18,6 +18,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
@@ -34,7 +35,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -51,7 +51,7 @@ var graphSubs = []string{"build", "push", "pull", "deps", "export", "stats", "di
 
 func graphCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		graphUsage()
+		commands.WriteGraphUsage(os.Stderr)
 		return flag.ErrHelp
 	}
 	sub, rest := args[0], args[1:]
@@ -90,25 +90,7 @@ func graphCommand(ctx context.Context, root string, args []string) error {
 
 func graphErrorUsage() {
 	fmt.Fprintln(os.Stderr, "")
-	graphUsage()
-}
-
-func graphUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus graph <subcommand> [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "The workspace's graphs as objects: emit, export, and measure them.")
-	fmt.Fprintln(os.Stderr, "(query/explain/path read the knowledge graph; graph is the graph itself.)")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  build    rebuild the knowledge graph now, reindexing code symbols (runs each project's scip op)")
-	fmt.Fprintln(os.Stderr, "  push     publish the graph to a container registry as an OCI artifact")
-	fmt.Fprintln(os.Stderr, "  pull     fetch a published graph; a public one needs no credentials")
-	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|tree)")
-	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot neighborhood)")
-	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
-	fmt.Fprintln(os.Stderr, "  diff     nodes/edges added/removed/changed vs a baseline export or --rev; PR blast-radius")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph).")
+	commands.WriteGraphUsage(os.Stderr)
 }
 
 // graphBuild is the explicit "build the graph now" subcommand: it reindexes code symbols
@@ -1141,12 +1123,6 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 // graph push and graph pull below are flags and wiring; the registry artifact, its
 // media types and its transport live in internal/graph/knowledge (publish.go).
 
-// graphRegistryTimeout bounds the whole exchange for every registry verb in this binary.
-const graphRegistryTimeout = knowledge.RegistryTimeout
-
-// readToken takes the registry token from STDIN; spell.go's verbs read theirs the same way.
-func readToken(ctx context.Context) (secrets.Secret, error) { return knowledge.ReadToken(ctx) }
-
 func graphPush(ctx context.Context, root string, args []string) error {
 	var pf *flaggen.GraphPushFlags
 	_, err := commandParse("graph push", args, func(fs *flag.FlagSet) {
@@ -1267,8 +1243,8 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	// No credentials on purpose: a public artifact is the case this exists for, and a
 	// client that quietly used an ambient token would work for whoever built it and fail
 	// for everyone they handed it to.
-	client := &oci.Client{HTTP: &http.Client{Timeout: graphRegistryTimeout}}
-	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	client := &oci.Client{HTTP: &http.Client{Timeout: knowledge.RegistryTimeout}}
+	ctx, cancel := context.WithTimeout(ctx, knowledge.RegistryTimeout)
 	defer cancel()
 
 	raw, err := knowledge.PullMergedGraph(ctx, client, src, deriveSourceBase(ctx, root))
@@ -1287,4 +1263,38 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		return emitRecord(opts, knowledge.RegistryOutput{Ref: src.String(), Bytes: len(raw), Path: out}, []string{src.String()})
 	}
 	return nil
+}
+
+// liveExplorerLink formats a server-origin Graph Explorer deep-link (served by the
+// running server from http://<host>/console/graph/) with the caller's directives
+// applied. It does not probe the server, and it NEVER embeds the bearer token.
+//
+// It used to call auth.Load() and put the live token in the fragment. The fragment
+// is not transmitted in an HTTP request, which is why that read as safe, but it is
+// still a credential written to stdout on every `magus explain`, and stdout is
+// scrollback, a captured run log, and the context of whatever agent ran the command.
+// A credential that reaches three sinks nobody audits is leaked regardless of what
+// the browser does with it afterwards.
+//
+// The token stays one shell substitution away (see console.AuthHint), which keeps the
+// authenticated URL composable while making its disclosure an explicit act rather
+// than a side effect of asking an unrelated question. Distinct from
+// graphExplorerLink below, which builds a static #src= link.
+func liveExplorerLink(directives console.GraphLinkOpts) string {
+	return console.BuildGraphLink(mcpAddrString(), "", directives)
+}
+
+// graphExplorerLink returns a Graph Explorer URL preloaded with the repo's committed
+// docs/graph.json, or "" when there is none to link (see console.GraphExplorerLink).
+func graphExplorerLink(ctx context.Context, root string) string {
+	return console.GraphExplorerLink(root, func() string { return deriveSourceBase(ctx, root) })
+}
+
+// deriveSourceBase resolves the workspace's forge blob-URL base, or "" when there is none.
+func deriveSourceBase(ctx context.Context, root string) string {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return ""
+	}
+	return console.DeriveSourceBase(ctx, ws)
 }

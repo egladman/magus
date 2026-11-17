@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/ward"
@@ -43,7 +44,7 @@ func maybeBootstrapExec(argv []string) {
 	if err != nil || ward.GoRunBinary(self) {
 		return
 	}
-	target, ok := workspace.BootstrapExecTarget(extractRootFlag(argv[1:]), self)
+	target, ok := workspace.BootstrapExecTarget(commands.ExtractRootFlag(argv[1:]), self)
 	if !ok {
 		return
 	}

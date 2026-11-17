@@ -17,26 +17,26 @@ import (
 // grades every gate it offers, so the installed grader opened the workspace once per
 // judgment: a few hundred MB of magusfile parse each time. This one opens each workspace
 // once for the whole fork, starting from the workspace the fork already holds, and
-// answers a grade it has already reached from its memo.
+// answers a grade it has already reached from its kept verdicts.
 //
 // It lives only as long as the fork. Nothing the fork does edits the magusfiles or the
 // rules, and a key carries the rules' content ids anyway, so a verdict read back is the
 // verdict judging again would reach.
 type ForkGrader struct {
 	rules    *rulesByRoot
-	verdicts *job.GradeMemo
+	verdicts *job.KeptVerdicts
 }
 
-// NewForkGrader is a ForkGrader loading rules through load, whose memo starts with held,
+// NewForkGrader is a ForkGrader loading rules through load, whose kept workspaces start with held,
 // the workspace the fork has open, under its root. A nil held starts it empty.
 func NewForkGrader(held types.WorkspaceRepository, load RulesLoader) *ForkGrader {
-	opens := NewWorkspaceMemo()
+	opens := NewOpenedWorkspaces()
 	if held != nil {
 		opens.Keep(held.Root(), held)
 	}
 	return &ForkGrader{
 		rules:    newRulesByRoot(load, opens),
-		verdicts: job.NewGradeMemo(),
+		verdicts: job.NewKeptVerdicts(),
 	}
 }
 

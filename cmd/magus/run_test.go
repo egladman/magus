@@ -231,8 +231,8 @@ func TestRunReadsPlan(t *testing.T) {
 // A run reading a plan is never forwarded, since a forward does not carry stdin, and
 // takes no records from its upstream, since stdin is its plan.
 func TestRunReadingAPlanStaysInThisProcess(t *testing.T) {
-	assert.False(t, resolveProfile("run", []string{"--stdin"}).needsForward)
-	assert.True(t, resolveProfile("run", []string{"--stdin"}).spawnsWork)
+	assert.False(t, resolveProfile("run", []string{"--stdin"}).NeedsForward)
+	assert.True(t, resolveProfile("run", []string{"--stdin"}).SpawnsWork)
 	assert.False(t, tradesRecords([]string{"run", "ci:gha", "--stdin"}))
 	assert.True(t, tradesRecords([]string{"run", "ci:gha"}))
 }

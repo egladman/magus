@@ -128,6 +128,36 @@ func (s *pathsNestedSuite) TestTheHeaderLineIsKept() {
 	s.NotContains(got, "spec")
 }
 
+// headerlessStoreSuite pins a store with no header line, which replays every migration
+// from 0 over rows a later magus already wrote.
+type headerlessStoreSuite struct {
+	suite.Suite
+}
+
+func TestHeaderlessStoreSuite(t *testing.T) { suite.Run(t, new(headerlessStoreSuite)) }
+
+func (s *headerlessStoreSuite) TestAnEnvelopedRowLoadsAndIsKept() {
+	ctx := s.T().Context()
+	st := tempStore(s.T(), s.T().TempDir())
+	row := job.Job{ID: "a", State: job.StateRunning, Created: 1, Updated: 1, Paths: job.Paths{Write: []string{"a.go"}}}
+	line, err := job.MarshalRecord(row, nil)
+	s.Require().NoError(err)
+	path := plantRaw(s.T(), st, string(line))
+	current := tempStore(s.T(), s.T().TempDir())
+	plantRaw(s.T(), current, headerLine("")+"\n"+string(line))
+	want, err := current.List(ctx)
+	s.Require().NoError(err)
+	s.Require().Len(want, 1)
+
+	rows, err := st.List(ctx)
+
+	s.Require().NoError(err)
+	s.Equal(want, rows, "the row reads as it does under a current header")
+	stored := storedLines(s.T(), path)
+	s.Require().Len(stored, 2, "the header the migration wrote, then the row")
+	s.Equal(string(job.APIVersion), stored[1]["apiVersion"])
+}
+
 // rootlessMigrationSuite pins the migration refusal for a store opened with
 // no root, which keys on the working directory. It changes directory, so it
 // runs alone.

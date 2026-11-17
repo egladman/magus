@@ -1249,10 +1249,10 @@ func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
 // from the template bodies in those files so it is the real bytes and not a copy, and
 // validates it against the host's hook-stdout schema.
 //
-// Nothing here reaches the network. testdata/hosts holds vendored copies and
+// Nothing here reaches the network. internal/render/testdata/hosts holds vendored copies and
 // records the provenance of each; hack/dev/host-schemas.buzz is what refreshes them.
 
-const hostSchemaDir = repoRoot + "/testdata/hosts"
+const hostSchemaDir = repoRoot + "/internal/render/testdata/hosts"
 
 // hostConfigSchema names the schema every hooks config a host reads is graded against.
 // A host absent from this map is a host whose config nothing checks, which is the

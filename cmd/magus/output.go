@@ -7,20 +7,16 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"slices"
 	"strings"
-	"text/template"
-
-	sprig "github.com/Masterminds/sprig/v3"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/libs/codec"
 )
 
 // The -o formats only magus's graph commands accept, passed to output.Parse as extras.
@@ -31,51 +27,14 @@ const (
 	outputGraphML  output.Format = "graphml"  // graph export: GraphML XML for external graph viewers
 )
 
-// structuredStdout is where structured output goes besides the --tee file. --silent
-// with --tee means the caller captures the record in the file and wants stdout empty,
-// so it does not pay for the same record twice in its context.
-func structuredStdout(out io.Writer) io.Writer {
-	if global.silent && global.tee != "" {
-		return io.Discard
-	}
-	return out
-}
-
-// outputDestination returns the writer for structured output over out, mirrored to the
-// --tee file when set; the caller runs the returned close once it is done writing.
-func outputDestination(out io.Writer) (io.Writer, func() error, error) {
-	if global.tee == "" {
-		return out, func() error { return nil }, nil
-	}
-	f, err := openTeeFile(global.tee)
-	if err != nil {
-		return nil, nil, fmt.Errorf("--tee: %w", err)
-	}
-	return io.MultiWriter(structuredStdout(out), f), f.Close, nil
-}
-
-// A command may open several destinations while streaming records. Truncate only
-// the first, so a fresh invocation replaces the old capture without losing its own records.
-func openTeeFile(path string) (*os.File, error) {
-	flags := os.O_WRONLY | os.O_APPEND | os.O_CREATE
-	if global.teeInitialized != path {
-		flags |= os.O_TRUNC
-	}
-	f, err := os.OpenFile(path, flags, 0o644)
-	if err == nil {
-		global.teeInitialized = path
-	}
-	return f, err
-}
-
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
 // --tee) and stderr; close flushes it and closes the tee. A text sink whose stdout a
 // magus stage reads also writes its records there (see pipeRecordStage).
 func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() error, error) {
 	stdout := io.Writer(os.Stdout)
-	tee := &lazyFile{path: global.tee}
-	if global.tee != "" {
-		stdout = io.MultiWriter(structuredStdout(os.Stdout), tee)
+	tee := render.NewLazyFile(&global.tee)
+	if global.tee.Path != "" {
+		stdout = io.MultiWriter(global.tee.StructuredStdout(os.Stdout, global.silent), tee)
 	}
 	sinkOpts := []magus.SinkOption{magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter)}
 	if opts.Format == outputText && pipe.StageFromContext(ctx).WritesRecords() {
@@ -88,29 +47,9 @@ func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() err
 	return sink, func() error { return errors.Join(sink.Close(), tee.Close()) }, nil
 }
 
-// lazyFile opens path on the first write, so a format that keeps stdout
-// empty leaves no --tee file behind. Not safe for concurrent writes.
-type lazyFile struct {
-	path string
-	f    *os.File
-	err  error
-}
-
-func (l *lazyFile) Write(p []byte) (int, error) {
-	if l.f == nil && l.err == nil {
-		l.f, l.err = openTeeFile(l.path)
-	}
-	if l.err != nil {
-		return 0, fmt.Errorf("--tee: %w", l.err)
-	}
-	return l.f.Write(p)
-}
-
-func (l *lazyFile) Close() error {
-	if l.f == nil {
-		return nil
-	}
-	return l.f.Close()
+// writeFormatted renders v in opts' structured format to w. queue.go calls it by this name.
+func writeFormatted(w io.Writer, opts output.Options, v any) error {
+	return render.WriteFormatted(w, opts, v)
 }
 
 // emitFormatted renders v with opts to the structured-output destination (stdout,
@@ -118,12 +57,12 @@ func (l *lazyFile) Close() error {
 // command's `-o json|yaml|jsonl|template` arm is one call instead of repeating the
 // same destination/defer/writeFormatted dance.
 func emitFormatted(opts output.Options, v any) error {
-	w, cleanup, err := outputDestination(os.Stdout)
+	w, cleanup, err := global.tee.Destination(os.Stdout, global.silent)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	return writeFormatted(w, opts, v)
+	return render.WriteFormatted(w, opts, v)
 }
 
 // emitNames writes the `-o name` form: one bare token per line, to out mirrored to --tee.
@@ -132,7 +71,7 @@ func emitFormatted(opts output.Options, v any) error {
 // a record is the command's to say, not the renderer's. So a command that offers -o name
 // renders it through here.
 func emitNames(out io.Writer, names []string) error {
-	w, cleanup, err := outputDestination(out)
+	w, cleanup, err := global.tee.Destination(out, global.silent)
 	if err != nil {
 		return err
 	}
@@ -168,18 +107,6 @@ func emitRecord(opts output.Options, v any, names []string) error {
 	return emitFormatted(opts, v)
 }
 
-// outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
-// so -o json and a template see the same wire form every other byte magus writes has.
-var outputWriter = output.Writer{
-	Codec: output.Codec{Marshal: codec.Marshal, Unmarshal: codec.Unmarshal},
-	Funcs: templateFuncs(),
-}
-
-// writeFormatted renders v in opts' structured format to w.
-func writeFormatted(w io.Writer, opts output.Options, v any) error {
-	return outputWriter.Write(w, opts, v)
-}
-
 // flagWasSet reports whether flag name was explicitly set (not just defaulted) on fs.
 func flagWasSet(fs *flag.FlagSet, name string) bool {
 	found := false
@@ -189,55 +116,6 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 		}
 	})
 	return found
-}
-
-// excludedSprigFuncs lists sprig entries absent from magus templates (non-hermetic or dangerous).
-// HermeticTxtFuncMap already drops env/expandenv/getHostByName; this list adds the rest.
-var excludedSprigFuncs = []string{
-	// non-deterministic
-	"now", "date", "dateInZone", "dateModify", "mustDateModify",
-	"toDate", "unixEpoch", "htmlDate", "htmlDateInZone",
-	"uuidv4",
-	// crypto — no business in a build-tool template
-	"genPrivateKey", "genCA", "genSelfSignedCert", "genSignedCert",
-	"derivePassword", "htpasswd", "bcrypt",
-	// confusing in -o context
-	"fail",
-}
-
-// templateFuncs returns the FuncMap exposed to -o template= bodies.
-func templateFuncs() template.FuncMap {
-	f := sprig.HermeticTxtFuncMap()
-	for _, name := range excludedSprigFuncs {
-		delete(f, name)
-	}
-	// Preserve magus's original bindings; magus's list-first join wins over sprig's
-	// reversed (sep-first) join. templateJoin (not strings.Join) so it also handles
-	// the []any that json-normalization produces for list fields.
-	f["join"] = templateJoin
-	f["upper"] = strings.ToUpper
-	f["lower"] = strings.ToLower
-	f["trim"] = strings.TrimSpace
-	return f
-}
-
-// templateJoin joins a list's elements with sep, keeping magus's list-first arg order
-// ({{join .list ","}}). Unlike strings.Join it accepts ANY slice/array ([]string
-// from sprig helpers, and the []any that -o template's json-normalized data yields
-// for list fields), stringifying each element. Non-slices stringify whole.
-func templateJoin(list any, sep string) string {
-	if list == nil { // an absent/null list field joins to empty, like strings.Join(nil, sep)
-		return ""
-	}
-	rv := reflect.ValueOf(list)
-	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
-		return fmt.Sprint(list)
-	}
-	parts := make([]string, rv.Len())
-	for i := range parts {
-		parts[i] = fmt.Sprint(rv.Index(i).Interface())
-	}
-	return strings.Join(parts, sep)
 }
 
 // unstructuredCommand reads the declaration, so dispatch and flag parsing share

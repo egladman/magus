@@ -685,3 +685,25 @@ func TestStoreNeverHoldsTheSecret(t *testing.T) {
 	assert.NotContains(t, string(raw), secret)
 	assert.NotContains(t, string(raw), strings.TrimPrefix(secret.Reveal(), prefixStored))
 }
+
+func TestParseExpiry(t *testing.T) {
+	for in, want := range map[string]time.Duration{
+		"":     DefaultTokenTTL,
+		"7d":   7 * 24 * time.Hour,
+		"366d": 366 * 24 * time.Hour,
+		"48h":  48 * time.Hour,
+	} {
+		got, err := ParseExpiry(in)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got, in)
+	}
+	// A token must expire, and a lifetime past the maximum is refused, never shortened.
+	for _, bad := range []string{"never", "Never", "367d", "8785h", "0d", "-3d", "0h", "40000d"} {
+		_, err := ParseExpiry(bad)
+		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, "ParseExpiry accepted %q", bad)
+	}
+	for _, bad := range []string{"5x", "abc", "99999999999999999999d"} {
+		_, err := ParseExpiry(bad)
+		assert.Error(t, err, "ParseExpiry accepted %q", bad)
+	}
+}

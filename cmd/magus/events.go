@@ -89,7 +89,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	destination, cleanup, err := outputDestination(os.Stdout)
+	destination, cleanup, err := global.tee.Destination(os.Stdout, global.silent)
 	if err != nil {
 		return err
 	}

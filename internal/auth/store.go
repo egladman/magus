@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -659,4 +660,48 @@ func lookup(tokens []Token, presented string, kind job.CredentialKind, now time.
 		}
 	}
 	return match, found
+}
+
+// ParseExpiry converts an --expires flag value into a token lifetime. "" is
+// DefaultTokenTTL; "<N>d" is N days; anything else is a Go duration ("48h"). A token must
+// expire, so "never" is refused, as is a lifetime that is not positive or exceeds
+// MaxTokenTTL; nothing is shortened to fit.
+func ParseExpiry(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	switch {
+	case s == "":
+		return DefaultTokenTTL, nil
+	case strings.EqualFold(s, "never"):
+		return 0, expiryOutOfBound(s)
+	}
+
+	var d time.Duration
+	if rest, ok := strings.CutSuffix(s, "d"); ok {
+		days, err := strconv.Atoi(rest)
+		if err != nil {
+			return 0, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
+		}
+		// Checked before multiplying, so a huge day count cannot wrap int64 nanoseconds.
+		if days > int(MaxTokenTTL/(24*time.Hour)) {
+			return 0, expiryOutOfBound(s)
+		}
+		d = time.Duration(days) * 24 * time.Hour
+	} else {
+		parsed, err := time.ParseDuration(s)
+		if err != nil {
+			return 0, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
+		}
+		d = parsed
+	}
+	if d <= 0 || d > MaxTokenTTL {
+		return 0, expiryOutOfBound(s)
+	}
+	return d, nil
+}
+
+// expiryOutOfBound is the --expires refusal for a lifetime a token cannot have: the same
+// TokenLifetimeOutOfRange a mint returns, matching ErrTokenLifetime.
+func expiryOutOfBound(s string) error {
+	return types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrTokenLifetime,
+		"invalid --expires %q: a token must expire, more than 0 and at most 366d out", s)
 }

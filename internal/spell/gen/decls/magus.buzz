@@ -192,6 +192,14 @@ export enum<str> KnowledgeUnknownReason {
     indexStale = "index-stale",
 }
 
+export enum<str> KnowledgeDefinitionStatus {
+    none = "",
+    verified = "verified",
+    changed = "changed",
+    unverified = "unverified",
+    unreadable = "unreadable",
+}
+
 export enum<str> EdgeDirection {
     none = "",
     outward = "out",
@@ -1316,6 +1324,17 @@ export object KnowledgeRanking {
     note: str = "",
 }
 
+export object KnowledgeDefinitionSite {
+    file: str = "",
+    startLine: int = 0,
+    endLine: int = 0,
+    status: KnowledgeDefinitionStatus = KnowledgeDefinitionStatus.none,
+    source: str = "",
+    sourceStartLine: int = 0,
+    sourceTotalLines: int = 0,
+    sourceNote: str = "",
+}
+
 export object QueryResult {
     definition: str = "",
     apiVersion: str = "",
@@ -1328,6 +1347,7 @@ export object QueryResult {
     links: [KnowledgeEdge] = [],
     answer: KnowledgeAnswer = KnowledgeAnswer{},
     ranking: KnowledgeRanking? = null,
+    context: [KnowledgeDefinitionSite] = [],
 }
 
 export object EdgeRef {

@@ -1557,6 +1557,10 @@ type KnowledgeQueryOutput struct {
 	// Ranking is what the match order depends on beyond the graph and the query. Nil for
 	// an answer that was not ranked.
 	Ranking *KnowledgeRanking `json:"ranking,omitempty" yaml:"ranking,omitempty"`
+	// Context is the source of the page's symbol matches under a position query, in match
+	// order and at most Budget of them: each one's doc comment and declaration line, kept
+	// only when its range verified. Empty for a query with no position.
+	Context []KnowledgeDefinitionSite `json:"context,omitempty" yaml:"context,omitempty"`
 }
 
 // EdgeDirection says which end of an edge the focus node sits on. Distinct from

@@ -245,7 +245,7 @@ type Dependencies struct {
 	// caller that judges many requests against a tree it holds still: one fork grading
 	// every check it validates. Nil opens each root afresh in every judgment, which a hook
 	// and a daemon need, since the tree moves between their calls.
-	Opens *WorkspaceMemo
+	Opens *OpenedWorkspaces
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -298,11 +298,11 @@ type workspaceOpen struct {
 type workspaceOpens struct {
 	mu     sync.Mutex
 	byRoot map[string]workspaceOpen
-	// shared is the caller's memo across judgments, nil when it keeps none.
-	shared *WorkspaceMemo
+	// shared is the caller's kept workspaces across judgments, nil when it keeps none.
+	shared *OpenedWorkspaces
 }
 
-func newWorkspaceOpens(shared *WorkspaceMemo) *workspaceOpens {
+func newWorkspaceOpens(shared *OpenedWorkspaces) *workspaceOpens {
 	return &workspaceOpens{byRoot: map[string]workspaceOpen{}, shared: shared}
 }
 
@@ -334,22 +334,22 @@ func (o *workspaceOpens) keep(root string, got workspaceOpen) {
 	}
 }
 
-// WorkspaceMemo is [Dependencies.Opens]: the workspace each root opened to, kept across
+// OpenedWorkspaces is [Dependencies.Opens]: the workspace each root opened to, kept across
 // judgments. It keeps only an open that succeeded. One that failed or ran out of time
 // belongs to its judgment: the next one may open it in time, and a verdict must not turn
 // on which judgment came first. Safe for concurrent use.
-type WorkspaceMemo struct {
+type OpenedWorkspaces struct {
 	mu     sync.Mutex
 	byRoot map[string]types.WorkspaceRepository
 }
 
-// NewWorkspaceMemo is an empty memo.
-func NewWorkspaceMemo() *WorkspaceMemo {
-	return &WorkspaceMemo{byRoot: map[string]types.WorkspaceRepository{}}
+// NewOpenedWorkspaces is an empty OpenedWorkspaces.
+func NewOpenedWorkspaces() *OpenedWorkspaces {
+	return &OpenedWorkspaces{byRoot: map[string]types.WorkspaceRepository{}}
 }
 
 // Keep records ws as the workspace at root, for a caller that already holds it open.
-func (m *WorkspaceMemo) Keep(root string, ws types.WorkspaceRepository) {
+func (m *OpenedWorkspaces) Keep(root string, ws types.WorkspaceRepository) {
 	if m == nil {
 		return
 	}
@@ -358,7 +358,7 @@ func (m *WorkspaceMemo) Keep(root string, ws types.WorkspaceRepository) {
 	m.byRoot[root] = ws
 }
 
-func (m *WorkspaceMemo) kept(root string) (types.WorkspaceRepository, bool) { //nolint:ireturn // the workspace backing is chosen at runtime
+func (m *OpenedWorkspaces) kept(root string) (types.WorkspaceRepository, bool) { //nolint:ireturn // the workspace backing is chosen at runtime
 	if m == nil {
 		return nil, false
 	}

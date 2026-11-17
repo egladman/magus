@@ -138,7 +138,7 @@ func (s *EndpointSuite) TestIsLazy() {
 
 // One socket per distinct grant within a scope: three callers naming the same grant
 // must not bind three listeners.
-func (s *EndpointSuite) TestMemoizesPerGrant() {
+func (s *EndpointSuite) TestIsKeptPerGrant() {
 	t := s.T()
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
@@ -280,7 +280,7 @@ func (s *EndpointSuite) TestRootPath() {
 	assert.Equal(t, "/", gotPath)
 }
 
-// TestRebindsAfterContextEnds is the memo-liveness fix. The Resolver outlives
+// TestRebindsAfterContextEnds is the kept-endpoint liveness fix. The Resolver outlives
 // a single scope, so a cached entry whose context has ended
 // used to hand back a URL on a RELEASED port, which under a local-attacker model
 // means another process can bind it and receive the child's whole request stream.
@@ -309,7 +309,7 @@ func (s *EndpointSuite) TestRebindsAfterContextEnds() {
 
 	base2, err := res.OpenEndpoint(t.Context(), scope(t), g)
 	require.NoError(t, err)
-	assert.NotEqual(t, base1, base2, "a dead endpoint was served from the memo")
+	assert.NotEqual(t, base1, base2, "a dead endpoint was served from the kept endpoints")
 
 	resp, err := http.Get(base2 + "/v1/models")
 	require.NoError(t, err)
@@ -505,7 +505,7 @@ func (s *EndpointSuite) TestRejectsNonLoopbackHost() {
 func (r *Resolver) resolvedCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.memo)
+	return len(r.resolved)
 }
 
 // endpointCount reports how many forwarders the resolver holds.
@@ -646,7 +646,7 @@ func (s *EndpointSuite) TestScopesGetTheirOwnEndpoint() {
 	require.NoError(t, err)
 	assert.NotEqual(t, baseA, baseB, "two runs shared one endpoint, so they shared a token")
 
-	// Within ONE run the endpoint is still memoized: three targets naming it bind one
+	// Within ONE run the endpoint is still kept: three targets naming it bind one
 	// socket, not three.
 	again, err := res.OpenEndpoint(runA, "inv-a", g)
 	require.NoError(t, err)

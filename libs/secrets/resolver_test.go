@@ -120,7 +120,7 @@ func (s *ResolverSuite) TestReadDoesNotRegisterValuesTooShortToMask() {
 	}
 }
 
-func (s *ResolverSuite) TestReadMemoizesPerProviderAndReference() {
+func (s *ResolverSuite) TestReadKeepsAnAnswerPerProviderAndReference() {
 	var mu sync.Mutex
 	calls := 0
 	s.withProvider("fake", providerFunc(func(context.Context, string) (Secret, error) {
@@ -137,7 +137,7 @@ func (s *ResolverSuite) TestReadMemoizesPerProviderAndReference() {
 }
 
 // A read before a provider is selected must not answer for that provider afterwards:
-// memoizing on the reference alone would keep returning the env value under it.
+// keeping answers by reference alone would keep returning the env value under it.
 func (s *ResolverSuite) TestReadReReadsWhenTheProviderChanges() {
 	opener := func(context.Context, string) (Provider, error) {
 		return providerFunc(func(context.Context, string) (Secret, error) { return New("from-vault"), nil }), nil
@@ -147,7 +147,7 @@ func (s *ResolverSuite) TestReadReReadsWhenTheProviderChanges() {
 	s.Equal("from-env", s.read("SOME_REF").Reveal())
 
 	s.r = s.r.WithProvider("vault")
-	s.Equal("from-vault", s.read("SOME_REF").Reveal(), "the declared provider must win over a memoized fallback")
+	s.Equal("from-vault", s.read("SOME_REF").Reveal(), "the declared provider must win over a kept fallback")
 }
 
 // N readers of one reference at once share one provider invocation; for an interactive
@@ -314,7 +314,7 @@ func (s *ResolverSuite) TestPackageLevelRedactorsFollowTheContext() {
 func (s *ResolverSuite) TestRegisterMasksAHeldCredential() {
 	s.r.Register(New("stdin-registry-token"))
 	s.Equal("push with "+mask, s.r.RedactString("push with stdin-registry-token"))
-	s.Empty(s.r.memo, "a registered value is not a resolved reference")
+	s.Empty(s.r.resolved, "a registered value is not a resolved reference")
 }
 
 func (s *ResolverSuite) TestRegisterIgnoresAValueTooShortToMask() {

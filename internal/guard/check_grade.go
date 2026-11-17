@@ -32,7 +32,7 @@ func NewCheckGrader(load RulesLoader) job.CheckGrader {
 // they came from, nil when none loaded. The CLI holds the wiring that builds them.
 type RulesLoader func(ctx context.Context, root string) (Dependencies, *WorkspaceRules)
 
-func newRulesByRoot(load RulesLoader, opens *WorkspaceMemo) *rulesByRoot {
+func newRulesByRoot(load RulesLoader, opens *OpenedWorkspaces) *rulesByRoot {
 	return &rulesByRoot{load: load, loaded: map[string]gradingRules{}, opens: opens}
 }
 
@@ -42,8 +42,8 @@ type rulesByRoot struct {
 	mu     sync.Mutex
 	loaded map[string]gradingRules
 	// opens is handed to every judgment as Dependencies.Opens: nil for a store's
-	// grader, which outlives any one tree, and one fork's memo for a fork's.
-	opens *WorkspaceMemo
+	// grader, which outlives any one tree, and one fork's kept workspaces for a fork's.
+	opens *OpenedWorkspaces
 }
 
 func (r *rulesByRoot) grade(ctx context.Context, root string, row jobtypes.Job) job.CheckVerdict {
@@ -72,7 +72,7 @@ type gradingRules struct {
 
 // judging is g's dependencies for one judgment, which keeps the workspaces it opens in
 // opens when that is not nil.
-func (g gradingRules) judging(opens *WorkspaceMemo) Dependencies {
+func (g gradingRules) judging(opens *OpenedWorkspaces) Dependencies {
 	deps := g.deps
 	deps.Opens = opens
 	return deps

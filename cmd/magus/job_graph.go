@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"time"
 
+	internalci "github.com/egladman/magus/internal/ci"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/job/evidence"
@@ -49,7 +50,7 @@ func jobEvidenceEnv() evidence.Env {
 			return notes.RegeneratedOutside, notes.UnrunGates
 		},
 		HolderCell:         job.HolderCell,
-		GateMergeScanLimit: gateMergeScanLimit,
+		GateMergeScanLimit: internalci.GateMergeScanLimit,
 	}
 }
 
@@ -83,7 +84,7 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	var gf *flaggen.JobGraphFlags
 	pos, err := commandParse("job graph", args, func(fs *flag.FlagSet) {
 		gf = flaggen.BindJobGraph(fs)
-		fs.Usage = func() { jobGraphUsage(fs) }
+		fs.Usage = func() { commands.WriteJobGraphUsage(os.Stderr, func() { printOwnDefaults(fs) }) }
 	})
 	if err != nil {
 		return err
@@ -133,25 +134,6 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, figs)
 	}
-}
-
-func jobGraphUsage(fs *flag.FlagSet) {
-	fmt.Fprintln(os.Stderr, "Usage: magus job graph [-o svg] [--dir <dir>] [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Draw the live jobs as a plan: one box per job, an edge per fork,")
-	fmt.Fprintln(os.Stderr, "merge and declared dependency, each box tagged with its state and")
-	fmt.Fprintln(os.Stderr, "naming its holder. A plan larger than one figure holds splits into an")
-	fmt.Fprintln(os.Stderr, "overview, one box per group of jobs, and a figure per group.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Without -o it prints each figure's boxes and edges. -o svg writes")
-	fmt.Fprintln(os.Stderr, "each figure to <id>.svg in --dir and prints one path per line,")
-	fmt.Fprintln(os.Stderr, "the overview first. The same plan writes the same bytes.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintln(os.Stderr, "  magus job graph -o svg --dir /tmp/plan")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-	printOwnDefaults(fs)
 }
 
 // outputSVG is `magus job graph`'s own -o format.

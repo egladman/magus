@@ -989,6 +989,15 @@ func (j Job) Instructions() string {
 	return j.Agent.Instructions
 }
 
+// HandedOutAfresh is j, an ended row declared again, with nothing of the holder that took
+// it last: a checkout left on it would refuse every new taker, and its grade would stand in
+// that checkout. A fork is graded on this row, so the write and the grade share it.
+func (j Job) HandedOutAfresh() Job {
+	j.ReportedBase, j.BaseVerdict, j.Registered, j.CheckoutRoot = "", "", 0, ""
+	j.ReleaseRequests = nil
+	return j
+}
+
 // Clone returns a deep copy: no slice, map or pointer it holds is shared with u, so a
 // value handed out of a store is safe to keep. Nil stays nil, so a job that stored null
 // does not come back as []. Its goals come back resolved (see [Goal.Resolve]).

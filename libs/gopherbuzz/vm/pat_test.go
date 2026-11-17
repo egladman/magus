@@ -13,7 +13,7 @@ import (
 // backtracking engine into exponential blowup. PatValue must bound this with
 // MatchTimeout so the call returns (as an error) instead of wedging the
 // calling goroutine forever. Run via `select` + `time.After` per the repo's
-// hang-test idiom (pool_test.go TestDispatchRejectsCycleWithMemo) so a
+// hang-test idiom (pool_test.go TestDispatchRejectsCycle) so a
 // regression fails the test instead of hanging the suite.
 func TestPatMatchBoundsCatastrophicBacktracking(t *testing.T) {
 	p, err := PatValue(`(a+)+$`)

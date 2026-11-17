@@ -10,6 +10,7 @@ import (
 	"os"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -38,7 +39,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 	bindDisplayFlags(fset)
 	cf := flaggen.BindSessionCheckpoint(fset)
 	fset.Usage = func() { checkpointUsage(os.Stderr) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := fset.Parse(commands.ReorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {

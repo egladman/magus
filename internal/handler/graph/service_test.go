@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -13,6 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // The engine's verbs are tested in internal/graph/knowledge. What is unverified here is the
@@ -324,4 +327,125 @@ func TestGraphResolutionFailureIsInternal(t *testing.T) {
 		connect.NewRequest(&graphv1.GetGraphStatsRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
+
+// statusResolver is cannedResolver plus the index freshness probe a position query needs.
+type statusResolver struct {
+	cannedResolver
+	status []types.SymbolIndexStatus
+}
+
+func (f statusResolver) SymbolIndexStatus(context.Context) []types.SymbolIndexStatus { return f.status }
+
+type queryPositionSuite struct {
+	suite.Suite
+	g *knowledge.Graph
+}
+
+func TestQueryPosition(t *testing.T) { suite.Run(t, new(queryPositionSuite)) }
+
+// lib/a.buzz defines parse on line 2 under a doc comment; app/main.buzz holds the cursor.
+func (s *queryPositionSuite) SetupTest() {
+	root := s.T().TempDir()
+	for path, text := range map[string]string{
+		"lib/a.buzz":    "// parse reads a config.\nfun parse() > void {}\n",
+		"app/main.buzz": "parse()\n",
+	} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(full), 0o755))
+		s.Require().NoError(os.WriteFile(full, []byte(text), 0o600))
+	}
+	g := knowledge.NewGraph()
+	g.SetRoot(root)
+	for _, path := range []string{"lib/a.buzz", "app/main.buzz"} {
+		g.AddNode(types.KnowledgeNode{ID: "file:" + path, Kind: types.KindFile, Label: path, Source: path, Attrs: map[string]string{knowledge.AttrLanguage: "buzz"}})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "symbol:a/parse", Kind: types.KindSymbol, Label: "parse", Source: "lib/a.buzz:2"})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:lib/a.buzz", Target: "symbol:a/parse", Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
+	s.g = g
+}
+
+func (s *queryPositionSuite) service(status ...types.SymbolIndexStatus) *Service {
+	if status == nil {
+		status = []types.SymbolIndexStatus{{Project: types.ProjectRef{Path: "."}, Language: "buzz", Freshness: types.SymbolIndexFresh}}
+	}
+	return NewService(statusResolver{cannedResolver: cannedResolver{g: s.g, probed: true}, status: status})
+}
+
+func (s *queryPositionSuite) request() *connect.Request[graphv1.QueryNodesRequest] {
+	return connect.NewRequest(&graphv1.QueryNodesRequest{Position: &graphv1.Position{Path: "app/main.buzz", Offset: 5, Prefix: "parse(", Suffix: ")\n"}})
+}
+
+func (s *queryPositionSuite) TestCarriesTheVerifiedContext() {
+	resp, err := s.service().QueryNodes(context.Background(), s.request())
+	s.Require().NoError(err)
+	s.Equal(int32(1), resp.Msg.GetMatchCount())
+	s.Require().Len(resp.Msg.GetContext(), 1)
+	site := resp.Msg.GetContext()[0]
+	s.Equal("lib/a.buzz", site.GetFile())
+	s.Equal(int32(2), site.GetStartLine())
+	s.Equal(int32(1), site.GetSourceStartLine())
+	s.Equal("// parse reads a config.\nfun parse() > void {}", site.GetSource())
+	s.Equal(string(types.DefinitionVerified), site.GetStatus())
+	s.Equal("parse", site.GetSymbol())
+	s.Equal("symbol:a/parse", site.GetMatchId())
+}
+
+func (s *queryPositionSuite) TestExcludedPathsLeaveNoContext() {
+	req := s.request()
+	req.Msg.ExcludePaths = []string{"lib"}
+	resp, err := s.service().QueryNodes(context.Background(), req)
+	s.Require().NoError(err)
+	s.Zero(resp.Msg.GetMatchCount())
+	s.Empty(resp.Msg.GetContext())
+}
+
+func (s *queryPositionSuite) TestAStaleIndexIsAFailedPrecondition() {
+	_, err := s.service(types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Language: "buzz", Freshness: types.SymbolIndexStale}).
+		QueryNodes(context.Background(), s.request())
+	s.Require().Error(err)
+	s.Equal(connect.CodeFailedPrecondition, connect.CodeOf(err))
+	s.Contains(err.Error(), "stale")
+}
+
+// The cursor's own file is newer than its index while it is edited; that alone answers.
+func (s *queryPositionSuite) TestAnIndexStaleOnlyForTheOwnFileAnswers() {
+	resp, err := s.service(types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Language: "buzz", Freshness: types.SymbolIndexStale,
+		Changed: []string{"app/main.buzz"}, ChangedCount: 1}).QueryNodes(context.Background(), s.request())
+	s.Require().NoError(err)
+	s.Len(resp.Msg.GetContext(), 1, "lib/a.buzz did not change, so its site still verifies")
+}
+
+func (s *queryPositionSuite) TestAnIndexStaleForAnotherFileIsAFailedPrecondition() {
+	_, err := s.service(types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Language: "buzz", Freshness: types.SymbolIndexStale,
+		Changed: []string{"app/main.buzz", "lib/a.buzz"}, ChangedCount: 2}).QueryNodes(context.Background(), s.request())
+	s.Equal(connect.CodeFailedPrecondition, connect.CodeOf(err))
+}
+
+func (s *queryPositionSuite) TestAWorkspaceWithNoFreshnessProbeIsUnimplemented() {
+	_, err := NewService(cannedResolver{g: s.g, probed: true}).QueryNodes(context.Background(), s.request())
+	s.Equal(connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+func (s *queryPositionSuite) TestFreeTextBesideAPositionIsInvalidArgument() {
+	req := s.request()
+	req.Msg.Query = "parse"
+	_, err := s.service().QueryNodes(context.Background(), req)
+	s.Equal(connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+func (s *queryPositionSuite) TestAPositionWithNoPathIsInvalidArgument() {
+	req := s.request()
+	req.Msg.Position.Path = ""
+	_, err := s.service().QueryNodes(context.Background(), req)
+	s.Equal(connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+func TestQueryNodesExcludePathsDropsMatches(t *testing.T) {
+	g := fixture()
+	g.AddNode(types.KnowledgeNode{ID: "file:held/x.buzz", Kind: types.KindFile, Label: "held/x.buzz", Source: "held/x.buzz"})
+	resp, err := NewService(cannedResolver{g: g, probed: true}).QueryNodes(context.Background(),
+		connect.NewRequest(&graphv1.QueryNodesRequest{Query: "kind:file", ExcludePaths: []string{"held"}}))
+	require.NoError(t, err)
+	assert.Zero(t, resp.Msg.GetMatchCount())
 }
