@@ -7,10 +7,11 @@ import (
 	"encoding"
 	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // walkLikeV2 is true: the scanner does first what v2 does on decode and encoding/json
@@ -21,8 +22,9 @@ func version() string { return "v1" }
 
 // marshal writes v through encoding/json, then rewrites the output in v2's form: every
 // string re-escaped the v2 way (U+2028 and U+2029 written as typed, a RawMessage's escapes
-// normalized), a repeated key refused, and the \ufffd escape encoding/json writes in place
-// of an invalid byte refused as invalid UTF-8.
+// normalized), a repeated key refused, and invalid UTF-8 refused. encoding/json writes an
+// invalid byte as the \ufffd escape, which a RawMessage may also carry as a real U+FFFD,
+// so an output holding one is told apart by reading v's own strings.
 func marshal(v any) ([]byte, error) {
 	v, err := encodable(v)
 	if err != nil {
@@ -35,7 +37,7 @@ func marshal(v any) ([]byte, error) {
 		return nil, err
 	}
 	data := bytes.TrimSuffix(b.Bytes(), []byte{'\n'})
-	s := scanner{data: data, canon: true, refuseReplacement: true, out: make([]byte, 0, len(data))}
+	s := scanner{data: data, canon: true, out: make([]byte, 0, len(data))}
 	if err := s.document(nil, reflect.Value{}); err != nil {
 		var syntax *SyntaxError
 		if errors.As(err, &syntax) {
@@ -43,7 +45,77 @@ func marshal(v any) ([]byte, error) {
 		}
 		return nil, err
 	}
+	if s.sawReplacement && holdsInvalidUTF8(reflect.ValueOf(v), 0) {
+		return nil, &EncodeError{Err: fmt.Errorf("%w in a string", ErrInvalidUTF8)}
+	}
 	return s.out, nil
+}
+
+// holdsInvalidUTF8 reports whether encoding/json would write an invalid byte of v's as
+// \ufffd: one in a string, a map key or a MarshalText result. A MarshalJSON result is
+// written as it stands, so a \ufffd escape in it is its author's.
+func holdsInvalidUTF8(v reflect.Value, depth int) bool {
+	if depth > maxDepth || !v.IsValid() {
+		return false
+	}
+	if (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) && v.IsNil() {
+		return false
+	}
+	if v.CanInterface() {
+		if _, ok := methodOf[json.Marshaler](v); ok {
+			return false
+		}
+		if m, ok := methodOf[encoding.TextMarshaler](v); ok {
+			text, err := m.MarshalText()
+			return err == nil && !utf8.Valid(text)
+		}
+	}
+	switch v.Kind() {
+	case reflect.String:
+		return !utf8.ValidString(v.String())
+	case reflect.Pointer, reflect.Interface:
+		return holdsInvalidUTF8(v.Elem(), depth+1)
+	case reflect.Struct:
+		t := v.Type()
+		for i := range t.NumField() {
+			sf := t.Field(i)
+			if sf.Tag.Get("json") == "-" || (!sf.IsExported() && !sf.Anonymous) {
+				continue
+			}
+			if holdsInvalidUTF8(v.Field(i), depth+1) {
+				return true
+			}
+		}
+	case reflect.Map:
+		for iter := v.MapRange(); iter.Next(); {
+			if holdsInvalidUTF8(iter.Key(), depth+1) || holdsInvalidUTF8(iter.Value(), depth+1) {
+				return true
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			return false
+		}
+		for i := range v.Len() {
+			if holdsInvalidUTF8(v.Index(i), depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// methodOf is v as an M, through its address when only the pointer has the method and
+// encoding/json could take it.
+func methodOf[M any](v reflect.Value) (M, bool) {
+	if m, ok := reflect.TypeAssert[M](v); ok {
+		return m, true
+	}
+	if v.CanAddr() {
+		return reflect.TypeAssert[M](v.Addr())
+	}
+	var zero M
+	return zero, false
 }
 
 // encodable refuses v when encoding/json would write it differently from v2, and returns
@@ -78,31 +150,43 @@ func unmarshal(data []byte, v any) error {
 	if err := s.document(t, rv); err != nil {
 		return err
 	}
-	return json.Unmarshal(data, v)
+	return decodeError(json.Unmarshal(data, v))
+}
+
+// unmarshalLossless is unmarshal with each number bound for an interface kept as a
+// json.Number, as v2 keeps it under the lossless option.
+func unmarshalLossless(data []byte, v any) error {
+	t, rv := targetOf(v)
+	if err := refuseDecode(t); err != nil {
+		return err
+	}
+	s := scanner{data: data, caseOnly: true, likeV2: true}
+	if err := s.document(t, rv); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	return decodeError(dec.Decode(v))
 }
 
 // unmarshalStrict decodes one value the scanner has read and walked already.
-func unmarshalStrict(data []byte, v any) error { return json.Unmarshal(data, v) }
+func unmarshalStrict(data []byte, v any) error { return decodeError(json.Unmarshal(data, v)) }
+
+// decodeError is err with encoding/json's type mismatch as the codec's [*TypeError].
+func decodeError(err error) error {
+	var mismatch *json.UnmarshalTypeError
+	if !errors.As(err, &mismatch) {
+		return err
+	}
+	kind, _, _ := strings.Cut(mismatch.Value, " ")
+	return &TypeError{JSON: kind, GoType: mismatch.Type, Err: err}
+}
 
 func refuseDecode(t reflect.Type) error {
 	if t == nil {
 		return nil
 	}
 	return newChecker("decode", t).check(t, "")
-}
-
-type streamDecoder struct{ dec *json.Decoder }
-
-func newStreamDecoder(r io.Reader) streamDecoder {
-	return streamDecoder{dec: json.NewDecoder(r)}
-}
-
-func (d streamDecoder) decode(v any) error {
-	var raw json.RawMessage
-	if err := d.dec.Decode(&raw); err != nil {
-		return err
-	}
-	return unmarshal(raw, v)
 }
 
 // checker walks a type for what encoding/json reads or writes differently from v2. It

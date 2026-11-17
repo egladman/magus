@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,8 +41,9 @@ func (s *LinesSuite) TestReadLinesKeepsLineNumbersAndFlagsAnUnfinishedLine() {
 	got, err = ReadLines(path)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), Lines{
-		Lines:   []Line{{N: 1, Text: []byte(`{"a":1}`)}, {N: 3, Text: []byte(`{"b":2}`)}},
-		Partial: true,
+		Lines:       []Line{{N: 1, Text: []byte(`{"a":1}`)}, {N: 3, Text: []byte(`{"b":2}`)}},
+		Partial:     true,
+		PartialLine: 4,
 	}, got)
 }
 
@@ -120,6 +122,57 @@ func (s *StoreSuite) TestRewritesPastAnUnfinishedLine() {
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), `{"key":"a","value":1}`+"\n"+`{"key":"c","value":1}`+"\n", string(raw))
 	assert.Contains(s.T(), logged.String(), "store rewritten")
+}
+
+// OnDrop alone is told of the line a rewrite drops, by path and line number.
+func (s *StoreSuite) TestOnDropIsToldOfTheDroppedLine() {
+	l := marks(filepath.Join(s.T().TempDir(), "marks.jsonl"))
+	var dropped []Dropped
+	l.OnDrop = func(_ context.Context, d Dropped) { dropped = append(dropped, d) }
+	require.NoError(s.T(), os.WriteFile(l.Path, []byte(`{"key":"a","value":1}`+"\n\n"+`{"key":"b"`), 0o644))
+	require.NoError(s.T(), l.Update(s.T().Context(), set(mark{Key: "c", Value: 1})))
+	assert.Equal(s.T(), []Dropped{{Path: l.Path, Line: 3}}, dropped)
+	raw, err := os.ReadFile(l.Path)
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), `{"key":"a","value":1}`+"\n"+`{"key":"c","value":1}`+"\n", string(raw))
+}
+
+// With nothing to tell, the rewrite that would drop the line is refused and the file is
+// left as it was.
+func (s *StoreSuite) TestRefusesToDropALineUnsaid() {
+	l := marks(filepath.Join(s.T().TempDir(), "marks.jsonl"))
+	torn := `{"key":"a","value":1}` + "\n" + `{"key":"b"`
+	require.NoError(s.T(), os.WriteFile(l.Path, []byte(torn), 0o644))
+	err := l.Update(s.T().Context(), set(mark{Key: "c", Value: 1}))
+	require.ErrorIs(s.T(), err, ErrUnfinishedLine)
+	var unfinished *UnfinishedLineError
+	require.ErrorAs(s.T(), err, &unfinished)
+	assert.Equal(s.T(), UnfinishedLineError{Path: l.Path, Line: 2}, *unfinished)
+	require.ErrorContains(s.T(), err, l.Path+":2: ")
+	raw, err := os.ReadFile(l.Path)
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), torn, string(raw))
+}
+
+// The directory a store creates is searchable by whoever may read its file: a private
+// store's directory is private too.
+func (s *StoreSuite) TestTheDirectoryModeFollowsPerm() {
+	root := s.T().TempDir()
+	private := marks(filepath.Join(root, "private", "marks.jsonl"))
+	private.Perm = 0o600
+	require.NoError(s.T(), private.Update(s.T().Context(), set(mark{Key: "a"})))
+	info, err := os.Stat(filepath.Dir(private.Path))
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), os.FileMode(0o700), info.Mode().Perm())
+	info, err = os.Stat(private.Path)
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), os.FileMode(0o600), info.Mode().Perm())
+
+	shared := marks(filepath.Join(root, "shared", "marks.jsonl"))
+	require.NoError(s.T(), shared.Update(s.T().Context(), set(mark{Key: "a"})))
+	info, err = os.Stat(filepath.Dir(shared.Path))
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), os.FileMode(0o700), info.Mode().Perm()&0o700, "a 0644 store's directory is the owner's to search")
 }
 
 // A line that does not decode names the file and its line.

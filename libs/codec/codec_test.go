@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
+	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -205,26 +208,43 @@ func (s *ConformanceSuite) TestACaseOnlyMatchIsSkippedOrRefused() {
 	s.Equal(`member "Name" matches a field only when case is ignored "name" at byte offset 1`, err.Error())
 }
 
-func (s *ConformanceSuite) TestUnmarshalStrictRefusesAsStrictDecoderDoes() {
-	type doc struct {
-		A int `json:"a"`
-	}
-	for _, c := range []struct{ in, want string }{
-		{in: `{"a":1,"a":2}`, want: `duplicate key "a" at byte offset 7`},
-		{in: `{"a":1,"b":2}`, want: `unknown field "b" at byte offset 7`},
-		{in: `{"a":1} {}`, want: `trailing data at byte offset 8`},
-	} {
-		var got doc
-		var strict *StrictError
-		s.Require().ErrorAs(UnmarshalStrict([]byte(c.in), &got), &strict, c.in)
-		s.Equal(c.want, strict.Error(), c.in)
-		s.Positive(strict.Offset, c.in)
-	}
-	var got doc
+type strictDoc struct {
+	A int `json:"a"`
+}
+
+func (s *ConformanceSuite) strictRefusal(in string) *StrictError {
+	var got strictDoc
+	var strict *StrictError
+	s.Require().ErrorAs(UnmarshalStrict([]byte(in), &got), &strict)
+	return strict
+}
+
+func (s *ConformanceSuite) TestUnmarshalStrictRefusesARepeatedKey() {
+	strict := s.strictRefusal(`{"a":1,"a":2}`)
+	s.Equal(`duplicate key "a" at byte offset 7`, strict.Error())
+	s.Equal(int64(7), strict.Offset)
+	s.ErrorIs(strict, ErrDuplicateKey)
+}
+
+func (s *ConformanceSuite) TestUnmarshalStrictRefusesAnUnknownField() {
+	strict := s.strictRefusal(`{"a":1,"b":2}`)
+	s.Equal(`unknown field "b" at byte offset 7`, strict.Error())
+	s.Equal(int64(7), strict.Offset)
+	s.ErrorIs(strict, ErrUnknownField)
+}
+
+func (s *ConformanceSuite) TestUnmarshalStrictRefusesTrailingData() {
+	strict := s.strictRefusal(`{"a":1} {}`)
+	s.Equal(`trailing data at byte offset 8`, strict.Error())
+	s.Equal(int64(8), strict.Offset)
+	s.ErrorIs(strict, ErrTrailingData)
+}
+
+func (s *ConformanceSuite) TestUnmarshalStrictReadsADeclaredDocument() {
+	var got strictDoc
 	s.Require().NoError(UnmarshalStrict([]byte(`{"a":1}`), &got))
 	s.Equal(1, got.A)
 	s.ErrorIs(UnmarshalStrict(nil, &got), io.ErrUnexpectedEOF)
-	s.ErrorIs(UnmarshalStrict([]byte(`{"a":1,"b":2}`), &got), ErrUnknownField)
 }
 
 func (s *ConformanceSuite) TestStrictDecoderReadsTokenByToken() {
@@ -251,10 +271,32 @@ func (s *ConformanceSuite) TestStrictDecoderReadsTokenByToken() {
 
 func (s *ConformanceSuite) TestUnmarshalLosslessKeepsNumbersAndRefusesDuplicates() {
 	var got any
-	s.Require().NoError(UnmarshalLossless([]byte(`{"n":12345678901234567890}`), &got))
-	s.Equal(map[string]any{"n": json.Number("12345678901234567890")}, got)
+	s.Require().NoError(UnmarshalLossless([]byte(`{"n":12345678901234567890,"l":[1.50]}`), &got))
+	s.Equal(map[string]any{"n": json.Number("12345678901234567890"), "l": []any{json.Number("1.50")}}, got)
 	s.ErrorIs(UnmarshalLossless([]byte(`{"a":1,"a":2}`), &got), ErrDuplicateKey)
 	s.ErrorIs(UnmarshalLossless([]byte(`{} {}`), &got), ErrTrailingData)
+}
+
+// A struct target reads as Unmarshal reads it: names matched exactly and null zeroing a
+// value, with only an interface field's number kept as its text.
+func (s *ConformanceSuite) TestUnmarshalLosslessReadsAStructAsUnmarshalDoes() {
+	got := struct {
+		Any   any    `json:"any"`
+		Count int    `json:"count"`
+		Name  string `json:"name"`
+	}{Name: "kept?"}
+	s.Require().NoError(UnmarshalLossless([]byte(`{"any":{"n":9007199254740993},"count":3,"name":null}`), &got))
+	s.Equal(map[string]any{"n": json.Number("9007199254740993")}, got.Any)
+	s.Equal(3, got.Count)
+	s.Empty(got.Name)
+
+	err := UnmarshalLossless([]byte(`{"Count":4}`), &got)
+	if Version() == "v2" {
+		s.Require().NoError(err)
+		s.Equal(3, got.Count, "a case-only name is skipped")
+		return
+	}
+	s.ErrorIs(err, ErrCaseOnlyMatch)
 }
 
 func (s *ConformanceSuite) TestValid() {
@@ -262,6 +304,134 @@ func (s *ConformanceSuite) TestValid() {
 	s.False(Valid([]byte(`{"a":1,"a":1}`)))
 	s.False(Valid([]byte(`{"a":1`)))
 	s.False(Valid([]byte("\"\xff\"")))
+}
+
+// A U+FFFD a RawMessage spells as an escape is a character, not the mark of an invalid
+// byte, so both builds write it; an invalid byte in a string is refused wherever it sits.
+func (s *ConformanceSuite) TestAnEscapedReplacementCharacterIsWritten() {
+	s.Equal("{\"raw\":\"a\ufffdb\"}", s.marshal(map[string]RawMessage{"raw": RawMessage(`"a\ufffdb"`)}))
+	s.Equal("\"\ufffd\"", s.marshal("\ufffd"))
+
+	var got string
+	s.Require().NoError(Unmarshal([]byte(`"\ufffd"`), &got))
+	s.Equal("\ufffd", got)
+}
+
+type badText struct{}
+
+func (badText) MarshalText() ([]byte, error) { return []byte("a\xffb"), nil }
+
+func (s *ConformanceSuite) refusesInvalidUTF8(v any) {
+	_, err := Marshal(v)
+	s.Require().ErrorIs(err, ErrInvalidUTF8)
+	var encode *EncodeError
+	s.Require().ErrorAs(err, &encode)
+	s.Equal("codec: cannot encode: invalid UTF-8 in a string", err.Error())
+}
+
+func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8InAMapKey() {
+	s.refusesInvalidUTF8(map[string]int{"a\xffb": 1})
+}
+
+func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8FromMarshalText() {
+	s.refusesInvalidUTF8(struct{ T badText }{})
+}
+
+func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8InARawMessage() {
+	s.refusesInvalidUTF8(map[string]RawMessage{"raw": RawMessage("\"a\xffb\"")})
+}
+
+// An escaped U+FFFD elsewhere in the output does not hide an invalid byte.
+func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8BesideAnEscapedReplacement() {
+	s.refusesInvalidUTF8(map[string]any{"ok": RawMessage(`"\ufffd"`), "bad": "a\xffb"})
+}
+
+// A value its Go target cannot hold is the codec's TypeError in both builds, with the
+// same words.
+func (s *ConformanceSuite) TestAValueOfTheWrongTypeIsATypeError() {
+	var got pair
+	err := Unmarshal([]byte(`{"k":"a","v":"x"}`), &got)
+	var typed *TypeError
+	s.Require().ErrorAs(err, &typed)
+	s.Equal("string", typed.JSON)
+	s.Equal(reflect.TypeFor[int](), typed.GoType)
+	s.Equal("cannot decode a JSON string into Go int", err.Error())
+	s.Require().Error(typed.Err, "the library's own error stays reachable")
+
+	var small struct {
+		N int8 `json:"n"`
+	}
+	err = Unmarshal([]byte(`{"n":300}`), &small)
+	s.Require().ErrorAs(err, &typed)
+	s.Equal("cannot decode a JSON number into Go int8", err.Error())
+}
+
+// An array of another length than its Go array's is refused in both builds, as v2 refuses
+// it, and reads the same in each.
+func (s *ConformanceSuite) TestAnArrayOfTheWrongLengthIsATypeError() {
+	var got struct {
+		P [2]int `json:"p"`
+	}
+	err := Unmarshal([]byte(`{"p":[1,2,3]}`), &got)
+	var typed *TypeError
+	s.Require().ErrorAs(err, &typed)
+	s.Equal("cannot decode a JSON array into Go [2]int: an array of 3 elements", err.Error())
+	var syntax *SyntaxError
+	s.NotErrorAs(err, &syntax)
+
+	err = UnmarshalStrict([]byte(`{"p":[1]}`), &got)
+	var strict *StrictError
+	s.Require().ErrorAs(err, &strict)
+	s.Require().ErrorAs(err, &typed)
+	s.Equal("cannot decode a JSON array into Go [2]int: an array of 1 element", err.Error())
+	s.Equal(int64(0), strict.Offset, "the offset is where the value being read starts")
+}
+
+// The stream's faults are the codec's in both builds, their offsets counted from the
+// start of the stream.
+func (s *ConformanceSuite) TestDecoderRefusesInTheCodecsWords() {
+	dec := NewDecoder(strings.NewReader(`{"a":1} {"a":1,"a":2}`))
+	var m map[string]int
+	s.Require().NoError(dec.Decode(&m))
+	err := dec.Decode(&m)
+	s.Require().ErrorIs(err, ErrDuplicateKey)
+	var syntax *SyntaxError
+	s.Require().ErrorAs(err, &syntax)
+	s.Equal(int64(15), syntax.Offset)
+	s.Equal(err, dec.Decode(&m), "a malformed stream stays malformed")
+
+	dec = NewDecoder(strings.NewReader(`{}x`))
+	s.Require().NoError(dec.Decode(&m))
+	err = dec.Decode(&m)
+	s.Require().ErrorIs(err, ErrTrailingData)
+	s.Equal("trailing data at byte offset 2", err.Error())
+
+	err = NewDecoder(strings.NewReader(` {"a":x}`)).Decode(&m)
+	s.Require().ErrorAs(err, &syntax)
+	s.Equal("invalid character 'x' looking for the start of a value at byte offset 6", err.Error())
+
+	err = NewDecoder(strings.NewReader(`{"a":`)).Decode(&m)
+	s.Require().ErrorIs(err, io.ErrUnexpectedEOF)
+	s.Require().ErrorAs(err, &syntax)
+
+	var p pair
+	err = NewDecoder(strings.NewReader(`{"v":"x"}`)).Decode(&p)
+	var typed *TypeError
+	s.Require().ErrorAs(err, &typed)
+	s.Equal("cannot decode a JSON string into Go int", err.Error())
+}
+
+// A reader handing over one byte at a time still yields whole values, a number at the very
+// end included.
+func (s *ConformanceSuite) TestDecoderReadsAcrossShortReads() {
+	dec := NewDecoder(iotest.OneByteReader(strings.NewReader(`{"k":"a","v":1}` + "\n" + `12`)))
+	var p pair
+	s.Require().NoError(dec.Decode(&p))
+	s.Equal(pair{K: "a", V: 1}, p)
+	var n int
+	s.Require().NoError(dec.Decode(&n))
+	s.Equal(12, n)
+	s.ErrorIs(dec.Decode(&n), io.EOF)
 }
 
 func (s *ConformanceSuite) TestEncoderAndDecoderStream() {
@@ -366,6 +536,17 @@ func (s *ConformanceSuite) TestUnknownMembersRoundTripThroughBothLibraries() {
 	out, err := json.Marshal(plain)
 	s.Require().NoError(err)
 	s.JSONEq(in, string(out), "and writes it back")
+}
+
+// A member whose name matches a declared field only when case is ignored is one the type
+// does not declare: both builds keep it in the bag and leave the field to its own member.
+func (s *ConformanceSuite) TestAKeeperKeepsACaseOnlyMatch() {
+	in := `{"version":"v1","name":"x","Name":1}`
+	var got keeper
+	s.Require().NoError(Unmarshal([]byte(in), &got))
+	s.Equal("x", got.Name)
+	s.Equal(map[string]RawMessage{"Name": RawMessage(`1`)}, got.Unknown)
+	s.Equal(`{"version":"v1","name":"x","Name":1}`, s.marshal(got))
 }
 
 func (s *ConformanceSuite) TestUnmarshalStrictRefusesWhatAKeeperWouldKeep() {

@@ -13,7 +13,7 @@ import (
 )
 
 // A store is JSON Lines: one object per line, appended when an entry changes, the last
-// line for a key being the entry. See magus's docs/design/principles/everything-is-a-file.md.
+// line for a key being the entry. See docs/design/principles/everything-is-a-file.md.
 
 // Lines is what [ReadLines] found in a JSON Lines file.
 type Lines struct {
@@ -23,6 +23,8 @@ type Lines struct {
 	// the remains of a writer that died in one. A writer appending after them would glue its
 	// first line onto them, so it rewrites the file instead.
 	Partial bool
+	// PartialLine is the 1-based number of the line Partial names, and 0 without one.
+	PartialLine int
 }
 
 // Line is one complete line and its 1-based line number.
@@ -49,17 +51,22 @@ func ReadLines(path string) (Lines, error) {
 			out.Lines = append(out.Lines, Line{N: n, Text: line})
 		}
 	}
+	// raw[:end] ends in a newline, so its last split is the empty start of line n.
+	if out.Partial {
+		out.PartialLine = n
+	}
 	return out, nil
 }
 
 // AppendLines adds lines to the end of the file at path in one write, so a reader sees each
-// of them whole or not at all, and syncs it. It creates the file and its directory.
+// of them whole or not at all, and syncs it. It creates the file with perm and its
+// directory with the mode [JSONL.Perm] documents.
 func AppendLines(path string, lines [][]byte, perm os.FileMode, opts ...AppendOption) error {
 	var o appendOptions
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), dirMode(perm)); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, perm)
@@ -84,7 +91,7 @@ type appendOptions struct{ skipSync bool }
 func WithoutSync() AppendOption { return func(o *appendOptions) { o.skipSync = true } }
 
 // RewriteLines replaces the file at path with lines through a rename, so a reader sees the
-// old file or the new one. It creates the directory.
+// old file or the new one. It creates the directory with the mode [JSONL.Perm] documents.
 func RewriteLines(path string, lines [][]byte, perm os.FileMode) error {
 	return writeAtomic(path, joinLines(lines), perm)
 }
@@ -101,7 +108,7 @@ func joinLines(lines [][]byte) []byte {
 // writeAtomic writes data to a temp file beside path, syncs it and renames it over path.
 func writeAtomic(path string, data []byte, perm os.FileMode) (err error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, dirMode(perm)); err != nil {
 		return err
 	}
 	// Same directory, because rename is atomic only within one filesystem and
@@ -131,6 +138,14 @@ func writeAtomic(path string, data []byte, perm os.FileMode) (err error) {
 	return os.Rename(tmp.Name(), path)
 }
 
+// dirMode is the mode of a directory holding files of mode perm: searchable by whoever may
+// read them, so 0644 files get a 0755 directory and 0600 files a 0700 one. Each permission
+// bit outside the nine is dropped.
+func dirMode(perm os.FileMode) os.FileMode {
+	perm &= os.ModePerm
+	return perm | (perm&0o444)>>2
+}
+
 // CompactDue reports whether a file of lines lines saying keys entries is due a rewrite to
 // one line per entry. Every read decodes every line, so the bound keeps a read within twice
 // the entries plus [CompactSlack], while one entry changing alone rewrites the file at most
@@ -145,7 +160,31 @@ var (
 	ErrLegacyStore = errors.New("store version conflict")
 	// ErrLineUndecodable matches a [*LineError].
 	ErrLineUndecodable = errors.New("store line does not decode")
+	// ErrUnfinishedLine matches an [*UnfinishedLineError].
+	ErrUnfinishedLine = errors.New("store ends in a line no writer finished")
 )
+
+// UnfinishedLineError is an Update refused because its rewrite would drop the line no
+// writer finished at Path's line Line, and the store has neither a Log nor an OnDrop to
+// say so.
+type UnfinishedLineError struct {
+	Path string
+	// Line is the 1-based line number.
+	Line int
+}
+
+func (e *UnfinishedLineError) Error() string {
+	return fmt.Sprintf("%s:%d: %v: dropping it in a rewrite needs a Log or an OnDrop to report it", e.Path, e.Line, ErrUnfinishedLine)
+}
+
+func (e *UnfinishedLineError) Unwrap() error { return ErrUnfinishedLine }
+
+// Dropped is the line no writer finished that an Update's rewrite dropped.
+type Dropped struct {
+	Path string
+	// Line is the 1-based line number.
+	Line int
+}
 
 // LegacyStoreError is the file an older writer kept a store in, still present beside the
 // file that replaced it.
@@ -189,7 +228,8 @@ func RefuseOld(old string) error {
 // the store never parses fields.
 type JSONL[T any] struct {
 	Path string
-	// Perm is the file's mode; zero means 0644.
+	// Perm is the file's mode, and zero means 0644. Its directory is created with
+	// read and search for whoever may read the file: 0600 files get a 0700 directory.
 	Perm os.FileMode
 	Key  func(T) string
 	// Live is nil when every line is an entry.
@@ -198,8 +238,11 @@ type JSONL[T any] struct {
 	// Update fail with [RefuseOld]'s error.
 	Old string
 	// Log receives the warning an Update logs when it drops a line no writer finished.
-	// Nil drops the warning with the line.
 	Log *slog.Logger
+	// OnDrop is told of each line no writer finished that an Update drops. With neither
+	// it nor Log set, such an Update fails with an [*UnfinishedLineError] and writes
+	// nothing.
+	OnDrop func(context.Context, Dropped)
 }
 
 // Load returns the entries, in the order their last lines appear. An absent file has none.
@@ -217,8 +260,8 @@ func (l JSONL[T]) Load() ([]T, error) {
 // It runs under the lock at Path+".lock", waiting up to [LockWait]: the appends do not need
 // it and the compaction does, since a rewrite from an earlier read would drop a line
 // appended after it. The file is rewritten to its entries when [CompactDue] says so, and
-// when it ends in a line no writer finished, which the rewrite drops and Log names. ctx
-// bounds only the wait for the lock.
+// when it ends in a line no writer finished, which the rewrite drops and Log and OnDrop
+// are told of. ctx bounds only the wait for the lock.
 func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 	return WithLock(ctx, l.Path+".lock", LockWait, func() error {
 		all, partial, err := l.read()
@@ -231,38 +274,52 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 		}
 		all = append(all, add...)
 		live := l.fold(all)
-		if !partial && !CompactDue(len(all), len(live)) {
+		if partial == 0 && !CompactDue(len(all), len(live)) {
 			return l.write(func(path string, lines [][]byte, perm os.FileMode) error {
 				return AppendLines(path, lines, perm)
 			}, add)
 		}
-		if partial && l.Log != nil {
-			l.Log.WarnContext(ctx, "store rewritten",
-				slog.String("path", l.Path), slog.String("why", "it ended in a line no writer finished, so the rewrite dropped it"))
+		if partial == 0 {
+			return l.write(RewriteLines, live)
 		}
-		return l.write(RewriteLines, live)
+		if l.Log == nil && l.OnDrop == nil {
+			return &UnfinishedLineError{Path: l.Path, Line: partial}
+		}
+		if err := l.write(RewriteLines, live); err != nil {
+			return err
+		}
+		if l.Log != nil {
+			l.Log.WarnContext(ctx, "store rewritten", slog.String("path", l.Path), slog.Int("line", partial),
+				slog.String("why", "it ended in a line no writer finished, so the rewrite dropped it"))
+		}
+		if l.OnDrop != nil {
+			l.OnDrop(ctx, Dropped{Path: l.Path, Line: partial})
+		}
+		return nil
 	})
 }
 
-func (l JSONL[T]) read() ([]T, bool, error) {
+// read returns the lines' entries and the number of the line no writer finished, 0 when
+// none.
+func (l JSONL[T]) read() ([]T, int, error) {
 	if l.Old != "" {
 		if err := RefuseOld(l.Old); err != nil {
-			return nil, false, err
+			return nil, 0, err
 		}
 	}
 	read, err := ReadLines(l.Path)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, err
 	}
 	all := make([]T, 0, len(read.Lines))
 	for _, line := range read.Lines {
 		var v T
 		if err := Unmarshal(line.Text, &v); err != nil {
-			return nil, false, &LineError{Path: l.Path, Line: line.N, Err: err}
+			return nil, 0, &LineError{Path: l.Path, Line: line.N, Err: err}
 		}
 		all = append(all, v)
 	}
-	return all, read.Partial, nil
+	return all, read.PartialLine, nil
 }
 
 // fold is the entries the lines say: each key's last line, in the order those lines appear,

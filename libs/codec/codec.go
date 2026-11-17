@@ -11,9 +11,9 @@
 // time.Duration. That build refuses such a type with an [*UnsupportedError] instead of
 // writing other bytes; a type gets past it with its own MarshalJSON and UnmarshalJSON.
 // Errors the codec raises itself ([*SyntaxError], [*MemberError], [*StrictError],
-// [*EncodeError]) read the same in both builds. An error a decoder raises over a value
-// of the wrong type, or one a type's own method returns, is passed through as the
-// underlying library words it.
+// [*EncodeError], [*TypeError]) read the same in both builds. A value its Go target cannot
+// hold is a [*TypeError] in both, wrapping the library's own error. An error a type's own
+// method returns is passed through as the underlying library words it.
 //
 // The JSON Lines store in jsonl.go writes through this API. Nothing in the package reads
 // the environment, writes to stdout or stderr, or keeps process-wide state.
@@ -93,8 +93,9 @@ func (e *MemberError) Error() string {
 func (e *MemberError) Unwrap() error { return e.Err }
 
 // StrictError is a refusal from [UnmarshalStrict] or a [StrictDecoder] at Offset, a byte
-// offset into the input. Err is the [*SyntaxError] or [*MemberError] behind it, or the
-// decoder's own error, which Offset then places at the start of the value it was reading.
+// offset into the input. Err is the [*SyntaxError] or [*MemberError] behind it, or a
+// [*TypeError] or the decoder's own error, which Offset then places at the start of the
+// value it was reading.
 type StrictError struct {
 	Offset int64
 	Err    error
@@ -102,6 +103,29 @@ type StrictError struct {
 
 func (e *StrictError) Error() string { return e.Err.Error() }
 func (e *StrictError) Unwrap() error { return e.Err }
+
+// TypeError is a JSON value its Go target cannot hold: a string for an int, a number out
+// of the target's range, or an array of another length than its Go array's. Err is the
+// library's own error, nil when the codec found the fault itself.
+type TypeError struct {
+	// JSON is the kind of value read: "string", "number", "bool", "null", "object" or
+	// "array".
+	JSON   string
+	GoType reflect.Type
+	// Reason says more where the kind alone does not, such as an array's length.
+	Reason string
+	Err    error
+}
+
+func (e *TypeError) Error() string {
+	msg := fmt.Sprintf("cannot decode a JSON %s into Go %v", e.JSON, e.GoType)
+	if e.Reason != "" {
+		msg += ": " + e.Reason
+	}
+	return msg
+}
+
+func (e *TypeError) Unwrap() error { return e.Err }
 
 // EncodeError is a value Marshal would not write: a string that is not valid UTF-8, or
 // an object holding one key twice, which a type's own MarshalJSON or MarshalText can
@@ -174,17 +198,10 @@ func UnmarshalStrict(data []byte, v any) error {
 	return d.End()
 }
 
-// UnmarshalLossless decodes an untyped JSON document without collapsing a repeated key
-// or rounding a large number: numbers decode as json.Number. Configuration mergers use it
-// before rewriting a document someone else owns.
-func UnmarshalLossless(data []byte, v any) error {
-	if err := validate(data); err != nil {
-		return err
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	return dec.Decode(v)
-}
+// UnmarshalLossless is [Unmarshal] without rounding a large number: a number decoded into
+// an interface is a json.Number holding its text. A repeated key is refused as Unmarshal
+// refuses it. Configuration mergers use it before rewriting a document someone else owns.
+func UnmarshalLossless(data []byte, v any) error { return unmarshalLossless(data, v) }
 
 // Valid reports whether data is one JSON value Unmarshal reads: well formed, valid
 // UTF-8, and no key repeated within an object.
@@ -232,8 +249,10 @@ func MarshalWithUnknown(v any, unknown map[string]RawMessage) ([]byte, error) {
 }
 
 // UnmarshalWithUnknown decodes data into v, a non-nil pointer to a struct, as [Unmarshal]
-// does, and returns the members v's type does not declare, nil when there are none. It is
-// the body of an UnmarshalJSON for a type that keeps them; see [MarshalWithUnknown].
+// does, and returns the members v's type does not declare, nil when there are none. A
+// member whose name matches a field only when case is ignored is one it does not declare,
+// so both builds keep it here. It is the body of an UnmarshalJSON for a type that keeps
+// them; see [MarshalWithUnknown].
 //
 // [UnmarshalStrict] still refuses those members for a type whose bag field is tagged
 // `codec:"unknown"`: the strict walk reads such a type's own fields rather than leaving the
@@ -243,23 +262,37 @@ func UnmarshalWithUnknown(data []byte, v any) (map[string]RawMessage, error) {
 	if t == nil || t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("codec: unknown members are kept by a struct, and %T does not point to one", v)
 	}
-	if err := Unmarshal(data, v); err != nil {
-		return nil, err
-	}
 	var members map[string]RawMessage
 	if err := Unmarshal(data, &members); err != nil {
+		if _, typed := errors.AsType[*TypeError](err); typed {
+			return nil, Unmarshal(data, v)
+		}
 		return nil, err
 	}
+	if members == nil {
+		return nil, Unmarshal(data, v)
+	}
 	declared := structFields(t).byName
+	known := []byte{'{'}
 	var unknown map[string]RawMessage
-	for name, raw := range members {
-		if _, ok := declared[name]; ok {
+	for _, name := range slices.Sorted(maps.Keys(members)) {
+		raw := members[name]
+		if _, ok := declared[name]; !ok {
+			if unknown == nil {
+				unknown = map[string]RawMessage{}
+			}
+			unknown[name] = raw
 			continue
 		}
-		if unknown == nil {
-			unknown = map[string]RawMessage{}
+		if len(known) > 1 {
+			known = append(known, ',')
 		}
-		unknown[name] = raw
+		known = append(append(appendQuote(known, name), ':'), raw...)
+	}
+	// Only the declared members reach v: encoding/json would fill a field from a member that
+	// matches it only when case is ignored, and that member belongs to the bag.
+	if err := Unmarshal(append(known, '}'), v); err != nil {
+		return nil, err
 	}
 	return unknown, nil
 }
@@ -303,14 +336,115 @@ func (e *Encoder) Encode(v any) error {
 }
 
 // Decoder reads a stream of JSON values separated by whitespace.
-type Decoder struct{ d streamDecoder }
+type Decoder struct {
+	r io.Reader
+	// buf holds the bytes read and not yet decoded; off is the stream offset of buf[0].
+	buf []byte
+	off int64
+	// readErr is the error the last Read returned, io.EOF at the end of the stream.
+	readErr error
+	// fault is a malformed stream's error, which every later Decode returns.
+	fault error
+	// adjoined says the last value read ended with no whitespace after it yet.
+	adjoined bool
+}
 
-// NewDecoder reads from r, buffering as it goes.
-func NewDecoder(r io.Reader) *Decoder { return &Decoder{d: newStreamDecoder(r)} }
+// NewDecoder reads from r, buffering as it goes. It reads only as far as the value it
+// decodes, and past a number to the byte that ends it.
+func NewDecoder(r io.Reader) *Decoder { return &Decoder{r: r} }
 
 // Decode reads the next value into v as [Unmarshal] does. At the end of the stream it
-// returns io.EOF. A malformed stream fails in the library's own words.
-func (d *Decoder) Decode(v any) error { return d.d.decode(v) }
+// returns io.EOF. A malformed stream is a [*SyntaxError] whose Offset counts from the start
+// of the stream, a value that does not follow the last one's whitespace included
+// ([ErrTrailingData]); once the stream is malformed, every later Decode returns that error.
+func (d *Decoder) Decode(v any) error {
+	if d.fault != nil {
+		return d.fault
+	}
+	start, end, err := d.next()
+	if err != nil {
+		if _, syntax := errors.AsType[*SyntaxError](err); syntax {
+			d.fault = err
+		}
+		return err
+	}
+	raw := d.buf[start:end]
+	at := d.off + int64(start)
+	d.buf, d.off = d.buf[end:], d.off+int64(end)
+	d.adjoined = true
+	if err := unmarshal(raw, v); err != nil {
+		return shiftOffset(err, at)
+	}
+	return nil
+}
+
+// next reads until buf holds one whole value and returns where it starts and ends.
+func (d *Decoder) next() (int, int, error) {
+	for {
+		s := scanner{data: d.buf}
+		s.skipSpace()
+		if s.pos > 0 {
+			d.adjoined = false
+		}
+		if s.pos == len(d.buf) {
+			if d.readErr != nil {
+				return 0, 0, d.atEnd()
+			}
+			d.fill()
+			continue
+		}
+		if d.adjoined {
+			return 0, 0, &SyntaxError{Offset: d.off, Err: ErrTrailingData}
+		}
+		start := s.pos
+		err := s.value(0, nil, reflect.Value{})
+		// A number ends only at the byte after it, which may not have arrived.
+		incomplete := errors.Is(err, io.ErrUnexpectedEOF) ||
+			(err == nil && s.pos == len(d.buf) && isNumberStart(d.buf[start]))
+		if incomplete && d.readErr == nil {
+			d.fill()
+			continue
+		}
+		if err != nil {
+			return 0, 0, shiftOffset(err, d.off)
+		}
+		return start, s.pos, nil
+	}
+}
+
+func (d *Decoder) atEnd() error {
+	if errors.Is(d.readErr, io.EOF) {
+		return io.EOF
+	}
+	return d.readErr
+}
+
+func (d *Decoder) fill() {
+	if len(d.buf) == cap(d.buf) {
+		grown := make([]byte, len(d.buf), max(2*cap(d.buf), 4096))
+		copy(grown, d.buf)
+		d.buf = grown
+	}
+	n, err := d.r.Read(d.buf[len(d.buf):cap(d.buf)])
+	d.buf = d.buf[:len(d.buf)+n]
+	if err != nil {
+		d.readErr = err
+	}
+}
+
+func isNumberStart(c byte) bool { return c == '-' || isDigit(c) }
+
+// shiftOffset moves the offset of a codec error found in a slice of the input by the
+// slice's start, so it counts from the start of the input.
+func shiftOffset(err error, by int64) error {
+	if syntax, ok := errors.AsType[*SyntaxError](err); ok {
+		syntax.Offset += by
+	}
+	if member, ok := errors.AsType[*MemberError](err); ok {
+		member.Offset += by
+	}
+	return err
+}
 
 // Duration is a time.Duration written as its String form ("1h30m0s") and read back from
 // one. A bare time.Duration field has no portable JSON form: the encoding/json/v2 build
@@ -410,6 +544,9 @@ func (d *StrictDecoder) Decode(v any) error {
 		return &StrictError{Offset: int64(start), Err: err}
 	}
 	if err := d.s.value(0, t, rv); err != nil {
+		if _, typed := errors.AsType[*TypeError](err); typed {
+			return &StrictError{Offset: int64(start), Err: err}
+		}
 		return d.refuse(err)
 	}
 	if err := unmarshalStrict(d.s.data[start:d.s.pos], v); err != nil {
@@ -464,13 +601,14 @@ const maxDepth = 10000
 // and anything but whitespace after the value. Both builds run it, so its refusals and
 // their offsets are the same in each.
 //
-// Given a target type it also walks the target: strict refuses a member the target does
-// not declare, caseOnly refuses a member that matches a field only when case is ignored,
-// and likeV2 does what v2 does on decode and encoding/json does not: it sets a
-// non-nullable target to its zero value on null, and refuses an array whose length is not
-// its Go array's. With canon set it appends the input to out in the form
-// encoding/json/v2 writes: no whitespace and each string escaped the v2 way; with
-// refuseReplacement it treats the escape encoding/json writes for an invalid byte as one.
+// Given a target type it also walks the target and refuses, as v2 does, an array whose
+// length is not its Go array's. strict refuses a member the target does not declare,
+// caseOnly refuses a member that matches a field only when case is ignored, and likeV2
+// does what v2 does on decode and encoding/json does not: it sets a non-nullable target to
+// its zero value on null. With canon set it appends the input to out in the form
+// encoding/json/v2 writes: no whitespace and each string escaped the v2 way.
+// sawReplacement records a \ufffd escape, which encoding/json also writes in place of an
+// invalid byte.
 type scanner struct {
 	data []byte
 	pos  int
@@ -479,9 +617,9 @@ type scanner struct {
 	caseOnly bool
 	likeV2   bool
 
-	canon             bool
-	refuseReplacement bool
-	out               []byte
+	canon          bool
+	sawReplacement bool
+	out            []byte
 
 	fields map[reflect.Type]*fieldSet
 }
@@ -694,7 +832,6 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 }
 
 func (s *scanner) array(depth int, t reflect.Type, v reflect.Value) error {
-	start := s.pos
 	s.pos++
 	s.emit('[')
 	var elem reflect.Type
@@ -703,8 +840,12 @@ func (s *scanner) array(depth int, t reflect.Type, v reflect.Value) error {
 		elem, fixed = t.Elem(), t.Kind() == reflect.Array
 	}
 	length := func(n int) error {
-		if s.likeV2 && fixed && n != t.Len() {
-			return s.errAt(start, fmt.Errorf("an array of %d elements for a Go %s", n, t))
+		if fixed && n != t.Len() {
+			reason := fmt.Sprintf("an array of %d elements", n)
+			if n == 1 {
+				reason = "an array of 1 element"
+			}
+			return &TypeError{JSON: "array", GoType: t, Reason: reason}
 		}
 		return nil
 	}
@@ -886,8 +1027,8 @@ func (s *scanner) escape() (rune, error) {
 			return 0, err
 		}
 		s.pos += 4
-		if s.refuseReplacement && r == utf8.RuneError {
-			return 0, s.errAt(at, fmt.Errorf("%w in a string", ErrInvalidUTF8))
+		if r == utf8.RuneError {
+			s.sawReplacement = true
 		}
 		if !utf16.IsSurrogate(r) {
 			return r, nil
