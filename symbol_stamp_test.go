@@ -133,7 +133,7 @@ func TestChangedSinceIndexListsSourcesNewerThanTheIndexSorted(t *testing.T) {
 		require.NoError(t, os.Chtimes(path, after, after))
 	}
 
-	changed, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceMemo())
+	changed, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceOnce())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"alpha.go", "zeta.go"}, changed, "newer sources, sorted; main.go and the magusfile predate the index")
 }
@@ -142,7 +142,7 @@ func TestChangedSinceIndexWithoutAnIndexFails(t *testing.T) {
 	m, _, index, _ := newStampedWorkspace(t)
 	require.NoError(t, os.Remove(index))
 
-	_, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceMemo())
+	_, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceOnce())
 	assert.Error(t, err, "no index file is no build time to compare against, never an empty list")
 }
 

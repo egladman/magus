@@ -40,7 +40,7 @@ func (f *rebuildingWorkspace) FreshenSymbolIndexes(_ context.Context, languages 
 }
 
 func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ types.GraphRequest) (*knowledge.Graph, error) {
-	v, err := types.EvalMemoFromContext(ctx).Do("rebuilding-workspace", func() (any, error) {
+	v, err := types.EvalOnceFromContext(ctx).Do("rebuilding-workspace", func() (any, error) {
 		return knowledge.Build(ctx, f.cacheDir, knowledge.BuildOptions{}, f.in, nil)
 	})
 	if err != nil {
@@ -149,24 +149,24 @@ func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithItsOpeningLan
 	s.Equal([][]string{{"go", "typescript"}, {"go", "typescript"}}, ws.scopes)
 }
 
-type symbolIndexMemoSuite struct {
+type symbolIndexEvaluationSuite struct {
 	suite.Suite
 	ws *rebuildingWorkspace
 }
 
-func TestSymbolIndexMemoSuite(t *testing.T) {
-	suite.Run(t, new(symbolIndexMemoSuite))
+func TestSymbolIndexEvaluationSuite(t *testing.T) {
+	suite.Run(t, new(symbolIndexEvaluationSuite))
 }
 
-func (s *symbolIndexMemoSuite) SetupTest() {
+func (s *symbolIndexEvaluationSuite) SetupTest() {
 	s.ws = indexWorkspace(s.T())
 }
 
-func (s *symbolIndexMemoSuite) evaluation() context.Context {
-	return types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
+func (s *symbolIndexEvaluationSuite) evaluation() context.Context {
+	return types.WithEvalOnce(types.WithWorkspace(s.T().Context(), s.ws))
 }
 
-func (s *symbolIndexMemoSuite) TestOneEvaluationFreshensOnceForEveryGraphRead() {
+func (s *symbolIndexEvaluationSuite) TestOneEvaluationFreshensOnceForEveryGraphRead() {
 	ctx := s.evaluation()
 	g, err := MagusGraphOpen(ctx, nil)
 	s.Require().NoError(err)
@@ -176,7 +176,7 @@ func (s *symbolIndexMemoSuite) TestOneEvaluationFreshensOnceForEveryGraphRead() 
 	s.Equal(1, s.ws.calls)
 }
 
-func (s *symbolIndexMemoSuite) TestEachLanguagesListFreshensOnItsOwn() {
+func (s *symbolIndexEvaluationSuite) TestEachLanguagesListFreshensOnItsOwn() {
 	ctx := s.evaluation()
 	_, err := MagusSymbolIndexDigest(ctx, []string{"go"})
 	s.Require().NoError(err)
@@ -186,7 +186,7 @@ func (s *symbolIndexMemoSuite) TestEachLanguagesListFreshensOnItsOwn() {
 	s.Nil(got.Languages)
 }
 
-func (s *symbolIndexMemoSuite) TestAFailedFreshenIsTriedAgain() {
+func (s *symbolIndexEvaluationSuite) TestAFailedFreshenIsTriedAgain() {
 	ctx := s.evaluation()
 	s.ws.freshen = assert.AnError
 	_, err := MagusSymbolIndexDigest(ctx, nil)
@@ -197,11 +197,11 @@ func (s *symbolIndexMemoSuite) TestAFailedFreshenIsTriedAgain() {
 	s.Equal(2, s.ws.calls)
 }
 
-func (s *symbolIndexMemoSuite) TestANewEvaluationFreshensAgain() {
+func (s *symbolIndexEvaluationSuite) TestANewEvaluationFreshensAgain() {
 	ctx := s.evaluation()
 	_, err := MagusSymbolIndexDigest(ctx, nil)
 	s.Require().NoError(err)
-	_, err = MagusSymbolIndexDigest(types.WithEvalMemo(ctx), nil)
+	_, err = MagusSymbolIndexDigest(types.WithEvalOnce(ctx), nil)
 	s.Require().NoError(err)
 	s.Equal(2, s.ws.calls)
 }
@@ -222,20 +222,20 @@ func (s *symbolIndexFreshenSuite) SetupTest() {
 	}
 }
 
-func (s *symbolIndexFreshenSuite) TestTheMemoizedDigestIsTheStoresDigest() {
+func (s *symbolIndexFreshenSuite) TestTheDigestComputedOnceIsTheStoresDigest() {
 	plain, err := MagusSymbolIndexDigest(types.WithWorkspace(s.T().Context(), s.ws), nil)
 	s.Require().NoError(err)
-	memo, err := MagusSymbolIndexDigest(types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws)), nil)
+	digest, err := MagusSymbolIndexDigest(types.WithEvalOnce(types.WithWorkspace(s.T().Context(), s.ws)), nil)
 	s.Require().NoError(err)
 	stored, err := knowledge.NewStore(s.ws.cacheDir, true, 0, nil, nil).SymbolIndexDigest()
 	s.Require().NoError(err)
 	s.Require().True(stored.Indexed, "the fixture indexes pkg/a")
-	s.Equal(stored, memo)
-	s.Equal(plain, memo)
+	s.Equal(stored, digest)
+	s.Equal(plain, digest)
 }
 
 func (s *symbolIndexFreshenSuite) evaluation() context.Context {
-	return types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
+	return types.WithEvalOnce(types.WithWorkspace(s.T().Context(), s.ws))
 }
 
 // indexB has the next freshen index pkg/b beside pkg/a.
@@ -288,7 +288,7 @@ func graphHandleReads(ctx context.Context, b *testing.B) {
 	}
 }
 
-func BenchmarkGraphHandleReadsWithoutMemo(b *testing.B) {
+func BenchmarkGraphHandleReadsWithoutEvaluation(b *testing.B) {
 	ws := indexWorkspace(b)
 	for b.Loop() {
 		graphHandleReads(types.WithWorkspace(b.Context(), ws), b)
@@ -298,6 +298,6 @@ func BenchmarkGraphHandleReadsWithoutMemo(b *testing.B) {
 func BenchmarkGraphHandleReadsInOneEvaluation(b *testing.B) {
 	ws := indexWorkspace(b)
 	for b.Loop() {
-		graphHandleReads(types.WithEvalMemo(types.WithWorkspace(b.Context(), ws)), b)
+		graphHandleReads(types.WithEvalOnce(types.WithWorkspace(b.Context(), ws)), b)
 	}
 }

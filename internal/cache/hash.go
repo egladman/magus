@@ -40,19 +40,19 @@ const KeyVersion = 7
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
 func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
-	key, _, err := c.hashStepInputsMemo(ctx, s, nil, nil, nil)
+	key, _, err := c.hashStepInputsWithSources(ctx, s, nil, nil, nil)
 	return key, err
 }
 
 // hashStepFiles is hashStep plus the count of input files hashed.
 func (c *Cache) hashStepFiles(ctx context.Context, s *Step) (string, int, error) {
-	return c.hashStepInputsMemo(ctx, s, nil, nil, nil)
+	return c.hashStepInputsWithSources(ctx, s, nil, nil, nil)
 }
 
 // hashStepSources is hashStepFiles plus the per-file hashes the key consumed.
 func (c *Cache) hashStepSources(ctx context.Context, s *Step) (string, int, sourceFingerprint, error) {
 	var fp sourceFingerprint
-	key, files, err := c.hashStepInputsMemo(ctx, s, nil, nil, &fp)
+	key, files, err := c.hashStepInputsWithSources(ctx, s, nil, nil, &fp)
 	return key, files, fp, err
 }
 
@@ -63,19 +63,19 @@ func (c *Cache) hashStepSources(ctx context.Context, s *Step) (string, int, sour
 // byte-identical to what the hash consumed; collecting inside the same writeLine keeps
 // that true by construction. The nil path adds no allocations to the hot path.
 func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (string, error) {
-	key, _, err := c.hashStepInputsMemo(ctx, s, lines, nil, nil)
+	key, _, err := c.hashStepInputsWithSources(ctx, s, lines, nil, nil)
 	return key, err
 }
 
-// hashStepInputsMemo is hashStepInputs with an optional SourceMemo covering the
-// expandSources+hashFiles portion of the key. See SourceMemo's doc for why memo must
+// hashStepInputsWithSources is hashStepInputs with an optional SourceOnce covering the
+// expandSources+hashFiles portion of the key. See SourceOnce's doc for why the holder must
 // stay nil on every path that executes a target (hashStep, hashStepInputs, and the
 // post-run key-inputs recompute in Run all pass nil); only a read-only prediction
 // sweep (ComputeTargetKey via IdentifyRef) constructs and threads a real one.
 //
 // The int is the number of input files hashed: one src: line each. A non-nil fp
 // receives each file's hash by relative path; nil builds no map.
-func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string, memo *SourceMemo, fp *sourceFingerprint) (string, int, error) {
+func (c *Cache) hashStepInputsWithSources(ctx context.Context, s *Step, lines *[]string, once *SourceOnce, fp *sourceFingerprint) (string, int, error) {
 	h := sha256.New()
 
 	// Build each key input in a reused scratch buffer and write it straight to the
@@ -155,7 +155,7 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 		writeLine("arg:", a)
 	}
 
-	files, hashes, modes, err := c.expandAndHashSources(ctx, s, memo)
+	files, hashes, modes, err := c.expandAndHashSources(ctx, s, once)
 	if err != nil {
 		return "", 0, err
 	}
@@ -237,25 +237,25 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 // key is what portable refs truncate, so callers can also predict the ref a run of
 // this step would print.
 func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []string, err error) {
-	return c.StepKeyMemo(ctx, s, nil)
+	return c.StepKeyWithSources(ctx, s, nil)
 }
 
-// StepKeyMemo is StepKey with an optional SourceMemo. It exists for a caller that
+// StepKeyWithSources is StepKey with an optional SourceOnce. It exists for a caller that
 // keys MANY steps sharing one WorkspaceRoot in one pass (IdentifyRef's sweep, via
 // ComputeTargetKey), so distinct targets whose buildStep gives them the SAME
 // Sources baseline expand and hash that source set once instead of once per
 // target/charm combination. Pass nil for ordinary StepKey behavior; see
-// SourceMemo's doc for the safety condition on passing a real one.
+// SourceOnce's doc for the safety condition on passing a real one.
 //
 // computeTargetKey (run.go), the implementation behind the `describe target --cache` seam
-// StepKey's own doc describes, calls StepKeyMemo directly rather than through StepKey;
+// StepKey's own doc describes, calls StepKeyWithSources directly rather than through StepKey;
 // only tests exercise StepKey itself.
-func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key string, lines []string, err error) {
-	key, _, err = c.hashStepInputsMemo(ctx, s, &lines, memo, nil)
+func (c *Cache) StepKeyWithSources(ctx context.Context, s *Step, once *SourceOnce) (key string, lines []string, err error) {
+	key, _, err = c.hashStepInputsWithSources(ctx, s, &lines, once, nil)
 	return key, lines, err
 }
 
-// SourceMemo memoizes the expandSources+hashFiles result for one sweep of steps sharing
+// SourceOnce computes the expandSources+hashFiles result once for one sweep of steps sharing
 // a WorkspaceRoot, keyed by the (Sources, Outputs, IgnoreDirs) tuple that determines it.
 //
 // ONLY for prediction: profiling IdentifyRef's sweep showed expandSources' WalkDir
@@ -263,36 +263,36 @@ func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key
 // dozens of walks over an IDENTICAL Sources set, because buildStep gives most targets in
 // a project the same baseline.
 //
-// It must NEVER reach a path that executes a target: the memo assumes nothing on disk
+// It must NEVER reach a path that executes a target: it assumes nothing on disk
 // changes between calls, which holds for a read-only sweep and nothing else. A real
 // Run/RunAll handed one could replay a source hash observed before that step's build
-// wrote to its own inputs. Construct one per sweep with NewSourceMemo, thread it
+// wrote to its own inputs. Construct one per sweep with NewSourceOnce, thread it
 // explicitly, and let it fall out of scope.
 //
 // Threaded as an explicit parameter rather than through ctx like gopherbuzz's TargetRuns,
 // deliberately: an explicit parameter is what makes "prediction only" provable by grep.
-type SourceMemo struct {
+type SourceOnce struct {
 	mu      sync.Mutex
-	entries map[string]sourceMemoEntry
+	entries map[string]sourceOnceEntry
 }
 
-type sourceMemoEntry struct {
+type sourceOnceEntry struct {
 	files  []relAbs
 	hashes []string
 	modes  []os.FileMode
 }
 
-// NewSourceMemo returns an empty memo. See SourceMemo's doc for its one intended
+// NewSourceOnce returns an empty SourceOnce. See SourceOnce's doc for its one intended
 // caller shape: created and discarded around a single prediction sweep.
-func NewSourceMemo() *SourceMemo {
-	return &SourceMemo{entries: make(map[string]sourceMemoEntry)}
+func NewSourceOnce() *SourceOnce {
+	return &SourceOnce{entries: make(map[string]sourceOnceEntry)}
 }
 
-// sourceMemoKey canonicalizes the inputs expandSources depends on. Sorting each list is
+// sourceOnceKey canonicalizes the inputs expandSources depends on. Sorting each list is
 // safe because every glob carries its own exclusions: expandSources' result is a
 // membership test per file, so two lists differing only in order expand to the same
 // file set. The key only detects that repetition and is never written to the hash.
-func sourceMemoKey(root string, through map[string]string, sources, outputs []types.Glob, ignoreDirs []string) string {
+func sourceOnceKey(root string, through map[string]string, sources, outputs []types.Glob, ignoreDirs []string) string {
 	var b strings.Builder
 	write := func(ss []string) {
 		sorted := append([]string(nil), ss...)
@@ -322,15 +322,15 @@ func sourceMemoKey(root string, through map[string]string, sources, outputs []ty
 	return b.String()
 }
 
-// expandAndHashSources expands s.Sources into files and hashes them, consulting memo
+// expandAndHashSources expands s.Sources into files and hashes them, consulting once
 // first when non-nil and populating it on a miss. The nil path is byte-for-byte the
 // prior inline behavior in hashStepInputs.
-func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceMemo) ([]relAbs, []string, []os.FileMode, error) {
+func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, once *SourceOnce) ([]relAbs, []string, []os.FileMode, error) {
 	roots, err := workspaceRoots(s)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if memo == nil {
+	if once == nil {
 		files, err := expandStepSources(s, roots)
 		if err != nil {
 			return nil, nil, nil, err
@@ -342,13 +342,13 @@ func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceM
 		return files, hashes, modes, nil
 	}
 
-	key := sourceMemoKey(s.WorkspaceRoot, roots, s.Sources, s.Outputs, s.IgnoreDirs)
-	memo.mu.Lock()
-	if e, ok := memo.entries[key]; ok {
-		memo.mu.Unlock()
+	key := sourceOnceKey(s.WorkspaceRoot, roots, s.Sources, s.Outputs, s.IgnoreDirs)
+	once.mu.Lock()
+	if e, ok := once.entries[key]; ok {
+		once.mu.Unlock()
 		return e.files, e.hashes, e.modes, nil
 	}
-	memo.mu.Unlock()
+	once.mu.Unlock()
 
 	files, err := expandStepSources(s, roots)
 	if err != nil {
@@ -359,9 +359,9 @@ func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceM
 		return nil, nil, nil, err
 	}
 
-	memo.mu.Lock()
-	memo.entries[key] = sourceMemoEntry{files: files, hashes: hashes, modes: modes}
-	memo.mu.Unlock()
+	once.mu.Lock()
+	once.entries[key] = sourceOnceEntry{files: files, hashes: hashes, modes: modes}
+	once.mu.Unlock()
 	return files, hashes, modes, nil
 }
 

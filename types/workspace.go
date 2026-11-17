@@ -220,28 +220,28 @@ func GraphObserverFromContext(ctx context.Context) Observer { //nolint:ireturn /
 	return o
 }
 
-// EvalMemo holds what one evaluation computes once. An evaluation is one scheduled
+// EvalOnce holds what one evaluation computes once. An evaluation is one scheduled
 // attempt with every body it needs through ctx.needs, or one script. Every read inside
 // it sees the same snapshot, so a body that writes files and reads the knowledge graph
 // again sees the graph as the evaluation began. A failed computation is not kept, so a
 // canceled context never sticks. End drops everything it holds.
-type EvalMemo struct {
+type EvalOnce struct {
 	mu     sync.Mutex
-	cells  map[string]*evalMemoCell
+	cells  map[string]*evalOnceCell
 	ended  bool
 	warned bool
 }
 
-type evalMemoCell struct {
+type evalOnceCell struct {
 	mu   sync.Mutex
 	done bool
 	v    any
 }
 
 // Do returns the value computed for key in this evaluation, computing it on the first
-// call. Concurrent callers of one key wait for the one computation. A nil memo computes
+// call. Concurrent callers of one key wait for the one computation. A nil holder computes
 // every time, as does one that has ended.
-func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
+func (m *EvalOnce) Do(key string, compute func() (any, error)) (any, error) {
 	if m == nil {
 		return compute()
 	}
@@ -256,11 +256,11 @@ func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
 		return compute()
 	}
 	if m.cells == nil {
-		m.cells = map[string]*evalMemoCell{}
+		m.cells = map[string]*evalOnceCell{}
 	}
 	c := m.cells[key]
 	if c == nil {
-		c = &evalMemoCell{}
+		c = &evalOnceCell{}
 		m.cells[key] = c
 	}
 	m.mu.Unlock()
@@ -282,7 +282,7 @@ func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
 // later Do computes, as on a nil holder. A Do already computing finishes and returns its
 // value, which is not kept. The first Do after End logs one warning naming its key. End
 // is safe to call more than once, on a nil holder, and concurrently with Do.
-func (m *EvalMemo) End() {
+func (m *EvalOnce) End() {
 	if m == nil {
 		return
 	}
@@ -293,7 +293,7 @@ func (m *EvalMemo) End() {
 }
 
 // Ended reports whether End has run. A nil holder has not ended: it never held anything.
-func (m *EvalMemo) Ended() bool {
+func (m *EvalOnce) Ended() bool {
 	if m == nil {
 		return false
 	}
@@ -302,15 +302,15 @@ func (m *EvalMemo) Ended() bool {
 	return m.ended
 }
 
-type evalMemoKey struct{}
+type evalOnceKey struct{}
 
-// WithEvalMemo returns ctx carrying a fresh, empty EvalMemo that replaces any outer one.
-func WithEvalMemo(ctx context.Context) context.Context {
-	return context.WithValue(ctx, evalMemoKey{}, &EvalMemo{})
+// WithEvalOnce returns ctx carrying a fresh, empty EvalOnce that replaces any outer one.
+func WithEvalOnce(ctx context.Context) context.Context {
+	return context.WithValue(ctx, evalOnceKey{}, &EvalOnce{})
 }
 
-// EvalMemoFromContext returns the evaluation's memo, or nil when none was installed.
-func EvalMemoFromContext(ctx context.Context) *EvalMemo {
-	m, _ := ctx.Value(evalMemoKey{}).(*EvalMemo)
+// EvalOnceFromContext returns the evaluation's holder, or nil when none was installed.
+func EvalOnceFromContext(ctx context.Context) *EvalOnce {
+	m, _ := ctx.Value(evalOnceKey{}).(*EvalOnce)
 	return m
 }
