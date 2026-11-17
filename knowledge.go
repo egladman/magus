@@ -2510,20 +2510,9 @@ func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*kn
 	if req.Symbols != types.AllSymbols || req.Refresh || !watched || len(memo) == 0 {
 		return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
 	}
-	w := m.warmKnowledgeGraph()
-	w.symMu.Lock()
-	defer w.symMu.Unlock()
-	if w.symBase == g && w.symMemo == &memo[0] {
-		return w.symbols, nil
-	}
-	merged, err := cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
-	if err != nil {
-		return nil, err
-	}
-	// Concurrent requests read it now, so a write copies the maps first.
-	merged.MarkShared()
-	w.symBase, w.symMemo, w.symbols = g, &memo[0], merged
-	return merged, nil
+	return m.warmKnowledgeGraph().symbolGraph(g, &memo[0], func() (*knowledge.Graph, error) {
+		return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
+	})
 }
 
 // optimization: read the warm graph once per evaluation, not per scope.

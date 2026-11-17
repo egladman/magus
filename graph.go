@@ -287,6 +287,30 @@ func (w *warmGraph) invalidate() {
 	w.valid, w.graph = false, nil
 	w.gen++
 	w.mu.Unlock()
+	// The merged graph was built onto the graph just dropped; holding it would keep both
+	// alive until the next symbol read.
+	w.symMu.Lock()
+	w.symBase, w.symMemo, w.symbols = nil, nil, nil
+	w.symMu.Unlock()
+}
+
+// symbolGraph returns the graph merge builds onto base, merging only when the one it holds
+// was built onto another base or under another memo. Concurrent misses merge once: the rest
+// wait on symMu and take that result. A merge error is returned and nothing is kept. The
+// result reaches concurrent readers, so it is marked shared before it is kept.
+func (w *warmGraph) symbolGraph(base *knowledge.Graph, memo *types.SymbolIndexStatus, merge func() (*knowledge.Graph, error)) (*knowledge.Graph, error) {
+	w.symMu.Lock()
+	defer w.symMu.Unlock()
+	if w.symbols != nil && w.symBase == base && w.symMemo == memo {
+		return w.symbols, nil
+	}
+	merged, err := merge()
+	if err != nil {
+		return nil, err
+	}
+	merged.MarkShared()
+	w.symBase, w.symMemo, w.symbols = base, memo, merged
+	return merged, nil
 }
 
 // requestReload asks reloadLoop for a background rebuild without blocking; a request

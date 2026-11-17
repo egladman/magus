@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -178,6 +177,10 @@ func (g *Graph) rankPosition(ix *searchIndex, cq *compiledQuery, opts RetrieveOp
 	} else {
 		ranking.Skipped = append(ranking.Skipped, listGraph+": no reader path names a node")
 	}
+	ranking.Note = fmt.Sprintf("position %s:%d seeded %d identifier(s) naming %d defined symbol(s)", opts.Position.Path, opts.Position.Offset, len(weights), len(cands))
+	if len(lists) == 1 {
+		return exactMatches(ix, cands, exact.Weight, opts.Weights.Fusion.K), nil
+	}
 	fused, err := textrank.Fuse(lists, opts.Weights.Fusion.K)
 	if err != nil {
 		return nil, err
@@ -193,12 +196,23 @@ func (g *Graph) rankPosition(ix *searchIndex, cq *compiledQuery, opts RetrieveOp
 		}
 		matches = append(matches, newMatch(&ix.entries[c.pos].node, f.Score, w))
 	}
-	ranking.Note = fmt.Sprintf("position %s:%d seeded %d identifier(s) naming %d defined symbol(s)", opts.Position.Path, opts.Position.Offset, len(weights), len(cands))
 	return matches, nil
 }
 
+// exactMatches is cands as the exact list alone fuses them: in its own order, each scored
+// by its reciprocal rank term, as rankText scores one list.
+func exactMatches(ix *searchIndex, cands []candidate, weight, k float64) []types.KnowledgeMatch {
+	matches := make([]types.KnowledgeMatch, len(cands))
+	for i := range cands {
+		c := &cands[i]
+		w := &types.KnowledgeMatchWhy{Prior: c.prior, Lists: []types.KnowledgeListRank{{List: listExact, Rank: i + 1}}}
+		matches[i] = newMatch(&ix.entries[c.pos].node, weight/(k+float64(i+1)), w)
+	}
+	return matches
+}
+
 // positionCandidates is the admitted defined symbols weights' labels name, by exact score,
-// then kindRank, then id.
+// then id.
 func (g *Graph) positionCandidates(ix *searchIndex, cq *compiledQuery, opts RetrieveOptions, x exclusion, weights map[string]float64) []candidate {
 	g.ensureAdj()
 	defined := func(id string) bool {
@@ -207,7 +221,8 @@ func (g *Graph) positionCandidates(ix *searchIndex, cq *compiledQuery, opts Retr
 	byLabel := symbolsByLabel(ix)
 	var admitted []int
 	perLabel := map[string]int{}
-	for _, label := range slices.Sorted(maps.Keys(weights)) {
+	// Any label order will do: the sort below is total, by score and then id.
+	for label := range weights {
 		for _, i := range byLabel[label] {
 			n := &ix.entries[i].node
 			if x.drops(n) || !g.admits(ix, int(i), cq) || !defined(n.ID) {
@@ -227,12 +242,12 @@ func (g *Graph) positionCandidates(ix *searchIndex, cq *compiledQuery, opts Retr
 		score := weights[n.Label] / float64(perLabel[n.Label]) * prior
 		cands = append(cands, candidate{pos: i, hit: textrank.Hit{ID: n.ID, Score: score}, prior: prior, score: score})
 	}
+	// Every candidate is a symbol, so kindRank cannot break a tie here.
 	slices.SortFunc(cands, func(a, b candidate) int {
 		if a.score != b.score {
 			return cmp.Compare(b.score, a.score)
 		}
-		ka, kb := kindRank(ix.entries[a.pos].node.Kind), kindRank(ix.entries[b.pos].node.Kind)
-		return cmp.Or(cmp.Compare(kb, ka), cmp.Compare(a.hit.ID, b.hit.ID))
+		return cmp.Compare(a.hit.ID, b.hit.ID)
 	})
 	return cands
 }
