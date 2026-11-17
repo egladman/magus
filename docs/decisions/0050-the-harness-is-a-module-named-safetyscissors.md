@@ -561,8 +561,7 @@ decided.
 - A line in any other group, or a version no migration reaches, is refused as MGS3058,
   which names the line and says to move the store aside and fork the job again, or start a
   fresh session. A newer version of the job group is MGS3047. This replaces the earlier
-  refusal of the magus group, which named no job-store code. Decided by the orchestrator,
-  Eli to confirm.
+  refusal of the magus group, which named no job-store code. Ruled by Eli on 11-17.
 
 ### 2026-11-17: the job module's surface is trimmed
 
