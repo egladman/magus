@@ -21,6 +21,10 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/egladman/magus/libs/diagnostics => ../diagnostics
+
+replace github.com/egladman/magus/libs/gopherbuzz => ../gopherbuzz
