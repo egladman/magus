@@ -46,6 +46,7 @@ func (s *ReadSuite) SetupTest() {
 		// build declares no inputs: its runs read only the paths their commands name.
 		TargetInputs: map[string][]types.InputRef{
 			"test": {{Glob: "**/*.go"}}, "lint": {{Glob: "**/*.go"}}, "vet": {{Glob: "**/*.go"}},
+			"generate": {{Glob: "**/*.go"}},
 		},
 		TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/*.jsonl"}}},
 	}
@@ -123,7 +124,7 @@ func (s *ReadSuite) TestACleanRunAtAnOlderRevisionLeavesAFileChangedSinceUnverif
 
 	got := s.read(head)
 	// The target that ran over the file comes first, then the magusfile targets that claim it.
-	s.Equal([]types.UnverifiedFile{{Path: "b.go", Commands: []string{
+	s.Equal([]types.UnverifiedFile{{Path: "b.go", Declared: true, Commands: []string{
 		hint.Run.With("test", "."), hint.Run.With("lint", "."), hint.Run.With("vet", "."),
 	}}}, got.Unverified)
 	s.Require().Len(got.Runs, 1)
@@ -190,7 +191,7 @@ func (s *ReadSuite) TestARunOfATargetThatDeclaresNoInputsReadsNothingItsCommandD
 	s.record("build", head, nil)
 
 	got := s.read(head)
-	s.Equal([]types.UnverifiedFile{{Path: "a.go", Commands: []string{
+	s.Equal([]types.UnverifiedFile{{Path: "a.go", Declared: true, Commands: []string{
 		hint.Run.With("test", "."), hint.Run.With("lint", "."), hint.Run.With("vet", "."),
 	}}}, got.Unverified, "build is never named: no declaration says a.go is its")
 	s.Empty(got.Runs, "build claims no file")
@@ -198,10 +199,44 @@ func (s *ReadSuite) TestARunOfATargetThatDeclaresNoInputsReadsNothingItsCommandD
 
 func (s *ReadSuite) TestARunOfATargetThatDeclaresNoInputsReadsThePathsItsCommandNames() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n", "b.go": "package a\n\nvar B = 1\n"})
-	s.record("build", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"-o", "./a.go"} })
+	s.record("build", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"./a.go"} })
 
 	got := s.read(head)
 	s.Equal([]string{"b.go"}, paths(got.Unverified))
+}
+
+func (s *ReadSuite) TestADotOnATargetThatDeclaresNoInputsNamesNothing() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("build", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"."} })
+
+	got := s.read(head)
+	s.Equal([]string{"a.go"}, paths(got.Unverified), "`build . -- .` may have done nothing")
+}
+
+func (s *ReadSuite) TestAnOptionsValueIsNotANamedPath() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("build", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"-o", "a.go"} })
+
+	got := s.read(head)
+	s.Equal([]string{"a.go"}, paths(got.Unverified), "a.go is the value of -o")
+}
+
+func (s *ReadSuite) TestATrailingEllipsisNamesThePackageAndBelow() {
+	head := s.repo.Commit("change", map[string]string{"pkg/a.go": "package pkg\n", "pkg/sub/b.go": "package sub\n", "c.go": "package a\n"})
+	s.record("build", head, func(d *cache.OutputDescriptor) { d.ExtraArgs = []string{"./pkg/..."} })
+
+	got := s.read(head)
+	s.Equal([]string{"c.go"}, paths(got.Unverified))
+}
+
+func (s *ReadSuite) TestAGeneratorIsNotNamedForAFileItOnlyReads() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.record("generate", head, func(d *cache.OutputDescriptor) { d.Failed = true })
+
+	got := s.read(head)
+	s.Require().Len(got.Unverified, 1)
+	s.True(got.Unverified[0].Declared)
+	s.NotContains(got.Unverified[0].Commands, hint.Run.With("generate", "."), "generate writes gen/ and checks nothing about a.go")
 }
 
 func (s *ReadSuite) TestAPathThatNamesNothingScopesTheRunToNothing() {
@@ -248,7 +283,7 @@ func (s *ReadSuite) TestARunOfATargetWithoutDeclaredOutputsReadsNoOutput() {
 	s.record("test", head, nil)
 
 	got := s.read(head)
-	s.Equal([]types.UnverifiedFile{{Path: "gen/out.jsonl", Commands: []string{hint.Run.With("generate", ".")}}}, got.Unverified)
+	s.Equal([]types.UnverifiedFile{{Path: "gen/out.jsonl", Declared: true, Commands: []string{hint.Run.With("generate", ".")}}}, got.Unverified)
 }
 
 func (s *ReadSuite) TestAFileScopedRunReadsOnlyThePathsItNamed() {
@@ -300,7 +335,7 @@ func (s *ReadSuite) TestChangedFilesAreSinceTheMergeBase() {
 	got := weigh(s.T().Context(), s.input("trunk", head))
 	s.Equal(types.UnverifiedReport{
 		Revision: head, Base: "trunk", Changed: []string{"a.go"},
-		Unverified: []types.UnverifiedFile{{Path: "a.go", Commands: []string{
+		Unverified: []types.UnverifiedFile{{Path: "a.go", Declared: true, Commands: []string{
 			hint.Run.With("test", "."), hint.Run.With("lint", "."), hint.Run.With("vet", "."),
 		}}},
 	}, got)

@@ -1,7 +1,7 @@
 package types
 
 // UnverifiedReport is what magus\workspace(dir).unverified(revision) reads in the checkout
-// holding dir: the files revision changed since its merge base with Base, and those no clean
+// holding dir: the files revision changed since its merge base with Base, and those no
 // passing run recorded in that checkout read as revision holds them. Facts only: a workspace
 // rule decides what they stop.
 type UnverifiedReport struct {
@@ -19,15 +19,22 @@ type UnverifiedReport struct {
 	// Unknown says why the read did not finish, empty when it did. When set, Changed and
 	// Unverified are not an answer.
 	Unknown string `json:"unknown,omitempty"`
+	// NoWorkspace is set when no magus workspace holds the checkout: it declares no target,
+	// so no file of Unverified is declared.
+	NoWorkspace bool `json:"no_workspace,omitempty"`
 }
 
-// UnverifiedFile is one changed file no clean passing run read.
+// UnverifiedFile is one changed file no passing run read as the commit holds it.
 type UnverifiedFile struct {
 	Path string `json:"path"`
+	// Declared is set when a target declares the file among its inputs or outputs. A file
+	// none declares has no run that could read it as such; declaring it as a target's input
+	// is how it gets checked.
+	Declared bool `json:"declared,omitempty"`
 	// Commands are at most three `magus run` lines whose target reads the file: targets this
 	// checkout ran over it first, then magusfile targets whose declared inputs or outputs
-	// claim it. Empty when no target claims it, which no run can fix: declaring the file as
-	// a target's input is how it gets checked.
+	// claim it, never a target that declares outputs for a file that is only its input.
+	// Empty for a file no target declares, and for one only such targets read.
 	Commands []string `json:"commands,omitempty"`
 }
 

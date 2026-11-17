@@ -1,5 +1,5 @@
-// Package unverified reads which files a commit changed that no clean passing run in a
-// checkout read.
+// Package unverified reads which files a commit changed that no passing run recorded in a
+// checkout read as the commit holds them.
 //
 // A run counts for a file when it passed, read the file (or wrote it), and the file held,
 // when it ran, what the commit holds, whatever else in the tree was uncommitted. It read
@@ -89,7 +89,7 @@ func weigh(ctx context.Context, in readInput) types.UnverifiedReport {
 	}
 	for _, file := range changed {
 		if !ev.covered(file) {
-			report.Unverified = append(report.Unverified, types.UnverifiedFile{Path: file, Commands: ev.wouldCover(file)})
+			report.Unverified = append(report.Unverified, types.UnverifiedFile{Path: file, Declared: ev.declares(file), Commands: ev.wouldCover(file)})
 		}
 	}
 	report.Runs = ev.claimingRuns(changed, report.Unverified)
@@ -221,6 +221,9 @@ func newEvidence(driver types.VCSDriver, root, workspace string, ws Projects, ru
 type targetFootprint struct {
 	inputs, outputs int
 	declaresInputs  bool
+	// declaresOutputs marks a generator: a run of it for a file it only reads rewrites its
+	// outputs and checks nothing about that file.
+	declaresOutputs bool
 }
 
 // runFootprint is one run's target footprint and the paths its args name. known is false
@@ -254,11 +257,12 @@ func (ev *evidence) index() {
 		key := [2]string{p.Path, target}
 		fp, ok := targets[key]
 		if !ok {
-			inputs := rootedInputs(p, target)
+			inputs, outputs := rootedInputs(p, target), rootedOutputs(p, target)
 			fp = targetFootprint{
-				inputs:         ev.globSet(setIDs, inputs),
-				outputs:        ev.globSet(setIDs, rootedOutputs(p, target)),
-				declaresInputs: len(inputs) > 0,
+				inputs:          ev.globSet(setIDs, inputs),
+				outputs:         ev.globSet(setIDs, outputs),
+				declaresInputs:  len(inputs) > 0,
+				declaresOutputs: len(outputs) > 0,
 			}
 			targets[key] = fp
 		}
@@ -392,7 +396,8 @@ func (ev *evidence) unchangedSince(d cache.OutputDescriptor, file string, wrote 
 // wouldCover names at most three runs that would cover file: targets this store ran over
 // it, else magusfile targets whose declared inputs or outputs hold it. A target that
 // declares no inputs is never named: which files it reads depends on the paths a command
-// passes it, so none of its runs says file is its.
+// passes it, so none of its runs says file is its. Nor is a target that declares outputs
+// for a file that is only its input.
 func (ev *evidence) wouldCover(file string) []string {
 	rel, inside := ev.workspacePath(file)
 	if !inside {
@@ -414,7 +419,7 @@ func (ev *evidence) wouldCover(file string) []string {
 		switch {
 		case ev.writes(i, claims):
 			add(hint.Run.With(target, d.Project))
-		case !r.known || !r.declaresInputs || !claims[r.inputs]:
+		case !r.known || !r.declaresInputs || !claims[r.inputs] || r.declaresOutputs:
 		case r.scoped:
 			add(hint.Run.With(target, d.Project, "--", projectRelative(d.Project, rel)))
 		default:
@@ -422,11 +427,23 @@ func (ev *evidence) wouldCover(file string) []string {
 		}
 	}
 	for _, t := range ev.declared {
-		if claims[t.inputs] || claims[t.outputs] {
+		if claims[t.outputs] || claims[t.inputs] && !t.declaresOutputs {
 			add(hint.Run.With(t.target, t.project))
 		}
 	}
 	return out
+}
+
+// declares reports whether a target of the workspace declares file among its inputs or
+// outputs.
+func (ev *evidence) declares(file string) bool {
+	rel, inside := ev.workspacePath(file)
+	if !inside {
+		return false
+	}
+	claims := ev.claiming(rel)
+	return slices.ContainsFunc(ev.declared, func(t declaredTarget) bool { return claims[t.inputs] || claims[t.outputs] }) ||
+		slices.ContainsFunc(ev.footprints, func(r runFootprint) bool { return r.known && (claims[r.inputs] || claims[r.outputs]) })
 }
 
 // claimingRuns lists the runs whose target claims a file of unverified, with the files of
@@ -478,7 +495,7 @@ func (ev *evidence) claimingRuns(changed []string, unverified []types.Unverified
 // claiming(rel).
 func (ev *evidence) claimsFile(i int, claims []bool, rel string) bool {
 	r := ev.footprints[i]
-	return r.known && (claims[r.inputs] || claims[r.outputs] || !r.declaresInputs && r.names(rel))
+	return r.known && (claims[r.inputs] || claims[r.outputs] || !r.declaresInputs && r.names(rel, false))
 }
 
 // workspacePath is file, repository-relative, relative to the workspace.
@@ -502,30 +519,52 @@ func (ev *evidence) reads(i int, claims []bool, rel string) bool {
 	case !r.known:
 		return false
 	case !r.declaresInputs:
-		return r.names(rel)
+		return r.names(rel, false)
 	}
-	return claims[r.inputs] && (!r.scoped || r.names(rel))
+	return claims[r.inputs] && (!r.scoped || r.names(rel, true))
 }
 
-// names reports whether the run's args name rel or a directory holding it.
-func (r runFootprint) names(rel string) bool {
-	return slices.ContainsFunc(r.named, func(n string) bool { return n == "." || n == rel || strings.HasPrefix(rel, n+"/") })
+// names reports whether the run's args name rel or a directory holding it. whole lets a
+// named `.` hold every file: true only for a target whose declared inputs already bound
+// what it read, since `-- .` on a target that declares none would otherwise verify the
+// whole workspace with a run that may have done nothing.
+func (r runFootprint) names(rel string, whole bool) bool {
+	return slices.ContainsFunc(r.named, func(n string) bool {
+		return n == "." && whole || n == rel || n != "." && strings.HasPrefix(rel, n+"/")
+	})
 }
 
 // namedPaths are the workspace paths run d's forwarded args name, read against its
 // project and then the workspace, spelled exactly as the tree spells them: on a disk that
-// ignores case, `-run Docs` names no `docs/`. An arg shaped as a path (holding a slash or
-// starting with a dot) scopes the run even when it names nothing that exists, so a typo
-// does not widen the run to every file. `-run Push` names no path and scopes nothing.
+// ignores case, `-run Docs` names no `docs/`. A trailing `/...` is dropped, so `./pkg/...`
+// names pkg and every directory under it. The word after an option is its value, never a
+// named path: `-o ./out` names nothing, and neither does `-v ./pkg`, which reads the same.
+// A word shaped as a path (holding a slash or starting with a dot) scopes the run even when
+// it names nothing, so a typo or a skipped value does not widen the run to every file.
+// `-run Push` names no path and scopes nothing.
 func (ev *evidence) namedPaths(d cache.OutputDescriptor) scope {
 	var sc scope
+	value, positional := false, false
 	for _, arg := range d.ExtraArgs {
-		if arg == "" || strings.HasPrefix(arg, "-") {
+		switch {
+		case arg == "--" && !positional:
+			positional, value = true, false
+			continue
+		case !positional && strings.HasPrefix(arg, "-") && arg != "-":
+			_, _, joined := strings.Cut(arg, "=")
+			value = !joined
+			continue
+		case arg == "":
+			value = false
 			continue
 		}
-		if strings.Contains(arg, "/") || strings.HasPrefix(arg, ".") {
-			sc.scoped = true
+		pathShaped := strings.Contains(arg, "/") || strings.HasPrefix(arg, ".")
+		sc.scoped = sc.scoped || pathShaped
+		if value {
+			value = false
+			continue
 		}
+		arg = strings.TrimSuffix(arg, "/...")
 		for _, c := range []string{path.Join(d.Project, arg), path.Clean(arg)} {
 			if filepath.IsLocal(filepath.FromSlash(c)) && spelledAsIs(ev.workspace, c) {
 				sc.named = append(sc.named, c)

@@ -1107,6 +1107,7 @@ export object JobForkFacts {
 
 export object UnverifiedFile {
     path: str = "",
+    declared: bool = false,
     commands: [str] = [],
 }
 
@@ -1129,6 +1130,7 @@ export object UnverifiedReport {
     unverified: [UnverifiedFile] = [],
     runs: [RunEvidence] = [],
     unknown: str = "",
+    noWorkspace: bool = false,
 }
 
 export object ModelTierRecord {

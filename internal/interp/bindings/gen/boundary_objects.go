@@ -1224,6 +1224,7 @@ func ObjectJobForkFacts(v types.JobForkFacts) vm.Value {
 func ObjectUnverifiedFile(v types.UnverifiedFile) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("declared", vm.BoolValue(v.Declared))
 	itemsCommands := make([]vm.Value, len(v.Commands))
 	for indexCommands := range v.Commands {
 		itemsCommands[indexCommands] = vm.StringValue(v.Commands[indexCommands])
@@ -1274,6 +1275,7 @@ func ObjectUnverifiedReport(v types.UnverifiedReport) vm.Value {
 	}
 	out.MapSet("runs", vm.ListValue(itemsRuns))
 	out.MapSet("unknown", vm.StringValue(v.Unknown))
+	out.MapSet("noWorkspace", vm.BoolValue(v.NoWorkspace))
 	return out
 }
 
