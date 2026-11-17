@@ -126,7 +126,3 @@ func noteJobDesktop(ctx context.Context, jobName, notice string) {
 	_ = raiseDesktopNotification(ctx, ev)
 }
 
-// compat(until: no cmd file calls checkDriftJobArgv): server.go still names it.
-func checkDriftJobArgv(hookArgs []string, stdin io.Reader) []string {
-	return changeset.CheckDriftJobArgv(hookArgs, stdin)
-}

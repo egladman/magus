@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -44,7 +43,7 @@ func staleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex 
 	return findStaleIndexes(ctx, ws)
 }
 
-func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeStaleIndex {
+func findStaleIndexes(ctx context.Context, ws workspacegraph.ReadWorkspace) []types.KnowledgeStaleIndex {
 	var m *magus.Magus
 	switch w := ws.(type) {
 	case *magus.Magus:
@@ -83,25 +82,6 @@ func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeS
 	}
 	slices.SortFunc(stale, types.CompareStaleIndexes)
 	return stale
-}
-
-// staleGraphAdvice is what the guard says to a graph read about to answer from an index
-// older than the tree, or "" when every built index is current.
-func (l guardLookups) staleGraphAdvice(ctx context.Context) string {
-	reason, _ := withinBudget(guardLookupBudget, func() string {
-		if idx := l.index(); idx != nil {
-			return idx.Stale()
-		}
-		return ""
-	})
-	advice := knowledge.RenderStaleGraphAdvice(reason, staleIndexes(ctx, l.rootOverride))
-	if advice == "" {
-		return ""
-	}
-	if cause := l.indexCause(); cause != "" {
-		advice += "\n" + cause
-	}
-	return advice
 }
 
 // knowledgeStoreDir is the checkout at root's knowledge store: where graph builds take
@@ -164,20 +144,4 @@ func indexCause(ctx context.Context, root string) types.KnowledgeIndexCause {
 		ServerStop:  hint.ServerStop.String(),
 		JobRunSync:  hint.JobRun.With(job.NameSyncGraph),
 	})
-}
-
-// indexCause is why the workspace's index is missing or behind, as advisory sentences, or
-// "" when it does not answer within the guard's lookup budget.
-func (l guardLookups) indexCause() string {
-	root, err := guardRoot(l.rootOverride)
-	if err != nil {
-		return ""
-	}
-	c, ok := withinBudget(guardLookupBudget, func() types.KnowledgeIndexCause {
-		return indexCause(context.Background(), root)
-	})
-	if !ok {
-		return ""
-	}
-	return fmt.Sprintf("Why: %s. Fix: %s.", c.Why, c.Fix)
 }

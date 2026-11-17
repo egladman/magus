@@ -24,8 +24,8 @@ func TestJobGraphOpensAnotherCheckoutInItsOwnScope(t *testing.T) {
 	graphIn := graphsByTree(process, newJobGraph(process, true), true)
 	graph := graphIn(other)
 
-	require.NotPanics(t, func() { graph.staleIndexes(t.Context()) })
-	require.NotPanics(t, func() { graph.loadScoped(nil)(t.Context()) })
+	require.NotPanics(t, func() { graph.StaleIndexes(t.Context()) })
+	require.NotPanics(t, func() { graph.LoadScoped(nil)(t.Context()) })
 	require.NotPanics(t, func() { graph.LoadDomain(t.Context(), nil) })
 	assert.Equal(t, openedRoot{override: process, root: process}, magusOpened)
 }

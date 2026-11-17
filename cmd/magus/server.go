@@ -432,7 +432,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	}
 	argv := entry.Argv
 	if name == job.NameCheckDrift {
-		argv = checkDriftJobArgv(args[1:], hookStdin())
+		argv = changeset.CheckDriftJobArgv(args[1:], hookStdin())
 	}
 	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {
@@ -1014,9 +1014,6 @@ func boundLease(root string) string {
 func leasedBrokerClient(lease string) *broker.Client {
 	return newBrokerClient(false, broker.WithLease(lease))
 }
-
-// describe.go, which this move does not hold, still names these two.
-var loadWorkspaceConfig = server.LoadWorkspaceConfig
 
 func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	return server.ResolveDeclaredWorkspaces(context.Background(), cfgList, envVal)

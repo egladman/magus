@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -64,7 +65,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		return errors.New("magus session checkpoint: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 
-	hostSession, transcript := guard.ReadCheckpointEnvelope(in, stdinIsTerminal())
+	hostSession, transcript := guard.ReadCheckpointEnvelope(in, termkit.StdinIsTerminal())
 	c := sessions.Checkpoint{
 		Workspace:   wsRoot,
 		Note:        cf.Note,
@@ -89,7 +90,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	lease, leaseFrom, err := checkoutLease(ctx, wsRoot)
+	lease, leaseFrom, err := guard.CheckoutLease(ctx, wsRoot, jobPlace)
 	if err != nil {
 		return fmt.Errorf("magus session checkpoint: %w", err)
 	}

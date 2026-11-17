@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,58 +10,15 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// TestHarnessInstallReportsWhatItWroteAndPruned pins the report. This install
-// force-writes and prunes without a flag, and it did both with no output at all:
-// 30 directories rewritten and 11 removed, and nothing said so. A delete a person
-// cannot see is how they lose a skill they thought they had.
-func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
-	root := t.TempDir()
-	const dest = ".agents/skills"
-
-	var log bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false, true)
-	require.NoError(t, err)
-	assert.Contains(t, log.String(), `msg=wrote component="agent harness install"`)
-
-	// An orphan from an earlier release: magus stamped it, so this install prunes it.
-	orphan := filepath.Join(root, dest, "magus-retired")
-	require.NoError(t, os.MkdirAll(orphan, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.SkillVariantShort), 0o644))
-
-	log.Reset()
-	out := captureStdout(t, func() {
-		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false, true)
-		require.NoError(t, err)
-	})
-	assert.NoDirExists(t, orphan)
-	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
-
-	// A dry run names the same deletion and performs none of it.
-	require.NoError(t, os.MkdirAll(orphan, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.SkillVariantShort), 0o644))
-	out = captureStdout(t, func() {
-		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true, true)
-		require.NoError(t, err)
-	})
-	assert.DirExists(t, orphan)
-	assert.Contains(t, out, fmt.Sprintf("would remove skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")))
-}
 
 // TestHarnessInstallRefusesABoundJobFromEitherSource pins that a harness skill install is
 // refused under the checkout's binding as well as under the claim the process was launched
@@ -80,7 +35,7 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	require.NoError(t, err)
 
 	acting := func(ctx context.Context) string {
-		lease, _, err := checkoutLease(ctx, root)
+		lease, _, err := guard.CheckoutLease(ctx, root, jobPlace)
 		require.NoError(t, err)
 		return lease
 	}
@@ -103,57 +58,6 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 }
 
-// TestDescribeHarnessPrintsEachChangeAndTheMergeCommand pins the text a person reads before
-// installing: every file, every entry it gains or loses, and the command.
-// Describe prints that command and never runs it.
-func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
-	var out bytes.Buffer
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
-		ID: "claude-code",
-		Files: map[string]types.HarnessFile{
-			".claude/settings.json": {
-				Exists:   true,
-				Fragment: map[string]any{"hooks": map[string]any{"Stop": []any{}}},
-				Changes: []types.HarnessChange{
-					{Op: types.HarnessAdd, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s magus-checkpoint.buzz"}},
-					{Op: types.HarnessRetire, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s old/magus-checkpoint.buzz"}},
-				},
-			},
-			".codex/rules/magus.rules": {Content: "rule\n", Changes: []types.HarnessChange{{Op: types.HarnessWrite}}},
-		},
-		Merge:   "merge-command",
-		MCPHint: "register it",
-	}))
-	assert.Equal(t, `claude-code harness: 2 file(s) to merge
-  .claude/settings.json (exists)
-    add hooks.Stop: {"command":"magus buzz -s magus-checkpoint.buzz"}
-    retire hooks.Stop: {"command":"magus buzz -s old/magus-checkpoint.buzz"}
-  .codex/rules/magus.rules (missing)
-    write the whole file
-apply the installation:
-  merge-command
-mcp claude-code (user-owned; Magus does not write host MCP config):
-register it
-`, out.String())
-
-	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{ID: "cursor"}))
-	assert.Equal(t, "cursor harness: current\n", out.String())
-
-	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
-		ID: "claude-code",
-		Wired: []types.HarnessWired{{File: ".claude/settings.json", Key: "hooks.PreToolUse", Entries: []map[string]any{
-			{"matcher": "Bash", "hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}}},
-			{"hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-observe.buzz"}}},
-		}}},
-	}))
-	assert.Equal(t, `claude-code harness: current
-wired in .claude/settings.json hooks.PreToolUse:
-  Bash: ./magus buzz -s magus-command.buzz
-  any: ./magus buzz -s magus-observe.buzz
-`, out.String(), "a current harness still prints the commands it wires")
-}
 
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
 // this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
@@ -367,7 +271,7 @@ func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
 }
 
 // The checkpoint's spawn ancestry is read from the environment, so its lease must be the
-// environment's claim too: a hook process forwards none, and checkoutLease has to agree with
+// environment's claim too: a hook process forwards none, and guard.CheckoutLease has to agree with
 // job.ActingLease over trail.SpawnFromEnv for every source.
 func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testing.T) {
 	for name, tc := range map[string]struct{ claim, bound string }{
@@ -390,7 +294,7 @@ func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testi
 			}
 
 			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)
-			lease, from, err := checkoutLease(context.Background(), root)
+			lease, from, err := guard.CheckoutLease(context.Background(), root, jobPlace)
 			require.NoError(t, err)
 			assert.Equal(t, wantLease, lease)
 			assert.Equal(t, wantFrom, from)

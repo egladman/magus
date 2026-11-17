@@ -41,75 +41,39 @@ func jobEvidenceEnv() evidence.Env {
 			return loadRefsGraph(ctx, m, globalCfg, false, "")
 		},
 		DomainGraph: func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error) {
-			return loadWorkspaceGraph(ctx, m, globalCfg, false, false, false)
+			return graphReads.LoadGraph(ctx, m, globalCfg, false, false, false)
 		},
 		Notes: func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate) {
 			notes := collectNotes(ctx, m, row)
 			return notes.RegeneratedOutside, notes.UnrunGates
 		},
-		HolderCell:         jobHolderCell,
+		HolderCell:         job.HolderCell,
 		GateMergeScanLimit: gateMergeScanLimit,
 	}
 }
 
-// jobGraph is evidence.Graph under the lower-case names other cmd files call.
-type jobGraph struct{ *evidence.Graph }
-
-func (r *jobGraph) load(ctx context.Context) *knowledge.Graph { return r.Load(ctx) }
-
-func (r *jobGraph) loadScoped(paths []string) func(context.Context) *knowledge.Graph {
-	return r.LoadScoped(paths)
-}
-
-func (r *jobGraph) staleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
-	return r.StaleIndexes(ctx)
-}
-
-func newJobGraph(root string, rebuild bool) *jobGraph {
-	return &jobGraph{evidence.New(root, rebuild, jobEvidenceEnv())}
+func newJobGraph(root string, rebuild bool) *evidence.Graph {
+	return evidence.New(root, rebuild, jobEvidenceEnv())
 }
 
 func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
 	return evidence.RefusesTheGate(ctx, root, row, jobEvidenceEnv())
 }
 
-func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
-	return evidence.LeaseBoundary(ctx, root, store, row, leases, graph.Graph, jobEvidenceEnv())
-}
-
-func leaseGraphEvidence(ctx context.Context, graph *jobGraph, paths []string) ([]job.TermsEvidence, bool) {
-	return evidence.LeaseGraphEvidence(ctx, graph.Graph, paths)
-}
-
-func deletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row types.Job) []types.UnreferencedEntry {
-	return evidence.DeletionCandidates(ctx, load, row)
-}
-
-func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) ([]job.ReferencedFile, string) {
-	return evidence.ReferencedOutside(ctx, load, root, row, projects)
-}
-
-func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
-	return evidence.ExtendedFootprint(ctx, store, graph.Graph, root, rec, ws)
-}
-
-func gradesSymbols(rows []types.Job, id string) bool { return evidence.GradesSymbols(rows, id) }
-
-func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolReader {
-	return evidence.GraphSymbolReader(load)
+func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *evidence.Graph) job.TermsFacts {
+	return evidence.LeaseBoundary(ctx, root, store, row, leases, graph, jobEvidenceEnv())
 }
 
 func jobSymbolReader(root string, rebuild bool) job.SymbolReader {
 	return evidence.JobSymbolReader(root, rebuild, jobEvidenceEnv())
 }
 
-func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree string) *jobGraph {
-	in := evidence.ByTree(root, rootGraph.Graph, rebuild, jobEvidenceEnv())
-	return func(tree string) *jobGraph { return &jobGraph{in(tree)} }
+func graphsByTree(root string, rootGraph *evidence.Graph, rebuild bool) func(tree string) *evidence.Graph {
+	return evidence.ByTree(root, rootGraph, rebuild, jobEvidenceEnv())
 }
 
-func jobObserver(root string, graphIn func(tree string) *jobGraph) job.Observer {
-	return evidence.Observer(root, func(tree string) *evidence.Graph { return graphIn(tree).Graph }, jobEvidenceEnv())
+func jobObserver(root string, graphIn func(tree string) *evidence.Graph) job.Observer {
+	return evidence.Observer(root, graphIn, jobEvidenceEnv())
 }
 
 // jobGraphCommand is `magus job graph`: the live plan as figures that fit
@@ -142,7 +106,7 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	list, _ = withoutEnded(list)
+	list, _ = job.WithoutEnded(list)
 	plan := job.NewPlan(list.Jobs)
 	figs := plan.Figures()
 	switch opts.Format {
@@ -151,7 +115,7 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		paths, err := evidence.WritePlanSVGs(ctx, plan, figs, dir, jobHolderCell)
+		paths, err := evidence.WritePlanSVGs(ctx, plan, figs, dir, job.HolderCell)
 		if err != nil {
 			return err
 		}
@@ -163,7 +127,7 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 		}
 		return emitNames(os.Stdout, ids)
 	case outputText:
-		plan.Print(os.Stdout, figs, jobHolderCell)
+		plan.Print(os.Stdout, figs, job.HolderCell)
 		return nil
 	default:
 		return emitFormatted(opts, figs)

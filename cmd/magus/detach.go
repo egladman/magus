@@ -37,9 +37,3 @@ func detachRun(ctx context.Context) error {
 	sink.EmitDetach(ctx, pid, logPath)
 	return nil
 }
-
-// query.go, which this move does not hold, still names these two.
-var (
-	detachedCommand     = proc.DetachedCommand
-	detachedSysProcAttr = proc.DetachedSysProcAttr
-)

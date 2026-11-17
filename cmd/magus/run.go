@@ -353,7 +353,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// is idle. Inert off the ci target and when nothing is on record.
 	partial := rf.Shard != "" || rf.NShards > 0
 	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
-	if gateErr := gate.evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
+	if gateErr := gate.Evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 
@@ -422,7 +422,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		err = m.Run(invCtx, targets, runOpts...)
 	}
 	// See affected.go: the cut-short question is read here, not inside record.
-	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
+	gate.Record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}
@@ -482,10 +482,6 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target string) bool {
 	return interactive.DefinesTarget(ctx, m)
 }
-
-type resultStatuses = report.ResultStatuses
-
-func newResultStatuses(target string) *resultStatuses { return report.NewResultStatuses(target) }
 
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per
 // line: the identity of what executed, and the form the next command takes as arguments.

@@ -5,6 +5,7 @@ import (
 	"flag"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/types"
 )
@@ -87,7 +88,7 @@ func tradesRecords(args []string) bool {
 // buzzScriptStage reports whether `magus buzz` runs a script named by a file or -e.
 // A script read from stdin is not a stage: stdin is its source.
 func buzzScriptStage(args []string) bool {
-	own, _, _ := splitScriptArgs(args)
+	own, _, _ := interp.SplitScriptArgs(args)
 	if _, rest, ok := cutBuzzWorkDir(own); ok {
 		own = rest
 	}

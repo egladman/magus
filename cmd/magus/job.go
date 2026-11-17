@@ -35,11 +35,13 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/job/evidence"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -238,7 +240,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 			return floor.Tokens, floor.USD, why == ""
 		}
 		// Lazy: the harness spells load only when a row names a model.
-		loc.ModelRows = harnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+		loc.ModelRows = guard.HarnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 			return inspectWorkspace(ctx, root)
 		})
 	}
@@ -453,11 +455,11 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	defer waiting.Stop()
 
 	// A read: the symbol goals, their delta, the deletion candidates and the graph evidence
-	// take the graph as built, and none while a symbol index is stale (see jobGraph).
+	// take the graph as built, and none while a symbol index is stale (see evidence.Graph).
 	graph := newJobGraph(root, false)
 	facts := leaseBoundary(ctx, root, store, row, leases, graph)
 	waiting.Stop()
-	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.Paths.Write)
+	facts.Evidence, facts.GraphCold = evidence.LeaseGraphEvidence(ctx, graph, row.Paths.Write)
 	tries, err := store.Attempts()
 	if err != nil {
 		return err
@@ -469,8 +471,8 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return exit.Usagef("magus describe job: %s", err)
 	}
-	if gradesSymbols(leases, row.ID) {
-		status.StaleIndexes = types.StaleIndexProjects(graph.staleIndexes(ctx))
+	if evidence.GradesSymbols(leases, row.ID) {
+		status.StaleIndexes = types.StaleIndexProjects(graph.StaleIndexes(ctx))
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -769,8 +771,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	// The graph loads only when a goal names a symbol, the footprint could extend by its
 	// referrers, or the report lists deletion candidates, and they share one load.
 	graph := newJobGraph(root, true)
-	reader := graphSymbolReader(graph.load)
-	row, notes := extendedFootprint(ctx, store, graph, root, row, jobWS)
+	reader := evidence.GraphSymbolReader(graph.Load)
+	row, notes := evidence.ExtendedFootprint(ctx, store, graph, root, row, jobWS)
 	for _, n := range notes {
 		slog.InfoContext(ctx, n, attr.Notice("note"))
 	}
@@ -919,7 +921,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 		}
 	}
-	referenced, referencedGap := referencedOutside(ctx, graph.loadScoped(stored.Paths.Write), root, stored, jobWS.Projects)
+	referenced, referencedGap := evidence.ReferencedOutside(ctx, graph.LoadScoped(stored.Paths.Write), root, stored, jobWS.Projects)
 	switch opts.Format {
 	case outputText:
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
@@ -939,7 +941,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
-		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.loadScoped(stored.Paths.Write), stored))
+		job.RenderDeletionCandidates(os.Stdout, evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored))
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
 		// The forker waits for the budget so the holder never does.
@@ -957,7 +959,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, job.ForkReport{
 			ForkOutput: job.ForkOutput{
 				Job:                  stored,
-				DeletionCandidates:   deletionCandidates(ctx, graph.loadScoped(stored.Paths.Write), stored),
+				DeletionCandidates:   evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored),
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
@@ -1982,12 +1984,12 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("magus job apply: %w", err)
 		}
 		var notes []string
-		records[i], notes = extendedFootprint(ctx, store, graph, root, records[i], jobWS)
+		records[i], notes = evidence.ExtendedFootprint(ctx, store, graph, root, records[i], jobWS)
 		for _, n := range notes {
 			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", records[i].ID, n), attr.Notice("note"))
 		}
 	}
-	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)
+	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, evidence.GraphSymbolReader(graph.Load), checkpoint, globalCfg.DryRun)
 	if err != nil {
 		ids := make([]string, len(records))
 		for i, rec := range records {
@@ -2226,14 +2228,6 @@ func configuredVCS() types.VCSOptions {
 	return types.VCSOptions{Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef}
 }
 
-// compat(until: no file in cmd/magus calls these names): they keep the callers outside this
-// file compiling while the job logic moves to internal/job.
-type listFlag = job.ListFlag
-
-func withoutEnded(list types.JobList) (types.JobList, int) { return job.WithoutEnded(list) }
-
-func jobHolderCell(row types.Job) string { return job.HolderCell(row) }
-
 // jobWorkspace is the workspace at root as a job record's validation reads it, loaded once.
 func jobWorkspace(ctx context.Context, root string) job.Workspace {
 	var loaded job.LoadedWorkspace
@@ -2242,7 +2236,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 		loaded = m
 	}
 	return job.WorkspaceOf(ctx, root, loaded, err, func(err error) string {
-		running, pathErr := runningBinaryPath()
+		running, pathErr := selfupdate.RunningBinary()
 		if pathErr != nil {
 			return err.Error()
 		}
@@ -2253,7 +2247,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 // workspaceLoadFailure is err's text, naming root's own ./magus when running, a binary
 // too old for root, is not that one.
 func workspaceLoadFailure(err error, root, running string) string {
-	return job.LoadFailureText(err, checkoutBinary(root, running))
+	return job.LoadFailureText(err, guard.CheckoutBinary(root, running))
 }
 
 // diskProbe is the cache package's disk probes, which internal/job cannot import.

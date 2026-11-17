@@ -25,6 +25,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -482,14 +483,14 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read knowledge
 	var err error
 	switch verb {
 	case readQuery:
-		res, err = searchGraph(ctx, f.local, f.cfg, read, false, false)
+		res, err = graphReads.SearchGraph(ctx, f.local, f.cfg, read, false, false)
 	case readExplain:
-		res, err = explainNode(ctx, f.local, f.cfg, read, false, false)
+		res, err = graphReads.ExplainNode(ctx, f.local, f.cfg, read, false, false)
 	case readRefs:
 		var g *knowledge.Graph
 		g, err = loadRefsGraph(ctx, f.local, f.cfg, false, read.Input)
 		if err == nil {
-			res = lookupRefs(ctx, f.local, f.cfg, g, read, measuredCoverage(ctx, f.local, f.cfg))
+			res = lookupRefs(ctx, f.local, f.cfg, g, read, graphReads.MeasuredCoverage(ctx, f.local, f.cfg))
 		}
 	}
 	require.NoError(tb, err)
@@ -522,9 +523,9 @@ func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read knowledg
 func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config, read knowledge.GraphRead) string {
 	tb.Helper()
 	ctx := context.Background()
-	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
+	g, err := graphReads.LoadGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	b, err := json.Marshal(searchLoaded(ctx, g, read, embedtable.Cached, measuredCoverage(ctx, ws, cfg)))
+	b, err := json.Marshal(workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, graphReads.MeasuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -532,7 +533,7 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 // memoCoverage measures ws once per kind of read and answers every later read of that
 // kind from it, for many reads of a tree and indexes that do not change between them.
 // measureSymbolCoverage reads its input only through knowledge.CouldMatchLazyLayer.
-func memoCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config) coverageFunc {
+func memoCoverage(ctx context.Context, ws workspacegraph.ReadWorkspace, cfg config.Config) workspacegraph.CoverageFunc {
 	type kind struct{ couldMatch, seeded bool }
 	var mu sync.Mutex
 	memo := map[kind]knowledge.Coverage{}
@@ -554,15 +555,15 @@ func memoCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config) cov
 // every judgment from.
 type loadedGraphs struct {
 	domain, symbols *knowledge.Graph
-	coverage        coverageFunc
+	coverage        workspacegraph.CoverageFunc
 }
 
 func (f graphReadFixture) loadGraphs(tb testing.TB) loadedGraphs {
 	tb.Helper()
 	ctx := context.Background()
-	domain, err := loadWorkspaceGraph(ctx, f.local, f.cfg, false, false, false)
+	domain, err := graphReads.LoadGraph(ctx, f.local, f.cfg, false, false, false)
 	require.NoError(tb, err)
-	symbols, err := loadWorkspaceGraph(ctx, f.local, f.cfg, false, false, true)
+	symbols, err := graphReads.LoadGraph(ctx, f.local, f.cfg, false, false, true)
 	require.NoError(tb, err)
 	return loadedGraphs{domain: domain, symbols: symbols, coverage: memoCoverage(ctx, f.local, f.cfg)}
 }
@@ -577,9 +578,9 @@ func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb stri
 	}
 	switch verb {
 	case readQuery:
-		return searchLoaded(ctx, g, read, embedtable.Cached, gs.coverage)
+		return workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, gs.coverage)
 	case readExplain:
-		return explainLoaded(ctx, g, read, gs.coverage)
+		return graphReads.ExplainLoaded(ctx, g, read, gs.coverage)
 	case readRefs:
 		return lookupRefs(ctx, f.local, f.cfg, gs.symbols, read, gs.coverage)
 	}

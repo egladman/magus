@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -196,4 +197,21 @@ func rebuildTarget(p *types.Project, absPath string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// DriverRelPath normalizes the driver's path argument to a workspace-relative slash
+// path. git passes it repo-relative; hg passes an absolute workspace path.
+func DriverRelPath(root, pathArg string) (string, error) {
+	if !filepath.IsAbs(pathArg) {
+		return filepath.ToSlash(pathArg), nil
+	}
+	wsRoot, err := workspace.FindRoot(root)
+	if err != nil {
+		return "", fmt.Errorf("merge-driver: find workspace root: %w", err)
+	}
+	rel, err := filepath.Rel(wsRoot, pathArg)
+	if err != nil {
+		return "", fmt.Errorf("merge-driver: resolve path %q: %w", pathArg, err)
+	}
+	return filepath.ToSlash(rel), nil
 }

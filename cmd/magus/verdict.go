@@ -34,7 +34,7 @@ func symbolCoverage(ctx context.Context, root, input string, seeded bool) knowle
 
 // measureSymbolCoverage is symbolCoverage over a workspace the caller already holds, read under
 // cfg: the form a server answering for one of many workspaces calls.
-func measureSymbolCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config, input string, seeded bool) knowledge.Coverage {
+func measureSymbolCoverage(ctx context.Context, ws workspacegraph.ReadWorkspace, cfg config.Config, input string, seeded bool) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded}
 	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov

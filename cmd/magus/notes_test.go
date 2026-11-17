@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/review"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/types"
 )
@@ -63,7 +64,7 @@ func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
 	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
 	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
 
-	_, _, served := serverReviewComments(context.Background())
+	_, _, served := review.ServerReviewComments(context.Background(), reviewServerGet)
 
 	assert.True(t, served)
 	_, ok := auth.Verify(presented)

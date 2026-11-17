@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/cache/remotetest"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
@@ -45,14 +46,14 @@ func (s *ConfigCacheImportRecordSuite) SetupTest() {
 	s.shard.sign(s.T())
 }
 
-func (s *ConfigCacheImportRecordSuite) importRecord() configCacheImportOutput {
+func (s *ConfigCacheImportRecordSuite) importRecord() cache.SpellImportRecord {
 	s.shard.output = "json"
 	var err error
 	stdout := captureStdout(s.T(), func() {
 		_, err = s.shard.run(s.T(), "import", "--remote")
 	})
 	s.Require().NoError(err)
-	var rec configCacheImportOutput
+	var rec cache.SpellImportRecord
 	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
 	return rec
 }
@@ -62,12 +63,12 @@ func (s *ConfigCacheImportRecordSuite) TestAMissRestoresNothing() {
 	rec := s.importRecord()
 	s.False(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
-	s.Equal(spellCacheCold, rec.Spells[0].Outcome)
+	s.Equal(cache.SpellOutcome("cold"), rec.Spells[0].Outcome)
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAnInactiveBackendRestoresNothing() {
 	row := newSpellCacheRow(magus.SpellCache{Spell: "go", Inactive: true})
-	s.Equal(spellCacheInactive, row.Outcome)
+	s.Equal(cache.SpellOutcome("inactive"), row.Outcome)
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
@@ -80,7 +81,7 @@ func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
 		_, err = s.shard.run(s.T(), "import", "--remote")
 	})
 	s.Require().ErrorContains(err, "no remote backend configured")
-	var rec configCacheImportOutput
+	var rec cache.SpellImportRecord
 	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
 	s.False(rec.Restored)
 	s.Len(rec.Spells, 1)
@@ -95,7 +96,7 @@ func (s *ConfigCacheImportRecordSuite) TestAnUntrustedBundleIsNamed() {
 	rec := s.importRecord()
 	s.False(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
-	s.Equal(spellCacheCold, rec.Spells[0].Outcome)
+	s.Equal(cache.SpellOutcome("cold"), rec.Spells[0].Outcome)
 	s.NotEmpty(rec.Spells[0].Refused)
 }
 
@@ -108,7 +109,7 @@ func (s *ConfigCacheImportRecordSuite) TestARestoreSaysWhatItRestored() {
 	s.True(rec.Restored)
 	s.Require().Len(rec.Spells, 1)
 	row := rec.Spells[0]
-	s.Equal(spellCacheRestored, row.Outcome)
+	s.Equal(cache.SpellOutcome("restored"), row.Outcome)
 	s.True(row.Exact)
 	s.NotEmpty(row.Dirs)
 	s.Positive(row.Transferred)
@@ -147,7 +148,7 @@ func (s *cacheShard) sign(t *testing.T) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	t.Setenv(signingKeyEnv, base64.StdEncoding.EncodeToString(priv.Seed()))
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", base64.StdEncoding.EncodeToString(priv.Seed()))
 	s.trusted = base64.StdEncoding.EncodeToString(pub)
 }
 
@@ -265,7 +266,7 @@ func TestConfigCacheRemoteRefusesAnUntrustedBundle(t *testing.T) {
 // bundle to refuse later, since none is stored.
 func TestConfigCacheRemoteExportNeedsTheSigningKey(t *testing.T) {
 	s := newCacheShard(t)
-	t.Setenv(signingKeyEnv, "")
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", "")
 	goCaches(t, map[string]string{"GOCACHE:0a/0abc-a": "compiled"})
 
 	out, err := s.run(t, "export", "--remote")
@@ -288,12 +289,4 @@ func TestConfigCacheExportAndImportTakeNoCacheSelector(t *testing.T) {
 	require.ErrorContains(t, err, "--remote and --to are exclusive")
 	_, err = s.run(t, "import", "--remote", "x")
 	require.ErrorContains(t, err, "--remote reads no file")
-}
-
-func TestFmtBytes(t *testing.T) {
-	assert.Equal(t, "0 B", fmtBytes(0))
-	assert.Equal(t, "512 B", fmtBytes(512))
-	assert.Equal(t, "1.0 KiB", fmtBytes(1<<10))
-	assert.Equal(t, "1.5 MiB", fmtBytes(3<<19))
-	assert.Equal(t, "2.0 GiB", fmtBytes(2<<30))
 }

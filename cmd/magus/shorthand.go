@@ -4,25 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/libs/clikit/command"
 )
 
-// shorthandName is the de facto short name for magus. Every shipped completion
-// script already registers it alongside magus, so the symlink is the only part
-// of the shorthand a user still has to set up by hand.
-const shorthandName = "mgs"
-
-// installShorthandCommand implements `magus self install-shorthand`: symlink mgs to
-// the running binary.
-//
-// A symlink beats a shell alias because it also resolves in scripts, Makefiles,
-// and anything else that is not an interactive shell. It survives an update:
-// selfupdate resolves symlinks before it swaps, so the real binary is replaced
-// underneath a link that keeps pointing at it.
+// installShorthandCommand implements `magus self install-shorthand`.
 func installShorthandCommand(args []string) error {
 	fs := flag.NewFlagSet("self install-shorthand", flag.ContinueOnError)
 	bindDisplayFlags(fs)
@@ -40,47 +28,18 @@ func installShorthandCommand(args []string) error {
 		return err
 	}
 
-	target, err := runningBinaryPath()
+	got, err := selfupdate.InstallShorthand(sf.Dir, sf.Force)
 	if err != nil {
 		return err
 	}
-
-	name := shorthandName
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	linkDir := sf.Dir
-	if linkDir == "" {
-		linkDir = filepath.Dir(target)
-	}
-	linkPath := filepath.Join(linkDir, name)
-
-	if _, err := os.Lstat(linkPath); err == nil {
-		if resolved, err := filepath.EvalSymlinks(linkPath); err == nil && resolved == target {
-			if opts.Format != outputText {
-				return emitRecord(opts, selfInstallShorthandOutput{Link: linkPath, Target: target}, []string{linkPath})
-			}
-			fmt.Printf("%s already points at %s\n", linkPath, target)
-			return nil
-		}
-		if !sf.Force {
-			return fmt.Errorf("%s already exists (use --force to replace it)", linkPath)
-		}
-		if err := os.Remove(linkPath); err != nil {
-			return fmt.Errorf("magus self install-shorthand: replace %s: %w", linkPath, err)
-		}
-	}
-
-	if err := os.Symlink(target, linkPath); err != nil {
-		if runtime.GOOS == "windows" {
-			return fmt.Errorf("magus self install-shorthand: create %s (Windows creates symlinks only in Developer Mode or an elevated shell): %w", linkPath, err)
-		}
-		return fmt.Errorf("magus self install-shorthand: create %s: %w", linkPath, err)
-	}
 	if opts.Format != outputText {
-		return emitRecord(opts, selfInstallShorthandOutput{Link: linkPath, Target: target, Created: true}, []string{linkPath})
+		return emitRecord(opts, selfInstallShorthandOutput{Link: got.Link, Target: got.Target, Created: got.Created}, []string{got.Link})
 	}
-	fmt.Printf("Installed the %s shorthand: %s -> %s\n", shorthandName, linkPath, target)
+	if !got.Created {
+		fmt.Printf("%s already points at %s\n", got.Link, got.Target)
+		return nil
+	}
+	fmt.Printf("Installed the %s shorthand: %s -> %s\n", selfupdate.ShorthandName, got.Link, got.Target)
 	return nil
 }
 
@@ -90,26 +49,9 @@ type selfInstallShorthandOutput struct {
 	Created bool   `json:"created"`
 }
 
-// runningBinaryPath returns the real path of the running binary. os.Executable
-// reports the as-invoked path on macOS, so running this through an existing mgs
-// link would otherwise point the new link at a link. EvalSymlinks pins it to the
-// real file. This does not borrow selfupdate.ResolveTargetPath because the
-// shorthand has nothing to do with updating, and -tags noselfupdate builds
-// (which still get install-shorthand) do not link that package in.
-func runningBinaryPath() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("magus self install-shorthand: resolve executable path: %w", err)
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		return resolved, nil
-	}
-	return exe, nil
-}
-
 func installShorthandUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus self install-shorthand [--dir DIR] [--force]")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "Symlink the %s shorthand to the running magus binary.\n", shorthandName)
+	fmt.Fprintf(os.Stderr, "Symlink the %s shorthand to the running magus binary.\n", selfupdate.ShorthandName)
 	fmt.Fprintln(os.Stderr, "Without --dir the link is created next to the binary itself.")
 }

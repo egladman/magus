@@ -12,12 +12,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-type (
-	queryWithNext   = job.QueryWithNext
-	explainWithNext = job.ExplainWithNext
-	filesWithNext   = job.FilesWithNext
-)
-
 // nextGate is job.NextGate under the name the commands use.
 type nextGate struct{ job.NextGate }
 

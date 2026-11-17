@@ -570,13 +570,13 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 	if err != nil {
 		return nil, err
 	}
-	return loadWorkspaceGraph(ctx, ws, globalCfg, refresh, global, includeSymbols)
+	return graphReads.LoadGraph(ctx, ws, globalCfg, refresh, global, includeSymbols)
 }
 
 // inspectForRead is inspectWorkspace for a graph read: the handle startup already opened
 // when there is one, else a lazy workspace that inspects on the first call needing the
 // model, so a read the stored graph answers never evaluates a magusfile (see openForRead).
-func inspectForRead(_ context.Context, root string) (graphWorkspace, error) { //nolint:ireturn // the workspace backing is chosen at runtime
+func inspectForRead(_ context.Context, root string) (workspacegraph.ReadWorkspace, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	if m, ok := loadedMagus(); ok {
 		return m, nil
 	}
@@ -591,41 +591,6 @@ func inspectForRead(_ context.Context, root string) (graphWorkspace, error) { //
 		}
 		return asMagus(ws)
 	}), nil
-}
-
-// loadWorkspaceGraph is loadKnowledgeGraph over a workspace the caller already holds, read
-// under cfg: the form a server answering for one of many workspaces calls.
-func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
-	if global {
-		// Cross-workspace symbol federation is a later phase; --global stays domain-only.
-		// Warn rather than silently drop a symbol-seeded selection, so an empty result
-		// is not mistaken for "no such symbol".
-		if includeSymbols {
-			interactive.Hint(ctx, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
-		}
-		full, err := fullWorkspace(ctx, ws)
-		if err != nil {
-			return nil, err
-		}
-		return workspacegraph.BuildGlobal(ctx, full, cfg, refresh, slog.Default())
-	}
-	if refresh {
-		// Before paying to rebuild, take the published copy if this workspace names one.
-		// A refresh is the moment the expensive half (the SCIP shards, which are never
-		// committed) would otherwise be recomputed, and a branch switch reaches here
-		// through the VCS refresh hook's sync-graph job.
-		seedFromPublishedGraph(ctx, ws)
-	}
-	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
-	if err != nil {
-		return nil, err
-	}
-	if includeSymbols {
-		if err := workspacegraph.MergeSymbols(ctx, ws, ws.Root(), cfg, g, slog.Default()); err != nil {
-			return nil, err
-		}
-	}
-	return g, nil
 }
 
 // loadKnowledgeGraphForRefs builds the domain graph and merges the symbol shards a
@@ -735,9 +700,6 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 // delivered PRIVATELY: either in a URL fragment (default) or fetched from an ephemeral
 // loopback server (--serve). Either way the graph stays on the machine: the site only
 // serves static assets.
-
-// query.go, which a pending move holds, still names fragmentWarnBytes.
-const fragmentWarnBytes = interactive.FragmentWarnBytes
 
 // Two privacy-first delivery modes:
 //   - default: gzip+base64url the graph into a `#data=` URL fragment. A fragment
@@ -1017,9 +979,6 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	return nil
 }
 
-// query.go, which a pending move holds, still names openBrowser.
-func openBrowser(raw string) error { return interactive.OpenBrowser(raw) }
-
 // graphDiff reports how the knowledge graph changed relative to a baseline: the nodes
 // and edges added, removed, or changed. It is the PR-review blast-radius artifact: emit
 // it as json or markdown for a CI comment. The baseline is either an export file
@@ -1256,46 +1215,6 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) (knowl
 		}
 		return knowledge.StoreLayers(cacheDir)
 	})
-}
-
-// seedFromPublishedGraph points the workspace's knowledge store at the published artifact,
-// so the rebuild that follows fetches a missing shard instead of recomputing it. It fetches
-// nothing itself: the store asks, shard by shard and by fingerprint, for only what it lacks.
-//
-// It ANNOUNCES ITSELF BEFORE any request, naming the host the build is about to reach. This
-// is the only place magus talks to a network the user did not ask it to talk to: it fires
-// from a branch switch, through the VCS refresh hook, and an unexplained pause there is
-// indistinguishable from a hang. Saying so afterwards is too late to be the explanation,
-// and saying it at debug level says it to nobody.
-//
-// The OUTCOME is best-effort and quiet. No published graph, no network, a private package,
-// a tag nobody pushed: each means the graph is built locally, which is what would have
-// happened anyway. Only the attempt is loud, because only the attempt costs the user
-// something they did not ask for.
-//
-// Does nothing unless knowledge.published_ref names an artifact. Opt-in per repository,
-// because reading a graph decides what magus answers about this tree.
-func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
-	ref := globalCfg.Knowledge.PublishedRef
-	if ref == "" {
-		return
-	}
-	src, err := knowledge.GraphReference(ref, knowledge.GraphFloatingTag)
-	if err != nil {
-		// A ref nobody can parse is a misconfiguration, not a quiet miss: the user asked
-		// for this pull by writing the key, so the key being wrong is worth their
-		// attention even though the build carries on without it.
-		interactive.Hint(ctx, fmt.Sprintf("knowledge.published_ref %q does not parse, so no graph was pulled: %v", ref, err))
-		return
-	}
-
-	slog.InfoContext(ctx, fmt.Sprintf("fetching the published knowledge graph from %s (knowledge.published_ref; unset it to build locally)", src.Registry),
-		attr.Notice(""), attr.Component("magus"))
-	// The timeout rides on the HTTP client rather than a ctx bounded here, because the
-	// requests happen later, inside the build, and a deadline started now would expire
-	// against whatever else that build has to do first.
-	client := &oci.Client{HTTP: &http.Client{Timeout: graphRegistryTimeout}}
-	workspacegraph.UsePublishedShards(ws, workspacegraph.PublishedShards(client, src, knowledge.GraphArtifactType, slog.Default()))
 }
 
 func graphPull(ctx context.Context, root string, args []string) error {
