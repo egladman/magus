@@ -290,3 +290,9 @@ func (s *attemptStoreSuite) TestARowWithNoTriesMovesNothing() {
 
 	s.Empty(triesIn(s.T(), s.store))
 }
+
+func running(id string) job.Job {
+	row := lease(id)
+	row.State = job.StateRunning
+	return row
+}
