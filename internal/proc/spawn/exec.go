@@ -21,7 +21,8 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -415,7 +416,7 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 // on: after the launcher's ruleset when the child is confined.
 func jobserverFD(confined bool) int {
 	if confined {
-		return firstExtraFD + sandbox.LauncherFiles
+		return firstExtraFD + scissors.LauncherFiles
 	}
 	return firstExtraFD
 }

@@ -17,7 +17,8 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -158,7 +159,7 @@ func warnKernelUnavailable(ctx context.Context) {
 	}
 	warnedKernelUnavailable.Do(func() {
 		reason := "landlock reports ABI 0"
-		if _, err := sandbox.ABI(); err != nil {
+		if _, err := scissors.ABI(); err != nil {
 			reason = err.Error()
 		}
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,

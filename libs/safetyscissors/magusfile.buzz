@@ -1,5 +1,6 @@
 import "fs";
 import "magus";
+import "os";
 import "../../hack/magusfile/index" as index;
 import "../../hack/magusfile/run-golangci" as golangci;
 
@@ -13,6 +14,13 @@ magus\project({
     // MAGUS.md is declared on index_generate, not here.
     "targets": {
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+        // The sandbox tests read their confined children's /proc entries.
+        "test": {
+            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
+        },
+        "landlock-test": {
+            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
+        },
     },
 });
 
@@ -85,6 +93,19 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 export fun test_jsonv2(ctx: magus\Context, args: [str]) > void {
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."]});
 }
+// Runs the sandbox package's tests with landlock required, so a Linux host without it
+// fails rather than skipping. CGO_ENABLED=0 links the test binary statically, so no
+// dynamic loader needs a grant of its own. Any other host says it skipped.
+export fun landlock_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["sandbox/**/*.go", "job/**/*.go", "go.mod", "go.sum"]);
+    final platform = os\platform()[0];
+    if (platform != "linux") {
+        magus\log.info("landlock-test: skipped: landlock is Linux's, and this host is {platform}");
+        return;
+    }
+    go["go-test"](ctx.withEnv({"CGO_ENABLED": "0", "SAFETYSCISSORS_TEST_REQUIRE_LANDLOCK": "1", "GOEXPERIMENT": "nojsonv2"}),
+        {"args": ["-count=1", "./sandbox/..."]});
+}
 // mark_test runs the mark script's in-file test blocks.
 export fun mark_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["assets/*.buzz"]);
@@ -95,5 +116,5 @@ export fun mark_test(ctx: magus\Context, args: [str]) > void !> any {
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // Only ci rewrites files: format first, so lint, build and test read the formatted tree.
     ctx.needs(format);
-    ctx.needs(lint, build, test, test_jsonv2, mark_lint, mark_test);
+    ctx.needs(lint, build, test, test_jsonv2, landlock_test, mark_lint, mark_test);
 }

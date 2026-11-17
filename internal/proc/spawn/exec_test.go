@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -234,7 +235,7 @@ func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
 		return sandbox.WithPolicy(t.Context(), p)
 	}
 	opts := ExecOptions{Dir: ws, Capture: true, Quiet: true}
-	abi, abiErr := sandbox.ABI()
+	abi, abiErr := scissors.ABI()
 
 	res, err := Exec(policy(types.SandboxModeBestEffort), "cat", []string{secretFile}, opts)
 	if abiErr == nil && abi >= 1 {
@@ -246,7 +247,7 @@ func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
 	}
 
 	res, err = Exec(policy(types.SandboxModeRequired), "cat", []string{secretFile}, opts)
-	if abiErr != nil || abi < sandbox.RequiredABI {
+	if abiErr != nil || abi < scissors.RequiredABI {
 		require.ErrorIs(t, err, types.SandboxRequired)
 		assert.False(t, res.Started, "nothing starts unconfined")
 	} else {

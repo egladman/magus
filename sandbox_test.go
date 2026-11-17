@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -87,7 +88,7 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 // Required is refused where the kernel cannot confine the children, before any run
 // starts, rather than at the first child.
 func TestApplySandboxRefusesARequiredWorkspaceTheKernelCannotConfine(t *testing.T) {
-	if abi, err := sandbox.ABI(); err == nil && abi >= sandbox.RequiredABI {
+	if abi, err := scissors.ABI(); err == nil && abi >= scissors.RequiredABI {
 		t.Skipf("landlock ABI %d confines children here", abi)
 	}
 	m := openSandboxed(t, types.SandboxModeRequired)

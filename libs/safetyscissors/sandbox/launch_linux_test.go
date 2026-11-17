@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,18 +14,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
 
-	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 )
 
 // The test binary doubles as the launcher and as the confined child, so no test
 // confines the process running the tests. helperEnv picks the child's job.
 const (
-	helperEnv     = "MAGUS_SANDBOX_TEST_HELPER"
-	helperPathEnv = "MAGUS_SANDBOX_TEST_PATH"
+	helperEnv     = "SAFETYSCISSORS_SANDBOX_TEST_HELPER"
+	helperPathEnv = "SAFETYSCISSORS_SANDBOX_TEST_PATH"
 )
+
+// launchFailedExit is the launcher's exit status when Relaunch could not confine
+// itself or exec the command, as a caller's main exits.
+const launchFailedExit = 126
 
 // Helper exit codes. Anything else is a helper bug.
 const (
@@ -35,7 +40,10 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	MaybeLaunch()
+	if handled, err := Relaunch(os.Args); handled {
+		os.Stderr.WriteString("confined launch failed: " + err.Error() + "\n")
+		os.Exit(launchFailedExit)
+	}
 	switch os.Getenv(helperEnv) {
 	case "read":
 		os.Exit(helperRead(os.Getenv(helperPathEnv)))
@@ -68,8 +76,16 @@ func helperRead(path string) int {
 	return 0
 }
 
+// helperBind binds a unix socket at path, reaching one longer than sun_path through
+// its directory's /proc/self/fd entry.
 func helperBind(path string) int {
-	ln, err := endpoint.Endpoint{Scheme: "unix", Addr: path}.Listen()
+	dirFD, err := unix.Open(filepath.Dir(path), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		os.Stderr.WriteString(err.Error() + "\n")
+		return exitReadFailed
+	}
+	defer unix.Close(dirFD)
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/proc/self/fd/%d/%s", dirFD, filepath.Base(path)), Net: "unix"})
 	if err != nil {
 		os.Stderr.WriteString(err.Error() + "\n")
 		if errors.Is(err, fs.ErrPermission) {
@@ -92,6 +108,12 @@ func testRules(t *testing.T) []filesystem.Rule {
 		rules = append(rules, filesystem.Rule{Path: filesystem.ResolveRulePath(dir), Read: true, Exec: true})
 	}
 	return rules
+}
+
+// confining is a policy over rules that confines wherever the kernel has landlock,
+// whatever its ABI, so the tests run on kernels below RequiredABI too.
+func confining(rules ...filesystem.Rule) *Policy {
+	return &Policy{rules: filesystem.Ruleset{Rules: rules}, mode: BestEffort}
 }
 
 // confinedHelper runs the test binary under Command as helper mode with path.
@@ -132,7 +154,7 @@ func TestCommandConfinesTheChild(t *testing.T) {
 		// A rule path that is a symlink grants nothing, not its target.
 		filesystem.Rule{Path: link, Read: true},
 	)
-	p := &Policy{FS: filesystem.Ruleset{Rules: rules}}
+	p := confining(rules...)
 
 	code, out := confinedHelper(t, p, "read", filepath.Join(inside, "f"))
 	assert.Equal(t, 0, code, "a file inside the rules is readable: %s", out)
@@ -148,23 +170,23 @@ func TestCommandConfinesTheChild(t *testing.T) {
 func TestCommandDoesNotLeakRulesetToTheChild(t *testing.T) {
 	requireLandlock(t)
 
-	p := &Policy{FS: filesystem.Ruleset{Rules: testRules(t)}}
+	p := confining(testRules(t)...)
 	code, out := confinedHelper(t, p, "fd", "")
 	assert.Equal(t, 0, code, "the ruleset descriptor is not inherited by the exec: %s", out)
 }
 
-// A /proc/self grant is the child's own entry, not the entry of the magus that built
+// A /proc/self grant is the child's own entry, not the entry of the process that built
 // the policy.
 func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
 	requireLandlock(t)
 
 	own := filesystem.Rule{Path: filesystem.ResolveRulePath("/proc/self/status"), Read: true}
-	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), own)}}
+	p := confining(append(testRules(t), own)...)
 
 	code, out := confinedHelper(t, p, "read", "/proc/self/status")
 	assert.Equal(t, 0, code, "the child reads its own status: %s", out)
 	code, out = confinedHelper(t, p, "read", own.Path)
-	assert.Equal(t, exitDenied, code, "and not the status of the magus that built the policy: %s", out)
+	assert.Equal(t, exitDenied, code, "and not the status of the process that built the policy: %s", out)
 }
 
 // A read grant on all of /proc leaves the environment of a process outside the child's
@@ -173,7 +195,7 @@ func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
 func TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed(t *testing.T) {
 	requireLandlock(t)
 
-	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), filesystem.Rule{Path: "/proc", Read: true})}}
+	p := confining(append(testRules(t), filesystem.Rule{Path: "/proc", Read: true})...)
 	code, out := confinedHelper(t, p, "read", "/proc/self/environ")
 	assert.Equal(t, 0, code, "the child reads its own environment: %s", out)
 	code, out = confinedHelper(t, p, "read", fmt.Sprintf("/proc/%d/environ", os.Getpid()))
@@ -196,7 +218,7 @@ func TestCommandJudgesALongSocketBindOnItsRealDirectory(t *testing.T) {
 	}
 	granted, ungranted := long(), long()
 	grant := filesystem.Rule{Path: filepath.Dir(granted), Read: true, Write: true}
-	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), grant)}}
+	p := confining(append(testRules(t), grant)...)
 
 	code, out := confinedHelper(t, p, "bind", granted)
 	assert.Equal(t, 0, code, "a bind in a granted directory: %s", out)
@@ -214,7 +236,7 @@ func TestCommandPassesAppendedFilesAfterTheRuleset(t *testing.T) {
 	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	cmd, err := Command(context.Background(), &Policy{FS: filesystem.Ruleset{Rules: testRules(t)}}, exe)
+	cmd, err := Command(context.Background(), confining(testRules(t)...), exe)
 	require.NoError(t, err)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, r)
 
@@ -228,7 +250,7 @@ func TestCommandRefusesWithoutItsRuleset(t *testing.T) {
 	readable := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(readable, "f"), []byte("x"), 0o600))
 	rules := append(testRules(t), filesystem.Rule{Path: filesystem.ResolveRulePath(readable), Read: true})
-	p := &Policy{FS: filesystem.Ruleset{Rules: rules}}
+	p := confining(rules...)
 
 	exe, err := os.Executable()
 	require.NoError(t, err)
@@ -246,4 +268,63 @@ func TestCommandNilPolicyIsPlain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"true"}, cmd.Args)
 	assert.Empty(t, cmd.ExtraFiles)
+}
+
+// A rule the building process resolved onto its own /proc entries is the child's to
+// grant itself; left in the ruleset it would hand the child the builder's descriptors.
+func TestProcSelfRulesMoveToTheLauncher(t *testing.T) {
+	rules := []filesystem.Rule{
+		{Path: "/proc/42/fd", Read: true, Write: true},
+		{Path: "/proc/42", Read: true},
+		{Path: "/proc/420/status", Read: true},
+		{Path: "/usr", Read: true, Exec: true},
+	}
+	self, rest := procSelfRules(rules, 42)
+	assert.Equal(t, []filesystem.Rule{
+		{Path: "/proc/self/fd", Read: true, Write: true},
+		{Path: "/proc/self", Read: true},
+	}, self)
+	assert.Equal(t, rules[2:], rest, "another pid's entries are not this process's")
+
+	got, err := decodeRules(encodeRules(self))
+	require.NoError(t, err)
+	assert.Equal(t, self, got)
+	empty, err := decodeRules(encodeRules(nil))
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+	_, err = decodeRules("rw:relative")
+	assert.Error(t, err)
+}
+
+// The launcher's rule encoding carries any path back unchanged.
+type RuleEncodingSuite struct{ suite.Suite }
+
+func TestRuleEncodingSuite(t *testing.T) { suite.Run(t, new(RuleEncodingSuite)) }
+
+func (s *RuleEncodingSuite) roundTrip(rules []filesystem.Rule) {
+	got, err := decodeRules(encodeRules(rules))
+	s.Require().NoError(err)
+	s.Equal(rules, got)
+}
+
+func (s *RuleEncodingSuite) TestAPathHoldingAnInjectedRuleStaysOneRule() {
+	s.roundTrip([]filesystem.Rule{{Path: "/ws/a,rwx:/", Read: true}})
+}
+
+func (s *RuleEncodingSuite) TestAPathHoldingABackslashRoundTrips() {
+	s.roundTrip([]filesystem.Rule{{Path: `/ws/a\,b\`, Read: true, Write: true}})
+}
+
+func (s *RuleEncodingSuite) TestAPathHoldingAColonRoundTrips() {
+	s.roundTrip([]filesystem.Rule{{Path: "/ws/a:b", Exec: true}, {Path: "/usr", Read: true}})
+}
+
+func (s *RuleEncodingSuite) TestADanglingEscapeIsMalformed() {
+	_, err := decodeRules(`r--:/ws/a\`)
+	s.Error(err)
+}
+
+func (s *RuleEncodingSuite) TestAnUnknownEscapeIsMalformed() {
+	_, err := decodeRules(`r--:/ws/\a`)
+	s.Error(err)
 }

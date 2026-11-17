@@ -279,10 +279,6 @@ magus\project({
             "slots": 4,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
-        // The confinement tests read their children's /proc entries.
-        "landlock-test": {
-            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
-        },
         "coverage-render": {"skip_cache": "reads the profiles CI measured and the assembled site, which it cannot declare as inputs"},
         // Uncached, so each suite it needs keys and replays from its own entry.
         "coverage-measure": {"skip_cache": "composes the suites and reads nothing itself; each member replays from its own cache entry"},
@@ -2286,7 +2282,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
     // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
     ctx.needs(generate);
-    ctx.needs(advice_test, landlock_test, cli_test);
+    ctx.needs(advice_test, cli_test);
     // extended adds the tests that need a C toolchain and a docker daemon.
     if (ctx.hasCharm("extended")) {
         ctx.needs(compress_cgo_test, completion_test);
@@ -2995,20 +2991,6 @@ export fun conventions_test(ctx: magus\Context, args: [str]) > void !> any {
                    "TestNoDirectEncodingJSONImport", "TestRevealCallsStayCapped"];
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-run", "^(" + names.join("|") + ")$", "-count=1", "."] + args});
-}
-
-// Runs internal/sandbox's tests with landlock required. test skips the
-// confinement test: it links cgo, which cannot confine every thread.
-// Linux only; any other host says it skipped.
-export fun landlock_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["internal/sandbox/**/*.go", "go.mod", "go.sum"]);
-    final platform = os\platform()[0];
-    if (platform != "linux") {
-        magus\log.info("landlock-test: skipped: landlock is Linux's, and this host is {platform}");
-        return;
-    }
-    go["go-test"](ctx.withEnv({"CGO_ENABLED": "0", "MAGUS_TEST_REQUIRE_LANDLOCK": "1", "GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-count=1", "./internal/sandbox/..."]});
 }
 
 // Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired

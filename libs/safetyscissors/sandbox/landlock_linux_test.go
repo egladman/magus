@@ -9,16 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 )
 
 // requireLandlock skips a test that needs the kernel sandbox where there is none,
-// and fails it instead under MAGUS_TEST_REQUIRE_LANDLOCK=1, so a host that must
+// and fails it instead under SAFETYSCISSORS_TEST_REQUIRE_LANDLOCK=1, so a host that must
 // have landlock cannot pass by skipping.
 func requireLandlock(t *testing.T) {
 	t.Helper()
 	if _, err := ABI(); err != nil {
-		if os.Getenv("MAGUS_TEST_REQUIRE_LANDLOCK") == "1" {
+		if os.Getenv("SAFETYSCISSORS_TEST_REQUIRE_LANDLOCK") == "1" {
 			t.Fatalf("landlock is required here and unavailable: %v", err)
 		}
 		t.Skipf("landlock unavailable: %v", err)

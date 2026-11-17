@@ -3,108 +3,109 @@ package sandbox
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 
-// setKernelABI answers kernelABI with abi and err for the rest of the test.
-func setKernelABI(t *testing.T, abi int, err error) {
-	t.Helper()
-	saved := kernelABI
-	kernelABI = func() (int, error) { return abi, err }
-	t.Cleanup(func() { kernelABI = saved })
-}
-
 // Best-effort takes the kernel layer wherever there is one and runs without it where
 // there is not; required refuses below RequiredABI, where truncation is not denied.
-func TestKernelConfinesFollowsTheMode(t *testing.T) {
-	best := &Policy{Mode: types.SandboxModeBestEffort}
-	required := &Policy{Mode: types.SandboxModeRequired, Workspace: "/ws"}
-	confines := func(p *Policy) bool {
-		t.Helper()
-		ok, err := p.KernelConfines()
-		require.NoError(t, err)
-		return ok
-	}
+type KernelConfinesSuite struct{ suite.Suite }
 
+func TestKernelConfinesSuite(t *testing.T) { suite.Run(t, new(KernelConfinesSuite)) }
+
+func answering(mode types.SandboxMode, abi int, err error) *Policy {
+	return &Policy{Mode: mode, Workspace: "/ws", probe: func() (int, error) { return abi, err }}
+}
+
+func (s *KernelConfinesSuite) TestANilPolicyConfinesNothing() {
 	var off *Policy
-	assert.False(t, confines(off), "a nil policy confines nothing")
-
-	setKernelABI(t, 0, ErrUnsupported)
-	assert.False(t, confines(best))
-	_, err := required.KernelConfines()
-	require.ErrorIs(t, err, types.SandboxRequired)
-	assert.ErrorContains(t, err, "/ws")
-
-	setKernelABI(t, 2, nil)
-	assert.True(t, confines(best), "best-effort takes an old kernel's partial confinement")
-	_, err = required.KernelConfines()
-	require.ErrorIs(t, err, types.SandboxRequired)
-	assert.ErrorContains(t, err, "ABI is 2")
-
-	setKernelABI(t, RequiredABI, nil)
-	assert.True(t, confines(required))
-}
-
-// A rule the building magus resolved onto its own /proc entries is the child's to
-// grant itself; left in the ruleset it would hand the child magus's descriptors.
-func TestProcSelfRulesMoveToTheLauncher(t *testing.T) {
-	rules := []filesystem.Rule{
-		{Path: "/proc/42/fd", Read: true, Write: true},
-		{Path: "/proc/42", Read: true},
-		{Path: "/proc/420/status", Read: true},
-		{Path: "/usr", Read: true, Exec: true},
-	}
-	self, rest := procSelfRules(rules, 42)
-	assert.Equal(t, []filesystem.Rule{
-		{Path: "/proc/self/fd", Read: true, Write: true},
-		{Path: "/proc/self", Read: true},
-	}, self)
-	assert.Equal(t, rules[2:], rest, "another pid's entries are not this process's")
-
-	got, err := decodeRules(encodeRules(self))
-	require.NoError(t, err)
-	assert.Equal(t, self, got)
-	empty, err := decodeRules(encodeRules(nil))
-	require.NoError(t, err)
-	assert.Empty(t, empty)
-	_, err = decodeRules("rw:relative")
-	assert.Error(t, err)
-}
-
-// The launcher's rule encoding carries any path back unchanged.
-type RuleEncodingSuite struct{ suite.Suite }
-
-func TestRuleEncodingSuite(t *testing.T) { suite.Run(t, new(RuleEncodingSuite)) }
-
-func (s *RuleEncodingSuite) roundTrip(rules []filesystem.Rule) {
-	got, err := decodeRules(encodeRules(rules))
+	ok, err := off.KernelConfines()
 	s.Require().NoError(err)
-	s.Equal(rules, got)
+	s.False(ok)
 }
 
-func (s *RuleEncodingSuite) TestAPathHoldingAnInjectedRuleStaysOneRule() {
-	s.roundTrip([]filesystem.Rule{{Path: "/ws/a,rwx:/", Read: true}})
+func (s *KernelConfinesSuite) TestWithoutLandlock() {
+	ok, err := answering(types.SandboxModeBestEffort, 0, &scissors.UnsupportedError{}).KernelConfines()
+	s.Require().NoError(err)
+	s.False(ok)
+
+	_, err = answering(types.SandboxModeRequired, 0, &scissors.UnsupportedError{}).KernelConfines()
+	s.Require().ErrorIs(err, types.SandboxRequired)
+	s.ErrorContains(err, "/ws")
 }
 
-func (s *RuleEncodingSuite) TestAPathHoldingABackslashRoundTrips() {
-	s.roundTrip([]filesystem.Rule{{Path: `/ws/a\,b\`, Read: true, Write: true}})
+func (s *KernelConfinesSuite) TestBelowTheRequiredABI() {
+	ok, err := answering(types.SandboxModeBestEffort, 2, nil).KernelConfines()
+	s.Require().NoError(err)
+	s.True(ok, "best-effort takes an old kernel's partial confinement")
+
+	_, err = answering(types.SandboxModeRequired, 2, nil).KernelConfines()
+	s.Require().ErrorIs(err, types.SandboxRequired)
+	s.ErrorContains(err, "ABI is 2")
 }
 
-func (s *RuleEncodingSuite) TestAPathHoldingAColonRoundTrips() {
-	s.roundTrip([]filesystem.Rule{{Path: "/ws/a:b", Exec: true}, {Path: "/usr", Read: true}})
+func (s *KernelConfinesSuite) TestAtTheRequiredABI() {
+	ok, err := answering(types.SandboxModeRequired, scissors.RequiredABI, nil).KernelConfines()
+	s.Require().NoError(err)
+	s.True(ok)
 }
 
-func (s *RuleEncodingSuite) TestADanglingEscapeIsMalformed() {
-	_, err := decodeRules(`r--:/ws/a\`)
-	s.Error(err)
+// Command hands the module the policy's rules under its mode, and confines with
+// landlock alone.
+type CommandSuite struct{ suite.Suite }
+
+func TestCommandSuite(t *testing.T) { suite.Run(t, new(CommandSuite)) }
+
+func (s *CommandSuite) TestANilPolicyIsPlain() {
+	cmd, err := Command(s.T().Context(), nil, "true")
+	s.Require().NoError(err)
+	s.Equal([]string{"true"}, cmd.Args)
+	s.Empty(cmd.ExtraFiles)
 }
 
-func (s *RuleEncodingSuite) TestAnUnknownEscapeIsMalformed() {
-	_, err := decodeRules(`r--:/ws/\a`)
-	s.Error(err)
+func (s *CommandSuite) TestAHostWithoutLandlockIsRefused() {
+	cmd, err := Command(s.T().Context(), answering(types.SandboxModeBestEffort, 0, &scissors.UnsupportedError{}), "true")
+	var unsupported *scissors.UnsupportedError
+	s.Require().ErrorAs(err, &unsupported, "a macOS host is refused too: magus does not confine with sandbox-exec")
+	s.Nil(cmd)
+}
+
+func (s *CommandSuite) TestTheModeMapsOntoTheModule() {
+	for mode, refuses := range map[types.SandboxMode]bool{
+		types.SandboxModeRequired:   true,
+		types.SandboxModeBestEffort: false,
+		types.SandboxModeOff:        false,
+	} {
+		confined, err := answering(mode, 0, nil).confinement()
+		s.Require().NoError(err)
+		_, err = confined.Confines()
+		if refuses {
+			var unconfined *scissors.UnconfinedError
+			s.ErrorAs(err, &unconfined, "%s refuses a host it cannot confine", mode)
+		} else {
+			s.NoError(err, "%s runs the child unconfined", mode)
+		}
+	}
+}
+
+func (s *CommandSuite) TestEveryRuleMagusBuildsHasABindMode() {
+	p := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{
+		{Path: "/ro", Read: true},
+		{Path: "/rw", Read: true, Write: true, Create: true},
+		{Path: "/rx", Read: true, Exec: true},
+		{Path: "/rwx", Read: true, Write: true, Exec: true},
+	}}, Lease: "fleet/w1"}
+	confined, err := p.confinement()
+	s.Require().NoError(err)
+	s.Equal(p.FS.Rules, confined.Rules())
+	id, _ := confined.Lease()
+	s.Equal("fleet/w1", id)
+}
+
+func (s *CommandSuite) TestAWriteWithoutReadHasNoBindMode() {
+	_, err := (&Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: "/w", Write: true}}}}).confinement()
+	s.ErrorContains(err, "without read")
 }

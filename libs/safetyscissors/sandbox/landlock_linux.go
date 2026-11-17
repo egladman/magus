@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 )
 
 // fsAccessV1 is every filesystem right landlock ABI v1 (Linux 5.13) handles.
@@ -100,7 +100,7 @@ func handledScopes(abi int) uint64 {
 }
 
 // ABI reports the highest landlock ABI version the running kernel supports. It
-// changes no process state. The error wraps ErrUnsupported when landlock is absent
+// changes no process state. The error is an *UnsupportedError when landlock is absent
 // (ENOSYS), disabled at boot (EOPNOTSUPP) or its syscalls are filtered (EPERM from a
 // seccomp policy: the version query needs no privilege, so nothing else denies it).
 func ABI() (int, error) {
@@ -112,7 +112,7 @@ func ABI() (int, error) {
 	)
 	if errno != 0 {
 		if errors.Is(errno, syscall.ENOSYS) || errors.Is(errno, syscall.EOPNOTSUPP) || errors.Is(errno, syscall.EPERM) {
-			return 0, fmt.Errorf("%w: landlock_create_ruleset(VERSION): %w", ErrUnsupported, errno)
+			return 0, &UnsupportedError{Err: fmt.Errorf("landlock_create_ruleset(VERSION): %w", errno)}
 		}
 		return 0, fmt.Errorf("sandbox: landlock_create_ruleset(VERSION): %w", errno)
 	}
@@ -135,7 +135,7 @@ func buildRuleset(rules []filesystem.Rule, abi int, scopes uint64) (int, error) 
 	)
 	if errno != 0 {
 		if errors.Is(errno, syscall.ENOSYS) || errors.Is(errno, syscall.EOPNOTSUPP) {
-			return -1, fmt.Errorf("%w: sandbox: landlock_create_ruleset: %w", ErrUnsupported, errno)
+			return -1, &UnsupportedError{Err: fmt.Errorf("landlock_create_ruleset: %w", errno)}
 		}
 		return -1, fmt.Errorf("sandbox: landlock_create_ruleset: %w", errno)
 	}

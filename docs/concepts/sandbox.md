@@ -286,6 +286,8 @@ On Linux both layers run, and the kernel layer is the backstop that also closes 
 
 On **macOS, Windows, or Linux older than 5.13** (or with the LSM disabled), the kernel layer is unavailable. In `best-effort` mode each child runs under the **binding layer only**: magus prints [MGS2005](../reference/codes/sandbox/MGS2005.md) once per top-level invocation (never from a nested magus) and continues. In `required` mode, and on a Linux kernel below landlock ABI 3, it stops with [MGS2012](../reference/codes/sandbox/MGS2012.md), both when the sandbox is applied and at each child, so no path starts one unconfined.
 
+The kernel layer lives in the `libs/safetyscissors/sandbox` module, which a Go program can use without magus. That module also confines a child on macOS, under `/usr/bin/sandbox-exec` with a deny-by-default profile generated from the same rules, and its `required` default refuses Windows with a typed error. magus's own modes do not use the macOS launcher: there they behave as described above.
+
 What that degradation means precisely:
 
 - **What goes through a binding is still checked.** A magusfile's `fs\write`, `archive\uncompress` or `http\upload` outside the allowlist is refused, and the first binary a step execs is checked. Env scrubbing is pure Go and applies on every platform.
