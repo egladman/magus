@@ -109,9 +109,6 @@ them and magus describe job prints one job's terms.
 **--depends-on** *value*
 : A job this one waits on; repeatable or comma-separated
 
-**--[no-]fix** (default: off)
-: Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
-
 **--instructions** *string*
 : What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the goals a --stdin record declares
 
@@ -149,9 +146,6 @@ them and magus describe job prints one job's terms.
 
 **-f** *file*
 : The records to apply from a file: one JSON job, a JSON array, or one job per line
-
-**--[no-]fix** (default: off)
-: Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records
 
 **--release-write-path** *\<file\>#\<declaration\>*
 : A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a \<file\>#\<declaration\> claim is one path

@@ -214,9 +214,7 @@ flag diff/thread
 flag diff/tui
 flag diff/unread
 flag diff/watch
-flag doctor/fix
 flag doctor/list
-flag doctor/no-fix
 flag doctor/no-list
 flag doctor/no-probe
 flag doctor/probe

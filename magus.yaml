@@ -158,8 +158,9 @@ knowledge:
             cmd/magus: 89
             internal: 14
             # the env and config digests moved out of cmd/magus: the config digest
-            # encodes the loaded config through internal/json.
-            internal/config: 15
+            # encodes the loaded config through internal/json. config set moved too: it
+            # splits a list value on unescaped commas with internal/file/watch.
+            internal/config: 16
             # detach and the signal lifecycle moved out of cmd/magus: the detached
             # child's environment drops the variables internal/proc/spawn names, the
             # detached-run argv reads the generated --detach flag name, and the
@@ -177,8 +178,8 @@ knowledge:
             # the diff input and text moved out of cmd/magus: types is in the
             # RequiredMatcher and diagnosticLine signatures, and the API floor text
             # calls release.Stage.Known. The advisors run through
-            # bindings.RunScriptMain, so gopherbuzz stays out.
-            internal/review: 16
+            # bindings.RunScriptMain, so gopherbuzz stays out. It imports 15.
+            internal/review: 15
             # the spell version probe and the tool table moved out of cmd/magus: they read
             # the project spell registry and share sessions.OrDash with the other tables,
             # which takes internal/spell from 14 to 16.

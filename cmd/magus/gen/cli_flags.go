@@ -192,8 +192,6 @@ const (
 	FlagDiffUnread = "unread"
 	// diff: --watch
 	FlagDiffWatch = "watch"
-	// doctor: --fix
-	FlagDoctorFix = "fix"
 	// doctor: --list
 	FlagDoctorList = "list"
 	// doctor: --probe
@@ -298,8 +296,6 @@ const (
 	FlagJobApplyAddWritePath = "add-write-path"
 	// job apply: --f
 	FlagJobApplyF = "f"
-	// job apply: --fix
-	FlagJobApplyFix = "fix"
 	// job apply: --release-write-path
 	FlagJobApplyReleaseWritePath = "release-write-path"
 	// job apply: --stdin
@@ -326,8 +322,6 @@ const (
 	FlagJobForkDenyPaths = "deny-paths"
 	// job fork: --depends-on
 	FlagJobForkDependsOn = "depends-on"
-	// job fork: --fix
-	FlagJobForkFix = "fix"
 	// job fork: --instructions
 	FlagJobForkInstructions = "instructions"
 	// job fork: --model
@@ -1608,7 +1602,6 @@ type JobForkFlags struct {
 	Delivery     string        // --delivery
 	ReadOnly     bool          // --[no-]read-only
 	Checkout     string        // --checkout
-	Fix          bool          // --[no-]fix
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1634,8 +1627,6 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	command.NegatedBoolVar(fs, &f.ReadOnly, FlagJobForkReadOnly)
 	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
-	fs.BoolVar(&f.Fix, FlagJobForkFix, false, "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain")
-	command.NegatedBoolVar(fs, &f.Fix, FlagJobForkFix)
 	return &f
 }
 
@@ -1643,7 +1634,6 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 type JobApplyFlags struct {
 	F                string   // -f
 	Stdin            bool     // --[no-]stdin
-	Fix              bool     // --[no-]fix
 	AddWritePath     []string // --add-write-path
 	ReleaseWritePath []string // --release-write-path
 }
@@ -1654,8 +1644,6 @@ func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply from a `file`: one JSON job, a JSON array, or one job per line")
 	fs.BoolVar(&f.Stdin, FlagJobApplyStdin, false, "Read the records from stdin instead of a file, as job fork --stdin does")
 	command.NegatedBoolVar(fs, &f.Stdin, FlagJobApplyStdin)
-	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
-	command.NegatedBoolVar(fs, &f.Fix, FlagJobApplyFix)
 	command.StringListVar(fs, &f.AddWritePath, FlagJobApplyAddWritePath, "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated")
 	command.StringListVar(fs, &f.ReleaseWritePath, FlagJobApplyReleaseWritePath, "A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path")
 	return &f
@@ -2365,7 +2353,6 @@ func BindInit(fs *flag.FlagSet) *InitFlags {
 // DoctorFlags are the flags declared for `magus doctor`.
 type DoctorFlags struct {
 	Probe bool // --[no-]probe
-	Fix   bool // --[no-]fix
 	List  bool // --[no-]list
 }
 
@@ -2374,8 +2361,6 @@ func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
 	var f DoctorFlags
 	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
 	command.NegatedBoolVar(fs, &f.Probe, FlagDoctorProbe)
-	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
-	command.NegatedBoolVar(fs, &f.Fix, FlagDoctorFix)
 	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run (name, subject, and MGS code) without running any of them")
 	command.NegatedBoolVar(fs, &f.List, FlagDoctorList)
 	return &f

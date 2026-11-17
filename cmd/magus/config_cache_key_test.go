@@ -100,10 +100,10 @@ func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 %s
 
 `, findSeed(t, out)), "the seed must be alone on its line")
-	assert.NotContains(t, out, signingKeyEnv+"=", "the seed must not be rendered as an assignment")
+	assert.NotContains(t, out, "MAGUS_CACHE_SIGNING_KEY=", "the seed must not be rendered as an assignment")
 	// Column zero, or the snippet does not paste into magus.yaml.
 	assert.Contains(t, out, "\ncache:\n  remote:\n    trusted_keys:\n")
-	assert.Contains(t, out, "gh secret set "+signingKeyEnv, "the next command is spelled out")
+	assert.Contains(t, out, "gh secret set MAGUS_CACHE_SIGNING_KEY", "the next command is spelled out")
 	// Plain ASCII: the old layout drew a box, which this repo's own rule forbids in
 	// user-facing strings and which renders badly in a plain terminal.
 	for _, r := range out {

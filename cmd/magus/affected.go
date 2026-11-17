@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/race"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -33,19 +34,11 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// The plan types and helpers live in internal/ci; run.go and session_load_next.go still
-// call them by these names.
-type (
-	planOutput = internalci.PlanOutput
-	planShard  = internalci.PlanShard
-)
-
 // failedResults wraps internalci.FailedResults so run.go keeps its unexported accessor.
 type failedResults struct{ internalci.FailedResults }
 
 func (c *failedResults) list() []journal.Event { return c.List() }
 
-func planSummaryMarkdown(out planOutput) string { return internalci.PlanSummaryMarkdown(out) }
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
@@ -297,15 +290,15 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Same check as `magus run ci`: a redundant gate refuses under load and
 	// advises when the machine is idle. See prepareGateRedundancy.
 	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
-	gate.noteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
-	if gateErr := gate.evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
+	gate.NoteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
+	if gateErr := gate.Evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 	// Sized once the gate is going to run. A trivial change is proven to need no gate,
 	// which is a verdict on the change rather than a deferral, so it exits 0.
-	sized := gate.size(ctx, af.Base, !af.RedundancyCheck)
+	sized := gate.Size(ctx, af.Base, !af.RedundancyCheck)
 	if sized != nil {
-		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
+		slog.InfoContext(ctx, internalci.RenderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == check.RiskTrivial {
 			return nil
 		}
@@ -367,7 +360,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// and CI runs through this path.
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
 	failed := &failedResults{}
-	statuses := newResultStatuses(target)
+	statuses := report.NewResultStatuses(target)
 	captureHandlers = append(captureHandlers, failed, statuses)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
@@ -386,7 +379,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Read the instant the run returns: after this line a cancellation means the signal
 	// arrived once the verdict was already decided, and dropping it would throw away a
 	// gate that genuinely ran.
-	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
+	gate.Record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if err != nil && opts.Format == outputText {
 		internalci.PrintFailedResults(os.Stdout, failed.list())
 	}
@@ -590,7 +583,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// the finding rides the output for the report job to publish.
 	var inherit *internalci.InheritFinding
 	if target == types.TargetCI && !pf.Stdin && len(only) == 0 {
-		if inherit = planInheritance(ctx, m); inherit != nil {
+		if inherit = internalci.PlanInheritance(ctx, m); inherit != nil {
 			plan.StageZero, plan.Shards = nil, nil
 			plan.MaxParallel = 0
 			slog.InfoContext(ctx, "ci plan inherits a green run's verdict",
@@ -650,7 +643,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(lines, " "))
 	}
-	out := planOutput{
+	out := internalci.PlanOutput{
 		Target:      target,
 		Charms:      plan.Charms,
 		Args:        plan.Args,
@@ -659,7 +652,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Count:       len(plan.Shards),
 		MaxParallel: plan.MaxParallel,
 		Source:      plan.Source,
-		Matrix:      make([]planShard, len(plan.Shards)),
+		Matrix:      make([]internalci.PlanShard, len(plan.Shards)),
 		Affected:    plan.Affected,
 		UnboundedBy: plan.UnboundedBy,
 		Unmeasured:  plan.Unmeasured,
@@ -698,15 +691,15 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 // outputText maps to JSON rather than to a prose rendering, because the plan has
 // no prose rendering to fall back on: the default output IS the machine-readable
 // document, and a workflow that pipes `--plan` without -o must keep getting it.
-func emitPlan(opts output.Options, out planOutput) error {
+func emitPlan(opts output.Options, out internalci.PlanOutput) error {
 	switch opts.Format {
 	case outputText, outputJSON:
 		return emitFormatted(output.Options{Format: outputJSON}, out)
 	case outputName:
-		return emitItemNames(os.Stdout, out.Matrix, func(s planShard) string { return s.Shard })
+		return emitItemNames(os.Stdout, out.Matrix, func(s internalci.PlanShard) string { return s.Shard })
 	default:
 		if opts.Format == outputTemplate {
-			out.Summary = planSummaryMarkdown(out)
+			out.Summary = internalci.PlanSummaryMarkdown(out)
 		}
 		return emitFormatted(opts, out)
 	}
@@ -835,8 +828,8 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	}
 
 	return internalci.PrintImpactText(os.Stdout, out, func(seed string) (string, string) {
-		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
-		return link, authHint(link)
+		link := liveExplorerLink(console.GraphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
+		return link, console.AuthHint(link)
 	})
 }
 

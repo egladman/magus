@@ -47,7 +47,7 @@ type Check struct {
 	// EvidenceUnknown, and one that probed raises it to EvidenceMeasured.
 	Evidence Evidence `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// Fix is the magus command that remedies the finding, as argv without
-	// "magus", nil when nothing mechanical applies. `doctor --fix` runs it.
+	// "magus", nil when nothing mechanical applies. doctor prints it and runs nothing.
 	Fix []string `json:"fix,omitempty" yaml:"fix,omitempty"`
 }
 

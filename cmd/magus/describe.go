@@ -7,13 +7,12 @@ import (
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
@@ -24,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -227,25 +227,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	for _, p := range out.Projects {
-		if p.Engine != "buzz" {
-			fmt.Printf("project: %s  (engine %s: graph extraction not yet supported)\n\n", p.Label(), p.Engine)
-			continue
-		}
-		fmt.Printf("project: %s  (%d targets)\n", p.Label(), len(p.Nodes))
-		if len(p.Cycle) > 0 {
-			fmt.Printf("  CYCLE: %s\n", strings.Join(p.Cycle, " -> "))
-		}
-		for _, n := range p.Nodes {
-			if len(n.Dependencies) > 0 {
-				fmt.Printf("  %s -> %s\n", n.Name, strings.Join(n.Dependencies, ", "))
-			} else {
-				fmt.Printf("  %s\n", n.Name)
-			}
-		}
-		fmt.Println()
-	}
+	describe.RenderGraph(os.Stdout, out)
 	return nil
 }
 
@@ -311,57 +293,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.SpellDefinition)
-	fmt.Printf("spells (%d):\n", len(inventory))
-	for _, t := range inventory {
-		// A workspace-local spell is marked, because the two are not
-		// interchangeable and the listing used to imply they were: only a built-in
-		// is reachable as `import "magus/spell/<name>"` from anywhere and appears in
-		// the spell reference. A local one came from a path import in THIS
-		// workspace's magusfile.
-		if t.BuiltIn {
-			fmt.Printf("  %s\n", t.Name)
-		} else {
-			fmt.Printf("  %s  [workspace-local, not a built-in]\n", t.Name)
-		}
-		// "adapts", not "language": the record carries two different languages, and
-		// naming them both language is what made this ambiguous. This is the source
-		// language the spell teaches magus to build; the import below is written in
-		// Buzz, whatever that language happens to be.
-		if t.Language != "" {
-			fmt.Printf("    adapts:  %s\n", t.Language)
-		}
-		if s := describe.SpellSyntaxSummary(t); s != "" {
-			fmt.Printf("    syntax:  %s\n", s)
-		}
-		// Rendered as the whole statement rather than the bare path, so it is
-		// copy-pasteable into a magusfile. It is the ONLY way to reach the spell's
-		// ops: written literally, so the target graph can see the edge.
-		//
-		// Built-ins only. `magus/spell/<name>` resolves nothing for a workspace-local
-		// spell, so printing it handed the reader a line that cannot work; that
-		// spell is reached by the path import its own magusfile already writes.
-		if t.BuzzImport != "" && t.BuiltIn {
-			fmt.Printf("    import:  import %q;  (buzz)\n", t.BuzzImport)
-		}
-		if len(t.Targets) > 0 {
-			fmt.Printf("    targets: %s\n", strings.Join(t.Targets, ", "))
-		}
-		for _, toolchain := range t.Toolchains {
-			fmt.Printf("    toolchain: %s (%s)\n", toolchain.Command, strings.Join(toolchain.Operations, ", "))
-		}
-		// Print each documented target's comment below the summary line; absent for
-		// undocumented targets and for spells whose docs aren't carried (built-ins).
-		for _, tgt := range t.Targets {
-			if doc := t.TargetDocs[tgt]; doc != "" {
-				fmt.Printf("      %s: %s\n", tgt, describe.FirstLine(doc))
-			}
-		}
-		if t.Opaque {
-			fmt.Printf("    opaque: true\n")
-		}
-		spell.PrintSpellVersions(os.Stdout, t.Versions)
-	}
+	describe.RenderSpells(os.Stdout, inventory, spell.PrintSpellVersions)
 	return nil
 }
 
@@ -428,45 +360,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.CharmDefinition)
-	fmt.Printf("charms (%d):\n", len(charms))
-	for _, c := range charms {
-		tags := make([]string, 0, 2)
-		if c.Builtin {
-			tags = append(tags, "built-in")
-		}
-		if c.Default {
-			tags = append(tags, "workspace default")
-		}
-		line := "  " + c.Name
-		if len(tags) > 0 {
-			line += fmt.Sprintf("  [%s]", strings.Join(tags, ", "))
-		}
-		fmt.Println(line)
-		if c.Doc != "" {
-			fmt.Printf("    %s\n", c.Doc)
-		}
-		// List view stays a summary; the per-target argv edits print only in the
-		// single-charm detail view, where the extra lines are the point.
-		if !detail {
-			if n := len(c.Declarations); n > 0 {
-				fmt.Printf("    declared by %d target(s)\n", n)
-			}
-			continue
-		}
-		if len(c.Declarations) == 0 {
-			fmt.Printf("    no target in this workspace declares it\n")
-			continue
-		}
-		fmt.Printf("    declared by:\n")
-		for _, d := range c.Declarations {
-			fmt.Printf("      %s:%s  (spell %s)\n", d.Project, d.Target, d.Spell)
-			if len(d.After) > 0 && !slices.Equal(d.Before, d.After) {
-				fmt.Printf("        base     %s\n", strings.Join(d.Before, " "))
-				fmt.Printf("        + %-6s %s\n", c.Name, strings.Join(d.After, " "))
-			}
-		}
-	}
+	describe.RenderCharms(os.Stdout, charms, detail)
 	return nil
 }
 
@@ -726,20 +620,7 @@ func describeTargets(ctx context.Context, root string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.TargetDefinition)
-	fmt.Printf("targets (%d):\n", len(targets))
-	for _, t := range targets {
-		switch t.Kind {
-		case "canonical":
-			fmt.Printf("  %s  [canonical - affected/pipeline anchor; composed in the magusfile]\n", t.Name)
-		case "spell":
-			fmt.Printf("  %s  [spell: %s]\n", t.Name, strings.Join(t.Spells, ", "))
-		case "custom":
-			fmt.Printf("  %s  [custom - projects: %s]\n", t.Name, strings.Join(t.Projects, ", "))
-		default:
-			fmt.Printf("  %s\n", t.Name)
-		}
-	}
+	describe.RenderTargets(os.Stdout, targets)
 	return nil
 }
 
@@ -796,56 +677,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		}
 
 		// text / wide
-		fmt.Printf("definition: %s\n\n", out.Definition)
-		fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
-		for _, p := range out.Projects {
-			fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
-			fmt.Printf("  dir:     %s\n", p.Dir)
-			if len(p.Sources) > 0 {
-				fmt.Printf("  sources: %v\n", p.Sources)
-			}
-			if len(p.Outputs) > 0 {
-				fmt.Printf("  outputs: %v\n", p.Outputs)
-			}
-			if len(p.DependsOn) > 0 {
-				fmt.Printf("  depends_on: %v\n", p.DependsOn)
-			}
-			for _, s := range p.ResolvedSpells {
-				fmt.Printf("  spell: %s\n", s.Name)
-			}
-			for targetName, pol := range p.TargetPolicies {
-				fmt.Printf("  policy: %s", targetName)
-				if pol.IncludeOS != nil {
-					fmt.Printf("  include_os=%t", *pol.IncludeOS)
-				}
-				if pol.IncludeArch != nil {
-					fmt.Printf("  include_arch=%t", *pol.IncludeArch)
-				}
-				if pol.Drift != types.DriftDefault {
-					fmt.Printf("  drift=%s", pol.Drift)
-				}
-				if pol.RetryOnVolatile {
-					fmt.Printf("  retry_on_volatile")
-				}
-				if pol.Advisory {
-					fmt.Printf("  advisory=%q", pol.AdvisoryReason)
-				}
-				if pol.SkipCache {
-					fmt.Printf("  skip_cache")
-				}
-				if pol.Slots > 0 {
-					fmt.Printf("  slots=%d", pol.Slots)
-				}
-				if pol.MemoryMB > 0 {
-					fmt.Printf("  memory_mb=%d", pol.MemoryMB)
-				}
-				if pol.Timeout != "" {
-					fmt.Printf("  timeout=%s", pol.Timeout)
-				}
-				fmt.Println()
-			}
-			fmt.Println()
-		}
+			describe.RenderEvaluatedProjects(os.Stdout, out)
 		return nil
 	}
 
@@ -874,25 +706,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
-	for _, p := range out.Projects {
-		fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
-		fmt.Printf("  dir:  %s\n", p.Dir)
-		if p.Spell != "" {
-			fmt.Printf("  spell: %s\n", p.Spell)
-		}
-		if len(p.Sources) > 0 {
-			fmt.Printf("  sources: %v\n", p.Sources)
-		}
-		if len(p.Outputs) > 0 {
-			fmt.Printf("  outputs: %v\n", p.Outputs)
-		}
-		if len(p.DependsOn) > 0 {
-			fmt.Printf("  depends_on: %v\n", p.DependsOn)
-		}
-		fmt.Println()
-	}
+	describe.RenderProjects(os.Stdout, out)
 	return nil
 }
 
@@ -941,121 +755,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.EvaluatedTargetDefinition)
-	fmt.Printf("targets (%d):\n\n", len(out))
-	for _, e := range out {
-		fmt.Printf("project: %s  target: %s\n", e.Project, e.Target)
-		fmt.Printf("  dir:     %s\n", e.Dir)
-		if len(e.Sources) > 0 {
-			fmt.Printf("  sources: %v\n", e.Sources)
-		}
-		if len(e.Outputs) > 0 {
-			fmt.Printf("  outputs: %v\n", e.Outputs)
-		}
-		// Always on, no flag: it is one line, it is absent for a target that composes
-		// nothing, and "what does this run, in what order" is the question the command
-		// already exists to answer: a flag would only hide the answer behind knowing
-		// to ask for it (docs/recommendations.md, fold don't add).
-		if len(e.Chain) > 0 {
-			fmt.Printf("  chain:   %s\n", types.Chain(e.Chain))
-		}
-		if len(e.BeforeKey) > 0 {
-			refs := make([]string, len(e.BeforeKey))
-			for i, r := range e.BeforeKey {
-				refs[i] = r.Ref()
-			}
-			fmt.Printf("  before key: %s\n", strings.Join(refs, ", "))
-		}
-		if len(e.DependsOn) > 0 {
-			fmt.Printf("  depends_on: %v\n", e.DependsOn)
-		}
-		if len(e.Charms) > 0 {
-			fmt.Printf("  charms:  %v\n", e.Charms)
-		}
-		for _, s := range e.Spells {
-			fmt.Printf("  spell: %s", s.Name)
-			if len(s.TargetSources) > 0 {
-				fmt.Printf("  target_sources=%v", s.TargetSources)
-			}
-			fmt.Println()
-			if len(s.Command) > 0 {
-				fmt.Printf("    command: %s\n", strings.Join(s.Command, " "))
-			}
-			if s.Service != nil {
-				fmt.Printf("    service:\n")
-				if len(s.Service.Readiness) > 0 {
-					fmt.Printf("      readiness: %s\n", strings.Join(s.Service.Readiness, " "))
-				}
-				if len(s.Service.Stop) > 0 {
-					fmt.Printf("      stop:      %s\n", strings.Join(s.Service.Stop, " "))
-				}
-				if s.Service.Idle != "" {
-					fmt.Printf("      idle:      %s\n", s.Service.Idle)
-				}
-				if s.Service.Distinct != "" {
-					fmt.Printf("      distinct:  %s\n", s.Service.Distinct)
-				} else {
-					fmt.Printf("      shared:    yes (dedups by fingerprint)\n")
-				}
-				if s.Service.Fingerprint != "" {
-					fmt.Printf("      fingerprint: %s\n", s.Service.Fingerprint)
-				}
-			}
-			if explain && len(s.CharmTrace) > 0 {
-				fmt.Printf("    charm trace:\n")
-				for _, step := range s.CharmTrace {
-					label := "base"
-					if step.Charm != "" {
-						label = "+ " + step.Charm
-					}
-					fmt.Printf("      %-10s %s\n", label, strings.Join(step.Command, " "))
-				}
-			}
-			// Shown without --explain: an overridden charm is a mistake, not a detail.
-			if len(s.Conflicts) > 0 {
-				fmt.Printf("    charm conflicts:\n")
-				for _, c := range s.Conflicts {
-					by := c.OverriddenBy
-					if by == "" {
-						by = "another active charm"
-					}
-					fmt.Printf("      %s overridden by %s (no effect here)\n", c.Name, by)
-				}
-			}
-		}
-		if e.Policy != nil {
-			fmt.Printf("  policy:")
-			if e.Policy.IncludeOS != nil {
-				fmt.Printf("  include_os=%t", *e.Policy.IncludeOS)
-			}
-			if e.Policy.IncludeArch != nil {
-				fmt.Printf("  include_arch=%t", *e.Policy.IncludeArch)
-			}
-			if e.Policy.Drift != types.DriftDefault {
-				fmt.Printf("  drift=%s", e.Policy.Drift)
-			}
-			if e.Policy.RetryOnVolatile {
-				fmt.Printf("  retry_on_volatile")
-			}
-			if e.Policy.Advisory {
-				fmt.Printf("  advisory=%q", e.Policy.AdvisoryReason)
-			}
-			if e.Policy.SkipCache {
-				fmt.Printf("  skip_cache")
-			}
-			if e.Policy.Slots > 0 {
-				fmt.Printf("  slots=%d", e.Policy.Slots)
-			}
-			if e.Policy.MemoryMB > 0 {
-				fmt.Printf("  memory_mb=%d", e.Policy.MemoryMB)
-			}
-			if e.Policy.Timeout != "" {
-				fmt.Printf("  timeout=%s", e.Policy.Timeout)
-			}
-			fmt.Println()
-		}
-		fmt.Println()
-	}
+	describe.RenderEvaluatedTargets(os.Stdout, out, explain)
 	return nil
 }
 
@@ -1096,27 +796,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.WorkspaceDefinition)
-	for _, w := range out {
-		fmt.Printf("workspace: %s\n", w.Root)
-		fmt.Printf("  projects: %d\n", w.ProjectCount)
-		if w.VCSBaseRef != "" {
-			fmt.Printf("  vcs base ref: %s\n", w.VCSBaseRef)
-		}
-		if w.CacheDir != "" {
-			fmt.Printf("  cache dir: %s\n", w.CacheDir)
-		}
-		if w.Concurrency > 0 {
-			fmt.Printf("  concurrency: %d\n", w.Concurrency)
-		}
-		for _, l := range w.Workspaces {
-			if l.Dir == "" {
-				fmt.Printf("  workspace %s: %s (this one)\n", l.Name, l.Root)
-				continue
-			}
-			fmt.Printf("  workspace %s: %s -> %s\n", l.Name, l.Dir, l.Root)
-		}
-	}
+	describe.RenderWorkspaces(os.Stdout, out)
 	return nil
 }
 
@@ -1142,7 +822,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
 	for _, wsRoot := range declared {
-		cfg, err := loadWorkspaceConfig(wsRoot)
+		cfg, err := server.LoadWorkspaceConfig(wsRoot)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
@@ -1204,21 +884,7 @@ func describeMCPTools(args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("mcp-tools (%d):\n", out.Count)
-	for _, t := range out.MCPTools {
-		fmt.Printf("  %s\n", t.Name)
-		if t.Description != "" {
-			fmt.Printf("    %s\n", t.Description)
-		}
-		for _, p := range t.Params {
-			req := ""
-			if p.Required {
-				req = " (required)"
-			}
-			fmt.Printf("    param %s <%s>%s: %s\n", p.Name, p.Type, req, p.Description)
-		}
-	}
+	describe.RenderMCPTools(os.Stdout, out)
 	return nil
 }
 
@@ -1266,7 +932,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, filesWithNext{FileReport: report, Next: next})
+		return emitFormatted(opts, job.FilesWithNext{FileReport: report, Next: next})
 	case outputName:
 		// One bare path per line. This used to print "<path>\t<role>", which is two
 		// columns in the one format that promises a single token, so `xargs` and
@@ -1279,52 +945,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n", types.FileDefinition)
-	// Printed once rather than per entry: it is a fact about where the caller stands,
-	// so it is the same for every path in the request, and it is what makes a
-	// `focus: out` line below actionable instead of an accusation.
-	if inFocus {
-		fmt.Printf("focus of %s: %s\n", strings.Join(focus.Seeds, ", "), strings.Join(focus.Projects, ", "))
-	}
-	fmt.Println()
-	for _, f := range files {
-		fmt.Printf("%s\n", f.Path)
-		if f.Project != "" {
-			fmt.Printf("  project: %s\n", f.Project)
-		}
-		fmt.Printf("  role: %s\n", f.Role)
-		// Only when absent. Present is the overwhelmingly common case, and a line on
-		// every entry would bury the one reading that changes what the rest means.
-		if !f.Exists {
-			fmt.Printf("  exists: false\n")
-		}
-		if len(f.OutputOf) > 0 {
-			fmt.Printf("  output_of: %v\n", f.OutputOf)
-		}
-		if len(f.SourceOf) > 0 {
-			fmt.Printf("  source_of: %v\n", f.SourceOf)
-		}
-		if len(f.DependsOn) > 0 {
-			fmt.Printf("  depends_on: %v\n", f.DependsOn)
-		}
-		// Only when OUT, for the reason `exists: false` prints only when false: in
-		// focus is the overwhelmingly common case, and a line on every entry buries
-		// the one reading that changes what to do next. `-o json` carries both.
-		if f.Focus == types.FocusOut {
-			fmt.Printf("  focus: out\n")
-		}
-		for _, c := range f.Claims {
-			fmt.Printf("  declared: %-6s %s  %s\n", c.Role, describe.ClaimLabel(c), c.Glob)
-		}
-		if f.Hint != "" {
-			fmt.Printf("  hint: %s\n", f.Hint)
-		}
-		fmt.Println()
-	}
-	if len(report.Overlaps) > 0 {
-		fmt.Println("declarations covering more than one of these paths:")
-		printOverlaps(os.Stdout, report.Overlaps)
-	}
+	describe.RenderFiles(os.Stdout, report, files, focus, inFocus)
 	printNext(os.Stdout, nx, next)
 	return nil
 }
@@ -1388,15 +1009,7 @@ func describeModules(ctx context.Context, args []string) error {
 
 	// text / wide
 	if name == "" {
-		fmt.Printf("definition: %s\n\n", types.ModuleDefinition)
-		fmt.Printf("modules (%d):\n", len(out))
-		for _, m := range out {
-			fmt.Printf("  %s\n", m.Name)
-			if m.Doc != "" {
-				fmt.Printf("    %s\n", describe.FirstLine(m.Doc))
-			}
-		}
-		fmt.Println("\nRun `magus describe module <name>` for a module's methods and signatures.")
+		describe.RenderModules(os.Stdout, out)
 		return nil
 	}
 
@@ -1500,25 +1113,4 @@ func emitSchema(raw string) error {
 		return emitNames(os.Stdout, names)
 	}
 	return emitFormatted(opts, doc)
-}
-
-// printOverlaps renders each set of paths once, then the declarations covering exactly
-// that set. Declarations that cover the same paths are the common case, and printing the
-// paths per declaration grew the text with paths times declarations.
-func printOverlaps(out io.Writer, overlaps []types.FileClaim) {
-	var order []string
-	groups := map[string][]types.FileClaim{}
-	for _, c := range overlaps {
-		k := strings.Join(c.Paths, ", ")
-		if _, ok := groups[k]; !ok {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], c)
-	}
-	for _, k := range order {
-		fmt.Fprintf(out, "  %s\n", k)
-		for _, c := range groups[k] {
-			fmt.Fprintf(out, "    %-6s %-24s %s\n", c.Role, describe.ClaimLabel(c), c.Glob)
-		}
-	}
 }

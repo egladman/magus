@@ -1,0 +1,238 @@
+// Cost: one commit lookup; with --apply, one advisory posted.
+//
+// Tells every agent session in this repository to bring its checkout onto a revision and
+// rebuild ./magus. It posts one advisory through `magus session advise`, which each root
+// session sees once at its next prompt and each later session sees at its start, until
+// `magus session retract`. --expect names the command every acting session runs, so
+// `magus session advisories` can count how many did.
+//
+//	magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason "<why>"] [--apply]
+//
+// --revision defaults to origin/main as this repository holds it now. The script never
+// fetches: run `git fetch` first if the tip it should name is not local yet. Without --apply
+// it prints the advisory and the command it would run and posts nothing. Only a person at an
+// interactive terminal may post; `magus session advise` refuses anyone else, and this script
+// reports that refusal as it was given. A reason that would push the advisory past the
+// message limit is refused, never truncated.
+namespace advisererebuild;
+
+import "flags";
+import "magus";
+import "result";
+import "std";
+import "vcs";
+
+import "assert";
+
+final SUMMARY = "advise every session to move onto a revision and rebuild ./magus";
+final SERVES = ["replaces:magus session advise"];
+
+final USAGE = "usage: magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason \"<why>\"] [--apply]";
+final HELP = "cost: one commit lookup; with --apply, one advisory posted\n{USAGE}\n\nThe default revision is the local origin/main; nothing is fetched. Without --apply nothing is posted.";
+
+final DEFAULT_REVISION = "origin/main";
+final EXPECT = "./magus buzz hack/dev/bootstrap-checkout.buzz";
+
+// MAX_MESSAGE_BYTES is sessions.MaxMessageBytes (4 << 10): the longest advisory text a post keeps.
+final MAX_MESSAGE_BYTES = 4096;
+
+// advisoryText is what every session reads. Each command stands alone on its line so a
+// session can copy it.
+export fun advisoryText(short: str, full: str, reason: str) > str {
+    final why = reason.trim();
+    final lines = mut [<str>];
+    lines.append("Bring your checkout onto {short} ({full}) and rebuild ./magus." + (if (why == "") "" else " Reason: {why}"));
+    lines.append("Check yourself: `./magus version -o json` reports `commit`. You are current when that commit contains {full}.");
+    lines.append("If you are not current, a clean checkout with no commits of its own runs:");
+    lines.append("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --onto {full}");
+    lines.append("A branch with its own commits merges the base, naming its own branch, then rebuilds:");
+    lines.append("./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <its branch>");
+    lines.append("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready");
+    lines.append("A leased worker builds nothing: ask your main session to place the binary.");
+    return lines.join("\n");
+}
+
+// checkFits fails when text is longer than a post keeps.
+export fun checkFits(text: str) > result\Result::<str> {
+    if (text.len() > MAX_MESSAGE_BYTES) {
+        return result\fail::<str>("issue-rebuild-advisory: the advisory is {text.len()} bytes, past the {MAX_MESSAGE_BYTES} a post keeps; shorten --reason by {text.len() - MAX_MESSAGE_BYTES} bytes");
+    }
+    return result\ok::<str>(text);
+}
+
+// quote wraps text in double quotes for the line a person copies.
+export fun quote(text: str) > str {
+    return "\"" + text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("$", with: "\\$").replace("`", with: "\\`") + "\"";
+}
+
+// adviseLine is the exact command --apply runs, as a person would type it.
+export fun adviseLine(text: str) > str {
+    return "magus session advise {quote(text)} --expect {quote(EXPECT)}";
+}
+
+// dryReport is what a run without --apply prints.
+export fun dryReport(text: str, revision: str) > [str] {
+    return [
+        "dry run: nothing posted; pass --apply to post. {revision} resolved locally, nothing was fetched.",
+        "advisory ({text.len()} of {MAX_MESSAGE_BYTES} bytes):",
+        text,
+        "command:",
+        adviseLine(text),
+    ];
+}
+
+// appliedReport is what a posted advisory prints: its id, how to read the count, and how to withdraw it.
+export fun appliedReport(id: str) > [str] {
+    return [
+        "posted {id}",
+        "read the count later: magus session advisories",
+        "retract: magus session retract {id}",
+    ];
+}
+
+// postedId reads the id from `posted <id>` on the first line of `magus session advise`.
+export fun postedId(stdout: str) > result\Result::<str> {
+    final words = stdout.trim().split("\n")[0].split(" ");
+    if (words.len() < 2 or words[0] != "posted") {
+        return result\fail::<str>("issue-rebuild-advisory: `magus session advise` printed no advisory id: {stdout.trim()}");
+    }
+    return result\ok::<str>(words[1]);
+}
+
+// Rev is a resolved revision.
+export object Rev {
+    id: str,
+    short: str,
+}
+
+// lookup is the full commit id of rev. It fetches nothing.
+export fun lookup(rev: str) > result\Result::<Rev> {
+    try {
+        final c = vcs\commit(rev);
+        return result\ok::<Rev>(Rev{ id = c.id, short = c.short });
+    } catch (err: any) {
+        return result\caught::<Rev>(err, doing: "issue-rebuild-advisory: {rev} does not resolve in this repository (this script never fetches)");
+    }
+}
+
+// post runs `magus session advise` and returns the advisory id. A refusal, such as there
+// being no interactive terminal, is returned with the command's own words.
+export fun post(text: str) > result\Result::<str> {
+    var ran: magus\ExecResult? = null;
+    try {
+        ran = magus\cmd("session", args: ["advise", text, "--expect", EXPECT], opts: magus\CommandOptions{ allowFailure = true });
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "issue-rebuild-advisory: run magus session advise");
+    }
+    if (!ran!.ok) {
+        return result\fail::<str>("issue-rebuild-advisory: magus session advise refused (exit {ran!.code}): {ran!.stderr.trim()}");
+    }
+    return postedId(ran!.stdout);
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: ["--revision", "--reason"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "issue-rebuild-advisory: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final rev = parsed.values["--revision"] ?? DEFAULT_REVISION;
+    final commit = lookup(rev);
+    if (commit.error != null) {
+        throw commit.error!.message;
+    }
+    final text = advisoryText(commit.value!.short, full: commit.value!.id, reason: parsed.values["--reason"] ?? "");
+    final fits = checkFits(text);
+    if (fits.error != null) {
+        throw fits.error!.message;
+    }
+    if (parsed.values["--apply"] == null) {
+        foreach (line in dryReport(text, revision: rev)) {
+            std\print(line);
+        }
+        return;
+    }
+    final id = post(text);
+    if (id.error != null) {
+        throw id.error!.message;
+    }
+    foreach (line in appliedReport(id.value!)) {
+        std\print(line);
+    }
+}
+
+final SHORT = "0b91591b4";
+final FULL = "0b91591b4e5c0d6a1f2b3c4d5e6f708192a3b4c5";
+
+test "the advisory names both revisions, the reason, and the check" {
+    final text = advisoryText(SHORT, full: FULL, reason: "guard fix");
+    assert\equal(text.indexOf("{SHORT} ({FULL})") != null, want: true, message: "revisions");
+    assert\equal(text.indexOf("Reason: guard fix") != null, want: true, message: "reason");
+    assert\equal(text.indexOf("`./magus version -o json` reports `commit`") != null, want: true, message: "check");
+}
+
+test "an absent reason leaves no reason clause" {
+    assert\equal(advisoryText(SHORT, full: FULL, reason: "  ").indexOf("Reason") == null, want: true, message: "no clause");
+}
+
+test "each command stands alone on its line" {
+    final lines = advisoryText(SHORT, full: FULL, reason: "").split("\n");
+    assert\equal(lines.indexOf("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --onto {FULL}") != null, want: true, message: "clean checkout");
+    assert\equal(lines.indexOf("./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <its branch>") != null, want: true, message: "merge");
+    assert\equal(lines.indexOf("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready") != null, want: true, message: "verify-ready");
+}
+
+test "a leased worker is told to ask its main session" {
+    assert\equal(advisoryText(SHORT, full: FULL, reason: "").indexOf("ask your main session to place the binary") != null, want: true, message: "worker");
+}
+
+test "the advisory with no reason fits the limit" {
+    assert\equal(checkFits(advisoryText(SHORT, full: FULL, reason: "")).error == null, want: true, message: "fits");
+}
+
+test "a reason that would not fit is refused, not cut" {
+    final long = "x".repeat(MAX_MESSAGE_BYTES);
+    final fits = checkFits(advisoryText(SHORT, full: FULL, reason: long));
+    assert\equal(fits.error != null, want: true, message: "refused");
+    assert\equal(fits.error!.message.indexOf("shorten --reason by") != null, want: true, message: "says what to cut");
+}
+
+test "a reason that just fits passes" {
+    final base = advisoryText(SHORT, full: FULL, reason: "a").len();
+    final room = MAX_MESSAGE_BYTES - base;
+    assert\equal(checkFits(advisoryText(SHORT, full: FULL, reason: "a" + "x".repeat(room))).error == null, want: true, message: "exact fit");
+    assert\equal(checkFits(advisoryText(SHORT, full: FULL, reason: "a" + "x".repeat(room + 1))).error != null, want: true, message: "one over");
+}
+
+test "the flags parse: valued, switch, and unknown" {
+    final parsed = flags\parse(["--revision", "abc", "--reason", "why", "--apply", "--bogus"], switches: ["--apply", "--help"], valued: ["--revision", "--reason"]);
+    assert\equal(parsed.values["--revision"], want: "abc", message: "revision");
+    assert\equal(parsed.values["--reason"], want: "why", message: "reason");
+    assert\equal(parsed.values["--apply"] != null, want: true, message: "apply");
+    assert\equal(parsed.unknown, want: ["--bogus"], message: "unknown");
+}
+
+test "the dry report posts nothing and prints the exact command" {
+    final text = advisoryText(SHORT, full: FULL, reason: "");
+    final lines = dryReport(text, revision: "origin/main");
+    assert\equal(lines[0].startsWith("dry run: nothing posted; pass --apply to post."), want: true, message: "says dry");
+    assert\equal(lines[2], want: text, message: "advisory text");
+    assert\equal(lines[4].startsWith("magus session advise \"Bring your checkout"), want: true, message: "command start");
+    assert\equal(lines[4].endsWith(" --expect \"./magus buzz hack/dev/bootstrap-checkout.buzz\""), want: true, message: "expect");
+}
+
+test "quoting escapes what a shell would expand" {
+    assert\equal(quote("a \"b\" $c `d`"), want: "\"a \\\"b\\\" \\$c \\`d\\`\"", message: "escaped");
+}
+
+test "the applied report names the id, the count line and the retract line" {
+    assert\equal(appliedReport("adv-1"), want: ["posted adv-1", "read the count later: magus session advisories", "retract: magus session retract adv-1"], message: "report");
+}
+
+test "the posted id is read from the first line" {
+    assert\equal(postedId("posted adv-abc\n  Bring your checkout").value!, want: "adv-abc", message: "id");
+    assert\equal(postedId("retracted adv-abc").error != null, want: true, message: "other verb");
+}

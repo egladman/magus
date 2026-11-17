@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -253,7 +252,7 @@ func occurrenceRead(r *magus.SymbolOccurrenceRead) *knowledge.OccurrenceRead {
 
 // refsTextCommand implements `magus refs <pattern> --text`: a raw substring search that
 // PRINTS matching lines, the shape a guard pipe deny routes a recursive grep to (see
-// internal/guard's trimmableMagus). It runs textScan directly (no symbol index, no
+// internal/guard's trimmableMagus). It runs textindex.Search directly (no symbol index, no
 // knowledge graph) so it answers on a cold worktree with no index built, which is the
 // one thing a grep replacement may never fail to do: textindex.Scan is index-free by
 // design for exactly this reason.
@@ -494,9 +493,9 @@ func loadRefsAnswerGraph(ctx context.Context, ws types.WorkspaceRepository, cfg 
 	return g, nil
 }
 
-// knownStaleCoverage is measuredCoverage over a staleness verdict the caller
+// knownStaleCoverage is workspacegraph.Reads.MeasuredCoverage over a staleness verdict the caller
 // already holds, since the sweep behind it forks the tool probes.
-func knownStaleCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config, stale []types.KnowledgeStaleIndex) coverageFunc {
+func knownStaleCoverage(ctx context.Context, ws workspacegraph.ReadWorkspace, cfg config.Config, stale []types.KnowledgeStaleIndex) workspacegraph.CoverageFunc {
 	return func(input string, seeded bool) knowledge.Coverage {
 		cov := knowledge.Coverage{Seeded: seeded}
 		if !knowledge.CouldMatchLazyLayer(input) {
@@ -521,7 +520,7 @@ func (r *refsResult) noteRefresh(cause *types.KnowledgeIndexCause) {
 
 // lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg,
 // judging the answer by coverage.
-func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read knowledge.GraphRead, coverage coverageFunc) refsResult {
+func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read knowledge.GraphRead, coverage workspacegraph.CoverageFunc) refsResult {
 	symbol, ambiguous := knowledge.PickSymbol(g, read.Input)
 	if len(ambiguous) > 0 {
 		return refsResult{Ambiguous: ambiguous}
@@ -695,43 +694,3 @@ func refsOccurrencePage(rf *flaggen.RefsFlags, fs *flag.FlagSet, root string, po
 	})
 }
 
-// The names below are what other cmd files call. They are one-line wrappers over
-// the moved logic and go when their callers move.
-
-// sourceWindow is the window explain builds: knowledge's window and the command that asked.
-type sourceWindow struct {
-	knowledge.SourceWindow
-	again string
-}
-
-func (w sourceWindow) refs() knowledge.RefsWindow {
-	return knowledge.RefsWindow{SourceWindow: w.SourceWindow, Again: w.again}
-}
-
-func checkSourcePage(command string, maxLines, skipLines int) error {
-	return knowledge.CheckSourcePage(command, maxLines, skipLines)
-}
-
-func docSectionSource(root string, node types.KnowledgeNode, w sourceWindow) (types.KnowledgeDefinitionSite, error) {
-	return knowledge.DocSectionSource(root, node, w.refs())
-}
-
-func emitDocSectionSource(w io.Writer, site types.KnowledgeDefinitionSite) error {
-	return knowledge.EmitDocSectionSource(w, site)
-}
-
-func docSectionExit(site types.KnowledgeDefinitionSite) error { return knowledge.DocSectionExit(site) }
-
-func textScan(ctx context.Context, root, pattern string, scopes []string, noGenerated bool, classify textindex.ClassifyFunc) ([]textindex.Match, int, int, int, bool, error) {
-	return textindex.Search(ctx, root, pattern, scopes, noGenerated, classify)
-}
-
-func textHits(matches []textindex.Match) []types.TextHit { return knowledge.TextHits(matches) }
-
-func pickSymbol(g *knowledge.Graph, ref string) (string, []string) {
-	return knowledge.PickSymbol(g, ref)
-}
-
-func renameBlindSpots(id, language string, cov knowledge.Coverage) []types.EditRefusal {
-	return edit.RenameBlindSpots(id, language, cov)
-}

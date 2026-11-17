@@ -7,13 +7,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/scaffold"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/xdg"
@@ -102,35 +101,21 @@ func runConfigView(cfg config.Config, args []string) error {
 }
 
 func printConfigText(cfg config.Config) {
-	fmt.Printf("log.format: %s\n", stringOrDef(cfg.Log.Format, "(default: pretty)"))
-	fmt.Printf("concurrency: %s\n", intOrDef(cfg.Concurrency, "(from concurrency_profile)"))
-	fmt.Printf("concurrency_profile: %s\n", stringOrDef(string(cfg.ConcurrencyProfile), "(default: balanced)"))
-	fmt.Printf("history_path: %s\n", stringOrDef(cfg.HistoryPath, "(disabled)"))
+	fmt.Printf("log.format: %s\n", config.StringOrDef(cfg.Log.Format, "(default: pretty)"))
+	fmt.Printf("concurrency: %s\n", config.IntOrDef(cfg.Concurrency, "(from concurrency_profile)"))
+	fmt.Printf("concurrency_profile: %s\n", config.StringOrDef(string(cfg.ConcurrencyProfile), "(default: balanced)"))
+	fmt.Printf("history_path: %s\n", config.StringOrDef(cfg.HistoryPath, "(disabled)"))
 	fmt.Printf("dry_run:  %v\n", cfg.DryRun)
 	fmt.Println()
 	fmt.Println("cache:")
-	fmt.Printf("  dir:  %s\n", stringOrDef(cfg.Cache.Dir, "(default)"))
+	fmt.Printf("  dir:  %s\n", config.StringOrDef(cfg.Cache.Dir, "(default)"))
 	fmt.Printf("  immutable: %v\n", !cfg.Cache.WriteEnabled())
 	fmt.Printf("  remote_write: %v\n", cfg.Cache.RemoteWriteEnabled())
-	fmt.Printf("  size_mb: %s\n", intOrDef(cfg.Cache.SizeMB, "(unlimited)"))
+	fmt.Printf("  size_mb: %s\n", config.IntOrDef(cfg.Cache.SizeMB, "(unlimited)"))
 	fmt.Println()
 	fmt.Println("ci:")
 	fmt.Printf("  max_shards:          %d\n", cfg.CI.MaxShards)
-	fmt.Printf("  runner_pool_budget:  %s\n", intOrDef(cfg.CI.RunnerPoolBudget, "(unlimited)"))
-}
-
-func stringOrDef(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
-}
-
-func intOrDef(n int, def string) string {
-	if n == 0 {
-		return def
-	}
-	return strconv.Itoa(n)
+	fmt.Printf("  runner_pool_budget:  %s\n", config.IntOrDef(cfg.CI.RunnerPoolBudget, "(unlimited)"))
 }
 
 func runConfigSet(ctx context.Context, args []string) error {
@@ -168,7 +153,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 		fs.Usage()
 		return exit.Usagef("magus config set: requires one argument in key=<key>,value=<value> form")
 	}
-	key, value, err := parseConfigSetArg(fs.Arg(0))
+	key, value, err := config.ParseSetArg(fs.Arg(0))
 	if err != nil {
 		return fmt.Errorf("magus config set: %w", err)
 	}
@@ -184,67 +169,12 @@ func runConfigSet(ctx context.Context, args []string) error {
 		cfgPath = config.Filename
 	}
 
-	if err := config.Save(vcs.WriteJudge(ctx, judgeDir("")), cfgPath, key, value); err != nil {
+	if err := config.Save(vcs.WriteJudge(ctx, scaffold.JudgeDir("")), cfgPath, key, value); err != nil {
 		return err
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, configSetOutput{Path: cfgPath, Key: key, Value: value}, []string{key})
+		return emitRecord(opts, config.SetOutput{Path: cfgPath, Key: key, Value: value}, []string{key})
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("wrote %s: %s = %s", cfgPath, key, value), attr.Notice(""))
 	return nil
-}
-
-type configSetOutput struct {
-	Path  string `json:"path"`
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-// parseConfigSetArg parses a single "key=<key>,value=<value>" argument.
-// Commas inside the value must be backslash-escaped (\,).
-func parseConfigSetArg(s string) (key, value string, err error) {
-	parts := splitConfigCommas(s)
-	for _, part := range parts {
-		eq := strings.IndexByte(part, '=')
-		if eq < 0 {
-			return "", "", fmt.Errorf("%q is not in key=value form (expected key=<key>,value=<value>)", part)
-		}
-		k := strings.TrimSpace(part[:eq])
-		v := part[eq+1:]
-		switch k {
-		case "key":
-			key = v
-		case "value":
-			value = v
-		default:
-			return "", "", fmt.Errorf("unknown field %q (allowed: key, value)", k)
-		}
-	}
-	if key == "" {
-		return "", "", fmt.Errorf("key is required (use key=<key>,value=<value>)")
-	}
-	return key, value, nil
-}
-
-// splitConfigCommas splits s on commas, treating backslash-escaped commas as
-// literal. Mirrors the same helper in magus/watch/pattern.go for the --ignore flag.
-func splitConfigCommas(s string) []string {
-	var parts []string
-	var cur strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\\' && i+1 < len(s) && s[i+1] == ',' {
-			cur.WriteByte(',')
-			i++
-			continue
-		}
-		if c == ',' {
-			parts = append(parts, cur.String())
-			cur.Reset()
-			continue
-		}
-		cur.WriteByte(c)
-	}
-	parts = append(parts, cur.String())
-	return parts
 }

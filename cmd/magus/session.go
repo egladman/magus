@@ -330,7 +330,7 @@ func sessionShow(root string, args []string) error {
 
 	out := sessionShowOutput{ShowSummary: sessions.SummarizeSession(rest[0], events)}
 	out.Trail = sessionTrailHere(root, rest[0])
-	out.Cost = summarizeCost(out.Trail, sessionModelTable(root))
+	out.Cost = trail.SummarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -348,7 +348,7 @@ func sessionShow(root string, args []string) error {
 // the report. The workspace is opened apart from the process's shared handle, which a
 // session read never needs.
 func sessionModelTable(root string) model.Table {
-	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+	rows := guard.HarnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 		return magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	})
 	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
@@ -483,7 +483,7 @@ type sessionShowOutput struct {
 	Trail *trail.SessionTrail `json:"trail,omitempty"`
 	// Cost is what the session's context and spawns cost. The sections the trail could not
 	// measure are named in its not_measured map rather than left out or zeroed.
-	Cost *sessionCost `json:"cost,omitempty"`
+	Cost *trail.SessionCost `json:"cost,omitempty"`
 }
 
 func renderSessionShow(w io.Writer, s sessionShowOutput) {
@@ -492,7 +492,7 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 		trail.RenderSessionTrail(w, s.Trail)
 	}
 	if s.Cost != nil {
-		renderCost(w, s.Cost)
+		trail.RenderCost(w, s.Cost)
 	}
 }
 
@@ -524,10 +524,6 @@ func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheCloc
 // The helpers below keep the names that cmd files outside this one still call.
 
 func orDash(s string) string { return sessions.OrDash(s) }
-
-func invocationsInCheckout(summaries []sessions.Summary, root string) []sessions.Summary {
-	return sessions.InvocationsInCheckout(summaries, root)
-}
 
 func sessionHintsUsage(fs *flag.FlagSet) func() {
 	return func() {
@@ -662,7 +658,7 @@ func briefReaders() brief.Readers {
 	return brief.Readers{
 		OpenJobs: func(ctx context.Context, root string) (*job.Store, error) { return openJobs(ctx, root, jobOpen{}) },
 		ActingLease: func(ctx context.Context, root string) string {
-			lease, _, _ := checkoutLease(ctx, root)
+			lease, _, _ := guard.CheckoutLease(ctx, root, jobPlace)
 			return lease
 		},
 		PromptCache: promptCacheForCheckout,
@@ -671,7 +667,7 @@ func briefReaders() brief.Readers {
 		},
 		ResolveRoot: resolveRootOrEmpty,
 		ConsoleURL:  consoleRootURL,
-		InCheckout:  invocationsInCheckout,
+		InCheckout:  sessions.InvocationsInCheckout,
 	}
 }
 
@@ -683,12 +679,3 @@ func readJobRows(ctx context.Context, root string) ([]types.Job, error) {
 	}
 	return store.List()
 }
-
-// compat(until: no cmd/magus file calls summarizeCost, renderCost or sessionCost): wrappers for session.go.
-type sessionCost = trail.SessionCost
-
-func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
-	return trail.SummarizeCost(tr, table)
-}
-
-func renderCost(w io.Writer, c *sessionCost) { trail.RenderCost(w, c) }

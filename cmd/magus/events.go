@@ -7,15 +7,12 @@ import (
 	eventstypes "github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/eventstream"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/clikit/output"
 )
 
 // eventsCommand implements `magus events`: the subscribe command third-party
@@ -71,7 +68,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	filter, err := parseStreamFilter(ef.Type)
+	filter, err := eventstream.ParseFilter(ef.Type)
 	if err != nil {
 		return err
 	}
@@ -101,7 +98,9 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	defer func() { _ = w.Close() }()
 	emit := w.Emit
 	if opts.Format != outputText && opts.Format != outputJSONL {
-		emit = eventRecordEmitter(opts, filter)
+		emit = eventstream.RecordEmitter(filter, func(v any, names []string) error {
+			return emitRecord(opts, v, names)
+		})
 	}
 
 	f := eventstream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)
@@ -131,54 +130,4 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	// the signal into magus's conventional 128+N exit. Registering a second
 	// handler for the same signals would fight it for no gain.
 	return f.Follow(ctx, ef.Interval, emit)
-}
-
-// eventRecordEmitter renders each event alone as it arrives. The stream never
-// closes, so no document could wrap it. A -o name line is the event's type.
-func eventRecordEmitter(opts output.Options, filter eventstypes.Filter) func(eventstypes.Event) error {
-	var mu sync.Mutex
-	return func(e eventstypes.Event) error {
-		if e.Body == nil || !filter.Allows(e.Body.StreamType()) {
-			return nil
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		return emitRecord(opts, e, []string{string(e.Body.StreamType())})
-	}
-}
-
-// parseStreamFilter turns the --type list into a filter, refusing an unknown
-// name.
-//
-// A typo has to be an error rather than an empty match: `--type target.reslut`
-// would otherwise present as a workspace where nothing ever happens, which is
-// indistinguishable from a broken integration and costs an hour to diagnose.
-func parseStreamFilter(csv string) (eventstypes.Filter, error) {
-	csv = strings.TrimSpace(csv)
-	if csv == "" {
-		return eventstypes.Filter{}, nil
-	}
-	var out eventstypes.Filter
-	for _, name := range strings.Split(csv, ",") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		t, err := eventstypes.ParseStreamEventType(name)
-		if err != nil {
-			return eventstypes.Filter{}, fmt.Errorf("magus events (known types: %s): %w", strings.Join(streamTypeNames(), ", "), err)
-		}
-		out.Types = append(out.Types, t)
-	}
-	return out, nil
-}
-
-// streamTypeNames renders the taxonomy for an error message.
-func streamTypeNames() []string {
-	all := eventstypes.EventTypes()
-	names := make([]string, len(all))
-	for i, t := range all {
-		names[i] = string(t)
-	}
-	return names
 }

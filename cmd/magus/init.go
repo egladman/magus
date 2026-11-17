@@ -3,28 +3,17 @@ package main
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/settle"
+	"github.com/egladman/magus/internal/scaffold"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/libs/termkit/pick"
-	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -114,24 +103,24 @@ func initCommand(ctx context.Context, root string, args []string) error {
 	// Ahead of every write: init touches three places at once, and two are outside
 	// the repo: the config, and the merge driver in the VCS's own config.
 	if inf.DryRun {
-		return printInitPlan(root, inf.Global, inf.Local, inf.Force)
+		return scaffold.PrintPlan(root, inf.Global, inf.Local, inf.Force)
 	}
 
 	// --global: write XDG config only, skip workspace bootstrap.
 	if inf.Global {
-		cfgPath, err := xdgConfigPath()
+		cfgPath, err := scaffold.XDGConfigPath()
 		if err != nil {
 			return fmt.Errorf("init --global: %w", err)
 		}
-		wrote, err := config.Init(vcs.WriteJudge(ctx, judgeDir(root)), cfgPath, inf.Force)
+		wrote, err := config.Init(vcs.WriteJudge(ctx, scaffold.JudgeDir(root)), cfgPath, inf.Force)
 		if err != nil {
 			return err
 		}
-		logConfigInit(ctx, cfgPath, wrote)
+		scaffold.LogConfigInit(ctx, cfgPath, wrote)
 		if opts.Format != outputText {
 			return emitRecord(opts, initOutput{Config: cfgPath, Wrote: wrote, Global: true}, []string{cfgPath})
 		}
-		printInitNextSteps(ctx, cfgPath, false, false)
+		scaffold.PrintNextSteps(ctx, cfgPath, false, false)
 		return nil
 	}
 
@@ -142,7 +131,7 @@ func initCommand(ctx context.Context, root string, args []string) error {
 		cfgPath = filepath.Join(root, config.Filename)
 		isLocal = true
 	} else {
-		p, err := xdgConfigPath()
+		p, err := scaffold.XDGConfigPath()
 		if err != nil {
 			return fmt.Errorf("init: %w", err)
 		}
@@ -154,25 +143,31 @@ func initCommand(ctx context.Context, root string, args []string) error {
 	// default config target sits outside the repo entirely ($XDG_CONFIG_HOME).
 	// Writing the config first left an orphaned global config behind whenever a
 	// later step (e.g. a bad --root) failed.
-	if err := writeMagusfileStub(root); err != nil {
+	if err := scaffold.WriteMagusfileStub(ctx, root, starterMagusfileBuzz); err != nil {
 		return err
 	}
 
-	if err := installMergeDriverForInit(ctx, root, inf.VCS); err != nil {
+	if err := scaffold.InstallMergeDriver(ctx, initLoaders, root, inf.VCS); err != nil {
 		return err
 	}
 
-	wrote, err := config.Init(vcs.WriteJudge(ctx, judgeDir(root)), cfgPath, inf.Force)
+	wrote, err := config.Init(vcs.WriteJudge(ctx, scaffold.JudgeDir(root)), cfgPath, inf.Force)
 	if err != nil {
 		return err
 	}
-	logConfigInit(ctx, cfgPath, wrote)
+	scaffold.LogConfigInit(ctx, cfgPath, wrote)
 
 	if opts.Format != outputText {
 		return emitRecord(opts, initOutput{Config: cfgPath, Wrote: wrote, Local: isLocal}, []string{cfgPath})
 	}
-	printInitNextSteps(ctx, cfgPath, true, isLocal)
+	scaffold.PrintNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
+}
+
+// initLoaders hands scaffold the process's memoized workspace load and VCS resolution.
+var initLoaders = scaffold.Loaders{
+	Load:       func(ctx context.Context, root string) (*magus.Magus, error) { return loadMagus(ctx, root) },
+	ResolveVCS: resolveVCS,
 }
 
 type initOutput struct {
@@ -180,275 +175,4 @@ type initOutput struct {
 	Wrote  bool   `json:"wrote"`
 	Global bool   `json:"global"`
 	Local  bool   `json:"local"`
-}
-
-// judgeDir is the directory whose repository orders this binary against the one that
-// wrote a config: root, or the working directory when root is "".
-func judgeDir(root string) string {
-	if root == "" {
-		root, _ = os.Getwd()
-	}
-	return root
-}
-
-func logConfigInit(ctx context.Context, cfgPath string, wrote bool) {
-	if wrote {
-		slog.With(attr.Component("init")).InfoContext(ctx, "wrote a config holding no keys; every key keeps its built-in default", slog.String("path", cfgPath))
-		return
-	}
-	slog.With(attr.Component("init")).InfoContext(ctx, "config exists, left as it is", slog.String("path", cfgPath))
-}
-
-// xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
-// so --dry-run can name the destination without making it.
-func xdgConfigTarget() (string, error) {
-	dir, err := xdg.ConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine config directory: %w", err)
-	}
-	return filepath.Join(dir, "magus", config.Filename), nil
-}
-
-// xdgConfigPath returns the same path, creating the directory. The form a real
-// run uses.
-func xdgConfigPath() (string, error) {
-	target, err := xdgConfigTarget()
-	if err != nil {
-		return "", err
-	}
-	magusDir := filepath.Dir(target)
-	if err := os.MkdirAll(magusDir, 0o755); err != nil {
-		return "", fmt.Errorf("create config dir %s: %w", magusDir, err)
-	}
-	return target, nil
-}
-
-// printInitPlan names every destination a real init would touch, creating none.
-// It reads state rather than assuming: a config is only overwritten with --force
-// and a magusfile never is, so a flat "would write" would overstate both.
-func printInitPlan(root string, global, local, force bool) error {
-	target, err := xdgConfigTarget()
-	if err != nil {
-		return err
-	}
-	cfgPath := target
-	if local {
-		cfgPath = filepath.Join(root, config.Filename)
-	}
-
-	verb := "would write, holding no keys"
-	if _, err := os.Stat(cfgPath); err == nil {
-		verb = "exists, would be left alone (pass --force to replace it with one holding no keys)"
-		if force {
-			verb = "exists, would be REPLACED with one holding no keys (--force)"
-		}
-	}
-	fmt.Fprintf(os.Stdout, "config:       %s - %s\n", cfgPath, verb)
-
-	if global {
-		fmt.Fprintln(os.Stdout, "magusfile:    skipped (--global writes only the config)")
-		fmt.Fprintln(os.Stdout, "merge driver: skipped (--global writes only the config)")
-		fmt.Fprintln(os.Stdout, "dry run: nothing was changed")
-		return nil
-	}
-
-	if magusfilePresent(root) {
-		fmt.Fprintln(os.Stdout, "magusfile:    already present, would be left alone")
-	} else {
-		fmt.Fprintln(os.Stdout, "magusfile:    magusfile.buzz - would write a starter")
-	}
-	// Named as a config write rather than a file write: this is the step that
-	// edits the repository's VCS configuration, and it is the least expected one.
-	fmt.Fprintln(os.Stdout, "merge driver: would wire the magus merge driver into your VCS config")
-	fmt.Fprintln(os.Stdout, "dry run: nothing was changed")
-	return nil
-}
-
-// printInitNextSteps prints actionable hints after a successful init.
-// Gated on the user-controlled hints preference, not terminal interactivity.
-// cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.buzz
-// was stubbed (false when --global was used); isLocal is true when --local was used.
-func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal bool) {
-	if !interactive.HintsEnabled() {
-		return
-	}
-
-	interactive.Hint(ctx, fmt.Sprintf("config: %s (set a key with `%s`)", cfgPath, hint.ConfigSet.With("key=<key>,value=<value>")))
-
-	if scaffolded {
-		interactive.Hint(ctx, "magusfile scaffolded: magusfile.buzz")
-		interactive.Hint(ctx, "run your first target:  "+hint.Run.With("build"))
-	}
-
-	if isLocal {
-		interactive.Hint(ctx, "tip: commit magus.yaml to share config with your team")
-	}
-
-	// Server rc snippet — clearly optional, copy/paste only.
-	interactive.Hint(ctx, "")
-	interactive.Hint(ctx, "optional: start the server automatically on login")
-	interactive.Hint(ctx, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
-	slog.InfoContext(ctx, fmt.Sprintf(`
-  # start magus server on login (magus works fine without it)
-  if command -v magus >/dev/null 2>&1 && \
-     ! %s >/dev/null 2>&1; then
-    %s &
-  fi
-`, hint.ServerStatus.With("--probe=liveness"), hint.ServerStart.String()), attr.Notice(""))
-	interactive.Hint(ctx, "stop with:  "+hint.ServerStop.String())
-
-	// Point users at the agent integration. A hint, not a step: connecting a client
-	// is per-user and per-machine (it writes the client's config, not the repo),
-	// so it does not belong in repo bootstrap; init just says where to look.
-	interactive.Hint(ctx, "")
-	interactive.Hint(ctx, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
-	interactive.Hint(ctx, fmt.Sprintf("  %s  # Agent Skills; it also prints the AGENTS.md block to paste", hint.AgentInstall.With("<skills-dir>")))
-	interactive.Hint(ctx, fmt.Sprintf("  %s  # mint a token, then configure the client", hint.ConfigMCPConnectorCreate.With("--name", "<client>")))
-}
-
-// writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has
-// no magus declaration file yet. A pre-existing magusfile.buzz or magusfiles/
-// directory is left untouched.
-func writeMagusfileStub(dir string) error {
-	if magusfilePresent(dir) {
-		return nil
-	}
-	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(starterMagusfileBuzz), 0o644); err != nil {
-		return fmt.Errorf("init: write %s: %w", path, err)
-	}
-	slog.With(attr.Component("init")).Info("wrote magusfile", slog.String("path", path))
-	return nil
-}
-
-// magusfilePresent reports whether dir already holds a magus project
-// declaration: a magusfile.buzz file or a magusfiles/ directory.
-func magusfilePresent(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err == nil {
-		return true
-	}
-	if fi, err := os.Stat(filepath.Join(dir, "magusfiles")); err == nil && fi.IsDir() {
-		return true
-	}
-	return false
-}
-
-// installMergeDriverForInit wires the VCS merge driver during `magus init`.
-// Missing workspace, no declared outputs, aborted picker, or no --vcs in non-interactive shell
-// are all non-fatal: init still succeeds.
-func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error {
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; workspace load failed", attr.Error(err))
-		return nil
-	}
-
-	globs, err := settle.DriverGlobs(ctx, m)
-	if err != nil {
-		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; could not list the files output exclusions carve out", attr.Error(err))
-		return nil
-	}
-	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
-		slog.With(attr.Component("init")).InfoContext(ctx, fmt.Sprintf("no projects declare Outputs and vcs.auto_resolve is empty; re-run `%s` after adding either to wire the merge driver", hint.Init.String()))
-		return nil
-	}
-
-	name, err := chooseInitVCS(ctx, root, m, vcsFlag)
-	if err != nil {
-		if errors.Is(err, pick.ErrAborted) {
-			slog.With(attr.Component("init")).InfoContext(ctx, "merge-driver setup skipped")
-			return nil
-		}
-		return err
-	}
-	if name == "" {
-		slog.With(attr.Component("init")).WarnContext(ctx, "non-interactive shell; re-run with --vcs to wire the merge driver",
-			slog.String("choices", strings.Join(vcs.InstallableVCSes(), "|")))
-		return nil
-	}
-
-	installer, ok := vcs.Installer(name)
-	if !ok {
-		return fmt.Errorf("init: %q does not support merge-driver setup (choose one of: %s)", name, strings.Join(vcs.InstallableVCSes(), ", "))
-	}
-
-	if err := installer.InstallMergeDriver(ctx, m.Root(), globs); err != nil {
-		return fmt.Errorf("init: install %s merge driver: %w", name, err)
-	}
-	if err := installInitHooks(ctx, installer, name, m.Root()); err != nil {
-		return err
-	}
-
-	n := slog.Int("globs", len(globs.Outputs)+len(globs.AutoResolve))
-	switch name {
-	case "git":
-		slog.With(attr.Component("init")).InfoContext(ctx, "wired git merge driver (.gitattributes + .git/config)", n)
-	case "hg":
-		slog.With(attr.Component("init")).InfoContext(ctx, "wired hg merge driver (.hg/hgrc)", n)
-	default:
-		slog.With(attr.Component("init")).InfoContext(ctx, "wired merge driver", slog.String("vcs", name), n)
-	}
-	return nil
-}
-
-// installInitHooks writes the git-style hooks `magus init` owns: the refresh and drift
-// hooks. Server start only refreshes sections that already exist, so this is where a
-// repository first gets them.
-func installInitHooks(ctx context.Context, installer any, name, root string) error {
-	log := slog.With(attr.Component("init"))
-	type install struct {
-		kind, done string
-		run        func() ([]string, error)
-	}
-	var steps []install
-	if h, ok := installer.(types.RefreshHookInstaller); ok {
-		steps = append(steps, install{"refresh", "history changes now reconcile the graph", func() ([]string, error) {
-			return h.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
-		}})
-	}
-	if h, ok := installer.(types.DriftHookInstaller); ok {
-		steps = append(steps, install{"drift", "a commit that leaves generated output stale is now noticed", func() ([]string, error) {
-			return h.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
-		}})
-	}
-	for _, s := range steps {
-		installed, err := s.run()
-		if err != nil && !errors.Is(err, types.ErrVCSUnsupported) {
-			return fmt.Errorf("init: install %s %s hooks: %w", name, s.kind, err)
-		}
-		if len(installed) > 0 {
-			log.InfoContext(ctx, fmt.Sprintf("wrote the %s hooks; %s", s.kind, s.done), slog.String("hooks", strings.Join(installed, ", ")))
-		}
-	}
-	return nil
-}
-
-// chooseInitVCS returns the VCS to wire: --vcs flag → interactive picker → "" (skip).
-func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag string) (string, error) {
-	choices := vcs.InstallableVCSes()
-	if vcsFlag != "" {
-		for _, c := range choices {
-			if c == vcsFlag {
-				return vcsFlag, nil
-			}
-		}
-		return "", fmt.Errorf("init: unknown --vcs %q (choose one of: %s)", vcsFlag, strings.Join(choices, ", "))
-	}
-	if !interactive.IsInteractiveTTY() {
-		return "", nil
-	}
-	initial := 0
-	if res, err := resolveVCS(ctx, root, m); err == nil {
-		for i, c := range choices {
-			if c == res.Name {
-				initial = i
-				break
-			}
-		}
-	}
-	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, choices, pick.Options{Prompt: "vcs", Initial: initial, MaxRows: len(choices)})
-	if err != nil {
-		return "", err
-	}
-	return choices[idx], nil
 }

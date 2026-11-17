@@ -316,6 +316,5 @@ would trade an instruction the reader can generalize for a ritual.
      `magus:skills:begin` and `magus:skills:end` markers with it and leave the rest
      alone. magus never writes AGENTS.md; `magus doctor`'s agent-skills advice
      names the stale block.
-  5. `./magus doctor` says up to date. `magus doctor --fix` runs the remedy each
-     finding names, where one exists.
+  5. `./magus doctor` says up to date; each finding names its remedy command.
   6. `magus affected ci --no-default-charms` before calling the work done.

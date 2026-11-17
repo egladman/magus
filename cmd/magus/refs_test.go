@@ -240,7 +240,7 @@ func (s *refsSourceSuite) TestOffsetWithoutOccurrencesIsAUsageError() {
 // TestRefsTextPrintsMatchingLines pins the output shape: path:line:text, the one
 // every grep-shaped tool and every agent already parses. classify is nil (the
 // cold-worktree case: no workspace, no graph, no symbol index); refsTextCommand
-// must still answer, which is the whole reason it runs textScan directly
+// must still answer, which is the whole reason it runs textindex.Search directly
 // instead of going through refs' usual symbol-graph path.
 func TestRefsTextPrintsMatchingLines(t *testing.T) {
 	w := testkit.NewWorkspace(t)

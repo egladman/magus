@@ -12,15 +12,15 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive/difftui"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/diff"
 )
 
 // There is deliberately no `put` subcommand, and adding one would defeat the feature.
@@ -278,7 +278,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// still a PERSON writing: an agent reaching for this is denied by the command guard,
 	// which is where the write boundary is enforced for shell commands (the file-write rule
 	// only sees file writes, and a pipe is not one).
-	if !stdinIsTerminal() {
+	if !termkit.StdinIsTerminal() {
 		return notesWriteFromStdin(ctx, root, dir, target, pos[0], path, anchors)
 	}
 	editor := strings.TrimSpace(store.FirstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
@@ -565,7 +565,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
-	comments, partial := reviewComments(ctx, m)
+	comments, partial := review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
 	if len(sess.Comments) == 0 && len(comments) == 0 {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
@@ -667,18 +667,18 @@ func captureEnv(root string) review.CaptureEnv {
 // revokes before returning.
 func reviewServerGet(ctx context.Context, path string) ([]byte, bool) {
 	addr := mcpAddrString()
-	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
+	token, tokenID, ok := difftui.MintToken(ctx, cliTokens{}, addr, difftui.CallTokenTTL)
 	if !ok {
 		return nil, false
 	}
-	defer revokeReviewToken(ctx, tokenID)
-	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
+	defer difftui.RevokeToken(ctx, cliTokens{}, tokenID)
+	ctx, cancel := context.WithTimeout(ctx, difftui.AttachTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s%s", addr, path), nil)
 	if err != nil {
 		return nil, false
 	}
-	setBearer(req, token)
+	difftui.SetBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, false
@@ -691,30 +691,3 @@ func reviewServerGet(ctx context.Context, path string) ([]byte, bool) {
 	return raw, err == nil
 }
 
-// compat(until: no cmd file calls reviewComments): diff.go still names it.
-func reviewComments(ctx context.Context, m *magus.Magus) ([]diff.ReviewComment, string) {
-	return review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
-}
-
-// compat(until: no cmd file calls serverReviewComments): diff.go still names it.
-func serverReviewComments(ctx context.Context) ([]diff.ReviewComment, string, bool) {
-	return review.ServerReviewComments(ctx, reviewServerGet)
-}
-
-// notesStore is the shape doctor_explanations.go reads the declared stores in.
-//
-// compat(until: doctor_explanations.go reads review.NoteStore): see notesStores.
-type notesStore struct {
-	dir   string
-	scope store.Scope
-}
-
-// compat: see notesStore.
-func notesStores(root, only string) ([]notesStore, error) {
-	found, err := review.ResolveNoteStores(root, noteDirs(), only)
-	out := make([]notesStore, len(found))
-	for i, s := range found {
-		out[i] = notesStore{dir: s.Dir, scope: s.Scope}
-	}
-	return out, err
-}

@@ -88,7 +88,6 @@ var vocabulary = []concept{
 	{Flag: "fetch"},
 	{Flag: "file"},
 	{Flag: "filter"},
-	{Flag: "fix"},
 	{Flag: "follow"},
 	{Flag: "for"},
 	{Flag: "force"},

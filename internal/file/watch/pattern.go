@@ -97,7 +97,7 @@ func ParsePattern(s string) (types.IgnorePattern, error) {
 		return types.IgnorePattern{}, fmt.Errorf("ignore: empty entry")
 	}
 
-	parts := splitEscapedCommas(s)
+	parts := SplitEscapedCommas(s)
 	out := types.IgnorePattern{}
 	for _, part := range parts {
 		eq := strings.IndexByte(part, '=')
@@ -124,8 +124,9 @@ func ParsePattern(s string) (types.IgnorePattern, error) {
 	return out, nil
 }
 
-// splitEscapedCommas splits s on unescaped commas (\, is a literal comma).
-func splitEscapedCommas(s string) []string {
+// SplitEscapedCommas splits s on unescaped commas (\, is a literal comma). It is
+// the one copy: `--ignore` patterns and `magus config set` arguments both read it.
+func SplitEscapedCommas(s string) []string {
 	var parts []string
 	var cur strings.Builder
 	for i := 0; i < len(s); i++ {
