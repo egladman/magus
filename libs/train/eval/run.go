@@ -639,7 +639,7 @@ func CutoffTree(e Env) (string, error) {
 		return dir, overlayConfig(e, dir)
 	}
 	if out, err := exec.Command("git", "-C", e.Root, "worktree", "add", "--detach", dir, e.Cutoff).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git worktree add %s: %w: %s", dir, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("git worktree add %s: %s: %w", dir, strings.TrimSpace(string(out)), err)
 	}
 	return dir, overlayConfig(e, dir)
 }
