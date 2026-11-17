@@ -1,0 +1,74 @@
+# The merge queue's verbs from the outside: help names each verb, misuse is a usage error
+# (exit 2) before anything is opened, and describe and ls print documents a tool reads.
+
+exec git init
+exec git remote add origin https://example.invalid/acme/widgets.git
+
+# help names every verb
+exec magus queue -h
+stdout 'describe'
+stdout 'ls '
+stdout 'plan'
+stdout 'validate'
+stdout 'gate'
+stdout 'apply'
+stdout 'reviews'
+
+# apply's own help documents its operand
+exec magus queue apply -h
+stderr '<source> is where apply reads the plan and the verdicts'
+
+# misuse exits 2
+! exec magus queue
+stderr 'a subcommand is required'
+! exec magus queue frobnicate
+stderr 'unknown subcommand "frobnicate"'
+! exec magus queue ls --provider local.buzz
+stderr '--base is required'
+! exec magus queue describe --provider local.buzz
+stderr '--base is required'
+! exec magus queue apply --provider local.buzz --base main
+stderr 'missing <source>'
+! exec magus queue apply --provider local.buzz --base main gitlab:a/b/pipelines/7
+stderr 'unknown scheme "gitlab"'
+! exec magus queue apply --provider local.buzz --base main --once --interval 1s verdicts
+stderr '--interval has no effect with --once'
+! exec magus queue validate --stdin --verdicts v
+stderr '--gate is required'
+
+# describe -o json is the capabilities document
+exec magus queue describe --provider local.buzz --base main -o json
+cmp stdout want-describe.json
+
+# describe prints the setup a person runs
+exec magus queue describe --provider local.buzz --base main --status-context ''
+cmp stdout want-describe.txt
+
+# ls prints the ids of the changes carrying merge intent
+exec magus queue ls --provider local.buzz --base main -o name
+stdout '^1$'
+
+-- want-describe.json --
+{"schema":"mergequeue.capabilities/v1alpha1","base":"main","stack_merge":"sequential","linear_stacks":false,"methods":["squash"],"required_approvals":0,"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}
+-- want-describe.txt --
+# local.buzz on main: merge methods squash; stacks merge sequential; a stack queues by the label "merge: <method>"
+# main requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own
+# no setup: --status-context is empty, or provider local.buzz reports none
+-- local.buzz --
+import "mergequeue/types";
+export fun describe(req: QueueDescribeRequest) > any {
+    return {"capabilities": {"stackMerge": "sequential", "linearStacks": false, "methods": ["squash"], "requiredApprovals": 0, "queueLabel": "merge: ",
+        "committer": {"name": "bot", "email": "bot@example.invalid"}}};
+}
+export fun list_changes(req: QueueListChangesRequest) > any {
+    return {"changes": [{"id": "1", "repo": req.remoteURL, "head": "0000000000000000000000000000000000000001", "base": "main", "method": "squash", "fork": false}], "merged": [<any>], "unqueued": [<any>]};
+}
+export fun approval_at(req: QueueApprovalRequest) > any {
+    return {"approved": true, "head": req.commit, "base": "main", "method": req.method, "queued": true, "branchSharedWith": [<str>]};
+}
+export fun list_green(req: QueueListGreenRequest) > any { return [<any>]; }
+export fun post_status(req: QueueStatusRequest) > Ack { return Ack{ ok = true }; }
+export fun retarget(req: QueueRetargetRequest) > Ack { return Ack{ ok = true }; }
+export fun kick_back(req: QueueKickBackRequest) > Ack { return Ack{ ok = true }; }
+export fun mark(req: QueueMarkRequest) > Ack { return Ack{ ok = true }; }
+export fun merge_change(req: QueueMergeRequest) > any { return {"merged": false, "reason": "the test merges nothing"}; }
