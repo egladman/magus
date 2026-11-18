@@ -291,7 +291,7 @@ func (s *Service) job(ctx context.Context, j jobstore.CatalogEntry, running map[
 		Holder:      jobv1.JobHolder_JOB_HOLDER_SERVER,
 		Description: j.Desc,
 		State:       string(job.StateDeclared),
-		Target:      s.targetSize(j),
+		Target:      s.targetSize(ctx, j),
 	}
 	if row.State != "" {
 		info.State = string(row.State)
@@ -303,7 +303,10 @@ func (s *Service) job(ctx context.Context, j jobstore.CatalogEntry, running map[
 	// for a job that ran before anything wrote rows, where a run with no id still beats none.
 	if row.LastRun != nil {
 		info.LastRun = storedRun(row.LastRun)
-	} else if ev, ok := recorder.LastJob(ctx, s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
+	} else if ev, ok, err := recorder.LastJob(ctx, s.ws.CacheDir(), jobstore.ActionString(j.Argv)); err != nil {
+		slog.With(attr.Component("job")).WarnContext(ctx, "the activity log did not read, so the job shows no last run",
+			slog.String("job", j.Name), attr.Error(err))
+	} else if ok {
 		info.LastRun = lastRun(ev)
 	}
 	info.Goals = wireGoals(row.Goals)
@@ -520,10 +523,14 @@ func wireJobResult(r *job.Result) *jobv1.JobResult {
 
 // targetSize is the current magnitude of what a job maintains. Not every job shrinks a resource
 // (sync-graph reconciles rather than trims), so an unmapped job reports a zero size.
-func (s *Service) targetSize(j jobstore.CatalogEntry) *jobv1.ResourceSize {
+func (s *Service) targetSize(ctx context.Context, j jobstore.CatalogEntry) *jobv1.ResourceSize {
 	switch j.Name {
 	case jobstore.NameRotateActivities:
-		bytes, count := recorder.StatCalls(s.ws.CacheDir())
+		bytes, count, err := recorder.StatCalls(ctx, s.ws.CacheDir())
+		if err != nil {
+			slog.With(attr.Component("job")).WarnContext(ctx, "the activity log did not read, so its size shows as zero",
+				slog.String("job", j.Name), attr.Error(err))
+		}
 		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
 	case jobstore.NameRotateLogs:
 		bytes, count := cache.NewOutputStore(s.ws.CacheDir()).RunsStat()

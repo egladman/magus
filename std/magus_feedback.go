@@ -45,7 +45,7 @@ func MagusFeedbackRead(ctx context.Context, opts feedback.ReadOptions) (feedback
 	if rel, err := filepath.Rel(root, cacheDir); err == nil && filepath.IsLocal(rel) {
 		cacheRel = rel
 	}
-	return recorder.ReadFeedback(recorder.FeedbackBases(listCheckouts(ctx, root), cacheRel, w.Since), w)
+	return recorder.ReadFeedback(ctx, recorder.FeedbackBases(listCheckouts(ctx, root), cacheRel, w.Since), w)
 }
 
 // listCheckouts is root and every other checkout of its repository. A repository whose
@@ -100,7 +100,7 @@ func MagusFeedbackMarks(ctx context.Context) ([]feedback.Mark, error) {
 	if err != nil {
 		return nil, err
 	}
-	return recorder.ReadFeedbackMarks(root)
+	return recorder.ReadFeedbackMarks(ctx, root)
 }
 
 // MagusFeedbackMark backs magus\session().mark: one mark in the repo's store.

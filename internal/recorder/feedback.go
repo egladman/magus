@@ -2,6 +2,7 @@ package recorder
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -65,7 +66,7 @@ func FeedbackBases(checkouts []string, cacheRel string, since time.Time) []strin
 // does not decode is the error.
 //
 // Checkouts on the result names the bases that held at least one event of the session.
-func ReadFeedback(bases []string, w FeedbackWindow) (feedback.Report, error) {
+func ReadFeedback(ctx context.Context, bases []string, w FeedbackWindow) (feedback.Report, error) {
 	since, until := w.Since.UnixMilli(), w.Until.UnixMilli()
 	out := feedback.Report{Start: since, End: until, Session: w.Session}
 	type sourced struct {
@@ -75,7 +76,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (feedback.Report, error) {
 	var events []sourced
 	var newest int64
 	for _, base := range bases {
-		read, err := eventsInWindow(base, since, until)
+		read, err := eventsInWindow(ctx, base, since, until)
 		if err != nil {
 			return out, err
 		}
@@ -176,7 +177,7 @@ func feedbackObservation(base string, e journal.Call) (feedback.Observation, boo
 
 // eventsInWindow decodes the events of the trail at base whose Ts falls in [since, until],
 // oldest first. A missing trail is no events.
-func eventsInWindow(base string, since, until int64) ([]journal.Call, error) {
+func eventsInWindow(ctx context.Context, base string, since, until int64) ([]journal.Call, error) {
 	f, err := os.Open(eventsPath(base))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -189,6 +190,9 @@ func eventsInWindow(base string, since, until int64) ([]journal.Call, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		line := sc.Bytes()
 		if len(line) == 0 {
 			continue

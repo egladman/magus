@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"iter"
 	"os"
 	"path/filepath"
@@ -587,10 +588,10 @@ type AgentActivity struct {
 }
 
 // LastAgentActivity returns the newest agent call in the log under base. It
-// reports false for a log that is absent, unreadable or holds no agent call.
-// It decodes one line: a hook asks on every call, and the rest of the file is
-// matched by substring.
-func LastAgentActivity(base string) (AgentActivity, bool) {
+// reports false for a log that is absent, unreadable or holds no agent call,
+// and for a ctx that ends first. It decodes one line: a hook asks on every
+// call, and the rest of the file is matched by substring.
+func LastAgentActivity(ctx context.Context, base string) (AgentActivity, bool) {
 	if base == "" {
 		return AgentActivity{}, false
 	}
@@ -604,6 +605,9 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
+		if ctx.Err() != nil {
+			return AgentActivity{}, false
+		}
 		if line := sc.Text(); strings.Contains(line, agentKindTag) {
 			newest = line
 		}
@@ -800,53 +804,95 @@ func WritePayload(ctx context.Context, base, prefix string, data []byte) journal
 
 // LastJob returns the newest job call whose Name is name, the space-joined
 // argv of a background job such as "graph build", and whether there is one.
-// A job that has not run within the retained log is (zero, false).
-func LastJob(ctx context.Context, base, name string) (journal.Call, bool) {
-	calls, _ := RecentCalls(ctx, base, maxEvents)
+// A job that has not run within the retained log is (zero, false, nil); a
+// log that cannot be read is the error.
+func LastJob(ctx context.Context, base, name string) (journal.Call, bool, error) {
+	calls, err := RecentCalls(ctx, base, maxEvents)
+	if err != nil {
+		return journal.Call{}, false, err
+	}
 	for _, c := range calls { // newest-first
 		if c.Kind == journal.CallKindJob && c.Name == name {
-			return c, true
+			return c, true, nil
 		}
 	}
-	return journal.Call{}, false
+	return journal.Call{}, false, nil
 }
 
 // StatCalls reports the activity log's footprint under base: the bytes of
-// the log and every payload, and the number of calls. A missing log is
-// (0, 0), and an unreadable directory is skipped rather than an error.
-func StatCalls(base string) (size int64, count int64) {
+// the log and every payload, and the number of calls. An empty base or a
+// missing log or payload directory adds nothing; any other read failure is
+// the error.
+func StatCalls(ctx context.Context, base string) (size, count int64, err error) {
 	if base == "" {
-		return 0, 0
+		return 0, 0, nil
 	}
-	if f, err := os.Open(eventsPath(base)); err == nil {
-		if fi, err := f.Stat(); err == nil {
-			size += fi.Size()
-		}
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		for sc.Scan() {
-			if len(sc.Bytes()) > 0 {
-				count++
-			}
-		}
-		f.Close()
+	size, count, err = statLog(ctx, eventsPath(base))
+	if err != nil {
+		return 0, 0, err
 	}
-	if entries, err := os.ReadDir(blobsPath(base)); err == nil {
-		for _, ent := range entries {
-			if info, err := ent.Info(); err == nil && !ent.IsDir() {
-				size += info.Size()
-			}
+	entries, err := os.ReadDir(blobsPath(base))
+	if errors.Is(err, fs.ErrNotExist) {
+		return size, count, nil
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("recorder: %w", err)
+	}
+	for _, ent := range entries {
+		if ent.IsDir() {
+			continue
+		}
+		info, err := ent.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return 0, 0, fmt.Errorf("recorder: %w", err)
+		}
+		size += info.Size()
+	}
+	return size, count, nil
+}
+
+// statLog is the bytes and non-blank lines of the log at path; a missing log
+// has none.
+func statLog(ctx context.Context, path string) (size, count int64, err error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("recorder: %w", err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return 0, 0, fmt.Errorf("recorder: %w", err)
+	}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
+		if len(sc.Bytes()) > 0 {
+			count++
 		}
 	}
-	return size, count
+	if err := sc.Err(); err != nil {
+		return 0, 0, fmt.Errorf("recorder: read %s: %w", path, err)
+	}
+	return fi.Size(), count, nil
 }
 
 // RotateCalls keeps the newest maxEvents calls and deletes payloads no kept
-// call names. An error leaves the log as it was. It takes no lock, so an
-// append racing the rewrite can be dropped. A small log costs one stat, so
-// the server's schedule is the only trigger: a hook process has nowhere to
-// keep an append counter.
-func RotateCalls(base string) { rotate(base, maxEvents) }
+// call names. An error leaves the log as it was, and a payload it could not
+// delete is kept. It takes no lock, so an append racing the rewrite can be
+// dropped. A small log costs one stat, so the server's schedule is the only
+// trigger: a hook process has nowhere to keep an append counter.
+func RotateCalls(ctx context.Context, base string) error {
+	return rotate(ctx, base, maxEvents)
+}
 
 // minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
 // file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,
@@ -938,26 +984,38 @@ func selectKept(lines []string, max int) []string {
 	return kept
 }
 
-func rotate(base string, max int) {
+// rotate keeps the newest keep calls under base by selectKept's policy. An
+// empty base or a missing log is nothing to rotate.
+func rotate(ctx context.Context, base string, keep int) error {
 	if base == "" {
-		return
+		return nil
 	}
 	path := eventsPath(base)
 	// A stat before the read is what makes a frequent schedule affordable. Without it, every
 	// check reads the whole trail: fine at a 30-day cadence, wasteful at an hourly one, and
 	// worst exactly when the file has grown large enough to matter.
-	if info, err := os.Stat(path); err == nil && info.Size() < int64(max)*minEventBytes {
-		return
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("recorder: rotate: %w", err)
+	}
+	if info.Size() < int64(keep)*minEventBytes {
+		return nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return
+		return fmt.Errorf("recorder: rotate: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) <= max {
-		return
+	if len(lines) <= keep {
+		return nil
 	}
-	kept := selectKept(lines, max)
+	kept := selectKept(lines, keep)
 
 	var b strings.Builder
 	for _, l := range kept {
@@ -968,9 +1026,9 @@ func rotate(base string, max int) {
 	// Synced, unlike a blob: a crash that emptied this file would lose the whole trail,
 	// where an unsynced blob loses one payload.
 	if err := file.WriteFileAtomic(path, []byte(b.String()), 0o600); err != nil {
-		return
+		return fmt.Errorf("recorder: rotate: %w", err)
 	}
-	gcBlobs(base, kept)
+	return gcBlobs(base, kept)
 }
 
 // blobGraceWindow holds back GC on a blob younger than this, even when no kept event
@@ -984,10 +1042,10 @@ func rotate(base string, max int) {
 // lock that would serialize Append behind rotation.
 const blobGraceWindow = 30 * time.Second
 
-// gcBlobs removes blob files that none of the kept event lines reference AND that are
-// older than blobGraceWindow. Temp files (from an in-flight WriteBlob) fail trailtypes.ValidRef and
-// are left alone regardless of age.
-func gcBlobs(base string, keptLines []string) {
+// gcBlobs removes the blobs no kept line references that are older than
+// blobGraceWindow. An in-flight WritePayload's temp file fails
+// journal.ValidPayloadRef and stays. A blob it cannot remove is the error.
+func gcBlobs(base string, keptLines []string) error {
 	referenced := make(map[string]struct{})
 	for _, l := range keptLines {
 		var c journal.Call
@@ -1005,10 +1063,14 @@ func gcBlobs(base string, keptLines []string) {
 		}
 	}
 	entries, err := os.ReadDir(blobsPath(base))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return
+		return fmt.Errorf("recorder: collect payloads: %w", err)
 	}
 	cutoff := time.Now().Add(-blobGraceWindow)
+	var errs []error
 	for _, ent := range entries {
 		name := ent.Name()
 		if ent.IsDir() || !journal.ValidPayloadRef(name) {
@@ -1018,11 +1080,21 @@ func gcBlobs(base string, keptLines []string) {
 			continue
 		}
 		info, err := ent.Info()
-		if err != nil || info.ModTime().After(cutoff) {
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if info.ModTime().After(cutoff) {
 			continue // too young: its event may not have landed yet
 		}
-		_ = os.Remove(filepath.Join(blobsPath(base), name))
+		if err := os.Remove(filepath.Join(blobsPath(base), name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, err)
+		}
 	}
+	return errors.Join(errs...)
 }
 
 // blobRef is the content-addressed name for a payload: its provenance prefix plus the first

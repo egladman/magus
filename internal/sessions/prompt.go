@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -13,8 +14,8 @@ import (
 // guard observation in the activity log under cacheDir. It reads the
 // checkout, not the repository: the question is about the agent in front
 // of you. A log that holds nothing gives an empty clock.
-func PromptCacheForCheckout(cacheDir string, now time.Time) PromptCacheClock {
-	act, ok := recorder.LastAgentActivity(cacheDir)
+func PromptCacheForCheckout(ctx context.Context, cacheDir string, now time.Time) PromptCacheClock {
+	act, ok := recorder.LastAgentActivity(ctx, cacheDir)
 	if !ok {
 		return PromptCacheClock{}
 	}

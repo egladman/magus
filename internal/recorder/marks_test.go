@@ -29,7 +29,7 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	_, err = appendMark(dir, second, at.Add(time.Minute))
 	require.NoError(t, err)
 
-	marks, err := readMarks(dir)
+	marks, err := readMarks(t.Context(), dir)
 	require.NoError(t, err)
 	require.Len(t, marks, 2)
 	assert.Equal(t, stored, marks[0])
@@ -57,13 +57,13 @@ func TestAppendFeedbackMarkRefusesAMalformedMark(t *testing.T) {
 func TestReadFeedbackMarksNamesAnUndecodableLine(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, marksFile), []byte("{\"id\":\"fb0123456789ab\"}\nnot json\n"), 0o644))
-	_, err := readMarks(dir)
+	_, err := readMarks(t.Context(), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), marksFile+":2")
 }
 
 func TestReadFeedbackMarksOfAnEmptyStore(t *testing.T) {
-	marks, err := readMarks(t.TempDir())
+	marks, err := readMarks(t.Context(), t.TempDir())
 	require.NoError(t, err)
 	assert.Empty(t, marks)
 }

@@ -143,7 +143,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputText:
-		return sessions.RenderInvocations(ctx, root, os.Stdout, summaries, fold, dir, !cutoff.IsZero(), promptCacheForCheckout(root, time.Now()))
+		return sessions.RenderInvocations(ctx, root, os.Stdout, summaries, fold, dir, !cutoff.IsZero(), promptCacheForCheckout(ctx, root, time.Now()))
 	case outputName:
 		names := make([]string, 0, len(summaries))
 		for _, s := range summaries {
@@ -158,7 +158,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		"legacy":      fold.Legacy,
 		"store":       dir,
 	}
-	if clock := promptCacheForCheckout(root, time.Now()); len(clock.Providers) > 0 {
+	if clock := promptCacheForCheckout(ctx, root, time.Now()); len(clock.Providers) > 0 {
 		// The prose the text view prints around these numbers stays out of the
 		// structured shape: a caller parsing this wants the instants, and phrasing
 		// them is the renderer's job.
@@ -475,12 +475,12 @@ func sessionTrailHere(ctx context.Context, root, session string) (sessions.Activ
 	return sessions.ActivityHere(ctx, cacheDir, session)
 }
 
-func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
+func promptCacheForCheckout(ctx context.Context, root string, now time.Time) sessions.PromptCacheClock {
 	cacheDir := checkoutCacheDir(root)
 	if cacheDir == "" {
 		return sessions.PromptCacheClock{}
 	}
-	return sessions.PromptCacheForCheckout(cacheDir, now)
+	return sessions.PromptCacheForCheckout(ctx, cacheDir, now)
 }
 
 // The helpers below keep the names that cmd files outside this one still call.

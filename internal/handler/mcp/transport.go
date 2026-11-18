@@ -198,7 +198,9 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 	if opts.Magus != nil {
 		cacheDir = opts.Magus.CacheDir()
 	}
-	recorder.RotateCalls(cacheDir)
+	if err := recorder.RotateCalls(context.Background(), cacheDir); err != nil {
+		log.Warn("the activity log was not rotated at start; the rotate-activities job tries again", slog.String("error", err.Error()))
+	}
 	registerTools(srv, opts, log, originFn, cacheDir, tasks)
 	return srv
 }

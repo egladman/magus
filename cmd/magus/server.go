@@ -614,7 +614,9 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 	if err != nil {
 		return fmt.Errorf("server rotate-activities: %w", err)
 	}
-	recorder.RotateCalls(m.CacheDir())
+	if err := recorder.RotateCalls(ctx, m.CacheDir()); err != nil {
+		return fmt.Errorf("server rotate-activities: %w", err)
+	}
 	if opts.Format != outputText {
 		return emitRecord(opts, serverRotateActivitiesOutput{CacheDir: m.CacheDir()}, []string{m.CacheDir()})
 	}

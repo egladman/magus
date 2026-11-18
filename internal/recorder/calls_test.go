@@ -617,7 +617,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 		backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 	}
 
-	rotate(dir, 2) // keep the last 2 events
+	require.NoError(t, rotate(t.Context(), dir, 2)) // keep the last 2 events
 
 	events, _ := RecentCalls(t.Context(), dir, 10)
 	if len(events) != 2 {
@@ -635,7 +635,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	if err := os.WriteFile(tmp, []byte("x"), 0o644); err != nil {
 		t.Fatalf("write temp: %v", err)
 	}
-	gcBlobs(dir, nil) // nothing referenced: valid-ref blobs go, the temp file stays
+	require.NoError(t, gcBlobs(dir, nil)) // nothing referenced: valid-ref blobs go, the temp file stays
 	if _, err := os.Stat(tmp); err != nil {
 		t.Errorf("gcBlobs deleted a non-ref temp file: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 	dir := t.TempDir()
 	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("pending payload"))
 
-	gcBlobs(dir, nil) // simulate rotate's events snapshot: taken before Append landed
+	require.NoError(t, gcBlobs(dir, nil)) // simulate rotate's events snapshot: taken before Append landed
 
 	if _, err := readBlob(dir, ref); err != nil {
 		t.Fatalf("gcBlobs collected a blob still within its grace window: %v", err)
@@ -668,7 +668,7 @@ func TestWriteBlob_DedupHitReopensTheGraceWindow(t *testing.T) {
 	again := writeBlobRef(t.Context(), dir, "mcp", []byte("shared payload"))
 	require.Equal(t, ref, again, "identical content must dedup onto the stored blob")
 
-	gcBlobs(dir, nil) // rotate's snapshot, taken before the pending Append lands
+	require.NoError(t, gcBlobs(dir, nil)) // rotate's snapshot, taken before the pending Append lands
 
 	_, err := readBlob(dir, ref)
 	require.NoError(t, err, "a deduped blob must survive the rotate its fresh reference races")
@@ -681,7 +681,7 @@ func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("truly orphaned"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 
-	gcBlobs(dir, nil)
+	require.NoError(t, gcBlobs(dir, nil))
 
 	if _, err := readBlob(dir, ref); err == nil {
 		t.Fatalf("gcBlobs kept an orphaned blob past its grace window")
@@ -698,7 +698,7 @@ func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 	line, err := journal.Call{Kind: journal.CallKindAgentCommand, Name: "shell.command", Guard: &journal.Guard{Verdict: journal.Payload{Ref: ref}}}.MarshalJSON()
 	require.NoError(t, err)
 
-	gcBlobs(dir, []string{string(line)})
+	require.NoError(t, gcBlobs(dir, []string{string(line)}))
 
 	got, err := readBlob(dir, ref)
 	require.NoError(t, err)
@@ -709,11 +709,11 @@ func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
-	rotate(dir, 10) // under cap: no rewrite
+	require.NoError(t, rotate(t.Context(), dir, 10)) // under cap: no rewrite
 	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
 	}
-	rotate("", 2) // must not panic
+	require.NoError(t, rotate(t.Context(), "", 2))
 }
 
 func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
@@ -721,7 +721,7 @@ func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindJob, Name: "x"})
 	}
-	RotateCalls(dir) // maxEvents is 10000, so this is a no-op that must not lose events
+	require.NoError(t, RotateCalls(t.Context(), dir)) // maxEvents is 10000, so this is a no-op that must not lose events
 	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 3 {
 		t.Errorf("Rotate under cap changed the trail: got %d events, want 3", len(evs))
 	}
@@ -735,7 +735,7 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	dir := t.TempDir()
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
-	RotateCalls(dir)
+	require.NoError(t, RotateCalls(t.Context(), dir))
 	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
@@ -768,7 +768,7 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 	seedEvents(t, dir, maxEvents+5)
 	require.NoError(t, os.Chmod(eventsPath(dir), 0o644))
 
-	RotateCalls(dir)
+	require.NoError(t, RotateCalls(t.Context(), dir))
 	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents, "the rotate ran")
@@ -792,7 +792,7 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	require.NoError(t, err)
 	require.Less(t, info.Size(), int64(maxEvents)*minEventBytes, "a one-event trail is below the skip threshold")
 
-	RotateCalls(dir)
+	require.NoError(t, RotateCalls(t.Context(), dir))
 	got, err := RecentCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
@@ -806,7 +806,7 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 }
 
 func TestRotate_EmptyBaseIsNoop(t *testing.T) {
-	RotateCalls("") // must not panic
+	require.NoError(t, RotateCalls(t.Context(), ""))
 }
 
 // TestSelectKept_ReservesAFloorForEveryKind is the governance guarantee: a loud kind must not be
@@ -981,6 +981,16 @@ func TestCommandProgramReducesToTheProgram(t *testing.T) {
 	}
 }
 
+// A log that does not read is not a job that never ran.
+func TestLastJobReturnsALogThatDoesNotRead(t *testing.T) {
+	base := t.TempDir()
+	require.NoError(t, os.MkdirAll(eventsPath(base), 0o700))
+	_, _, err := LastJob(t.Context(), base, "graph build")
+	require.Error(t, err)
+	_, _, err = StatCalls(t.Context(), base)
+	require.Error(t, err)
+}
+
 func TestRelativizeCutsTheRootAtASeparator(t *testing.T) {
 	assert.Equal(t, "x/y.go", Relativize("/repo", "/repo/x/y.go"))
 	assert.Equal(t, "x/y.go", Relativize("/repo/", "/repo/x/y.go"))
@@ -990,18 +1000,18 @@ func TestRelativizeCutsTheRootAtASeparator(t *testing.T) {
 
 func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
 	base := t.TempDir()
-	_, ok := LastAgentActivity(base)
+	_, ok := LastAgentActivity(t.Context(),base)
 	assert.False(t, ok, "an empty log has no activity to report")
 
 	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
 	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s2", Host: "opencode", Tool: ToolFileRead, Path: "magus.go"})
 
-	got, ok := LastAgentActivity(base)
+	got, ok := LastAgentActivity(t.Context(),base)
 	require.True(t, ok)
 	assert.Equal(t, AgentActivity{Session: "s2", Host: "opencode", At: got.At}, got)
 	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
 
-	_, ok = LastAgentActivity(t.TempDir())
+	_, ok = LastAgentActivity(t.Context(),t.TempDir())
 	assert.False(t, ok, "an absent log is no activity, not an error")
 }
 
@@ -1014,12 +1024,12 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 		AppendCall(t.Context(), base, journal.Call{Kind: journal.CallKindJob, Time: time.Now()})
 	}
 
-	got, ok := LastAgentActivity(base)
+	got, ok := LastAgentActivity(t.Context(),base)
 	require.True(t, ok, "an observation does not age out because other calls were recorded after it")
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
 	AppendCall(t.Context(), stamped, journal.Call{Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}})
-	_, ok = LastAgentActivity(stamped)
+	_, ok = LastAgentActivity(t.Context(),stamped)
 	assert.False(t, ok, "an observation with no time has no age to report")
 }

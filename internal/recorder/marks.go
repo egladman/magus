@@ -2,6 +2,7 @@ package recorder
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -49,12 +50,12 @@ func AppendFeedbackMark(root string, m feedback.Mark, now time.Time) (feedback.M
 
 // ReadFeedbackMarks returns every mark in the store of root's repository,
 // oldest first, by readMarks' rules.
-func ReadFeedbackMarks(root string) ([]feedback.Mark, error) {
+func ReadFeedbackMarks(ctx context.Context, root string) ([]feedback.Mark, error) {
 	dir, err := marksDir(root)
 	if err != nil {
 		return nil, err
 	}
-	return readMarks(dir)
+	return readMarks(ctx, dir)
 }
 
 // appendMark appends m to the store at dir. Marks are never rewritten: a
@@ -90,7 +91,7 @@ func appendMark(dir string, m feedback.Mark, now time.Time) (feedback.Mark, erro
 // readMarks returns every mark in the store at dir, oldest first. A store
 // nobody wrote holds none. A line that does not decode is an error: a
 // dropped verdict reads as one the person never gave.
-func readMarks(dir string) ([]feedback.Mark, error) {
+func readMarks(ctx context.Context, dir string) ([]feedback.Mark, error) {
 	path := filepath.Join(dir, marksFile)
 	f, err := os.Open(path)
 	if err != nil {
@@ -104,6 +105,9 @@ func readMarks(dir string) ([]feedback.Mark, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for n := 1; sc.Scan(); n++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if len(sc.Bytes()) == 0 {
 			continue
 		}

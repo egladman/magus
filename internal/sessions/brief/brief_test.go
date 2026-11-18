@@ -469,7 +469,7 @@ func briefClock(t *testing.T) sessions.PromptCacheClock {
 	t.Helper()
 	cacheDir := t.TempDir()
 	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
-	return sessions.PromptCacheForCheckout(cacheDir, time.Now().Add(7*time.Minute))
+	return sessions.PromptCacheForCheckout(t.Context(), cacheDir, time.Now().Add(7*time.Minute))
 }
 
 // Finished branches off the base are counted against the fork thresholds, and an unread
@@ -701,7 +701,7 @@ func testReaders(t *testing.T, root string) Readers {
 			lease, _ := job.RunLease(ctx, loc)
 			return lease
 		},
-		PromptCache: func(string, time.Time) sessions.PromptCacheClock { return sessions.PromptCacheClock{} },
+		PromptCache: func(context.Context, string, time.Time) sessions.PromptCacheClock { return sessions.PromptCacheClock{} },
 		CacheDir:    func(string) (string, error) { return "", errors.New("no cache directory in this test") },
 		ResolveRoot: func(root string) string { return root },
 		ConsoleURL:  func() string { return "" },

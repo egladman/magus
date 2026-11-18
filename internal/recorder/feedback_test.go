@@ -66,7 +66,7 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	bases := FeedbackBases([]string{main, worktree, t.TempDir()}, ".magus", now.Add(-time.Hour))
 	require.Equal(t, 2, len(bases), "a checkout with no trail is not read")
 
-	got, err := ReadFeedback(bases, FeedbackWindow{Session: "s1", Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
+	got, err := ReadFeedback(ctx, bases, FeedbackWindow{Session: "s1", Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
 	require.NoError(t, err)
 	assert.Equal(t, "claude-code", got.Host)
 	assert.ElementsMatch(t, []string{main, worktree}, got.Checkouts)
@@ -102,7 +102,7 @@ func TestReadFeedbackDefaultsToTheNewestSession(t *testing.T) {
 	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "newer", Tool: "shell.command", Command: "pwd", Decision: verdict.Defer})
 
 	now := time.Now()
-	got, err := ReadFeedback([]string{base}, FeedbackWindow{Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
+	got, err := ReadFeedback(ctx, []string{base}, FeedbackWindow{Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
 	require.NoError(t, err)
 	assert.Equal(t, "newer", got.Session)
 	require.Len(t, got.Observations, 1)
@@ -113,7 +113,7 @@ func TestReadFeedbackLeavesOutEventsOutsideTheWindow(t *testing.T) {
 	base := filepath.Join(t.TempDir(), ".magus")
 	AppendAgentCommand(context.Background(), base, AgentCommand{Host: "codex", Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	future := time.Now().Add(time.Hour)
-	got, err := ReadFeedback([]string{base}, FeedbackWindow{Session: "s", Since: future, Until: future.Add(time.Hour)})
+	got, err := ReadFeedback(t.Context(), []string{base}, FeedbackWindow{Session: "s", Since: future, Until: future.Add(time.Hour)})
 	require.NoError(t, err)
 	assert.Empty(t, got.Observations)
 }

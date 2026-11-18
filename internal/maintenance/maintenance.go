@@ -115,7 +115,13 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	}
 	now := time.Now()
 	for _, j := range schedule {
-		if isDue(ctx, base, j, now) {
+		due, err := isDue(ctx, base, j, now)
+		if err != nil {
+			slog.With(attr.Component("maintenance")).WarnContext(ctx, "the activity log did not read, so the job waits for the next tick",
+				slog.String("job", j.action), attr.Error(err))
+			continue
+		}
+		if due {
 			_, _ = proc.SubmitJob(ctx, addr, j.argv, opts.Version)
 		}
 	}
@@ -124,11 +130,14 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 // isDue reports whether j should run now: true if it has never run within the retained trail, or
 // if at least its interval has elapsed since its last run (finish time = recorded start plus
 // duration). Pure over (base, now) so the schedule decision is testable without a live server.
-func isDue(ctx context.Context, base string, j scheduledJob, now time.Time) bool {
-	ev, ok := recorder.LastJob(ctx, base, j.action)
+func isDue(ctx context.Context, base string, j scheduledJob, now time.Time) (bool, error) {
+	ev, ok, err := recorder.LastJob(ctx, base, j.action)
+	if err != nil {
+		return false, err
+	}
 	if !ok {
-		return true // never run in the retained trail
+		return true, nil // never run in the retained trail
 	}
 	last := ev.Time.Add(ev.Duration)
-	return now.Sub(last) >= j.interval
+	return now.Sub(last) >= j.interval, nil
 }

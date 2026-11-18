@@ -307,7 +307,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 	} else {
 		brief.WiringUnknown = err.Error()
 	}
-	brief.PromptCache = r.PromptCache(root, time.Now())
+	brief.PromptCache = r.PromptCache(ctx, root, time.Now())
 	if base, err := r.CacheDir(root); err == nil {
 		if feedback, err := recorder.RecentGuardFeedback(ctx, base, "", briefFeedbackEvents); err == nil {
 			for _, item := range feedback {
@@ -1061,7 +1061,7 @@ type Readers struct {
 	// ActingLease is the lease a CLI call acts under in root's checkout, "" when none.
 	ActingLease func(ctx context.Context, root string) string
 	// PromptCache is the prompt-cache clock of root's checkout at now.
-	PromptCache func(root string, now time.Time) sessions.PromptCacheClock
+	PromptCache func(ctx context.Context, root string, now time.Time) sessions.PromptCacheClock
 	// CacheDir is the cache directory of the workspace at root.
 	CacheDir func(root string) (string, error)
 	// ResolveRoot returns root, or the workspace found from the working directory when it is empty.
