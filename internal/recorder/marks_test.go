@@ -19,17 +19,17 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 		Verdict: feedback.VerdictShouldDeny, Note: "guard it next time", Session: "s1",
 		Examples: []string{"grep -rn a b", "grep -rn c d", "grep -rn e f", "grep -rn g h"},
 	}
-	stored, err := AppendFeedbackMark(dir, first, at)
+	stored, err := appendMark(dir, first, at)
 	require.NoError(t, err)
 	assert.Equal(t, at.UnixMilli(), stored.At)
 	assert.Len(t, stored.Examples, 3, "a mark keeps a few examples, not the trail")
 
 	second := first
 	second.Verdict, second.Session, second.Examples = feedback.VerdictFine, "s2", nil
-	_, err = AppendFeedbackMark(dir, second, at.Add(time.Minute))
+	_, err = appendMark(dir, second, at.Add(time.Minute))
 	require.NoError(t, err)
 
-	marks, err := ReadFeedbackMarks(dir)
+	marks, err := readMarks(dir)
 	require.NoError(t, err)
 	require.Len(t, marks, 2)
 	assert.Equal(t, stored, marks[0])
@@ -47,7 +47,7 @@ func TestAppendFeedbackMarkRefusesAMalformedMark(t *testing.T) {
 	} {
 		m := valid
 		mutate(&m)
-		_, err := AppendFeedbackMark(dir, m, time.Now())
+		_, err := appendMark(dir, m, time.Now())
 		assert.Error(t, err, name)
 	}
 	_, err := os.Stat(filepath.Join(dir, marksFile))
@@ -57,13 +57,13 @@ func TestAppendFeedbackMarkRefusesAMalformedMark(t *testing.T) {
 func TestReadFeedbackMarksNamesAnUndecodableLine(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, marksFile), []byte("{\"id\":\"fb0123456789ab\"}\nnot json\n"), 0o644))
-	_, err := ReadFeedbackMarks(dir)
+	_, err := readMarks(dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), marksFile+":2")
 }
 
 func TestReadFeedbackMarksOfAnEmptyStore(t *testing.T) {
-	marks, err := ReadFeedbackMarks(t.TempDir())
+	marks, err := readMarks(t.TempDir())
 	require.NoError(t, err)
 	assert.Empty(t, marks)
 }

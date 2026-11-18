@@ -26,29 +26,41 @@ const maxMarkExamples = 3
 // report computes over a row's section and key.
 var feedbackID = regexp.MustCompile(`^fb[0-9a-f]{12}$`)
 
-// FeedbackMarksDir resolves the per-repository store feedback marks live in,
-// <XDG state>/magus/feedback/<repo>-<hash12>. It keys on repository identity the way the
-// session store does, so a mark made in one worktree is read in every other one and in
-// later sessions.
-func FeedbackMarksDir(root string) (string, error) {
+// marksDir is root's mark store, <XDG state>/magus/feedback/<repo>-<hash12>.
+// It keys on repository identity, so every worktree reads one store.
+func marksDir(root string) (string, error) {
 	base, err := xdg.StateDir()
-	if err != nil {
-		return "", fmt.Errorf("recorder: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
+	if err == nil {
+		return vcs.StateDir(base, "feedback", root)
 	}
-	dir, err := vcs.StateDir(base, "feedback", root)
-	if err != nil {
-		return "", fmt.Errorf("recorder: %w", err)
-	}
-	return dir, nil
+	return "", fmt.Errorf("recorder: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 }
 
-// AppendFeedbackMark validates m, stamps its time, and appends it to the store at dir.
-// Marks are never rewritten: a later mark on the same id supersedes an earlier one for the
-// row's current verdict, and the history is what the cross-session fold counts.
-//
-// Unlike the trail's producers it returns its error, because a person who asked to record
-// a verdict must learn that it was not recorded.
-func AppendFeedbackMark(dir string, m feedback.Mark, now time.Time) (feedback.Mark, error) {
+// AppendFeedbackMark validates m, stamps its time, and appends it to the
+// mark store of root's repository. It returns its error: a person who asked
+// to record a verdict must learn that it was not recorded.
+func AppendFeedbackMark(root string, m feedback.Mark, now time.Time) (feedback.Mark, error) {
+	dir, err := marksDir(root)
+	if err != nil {
+		return m, err
+	}
+	return appendMark(dir, m, now)
+}
+
+// ReadFeedbackMarks returns every mark in the store of root's repository,
+// oldest first, by readMarks' rules.
+func ReadFeedbackMarks(root string) ([]feedback.Mark, error) {
+	dir, err := marksDir(root)
+	if err != nil {
+		return nil, err
+	}
+	return readMarks(dir)
+}
+
+// appendMark appends m to the store at dir. Marks are never rewritten: a
+// later mark on an id supersedes an earlier one, and the cross-session fold
+// counts the history.
+func appendMark(dir string, m feedback.Mark, now time.Time) (feedback.Mark, error) {
 	if !feedbackID.MatchString(m.ID) {
 		return m, fmt.Errorf("feedback mark id %q is not a row id (fb and 12 hex digits)", m.ID)
 	}
@@ -75,10 +87,10 @@ func AppendFeedbackMark(dir string, m feedback.Mark, now time.Time) (feedback.Ma
 	return m, nil
 }
 
-// ReadFeedbackMarks returns every mark in the store at dir, oldest first. A store nobody
-// has written to holds no marks. A line that does not decode is an error naming it, since
-// a silently dropped verdict reads as one the person never gave.
-func ReadFeedbackMarks(dir string) ([]feedback.Mark, error) {
+// readMarks returns every mark in the store at dir, oldest first. A store
+// nobody wrote holds none. A line that does not decode is an error: a
+// dropped verdict reads as one the person never gave.
+func readMarks(dir string) ([]feedback.Mark, error) {
 	path := filepath.Join(dir, marksFile)
 	f, err := os.Open(path)
 	if err != nil {

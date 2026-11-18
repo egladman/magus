@@ -96,16 +96,16 @@ func feedbackWindow(opts feedback.ReadOptions, now time.Time) (recorder.Feedback
 
 // MagusFeedbackMarks backs magus\session().marks(): repo marks, oldest first.
 func MagusFeedbackMarks(ctx context.Context) ([]feedback.Mark, error) {
-	dir, err := feedbackMarksDir(ctx, "Session.marks")
+	root, err := feedbackRoot(ctx, "Session.marks")
 	if err != nil {
 		return nil, err
 	}
-	return recorder.ReadFeedbackMarks(dir)
+	return recorder.ReadFeedbackMarks(root)
 }
 
 // MagusFeedbackMark backs magus\session().mark: one mark in the repo's store.
 func MagusFeedbackMark(ctx context.Context, mark map[string]any) (feedback.Mark, error) {
-	dir, err := feedbackMarksDir(ctx, "Session.mark")
+	root, err := feedbackRoot(ctx, "Session.mark")
 	if err != nil {
 		return feedback.Mark{}, err
 	}
@@ -113,15 +113,15 @@ func MagusFeedbackMark(ctx context.Context, mark map[string]any) (feedback.Mark,
 	if err != nil {
 		return feedback.Mark{}, err
 	}
-	return recorder.AppendFeedbackMark(dir, m, time.Now())
+	return recorder.AppendFeedbackMark(root, m, time.Now())
 }
 
-func feedbackMarksDir(ctx context.Context, member string) (string, error) {
+func feedbackRoot(ctx context.Context, member string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return "", errorNoWorkspace(member)
 	}
-	return recorder.FeedbackMarksDir(ws.Root())
+	return ws.Root(), nil
 }
 
 // decodeFeedbackMark reads a magus\feedback\Mark object, raising on a
