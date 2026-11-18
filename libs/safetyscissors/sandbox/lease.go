@@ -81,7 +81,7 @@ func (b Boundary) Narrow(rules []filesystem.Rule) []filesystem.Rule {
 }
 
 // Apply returns a copy of p narrowed to b (see Narrow) and naming b's lease. A nil p
-// stays nil: no policy has no writes to narrow.
+// stays nil, which every Policy method refuses.
 func (b Boundary) Apply(p *Policy) *Policy {
 	if p == nil {
 		return nil

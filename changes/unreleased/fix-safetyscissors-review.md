@@ -9,3 +9,6 @@
   `(value, error)` and a `*secrets.NoResolverError`, where they returned the text
   unmasked. magus installs a resolver at every entry point, and a journal record that
   cannot be masked is dropped with a `journal.dropped` warning.
+- **Breaking for SDK callers: a nil `sandbox.Policy` is refused.** `Check`, `Confines`
+  and `sandbox.Command` return a `*sandbox.NilPolicyError`, where a nil policy confined
+  nothing and `Command` started the child unconfined.

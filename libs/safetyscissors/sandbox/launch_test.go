@@ -23,11 +23,17 @@ func (s *ConfinesSuite) policy(level int, err error, opts ...Option) *Policy {
 	return p
 }
 
-func (s *ConfinesSuite) TestANilPolicyConfinesNothing() {
+func (s *ConfinesSuite) TestANilPolicyIsRefused() {
 	var p *Policy
+	var refused *NilPolicyError
+
 	ok, err := p.Confines()
-	s.Require().NoError(err)
+	s.Require().ErrorAs(err, &refused)
 	s.False(ok)
+	cmd, err := Command(s.T().Context(), p, "true")
+	s.Require().ErrorAs(err, &refused, "a nil policy never starts an unconfined child")
+	s.Nil(cmd)
+	s.ErrorAs(p.Check(0, "/"), &refused)
 }
 
 func (s *ConfinesSuite) TestRequiredIsTheDefault() {
@@ -101,13 +107,6 @@ func (s *ConfinesSuite) TestCommandStartsABestEffortChildPlainWithoutASandbox() 
 	s.Require().Len(heard, 1, "the caller hears that the child runs unconfined")
 	var unconfined *UnconfinedError
 	s.ErrorAs(heard[0], &unconfined)
-}
-
-func (s *ConfinesSuite) TestCommandStartsANilPolicyPlain() {
-	cmd, err := Command(s.T().Context(), nil, "true")
-	s.Require().NoError(err)
-	s.Equal([]string{"true"}, cmd.Args)
-	s.Empty(cmd.ExtraFiles)
 }
 
 // Relaunch handles only a process Command started as its launcher.

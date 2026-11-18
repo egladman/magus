@@ -71,9 +71,11 @@ func (s *PolicySuite) TestCheckRefusesOutsideTheBinds() {
 	}, *denied)
 }
 
-func (s *PolicySuite) TestANilPolicyPermitsEverything() {
+func (s *PolicySuite) TestANilPolicyPermitsNothing() {
 	var p *Policy
-	s.Require().NoError(p.Check(filesystem.Write, "/anywhere"))
+	var refused *NilPolicyError
+	s.Require().ErrorAs(p.Check(filesystem.Write, "/anywhere"), &refused)
+	s.Equal("Check", refused.Op)
 	s.Nil(p.Rules())
 	id, from := p.Lease()
 	s.Empty(id)

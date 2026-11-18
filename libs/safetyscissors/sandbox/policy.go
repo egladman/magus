@@ -62,8 +62,8 @@ func (m Mode) String() string {
 }
 
 // Policy is the compiled form of a set of Binds. It is immutable once built and safe
-// for concurrent use. A nil Policy confines nothing: Check passes every access and
-// Command starts a plain child.
+// for concurrent use. A nil Policy is refused, never read as no confinement: Check,
+// Confines and Command return a *[NilPolicyError].
 type Policy struct {
 	rules     filesystem.Ruleset
 	mode      Mode
@@ -185,10 +185,10 @@ func (p *Policy) Lease() (string, job.LeaseSource) {
 
 // Check reports whether p permits access to path, resolved through its symlinks
 // first. A refusal is a *DeniedError, which wraps filesystem.ErrDenied. Check records
-// nothing; a nil p permits everything.
+// nothing; a nil p is a *[NilPolicyError].
 func (p *Policy) Check(access filesystem.Access, path string) error {
 	if p == nil {
-		return nil
+		return &NilPolicyError{Op: "Check"}
 	}
 	if err := p.rules.Check(path, access); err != nil {
 		return &DeniedError{Access: access, Path: path, Lease: p.lease, LeaseFrom: p.leaseFrom, Err: err}
