@@ -13,7 +13,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/trail"
+	"github.com/egladman/magus/types/feedback"
 )
 
 // RegisterMagus builds the "magus" module map and returns it.
@@ -210,9 +210,9 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectJob(ret0, enums), nil
 	}))
 	m.MapSet("session", vm.DirectValue("magus.session", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts trail.ReadOptions
+		var opts feedback.ReadOptions
 		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\session", "opts", bzArgs, 0, decode.DecodeTrailReadOptions)
+			x, err := ffi.Object("magus\\session", "opts", bzArgs, 0, decode.DecodeFeedbackReadOptions)
 			if err != nil {
 				return vm.Null, ffi.Error(err)
 			}
@@ -852,7 +852,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectTrail(ret0), nil
+		return ObjectFeedbackReport(ret0), nil
 	}))
 	m.MapSet("magus__Session__marks", vm.DirectValue("magus.magus__Session__marks", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Session__marks", "recv", bzArgs, 0, decode.DecodeSession)
@@ -863,7 +863,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(ret0, func(v trail.Mark) vm.Value { return ObjectTrailMark(v, enums) }), nil
+		return ffi.ObjectSlice(ret0, func(v feedback.Mark) vm.Value { return ObjectFeedbackMark(v, enums) }), nil
 	}))
 	m.MapSet("magus__Session__mark", vm.DirectValue("magus.magus__Session__mark", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Session__mark", "recv", bzArgs, 0, decode.DecodeSession)
@@ -875,7 +875,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectTrailMark(ret0, enums), nil
+		return ObjectFeedbackMark(ret0, enums), nil
 	}))
 	return m
 }

@@ -256,7 +256,7 @@ var Magus = Module{
 				"opts.session is the host's session id, empty for the one with the newest observation; opts.since is a " +
 				"duration back from opts.until (`6h`) or an RFC3339 time, default 24h; opts.until is an RFC3339 time, " +
 				"default now. An unknown option raises, and MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "opts", Optional: true, Object: `magus\trail\ReadOptions`}},
+			Args:    []Arg{{Name: "opts", Optional: true, Object: `magus\feedback\ReadOptions`}},
 			Returns: []Ret{{Object: "Session"}},
 			Raises:  true,
 			Impl:    MagusSessionOpen,

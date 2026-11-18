@@ -58,7 +58,7 @@ again at `4584cc73a`, the commit the fold starts from.
 | `internal/journal`          | 66    | `libs/safetyscissors/journal`, `internal/recorder` |
 | `internal/trail`            | 128   | `internal/recorder`, `internal/sessions`           |
 | `libs/safetyscissors/trail` | 71    | `libs/safetyscissors/journal`                      |
-| `types/trail`               | 14    | not yet renamed                                    |
+| `types/trail`               | 14    | `types/feedback`                                   |
 | `types/events`              | 8     | `libs/safetyscissors/journal/stream`               |
 | `internal/eventstream`      | 1     | `libs/safetyscissors/journal/stream`               |
 | `internal/handler/trailrpc` | 2     | `internal/handler/activityrpc`                     |
@@ -94,7 +94,7 @@ would be tempted to reverse.
 | 5    | `journal/stream` replaces `internal/eventstream` and `types/events` | done                                      |
 | 6    | `internal/sessions` sits above the journal                          | done                                      |
 | 7    | nothing on disk changes; the `dur_ms` readers go                    | done                                      |
-| 8    | the word trail leaves code, docs and UI                             | in progress (types, Buzz and docs owed)   |
+| 8    | the word trail leaves code, docs and UI                             | in progress (prose owed)                  |
 
 ### 1. Two line types, the first shaped like `slog.Record`
 
@@ -153,7 +153,10 @@ recorded lines holds it. A reader stops reading `dur_ms`.
 
 `internal/journal` becomes `internal/recorder`. `libs/safetyscissors/trail` becomes part
 of `journal`. `trailrpc` becomes `activityrpc`, and the console's "Activity Trail"
-becomes "Activity". The `magus events` verb stays. A record is a line at rest and an
+becomes "Activity". `types/trail` becomes `types/feedback`, its `Trail` becomes
+`feedback.Report`, and the Buzz namespace `magus\trail` becomes `magus\feedback`:
+`types/journal` would collide with the module's `journal` in every file that imports
+both. The `magus events` verb stays. A record is a line at rest and an
 event is a record delivered to a subscriber, so `stream.Event` and the viewer proto's
 `Event` keep the word.
 
@@ -281,10 +284,6 @@ No principle bends.
 
 ## Open questions
 
-- The package for the guard feedback records. The ruling renames `types/trail` to
-  `types/journal`, which collides with the module's `journal` in every file that imports
-  both and forces the alias the ruling set out to remove. `types/feedback` is
-  recommended. Eli picks package names.
 - The Buzz spelling `magus\session().trail()`. ADR 0050 keeps Buzz names as they are,
   and the ruling says the word leaves. Eli decides which holds here.
 - The `runs/` directory. By the glossary it holds invocations. Renaming it orphans

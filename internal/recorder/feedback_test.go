@@ -2,13 +2,13 @@ package recorder
 
 import (
 	"context"
-	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types/feedback"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +72,7 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	assert.ElementsMatch(t, []string{main, worktree}, got.Checkouts)
 	require.Len(t, got.Observations, 2)
 	deny := got.Observations[0]
-	assert.Equal(t, trailtypes.Observation{
+	assert.Equal(t, feedback.Observation{
 		At:       deny.At, // wall-clock stamp
 		Agent:    "a1",
 		Lease:    "job-1",
@@ -86,7 +86,7 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	}, deny)
 	assert.Equal(t, "deny-grep-reader", got.Observations[1].PreauthorizedBy)
 	require.Len(t, got.Spawns, 1, "a continuation starts no subagent")
-	assert.Equal(t, trailtypes.Spawn{
+	assert.Equal(t, feedback.Spawn{
 		At:    got.Spawns[0].At, // wall-clock stamp
 		Child: "worker",
 		Lease: "job-1",

@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	trailrecord "github.com/egladman/magus/types/trail"
+	"github.com/egladman/magus/types/feedback"
 )
 
 // FeedbackWindow selects one session's observations: the events inside [Since, Until]
@@ -61,9 +61,9 @@ func FeedbackBases(checkouts []string, cacheRel string, since time.Time) []strin
 // does not decode is the error.
 //
 // Checkouts on the result names the bases that held at least one event of the session.
-func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
+func ReadFeedback(bases []string, w FeedbackWindow) (feedback.Report, error) {
 	since, until := w.Since.UnixMilli(), w.Until.UnixMilli()
-	out := trailrecord.Trail{Start: since, End: until, Session: w.Session}
+	out := feedback.Report{Start: since, End: until, Session: w.Session}
 	type sourced struct {
 		base string
 		e    journal.Call
@@ -114,7 +114,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 			if e.Name == NameAgentContinue {
 				continue
 			}
-			sp := trailrecord.Spawn{At: e.Time.UnixMilli(), Agent: e.Agent, Child: e.Name, Lease: e.Lease}
+			sp := feedback.Spawn{At: e.Time.UnixMilli(), Agent: e.Agent, Child: e.Name, Lease: e.Lease}
 			if raw, err := e.Request.Read(CallsDir(s.base)); err == nil {
 				var req AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
@@ -132,32 +132,32 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 // that recorded no request blob or whose blob is gone. A request blob that cannot be read or decoded is its error: a
 // [*blobUndecodableError], or a [*retiredDecisionError] for one holding a retired guard
 // decision.
-func feedbackObservation(base string, e journal.Call) (trailrecord.Observation, bool, error) {
+func feedbackObservation(base string, e journal.Call) (feedback.Observation, bool, error) {
 	var req AgentCommandRequest
 	var resp AgentCommandResponse
 	var retired *retiredDecisionError
 	if e.Request.Ref == "" {
-		return trailrecord.Observation{}, false, nil
+		return feedback.Observation{}, false, nil
 	}
 	raw, err := e.Request.Read(CallsDir(base))
 	if errors.Is(err, fs.ErrNotExist) {
-		return trailrecord.Observation{}, false, nil
+		return feedback.Observation{}, false, nil
 	}
 	if err != nil {
-		return trailrecord.Observation{}, false, err
+		return feedback.Observation{}, false, err
 	}
 	if err := decodeAgentBlob(base, e.Request.Ref, raw, &req); err != nil {
-		return trailrecord.Observation{}, false, err
+		return feedback.Observation{}, false, err
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.Response.Ref != "" {
 		if raw, err := e.Response.Read(CallsDir(base)); err == nil {
 			if err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); errors.As(err, &retired) {
-				return trailrecord.Observation{}, false, err
+				return feedback.Observation{}, false, err
 			}
 		}
 	}
-	obs := trailrecord.Observation{
+	obs := feedback.Observation{
 		At: e.Time.UnixMilli(), Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
 		Decision: string(resp.Decision), Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,

@@ -5,36 +5,36 @@ package std
 import (
 	"context"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/feedback"
 	"github.com/egladman/magus/vcs"
 )
 
-// trailDefaultSince is the window a trail read covers when the caller names none: long
-// enough for a working day's session, short enough that the trails it stats are few.
-const trailDefaultSince = 24 * time.Hour
+// feedbackDefaultSince is the window a read covers when the caller names
+// none: a working day's session, and few activity logs to stat.
+const feedbackDefaultSince = 24 * time.Hour
 
-// cacheDirer is the one capability of the loaded workspace the trail read needs beyond
-// its root: where its cache, and so its trail, lives.
+// cacheDirer is the one capability of the loaded workspace the feedback
+// read needs beyond its root: where its cache, and so its activity log, is.
 type cacheDirer interface {
 	CacheDir() string
 }
 
-// MagusTrailRead backs magus\session().trail().
-// It is one session's guard record from every checkout's trail.
-func MagusTrailRead(ctx context.Context, opts trailtypes.ReadOptions) (trailtypes.Trail, error) {
+// MagusFeedbackRead backs magus\session().trail(): one session's guard
+// record from every checkout's activity log.
+func MagusFeedbackRead(ctx context.Context, opts feedback.ReadOptions) (feedback.Report, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return trailtypes.Trail{}, errorNoWorkspace("trail.read")
+		return feedback.Report{}, errorNoWorkspace("Session.trail")
 	}
 	w, err := feedbackWindow(opts, time.Now())
 	if err != nil {
-		return trailtypes.Trail{}, err
+		return feedback.Report{}, err
 	}
 	root := ws.Root()
 	cacheDir := filepath.Join(root, ".magus")
@@ -66,52 +66,52 @@ func listCheckouts(ctx context.Context, root string) []string {
 	return append([]string{root}, others...)
 }
 
-// feedbackWindow reads the trail call's window. A value that does not parse raises rather
-// than reading as its default, which would be a report about the wrong window.
-func feedbackWindow(opts trailtypes.ReadOptions, now time.Time) (recorder.FeedbackWindow, error) {
+// feedbackWindow reads the call's window. A value that does not parse
+// raises: its default would report on the wrong window.
+func feedbackWindow(opts feedback.ReadOptions, now time.Time) (recorder.FeedbackWindow, error) {
 	w := recorder.FeedbackWindow{Until: now, Session: strings.TrimSpace(opts.Session)}
 	var err error
 	if until := strings.TrimSpace(opts.Until); until != "" {
 		if w.Until, err = time.Parse(time.RFC3339, until); err != nil {
-			return w, fmt.Errorf("trail.read: opts.until %q is not an RFC3339 time", until)
+			return w, fmt.Errorf("Session.trail: opts.until %q is not an RFC3339 time", until)
 		}
 	}
 	switch since := strings.TrimSpace(opts.Since); since {
 	case "":
-		w.Since = w.Until.Add(-trailDefaultSince)
+		w.Since = w.Until.Add(-feedbackDefaultSince)
 	default:
 		if d, derr := time.ParseDuration(since); derr == nil && d > 0 {
 			w.Since = w.Until.Add(-d)
 		} else if t, terr := time.Parse(time.RFC3339, since); terr == nil {
 			w.Since = t
 		} else {
-			return w, fmt.Errorf("trail.read: opts.since %q is neither a positive duration (6h) nor an RFC3339 time", since)
+			return w, fmt.Errorf("Session.trail: opts.since %q is neither a positive duration (6h) nor an RFC3339 time", since)
 		}
 	}
 	if !w.Since.Before(w.Until) {
-		return w, fmt.Errorf("trail.read: the window starts at %s, not before its end %s", w.Since.Format(time.RFC3339), w.Until.Format(time.RFC3339))
+		return w, fmt.Errorf("Session.trail: the window starts at %s, not before its end %s", w.Since.Format(time.RFC3339), w.Until.Format(time.RFC3339))
 	}
 	return w, nil
 }
 
-// MagusTrailMarks backs magus\session().marks(): repo marks, oldest first.
-func MagusTrailMarks(ctx context.Context) ([]trailtypes.Mark, error) {
-	dir, err := feedbackMarksDir(ctx, "trail.marks")
+// MagusFeedbackMarks backs magus\session().marks(): repo marks, oldest first.
+func MagusFeedbackMarks(ctx context.Context) ([]feedback.Mark, error) {
+	dir, err := feedbackMarksDir(ctx, "Session.marks")
 	if err != nil {
 		return nil, err
 	}
 	return recorder.ReadFeedbackMarks(dir)
 }
 
-// MagusTrailMark backs magus\session().mark: one mark in the repo's store.
-func MagusTrailMark(ctx context.Context, mark map[string]any) (trailtypes.Mark, error) {
-	dir, err := feedbackMarksDir(ctx, "trail.mark")
+// MagusFeedbackMark backs magus\session().mark: one mark in the repo's store.
+func MagusFeedbackMark(ctx context.Context, mark map[string]any) (feedback.Mark, error) {
+	dir, err := feedbackMarksDir(ctx, "Session.mark")
 	if err != nil {
-		return trailtypes.Mark{}, err
+		return feedback.Mark{}, err
 	}
-	m, err := decodeTrailMark(mark)
+	m, err := decodeFeedbackMark(mark)
 	if err != nil {
-		return trailtypes.Mark{}, err
+		return feedback.Mark{}, err
 	}
 	return recorder.AppendFeedbackMark(dir, m, time.Now())
 }
@@ -124,10 +124,10 @@ func feedbackMarksDir(ctx context.Context, member string) (string, error) {
 	return recorder.FeedbackMarksDir(ws.Root())
 }
 
-// decodeTrailMark reads a magus\trail\Mark object, raising on a field of
-// the wrong type rather than storing its zero value.
-func decodeTrailMark(in map[string]any) (trailtypes.Mark, error) {
-	var m trailtypes.Mark
+// decodeFeedbackMark reads a magus\feedback\Mark object, raising on a
+// field of the wrong type rather than storing its zero value.
+func decodeFeedbackMark(in map[string]any) (feedback.Mark, error) {
+	var m feedback.Mark
 	str := func(k string) (string, error) {
 		v, ok := in[k]
 		if !ok || v == nil {
@@ -135,7 +135,7 @@ func decodeTrailMark(in map[string]any) (trailtypes.Mark, error) {
 		}
 		s, ok := v.(string)
 		if !ok {
-			return "", fmt.Errorf("trail.mark: %s is %T, want a string", k, v)
+			return "", fmt.Errorf("Session.mark:%s is %T, want a string", k, v)
 		}
 		return s, nil
 	}
@@ -149,21 +149,21 @@ func decodeTrailMark(in map[string]any) (trailtypes.Mark, error) {
 			return m, err
 		}
 	}
-	m.Section, m.Verdict = trailtypes.Section(section), trailtypes.Verdict(verdict)
+	m.Section, m.Verdict = feedback.Section(section), feedback.Verdict(verdict)
 	switch ex := in["examples"].(type) {
 	case nil:
 	case []any:
 		for _, e := range ex {
 			s, ok := e.(string)
 			if !ok {
-				return m, fmt.Errorf("trail.mark: examples holds a %T, want strings", e)
+				return m, fmt.Errorf("Session.mark:examples holds a %T, want strings", e)
 			}
 			m.Examples = append(m.Examples, s)
 		}
 	case []string:
 		m.Examples = ex
 	default:
-		return m, fmt.Errorf("trail.mark: examples is %T, want a list of strings", ex)
+		return m, fmt.Errorf("Session.mark:examples is %T, want a list of strings", ex)
 	}
 	return m, nil
 }

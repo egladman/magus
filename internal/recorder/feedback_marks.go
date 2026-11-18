@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/types/feedback"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -48,7 +48,7 @@ func FeedbackMarksDir(root string) (string, error) {
 //
 // Unlike the trail's producers it returns its error, because a person who asked to record
 // a verdict must learn that it was not recorded.
-func AppendFeedbackMark(dir string, m trailtypes.Mark, now time.Time) (trailtypes.Mark, error) {
+func AppendFeedbackMark(dir string, m feedback.Mark, now time.Time) (feedback.Mark, error) {
 	if !feedbackID.MatchString(m.ID) {
 		return m, fmt.Errorf("feedback mark id %q is not a row id (fb and 12 hex digits)", m.ID)
 	}
@@ -78,7 +78,7 @@ func AppendFeedbackMark(dir string, m trailtypes.Mark, now time.Time) (trailtype
 // ReadFeedbackMarks returns every mark in the store at dir, oldest first. A store nobody
 // has written to holds no marks. A line that does not decode is an error naming it, since
 // a silently dropped verdict reads as one the person never gave.
-func ReadFeedbackMarks(dir string) ([]trailtypes.Mark, error) {
+func ReadFeedbackMarks(dir string) ([]feedback.Mark, error) {
 	path := filepath.Join(dir, marksFile)
 	f, err := os.Open(path)
 	if err != nil {
@@ -88,14 +88,14 @@ func ReadFeedbackMarks(dir string) ([]trailtypes.Mark, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var out []trailtypes.Mark
+	var out []feedback.Mark
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for n := 1; sc.Scan(); n++ {
 		if len(sc.Bytes()) == 0 {
 			continue
 		}
-		var m trailtypes.Mark
+		var m feedback.Mark
 		if err := codec.Unmarshal(sc.Bytes(), &m); err != nil {
 			return nil, fmt.Errorf("feedback: %s:%d: %w", path, n, err)
 		}

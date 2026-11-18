@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
+	"github.com/egladman/magus/types/feedback"
 	imagetypes "github.com/egladman/magus/types/image"
-	"github.com/egladman/magus/types/trail"
 	vcstypes "github.com/egladman/magus/types/vcs"
 )
 
@@ -175,7 +175,7 @@ var inboundTypes = []inboundType{
 	{Name: "magus\\agent\\Model", Zero: job.Model{}, Encode: func(v any) vm.Value { return ObjectJobModel(v.(job.Model)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobModel(v) }},
 	{Name: "magus\\agent\\Spec", Zero: job.Agent{}, Encode: func(v any) vm.Value { return ObjectJobAgent(v.(job.Agent), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobAgent(v) }},
 	{Name: "magus\\agent\\Worker", Zero: job.Worker{}, Encode: func(v any) vm.Value { return ObjectJobWorker(v.(job.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobWorker(v) }},
-	{Name: "magus\\trail\\ReadOptions", Zero: trail.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(trail.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
+	{Name: "magus\\feedback\\ReadOptions", Zero: feedback.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectFeedbackReadOptions(v.(feedback.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeFeedbackReadOptions(v) }},
 	{Name: "magus\\vcs\\Checkpoint", Zero: vcstypes.Checkpoint{}, Encode: func(v any) vm.Value { return ObjectVCSCheckpoint(v.(vcstypes.Checkpoint)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCheckpoint(v) }},
 	{Name: "vcs\\CommandOptions", Zero: types.VCSCommandOptions{}, Encode: func(v any) vm.Value { return ObjectVCSCommandOptions(v.(types.VCSCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCommandOptions(v) }},
 }

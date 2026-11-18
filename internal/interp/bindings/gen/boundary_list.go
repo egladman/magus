@@ -15,10 +15,10 @@ import (
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
+	"github.com/egladman/magus/types/feedback"
 	imagetypes "github.com/egladman/magus/types/image"
 	impacttypes "github.com/egladman/magus/types/impact"
 	releasetypes "github.com/egladman/magus/types/release"
-	"github.com/egladman/magus/types/trail"
 	vcstypes "github.com/egladman/magus/types/vcs"
 )
 
@@ -275,7 +275,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ListedWorkspace", Zero: types.ListedWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectListedWorkspace(v.(types.ListedWorkspace)) }},
 	{Name: "MCPTool", Zero: types.MCPTool{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPTool(v.(types.MCPTool)) }},
 	{Name: "MCPToolParam", Zero: types.MCPToolParam{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPToolParam(v.(types.MCPToolParam)) }},
-	{Name: "Mark", Zero: trail.Mark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(trail.Mark), enums) }},
+	{Name: "Mark", Zero: feedback.Mark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackMark(v.(feedback.Mark), enums) }},
 	{Name: "MarkdownSection", Zero: types.MarkdownSection{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMarkdownSection(v.(types.MarkdownSection)) }},
 	{Name: "Match", Zero: types.KnowledgeMatch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeMatch(v.(types.KnowledgeMatch)) }},
 	{Name: "Model", Zero: job.Model{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobModel(v.(job.Model)) }},
@@ -297,7 +297,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},
 	{Name: "Node", Zero: types.Node{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectNode(v.(types.Node)) }},
-	{Name: "Observation", Zero: trail.Observation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(trail.Observation)) }},
+	{Name: "Observation", Zero: feedback.Observation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackObservation(v.(feedback.Observation)) }},
 	{Name: "Origin", Zero: job.Origin{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobOrigin(v.(job.Origin), enums) }},
 	{Name: "OutputRecord", Zero: types.OutputRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOutputRecord(v.(types.OutputRecord)) }},
 	{Name: "OutputRef", Zero: types.OutputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOutputRef(v.(types.OutputRef)) }},
@@ -378,6 +378,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ReplyReviewRequest", Zero: types.ReplyReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectReplyReviewRequest(v.(types.ReplyReviewRequest))
 	}},
+	{Name: "Report", Zero: feedback.Report{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackReport(v.(feedback.Report)) }},
 	{Name: "Response", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
 	{Name: "RetryVerdict", Zero: job.RetryVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobRetryVerdict(v.(job.RetryVerdict), enums) }},
 	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
@@ -398,7 +399,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "ShippedAgent", Zero: types.ShippedAgent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShippedAgent(v.(types.ShippedAgent)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSkill(v.(types.Skill)) }},
-	{Name: "Spawn", Zero: trail.Spawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(trail.Spawn)) }},
+	{Name: "Spawn", Zero: feedback.Spawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackSpawn(v.(feedback.Spawn)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest), enums) }},
 	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget), enums) }},
 	{Name: "Spec", Zero: job.Agent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobAgent(v.(job.Agent), enums) }},
@@ -438,7 +439,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TierReport", Zero: types.TierReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierReport(v.(types.TierReport), enums) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
 	{Name: "ToolStatus", Zero: types.ToolStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolStatus(v.(types.ToolStatus)) }},
-	{Name: "Trail", Zero: trail.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(trail.Trail)) }},
 	{Name: "Trend", Zero: types.Trend{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrend(v.(types.Trend)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
 	{Name: "TrimReport", Zero: types.TrimReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrimReport(v.(types.TrimReport)) }},

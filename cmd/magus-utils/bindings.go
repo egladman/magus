@@ -843,7 +843,7 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/types/release", alias: "releasetypes", prefix: "Release"},
 	{path: "github.com/egladman/magus/types/image", alias: "imagetypes", prefix: "Image"},
 	{path: "github.com/egladman/magus/types/daemon", alias: "daemon", prefix: "Status"},
-	{path: "github.com/egladman/magus/types/trail", alias: "trail", prefix: "Trail"},
+	{path: "github.com/egladman/magus/types/feedback", alias: "feedback", prefix: "Feedback"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/journal/stream", alias: "stream", prefix: "Stream"},
 	{path: "github.com/egladman/magus/types/diff", alias: "difftypes", prefix: "Diff"},
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},

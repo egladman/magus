@@ -1,15 +1,12 @@
-// Package trail is the guard trail as magus's Buzz API reads it: what the guard recorded
-// about one session inside a window, and the marks a person leaves on its rows.
-// magus\session(opts).trail() and its marks are the only producers and readers.
-package trail
+package feedback
 
 import (
 	"fmt"
 	"strings"
 )
 
-// Section is which part of a session's guard trail a row belongs to. The
-// letter is the row's label prefix, so a person writes C3 for the third unguarded shape.
+// Section is which part of a session's guard [Report] a row belongs to.
+// Its letter prefixes the row's label: C3 is the third unguarded shape.
 type Section string
 
 const (
@@ -48,7 +45,7 @@ func (s Section) Validate() error {
 	return nil
 }
 
-// Verdict is what a person said about a trail row.
+// Verdict is what a person said about a report row.
 type Verdict string
 
 const (
@@ -85,7 +82,7 @@ type UnknownValueError struct {
 }
 
 func (e *UnknownValueError) Error() string {
-	return fmt.Sprintf("trail: %s %q is not one of %s", e.Field, e.Value, strings.Join(e.Known, ", "))
+	return fmt.Sprintf("feedback: %s %q is not one of %s", e.Field, e.Value, strings.Join(e.Known, ", "))
 }
 
 func valueStrings[T ~string](values []T) []string {
@@ -96,9 +93,9 @@ func valueStrings[T ~string](values []T) []string {
 	return parts
 }
 
-// Trail is what the guard recorded about one session inside a window.
+// Report is what the guard recorded about one session inside a window.
 // magus\session().trail() returns it: each call judged, each subagent started.
-type Trail struct {
+type Report struct {
 	// Session is the host's session id the observations belong to.
 	Session string
 	// Host is the agent host that reported the session, empty when its hooks named none.
@@ -107,9 +104,9 @@ type Trail struct {
 	// Until: until is a Buzz keyword, and a field named by one reads as @"until".
 	Start int64
 	End   int64
-	// Checkouts are the checkouts whose trails were read: every checkout of the
-	// repository whose trail changed inside the window, since a session's hooks record
-	// in whichever checkout they ran from.
+	// Checkouts are every checkout of the repository whose activity log
+	// changed inside the window: a session's hooks record in whichever
+	// checkout they ran from.
 	Checkouts []string
 	// Observations are oldest first.
 	Observations []Observation
@@ -118,7 +115,7 @@ type Trail struct {
 	Spawns []Spawn
 }
 
-// ReadOptions picks the session and window a trail read covers.
+// ReadOptions picks the session and window a [Report] covers.
 // magus\session(opts).trail() takes them.
 // Each field is text a person writes; one that does not parse is an error.
 type ReadOptions struct {
@@ -179,13 +176,13 @@ type Spawn struct {
 	Model string
 }
 
-// Mark is a person's verdict on one trail row, kept per repository so every
-// checkout and every later session sees it.
+// Mark is a person's verdict on one report row, kept per repository so
+// every checkout and every later session sees it.
 type Mark struct {
 	// ID is the row's stable id: a digest of its section and key, so a mark outlives the
 	// page position it was made from.
 	ID string `json:"id"`
-	// Section is which part of the trail the row came from.
+	// Section is which part of the report the row came from.
 	Section Section `json:"section"`
 	// Key is what the row groups by: a rule for refused and advised rows, a command shape
 	// for unguarded ones, a rule and shape for next-not-taken ones.
