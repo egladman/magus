@@ -551,6 +551,27 @@ decided.
 
 ## Amendments
 
+### 2026-11-18: the job check is opaque JSON, read through magus's views (option B)
+
+The open question of the 2026-11-17 trim is settled as option B, Eli's ruling of
+2026-11-17. The module keeps a check as opaque JSON and never interprets one; magus
+reads it through views in `types/`, and the generators reflect those views, so Buzz
+keeps the typed `magus\LeaseCheck`.
+
+- `Job.Check`, `Goal.Check`, `Declaration.Check`, `Put.Check`, `Statement.Check` and
+  `Report.Check` are `codec.RawMessage`. `LeaseCheck`, `ParseLeaseCheck`, `CheckError`
+  and `SameLeaseCheck` leave the module.
+- The caller passes `job.WithCheckSpec(validate, equal, render)`, and `safetyscissors.New`
+  requires `WithCheckSpec`. Without it the store refuses every row write and every
+  grading call, naming the option. A check the caller's validate refuses fails the
+  write with `*CheckRefusedError`.
+- `types.LeaseCheck` and the views `types.Job`, `types.Goal`, `types.JobList` and
+  `types.Declaration` embed the module type and override only the check members.
+  `internal/job` holds the spec, the parse and the check-content faults.
+- buzzgen and `jobschema` apply Go's field-visibility rule, so a view's field hides the
+  embedded one in place. The Buzz declarations, `job.schema.json` and the declaration
+  ledger are unchanged.
+
 ### 2026-11-17: the root package holds `New` and `SafetyScissors`
 
 Part 1 said the root package holds only the package doc. It now holds one constructor,
@@ -613,7 +634,8 @@ store's verbs are not mirrored on the root type.
   `CheckCommand` joins it.
 - The three logs beside the rows report a dropped unfinished line as a store notice.
 - LeaseCheck stays typed in the module until the binding generators learn a raw-JSON
-  member, an open question for Eli. Option A teaches the generators to carry
+  member, an open question for Eli, settled as option B on 2026-11-18 (see that
+  amendment). Option A teaches the generators to carry
   `codec.RawMessage` as `any?`, which costs Buzz callers the typed `LeaseCheck` object.
   Option B has the bindings reflect magus-side view types of `Goal` and `Job` that carry
   the typed check, which reshapes the boundary roots in `cmd/magus-utils`.
