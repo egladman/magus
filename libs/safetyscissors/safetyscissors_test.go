@@ -277,20 +277,32 @@ func ExampleNew() {
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
 		WithCheckSpec(keptChecks{}),
-		WithSlots(2),
 	)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	slots, err := ss.Slots()
-	fmt.Println(slots.Capacity(), err)
+	check, err := job.NewCheck([]string{"go", "test", "./auth/..."})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	row, err := ss.Jobs().Update(ctx, "fix-login", func(j *job.Job) {
+		j.Parent = "root"
+		j.Paths = job.Paths{Write: []string{"auth/**"}}
+		j.Check = check
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(row.ID, row.Paths.Write, row.Check)
 
-	_, err = ss.Command(ctx, "", "go", "version")
+	_, err = ss.Slots()
 	var unconfigured *UnconfiguredError
 	fmt.Println(errors.As(err, &unconfigured), unconfigured.Option)
 	// Output:
-	// 2 <nil>
-	// true WithSandbox
+	// fix-login [auth/**] ["go","test","./auth/..."]
+	// true WithSlots
 }
