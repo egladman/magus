@@ -119,6 +119,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSleepPoll},
 	{doc: ruleDocReadPaging},
 	{doc: ruleDocHeredocWrite},
+	{doc: ruleDocCopyWrite},
 	{doc: ruleDocHooksOff},
 	{doc: ruleDocSpawnPlainCommands},
 	{doc: ruleDocUnjudgedStep},
@@ -923,6 +924,14 @@ var ruleDocHeredocWrite = types.RuleDoc{
 		"A refused write refuses the line under this name, with the write rule's own in brackets, and advice about the write rides the line. " +
 		"Only a literal body is judged: one that expands a parameter or runs a substitution is text nobody can read before it runs. A target in /dev, a stderr redirect and a heredoc feeding a command's stdin are not writes. " +
 		"It cannot tell a scratch file the same line deletes from a file meant to stay.",
+}
+
+var ruleDocCopyWrite = types.RuleDoc{
+	Name:    string(denyRuleCopyWrite),
+	Catches: "a file copied into the workspace from outside it, judged as the file write it is",
+	Why: "`cp`, `mv` and `install` from a scratch file into the workspace write that file's bytes the way a host's write tool does, so the source is read and judged as that write: the comment, lease and workspace write rules hold on either channel. " +
+		"A refused write refuses the line under this name, with the write rule's own in brackets. A source over 1 MiB, or one that cannot be read, is refused, since its bytes cannot be judged; a binary source is judged by its destination alone. " +
+		"A source already inside the workspace met the write rules on its way in and is not read again. It cannot read a source a variable or substitution names.",
 }
 
 var ruleDocHooksOff = types.RuleDoc{

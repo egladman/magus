@@ -39,6 +39,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [claimed-declaration](claimed-declaration.md)             | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)             |
 | [conflict-commit](conflict-commit.md)                     | a `git commit` recording a merge conflict marker on a line it adds                                  |
 | [conflict-rewrite](conflict-rewrite.md)                   | an inline interpreter rewriting a file that holds merge conflict markers                            |
+| [copy-write](copy-write.md)                               | a file copied into the workspace from outside it, judged as the file write it is                    |
 | [credential-verb](credential-verb.md)                     | an agent minting, printing, rotating or revoking a credential through the CLI                       |
 | [dependency-install](dependency-install.md)               | a raw package install that the cached install target already runs                                   |
 | [dependency-update](dependency-update.md)                 | a raw dependency update outside a target's update charm                                             |

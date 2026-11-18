@@ -314,6 +314,7 @@ var defaults = map[string]decision{
 	"cache-clear":           Deny,
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
+	"copy-write":            Deny,
 	"credential-verb":       Deny,
 	"edit-ungraded":         Deny,
 	"focus-read":            Deny,
