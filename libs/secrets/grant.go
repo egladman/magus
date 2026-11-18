@@ -88,6 +88,9 @@ func (g Grant) Normalize() (Grant, error) {
 		return refuse("ref is required")
 	case g.Host == "":
 		return refuse("host is required, and names the only destination this credential may be sent to")
+	case hostName(g.Host) == "":
+		// A dial of ":8080" reaches this machine, which the grant never named.
+		return refuse("host %q names a port and no host", g.Host)
 	case g.Header == "":
 		return refuse("header is required")
 	case strings.ContainsAny(g.Host, "*?"):
@@ -140,6 +143,14 @@ func canonicalHost(host string) string {
 		return bracketIPv6(name)
 	}
 	return net.JoinHostPort(name, port)
+}
+
+// hostName is the name part of a canonical host, without its port or brackets.
+func hostName(host string) string {
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+	return strings.Trim(host, "[]")
 }
 
 // bracketIPv6 brackets name when it is an IPv6 literal, the one host form with a colon.
