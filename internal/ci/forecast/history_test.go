@@ -38,7 +38,7 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 	// someone decided the field is safe to put in a shared CI cache.
 	allowed := map[reflect.Type]map[string]bool{
 		reflect.TypeOf(History{}): {
-			"version": true, "updated_at": true, "constants": true, "projects": true,
+			"api_version": true, "version": true, "updated_at": true, "constants": true, "projects": true,
 			"setup": true, "alpha": true, "workspace_fallback_ms": true, "runs": true,
 			"jobs": true,
 		},
@@ -46,7 +46,7 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 		// (project, target), the same path and name Projects is keyed by.
 		reflect.TypeOf(historyLine{}): {"workspace": true, "stats": true, "run": true, "job": true, "removed": true},
 		reflect.TypeOf(workspaceEntry{}): {
-			"version": true, "updated_at": true, "constants": true, "setup": true,
+			"api_version": true, "version": true, "updated_at": true, "constants": true, "setup": true,
 			"alpha": true, "workspace_fallback_ms": true,
 		},
 		reflect.TypeOf(statsEntry{}): {"project": true, "target": true, "Stats": true},
@@ -167,7 +167,8 @@ func TestHistorySchemaLock(t *testing.T) {
 	// integer timings, project paths, or subdir tag names — never
 	// source code, content hashes, secrets, author identity, or error messages.
 	allowedWorkspace := map[string]bool{
-		"version":               true, // schema version int
+		"api_version":           true, // schema version string
+		"version":               true, // numeric schema version of an old history, refused on load
 		"updated_at":            true, // ISO timestamp of last ingest
 		"constants":             true, // {setup_p50_ms, alpha_ms} — integer ms
 		"setup":                 true, // []int64 of per-shard setup observations
@@ -812,12 +813,12 @@ func TestUpdate_shardSampleNonPositiveResidual(t *testing.T) {
 func TestMerge_nilOtherIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	h := History{Version: 4, Projects: map[string]map[string]Stats{
+	h := History{Version: HistoryVersion, Projects: map[string]map[string]Stats{
 		"a": {"ci": {P75Ms: 10}},
 	}}
 	h.Merge(nil)
 	assert.Equal(t, int64(10), h.Projects["a"]["ci"].P75Ms)
-	assert.Equal(t, 4, h.Version)
+	assert.Equal(t, HistoryVersion, h.Version)
 }
 
 // TestMerge_adoptsVersionAndOlderUpdateSkipped covers two branches: a
@@ -830,7 +831,7 @@ func TestMerge_adoptsVersionAndOlderUpdateSkipped(t *testing.T) {
 	older := newer.Add(-time.Hour)
 
 	h := History{
-		Version:             0, // unset -> adopts other's version
+		Version:             "", // unset -> adopts other's version
 		UpdatedAt:           newer,
 		Constants:           Constants{SetupP50Ms: 30_000, AlphaMs: 5_000},
 		WorkspaceFallbackMs: 9_000,
@@ -838,7 +839,7 @@ func TestMerge_adoptsVersionAndOlderUpdateSkipped(t *testing.T) {
 		Alpha:               []int64{1, 2, 3},
 	}
 	other := History{
-		Version:             3,
+		Version:             HistoryVersion,
 		UpdatedAt:           older, // older -> workspace fields not adopted
 		Constants:           Constants{SetupP50Ms: 1, AlphaMs: 1},
 		WorkspaceFallbackMs: 1,
@@ -850,7 +851,7 @@ func TestMerge_adoptsVersionAndOlderUpdateSkipped(t *testing.T) {
 	// The zero version adopts other's, while an older other leaves the constants, fallback
 	// and Setup/Alpha windows alone.
 	want := History{
-		Version:             3,
+		Version:             HistoryVersion,
 		UpdatedAt:           newer,
 		Constants:           Constants{SetupP50Ms: 30_000, AlphaMs: 5_000},
 		Projects:            map[string]map[string]Stats{},
@@ -870,13 +871,13 @@ func TestMerge_newerAdoptsWindows(t *testing.T) {
 	newer := older.Add(time.Hour)
 
 	h := History{
-		Version:   4,
+		Version:   HistoryVersion,
 		UpdatedAt: older,
 		Setup:     []int64{1},
 		Alpha:     []int64{1},
 	}
 	other := History{
-		Version:             4,
+		Version:             HistoryVersion,
 		UpdatedAt:           newer,
 		Constants:           Constants{SetupP50Ms: 42, AlphaMs: 7},
 		WorkspaceFallbackMs: 88,
@@ -887,7 +888,7 @@ func TestMerge_newerAdoptsWindows(t *testing.T) {
 
 	// The newer other's constants, fallback and longer Setup/Alpha windows are adopted.
 	want := History{
-		Version:             4,
+		Version:             HistoryVersion,
 		UpdatedAt:           newer,
 		Constants:           Constants{SetupP50Ms: 42, AlphaMs: 7},
 		Projects:            map[string]map[string]Stats{},
@@ -977,7 +978,7 @@ func TestLoad_versionTooNew(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "future.jsonl")
 	// Hand-crafted, since UpdateHistory stamps the build's own version.
-	future, err := codec.Marshal(historyLine{Workspace: &workspaceEntry{Version: HistoryVersion + 1}})
+	future, err := codec.Marshal(historyLine{Workspace: &workspaceEntry{Version: "magus.forecast-history/v1alpha2"}})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(future, '\n'), 0o644))
 
@@ -986,7 +987,40 @@ func TestLoad_versionTooNew(t *testing.T) {
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	var skew *UnsupportedVersionError
 	require.ErrorAs(t, err, &skew)
-	assert.Equal(t, UnsupportedVersionError{Have: HistoryVersion + 1, Max: HistoryVersion, Path: path}, *skew)
+	assert.Equal(t, UnsupportedVersionError{Have: "magus.forecast-history/v1alpha2", Max: HistoryVersion, Path: path}, *skew)
+}
+
+// TestLoad_refusesNumericVersion pins that a history stamped with the integer form is
+// refused, naming the file and the delete remedy, and is neither read nor rewritten.
+func TestLoad_refusesNumericVersion(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	old := `{"workspace":{"version":9}}` + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(old), 0o644))
+
+	var h History
+	err := h.Load(t.Context(), path)
+	require.ErrorContains(t, err, path)
+	require.ErrorContains(t, err, "delete the file")
+	require.Error(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1)))
+	got, rerr := os.ReadFile(path)
+	require.NoError(t, rerr)
+	assert.Equal(t, old, string(got))
+}
+
+// TestLoad_refusesForeignGroup pins that a history of another group is refused as foreign,
+// not as newer.
+func TestLoad_refusesForeignGroup(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(`{"workspace":{"api_version":"other.thing/v9"}}`+"\n"), 0o644))
+
+	var h History
+	err := h.Load(t.Context(), path)
+	require.ErrorContains(t, err, "delete the file")
+	assert.NotErrorIs(t, err, types.StoreRecordsNewer)
 }
 
 // TestLoad_decodeError names the file and line of a complete line that does not decode,
@@ -995,8 +1029,8 @@ func TestLoad_decodeError(t *testing.T) {
 	t.Parallel()
 
 	for name, content := range map[string]string{
-		"not json":    `{"workspace":{"version":8}}` + "\n{not valid json\n",
-		"two entries": `{"workspace":{"version":8}}` + "\n" + `{"run":{"commit":"a"},"job":{"job":"j"}}` + "\n",
+		"not json":    `{"workspace":{"api_version":"magus.forecast-history/v1alpha1"}}` + "\n{not valid json\n",
+		"two entries": `{"workspace":{"api_version":"magus.forecast-history/v1alpha1"}}` + "\n" + `{"run":{"commit":"a"},"job":{"job":"j"}}` + "\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -1074,11 +1108,11 @@ func TestHistoryLastLinePerKeyWins(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "history.jsonl")
 	lines := strings.Join([]string{
-		`{"workspace":{"version":8,"workspace_fallback_ms":1}}`,
+		`{"workspace":{"api_version":"magus.forecast-history/v1alpha1","workspace_fallback_ms":1}}`,
 		`{"stats":{"project":"svc","target":"ci","p75_ms":100}}`,
 		`{"run":{"commit":"aaa","ref":"main","target":"ci","status":"passed","at":"2026-01-02T03:04:05Z"}}`,
 		`{"stats":{"project":"svc","target":"ci","p75_ms":200}}`,
-		`{"workspace":{"version":8,"workspace_fallback_ms":2}}`,
+		`{"workspace":{"api_version":"magus.forecast-history/v1alpha1","workspace_fallback_ms":2}}`,
 		`{"removed":true,"run":{"commit":"aaa","ref":"main","target":"ci","status":"passed","at":"2026-01-02T03:04:05Z"}}`,
 	}, "\n") + "\n"
 	require.NoError(t, os.WriteFile(path, []byte(lines), 0o644))
@@ -1666,7 +1700,7 @@ func TestOutcomeWithoutCurveIsUnprofiled(t *testing.T) {
 
 	full := NewShape(nil, nil)
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	lines := fmt.Sprintf(`{"workspace":{"version":8}}`+"\n"+
+	lines := fmt.Sprintf(`{"workspace":{"api_version":"magus.forecast-history/v1alpha1"}}`+"\n"+
 		`{"stats":{"project":".","target":"magusfile/test","recent_outcomes":[`+
 		`{"result":"pass","affected":false,"duration_ms":5000,"at":"2026-10-20T00:00:00Z","max_rss_bytes":1073741824,"args_hash":"%s"}]}}`+"\n", full.ArgsHash)
 	require.NoError(t, os.WriteFile(path, []byte(lines), 0o644))

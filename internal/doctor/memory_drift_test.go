@@ -16,9 +16,9 @@ import (
 const mb = int64(1) << 20
 
 func TestHistoryUnreadableCheckNamesTheRebuildForANewerHistory(t *testing.T) {
-	skew := historyUnreadableCheck("memory-declarations", &forecast.UnsupportedVersionError{Have: 9, Max: 8, Path: "h"})
+	skew := historyUnreadableCheck("memory-declarations", &forecast.UnsupportedVersionError{Have: "magus.forecast-history/v1alpha2", Max: forecast.HistoryVersion, Path: "h"})
 	assert.Equal(t, check.Advice, skew.Status)
-	assert.Contains(t, skew.Message, "version 9")
+	assert.Contains(t, skew.Message, "magus.forecast-history/v1alpha2")
 	assert.Contains(t, skew.Fix, "build")
 
 	other := historyUnreadableCheck("memory-declarations", assert.AnError)
