@@ -2,7 +2,13 @@ package safetyscissors
 
 import (
 	"bufio"
+	"go/parser"
+	"go/token"
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -72,4 +78,35 @@ func (s *DocSuite) TestGoModRequiresOnlyWhatTheDocAllows() {
 		assert.Contains(t, allowedRequires, mod, "go.mod requires %s, which the package doc does not allow", mod)
 	}
 	assert.NotContains(t, direct, "github.com/egladman/magus", "the module never imports magus")
+}
+
+// The journal's packages import only what their docs name: session above it,
+// or a magus package, would close a cycle.
+func (s *DocSuite) TestJournalImportsOnlyWhatItsDocNames() {
+	s.Equal([]string{
+		"github.com/egladman/magus/libs/codec",
+	}, s.nonStandardImports("journal"))
+}
+
+// nonStandardImports lists the imports of dir's non-test files that are not
+// in the standard library, sorted.
+func (s *DocSuite) nonStandardImports(dir string) []string {
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	s.Require().NoError(err)
+	seen := map[string]bool{}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), name, nil, parser.ImportsOnly)
+		s.Require().NoError(err)
+		for _, imp := range f.Imports {
+			path, err := strconv.Unquote(imp.Path.Value)
+			s.Require().NoError(err)
+			if first, _, _ := strings.Cut(path, "/"); strings.Contains(first, ".") {
+				seen[path] = true
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
 }
