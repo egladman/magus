@@ -12,7 +12,7 @@
     "failed_need_target": "string",
     "inv": "string",
     "key": "string",
-    "key_version": "int",
+    "key_version": "string",
     "lease": "string",
     "magus_version": "string",
     "output": "string",

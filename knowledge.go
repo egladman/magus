@@ -2134,9 +2134,9 @@ type vcsHistoryFile struct {
 // added, renamed, or retyped: the rest of the key cannot see a shape change, so an old file
 // would match on an unchanged HEAD and decode the renamed fields as zero values.
 //
-//	v2: LastUnix (epoch int64) became LastModified (time.Time).
-//	v3: the file holds co-change couplings beside the entries.
-const vcsHistoryFormat = 3
+// The numbered formats before the string were 2 (LastUnix, an epoch int64, became
+// LastModified, a time.Time) and 3 (the file holds co-change couplings beside the entries).
+const vcsHistoryFormat = "magus.vcs-history/v1alpha1"
 
 // loadKnowledgeVCSCached returns the per-file history and co-change pairs, walking only when
 // the cached scan does not match the current input.
@@ -2194,7 +2194,7 @@ func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) st
 		return ""
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "f%d\x00%s\x00%d\x00", vcsHistoryFormat, head.ID, vcsMaxCommits(cfg))
+	fmt.Fprintf(h, "f%s\x00%s\x00%d\x00", vcsHistoryFormat, head.ID, vcsMaxCommits(cfg))
 	return hex.EncodeToString(h.Sum(nil))
 }
 

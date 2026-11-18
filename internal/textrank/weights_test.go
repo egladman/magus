@@ -20,7 +20,7 @@ func TestLoadWeightsShippedFile(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, Weights{
-		Version: 1,
+		Version: weightsVersion,
 		BM25F: BM25F{
 			K1: 1.2,
 			Fields: map[string]FieldWeight{
@@ -108,7 +108,7 @@ func TestLoadWeightsRejects(t *testing.T) {
 		{"zero tolerance", shipped(t, `"tolerance": 1e-6`, `"tolerance": 0`), "ppr.tolerance"},
 		{"max nodes below one", shipped(t, `"max_nodes": 5000`, `"max_nodes": 0`), "ppr.max_nodes"},
 		{"task limit below one", shipped(t, `"task_limit": 8`, `"task_limit": 0`), "context.task_limit"},
-		{"unknown version", shipped(t, `"version": 1`, `"version": 2`), "version"},
+		{"unknown version", shipped(t, `"version": "magus.textrank-weights/v1alpha1"`, `"version": "magus.textrank-weights/v1alpha2"`), "version"},
 		{"not an object", []byte(`[]`), ""},
 		{"not json", []byte(`{`), ""},
 		{"trailing data", append(bytes.Clone(weightsJSON), []byte(`{}`)...), ""},

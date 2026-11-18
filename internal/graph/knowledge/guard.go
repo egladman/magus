@@ -45,7 +45,7 @@ const GuardSymbol = "symbol"
 // guardIndexKinds are the node kinds the index lists by id.
 var guardIndexKinds = []string{types.KindDiagnostic, types.KindDocSection, types.KindTarget, types.KindFile}
 
-const guardIndexHeader = "magus-guard-index 2"
+const guardIndexHeader = "magus.guard-index/v1alpha1"
 
 // GuardIndexPath is the index file under a workspace cache dir.
 func GuardIndexPath(cacheDir string) string { return filepath.Join(StoreDir(cacheDir), "guard.idx") }

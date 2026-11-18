@@ -113,7 +113,7 @@ var miseDirInputs = []string{
 
 // probeCacheFormat changes whenever the key's composition or the records' encoding
 // does, so an older entry is never read under a new meaning.
-const probeCacheFormat = "probe-cache/4"
+const probeCacheFormat = "magus.probe-cache/v1alpha1"
 
 // lookupProbeSpec returns what decides probe's answer, and false for a probe never cached.
 func lookupProbeSpec(probe spells.Command) (probeSpec, bool) {

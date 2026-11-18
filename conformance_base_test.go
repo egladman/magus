@@ -178,7 +178,7 @@ func (s *ConformanceBaseSuite) seed(base, headVersion, body string, readOnly boo
 }
 
 func (s *ConformanceBaseSuite) TestASeedLandsTheBasePacksBytes() {
-	dest, seeded, err := s.seed("goindex 4", "goindex 4", "pack", false)
+	dest, seeded, err := s.seed("magus.goindex/v1alpha1", "magus.goindex/v1alpha1", "pack", false)
 	s.Require().NoError(err)
 	s.True(seeded)
 	got, err := os.ReadFile(dest)
@@ -187,7 +187,7 @@ func (s *ConformanceBaseSuite) TestASeedLandsTheBasePacksBytes() {
 }
 
 func (s *ConformanceBaseSuite) TestASeedLeavesNoTemporaryFileBehind() {
-	dest, _, err := s.seed("goindex 4", "goindex 4", "pack", false)
+	dest, _, err := s.seed("magus.goindex/v1alpha1", "magus.goindex/v1alpha1", "pack", false)
 	s.Require().NoError(err)
 	entries, err := os.ReadDir(filepath.Dir(dest))
 	s.Require().NoError(err)
@@ -195,14 +195,14 @@ func (s *ConformanceBaseSuite) TestASeedLeavesNoTemporaryFileBehind() {
 }
 
 func (s *ConformanceBaseSuite) TestAPackOfAnotherIndexerVersionIsNotSeeded() {
-	dest, seeded, err := s.seed("goindex 4 go1.25", "goindex 4 go1.26", "pack", false)
-	s.Require().ErrorContains(err, `the base tree's indexer is "goindex 4 go1.25" and head's is "goindex 4 go1.26"`)
+	dest, seeded, err := s.seed("magus.goindex/v1alpha1 go1.25", "magus.goindex/v1alpha1 go1.26", "pack", false)
+	s.Require().ErrorContains(err, `the base tree's indexer is "magus.goindex/v1alpha1 go1.25" and head's is "magus.goindex/v1alpha1 go1.26"`)
 	s.False(seeded)
 	s.NoFileExists(dest)
 }
 
 func (s *ConformanceBaseSuite) TestAReadOnlyCacheIsNotSeeded() {
-	dest, seeded, err := s.seed("goindex 4", "goindex 4", "pack", true)
+	dest, seeded, err := s.seed("magus.goindex/v1alpha1", "magus.goindex/v1alpha1", "pack", true)
 	s.Require().ErrorContains(err, "read-only")
 	s.False(seeded)
 	s.NoFileExists(dest)

@@ -68,14 +68,14 @@ func TestIndexGolden(t *testing.T) {
 	_, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	sum := sha256.Sum256(data)
-	if got, want := hex.EncodeToString(sum[:]), "16ed85696b45875a6105e20ed75da511e347dc9cfb0f492c9bab178704b087d4"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "8491ec7d057b8e3a17b4beb55af80471269f1258e821aee53eacfcec9fdf2ea4"; got != want {
 		t.Errorf("index digest = %q, want %q", got, want)
 	}
 }
 
 // indexLayout splits a valid encoding into its header, the inverse norms, and the rows.
 func indexLayout(data []byte, docs, dims int) (hdr, head, rows []byte) {
-	_, k := binary.Uvarint(data[4:])
+	_, k := parseFormat(data[4:])
 	hlen, k2 := binary.Uvarint(data[4+k:])
 	start := 4 + k + k2
 	end := len(data) - docs*dims
@@ -84,9 +84,9 @@ func indexLayout(data []byte, docs, dims int) (hdr, head, rows []byte) {
 
 // resignIndex encodes its parts with a fresh digest, so the checks past the digest see
 // whatever corruption they carry.
-func resignIndex(format uint64, hdr, head, rows []byte) []byte {
+func resignIndex(format string, hdr, head, rows []byte) []byte {
 	out := append([]byte{}, indexMagic[:]...)
-	out = binary.AppendUvarint(out, format)
+	out = appendFormat(out, format)
 	out = binary.AppendUvarint(out, uint64(len(hdr)))
 	out = append(out, hdr...)
 	out = append(out, head...)
@@ -128,8 +128,8 @@ func TestIndexReadRefuses(t *testing.T) {
 	}{
 		{"empty", nil, c.table, "no MSEI magic"},
 		{"magic", append([]byte("MSET"), data[4:]...), c.table, "no MSEI magic"},
-		{"format", resignIndex(indexFormat+1, hdr, head, rows), c.table, fmt.Sprintf("format %d", indexFormat+1)},
-		{"header length", append(indexMagic[:], indexFormat, 0xff, 0xff, 0x7f), c.table, "header length is malformed"},
+		{"format", resignIndex(indexFormat+"x", hdr, head, rows), c.table, fmt.Sprintf("format %q", indexFormat+"x")},
+		{"header length", append(appendFormat(indexMagic[:], indexFormat), 0xff, 0xff, 0x7f), c.table, "header length is malformed"},
 		{"header json", resignIndex(indexFormat, []byte("{"), head, rows), c.table, "header"},
 		{"header field", withHeaderJSON(t, hdr, head, rows), c.table, "header"},
 		{"table digest", withHeader(func(h *indexHeader) { h.TableDigest = other.Digest() }), c.table, "rebuild it"},

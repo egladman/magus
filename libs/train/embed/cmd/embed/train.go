@@ -18,7 +18,7 @@ import (
 )
 
 // pcaSalt picks the training texts whose targets PCA is fitted on.
-const pcaSalt = "embed-pca/v1:"
+const pcaSalt = "train.embed-pca/v1alpha1:"
 
 // vocabFlags are the flags vocab and train share: train rebuilds the vocabulary from
 // them and refuses a token run that embedded another.

@@ -41,12 +41,12 @@ const noBaseIndex = "no in-process index; ceiling not applied"
 // projectNewAtHead is why a file of a project the base lacks has no ceiling.
 const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
 
-// baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
-// Bump it too when the kept entry's JSON shape changes: an old entry decodes
+// baseMeasureVersion keys the kept measures; replace it when measureTree measures differently.
+// Replace it too when the kept entry's JSON shape changes: an old entry decodes
 // empty and reads as a base of zero.
 // It replaces the magus build in the key: a gate measures under one
 // binary and lint reads under the checkout's own.
-const baseMeasureVersion = "8"
+const baseMeasureVersion = "magus.base-measure/v1alpha1"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count

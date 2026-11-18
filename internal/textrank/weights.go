@@ -15,13 +15,13 @@ import (
 //go:embed weights.json
 var weightsJSON []byte
 
-const weightsVersion = 1
+const weightsVersion = "magus.textrank-weights/v1alpha1"
 
 // Weights is every tunable number the rankers read. It comes only from the committed
 // weights.json: a person edits and reviews it, and nothing adjusts it at run time.
 type Weights struct {
-	Version int   `json:"version"`
-	BM25F   BM25F `json:"bm25f"`
+	Version string `json:"version"`
+	BM25F   BM25F  `json:"bm25f"`
 	// KindPrior multiplies a node's lexical score by its kind; a kind it does not name
 	// keeps its score. Empty for now: on the retrieval eval's 242 query judgments, 2x on
 	// the domain kinds cost .003 nDCG@10 and 1.5x on file, dir and symbol gained .010.
@@ -93,13 +93,13 @@ func (w Weights) Digest() string {
 
 func decodeWeights(data []byte) (Weights, error) {
 	var head struct {
-		Version *int `json:"version"`
+		Version *string `json:"version"`
 	}
 	if err := codec.Unmarshal(data, &head); err != nil {
 		return Weights{}, err
 	}
 	if head.Version != nil && *head.Version != weightsVersion {
-		return Weights{}, fmt.Errorf("version: unknown version %d, this build reads %d", *head.Version, weightsVersion)
+		return Weights{}, fmt.Errorf("version: unknown version %q, this build reads %q", *head.Version, weightsVersion)
 	}
 	if err := checkShape(data); err != nil {
 		return Weights{}, err

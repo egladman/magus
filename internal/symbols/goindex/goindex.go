@@ -28,7 +28,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "goindex 5"
+const formatVersion = "magus.goindex/v1alpha1"
 
 // scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
 // version, so a key matches the one scip-go named the same symbol by.

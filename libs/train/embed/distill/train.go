@@ -17,7 +17,7 @@ const gradChunks = 16
 // validSalt picks the early-stopping texts: IDHash(validSalt, id) % validModulus == 0,
 // about 2% of them.
 const (
-	validSalt    = "embed-valid/v1:"
+	validSalt    = "train.embed-valid/v1alpha1:"
 	validModulus = 50
 )
 

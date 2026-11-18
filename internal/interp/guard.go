@@ -15,7 +15,7 @@ import (
 // guardRulesFilterID names guardRulesFilter in bytecode keys. Change it with
 // any change to what the filter keeps, so no chunk the old filter compiled is
 // served to the new one.
-const guardRulesFilterID = "magus-guard-rules/3"
+const guardRulesFilterID = "magus.guard-rules/v1alpha1"
 
 // guardRulesFilter limits an entry magusfile to its magus\guard registrations
 // and the names those registrations reach. Descent goes through ast.Inspect, so

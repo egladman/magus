@@ -50,7 +50,7 @@ func RegisterLifecycleRunner(fn LifecycleRunner) {
 
 // lifecycleCacheVersion is the entry format, folded into the fingerprint for the reason
 // providerCacheVersion is: a retagged field must miss rather than decode silently zeroed.
-const lifecycleCacheVersion = 1
+const lifecycleCacheVersion = "magus.lifecycle-cache/v1alpha1"
 
 type lifecycleCacheEntry struct {
 	Fingerprint string             `json:"fingerprint"`

@@ -10,9 +10,9 @@ import (
 	"sort"
 )
 
-// indexFormat is the version WriteTo stamps and ReadIndex requires. Bump it on any
-// change to the encoding below.
-const indexFormat = 1
+// indexFormat is the version WriteTo stamps and ReadIndex requires, compared by equality.
+// Replace it with the next v1alphaN on any change to the encoding below.
+const indexFormat = "magus.textrank-index/v1alpha1"
 
 var indexMagic = [4]byte{'M', 'T', 'R', 'X'}
 
@@ -215,7 +215,7 @@ func (ix *Index) Score(query []string, w BM25F) []Hit {
 func (ix *Index) WriteTo(w io.Writer) (int64, error) {
 	cw := &countWriter{w: bufio.NewWriter(w)}
 	cw.write(indexMagic[:])
-	cw.uvarint(indexFormat)
+	cw.string(indexFormat)
 	cw.uvarint(uint64(len(ix.ids)))
 	for _, id := range ix.ids {
 		cw.string(id)
@@ -292,8 +292,8 @@ func ReadIndex(r io.Reader) (*Index, error) {
 	if magic != indexMagic {
 		return nil, fmt.Errorf("textrank: not a textrank index (header %q)", magic[:])
 	}
-	if v := rd.uvarint(); rd.err == nil && v != indexFormat {
-		return nil, fmt.Errorf("textrank: index format version %d, this build reads version %d: rebuild the index", v, indexFormat)
+	if v := rd.string(); rd.err == nil && v != indexFormat {
+		return nil, fmt.Errorf("textrank: index format version %q, this build reads version %q: rebuild the index", v, indexFormat)
 	}
 
 	ix := &Index{post: map[string][]posting{}}

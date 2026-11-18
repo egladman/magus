@@ -157,7 +157,7 @@ type UnitIndexer interface {
 // them. gob because a pack is a cache entry read back only by a binary whose version
 // matches packMagic and the indexer's.
 const (
-	packMagic   = "magus-symbol-pack 1\n"
+	packMagic   = "magus.symbol-pack/v1alpha1\n"
 	trailerSize = 16
 )
 

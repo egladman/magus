@@ -269,7 +269,7 @@ func TestHashStepLinesMatchesHash(t *testing.T) {
 	// Against the constant, not a literal: this test pins that keyVersion LEADS the
 	// key inputs, which is what the diff reader relies on; the value itself is
 	// pinned once, by TestHashStep_KeyVersionIsHashed.
-	assert.Equal(t, fmt.Sprintf("keyVersion:%d", KeyVersion), lines[0])
+	assert.Equal(t, fmt.Sprintf("keyVersion:%s", KeyVersion), lines[0])
 	assert.Equal(t, withLines, hashOfLines(lines), "lines are byte-identical to what the hash consumed")
 }
 

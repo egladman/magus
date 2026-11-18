@@ -37,7 +37,7 @@ import (
 
 // symbolStampFormat changes whenever the stamp's composition does, so a stamp file written
 // under an older meaning never matches.
-const symbolStampFormat = "symbol-stamp/3"
+const symbolStampFormat = "magus.symbol-stamp/v1alpha1"
 
 // symbolStampPath is the stamp file beside one project's SCIP index.
 func symbolStampPath(indexPath string) string { return indexPath + ".fresh" }
