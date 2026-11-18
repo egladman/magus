@@ -675,11 +675,13 @@ func reserveArchive(dir, stamp string) (string, error) {
 func (s *Store) Rewrite(ctx context.Context, fn func(*Rows) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.rewrite(ctx, fn)
+	return s.rewrite(ctx, fn, nil)
 }
 
-// rewrite is Rewrite for a caller holding s.mu.
-func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
+// rewrite is Rewrite for a caller holding s.mu. then, when not nil, runs after the rows
+// are written and still under both locks, so what it appends cannot interleave with
+// another writer's.
+func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error, then func() error) error {
 	if err := s.needWriter("Rewrite"); err != nil {
 		return err
 	}
@@ -722,7 +724,10 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
 		if err := s.dropAttempts(ctx, gone); err != nil {
 			return err
 		}
-		return s.write(f, log)
+		if err := s.write(f, log); err != nil || then == nil {
+			return err
+		}
+		return then()
 	})
 }
 
