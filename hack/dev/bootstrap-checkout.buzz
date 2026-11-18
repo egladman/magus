@@ -254,9 +254,9 @@ fun startDaemon(h: Host, dir: str) > str !> any {
 // installDependencies runs every project's install with the checkout's ./magus: a fresh checkout
 // has no node_modules, and the TypeScript symbol index needs tsc. It raises naming the command.
 fun installDependencies(h: Host, dir: str) > str !> any {
-    final r = h.magus(dir, args: ["run", "install", "/"]);
+    final r = h.magus(dir, args: ["run", "install", "--all"]);
     if (r.code != 0) {
-        throw "bootstrap-checkout: {dir}/magus run install /: exit {r.code}: {r.stderr}{r.stdout}";
+        throw "bootstrap-checkout: {dir}/magus run install --all: exit {r.code}: {r.stderr}{r.stdout}";
     }
     return "installed every project's dependencies";
 }
@@ -1077,7 +1077,7 @@ test "verify-ready stops the daemon, rebuilds a skewed binary, removes only untr
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("remove")), want: ["remove /c/.claude/skills/magus-run"], message: "one removal");
     assert\equal(calls.indexOf("magus server stop")! < calls.indexOf("build /c")!, want: true, message: "daemon stops before the build");
     assert\equal(calls.indexOf("magus ls jobs -o name")! < calls.indexOf("magus server stop --pools")!, want: true, message: "the store opens first");
-    assert\equal(calls.indexOf("magus run install /")! < calls.indexOf("magus graph build")!, want: true, message: "install before the graph build");
+    assert\equal(calls.indexOf("magus run install --all")! < calls.indexOf("magus graph build")!, want: true, message: "install before the graph build");
     assert\equal(calls[calls.len() - 1], want: "magus run proofread-build libs/proofread", message: "proofread binary last");
 }
 
@@ -1091,7 +1091,7 @@ test "the build path stops the daemon, places the binary, seeds the index, then 
         "installed every project's dependencies",
         "installed every declared harness",
     ], message: "did");
-    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "magus ls jobs -o name", "seed /c", "magus run install /", "magus buzz hack/dev/bootstrap-harnesses.buzz"], message: "order");
+    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "magus ls jobs -o name", "seed /c", "magus run install --all", "magus buzz hack/dev/bootstrap-harnesses.buzz"], message: "order");
 }
 
 test "a job store the placed binary will not open stops the build path before any step writes it" {
@@ -1146,7 +1146,7 @@ test "install names the projects to install, one run each, or none" {
     final h = stubHost({}, stamps: {}, calls: calls);
     assert\equal(placeBinary(h, dir: "/c", restart: false, install: "docs,console")[3], want: "installed the dependencies of docs,console", message: "named");
     assert\equal(calls.indexOf("magus run install docs") != null and calls.indexOf("magus run install console") != null, want: true, message: "ran");
-    assert\equal(calls.indexOf("magus run install /"), want: null, message: "not every project");
+    assert\equal(calls.indexOf("magus run install --all"), want: null, message: "not every project");
     assert\equal(placeBinary(h, dir: "/c", restart: false, install: "none")[3], want: "installed no dependencies: the job touches no project that has an install target", message: "none");
 }
 
@@ -1199,18 +1199,18 @@ test "the build path with restart installs before it starts the daemon on the ne
     }, stamps: {}, calls: calls);
     final did = placeBinary(h, dir: "/c", restart: true);
     assert\equal(did[did.len() - 1], want: "started the daemon", message: "last");
-    assert\equal(calls.indexOf("magus run install /")! < calls.indexOf("magus server start")!, want: true, message: "install before the start");
+    assert\equal(calls.indexOf("magus run install --all")! < calls.indexOf("magus server start")!, want: true, message: "install before the start");
 }
 
 test "a failed install stops the build path, naming the command" {
-    final h = stubHost({"magus run install /": Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
+    final h = stubHost({"magus run install --all": Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
         _ = placeBinary(h, dir: "/c", restart: false);
     } catch (e: str) {
         why = e;
     }
-    assert\equal(why, want: "bootstrap-checkout: /c/magus run install /: exit 1: no pnpm", message: why);
+    assert\equal(why, want: "bootstrap-checkout: /c/magus run install --all: exit 1: no pnpm", message: why);
 }
 
 test "verify-ready keeps a binary at HEAD and says so" {

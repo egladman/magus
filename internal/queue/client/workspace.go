@@ -230,8 +230,8 @@ func carryTier(class string) types.CarryTier {
 	return types.CarryCode
 }
 
-// AllUnits is "/", the project reference magus reads as every project.
-func (w *Workspace) AllUnits(context.Context) ([]string, error) { return []string{"/"}, nil }
+// AllUnits is --all, the `magus run` flag that selects every project.
+func (w *Workspace) AllUnits(context.Context) ([]string, error) { return []string{"--all"}, nil }
 
 // Close releases the workspace.
 func (w *Workspace) Close() error { return w.m.Close() }

@@ -127,7 +127,7 @@ final GATE = candidateMagus("buzz hack/ci/run-with-harnesses.buzz gate -- --inhe
 final REGENERATE = candidateMagus("run generate:rw");
 
 // validateArgs names no project: the queue adds the change's affected projects to each
-// hook line, ahead of its `--`, or "/" when that set is no proof. Hooks read main's signed cache
+// hook line, ahead of its `--`, or --all when that set is no proof. Hooks read main's signed cache
 // through the queue's read-only proxy; the runner's cache token stays with the queue.
 // The plan arrives on stdin; validate() feeds it.
 export fun validateArgs(dir: str, change: str) > [str] {

@@ -962,17 +962,28 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 	}
 	var r targetRun
 	skip := false
+	all := false
+	// The rest of the guard reads "/" as every project, the resolver's own spelling.
+	done := func() (targetRun, bool) {
+		if all {
+			r.projects = append(r.projects, "/")
+		}
+		return r, r.target != ""
+	}
 	for i, a := range c.Args {
 		switch {
 		case skip:
 			skip = false
 		case a == "--":
 			r.forwarded = c.Args[i+1:]
-			return r, r.target != ""
+			return done()
 		case len(a) > 1 && a[0] == '-':
 			name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 			if slices.Contains(runReportFlags, name) {
 				return targetRun{}, false
+			}
+			if name == "all" && r.verb == "run" {
+				all = !joined || value != "false"
 			}
 			if name == "no-default-charms" {
 				r.noDefaultCharms = !joined || value != "false"
@@ -995,7 +1006,7 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 			r.projects = append(r.projects, a)
 		}
 	}
-	return r, r.target != ""
+	return done()
 }
 
 // verbFlagTakesValue reports whether a flag consumes the next word, asking verb's own flags
