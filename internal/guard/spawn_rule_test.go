@@ -1553,9 +1553,9 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	assert.Equal(t, decidedByApproved, failures[0].Side)
 	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
 	assert.Equal(t, recorder.RuleFailure{Side: decidedByWorktree, Error: "the rule had no time left before the guard's deadline"}, failures[1])
-	require.NotEmpty(t, phasesOf(spawns[0]))
-	assert.Equal(t, phaseApprovedResolve, phasesOf(spawns[0])[0].Name)
-	assert.True(t, phasesOf(spawns[0])[0].Lapsed)
+	require.NotEmpty(t, guardPhases(spawns[0]))
+	assert.Equal(t, phaseApprovedResolve, guardPhases(spawns[0])[0].Name)
+	assert.True(t, guardPhases(spawns[0])[0].Lapsed)
 }
 
 // Codex reports a finished spawn's response as a string holding JSON, and its v2 spawn

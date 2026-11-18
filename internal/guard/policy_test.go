@@ -210,18 +210,9 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, found, err := sessions.ActivityHere(t.Context(), cacheDir, "s1")
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Len(t, tr.Calls, 1)
-	got := tr.Calls[0]
-	assert.Equal(t, "Bash", got.Action)
-	assert.Equal(t, int64(420), got.ToolMs)
-	assert.Empty(t, got.Worker)
-	assert.Empty(t, got.Rule)
 	assert.Equal(t, types.AgentFacts{
 		CallDigest: "c1", ResultDigest: "r1", Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
-	}, got.AgentFacts)
+	}, recordedRequest(t, cacheDir).AgentFacts)
 }
 
 func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {

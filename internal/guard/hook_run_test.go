@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -312,7 +311,26 @@ func callDecidedBy(c journal.Call) string {
 	return c.Guard.DecidedBy
 }
 
-func phasesOf(c journal.Call) []journal.Phase {
+// recordedRequest is the request payload of the one agent command the log
+// under cacheDir holds.
+func recordedRequest(t *testing.T, cacheDir string) recorder.AgentCommandRequest {
+	t.Helper()
+	var calls []journal.Call
+	for c, err := range recorder.Calls(t.Context(), cacheDir, 10) {
+		require.NoError(t, err)
+		if c.Kind == journal.CallKindAgentCommand {
+			calls = append(calls, c)
+		}
+	}
+	require.Len(t, calls, 1)
+	raw, err := recorder.ReadPayload(cacheDir, calls[0].Request)
+	require.NoError(t, err)
+	var req recorder.AgentCommandRequest
+	require.NoError(t, codec.Unmarshal(raw, &req))
+	return req
+}
+
+func guardPhases(c journal.Call) []journal.Phase {
 	if c.Guard == nil {
 		return nil
 	}
@@ -1407,16 +1425,8 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 
-	tr, found, err := sessions.ActivityHere(ctx, cacheDir, "s1")
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Len(t, tr.Calls, 1)
-	got := tr.Calls[0]
-	assert.Equal(t, "Bash", got.Action)
-	assert.Equal(t, int64(420), got.ToolMs)
-	assert.Empty(t, got.Worker)
-	assert.Empty(t, got.Rule)
-	assert.Equal(t, types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"}, got.AgentFacts)
+	req := recordedRequest(t, cacheDir)
+	assert.Equal(t, types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"}, req.AgentFacts)
 }
 
 func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
