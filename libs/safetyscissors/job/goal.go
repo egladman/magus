@@ -364,4 +364,3 @@ func acceptFaults(g Goal, bad func(sub, message, fix string)) {
 		seen[b] = true
 	}
 }
-

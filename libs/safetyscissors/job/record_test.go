@@ -180,7 +180,7 @@ func (s *RecordSuite) TestARowsLineIsPinned() {
 		Goals:        []Goal{{ID: "lint", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("lint", "p"), Accept: []Basis{BasisWitnessed}}},
 		RegisteredBy: Origin{User: "eli", EntryPoint: EntryPointCLI, Credential: Credential{Kind: "socket-peer", ID: "c1"}},
 		WriteProof:   WriteProofDisjoint, BaseVerdict: BaseRevisionMatch, ReportedBase: "abc",
-		ModelTier:    &tier.Assignment{Name: "bounded", Rank: 2, Skills: tier.SkillVariantShort, Source: tier.SourceUserMatrix}}
+		ModelTier: &tier.Assignment{Name: "bounded", Rank: 2, Skills: tier.SkillVariantShort, Source: tier.SourceUserMatrix}}
 
 	out, err := MarshalRecord(row, nil)
 

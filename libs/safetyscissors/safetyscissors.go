@@ -31,8 +31,8 @@ type SafetyScissors struct {
 	policy  *sandbox.Policy
 }
 
-// New opens the harness on dir. It requires [WithInvocation], [WithActor] and
-// [WithNotices]; every other part is absent until its option is passed, and its
+// New opens the harness on dir. It requires [WithInvocation], [WithActor],
+// [WithNotices] and [WithCheckSpec]; every other part is absent until its option is passed, and its
 // accessor then returns an [*UnconfiguredError] naming the option.
 //
 // It refuses an empty dir and each option problem with an [*OptionError], joined, and
@@ -98,6 +98,9 @@ func (c *config) missing() []error {
 	if c.notices == nil {
 		errs = append(errs, &OptionError{Option: "WithNotices", Problem: "New requires it: the job store reports what it did there, and never prints"})
 	}
+	if c.checks == nil {
+		errs = append(errs, &OptionError{Option: "WithCheckSpec", Problem: "New requires it: the job store keeps a check as opaque JSON and reads it only through the caller's spec"})
+	}
 	return errs
 }
 
@@ -109,7 +112,7 @@ func (c *config) sessionOptions() []session.Option {
 }
 
 func (c *config) jobOptions() []job.StoreOption {
-	opts := slices.Concat(c.jobOpts, []job.StoreOption{job.WithActor(c.actor), job.WithNotices(c.notices)})
+	opts := slices.Concat(c.jobOpts, []job.StoreOption{job.WithActor(c.actor), job.WithNotices(c.notices)}, c.checks)
 	if c.clock != nil {
 		opts = append(opts, job.WithClock(c.clock))
 	}

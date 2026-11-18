@@ -1,6 +1,7 @@
 package safetyscissors
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -31,8 +33,17 @@ func required() []Option {
 		WithInvocation("inv1", session.InvocationStart{Command: "test"}),
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
+		WithCheckSpec(keepCheck, sameCheck, renderCheck),
 	}
 }
+
+// keepCheck, sameCheck and renderCheck stand in for the caller's check spec: a check is
+// whatever JSON it is, compared byte for byte.
+func keepCheck(raw codec.RawMessage) (codec.RawMessage, error) { return raw, nil }
+
+func sameCheck(a, b codec.RawMessage) (bool, error) { return bytes.Equal(a, b), nil }
+
+func renderCheck(raw codec.RawMessage) (string, error) { return string(raw), nil }
 
 func (s *NewSuite) open(opts ...Option) *SafetyScissors {
 	ss, err := New(s.T().Context(), s.dir, append(required(), opts...)...)
@@ -77,7 +88,13 @@ func (s *NewSuite) optionProblems(err error) []string {
 func (s *NewSuite) TestNewNamesEveryMissingRequiredOptionAtOnce() {
 	_, err := New(s.T().Context(), s.dir)
 	s.Require().Error(err)
-	s.Equal([]string{"WithInvocation", "WithActor", "WithNotices"}, s.optionProblems(err))
+	s.Equal([]string{"WithInvocation", "WithActor", "WithNotices", "WithCheckSpec"}, s.optionProblems(err))
+}
+
+func (s *NewSuite) TestNewRefusesACheckSpecWithANilFunction() {
+	_, err := New(s.T().Context(), s.dir, append(required(), WithCheckSpec(keepCheck, nil, renderCheck))...)
+	s.Require().Error(err)
+	s.Equal([]string{"WithCheckSpec"}, s.optionProblems(err))
 }
 
 func (s *NewSuite) TestNewRefusesAnEmptyDir() {
@@ -255,6 +272,7 @@ func ExampleNew() {
 		WithInvocation("inv1", session.InvocationStart{Command: "example"}),
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
+		WithCheckSpec(keepCheck, sameCheck, renderCheck),
 		WithSlots(2),
 	)
 	if err != nil {
