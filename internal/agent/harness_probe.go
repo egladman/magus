@@ -308,15 +308,8 @@ func checkProbeEnvironment(root string) (reason string, ok bool) {
 // workspace's own ./magus, fall back to PATH. root is already the workspace root
 // VerifyHarness resolved, so no further upward walk is needed here.
 func hasExecutableMagus(root string) bool {
-	name := "magus"
-	if runtime.GOOS == "windows" {
-		name = "magus.exe"
-	}
-	if info, err := os.Stat(filepath.Join(root, name)); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-		return true
-	}
-	_, err := exec.LookPath("magus")
-	return err == nil
+	_, ok := hookBinary(root)
+	return ok
 }
 
 // probeOneCommand actually executes command (a full shell invocation, exactly as
@@ -441,4 +434,137 @@ func firstLineContaining(text, substr string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// failClosedWrapper is the shell function the shipped wirings wrap a hook line in. It
+// turns any exit but the verdict's into a refusal, so a magus that cannot start still
+// blocks the call.
+const failClosedWrapper = "fail_closed()"
+
+// projectDirWord is how a rendered hook line names the workspace root.
+const projectDirWord = `"$CLAUDE_PROJECT_DIR"`
+
+// failOpenHooks reports every guard line under the descriptor's managed paths in config
+// that a host would run the call of, unjudged: one whose magus invocation exits other
+// than the 0 or 2 a verdict exits with, and one missing the wrapper the spell renders.
+func failOpenHooks(ctx context.Context, root string, config map[string]any, d HarnessDescriptor) []string {
+	var found []string
+	for _, group := range d.ManagedEntries {
+		configured, err := pathEntries(config, group.Path)
+		if err != nil {
+			continue // pathEntries' own error is reported by the managed-entry check
+		}
+		var rendered, lines []string
+		for _, entry := range group.Entries {
+			collectCommands(entry, &rendered)
+		}
+		collectCommands(configured, &lines)
+		wraps := false
+		for _, line := range rendered {
+			wraps = wraps || strings.Contains(line, failClosedWrapper)
+		}
+		at := strings.Join(group.Path, ".")
+		for _, line := range lines {
+			if !supportsHostResponseOverride(line) {
+				continue
+			}
+			if wraps && !strings.Contains(line, failClosedWrapper) {
+				found = append(found, fmt.Sprintf("%s: %q runs magus without the %s wrapper the spell renders, so a magus that cannot start exits 1 or 127 and the host runs the call unjudged",
+					at, line, strings.TrimSuffix(failClosedWrapper, "()")))
+			}
+			if reason := probeInvocationExit(ctx, root, line); reason != "" {
+				found = append(found, fmt.Sprintf("%s: %q %s", at, line, reason))
+			}
+		}
+	}
+	return found
+}
+
+// lineInvocation is the magus argv a hook line runs, from its `buzz` word on, with the
+// project directory set to root. false for a line whose invocation carries any other
+// shell syntax, which the probe does not run.
+func lineInvocation(root, line string) ([]string, bool) {
+	at := strings.LastIndex(line, " buzz ")
+	if at < 0 {
+		return nil, false
+	}
+	tail := line[at+1:]
+	if strings.ContainsAny(strings.ReplaceAll(tail, projectDirWord, ""), probeMetacharacters) {
+		return nil, false
+	}
+	argv := strings.Fields(tail)
+	for i, word := range argv {
+		if word == projectDirWord {
+			argv[i] = root
+		}
+	}
+	return argv, true
+}
+
+// hookBinary is the magus a shipped hook line runs: the workspace's own ./magus, else
+// the one on PATH.
+func hookBinary(root string) (string, bool) {
+	name := "magus"
+	if runtime.GOOS == "windows" {
+		name = "magus.exe"
+	}
+	own := filepath.Join(root, name)
+	if info, err := os.Stat(own); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+		return own, true
+	}
+	found, err := exec.LookPath("magus")
+	return found, err == nil
+}
+
+// probeInvocationExit runs the magus invocation a shell line carries against the
+// synthetic event its script expects, without the shell around it, and says how it
+// fails open: an exit other than 0 or 2, which a host reads as no verdict. "" when it
+// exits 0 or 2, or when it cannot be run at all, which checkProbeEnvironment reports. A
+// line plain enough to run whole is probeOneCommand's.
+func probeInvocationExit(ctx context.Context, root, line string) string {
+	argv, ok := lineInvocation(root, line)
+	if !ok || runnableAsProbe(root, line) {
+		return ""
+	}
+	bin, ok := hookBinary(root)
+	if !ok {
+		return ""
+	}
+	scratch, err := os.MkdirTemp("", "magus-harness-probe-*")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = os.RemoveAll(scratch) }() // a leftover temp dir changes no verdict
+	probeCtx, cancel := context.WithTimeout(ctx, ProbeTimeout(ctx))
+	defer cancel()
+	event, _ := probeEvent(line)
+	cmd := exec.CommandContext(probeCtx, bin, argv...)
+	cmd.Dir = root
+	cmd.Stdin = strings.NewReader(event)
+	cmd.Env = append(withoutLeaseClaim(os.Environ()),
+		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
+		"TMPDIR="+scratch,
+		"CLAUDE_PROJECT_DIR="+root,
+		"HOST_RESPONSE={{.decision}}", "HOST_ADVISE_BRANCH=",
+	)
+	out, runErr := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if probeCtx.Err() != nil || !errors.As(runErr, &exitErr) || exitErr.ExitCode() == 2 {
+		return ""
+	}
+	reason := fmt.Sprintf("fails open: %s exits %d, which the host reads as no verdict and runs the call", strings.Join(append([]string{bin}, argv...), " "), exitErr.ExitCode())
+	if detail := firstLine(string(out)); detail != "" {
+		reason += ": " + detail
+	}
+	return reason
+}
+
+// firstLine is text's first non-blank line, trimmed.
+func firstLine(text string) string {
+	for line := range strings.SplitSeq(text, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
 }

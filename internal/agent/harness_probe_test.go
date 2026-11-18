@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
@@ -449,4 +450,76 @@ func TestVerifyHarnessProbeSkipsARelativePathEntry(t *testing.T) {
 	_, err := VerifyHarness(untimedProbes(), root, "relpath")
 	require.NoError(t, err)
 	assert.NoFileExists(t, marker)
+}
+
+// The line the spell renders: the shipped wrapper around the glue's invocation.
+const wrappedHookLine = `m="$CLAUDE_PROJECT_DIR"/magus; fail_closed() { "$@"; s=$?; [ "$s" -eq 0 ] || [ "$s" -eq 2 ] || exit 2; exit $s; }; ` +
+	`fail_closed "$m" buzz -C "$CLAUDE_PROJECT_DIR" -s magus-command.buzz -- --agent-name wrapped-host`
+
+// The line a config installed before the wrapper still carries.
+const unwrappedHookLine = `"$CLAUDE_PROJECT_DIR"/magus buzz -C "$CLAUDE_PROJECT_DIR" -s magus-command.buzz -- --agent-name wrapped-host`
+
+// failOpenSuite verifies a harness by the hook lines its config actually holds, for a
+// line whose call the host would run unjudged.
+type failOpenSuite struct {
+	suite.Suite
+	w *testkit.Workspace
+}
+
+func TestFailOpenSuite(t *testing.T) { suite.Run(t, new(failOpenSuite)) }
+
+func (s *failOpenSuite) SetupTest() {
+	s.w = testkit.NewWorkspace(s.T())
+	registerHarnessSpell(s.T(), "wrapped-host", fmt.Sprintf(`{
+  "api_version": "magus.harness/v1alpha1",
+  "id": "wrapped-host",
+  "display": {"name": "Wrapped Host"},
+  "config": {"path": "host/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{"path": ["hooks", "PreToolUse"], "entries": [{"hooks": [{"type": "command", "command": %q}]}]}]
+}`, wrappedHookLine))
+}
+
+// verify installs line as the config's one PreToolUse hook and a ./magus whose glue
+// runs script, then verifies the harness.
+func (s *failOpenSuite) verify(line, script string) HarnessVerification {
+	body, err := codec.Marshal(map[string]any{"hooks": map[string]any{"PreToolUse": []any{
+		map[string]any{"hooks": []any{map[string]any{"type": "command", "command": line}}},
+	}}})
+	s.Require().NoError(err)
+	s.w.Write("host/hooks.json", string(body))
+	s.w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\n"+script)
+	result, err := VerifyHarness(untimedProbes(), s.w.Root(), "wrapped-host")
+	s.Require().NoError(err)
+	return result
+}
+
+func (s *failOpenSuite) TestALineWhoseGlueExitsOneFailsOpen() {
+	result := s.verify(wrappedHookLine, "echo 'open magus-command.buzz: no such file' >&2\nexit 1\n")
+
+	s.Equal(HarnessUncovered, result.Status)
+	s.Contains(result.Reason, "fails open")
+	s.Contains(result.Reason, "exits 1, which the host reads as no verdict")
+	s.Contains(result.Reason, "open magus-command.buzz: no such file")
+	s.Contains(result.Reason, "magus agent harness install")
+}
+
+func (s *failOpenSuite) TestALineMissingTheWrapperFailsOpen() {
+	result := s.verify(unwrappedHookLine, "echo deny\nexit 0\n")
+
+	s.Equal(HarnessUncovered, result.Status)
+	s.Contains(result.Reason, "without the fail_closed wrapper the spell renders")
+	s.NotContains(result.Reason, "exits 0")
+}
+
+func (s *failOpenSuite) TestAWrappedLineThatAnswersIsVerified() {
+	result := s.verify(wrappedHookLine, "echo deny\nexit 0\n")
+
+	s.Equal(HarnessVerified, result.Status, result.Reason)
+}
+
+func (s *failOpenSuite) TestADenyIsNoFailure() {
+	result := s.verify(wrappedHookLine, "echo deny\nexit 2\n")
+
+	s.NotContains(result.Reason, "fails open")
 }
