@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -220,4 +224,219 @@ func servedNexts(text string) []string {
 		}
 	}
 	return out
+}
+
+// CommandShape is a shell line with what it names normalized away. Calls
+// that differ only in paths and literals read alike: `grep -rn foo src` is
+// `grep -rn <arg>`. It keeps programs, flags, operators and redirections,
+// and is "" for a line that does not parse. A wrapper stays the program.
+func CommandShape(command string) string {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
+	if err != nil {
+		return ""
+	}
+	return stmtsShape(f.Stmts)
+}
+
+// CommandShapes is the shape of each program a shell line runs, in order,
+// each with its own redirections. `cd x && grep -rn foo src` is `cd <path>`
+// and `grep -rn <arg>`. Programs inside loops and substitutions count. Nil
+// for a line that does not parse. Unguarded calls cluster by these.
+func CommandShapes(command string) []string {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if s, ok := n.(*syntax.Stmt); ok {
+			if call, ok := s.Cmd.(*syntax.CallExpr); ok && len(call.Args) > 0 {
+				out = append(out, stmtShape(s))
+			}
+		}
+		return true
+	})
+	return out
+}
+
+func stmtsShape(stmts []*syntax.Stmt) string {
+	parts := make([]string, 0, len(stmts))
+	for _, s := range stmts {
+		if shape := stmtShape(s); shape != "" {
+			parts = append(parts, shape)
+		}
+	}
+	return strings.Join(parts, " ; ")
+}
+
+func stmtShape(s *syntax.Stmt) string {
+	words := []string{}
+	if s.Negated {
+		words = append(words, "!")
+	}
+	if cmd := commandShape(s.Cmd); cmd != "" {
+		words = append(words, cmd)
+	}
+	for _, r := range s.Redirs {
+		words = append(words, redirectShape(r))
+	}
+	if s.Background {
+		words = append(words, "&")
+	}
+	return strings.Join(words, " ")
+}
+
+func commandShape(cmd syntax.Command) string {
+	switch c := cmd.(type) {
+	case nil:
+		return ""
+	case *syntax.CallExpr:
+		return callShape(c.Args)
+	case *syntax.BinaryCmd:
+		return fmt.Sprintf("%s %s %s", stmtShape(c.X), c.Op.String(), stmtShape(c.Y))
+	case *syntax.Subshell:
+		return fmt.Sprintf("( %s )", stmtsShape(c.Stmts))
+	case *syntax.Block:
+		return fmt.Sprintf("{ %s }", stmtsShape(c.Stmts))
+	case *syntax.IfClause:
+		return fmt.Sprintf("if %s ; then %s ; fi", stmtsShape(c.Cond), stmtsShape(c.Then))
+	case *syntax.WhileClause:
+		kw := "while"
+		if c.Until {
+			kw = "until"
+		}
+		return fmt.Sprintf("%s %s ; do %s ; done", kw, stmtsShape(c.Cond), stmtsShape(c.Do))
+	case *syntax.ForClause:
+		return fmt.Sprintf("for <loop> ; do %s ; done", stmtsShape(c.Do))
+	case *syntax.TimeClause:
+		return "time " + stmtShape(c.Stmt)
+	case *syntax.DeclClause:
+		return c.Variant.Value + " <assign>"
+	case *syntax.CaseClause:
+		return "case <arg> ; esac"
+	case *syntax.FuncDecl:
+		return "function"
+	case *syntax.TestClause:
+		return "[[ <test> ]]"
+	case *syntax.ArithmCmd:
+		return "(( <arith> ))"
+	default:
+		return "<compound>"
+	}
+}
+
+// subcommandDepth is how many leading bare words name a subcommand, for
+// programs whose first word picks what they do. Every other program's
+// operands normalize from the first, so `grep foo src` and `grep bar lib`
+// share a shape.
+var subcommandDepth = map[string]int{
+	"magus": 2, "gh": 2,
+	"git": 1, "hg": 1, "sl": 1, "jj": 1, "go": 1, "npm": 1, "pnpm": 1, "yarn": 1,
+	"cargo": 1, "docker": 1, "podman": 1, "kubectl": 1, "mise": 1, "brew": 1, "uv": 1,
+	"buf": 1, "gcloud": 1, "aws": 1, "terraform": 1,
+}
+
+var (
+	subcommandWord = regexp.MustCompile(`^[a-z][a-z0-9-]*(:[a-z0-9-]+)?$`)
+	numberWord     = regexp.MustCompile(`^[0-9][0-9,.:+-]*[a-z]?$`)
+	digits         = regexp.MustCompile(`[0-9]+`)
+)
+
+func callShape(args []*syntax.Word) string {
+	if len(args) == 0 {
+		// An assignment's value is where a credential sits: never shown.
+		return "<assign>"
+	}
+	program := "<cmd>"
+	if lit, ok := literal(args[0]); ok && lit != "" {
+		program = path.Base(lit)
+	}
+	out := []string{program}
+	depth := subcommandDepth[program]
+	for i, w := range args[1:] {
+		lit, ok := literal(w)
+		if ok && i < depth && subcommandWord.MatchString(lit) {
+			out = append(out, lit)
+			continue
+		}
+		depth = 0
+		token := operandShape(lit, ok)
+		if strings.HasPrefix(token, "<") && out[len(out)-1] == token {
+			continue
+		}
+		out = append(out, token)
+	}
+	return strings.Join(out, " ")
+}
+
+// operandShape is the placeholder an operand reads as, or the flag it is.
+func operandShape(lit string, isLiteral bool) string {
+	switch {
+	case !isLiteral:
+		return "<arg>"
+	case lit == "-" || lit == "--":
+		return lit
+	case strings.HasPrefix(lit, "--"):
+		if name, _, found := strings.Cut(lit, "="); found {
+			return name + "=<arg>"
+		}
+		return lit
+	case strings.HasPrefix(lit, "-"):
+		// Letters stay in order: one dash may be a long flag (go's -run), not a
+		// bundle of short ones, and only the program knows which.
+		return digits.ReplaceAllString(lit, "<n>")
+	case numberWord.MatchString(lit):
+		return "<n>"
+	case strings.ContainsAny(lit, "/~") || strings.HasPrefix(lit, ".") || path.Ext(lit) != "":
+		return "<path>"
+	default:
+		return "<arg>"
+	}
+}
+
+func redirectShape(r *syntax.Redirect) string {
+	op := r.Op.String()
+	if r.N != nil {
+		op = r.N.Value + op
+	}
+	if r.Hdoc != nil {
+		return op + " <heredoc>"
+	}
+	lit, ok := literal(r.Word)
+	switch {
+	case ok && (lit == "/dev/null" || numberWord.MatchString(lit)):
+		return op + lit
+	case ok:
+		return op + " <path>"
+	default:
+		return op + " <arg>"
+	}
+}
+
+// literal is the text the shell passes for w. It is false when part of it
+// is known only at run time: a variable, a substitution, an expansion.
+func literal(w *syntax.Word) (string, bool) {
+	if w == nil {
+		return "", false
+	}
+	var b strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			b.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			for _, inner := range p.Parts {
+				lit, ok := inner.(*syntax.Lit)
+				if !ok {
+					return "", false
+				}
+				b.WriteString(lit.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	return b.String(), true
 }
