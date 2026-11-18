@@ -400,7 +400,7 @@ func TestReadNavigationLinesComeFromTheWorkspace(t *testing.T) {
 // and a build of ./magus are still refused.
 func TestWorkerCheckOnlyLetsAReadOnlyRunOverItsOwnPaths(t *testing.T) {
 	row := testCheckLease()
-	row.Check.Target = "lint"
+	row.Check = rawCheck("lint", ".")
 	ctx, _ := fleetFixture(t, row)
 	deps := composingWorkspace(t)
 

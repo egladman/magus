@@ -476,7 +476,7 @@ func integratorFixture(t *testing.T, row jobtypes.Job, title string) (context.Co
 func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 	row := narrowLease()
 	row.Validation = ""
-	row.Check = &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
+	row.Check = rawCheck("go-test", ".")
 	integrating := []string{
 		"./magus run go-build .",
 		"./magus run generate --all -s",
@@ -531,7 +531,7 @@ func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 func TestACheckoutHolderGatesInItsOwnCheckout(t *testing.T) {
 	row := narrowLease()
 	row.Validation = ""
-	row.Check = &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
+	row.Check = rawCheck("go-test", ".")
 	ctx, deps := integratorFixture(t, row, "root/feat "+row.ID)
 	recordCheckout := func(ctx context.Context) {
 		at, ok := ctx.Value(locationKey{}).(location)
@@ -566,7 +566,7 @@ func TestACheckoutHolderGatesWhereTheCallRuns(t *testing.T) {
 	held, other := workspaceDir(), workspaceDir()
 	row := narrowLease()
 	row.Validation = ""
-	row.Check = &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
+	row.Check = rawCheck("go-test", ".")
 	row.CheckoutRoot = held
 	ctx, deps := integratorFixture(t, row, "root/feat "+row.ID)
 	at, ok := ctx.Value(locationKey{}).(location)
@@ -609,7 +609,7 @@ func heldRowFixture(t *testing.T, held, worktreeRoot, role string) (context.Cont
 	t.Helper()
 	row := narrowLease()
 	row.Validation = ""
-	row.Check = &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
+	row.Check = rawCheck("go-test", ".")
 	row.CheckoutRoot = held
 	ctx, deps := integratorFixture(t, row, fmt.Sprintf("root/%s %s", role, row.ID))
 	if worktreeRoot != "" {
@@ -692,7 +692,7 @@ func untakenRowFixture(t *testing.T, wt jobtypes.Worktree) (context.Context, Dep
 	require.True(t, ok)
 	row := narrowLease()
 	row.Validation = ""
-	row.Check = &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
+	row.Check = rawCheck("go-test", ".")
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: root})
 	_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
@@ -758,7 +758,7 @@ func figuresLease() jobtypes.Job {
 		ID:         "figures/flow",
 		Agent:      jobtypes.Instructed("draw the flow figure"),
 		Paths:      jobtypes.Paths{Write: []string{"docs/figures/flow.md", "docs/gen/figures/flow.svg"}},
-		Check:      &jobtypes.LeaseCheck{Target: "diagrams_generate", Project: "docs"},
+		Check:      rawCheck("diagrams_generate", "docs"),
 		State:      jobtypes.StateRunning,
 		Registered: 1,
 	}
@@ -799,7 +799,7 @@ func testCheckLease() jobtypes.Job {
 		ID:         "guard/fix",
 		Agent:      jobtypes.Instructed("fix a guard rule"),
 		Paths:      jobtypes.Paths{Write: []string{"internal/guard/**"}},
-		Check:      &jobtypes.LeaseCheck{Target: "test", Project: "."},
+		Check:      rawCheck("test", "."),
 		State:      jobtypes.StateRunning,
 		Registered: 1,
 	}
@@ -905,7 +905,7 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 // cannot fit still learns whether its code builds.
 func TestWorkerCheckOnlyLetsAWorkerVetItsOwnPaths(t *testing.T) {
 	row := testCheckLease()
-	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "libs/conventions"}
+	row.Check = rawCheck("test", "libs/conventions")
 	ctx, _ := fleetFixture(t, row)
 	deps := composingWorkspace(t)
 	rw := deps
@@ -1052,7 +1052,7 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	lease := func(writePaths ...string) jobtypes.Job {
 		return jobtypes.Job{
 			ID: "docs/jobs", Agent: jobtypes.Instructed("document jobs"), Paths: jobtypes.Paths{Write: writePaths},
-			Check: &jobtypes.LeaseCheck{Target: "format", Project: "."}, State: jobtypes.StateRunning, Registered: 1,
+			Check: rawCheck("format", "."), State: jobtypes.StateRunning, Registered: 1,
 		}
 	}
 	for _, tt := range []struct {
@@ -1094,7 +1094,7 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	}
 
 	everywhere := lease("docs/guides/jobs.md")
-	everywhere.Check.Project = "/"
+	everywhere.Check = rawCheck("format", "/")
 	ctx, _ := fleetFixture(t, everywhere)
 	reason := denyWorkerCheckOnly(ctx, deps, everywhere.ID, "./magus run format:rw --all")
 	require.NotEmpty(t, reason, "a run over every project reads every project's declarations")
@@ -1114,7 +1114,7 @@ func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := jobtypes.Job{
 		ID: "docs/jobs", Agent: jobtypes.Instructed("document jobs"), Paths: jobtypes.Paths{Write: []string{"docs/**"}},
-		Check: &jobtypes.LeaseCheck{Target: "format", Project: "."}, State: jobtypes.StateRunning, Registered: 1,
+		Check: rawCheck("format", "."), State: jobtypes.StateRunning, Registered: 1,
 	}
 	for _, tt := range []struct {
 		name, command string
@@ -1150,7 +1150,7 @@ func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
 	assert.Contains(t, reason.Say, "rewrites `docs/**/*.md` outside lease docs/jobs's write paths", "the target calling the op is judged by its declarations")
 
 	uncalled := row
-	uncalled.Check = &jobtypes.LeaseCheck{Target: "markdown-lint", Project: "."}
+	uncalled.Check = rawCheck("markdown-lint", ".")
 	ctx, root := fleetFixture(t, uncalled)
 	deps := Dependencies{Inspect: inspect}
 	reason = denyWorkerCheckOnly(ctx, deps, uncalled.ID, "./magus run markdown-lint:rw .")
@@ -1252,7 +1252,7 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := jobtypes.Job{
 		ID: "docs/jobs", Agent: jobtypes.Instructed("document jobs"), Paths: jobtypes.Paths{Write: []string{"docs/guides/jobs.md"}},
-		Check: &jobtypes.LeaseCheck{Target: "dprint", Project: "docs"}, State: jobtypes.StateRunning, Registered: 1,
+		Check: rawCheck("dprint", "docs"), State: jobtypes.StateRunning, Registered: 1,
 	}
 	for _, tt := range []struct {
 		name, command string
@@ -1332,7 +1332,7 @@ func TestWorkerCheckOnlyNamesASlowOpen(t *testing.T) {
 func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	row := jobtypes.Job{
 		ID: "docs/jobs", Agent: jobtypes.Instructed("document jobs"), Paths: jobtypes.Paths{Write: []string{"docs/guides/jobs.md"}},
-		Check: &jobtypes.LeaseCheck{Target: "format", Project: "docs"}, State: jobtypes.StateRunning, Registered: 1,
+		Check: rawCheck("format", "docs"), State: jobtypes.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	at := hookLocation(ctx, Dependencies{})
@@ -1468,7 +1468,7 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 // TestWorkerCheckOnlyNextQuotesTheCheck: a forwarded pattern holding `|` is a pipe unless
 // quoted, and the next is a command a reader runs as printed.
 func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
-	c := jobtypes.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
+	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
 	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --budget-wait 0 -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 
 	c.NoDefaultCharms = true
@@ -4041,7 +4041,7 @@ func (s *CherryPickWriteSuite) TestAnUnleasedSessionIsNotGraded() {
 func regeneratingLease(id string) jobtypes.Job {
 	return jobtypes.Job{
 		ID: id, Agent: jobtypes.Instructed("add a flag"), Paths: jobtypes.Paths{Write: []string{"cli/registry.go"}},
-		Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}, State: jobtypes.StateRunning, Registered: 1,
+		Check: rawCheck("test", "."), State: jobtypes.StateRunning, Registered: 1,
 	}
 }
 
@@ -4106,7 +4106,7 @@ func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 	deps := regeneratingWorkspace(t)
 	owner := jobtypes.Job{
 		ID: "a/lock", Agent: jobtypes.Instructed("own the lock"), Paths: jobtypes.Paths{Write: []string{"testdata/api.lock"}},
-		Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}, State: jobtypes.StateRunning, Registered: 1,
+		Check: rawCheck("test", "."), State: jobtypes.StateRunning, Registered: 1,
 	}
 	ended := owner
 	ended.State = jobtypes.StatePass
@@ -4402,7 +4402,7 @@ func (s *workerCheckReadsSuite) ruled() Dependencies {
 // its write paths sit elsewhere, as after that project was renamed.
 func movedProjectRow() jobtypes.Job {
 	row := testCheckLease()
-	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "libs/conventions"}
+	row.Check = rawCheck("test", "libs/conventions")
 	return row
 }
 
@@ -4434,7 +4434,7 @@ func (s *workerCheckReadsSuite) TestAWritingRunOverAReadPathIsRefused() {
 
 func (s *workerCheckReadsSuite) TestACheckOverEveryProjectOwnsNone() {
 	row := testCheckLease()
-	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "/"}
+	row.Check = rawCheck("test", "/")
 	s.True(s.judged(row, composingWorkspace(s.T()), "./magus run lint --all --no-default-charms").refused())
 }
 

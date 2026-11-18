@@ -1745,7 +1745,7 @@ func TestSpawnIntoAFullBuildBudgetIsAdvised(t *testing.T) {
 }
 
 func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T) {
-	check := &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
+	check := rawCheck("go-test", ".")
 	full := budget.Snapshot{BudgetSlots: 2, HeldSlots: 2}
 	for _, tc := range []struct {
 		name   string
@@ -1754,7 +1754,7 @@ func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T)
 	}{
 		{"read-only without a check", jobtypes.Job{ReadOnly: true}, false},
 		{"read-only with a check", jobtypes.Job{ReadOnly: true, Check: check}, true},
-		{"read-only with a check goal", jobtypes.Job{ReadOnly: true, Goals: []jobtypes.Goal{{Kind: jobtypes.GoalKindCheck, Check: *check}}}, true},
+		{"read-only with a check goal", jobtypes.Job{ReadOnly: true, Goals: []jobtypes.Goal{{Kind: jobtypes.GoalKindCheck, Check: check}}}, true},
 		{"read-only with a paths goal only", jobtypes.Job{ReadOnly: true, Goals: []jobtypes.Goal{{Kind: jobtypes.GoalKindPaths, Paths: []string{"a/**"}}}}, false},
 		{"write paths", jobtypes.Job{Paths: jobtypes.Paths{Write: []string{"a/**"}}}, true},
 		{"read-only with write paths", jobtypes.Job{ReadOnly: true, Paths: jobtypes.Paths{Write: []string{"a/**"}}}, true},

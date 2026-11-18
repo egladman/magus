@@ -1347,7 +1347,7 @@ func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	testkit.Isolate(t)
 	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
-	row := jobtypes.Job{ID: "worker", Paths: jobtypes.Paths{Write: []string{"a.go"}}, Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}, State: jobtypes.StateRunning, Registered: 1}
+	row := jobtypes.Job{ID: "worker", Paths: jobtypes.Paths{Write: []string{"a.go"}}, Check: rawCheck("test", "."), State: jobtypes.StateRunning, Registered: 1}
 	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := WithLocation(t.Context(), cacheDir, root, "")

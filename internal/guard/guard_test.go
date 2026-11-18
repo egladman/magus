@@ -49,6 +49,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// rawCheck is the check a row stores for target in project: opaque JSON, as the store keeps it.
+func rawCheck(target, project string) codec.RawMessage {
+	return codec.RawMessage(fmt.Sprintf(`{"target":%q,"project":%q}`, target, project))
+}
+
 // verdictWithRule is the verdict a rule reaches before any wording or lease attribution:
 // pair it with unworded so a test compares the whole struct and still checks the prose by
 // substring.
@@ -354,10 +359,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: verdict.Defer},
 		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: verdict.Deny, reason: "integrate"},
 		{rule: "worker-runs-gate", name: "the checkout's integrator runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint",
-			jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: verdict.Defer},
+			jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, Check: rawCheck("go-test", ".")}}, lease: "footprint", decision: verdict.Defer},
 		{rule: "worker-runs-gate", name: "an integrate title with no lease taken here", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: verdict.Deny, reason: "integrate"},
 		{rule: "worker-builds-magus", name: "the checkout's integrator builds magus", input: bash("./magus run go-build ."), worker: "root/integrate footprint",
-			jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: verdict.Defer},
+			jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, Check: rawCheck("go-test", ".")}}, lease: "footprint", decision: verdict.Defer},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: verdict.Deny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),

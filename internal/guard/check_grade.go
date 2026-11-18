@@ -11,8 +11,10 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types"
 )
 
 // NewCheckGrader grades a declared check against the guard's rules for the workspace at the
@@ -116,9 +118,13 @@ func (g gradingRules) unchanged() bool {
 // (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
 // A deny from a judgment that ran out of time defers too.
 func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtypes.Job) job.CheckVerdict {
+	check, err := checkOf(row.Check)
+	if err != nil {
+		return job.CheckVerdict{NotGraded: fmt.Sprintf("job %s's check could not be read: %v", row.ID, err)}
+	}
 	if deps.LoadFailure != nil {
 		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
-		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", job.CheckCommand(*row.Check), why),
+		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", job.CheckCommand(check), why),
 			attr.Unchecked())
 		return job.CheckVerdict{Deferred: why}
 	}
@@ -132,9 +138,9 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 		}
 		row.CheckoutRoot = dir
 	}
-	judge := func(pending jobtypes.Job) (verdict.Judgment, bool) {
+	judge := func(pending jobtypes.Job, c types.LeaseCheck) (verdict.Judgment, bool) {
 		return JudgeLapsed(ctx, deps, Request{
-			Input:      ownBinaryPrefix + workerCheckLine(*pending.Check),
+			Input:      ownBinaryPrefix + workerCheckLine(c),
 			DryRun:     true,
 			Lease:      pending.ID,
 			PendingRow: &pending,
@@ -144,10 +150,10 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 	deferLapse := func(v verdict.Judgment) job.CheckVerdict {
 		first, _, _ := strings.Cut(strings.TrimSpace(v.Reason), "\n")
 		why := fmt.Sprintf("the guard ran out of time grading it: %s", first)
-		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", job.CheckCommand(*row.Check), why), attr.Unchecked())
+		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", job.CheckCommand(check), why), attr.Unchecked())
 		return job.CheckVerdict{Deferred: why}
 	}
-	declared, lapsed := judge(row)
+	declared, lapsed := judge(row, check)
 	if declared.Decision != verdict.Deny {
 		return job.CheckVerdict{}
 	}
@@ -156,8 +162,12 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 	}
 	baseline := row
 	compiling := job.CompilingCheck()
-	baseline.Check = &compiling
-	baselineVerdict, lapsed := judge(baseline)
+	raw, err := codec.Marshal(compiling)
+	if err != nil {
+		return job.CheckVerdict{NotGraded: fmt.Sprintf("the compiling check could not be written to grade against: %v", err)}
+	}
+	baseline.Check = raw
+	baselineVerdict, lapsed := judge(baseline, compiling)
 	if baselineVerdict.Decision == verdict.Deny && lapsed {
 		return deferLapse(baselineVerdict)
 	}
@@ -188,7 +198,7 @@ const ownBinaryPrefix = "./"
 
 // workerCheckLine renders c with --budget-wait 0, which a worker's run needs.
 // A script check has no such flag and is rendered as stored.
-func workerCheckLine(c jobtypes.LeaseCheck) string {
+func workerCheckLine(c types.LeaseCheck) string {
 	if c.Script != "" {
 		return job.CheckCommand(c)
 	}
