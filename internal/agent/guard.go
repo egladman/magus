@@ -256,7 +256,12 @@ var guardInputs = []string{"command", "path", "mcp"}
 // 38: magus-command.buzz sends a stop advise as systemMessage, which the
 // host shows and never continues the turn for. A 37 copy sends it as additionalContext,
 // and the host continues the turn to answer it.
-const GuardTemplateVersion = 38
+//
+// 39: `magus agent harness install` copies the hook glue into .magus/harness/hooks and
+// stamps each copy with its glue version and digest, and every host's hook lines run it
+// from there. A 38 line names docs/guides/integrations/agents, which only a checkout of
+// magus holds, so outside one every hook fails closed until it is re-installed.
+const GuardTemplateVersion = 39
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

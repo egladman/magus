@@ -62,7 +62,7 @@
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 38
+// magus-guard-template: 39
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model defer=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model defer=none ask=human
@@ -625,7 +625,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
     if (v.decision == UNJUDGED) { return denyBoth(v.reason); }
     return json\stringify({
         "permission": "deny",
-        "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
+        "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Re-install it with magus agent harness install.",
         "agent_message": "magus guard returned the decision {v.decision}, which this hook does not know, so it refuses the call rather than allow it.",
     }) catch DEFER;
 }

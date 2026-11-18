@@ -29,6 +29,9 @@ final HOOK_TIMEOUT_S = 10;
 // Where `magus agent harness install` writes this host's tool rows, beside its hooks.
 final TOOLS_DIR = ".cursor/magus/tools";
 
+// Where `magus agent harness install` copies the glue every hook runs.
+final GLUE_DIR = hookGlueDir();
+
 // Every tool, gated before it runs so a deny lands first. The glue restates Grep, Glob and
 // Read as the shell lines they stand for, judges Shell and Task as a command and a spawn,
 // and hands magus every other call whole. Cursor's validator reads * as every tool, not as
@@ -49,7 +52,7 @@ fun cursor_guard_flags() > [str] {
 }
 
 fun cursor_guard_command() > str {
-    return buzzCommand(HOOK_DIR, script: "cursor-hook", flags: cursor_guard_flags());
+    return buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: "cursor-hook", flags: cursor_guard_flags());
 }
 
 // Every event the guard port answers, in the order the entries render. The port reads
@@ -134,7 +137,7 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 fun cursor_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
-    final command = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    final command = buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: hook.script, flags: hook.flags);
     entry["command"] = if (hook.script == "magus-duration") command + " # magus:harness" else command;
     entry["timeout"] = hook.timeoutS;
     if (!cursor_stops(hook.event)) { entry["failClosed"] = true; }
@@ -170,7 +173,8 @@ export fun mgs_listEntries() > [ManagedEntries] {
 
 // The hooks file and its version, set only where the file lacks it.
 export fun mgs_getHarness() > Harness {
-    return Harness{config = HarnessConfig{path = ".cursor/hooks.json", defaults = {"version": 1}}, guard = "hooks"};
+    return Harness{config = HarnessConfig{path = ".cursor/hooks.json", defaults = {"version": 1}}, guard = "hooks",
+        assets = glueAssets(GLUE_DIR, hooks: cursor_hooks())};
 }
 
 // Cursor reads skills from .agents/skills, .cursor/skills and .claude/skills (probed on
@@ -298,7 +302,11 @@ test "mgs_getSkills installs both forms into .agents/skills" {
 
 test "guard command is the shipped Cursor Buzz port, not a shell script" {
     final cmd = cursor_guard_command();
-    assert\isTrue(cmd.startsWith("magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz"), "host runs the Buzz port, with no shell");
+    assert\isTrue(cmd.startsWith("magus buzz -s .magus/harness/hooks/cursor-hook.buzz"), "host runs the installed Buzz port, with no shell");
+    final paths = mgs_getHarness().assets.map(fun (index: int, asset: HarnessAsset) > str => asset.path);
+    foreach (hook in cursor_hooks()) {
+        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, "{hook.script} is installed");
+    }
     assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, "names this host on the script argv");
     assert\isTrue(cmd.endsWith(" -- --agent-name {mgs_getName()}"), "the host name is the one argument");
     assert\isTrue(mgs_getLimits().observesSkillLoads, "a SKILL.md Read reaches preToolUse, so skill loads are reported");

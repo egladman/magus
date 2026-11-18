@@ -144,7 +144,7 @@ magus agent harness verify --id cursor
 ```
 
 That prints opaque fragments naming
-`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor`.
+`magus buzz -s .magus/harness/hooks/cursor-hook.buzz -- --agent-name cursor`.
 The script takes the host's name from that argument and nowhere else, and refuses a call
 without it ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)). It needs neither a
 POSIX shell nor `jq`. A portable install copies the script to `.cursor/hooks/cursor-hook.buzz`
@@ -329,7 +329,7 @@ sources:
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 38
+// magus-guard-template: 39
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model defer=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model defer=none ask=human
@@ -892,7 +892,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
     if (v.decision == UNJUDGED) { return denyBoth(v.reason); }
     return json\stringify({
         "permission": "deny",
-        "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
+        "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Re-install it with magus agent harness install.",
         "agent_message": "magus guard returned the decision {v.decision}, which this hook does not know, so it refuses the call rather than allow it.",
     }) catch DEFER;
 }
@@ -1392,7 +1392,7 @@ as the reason to fix it:
     "postToolUse": [
       {
         "matcher": "Write|StrReplace|Edit",
-        "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor",
+        "command": "magus buzz -s .magus/harness/hooks/magus-buzz-check.buzz -- --agent-name cursor",
         "timeout": 30
       }
     ]

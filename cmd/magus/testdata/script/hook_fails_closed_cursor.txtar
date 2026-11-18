@@ -22,8 +22,8 @@ stdout '^hooks.stop <no value>$'
 stdout '^hooks.subagentStop <no value>$'
 exec magus describe harness cursor -o 'template={{range .wired}}{{if eq .key "hooks.beforeShellExecution"}}{{(index .entries 0).command}}{{end}}{{end}}'
 cp stdout $WORK/shell.sh
-mkdir docs/guides/integrations
-symlink docs/guides/integrations/agents -> $__MAGUS_TEMPLATES
+mkdir .magus/harness
+symlink .magus/harness/hooks -> $__MAGUS_TEMPLATES
 
 # A magus.yaml this magus cannot read refuses an ordinary command and names the update.
 cp $WORK/unreadable.yaml magus.yaml

@@ -1,0 +1,782 @@
+// magus guard hook: judges ONE tool call an agent is about to make, whatever the tool.
+//
+// It needs neither jq nor a POSIX shell, so the file runs unchanged on Windows.
+//
+// Run it as `magus buzz -s magus-command.buzz`. `-s` is load-bearing, not tidiness:
+// without it a BZZ advisory on stderr reads to the host as a hook error, so the glue
+// reports itself broken. It imports no magus Buzz
+// module and no spell, which is what keeps the workspace CLOSED: a script that
+// reads no workspace member starts in about 10ms, where opening one costs
+// roughly 700ms on every tool call.
+//
+// Contract: reads the host's event as JSON on stdin and feeds the whole event to
+// `magus shell`, which judges the call by its tool's name and the shape of its
+// input: a command line, a file read or write, a search, a spawn. It writes the
+// host's response on stdout and exits 0 either way.
+//
+// A hook command is an ARGV, not a shell line: the host splits it and runs the
+// program itself, so a `NAME=value` prefix only means anything where something
+// re-joins and re-parses the string. So this file is wired as a plain
+// `<interpreter> buzz -s <this file> -- --agent-name <host>` and takes one argument:
+//
+//   -- --agent-name <host>  REQUIRED: the host this entry is wired into, the harness
+//                    spell's own name, which the configuration `magus describe
+//                    harness` prints puts on every command. It is the ONLY place this file
+//                    learns the host: never the event's shape, never the environment,
+//                    never a default. Without it `magus shell` refuses the call
+//                    (MGS3024), so a hand-written config that omits it fails loudly.
+//                    magus reads every other fact about the host from that spell: its
+//                    tool rows, its foreground limits, the release that resumes a stopped
+//                    subagent, and whether its wiring sees a skill load. Any other
+//                    argument is REPORTED on stderr and left out, and the call is judged
+//                    anyway: a misconfigured entry must not block work, and must not be
+//                    silent
+//
+// Everything else is an environment variable, a property of the HOST that it sets once.
+//
+// Override any of the variables below:
+//
+//   HOST_EVENT_PATH  dot-path to the command inside your host's event, for a host whose
+//                    envelope magus does not read: that one string is forwarded instead
+//                    of the whole event. Unset, the whole event goes, which is what lets
+//                    magus judge every tool and not only a shell
+//   HOST_TOOL_PATH   dot-path to the tool name, which keeps an MCP call whole even where
+//                    HOST_EVENT_PATH selects
+//   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+//   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
+//                    subagent's command is graded under the job it was spawned for
+//                    rather than as its parent
+//   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_MESSAGE_PATH  dot-path to the text of a message the person typed (default
+//                    prompt, the key Claude Code's envelope uses). An event that names no
+//                    tool and carries a string there is a message rather than a call: it
+//                    goes to `magus shell --message`, which records the
+//                    topics it raises. Its only reply is one systemMessage
+//                    per session when no magus runs
+//   HOST_CWD_PATH    dot-path to the directory the call runs in. The ./magus beside the
+//                    nearest magus.yaml above it judges the call, so a call from a
+//                    subdirectory with its own magusfile.buzz (console/, docs/) still
+//                    uses the root's build (default cwd)
+//   HOST_RESPONSE    Go template rendering your host's reply
+//   HOST_ADVISE_BRANCH  the advise arm of that template
+//   HOST_ASK_BRANCH  the ask arm of that template: the reply that puts the call in
+//                    front of the PERSON through the host's own approval prompt
+//   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
+//                    an advise renders nothing rather than a reply it rejects
+//   __MAGUS_BIN  path to the binary, when it is not on PATH
+//   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found,
+//                    in place of the refusal this file builds
+//   __MAGUS_FAILED_RESPONSE  the same, for a magus that IS found but cannot judge
+//                    the command. Left unset, this file builds one from evidence:
+//                    which binary it resolved, that binary's version, and the
+//                    error it actually printed
+//   __MAGUS_UNREADABLE_RESPONSE  what to print when the call never arrived
+//   __MAGUS_NOTICE_WINDOW  minutes a notice marker survives on a host that reports
+//                    no session id, so one session cannot silence every later one
+//
+// The defaults are Claude Code's event and response shape.
+//
+// The host name and the session are ATTRIBUTION to magus, not policy. magus records them
+// on its activity event so a reader can tell which host produced an observation;
+// neither one can change the verdict, and a host whose event carries no session
+// id records none and is judged exactly the same. The subagent id is the exception:
+// magus grades a subagent it saw spawned under that spawn's job. This file does read the
+// host name for one thing, which reply shape its host can parse, and that is why it must
+// be given.
+//
+// __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
+// magus's own settings, so a variable this template invents must stay
+// out of it rather than look like a setting magus reads.
+//
+// A call no magus judged fails CLOSED. With magus missing, or unable to
+// answer, every PreToolUse call but the repair line is refused, reads
+// included. Each such call also tells the person how to install or build
+// magus, through systemMessage. A stop is let end, since ending is the one
+// act that leaves nothing unjudged behind.
+//
+// NOTHING here may raise. Claude Code reads a non-zero hook exit other than 2 as a
+// non-blocking error and runs the call anyway, and exit 2 BLOCKS with stderr as the
+// message, which would turn a Buzz bug into a refusal the person cannot read. Every
+// call that can fail is caught, and the script ends by writing one reply.
+//
+// The line below declares, per guard input, how much of a verdict this file
+// can carry: model (reaches the agent), human (reaches the person only), or none
+// (not delivered). It is machine-read by the host-parity gate, which fails the
+// build when a decision or input exists in the guard contract that some host
+// was never asked about. Keep it true to what HOST_RESPONSE actually renders.
+//
+// An ask reaches the person on both hosts, by different routes. Claude Code takes
+// permissionDecision "ask" from PreToolUse and prompts. Codex parses that value and does
+// not support it: the hook run is marked failed and the call CONTINUES, so on Codex this
+// file never emits it. There the prompt comes from a rules file the codex harness writes
+// (.codex/rules/magus.rules, a prefix_rule with decision "prompt" on each push verb and
+// on each run of a human_only target), and the PermissionRequest event Codex raises
+// before that prompt reaches this same file, which writes no decision for a call the guard
+// defers or asks, so the person answers Codex's prompt, and denies a leased worker's.
+//
+// The guard never answers yes. A defer is no objection, and this file writes no
+// permission decision for it, so the host's own permission flow decides the call.
+//
+// An ask is the host's own prompt, never the model's question tool.
+// Where no prompt can happen it renders as a deny, never a yes.
+// promptBlocker names those cells. systemMessage tells the person why
+// and what to type at their terminal.
+// magus-guard-template: 39
+// magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model defer=none ask=model
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model defer=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model defer=none ask=model
+// The mcp and path rows are real: every host wires this file to every tool, so an
+// mcp__magus__* call and a file write reach it as whole events (see hook\wholeEvent), and
+// the same hookSpecificOutput reply it renders for a command carries a deny or an advise on
+// those too. No Codex rule prompts for an MCP call or a write, so there the ask is the deny
+// that names the terminal.
+
+import "std";
+import "flags";
+import "io";
+import "encoding/json";
+import "env";
+import "fs";
+import "path";
+import "proc";
+import "lib/hook" as hook;
+
+// ADVISE_DEFAULT and the two ask arms are separate strings because a host may
+// replace one arm without replacing the whole reply. A host that REJECTS the
+// context key is worse off than one that ignores it: an unsupported field can
+// make the host mark the hook run failed and continue the call, so an advisory
+// it cannot take disarms the guard rather than merely going unread. No host
+// shipped here is in that position today, since both hosts wired to this file
+// take additionalContext, so __MAGUS_NO_ADVISE has no user and is kept for the
+// one you may wire.
+final ADVISE_DEFAULT = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}`;
+
+final ASK_CLAUDE = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}`;
+
+final ASK_CODEX_PROMPTS = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}`;
+
+// A backtick string DOES interpolate: a `{...}` run is evaluated when its contents parse as
+// a Buzz expression, and stays literal only when they do not. Go template braces do not
+// parse, which is the only reason these render verbatim, and a `{name}` fragment would not.
+// So a template is spliced through placeholders rather than
+// concatenated around an open `{{`, which would swallow its closing
+// backtick. Each takes a quoted literal: the text can quote a command.
+final PERSON_SLOT = "__MAGUS_ASK_PERSON__";
+final AGENT_SLOT = "__MAGUS_ASK_AGENT__";
+final ASK_BLOCKED = `{{else if eq .decision "ask"}}{"systemMessage":{{toJson (print .reason __MAGUS_ASK_PERSON__)}},"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason __MAGUS_ASK_AGENT__)}}}}`;
+
+// A decision this file does not know is refused, never allowed: the guard contract
+// grows, and a copy older than the growth must not read the new verdict as a defer.
+final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}`;
+
+// A deny's first line is the verdict, for the display both readers see; the rest (next step,
+// details ref) goes to additionalContext, the capture only the agent reads. A host whose
+// harness declares no capture channel is sent the verdict line alone by `magus shell`.
+final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"additionalContext":{{toJson .}}{{end}}}}`;
+final DEFER_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "defer"}}`;
+
+// A block's reason sends the agent back to work and shows the person, so it carries the
+// first line and additionalContext the rest. An advise lets the stop through, so it goes
+// to systemMessage, which the person reads: Claude Code delivers a stop's
+// additionalContext by continuing the turn, which counts toward its block cap and is a
+// refusal in all but name.
+// Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
+final STOP_EVENT_SLOT = "__MAGUS_STOP_EVENT__";
+final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
+// Codex's Stop reply takes no hookSpecificOutput, so its block carries the
+// whole reason. Its only other text field, systemMessage, shows the person,
+// so an advise prints nothing there.
+final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{end}}`;
+
+final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
+final PERMISSION_DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson .reason}}}}}{{else if eq .decision "ask"}}`;
+final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}}{{end}}`;
+
+// Nothing arrived, so no rule was ever offered the call. `magus shell`
+// denies an unreadable payload too and leaves this case to its caller.
+final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
+
+// The characters that let one command line become several, or become a different
+// one. A line carrying any of them reaches no Codex prefix rule.
+final SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "\n"];
+
+
+// What magus's own decoder tests to tell an envelope from a bare command line. `\{` escapes
+// the interpolation a lone brace would open.
+final ENVELOPE_PREFIX = "\{";
+
+// The host this entry is wired into, the one argument it takes. The file needs it too: it
+// picks the ask arm. magus reads every other fact about the host from its harness spell.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// findUp returns the nearest ancestor of start holding relative, or "" when there is none.
+fun findUp(relative: str, start: str) > str {
+    var dir = start;
+    if (dir == "") { dir = path\abs(".") catch ""; }
+    while (dir != "") {
+        final candidate = "{dir}/{relative}";
+        final found = fs\isFile(candidate) catch false;
+        if (found) { return candidate; }
+        dir = hook\parentDir(dir);
+    }
+    return "";
+}
+
+// codexPromptRule names the Codex prefix rule a bare push or a bare magus run reaches, as
+// the rules file spells its pattern with the spacing removed, or null for anything else:
+// a compound line, `git -C dir push`, a flag before the target, an MCP call. Those reach
+// no rule, so Codex would run them unprompted and no answer here may assume it prompts. A
+// magus run reaches a rule only when the harness wrote one for its target, which it does
+// for each target the workspace declares human_only.
+fun codexPromptRule(line: str) > str? {
+    foreach (meta in SHELL_METACHARACTERS) {
+        if (line.indexOf(meta) != null) { return null; }
+    }
+    if (line == "git push" or line.startsWith("git push ")) { return `["git","push"]`; }
+    if (line == "hg push" or line.startsWith("hg push ")) { return `["hg","push"]`; }
+    if (line == "sl push" or line.startsWith("sl push ")) { return `["sl","push"]`; }
+    if (line == "jj git push" or line.startsWith("jj git push ")) { return `["jj","git","push"]`; }
+    final words = line.split(" ").filter(fun (index: int, word: str) > bool => word != "");
+    if (words.len() >= 3 and (words[0] == "magus" or words[0] == "./magus")
+            and (words[1] == "run" or words[1] == "affected") and !words[2].startsWith("-")) {
+        return "[\"" + words[0] + "\",\"" + words[1] + "\",\"" + words[2] + "\"]";
+    }
+    return null;
+}
+
+// codexRuleMissing states why the project's rules file does not carry rule, and "" when
+// it does.
+fun codexRuleMissing(event: any?, rule: str) > str {
+    final rules = findUp(".codex/rules/magus.rules", start: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
+    if (rules != "") {
+        // A file that is THERE and unreadable is not the same as one that carries no
+        // matching rule, and collapsing the two produced a deny whose stated reason was
+        // false. Named separately so the person is told what to look at.
+        final body = fs\readFile(rules) catch null;
+        if (body == null) {
+            return "{rules} exists but could not be read, so whether it carries the prompt rule for this call is unknown";
+        }
+        // Compared with the spacing removed, so the rule matches however it is
+        // formatted. The leading bracket is what keeps the git rule from being found
+        // inside jj's ["jj", "git", "push"].
+        final packed = body!.replace(" ", with: "").replace("\t", with: "");
+        if (packed.indexOf(rule) != null) { return ""; }
+    }
+    return "no .codex/rules/magus.rules carries the prompt rule for this call, which magus describe harness codex prints";
+}
+
+// An allowlist: a mode not seen to prompt must not read as one that does.
+final PROMPTING_MODES = ["default", "acceptEdits", "auto"];
+
+// promptBlocker states why the host will not put this call in front of
+// the person, and "" when its own approval prompt will.
+fun promptBlocker(event: any?, codex: bool, rule: str?) > str {
+    final mode = hook\field(event, dotPath: "permission_mode");
+    if (mode == "") {
+        return "this session reports no permission_mode, so a prompt cannot be assumed";
+    }
+    if (mode == "bypassPermissions" or mode == "dontAsk") {
+        return "this session runs in permission_mode {mode}, which never prompts";
+    }
+    if (PROMPTING_MODES.indexOf(mode) == null) {
+        return "this session runs in permission_mode {mode}, which is not known to prompt";
+    }
+    if (!codex) { return ""; }
+    if (rule == null) {
+        return "no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command, or a plain magus run of a human-only target";
+    }
+    return codexRuleMissing(event, rule: rule!);
+}
+
+// callFlags is what a shell command's tool input asked of the host: to run it in the
+// background, and how long to wait on it. The whole event carries both too; these say it
+// where HOST_EVENT_PATH forwards the command alone. JSON numbers parse as double.
+fun callFlags(event: any?) > [str] {
+    final facts = mut [<str>];
+    if (hook\dig(event, dotPath: "tool_input.run_in_background") == true) {
+        facts.append("--call-background");
+    }
+    final timeout = hook\dig(event, dotPath: "tool_input.timeout");
+    var ms = 0;
+    if (timeout is int) { ms = timeout as int; }
+    if (timeout is double) { ms = std\toInt(timeout as double); }
+    if (ms > 0) {
+        facts.append("--call-timeout");
+        facts.append("{ms}ms");
+    }
+    return facts;
+}
+
+// readAgentName is the host this entry names on its argv, or "" when it names none. Empty is
+// not defaulted: `magus shell` refuses installed glue that names no host (MGS3024). Any
+// other argument is REPORTED on stderr and left out, and the call is judged anyway: a
+// misconfigured entry must not block work, and must not be silent. A host shows a hook's
+// stderr as an error notice, so the person who wrote the entry is the one who reads it.
+fun readAgentName(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) {
+        // A valued flag with no value after it. Caught because NOTHING here may raise.
+        warn("could not parse this entry's arguments; the call was judged without them");
+        return "";
+    }
+    foreach (word in parsed!.unknown) {
+        // Quoted because an empty or whitespace argument otherwise reads as nothing.
+        warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
+            + "This hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
+    }
+    foreach (word in parsed!.positionals) {
+        warn("stray word \"{word}\"; this call was judged WITHOUT it. "
+            + "This hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
+    }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
+}
+
+// warn names the file, because a host reports a hook's stderr with the entry's matcher at
+// best and nothing at all at worst, and a reader with eight entries needs to know which.
+fun warn(message: str) > void {
+    io\stderr.write("magus-command.buzz: {message}\n") catch void;
+}
+
+
+// Guard carries everything one judgment call needs, so the three call sites (the
+// verdict, the unattributed retry, and the stderr capture for the failure notice)
+// cannot drift apart.
+object Guard {
+    bin: str,
+    payload: str,
+    response: str,
+    // The event's cwd. The guard reads its workspace, job store and lease binding from
+    // its own working directory, and a host may start hooks in the repository's main
+    // checkout while the session works in a linked worktree.
+    dir: str,
+}
+
+// Every flag rides in `extra`, so the unattributed retry drops them all: a binary too old
+// for one fails BOTH attempts otherwise.
+fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
+    final args = mut ["shell"];
+    foreach (arg in extra) { args.append(arg); }
+    args.append("-o");
+    args.append("template={guard.response}");
+    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
+    });
+}
+
+// UNKNOWN_FLAG is how magus's flag parser refuses a flag it does not define.
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag reports an attempt refused for a flag the binary predates, the one failure
+// that asking with fewer flags recovers. A deny exits non-zero with the verdict on stdout,
+// and a timeout kill or a crash leaves stdout empty too; asking again judges the call a
+// second time, which a host already out of time cannot afford.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and result!.stdout.trim() == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
+}
+
+// A person's open advisory, as context for the prompt the person just sent.
+final PROMPT_REPLY = `{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":{{toJson .context}}}}{{end}}`;
+
+// recordMessage hands a message the person typed to `magus shell --message`.
+// A failure costs the record, never the message. It returns the reply: an
+// open advisory as context, the notice that no magus ran, or "".
+fun recordMessage(bin: str, message: str, dir: str, session: str, host: str, attribution: [str]) > str {
+    if (bin == "" or !hook\isExecutable(bin)) {
+        return hook\unrecordedNotice(bin, session: session, host: host,
+            file: "magus-command.buzz", root: hook\workspaceRootAt(dir));
+    }
+    final args = mut ["shell", "--message", "--renders-context", "-o", "template={PROMPT_REPLY}"];
+    foreach (word in attribution) { args.append(word); }
+    final opts = proc\ExecOptions{quiet = true, allowFailure = true, stdin = message};
+    final result = proc\exec(bin, args: args, dir: dir, opts: opts) catch null;
+    if (result == null) { return ""; }
+    if (!rejectedFlag(result)) { return hook\trimTrailingNewlines(result!.stdout); }
+    // A magus older than advisories still records the message.
+    final plain = mut ["shell", "--message"];
+    foreach (word in attribution) { plain.append(word); }
+    _ = proc\exec(bin, args: plain, dir: dir, opts: opts) catch void;
+    return "";
+}
+
+// failureNotice states WHICH binary went silent, what version it is, and what it
+// actually said, the three facts a reader otherwise spends a session collecting.
+//
+// The stderr comes from the attempt that ALREADY failed rather than a fresh one. Re-running
+// cost a third process inside the host's 10s budget, on the path where the binary is the
+// thing going wrong, so the arm that exists to make a silent failure visible was the
+// likeliest to be killed before writing anything; it also reported whatever a NEW run
+// printed, which is not necessarily what went wrong. WARN lines are dropped because a
+// config the binary is too old to parse warns BEFORE it fails, and that warning is a
+// symptom of the same staleness, not the error.
+fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
+    var version = "";
+    // In the binary's own directory, or version re-execs into another ./magus.
+    final probe = proc\exec(guard.bin, args: ["version"], dir: binDir(guard.bin), opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
+    if (probe != null) { version = hook\firstLine(probe!.stdout); }
+    if (version == "") { version = "version unreadable"; }
+
+    var why = "";
+    if (failed != null) { why = hook\errorLines(failed!.stderr); }
+    if (why == "" and failed != null) { why = "it printed no error (exit code {failed!.code})"; }
+    if (why == "") { why = "it could not be run"; }
+
+    return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
+}
+
+// binDir is the directory bin lives in, "" for a bare name found on PATH.
+fun binDir(bin: str) > str {
+    final parts = bin.split("/");
+    final kept = mut [<str>];
+    var i = 0;
+    while (i < parts.len() - 1) {
+        kept.append(parts[i]);
+        i = i + 1;
+    }
+    return kept.join("/");
+}
+
+// unjudgedReply answers a call no magus judged. Every event shows the person
+// systemMessage. A PreToolUse call is refused, a read or a handback as much
+// as a write: no policy loaded to say which reads it guards. A
+// PermissionRequest leaves the decision to the person's own prompt. The
+// repair the running magus supplied for root passes: it is the fix the notice names.
+fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix: str, root: str = "") > str {
+    final text = "{verdict}\n{fix}";
+    if (eventName == "Stop" or eventName == "SubagentStop") {
+        return json\stringify({"systemMessage": text}) catch "";
+    }
+    if (eventName == "PermissionRequest") {
+        return json\stringify({"systemMessage": text,
+            "hookSpecificOutput": {"hookEventName": eventName}}) catch PERMISSION_NO_DECISION;
+    }
+    if (eventName == "PostToolUse" or hook\recovers(command, root: root)) {
+        final named = if (eventName == "PostToolUse") eventName else "PreToolUse";
+        return json\stringify({"systemMessage": text,
+            "hookSpecificOutput": {"hookEventName": named, "additionalContext": text}}) catch "";
+    }
+    return hook\refusal(verdict, fix: fix);
+}
+
+// askBranch picks the ask arm for the host that sent this event. Only a reply this
+// file assembled may claim --renders-ask; see the header for why Codex never receives
+// permissionDecision "ask".
+fun askBranch(event: any?, codex: bool, rule: str?, command: str) > str {
+    final declared = env\get("HOST_ASK_BRANCH") catch "";
+    if (declared != "") { return declared; }
+    final blocker = promptBlocker(event, codex: codex, rule: rule);
+    if (blocker == "") {
+        if (codex) { return ASK_CODEX_PROMPTS; }
+        return ASK_CLAUDE;
+    }
+    return blockedAsk(blocker, command: command);
+}
+
+// blockedAsk is the deny that stands in for a prompt that cannot happen.
+// The verdict's reason leads both texts: it names the target or commit.
+fun blockedAsk(blocker: str, command: str) > str {
+    var yours = "Do this one yourself; it has no command line to copy.";
+    var theirs = "Ask them to do it themselves.";
+    if (command != "") {
+        yours = "Run it from your own terminal: {command}";
+        theirs = "Ask them to run it from their own terminal: {command}";
+    }
+    final person = "\n\nmagus stopped this call. It needs your approval, and {blocker}. {yours}";
+    final agent = "\n\nThis call needs the approval of the person you work for, and {blocker}. {theirs} "
+        + "If they saw no such message, relay this one to them verbatim.";
+    return ASK_BLOCKED
+        .replace(PERSON_SLOT, with: json\stringify(person) catch `""`)
+        .replace(AGENT_SLOT, with: json\stringify(agent) catch `""`);
+}
+
+// adviseBranch is the advise arm.
+fun adviseBranch() > str {
+    final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
+    if (suppressed != "") { return ""; }
+    final declared = env\get("HOST_ADVISE_BRANCH") catch "";
+    if (declared != "") { return declared; }
+    return ADVISE_DEFAULT;
+}
+
+// permissionResponse answers the approval request Codex raises just before its own
+// prompt. No decision object leaves the prompt to the person, which is the answer for
+// every decision but a deny: a defer from the guard is no objection, never the person's
+// consent.
+fun permissionResponse() > str {
+    return PERMISSION_DENY_HEAD + PERMISSION_NO_DECISION
+        + `{{else if eq .decision "defer"}}` + PERMISSION_NO_DECISION
+        + `{{else if eq .decision "advise"}}` + PERMISSION_NO_DECISION
+        + PERMISSION_UNKNOWN;
+}
+
+fun main(args: [str]) > void {
+    final raw = io\stdin.readAll() catch null;
+    final event = json\parse(raw ?? "") catch null;
+
+    // A payload that opens like an envelope but does not parse is a TRUNCATED one, not a
+    // command line. Judged as text it matches no rule and passes, so it is refused here
+    // while its shape still says what it was. The prefix test is magus's own decoder's.
+    if (raw == null or (event == null and raw!.startsWith(ENVELOPE_PREFIX))) {
+        io\stdout.write(hook\envOr("__MAGUS_UNREADABLE_RESPONSE", fallback: UNREADABLE_DEFAULT)) catch void;
+        return;
+    }
+
+    // Empty unless the host names a field: the whole event goes, and magus reads the tool.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
+    final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
+    final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
+    final agentName = readAgentName(args);
+    // Overridable alongside the other dot-paths rather than fixed: a host that points
+    // HOST_EVENT_PATH at a field it DOES populate for MCP calls loses the namespace test
+    // otherwise, and gets that field judged as a shell command.
+    final toolPath = hook\envOr("HOST_TOOL_PATH", fallback: "tool_name");
+    final rawEvent = hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath);
+    // A shell command line, which alone has a Codex prompt rule, a background mode and a
+    // timeout: a string at the command field of a call that is not over MCP.
+    final commandPath = hook\envOr("HOST_EVENT_PATH", fallback: hook\commandPath(event));
+    final shellCall = !hook\wholeEvent(event, dotPath: commandPath, toolPath: toolPath);
+
+    // Read BEFORE the availability check below, because the notices that check prints
+    // are held to one firing per session and the session id is what keys them.
+    final session = hook\field(event, dotPath: sessionPath);
+    // Forwarded for a host whose HOST_EVENT_PATH selects one field out of the envelope:
+    // without it a subagent's command reaches magus looking like its parent's.
+    final agent = hook\field(event, dotPath: agentPath);
+    final transcript = hook\field(event, dotPath: transcriptPath);
+    final eventName = hook\field(event, dotPath: "hook_event_name");
+    final toolName = hook\field(event, dotPath: toolPath);
+
+    var promptRule: str? = null;
+    var commandLine = "";
+    if (shellCall) {
+        commandLine = hook\field(event, dotPath: commandPath);
+        promptRule = codexPromptRule(commandLine);
+    }
+
+    // Codex is the host the entry names, never one the event's shape suggests: see
+    // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
+    // is assembled here.
+    final codex = agentName == "codex";
+
+    var response = env\get("HOST_RESPONSE") catch "";
+    var capabilities = mut [<str>];
+    if (response == "" and eventName == "PermissionRequest") {
+        response = permissionResponse();
+        capabilities.append("--renders-ask");
+    } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
+        response = STOP_REPLY.replace(STOP_EVENT_SLOT, with: eventName);
+        if (codex) { response = STOP_REPLY_CODEX; }
+    } else if (response == "") {
+        response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule, command: commandLine)
+            + adviseBranch() + DEFER_AND_ADVISE_TAIL + UNKNOWN_DECISION;
+        capabilities.append("--renders-ask");
+    }
+
+    final cwd = hook\commandDir(event,
+        cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")),
+        commandPath: commandPath, toolPath: toolPath);
+    final bin = hook\resolveBin(cwd: cwd);
+
+    // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the
+    // availability notice, which a message hook would hand the model as context.
+    final message = hook\dig(event, dotPath: hook\envOr("HOST_MESSAGE_PATH", fallback: "prompt")) as? str;
+    if (toolName == "" and message != null) {
+        io\stdout.write(recordMessage(bin, message: message!, dir: cwd, session: session, host: agentName, attribution: [
+            "--agent-name", agentName, "--transport", "buzz", "--session", session,
+            "--agent", agent, "--transcript", transcript, "--event", eventName,
+        ])) catch void;
+        return;
+    }
+
+    // Every unjudged call names a fallback from ./magus; a judged one, once.
+    final note = hook\fallbackNote(cwd);
+    var root = hook\workspaceRootAt(cwd);
+    if (root == "") { root = hook\binRoot(""); }
+    // Absolute, so a fallback notice names one checkout from anywhere.
+    if (root != "") { root = path\abs(root) catch root; }
+    var fix = hook\recoveryFix(root);
+    if (note != "") { fix = note + ". " + fix; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        final verdict = "magus guard could not judge this call: no magus binary was found";
+        io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
+            fallback: unjudgedReply(eventName, toolName: toolName, command: commandLine, verdict: verdict, fix: fix, root: root))) catch void;
+        return;
+    }
+
+    var payload = raw!;
+    if (!rawEvent) {
+        payload = hook\rawField(event, dotPath: eventPath) + "\n";
+    }
+    final marked = hook\unloadedTemplate(response);
+
+    // Attribution is BEST EFFORT; the verdict is not.
+    //
+    // --agent-name, --session and --agent postdate the current magus release, and this template is
+    // downloaded and run against whatever binary a reader already has. Passing them
+    // unconditionally does not degrade the guard, it BREAKS it: an older binary rejects the
+    // unknown flag, prints its usage to stderr, and exits non-zero, so the host receives no
+    // verdict at all and every deny and advise rule silently stops being enforced.
+    //
+    // Only that refusal is asked again: see rejectedFlag.
+    //
+    // --renders-ask rides the attributed call only. A binary too old for it is too old to
+    // ask, so the retry dropping it loses nothing.
+    //
+    // The call facts are newer than the rest, so a binary that rejects one is asked again
+    // with everything else before it is asked with nothing: dropping them must not also
+    // drop the attribution and the ask.
+    //
+    // --transport buzz names this glue as the caller. magus keeps a deny's full text and
+    // its once-per-session notices per host, transport and session.
+    final attributed = mut [<str>];
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
+        attributed.append(word);
+    }
+    foreach (flag in capabilities) { attributed.append(flag); }
+    final newest = mut [<str>];
+    // Only a shell command the host runs has a background or a timeout to report.
+    if (shellCall) {
+        foreach (word in callFlags(event)) { newest.append(word); }
+    }
+    final judged = hook\judgeFirstLoaded(hook\binCandidates(bin, cwd: cwd),
+        ask: fun (candidate: str) > proc\ExecResult? => ask(Guard{ bin = candidate, payload = payload, response = marked, dir = cwd },
+            attributed: attributed, newest: newest));
+    final result = judged.result;
+
+    // No binary here loads the tree, so none may judge. The rebuild the fix
+    // names runs; every other call that may change state is refused.
+    if (judged.by == "") {
+        final refused = unjudgedReply(eventName, toolName: toolName, command: commandLine,
+            verdict: hook\unloadedVerdict(judged, what: "call"), fix: fix, root: root);
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
+        return;
+    }
+    final by = Guard{ bin = judged.by, payload = payload, response = response, dir = cwd };
+
+    // A DEFER and a BROKEN GUARD both render nothing, and telling them apart is the whole
+    // point of this block. A defer exits 0 with empty output because there was nothing to
+    // say; a binary that cannot run, too old for `magus shell`, unable to load the
+    // workspace, half-written by a concurrent build, exits non-zero with empty output, and
+    // printing that as a defer silently disables every rule with nothing anywhere saying so.
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+        var verdict = failureNotice(by, failed: result);
+        if (judged.trail.len() > 0) { verdict = judged.trail.join("\n") + "\n" + verdict; }
+        final refused = unjudgedReply(eventName, toolName: toolName, command: commandLine,
+            verdict: verdict, fix: "Rebuild or update {judged.by}. {fix}", root: root);
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
+        return;
+    }
+    var reply = hook\trimTrailingNewlines(result!.stdout);
+    if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-command.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-command.buzz: " + note);
+    }
+    final fell = hook\fellToNotice(judged, what: "call", root: root);
+    if (fell != "" and hook\noticeOnce(session, family: "bin-unloaded", file: "magus-command.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-command.buzz: " + fell);
+    }
+    io\stdout.write(reply) catch void;
+}
+
+// ask judges with guard.bin, dropping flags only when that binary refused one.
+fun ask(guard: Guard, attributed: [str], newest: [str]) > proc\ExecResult? {
+    var result: proc\ExecResult? = null;
+    if (newest.len() > 0) {
+        final newer = mut [<str>];
+        foreach (word in attributed) { newer.append(word); }
+        foreach (word in newest) { newer.append(word); }
+        result = judge(guard, extra: newer) catch null;
+    }
+    if (newest.len() == 0 or rejectedFlag(result)) {
+        result = judge(guard, extra: attributed) catch null;
+    }
+    if (rejectedFlag(result)) {
+        result = judge(guard, extra: [<str>]) catch null;
+    }
+    return result;
+}
+
+fun replyOf(text: str) > {str: any} {
+    return json\parse(text) catch {<str: any>};
+}
+
+test "an unjudged call that may change state is refused and told to the person" {
+    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: "ls", verdict: "v", fix: "f"));
+    final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(spec["permissionDecision"] == "deny", message: "{reply}");
+    std\assert(spec["additionalContext"] == "f", message: "the agent reads the fix");
+    std\assert(reply["systemMessage"] == "v\nf", message: "the person reads the verdict and the fix");
+}
+
+test "the repair magus supplied alone passes an unjudged call" {
+    final saved = env\get("__MAGUS_REPAIR_LINES") catch "";
+    final savedRoot = env\get("__MAGUS_REPAIR_ROOT") catch "";
+    final line = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
+    env\set("__MAGUS_REPAIR_LINES", value: line) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: "/w") catch void;
+    foreach (command in [line, " {line} "]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: "/w"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{command}: {reply}");
+    }
+    foreach (command in [line + " && git stash", "git stash", "magus self update"]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: "/w"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == "deny", message: "{command}: {reply}");
+    }
+    env\set("__MAGUS_REPAIR_LINES", value: "") catch void;
+    final none = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: "/w"));
+    final noneSpec: {str: any} = none["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(noneSpec["permissionDecision"] == "deny", message: "no repair supplied, so nothing runs: {none}");
+    final elsewhere = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: "/other"));
+    final elsewhereSpec: {str: any} = elsewhere["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(elsewhereSpec["permissionDecision"] == "deny", message: "another workspace's repair: {elsewhere}");
+    env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
+}
+
+test "an unjudged read, handback or job exit is refused like any other call" {
+    foreach (tool in ["Read", "Grep", "SubagentHandback"]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: tool, command: "", verdict: "v", fix: "f"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == "deny", message: "{tool}: {reply}");
+    }
+    final exits = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: "./magus job exit x --stdin", verdict: "v", fix: "f"));
+    final exitSpec: {str: any} = exits["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(exitSpec["permissionDecision"] == "deny", message: "{exits}");
+}
+
+test "a stop advise reaches the person and never continues the turn" {
+    final advise = STOP_REPLY.split(`{{else if eq .decision "advise"}}`);
+    std\assert(advise.len() == 2, message: STOP_REPLY);
+    std\assert(advise[1].indexOf(`"systemMessage":{{toJson .context}}`) != null, message: advise[1]);
+    std\assert(advise[1].indexOf("hookSpecificOutput") == null and advise[1].indexOf("block") == null, message: advise[1]);
+    std\assert(STOP_REPLY_CODEX.indexOf("systemMessage") == null and STOP_REPLY_CODEX.indexOf("advise") == null, message: STOP_REPLY_CODEX);
+}
+
+test "the lifecycle events carry the notice in their own dialect" {
+    foreach (name in ["Stop", "SubagentStop"]) {
+        final reply = replyOf(unjudgedReply(name, toolName: "", command: "", verdict: "v", fix: "f"));
+        std\assert(reply["systemMessage"] == "v\nf" and reply["hookSpecificOutput"] == null, message: "{name}: {reply}");
+    }
+    final permission = replyOf(unjudgedReply("PermissionRequest", toolName: "Bash", command: "", verdict: "v", fix: "f"));
+    final spec: {str: any} = permission["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(spec["hookEventName"] == "PermissionRequest" and spec["decision"] == null, message: "{permission}");
+    final post = replyOf(unjudgedReply("PostToolUse", toolName: "Bash", command: "", verdict: "v", fix: "f"));
+    final postOut: {str: any} = post["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(postOut["hookEventName"] == "PostToolUse" and postOut["permissionDecision"] == null, message: "{post}");
+}
+
+test "a message with no magus to record it says so once per session" {
+    final session = "record-{std\random(min: 0, max: 1000000)}";
+    std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]).indexOf("systemMessage") != null, message: "first");
+    std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]) == "", message: "second");
+}
+

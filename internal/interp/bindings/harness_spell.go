@@ -56,11 +56,17 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 		Probe:      slices.Clone(definition.Probe),
 	}
 	for _, asset := range definition.Assets {
-		content, err := harnessAssetContent(drv, asset)
-		if err != nil {
-			return fail(err)
+		glue := agent.IsGlueSource(asset.Source)
+		var content []byte
+		if glue {
+			content, err = agent.GlueAsset(asset.Source)
+		} else {
+			content, err = harnessAssetContent(drv, asset)
 		}
-		d.Assets = append(d.Assets, agent.HarnessRuntimeAsset{Path: asset.Path, Content: content})
+		if err != nil {
+			return fail(fmt.Errorf("asset %s: %w", asset.Path, err))
+		}
+		d.Assets = append(d.Assets, agent.HarnessRuntimeAsset{Path: asset.Path, Content: content, Glue: glue})
 	}
 	if d.Skills, _, err = callHarness[types.HarnessSkills](ctx, drv, "mgs_getSkills"); err != nil {
 		return fail(err)

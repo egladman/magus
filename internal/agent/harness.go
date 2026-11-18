@@ -517,7 +517,8 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessInstallatio
 	}
 	plan.MCPHint = hint
 	plan.Merge = harnessMergeCommand(d.ID, plan.Files)
-	if d.Guard == "plugin" && len(plan.Files) > 0 {
+	// Runtime assets are bytes the merge script cannot write, so install writes them.
+	if len(d.Assets) > 0 && len(plan.Files) > 0 {
 		plan.Merge = "magus agent harness install --id " + d.ID
 	}
 	return plan, nil
@@ -903,6 +904,11 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 		return HarnessVerification{}, pathErr
 	}
 	result.Path = path
+	if problems := glueProblems(root, d); len(problems) > 0 {
+		result.Status, result.Reason = HarnessUncovered, strings.Join(problems, "; ")
+		verifyHarnessMCP(d, &result)
+		return result, nil
+	}
 	body, readError := os.ReadFile(path)
 	if os.IsNotExist(readError) {
 		result.Status, result.Reason = HarnessUncovered, "harness config does not exist"
