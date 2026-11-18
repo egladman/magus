@@ -20,8 +20,10 @@ type Limiter struct {
 
 // pool is the slots every [Limiter] derived from one [NewLimiter] shares.
 type pool struct {
-	sem     *semaphore.Weighted
-	cap     int
+	sem *semaphore.Weighted
+	cap int
+	// refused is what every acquire returns on a limiter built with no capacity.
+	refused error
 	running atomic.Int64
 	queued  atomic.Int64
 	// watch records who holds the slots and what each holder is waiting on, so a wait
@@ -79,8 +81,9 @@ func (l *Limiter) fire(ev PoolEvent) {
 	}
 }
 
-// NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited (Acquire and
-// AcquireN always succeed immediately).
+// NewLimiter returns a Limiter with capacity n. An n below 1 is no capacity at all, never
+// unlimited: every acquire on it is a [*CapacityError]. [NewUnlimitedLimiter] is the
+// limiter that bounds nothing.
 func NewLimiter(n int, opts ...LimiterOption) *Limiter {
 	o := limiterOptions{grace: DefaultDeadlockGrace}
 	for _, opt := range opts {
@@ -89,8 +92,20 @@ func NewLimiter(n int, opts ...LimiterOption) *Limiter {
 	p := &pool{cap: n, watch: newSlotWatch(n, o)}
 	if n > 0 {
 		p.sem = semaphore.NewWeighted(int64(n))
+	} else {
+		p.refused = &CapacityError{Slots: 1, Capacity: n}
 	}
 	return &Limiter{pool: p, events: o.events}
+}
+
+// NewUnlimitedLimiter returns a Limiter that bounds nothing: Acquire and AcquireN succeed
+// at once, and its snapshot reports no capacity and nothing running.
+func NewUnlimitedLimiter(opts ...LimiterOption) *Limiter {
+	o := limiterOptions{grace: DefaultDeadlockGrace}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return &Limiter{pool: &pool{}, events: o.events}
 }
 
 // WithPoolEvents returns a Limiter sharing l's slots, holders and waiters whose own
@@ -107,16 +122,19 @@ func (l *Limiter) Acquire(ctx context.Context) error {
 	return l.AcquireN(ctx, 1)
 }
 
-// AcquireN acquires n slots under FIFO fairness. n < 1 is floored to 1. A request above
-// capacity can never be satisfied by any wait, so it fails immediately rather than
-// blocking forever with a [*CapacityError]; callers decide whether to clamp first or
-// surface the error. Returns ctx.Err() on cancellation.
+// AcquireN acquires n slots under FIFO fairness. An n below 1 is a [*SlotCountError]. A
+// request above capacity can never be satisfied by any wait, so it fails immediately
+// rather than blocking forever with a [*CapacityError]; callers decide whether to clamp
+// first or surface the error. Returns ctx.Err() on cancellation.
 func (l *Limiter) AcquireN(ctx context.Context, n int) error {
+	if n < 1 {
+		return &SlotCountError{Slots: n}
+	}
+	if l.refused != nil {
+		return l.refused
+	}
 	if l.sem == nil {
 		return nil
-	}
-	if n < 1 {
-		n = 1
 	}
 	if n > l.cap {
 		return &CapacityError{Slots: n, Capacity: l.cap}
@@ -142,7 +160,19 @@ type CapacityError struct {
 }
 
 func (e *CapacityError) Error() string {
+	if e.Capacity < 1 {
+		return fmt.Sprintf("budget: a limiter of capacity %d holds no slot: NewUnlimitedLimiter bounds nothing", e.Capacity)
+	}
 	return fmt.Sprintf("budget: acquire %d slots exceeds capacity %d", e.Slots, e.Capacity)
+}
+
+// SlotCountError is a request for fewer than one slot.
+type SlotCountError struct {
+	Slots int
+}
+
+func (e *SlotCountError) Error() string {
+	return fmt.Sprintf("budget: a request takes at least 1 slot, not %d", e.Slots)
 }
 
 // Release frees 1 previously acquired slot.
@@ -150,15 +180,14 @@ func (l *Limiter) Release() {
 	l.ReleaseN(1)
 }
 
-// ReleaseN frees n previously acquired slots. n < 1 is floored to 1, as
-// [Limiter.AcquireN] floors it. It never frees more slots than are running: the excess is
-// left unfreed and reported as the [PoolEvent]'s Shortfall, since freeing a slot nobody
-// took would let a peer run beyond the capacity.
+// ReleaseN frees n previously acquired slots. An n below 1 frees nothing, as
+// [Limiter.AcquireN] takes nothing for it. It never frees more slots than are running: the
+// excess is left unfreed and reported as the [PoolEvent]'s Shortfall, since freeing a slot
+// nobody took would let a peer run beyond the capacity.
 func (l *Limiter) ReleaseN(n int) {
-	if l.sem == nil {
+	if l.sem == nil || n < 1 {
 		return
 	}
-	n = max(n, 1)
 	freed := l.takeRunning(n)
 	if freed > 0 {
 		l.sem.Release(int64(freed))

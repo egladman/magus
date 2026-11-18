@@ -34,12 +34,27 @@ func (s *LimiterSuite) TestSnapshot() {
 
 func (s *LimiterSuite) TestUnlimited() {
 	t := s.T()
-	l := NewLimiter(0)
+	l := NewUnlimitedLimiter()
 	for range 100 {
 		require.NoError(t, l.Acquire(context.Background()))
 	}
 	snap := l.Snapshot()
 	assert.Equal(t, LimiterSnapshot{}, snap, "an unlimited limiter reports no capacity and counts nothing running")
+}
+
+func (s *LimiterSuite) TestACapacityBelowOneIsNoCapacityNotUnlimited() {
+	var refused *CapacityError
+	s.Require().ErrorAs(NewLimiter(0).Acquire(s.T().Context()), &refused)
+	s.Equal(0, refused.Capacity)
+}
+
+func (s *LimiterSuite) TestACountBelowOneIsRefused() {
+	l := NewLimiter(2)
+	var refused *SlotCountError
+	s.Require().ErrorAs(l.AcquireN(s.T().Context(), 0), &refused)
+	s.Equal(0, refused.Slots)
+	l.ReleaseN(0)
+	s.Equal(LimiterSnapshot{Capacity: 2}, l.Snapshot(), "a release of no slots frees nothing")
 }
 
 func (s *LimiterSuite) TestCancelledAcquire() {
