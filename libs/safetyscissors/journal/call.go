@@ -198,11 +198,17 @@ func (l callLine) call() Call {
 		Cwd:           l.Cwd,
 		Phases:        l.Phases,
 	}
-	if g.Duration != 0 || g.Verdict.Ref != "" || g.PolicyDigest != "" || g.DecidedBy != "" ||
-		g.Binary != "" || g.BinaryVersion != "" || g.Cwd != "" || len(g.Phases) > 0 {
+	if !g.IsZero() {
 		c.Guard = &g
 	}
 	return c
+}
+
+// IsZero reports whether g records nothing, which is how a call no guard
+// judged reads back: with a nil Guard.
+func (g Guard) IsZero() bool {
+	return g.Duration == 0 && g.Verdict.Ref == "" && g.PolicyDigest == "" && g.DecidedBy == "" &&
+		g.Binary == "" && g.BinaryVersion == "" && g.Cwd == "" && len(g.Phases) == 0
 }
 
 // LogValue lets a host log c with its own logger, keyed as the line is on

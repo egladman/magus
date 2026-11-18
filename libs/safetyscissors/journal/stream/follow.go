@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -167,7 +167,7 @@ func (f *Follower) logs() ([]string, error) {
 		}
 		found = append(found, stamped{e.Name(), info.ModTime()})
 	}
-	sort.Slice(found, func(i, j int) bool { return found[i].mod.Before(found[j].mod) })
+	slices.SortFunc(found, func(a, b stamped) int { return a.mod.Compare(b.mod) })
 	names := make([]string, len(found))
 	for i, s := range found {
 		names[i] = s.name

@@ -1,9 +1,10 @@
 package recorder
 
 import (
+	"cmp"
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -172,14 +173,8 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 		c.Count = n
 		out = append(out, c)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
-		}
-		if out[i].Verb != out[j].Verb {
-			return out[i].Verb < out[j].Verb
-		}
-		return out[i].Subject < out[j].Subject
+	slices.SortFunc(out, func(a, b Consultation) int {
+		return cmp.Or(cmp.Compare(b.Count, a.Count), strings.Compare(a.Verb, b.Verb), strings.Compare(a.Subject, b.Subject))
 	})
 	undecoded := errors.Join(errs...)
 	if len(out) > 0 {
@@ -243,11 +238,11 @@ func isMagusProgram(tok string) bool {
 }
 
 // clampRunes bounds a string, cutting on a rune boundary so what is stored stays valid UTF-8.
-func clampRunes(s string, max int) string {
-	if len(s) <= max {
+func clampRunes(s string, limit int) string {
+	if len(s) <= limit {
 		return s
 	}
-	cut := max
+	cut := limit
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}

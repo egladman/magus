@@ -220,7 +220,7 @@ func touchesRead(obs []observation, paths []string) map[string][]diff.Touch {
 				Session:    o.Session,
 				Transcript: o.Transcript,
 				Read:       withoutSelf(st.read, o.Path),
-				Ran:        append([]string(nil), st.ran...),
+				Ran:        slices.Clone(st.ran),
 			}
 			out[o.Path] = upsertLatest(out[o.Path], t)
 		}
@@ -432,14 +432,14 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 
 // prependCapped puts v at the front and bounds the list, dropping a duplicate so a file read
 // five times in a row does not fill the whole window with itself.
-func prependCapped(xs []string, v string, cap int) []string {
-	out := make([]string, 0, cap)
+func prependCapped(xs []string, v string, limit int) []string {
+	out := make([]string, 0, limit)
 	out = append(out, v)
 	for _, x := range xs {
 		if x == v {
 			continue
 		}
-		if len(out) == cap {
+		if len(out) == limit {
 			break
 		}
 		out = append(out, x)

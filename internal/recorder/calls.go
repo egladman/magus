@@ -302,8 +302,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 
 // judged is g, or nil when g records nothing: no guard judged the call.
 func judged(g journal.Guard) *journal.Guard {
-	if g.Duration == 0 && g.Verdict.Ref == "" && g.PolicyDigest == "" && g.DecidedBy == "" &&
-		g.Binary == "" && g.BinaryVersion == "" && g.Cwd == "" && len(g.Phases) == 0 {
+	if g.IsZero() {
 		return nil
 	}
 	return &g
@@ -908,7 +907,7 @@ const perKindFloor = 500
 // selectKept keeps every kind's newest perKindFloor lines, then the newest
 // of any kind, in file order, which every reader depends on. A line that
 // does not decode has no kind and competes on recency alone.
-func selectKept(lines []string, max int) []string {
+func selectKept(lines []string, keep int) []string {
 	type lineKind struct {
 		Kind string `json:"kind"`
 	}
@@ -933,13 +932,13 @@ func selectKept(lines []string, max int) []string {
 	// budget on whichever kind happens to be newest, which is precisely the eviction this
 	// policy exists to prevent, reintroduced by the policy itself.
 	reserve := perKindFloor
-	if len(present) > 0 && max/len(present) < reserve {
-		reserve = max / len(present)
+	if len(present) > 0 {
+		reserve = min(reserve, keep/len(present))
 	}
 
 	admit := make([]bool, len(lines))
 	seen := map[string]int{}
-	budget := max
+	budget := keep
 
 	// Newest first, so "the newest N of this kind" falls out of the iteration order.
 	for i := len(lines) - 1; i >= 0 && budget > 0; i-- {
@@ -960,7 +959,7 @@ func selectKept(lines []string, max int) []string {
 		budget--
 	}
 
-	kept := make([]string, 0, max)
+	kept := make([]string, 0, keep)
 	for i, ok := range admit {
 		if ok {
 			kept = append(kept, lines[i])
