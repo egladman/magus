@@ -121,7 +121,11 @@ func commitAuthority(t *testing.T, ctx context.Context, root string) {
 		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
-	store := job.NewStore(hookLocation(ctx, Dependencies{}).jobs())
+	// The fixture carries another contract than this binary on purpose,
+	// so the setup writes past the store's skew fence the guard keeps.
+	loc := hookLocation(ctx, Dependencies{}).jobs()
+	loc.Skew = nil
+	store := job.NewStore(loc)
 	rows, err := store.List(t.Context())
 	require.NoError(t, err)
 	for _, row := range rows {
