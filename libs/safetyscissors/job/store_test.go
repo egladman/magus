@@ -453,6 +453,26 @@ func (s *StoreSuite) TestARewriteDroppingAnUnfinishedAttemptLineIsANotice() {
 	s.Len(tries, 1, "the append landed after the rewrite")
 }
 
+// The tries end before the row does, so a drop whose tries could not end keeps the row
+// rather than leave tries a later job under the id would inherit.
+func (s *StoreSuite) TestARowWhoseTriesCannotEndIsKept() {
+	ctx := s.T().Context()
+	st := s.open()
+	_, err := st.Update(ctx, "a", func(*Job) {})
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, attemptsFileName), []byte("not json\n"), 0o600))
+
+	err = st.Rewrite(ctx, func(f *Rows) error {
+		f.Jobs = nil
+		return nil
+	})
+
+	s.Require().ErrorIs(err, codec.ErrLineUndecodable)
+	rows, err := st.List(ctx)
+	s.Require().NoError(err)
+	s.Len(rows, 1)
+}
+
 func (s *StoreSuite) TestAttemptsLiveBesideTheRows() {
 	st := s.open()
 	_, err := st.Update(s.T().Context(), "a", func(*Job) {})

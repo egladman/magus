@@ -711,13 +711,18 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
 				return err
 			}
 		}
-		if err := s.write(f, log); err != nil {
-			return err
+		if err := refuseDuplicateRows(f.Jobs); err != nil {
+			return s.wrap(err)
 		}
 		for _, row := range f.Jobs {
 			delete(gone, row.ID)
 		}
-		return s.dropAttempts(ctx, gone)
+		// Before the rows: a dropped row whose tries outlived it would hand them to the
+		// next job forked under its id.
+		if err := s.dropAttempts(ctx, gone); err != nil {
+			return err
+		}
+		return s.write(f, log)
 	})
 }
 
