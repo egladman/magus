@@ -1,11 +1,11 @@
 ---
-title: A benchmark is a recipe for four
+title: Fit the work, never the benchmark
 order: 40
-description: A benchmark measures the benchmark; the gap between it and real work is never zero and is unknown until it is measured, so a result is claimed at the size it was run and a change tuned only to a benchmark needs a witness from real use.
+description: Between an artificial result and real work there is a gap that is never zero and is unknown until it is measured; a change tuned to a benchmark fits the benchmark, so a gain counts where real use shows it, at the size it was run.
 tags: [design, principle, benchmarks, measurement, evidence]
 ---
 
-# A benchmark is a recipe for four
+# Fit the work, never the benchmark
 
 A recipe that serves four does not serve twenty when every quantity is
 multiplied by five. The salt is too much, the pan is too small, the water
@@ -14,25 +14,31 @@ all. The recipe was right. What it left out was its own tolerance: the range
 of kitchens, pans and head counts it was tried in.
 
 A benchmark is that recipe. It was run on one tree, on one machine, on one
-set of tasks, at one size, and its number is true there. Between it and the
-work people do with the tool there is a gap that is never zero and is unknown
-until someone measures it. Three habits follow from treating that gap as real.
+set of tasks, at one size, and its number is true there. Between that
+artificial result and the work people do with the tool there is a gap. It is
+never zero, and it is unknown until someone measures it. A benchmark cannot
+measure it, because the gap is the part the benchmark left out.
 
-- **A result is claimed at the size it was run.** A number from a tree of ten
-  thousand files says nothing certain about a million. Run a benchmark at two
-  sizes or more and publish how the number moves between them. A figure for a
-  size nobody ran is an extrapolation, and the sentence that states it says
-  so.
-- **A benchmark tuned against is spent.** Once a change is shaped by a
-  benchmark's number, that number has stopped measuring the tool and started
-  measuring the fit. Keep one benchmark nobody tunes against, or count the
-  gain only where real runs show it too.
+Chasing the number makes the gap worse. Each change shaped by a benchmark's
+result fits the tool a little more closely to the benchmark, and nothing says
+it fits the work any better. Past some point the number is measuring the fit.
+The work is still what the tool is for, so three habits follow.
+
 - **A benchmark win needs a witness from real use.** The run journals already
   record what the cache saved and what an agent spent on real work. A change
   justified by a benchmark alone is labelled as that: better on the
   benchmark, not yet seen in use. When the benchmark keeps improving and the
   journals do not move, stop: the remaining work is on the recipe, not the
   dinner.
+- **A benchmark tuned against is spent.** Once a change is shaped by a
+  benchmark's number, that number has stopped measuring the tool. Keep one
+  benchmark nobody tunes against, or count the gain only where real runs show
+  it too.
+- **A result is claimed at the size it was run.** A number from a tree of ten
+  thousand files says nothing certain about a million. Run a benchmark at two
+  sizes or more and publish how the number moves between them. A figure for a
+  size nobody ran is an extrapolation, and the sentence that states it says
+  so.
 
 This page does not argue against measuring.
 [Measured, not asserted](measured-not-asserted.md) still holds, and a claim
