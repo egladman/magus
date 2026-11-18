@@ -108,7 +108,7 @@ func (s *Store) MutateSeeing(ctx context.Context, id string, kind WriteKind, app
 		// After the row, so a refused write folds nothing, and under its lock, so no other
 		// writer's fork reads the attempts between the row and its fold.
 		if w.folded != nil {
-			if err := s.AppendAttempts(ctx, *w.folded); err != nil {
+			if err := s.appendAttempts(ctx, *w.folded); err != nil {
 				foldErr = fmt.Errorf("%s was forked again, and its last attempt was not folded: %w", id, err)
 			}
 		}

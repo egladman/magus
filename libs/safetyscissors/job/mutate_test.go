@@ -132,7 +132,7 @@ func (s *MutateSuite) TestAForkPastItsCapIsRefusedWithNoHook() {
 	st := s.open()
 	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.State, r.MaxAttempts = StateFail, 1 })
 	s.Require().NoError(err)
-	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
+	s.Require().NoError(st.appendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
 
 	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.State = StateDeclared })
 

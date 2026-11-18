@@ -89,7 +89,7 @@ func (s *StoreGrantsSuite) TestAGrantEndsWithTheJobAndItsAttempt() {
 	ended := row
 	ended.State = StatePass
 	s.False(s.lowersAt(ended, "hooks-off", now), "a grant ends at the job's terminal state")
-	s.Require().NoError(s.store.AppendAttempts(ctx, Attempt{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}))
+	s.Require().NoError(s.store.appendAttempts(ctx, Attempt{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}))
 	s.False(s.lowersAt(row, "hooks-off", now), "the next attempt is not the one the person approved")
 }
 

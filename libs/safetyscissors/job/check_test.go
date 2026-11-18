@@ -126,13 +126,13 @@ func (s *CheckSuite) TestAStoredRowsChecksRewriteToOneLine() {
 	stored := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{"check":{ "target" : "test", "project": "." },"postconditions":[{"id":"lint","kind":"check","expect":"passed",` +
 		`"check":{"target":"lint","project":"p"},"accept":["witnessed"]}]},"status":{"created":10,"updated":20}}`)
-	row, ok, err := ReadRecord(stored)
+	row, ok, err := readRecord(stored)
 	s.Require().NoError(err)
 	s.Require().True(ok)
 
 	once, err := MarshalRecord(row, nil)
 	s.Require().NoError(err)
-	again, ok, err := ReadRecord(once)
+	again, ok, err := readRecord(once)
 	s.Require().NoError(err)
 	s.Require().True(ok)
 	twice, err := MarshalRecord(again, nil)

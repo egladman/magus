@@ -531,13 +531,6 @@ func (s *Store) endedAttemptDenials(ctx context.Context, id string) ([]Denial, b
 	return denials, known
 }
 
-// Reader is s as a [Reader].
-func (s *Store) Reader() Reader { return storeReader{s} }
-
-type storeReader struct{ s *Store }
-
-func (r storeReader) List(ctx context.Context) ([]Job, error) { return r.s.List(ctx) }
-
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
 //
@@ -1007,20 +1000,6 @@ func MarshalHeader(features []apiversion.Feature) ([]byte, error) {
 	return codec.Marshal(Rows{TypeMeta: jobListType(), Metadata: apiversion.Metadata{}.WithRequires(recordGroup, features)})
 }
 
-// ReadRecord is the row a line of jobs.jsonl stores, kinds being the credential kinds
-// its origins may carry, and false for a line that is not a row, such as the header.
-func ReadRecord(text []byte, kinds ...CredentialKind) (Job, bool, error) {
-	var r jobRecord
-	if err := codec.Unmarshal(text, &r); err != nil {
-		return Job{}, false, err
-	}
-	if r.Kind != jobType().Kind {
-		return Job{}, false, nil
-	}
-	row, err := r.job(newWireEnum(kinds...))
-	return row, err == nil, err
-}
-
 // Delete removes ONE row and returns it, or reports that no such row exists.
 //
 // A row that is over is still a row: ending a job moves it to a terminal state, which is
@@ -1278,8 +1257,8 @@ func (s *Store) ChangeLiveAttempt(ctx context.Context, id string, change func(*A
 	return live, nil
 }
 
-// AppendAttempts appends attempts as their records.
-func (s *Store) AppendAttempts(ctx context.Context, attempts ...Attempt) error {
+// appendAttempts appends attempts as their records.
+func (s *Store) appendAttempts(ctx context.Context, attempts ...Attempt) error {
 	if len(attempts) == 0 {
 		return nil
 	}

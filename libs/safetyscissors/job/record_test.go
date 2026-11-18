@@ -16,6 +16,20 @@ type RecordSuite struct {
 
 func TestRecordSuite(t *testing.T) { suite.Run(t, new(RecordSuite)) }
 
+// readRecord is the row a line of jobs.jsonl stores, and false for a line that is not a
+// row, such as the header.
+func readRecord(text []byte) (Job, bool, error) {
+	var r jobRecord
+	if err := codec.Unmarshal(text, &r); err != nil {
+		return Job{}, false, err
+	}
+	if r.Kind != jobType().Kind {
+		return Job{}, false, nil
+	}
+	row, err := r.job(newWireEnum[CredentialKind]())
+	return row, err == nil, err
+}
+
 func (s *RecordSuite) record(source string) jobRecord {
 	r := recordJob(Job{ID: "a", State: StateDeclared,
 		ModelTier: &tier.Assignment{Name: "bounded", Source: tier.SourceJob}}, nil)
@@ -73,7 +87,7 @@ func (s *RecordSuite) TestACredentialKindTheStoreDoesNotAdmitIsRefused() {
 func (s *RecordSuite) TestAMemberANewerWriterStoredGoesBackOut() {
 	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"later":1},"status":{"created":0,"updated":0},"extra":true}`)
 
-	row, ok, err := ReadRecord(line)
+	row, ok, err := readRecord(line)
 	s.Require().NoError(err)
 	s.Require().True(ok)
 	s.Equal([]string{"extra", "spec.later"}, row.Unknown)
@@ -116,7 +130,7 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredInAPostconditionIsRefused() {
 	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{"postconditions":[{"id":"tests","kind":"check","later":1}]},"status":{"created":0,"updated":0}}`)
 
-	_, _, err := ReadRecord(line)
+	_, _, err := readRecord(line)
 
 	refused := s.nestedRefusal(err)
 	s.Equal("postconditionRecord", refused.Record)
@@ -127,7 +141,7 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredTwoLevelsDownIsRefused() {
 	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{},"status":{"created":0,"updated":0,"registered_by":{"user":"eli","credential":{"id":"c1","later":true}}}}`)
 
-	_, _, err := ReadRecord(line)
+	_, _, err := readRecord(line)
 
 	s.Equal("credentialRecord", s.nestedRefusal(err).Record)
 }
@@ -149,7 +163,7 @@ func (s *RecordSuite) TestEveryNestedRecordRoundTrips() {
 	out, err := MarshalRecord(row, nil)
 	s.Require().NoError(err)
 
-	got, ok, err := ReadRecord(out)
+	got, ok, err := readRecord(out)
 
 	s.Require().NoError(err)
 	s.Require().True(ok)
@@ -165,7 +179,7 @@ func (s *RecordSuite) TestAnOlderBuildsCamelCaseNestedKeyIsRefused() {
 	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{},"status":{"created":0,"updated":0,"registered_by":{"user":"eli","entryPoint":"cli"}}}`)
 
-	_, _, err := ReadRecord(line)
+	_, _, err := readRecord(line)
 
 	refused := s.nestedRefusal(err)
 	s.Equal("originRecord", refused.Record)

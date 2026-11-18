@@ -2557,7 +2557,7 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	reader, store := at.rows, (*job.Store)(nil)
 	if reader == nil {
 		store = at.store(isDryRun(ctx))
-		reader = store.Reader()
+		reader = store
 	}
 	rows, err := awaitDeadline(wait, func() ([]jobtypes.Job, error) { return reader.List(wait) })
 	if err != nil && wait.Err() != nil {

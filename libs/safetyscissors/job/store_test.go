@@ -354,7 +354,7 @@ func (s *StoreSuite) TestTwoDropsWithinASecondKeepBothArchives() {
 	for _, id := range []string{"a", "b"} {
 		_, err := st.Update(ctx, id, func(*Job) {})
 		s.Require().NoError(err)
-		s.Require().NoError(st.AppendAttempts(ctx, Attempt{Job: id, N: 1}))
+		s.Require().NoError(st.appendAttempts(ctx, Attempt{Job: id, N: 1}))
 		_, err = st.Delete(ctx, id, true)
 		s.Require().NoError(err)
 	}
@@ -445,7 +445,7 @@ func (s *StoreSuite) TestARewriteDroppingAnUnfinishedAttemptLineIsANotice() {
 	path := filepath.Join(s.dir, attemptsFileName)
 	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":`), 0o600))
 
-	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
+	s.Require().NoError(st.appendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
 
 	s.Contains(notices, Notice{Path: path, Text: "line 1 was one no writer finished; the rewrite dropped it"})
 	tries, err := st.Attempts(s.T().Context())
@@ -478,7 +478,7 @@ func (s *StoreSuite) TestAttemptsLiveBesideTheRows() {
 	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
 	s.Require().NoError(err)
 
-	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1, Status: AttemptStatus{Started: 3}}))
+	s.Require().NoError(st.appendAttempts(s.T().Context(), Attempt{Job: "a", N: 1, Status: AttemptStatus{Started: 3}}))
 	_, err = st.Delete(s.T().Context(), "a", true)
 	s.Require().NoError(err)
 
