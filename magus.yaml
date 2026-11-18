@@ -167,6 +167,9 @@ knowledge:
             # 16 since the queue's source and setup parsing moved in from cmd/magus (#781).
             internal/queue: 16
             internal/recorder: 12
+            # 16 since ADR 0051 moved the session views in from internal/trail: they
+            # read journal.Call through internal/recorder and fold the session store.
+            internal/sessions: 16
             internal/workspace: 16
             # the env and config digests moved out of cmd/magus: the config digest
             # encodes the loaded config through internal/json. config set moved too: it
