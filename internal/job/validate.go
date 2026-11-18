@@ -733,6 +733,7 @@ func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
 			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
 			Fix: fmt.Sprintf(`add %q to paths.write, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
+			Deviation: &job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: "the root regenerates it"},
 		})
 	}
 	return ps
@@ -754,8 +755,11 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),
 			Fix: fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				goal, types.GateNotRun, subject),
+			Goal: &g.Goal,
 		}
 		if g.Target != lintTarget && owner.runs != "" {
+			p.Goal = nil
+			p.Deviation = &job.Deviation{Code: job.Code(types.GateNotRun), Subject: subject, Reason: owner.runs}
 			p.Fix = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
 		}
 		ps = append(ps, p)

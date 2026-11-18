@@ -814,8 +814,13 @@ func TestUnrunGateFixAddsTheGoalWithoutAnOwner(t *testing.T) {
 
 	ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{})
 
-	require.Len(t, ps, 1)
-	assert.Equal(t, `add the goal {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to goals, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`, ps[0].Fix)
+	goal := unrunGate().Goal
+	assert.Equal(t, types.JobProblems{{
+		Code: types.GateNotRun, Field: "goals", Subject: "unit .",
+		Message: "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a goal runs it",
+		Fix:     `add the goal {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to goals, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`,
+		Goal:    &goal,
+	}}, ps, "the goal is the one remedy")
 }
 
 func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
@@ -824,8 +829,12 @@ func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
 	for _, runs := range []string{"github-actions runs it", integratorRuns} {
 		ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{runs: runs})
 
-		require.Len(t, ps, 1)
-		assert.Equal(t, fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs), ps[0].Fix)
+		assert.Equal(t, types.JobProblems{{
+			Code: types.GateNotRun, Field: "goals", Subject: "unit .",
+			Message:   "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a goal runs it",
+			Fix:       fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs),
+			Deviation: &job.Deviation{Code: "MGS3045", Subject: "unit .", Reason: runs},
+		}}, ps, "the owner's deviation is the one remedy")
 	}
 }
 
@@ -837,9 +846,13 @@ func TestUnrunLintGateFixStaysTheGoalWhoeverOwnsTheRest(t *testing.T) {
 
 	ps := unrunGateProblems([]UnrunGate{lint}, gateOwner{runs: "github-actions runs it"})
 
-	require.Len(t, ps, 1)
-	assert.Contains(t, ps[0].Fix, "add the goal ")
-	assert.NotContains(t, ps[0].Fix, "since github-actions")
+	goal := lint.Goal
+	assert.Equal(t, types.JobProblems{{
+		Code: types.GateNotRun, Field: "goals", Subject: "lint .",
+		Message: "ci runs `lint .` over the write paths (it reads **/*.go), and neither the check nor a goal runs it",
+		Fix:     fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":"MGS3045","subject":"lint .","reason":"the root runs it"}`, `{"id":"unit","kind":"check","check":{"target":"unit","project":"."}}`),
+		Goal:    &goal,
+	}}, ps)
 }
 
 func TestIntegratorGatesAskForNoFix(t *testing.T) {
@@ -856,8 +869,12 @@ func TestRegeneratedOutputFixOffersTheWritePathOrADeviation(t *testing.T) {
 
 	ps := regeneratedProblems([]RegeneratedOutput{{Target: ".:man-generate", Output: "manpage/*.1", Source: "cli/registry.go"}})
 
-	require.Len(t, ps, 1)
-	assert.Equal(t, `add "manpage/*.1" to paths.write, or permit it in deviations: {"code":"MGS3044","subject":"manpage/*.1","reason":"the root regenerates it"}`, ps[0].Fix)
+	assert.Equal(t, types.JobProblems{{
+		Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: "manpage/*.1",
+		Message:   ".:man-generate regenerates manpage/*.1 from cli/registry.go, inside the write paths, and manpage/*.1 sits outside them",
+		Fix:       `add "manpage/*.1" to paths.write, or permit it in deviations: {"code":"MGS3044","subject":"manpage/*.1","reason":"the root regenerates it"}`,
+		Deviation: &job.Deviation{Code: "MGS3044", Subject: "manpage/*.1", Reason: "the root regenerates it"},
+	}}, ps)
 }
 
 // declaredGateSuite pins which owner the workspace declares for a worker's gates.

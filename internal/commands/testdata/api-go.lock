@@ -2470,9 +2470,11 @@ github.com/egladman/magus/types.JobOutcome.Work field *JobWork "json:\"work,omit
 github.com/egladman/magus/types.JobOutcome.WriteFiles field int "json:\"write_files\"             yaml:\"write_files\""
 github.com/egladman/magus/types.JobProblem type struct
 github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"code\""
+github.com/egladman/magus/types.JobProblem.Deviation field *github.com/egladman/magus/libs/safetyscissors/job.Deviation "json:\"deviation,omitempty\""
 github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
+github.com/egladman/magus/types.JobProblem.Goal field *github.com/egladman/magus/libs/safetyscissors/job.Goal "json:\"goal,omitempty\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
 github.com/egladman/magus/types.JobProblem.Permissible method func() bool
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
