@@ -160,18 +160,9 @@ func TypeParams(rt reflect.Type) []string {
 // to the outer object, so nesting here would make the Buzz mirror and the JSON encoding
 // of the same value disagree about their shape.
 func renderFields(b *bytes.Buffer, rt reflect.Type, opts Options, declared map[string]bool) error {
-	required := opts.required(rt)
-	for i := 0; i < rt.NumField(); i++ {
-		f := rt.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
-		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
-			if err := renderFields(b, f.Type, opts, declared); err != nil {
-				return err
-			}
-			continue
-		}
+	for _, mf := range MirroredFields(rt) {
+		f := mf.StructField
+		required := opts.required(mf.Owner)
 		bt, def, err := FieldType(f.Type, opts)
 		if err != nil {
 			return fmt.Errorf("field %s: %w", f.Name, err)

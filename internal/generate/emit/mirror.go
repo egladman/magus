@@ -1,9 +1,10 @@
 package emit
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
 // CallbackFuncName names the generated adapter for callback type t, a func
@@ -49,23 +50,12 @@ type ObjectField struct {
 }
 
 // ObjectFields lists t's fields the way buzzgen's mirror declares them, in
-// declaration order. It skips unexported fields and `buzz:"-"`. An untagged
-// embedded struct contributes its own fields inline. t must be a struct.
+// declaration order, with buzzgen.MirroredFields' visibility rule. t must be a
+// struct.
 func ObjectFields(t reflect.Type) []ObjectField {
 	var out []ObjectField
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
-		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
-			for _, inner := range ObjectFields(f.Type) {
-				inner.Selector = fmt.Sprintf("%s.%s", f.Name, inner.Selector)
-				out = append(out, inner)
-			}
-			continue
-		}
-		out = append(out, ObjectField{StructField: f, Selector: f.Name})
+	for _, f := range buzzgen.MirroredFields(t) {
+		out = append(out, ObjectField{StructField: f.StructField, Selector: f.Selector})
 	}
 	return out
 }

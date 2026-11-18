@@ -3,6 +3,7 @@ package buzzgen
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,4 +295,70 @@ func (s *RequiredFieldSuite) TestUndeclaredRequiredFieldIsRefused() {
 	s.opts.Required = func(reflect.Type) []string { return []string{"missing"} }
 	_, err := ObjectDecl("Worker", reflect.TypeFor[requiredWorker](), s.opts)
 	s.ErrorContains(err, "requires field missing, which it does not declare")
+}
+
+type MirrorBase struct {
+	ID    string
+	Check string
+	Tail  int
+}
+
+type mirrorShadow struct {
+	MirrorBase
+	Check []byte
+	Extra bool
+}
+
+type MirrorDeepBase struct{ Name string }
+
+type mirrorDeep struct {
+	MirrorDeepBase
+	Name int
+}
+
+type MirrorLeft struct{ Twin string }
+
+type MirrorRight struct{ Twin string }
+
+type mirrorAmbiguous struct {
+	MirrorLeft
+	MirrorRight
+	Own string
+}
+
+// MirrorSuite pins which fields the Buzz mirror of a struct declares.
+type MirrorSuite struct {
+	suite.Suite
+}
+
+func TestMirror(t *testing.T) { suite.Run(t, new(MirrorSuite)) }
+
+func (s *MirrorSuite) names(t reflect.Type) []string {
+	var out []string
+	for _, f := range MirroredFields(t) {
+		out = append(out, f.Selector)
+	}
+	return out
+}
+
+func (s *MirrorSuite) TestAnOuterFieldHidesTheEmbeddedOneAndTakesItsPlace() {
+	s.Equal([]string{"MirrorBase.ID", "Check", "MirrorBase.Tail", "Extra"}, s.names(reflect.TypeFor[mirrorShadow]()))
+	for _, f := range MirroredFields(reflect.TypeFor[mirrorShadow]()) {
+		if f.Name == "Check" {
+			s.Equal(reflect.TypeFor[[]byte](), f.Type, "the outer field wins, not the embedded string")
+		}
+	}
+}
+
+func (s *MirrorSuite) TestAShadowingFieldReachesOnlyItsOwnType() {
+	s.Equal([]string{"Name"}, s.names(reflect.TypeFor[mirrorDeep]()))
+	var b bytes.Buffer
+	s.Require().NoError(renderFields(&b, reflect.TypeFor[mirrorShadow](), DefaultOptions(), map[string]bool{}))
+	s.Equal(1, strings.Count(b.String(), "check:"), "one declaration of the shadowed name")
+	s.Less(strings.Index(b.String(), "id:"), strings.Index(b.String(), "check:"))
+	s.Less(strings.Index(b.String(), "check:"), strings.Index(b.String(), "tail:"))
+}
+
+func (s *MirrorSuite) TestTwoEmbeddedFieldsOfOneNameAreAmbiguousAndDropped() {
+	s.Equal([]string{"Own"}, s.names(reflect.TypeFor[mirrorAmbiguous]()))
 }
