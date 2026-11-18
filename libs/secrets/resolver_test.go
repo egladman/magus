@@ -24,7 +24,18 @@ func TestResolver(t *testing.T) { suite.Run(t, new(ResolverSuite)) }
 // SetupTest gives every test a fresh resolver on its context: nothing leaks between
 // tests, as nothing leaks between scopes of a long-lived caller.
 func (s *ResolverSuite) SetupTest() {
-	s.r = NewResolver()
+	s.r = newTestResolver(s.T())
+}
+
+// newTestResolver builds a Resolver that falls back to the environment, as most tests
+// read through it, with opts applied.
+func newTestResolver(t testing.TB, opts ...Option) *Resolver {
+	t.Helper()
+	r, err := NewResolver(Config{Fallback: EnvProvider{}}, opts...)
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	return r
 }
 
 // ctx is the test's context carrying the suite's resolver.
@@ -48,22 +59,32 @@ func (f providerFunc) Fetch(ctx context.Context, ref string) (Secret, error) { r
 // name, reading through name.
 func (s *ResolverSuite) withProvider(name string, p Provider, opts ...Option) {
 	opener := func(context.Context, string) (Provider, error) { return p, nil }
-	s.r = NewResolver(append([]Option{WithOpener(opener)}, opts...)...).WithProvider(name)
+	s.r = newTestResolver(s.T(), append([]Option{WithOpener(opener)}, opts...)...).WithProvider(name)
+}
+
+func (s *ResolverSuite) TestReadWithNoProviderAndNoFallbackIsRefused() {
+	r, err := NewResolver(Config{})
+	s.Require().NoError(err)
+	s.T().Setenv("SECRETS_TEST_TOKEN", "s3cret-value")
+	_, err = r.Read(s.T().Context(), "SECRETS_TEST_TOKEN")
+	var re *ReadError
+	s.Require().ErrorAs(err, &re)
+	s.ErrorIs(err, ErrNoFallback)
 }
 
 func (s *ResolverSuite) TestEnvProviderReadsTheNamedVariable() {
 	s.T().Setenv("SECRETS_TEST_TOKEN", "s3cret-value")
-	v, err := envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_TOKEN")
+	v, err := EnvProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_TOKEN")
 	s.Require().NoError(err)
 	s.Equal("s3cret-value", v.Reveal())
 }
 
 func (s *ResolverSuite) TestEnvProviderTellsUnsetFromEmpty() {
-	_, err := envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_ABSENT")
+	_, err := EnvProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_ABSENT")
 	s.Require().ErrorContains(err, "$SECRETS_TEST_ABSENT is not set")
 
 	s.T().Setenv("SECRETS_TEST_BLANK", "")
-	_, err = envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_BLANK")
+	_, err = EnvProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_BLANK")
 	s.Require().ErrorContains(err, "is set but empty")
 }
 
@@ -119,7 +140,7 @@ func (s *ResolverSuite) TestRedactMasksLongestValueFirst() {
 
 func (s *ResolverSuite) TestReadDoesNotRegisterValuesTooShortToMask() {
 	s.T().Setenv("SECRETS_TEST_TINY", "ab")
-	s.r = NewResolver(WithShortSecret(func(context.Context, string) {}))
+	s.r = newTestResolver(s.T(), WithShortSecret(func(context.Context, string) {}))
 	s.Equal("ab", s.read("SECRETS_TEST_TINY").Reveal(), "the value is returned; only its protection is declined")
 	s.Equal("grab a table", string(s.r.redact([]byte("grab a table"))))
 
@@ -153,7 +174,7 @@ func (s *ResolverSuite) TestReadReReadsWhenTheProviderChanges() {
 	opener := func(context.Context, string) (Provider, error) {
 		return providerFunc(func(context.Context, string) (Secret, error) { return New("from-vault"), nil }), nil
 	}
-	s.r = NewResolver(WithOpener(opener))
+	s.r = newTestResolver(s.T(), WithOpener(opener))
 	s.T().Setenv("SOME_REF", "from-env")
 	s.Equal("from-env", s.read("SOME_REF").Reveal())
 
@@ -243,7 +264,7 @@ func (s *ResolverSuite) TestReadRejectsEmptyReference() {
 
 func (s *ResolverSuite) TestWithProviderDerivesWithoutChangingTheOriginal() {
 	vault := s.r.WithProvider("onepassword")
-	s.Empty(s.r.ProviderName(), "no selection means the built-in env provider applies")
+	s.Empty(s.r.ProviderName(), "no selection means the fallback applies")
 	s.Equal("onepassword", vault.ProviderName())
 
 	// The derived resolver shares the redaction set: a value one registers, both mask.
@@ -258,7 +279,7 @@ func (s *ResolverSuite) TestReadUnderANamedProviderNeedsAnOpener() {
 }
 
 func (s *ResolverSuite) TestReadSurfacesProviderOpenFailures() {
-	s.r = NewResolver(WithOpener(func(context.Context, string) (Provider, error) {
+	s.r = newTestResolver(s.T(), WithOpener(func(context.Context, string) (Provider, error) {
 		return nil, errors.New("spell not registered")
 	})).WithProvider("missing-spell")
 	_, err := s.r.Read(s.resolverContext(), "ANY")
@@ -346,7 +367,7 @@ func (s *ResolverSuite) TestRegisterRefusesAValueTooShortToMask() {
 
 func (s *ResolverSuite) TestReadRefusesAShortValueNoNoticeHears() {
 	s.T().Setenv("SECRETS_TEST_TINY", "ab")
-	_, err := NewResolver().Read(s.T().Context(), "SECRETS_TEST_TINY")
+	_, err := newTestResolver(s.T()).Read(s.T().Context(), "SECRETS_TEST_TINY")
 
 	var short *ShortSecretError
 	s.Require().ErrorAs(err, &short)

@@ -626,12 +626,12 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 		forwarded, baggage, bound string
 		want                      answer
 	}{
-		"nothing":                              {unstamped: true},
-		"an unstamped ctx reads BAGGAGE":       {unstamped: true, baggage: "fleet/env", want: answer{"fleet/env", job.LeaseSourceEnv}},
-		"a stamped absence over BAGGAGE":       {baggage: "fleet/env"},
-		"the forwarded lease":                  {forwarded: "fleet/client", want: answer{"fleet/client", job.LeaseSourceEnv}},
-		"the forwarded lease over BAGGAGE":     {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", job.LeaseSourceEnv}},
-		"the record over a claim":            {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", job.LeaseSourceContested}},
+		"nothing":                          {unstamped: true},
+		"an unstamped ctx reads BAGGAGE":   {unstamped: true, baggage: "fleet/env", want: answer{"fleet/env", job.LeaseSourceEnv}},
+		"a stamped absence over BAGGAGE":   {baggage: "fleet/env"},
+		"the forwarded lease":              {forwarded: "fleet/client", want: answer{"fleet/client", job.LeaseSourceEnv}},
+		"the forwarded lease over BAGGAGE": {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", job.LeaseSourceEnv}},
+		"the record over a claim":          {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", job.LeaseSourceContested}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(recorder.EnvBaggage, "")

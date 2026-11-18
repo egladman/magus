@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +41,7 @@ func leased(t testing.TB, ctx context.Context, lease string) context.Context {
 
 // withResolver is ctx carrying an empty secret resolver, which redaction needs.
 func withResolver(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // mustPersist stores one execution and returns its step ref, failing the test on error.

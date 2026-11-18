@@ -42,6 +42,26 @@ func (p *SecretProvider) Fetches(ref string) int {
 	return p.fetches[ref]
 }
 
+// EnvResolver returns a Resolver that reads a bare reference from the environment, the
+// way a production scope does, with opts applied. It fails the test when the resolver
+// cannot be built, which only an invalid option causes.
+func EnvResolver(t TB, opts ...secrets.Option) *secrets.Resolver {
+	t.Helper()
+	r, err := secrets.NewResolver(secrets.Config{Fallback: secrets.EnvProvider{}}, opts...)
+	if err != nil {
+		t.Fatalf("testkit: build the secret resolver: %v", err)
+	}
+	return r
+}
+
+// WithEnvResolver installs an [EnvResolver] on ctx, for a helper that has a context but no
+// TB to fail. It has no options, so the build cannot fail; were it to, ctx carries a nil
+// resolver, and every read and redaction under it is a *secrets.NoResolverError.
+func WithEnvResolver(ctx context.Context) context.Context {
+	r, _ := secrets.NewResolver(secrets.Config{Fallback: secrets.EnvProvider{}})
+	return secrets.WithResolver(ctx, r)
+}
+
 // Opener returns a secrets.Opener that opens p under every name, for secrets.WithOpener.
 func (p *SecretProvider) Opener() secrets.Opener {
 	return func(context.Context, string) (secrets.Provider, error) { return p, nil }

@@ -606,30 +606,6 @@ func LoadApprovedWriteRule(ctx context.Context, root string) (workspace.WriteRul
 	return reg.WriteRule(), nil
 }
 
-// ruleLoad is what one load of a root magusfile registered: the registry's
-// seams, and the step rules internal/workspace cannot hold.
-type ruleLoad struct {
-	*workspace.WorkspaceRegistry
-	steps *steps.Group
-}
-
-func newRuleLoad() *ruleLoad {
-	return &ruleLoad{WorkspaceRegistry: workspace.NewWorkspaceRegistry(), steps: &steps.Group{}}
-}
-
-// within is ctx with the load's registry and step group to register into.
-func (l *ruleLoad) within(ctx context.Context) context.Context {
-	return steps.WithGroup(workspace.ContextWithRegistry(ctx, l.WorkspaceRegistry), l.steps)
-}
-
-// StepRule is the rule for kind, nil when l is nil or registers none.
-func (l *ruleLoad) StepRule(kind string) steps.Rule {
-	if l == nil {
-		return nil
-	}
-	return l.steps.Rule(kind)
-}
-
 // LoadApprovedBuiltins is LoadApprovedSpawnRule for the magus\guard.builtins settings: the
 // approved sources' declaration over their magus\guard.profile level, raised by the
 // person's agents.profile, resolved over the compiled defaults. With no approval authority
@@ -785,8 +761,11 @@ func approvedRegistry(ctx context.Context, root string, approved headPolicy, pen
 		return nil, &types.EngineNotLinkedError{Op: "load the approved guard rules"}
 	}
 	reg := newRuleLoad()
-	lctx := interp.WithGuardRules(reg.within(ctx))
-	lctx = secrets.WithResolver(lctx, recorder.NewSecretResolver())
+	resolver, err := recorder.NewSecretResolver()
+	if err != nil {
+		return nil, err
+	}
+	lctx := secrets.WithResolver(interp.WithGuardRules(reg.within(ctx)), resolver)
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithApprovedSourceReader(lctx, read)
 	for _, src := range interp.Sources(root, files) {
@@ -949,8 +928,11 @@ func LoadWorkspaceRules(ctx context.Context, root string, opts types.VCSOptions)
 	// Rules only. The rest of the magusfile (harness spells, release tooling,
 	// target imports) is not a guard rule, and compiling it is most of a hook's
 	// cost. See guardRulesFilter in internal/interp.
-	lctx := interp.WithGuardRules(load.within(ctx))
-	lctx = secrets.WithResolver(lctx, recorder.NewSecretResolver())
+	resolver, err := recorder.NewSecretResolver()
+	if err != nil {
+		return nil, err
+	}
+	lctx := secrets.WithResolver(interp.WithGuardRules(load.within(ctx)), resolver)
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithSourceLog(lctx, log)
 	for _, src := range srcs {

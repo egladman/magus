@@ -30,12 +30,12 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // testCtx carries the resolver every write needs: with none the recorder drops the
 // record rather than persist text it could not redact.
 func testCtx(t testing.TB) context.Context {
-	return secrets.WithResolver(t.Context(), secrets.NewResolver())
+	return secrets.WithResolver(t.Context(), testkit.EnvResolver(t))
 }
 
 // bgCtx is testCtx for callers with no *testing.T in reach (helpers, benchmarks).
 func bgCtx() context.Context {
-	return secrets.WithResolver(context.Background(), secrets.NewResolver())
+	return testkit.WithEnvResolver(context.Background())
 }
 
 type CallsSuite struct{ suite.Suite }
@@ -901,7 +901,7 @@ func (s *CallsSuite) TestTrailRedactsThroughContext() {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
-	res := secrets.NewResolver()
+	res := testkit.EnvResolver(t)
 	t.Setenv("TRAIL_TEST_TOKEN", credential)
 	ctx := secrets.WithResolver(testCtx(t), res)
 	// Reading is what marks the value as a secret: provenance, not shape.
@@ -952,7 +952,7 @@ func (s *CallsSuite) TestTrailRedactsThroughContext() {
 func (s *CallsSuite) TestTrailKeepsStructuralFields() {
 	t := s.T()
 	base := t.TempDir()
-	res := secrets.NewResolver()
+	res := testkit.EnvResolver(t)
 	t.Setenv("TRAIL_TEST_TOKEN", "sk-live-must-not-be-persisted")
 	ctx := secrets.WithResolver(testCtx(t), res)
 	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")

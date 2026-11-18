@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
@@ -28,7 +28,7 @@ import (
 
 // withSecrets gives the trail writers the resolver they refuse to run without.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 func actions(events []*activityv1.ActivityEvent) []string {

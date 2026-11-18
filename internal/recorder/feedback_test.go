@@ -125,7 +125,7 @@ func (s *FeedbackSuite) TestReadFeedbackDefaultsToTheNewestSession() {
 func (s *FeedbackSuite) TestReadFeedbackLeavesOutEventsOutsideTheWindow() {
 	t := s.T()
 	base := filepath.Join(t.TempDir(), ".magus")
-	AppendAgentCommand(bgCtx(),base, AgentCommand{Host: "codex", Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	AppendAgentCommand(bgCtx(), base, AgentCommand{Host: "codex", Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	future := time.Now().Add(time.Hour)
 	got, err := ReadFeedback(testCtx(t), []string{base}, FeedbackWindow{Session: "s", Since: future, Until: future.Add(time.Hour)})
 	require.NoError(t, err)
@@ -142,7 +142,7 @@ func (s *FeedbackSuite) TestFeedbackBasesSkipsATrailUntouchedInTheWindow() {
 	t := s.T()
 	root := t.TempDir()
 	base := filepath.Join(root, ".magus")
-	AppendAgentCommand(bgCtx(),base, AgentCommand{Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	AppendAgentCommand(bgCtx(), base, AgentCommand{Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 	old := time.Now().Add(-48 * time.Hour)
 	require.NoError(t, os.Chtimes(eventsPath(base), old, old))
 	assert.Empty(t, FeedbackBases([]string{root}, ".magus", time.Now().Add(-24*time.Hour)))

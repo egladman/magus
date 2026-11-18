@@ -48,8 +48,12 @@ import (
 // background is the context the recorder runs and renders under. Redaction refuses a
 // context with no resolver, and this tool reads no secret, so an empty one masks all
 // there is.
-func background() context.Context {
-	return secrets.WithResolver(context.Background(), secrets.NewResolver())
+func background() (context.Context, error) {
+	r, err := secrets.NewResolver(secrets.Config{})
+	if err != nil {
+		return nil, err
+	}
+	return secrets.WithResolver(context.Background(), r), nil
 }
 
 const (
@@ -201,7 +205,11 @@ func materialize(dir string) error {
 		{"-c", "user.email=demo@example.com", "-c", "user.name=magus", "commit", "-qm", "demo workspace"},
 		{"update-ref", "refs/remotes/origin/main", "HEAD"},
 	} {
-		res, err := spawn.Exec(background(), "git", args, spawn.ExecOptions{Dir: dir, Quiet: true, Capture: true})
+		ctx, err := background()
+		if err != nil {
+			return err
+		}
+		res, err := spawn.Exec(ctx, "git", args, spawn.ExecOptions{Dir: dir, Quiet: true, Capture: true})
 		if err != nil {
 			return fmt.Errorf("git %s: %w", args[0], err)
 		}
@@ -219,7 +227,11 @@ func materialize(dir string) error {
 // half of this command that cannot be reproduced. CI renders from the committed
 // capture and never runs this.
 func recordSession() error {
-	res, err := spawn.Exec(background(), "bash", []string{sessionPath}, spawn.ExecOptions{
+	ctx, err := background()
+	if err != nil {
+		return err
+	}
+	res, err := spawn.Exec(ctx, "bash", []string{sessionPath}, spawn.ExecOptions{
 		TTY:     true,
 		TTYCols: cols,
 		TTYRows: rows,

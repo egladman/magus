@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -66,7 +65,7 @@ func (s *ReadSuite) record(target, revision string, edit func(*cache.OutputDescr
 		edit(&d)
 	}
 	key := fmt.Sprintf("%064x", s.runs)
-	_, err := cache.NewOutputStore(s.cacheDir).Persist(secrets.WithResolver(s.T().Context(), secrets.NewResolver()), key, []byte("ok\n"), d)
+	_, err := cache.NewOutputStore(s.cacheDir).Persist(testkit.WithEnvResolver(s.T().Context()), key, []byte("ok\n"), d)
 	s.Require().NoError(err)
 }
 

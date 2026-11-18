@@ -13,7 +13,6 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,7 +125,7 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	var submitted [][]string
 	h := newTestRunHandler(t, dir, &submitted)
-	recorder.AppendCall(secrets.WithResolver(context.Background(), secrets.NewResolver()), dir, journal.Call{
+	recorder.AppendCall(testkit.WithEnvResolver(context.Background()), dir, journal.Call{
 		Time:     time.UnixMilli(1000),
 		Kind:     journal.CallKindJob,
 		Name:     "run test libs/authkit",

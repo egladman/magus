@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os/signal"
 	"syscall"
@@ -19,7 +20,12 @@ import (
 func runClientWorker(ctx context.Context, in io.Reader, out, errOut io.Writer) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
 	defer stop()
-	ctx = secrets.WithResolver(ctx, recorder.NewSecretResolver())
+	resolver, err := recorder.NewSecretResolver()
+	if err != nil {
+		fmt.Fprintf(errOut, "magus: %v\n", err)
+		return 1
+	}
+	ctx = secrets.WithResolver(ctx, resolver)
 	return mcpclient.Serve(ctx, in, out, errOut, func(ctx context.Context) (context.Context, error) {
 		return mcpclient.OpenWorkspace(ctx, errOut, openClientWorkspace)
 	})

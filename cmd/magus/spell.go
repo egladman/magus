@@ -300,7 +300,11 @@ func spellLock(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell lock: %w", err)
 	}
-	loadOpts := remotespell.LoadOptions{Client: remotespell.LockClient(registryHTTP, spells)}
+	lockClient, err := remotespell.LockClient(registryHTTP, spells)
+	if err != nil {
+		return fmt.Errorf("spell lock: %w", err)
+	}
+	loadOpts := remotespell.LoadOptions{Client: lockClient}
 	if update {
 		err = remotespell.UpdateLock(ctx, wsRoot, func(remotespell.Lock) (remotespell.Lock, error) {
 			return remotespell.Relock(ctx, spells, loadOpts)

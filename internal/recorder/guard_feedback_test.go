@@ -38,7 +38,7 @@ func (s *GuardFeedbackSuite) TestRecentGuardFeedbackOnlyProposesRecurringEvidenc
 
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
-	AppendAgentCommand(bgCtx(),base, AgentCommand{
+	AppendAgentCommand(bgCtx(), base, AgentCommand{
 		Host: "claude-code", Session: "one", Tool: "shell.command", Command: "magus run test .", Decision: verdict.Defer,
 	})
 
@@ -176,7 +176,7 @@ func (s *GuardFeedbackSuite) TestIsMagusRunRequestRefusesWhatIsNotARun() {
 
 func recordFeedbackCommand(t *testing.T, base, host, session, command string) {
 	t.Helper()
-	AppendAgentCommand(bgCtx(),base, AgentCommand{
+	AppendAgentCommand(bgCtx(), base, AgentCommand{
 		Host: host, Session: session, Tool: "shell.command", Command: command,
 		Decision: verdict.Deny, Reason: "run through magus", Rule: "raw-tool",
 	})

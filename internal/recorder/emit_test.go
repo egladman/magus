@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -184,7 +185,7 @@ func (s *EmitSuite) TestEveryFreeTextFieldIsRedacted() {
 
 	const credential = "sk-live-must-not-be-persisted"
 	s.T().Setenv("RECORDER_TEST_TOKEN", credential)
-	res := secrets.NewResolver()
+	res := testkit.EnvResolver(s.T())
 	ctx := secrets.WithResolver(s.T().Context(), res)
 	_, err := res.Read(ctx, "RECORDER_TEST_TOKEN")
 	s.Require().NoError(err)
@@ -226,7 +227,7 @@ func stringFields(t reflect.Type, prefix string) []string {
 // BenchmarkEmitOutput measures the hot path: one output record to a file
 // sink, the per-subprocess-line cost.
 func BenchmarkEmitOutput(b *testing.B) {
-	ctx := WithInvocationID(WithSinks(bgCtx(),NewFileSink(io.Discard).Handle), "invbench")
+	ctx := WithInvocationID(WithSinks(bgCtx(), NewFileSink(io.Discard).Handle), "invbench")
 	out := journal.Output{Stream: journal.Stdout, Project: "web", Target: "build", Text: "some subprocess output line here"}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -238,7 +239,7 @@ func BenchmarkEmitOutput(b *testing.B) {
 // BenchmarkEmitOutput: a result flushes so a live follower sees it, and output
 // stays buffered.
 func BenchmarkEmitResult(b *testing.B) {
-	ctx := WithInvocationID(WithSinks(bgCtx(),NewFileSink(io.Discard).Handle), "invbench")
+	ctx := WithInvocationID(WithSinks(bgCtx(), NewFileSink(io.Discard).Handle), "invbench")
 	run := journal.Run{Project: "web", Target: "build", Status: journal.StatusPass, Ref: "outa1b2c3d4e5f6", Duration: 1200 * time.Millisecond}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -255,7 +256,7 @@ func BenchmarkEmitResultFile(b *testing.B) {
 	}
 	defer func() { _ = f.Close() }()
 
-	ctx := WithInvocationID(WithSinks(bgCtx(),NewFileSink(f).Handle), "invbench")
+	ctx := WithInvocationID(WithSinks(bgCtx(), NewFileSink(f).Handle), "invbench")
 	run := journal.Run{Project: "web", Target: "build", Status: journal.StatusPass, Ref: "outa1b2c3d4e5f6", Duration: 1200 * time.Millisecond}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -285,7 +286,9 @@ func (s *SecretResolverSuite) TearDownTest() { slog.SetDefault(s.prev) }
 // caller treating it as protected. MGS2011 is the whole mitigation available.
 func (s *SecretResolverSuite) TestAValueTooShortToMaskLogsMGS2011() {
 	s.T().Setenv("MAGUS_TEST_TINY", "ab")
-	_, err := NewSecretResolver().Read(s.T().Context(), "MAGUS_TEST_TINY")
+	r, err := NewSecretResolver()
+	s.Require().NoError(err)
+	_, err = r.Read(s.T().Context(), "MAGUS_TEST_TINY")
 	s.Require().NoError(err, "the read succeeds; only the protection is declined")
 
 	out := s.sink.String()
@@ -297,7 +300,9 @@ func (s *SecretResolverSuite) TestAValueTooShortToMaskLogsMGS2011() {
 // A long enough value must NOT trip the notice, or it becomes noise every run.
 func (s *SecretResolverSuite) TestAMaskableValueLogsNothing() {
 	s.T().Setenv("MAGUS_TEST_LONG_ENOUGH", "long-enough-token")
-	_, err := NewSecretResolver().Read(s.T().Context(), "MAGUS_TEST_LONG_ENOUGH")
+	r, err := NewSecretResolver()
+	s.Require().NoError(err)
+	_, err = r.Read(s.T().Context(), "MAGUS_TEST_LONG_ENOUGH")
 	s.Require().NoError(err)
 	s.NotContains(s.sink.String(), string(types.SecretTooShortToMask))
 }

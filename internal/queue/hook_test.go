@@ -26,7 +26,6 @@ import (
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
@@ -845,7 +844,7 @@ var facts = script(`case "$1" in
 // withSecrets gives ctx the resolver spawn requires before it hands back captured output:
 // with none it refuses rather than return text it could not redact.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 func TestCommandFactsGetTheFactAskedForAsTheirArgument(t *testing.T) {

@@ -17,7 +17,6 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -25,7 +24,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 
 // withSecrets gives the trail writers the resolver they refuse to run without.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // loggedCalls is the newest calls in the log under base.

@@ -1524,7 +1524,7 @@ func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 // interpolated credential would print it verbatim as the final thing a user sees. This
 // is the one seam where a run error stops being magus's and becomes the caller's text.
 func TestRedactError(t *testing.T) {
-	m := &Magus{resolver: secrets.NewResolver()}
+	m := &Magus{resolver: testkit.EnvResolver(t)}
 	ctx := secrets.WithResolver(t.Context(), m.resolver)
 	t.Setenv("MAGUS_TEST_RUNERR_TOKEN", "ghp_thrown_from_a_magusfile")
 	_, err := m.resolver.Read(ctx, "MAGUS_TEST_RUNERR_TOKEN")

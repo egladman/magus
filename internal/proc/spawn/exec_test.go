@@ -27,7 +27,7 @@ import (
 // withTestResolver gives ctx the resolver Exec requires before it hands back captured
 // output: with none it refuses rather than return text it could not redact.
 func withTestResolver(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // TestExecRedactsSecretsFromEveryCapturedPath is the regression for two leaks found in
@@ -40,7 +40,7 @@ func withTestResolver(ctx context.Context) context.Context {
 //
 // Both variants run here because Quiet is the one that leaves zero other coverage.
 func TestExecRedactsSecretsFromEveryCapturedPath(t *testing.T) {
-	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(t.Context())
 	t.Setenv("MAGUS_TEST_LEAK_TOKEN", "ghp_never_capture_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LEAK_TOKEN")
 	require.NoError(t, err)

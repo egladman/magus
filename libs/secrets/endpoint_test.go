@@ -30,7 +30,7 @@ func upstream(t *testing.T, h http.HandlerFunc) (*httptest.Server, *Resolver, Gr
 	srv := httptest.NewTLSServer(h)
 	t.Cleanup(srv.Close)
 
-	res := NewResolver()
+	res := newTestResolver(t)
 	res.endpointTransport = srv.Client().Transport
 
 	u, err := url.Parse(srv.URL)
@@ -217,7 +217,7 @@ func (s *EndpointSuite) TestURLIsRedactable() {
 // its cause.
 func (s *EndpointSuite) TestRejectsInvalidGrant() {
 	t := s.T()
-	res := NewResolver()
+	res := newTestResolver(t)
 	_, err := res.OpenEndpoint(t.Context(), scope(t), Grant{Host: "api.example.com", Header: "Authorization"})
 	require.ErrorContains(t, err, "ref is required")
 }

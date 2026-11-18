@@ -18,7 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ import (
 // origin, and ends with a `done` event when the broadcaster closes.
 // emit sends one output line to bc through Emit, the real capture path.
 func emit(bc *recorder.Broadcaster, text string) {
-	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(context.Background())
 	recorder.Emit(recorder.WithSinks(ctx, bc.Handle), journal.Output{Text: text})
 }
 

@@ -7,9 +7,9 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ import (
 // withSecrets gives ctx the resolver the recorder requires before it writes anything: with
 // none it refuses rather than store text it could not redact.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // call records one guard observation of lease's holder in the trail at base.

@@ -562,7 +562,7 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 	p := testkit.NewSecretProvider(map[string]string{"op://vault/token": "op-token-value"})
-	r := secrets.NewResolver(secrets.WithOpener(p.Opener()))
+	r := testkit.EnvResolver(t, secrets.WithOpener(p.Opener()))
 
 	// The same evaluation's read goes through the selected provider.
 	parsed, err := parseChoices(t, secrets.WithResolver(context.Background(), r),
@@ -595,7 +595,7 @@ func parseChoices(t *testing.T, ctx context.Context, body string) (interp.Parsed
 }
 
 func TestSecretProviderRejectsNonHandles(t *testing.T) {
-	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(context.Background())
 
 	// Typed as any, so the value reaches the binding rather than the type checker.
 	_, err := parseChoices(t, ctx, `final handle: any = "onepassword";
@@ -618,7 +618,7 @@ try {
 }
 
 func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StringValue("onepassword"))
 	err := callSecret(t, secretObj, "provider", handle)
@@ -627,7 +627,7 @@ func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {
 }
 
 func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
-	r := secrets.NewResolver()
+	r := testkit.EnvResolver(t)
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
 	secretObj := buildSecret(secrets.WithResolver(context.Background(), r), nil)
 
@@ -641,14 +641,14 @@ func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 }
 
 func TestSecretReadRejectsEmptyReference(t *testing.T) {
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 
 	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
 	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StringValue("")), "non-empty reference string")
 }
 
 func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 
 	err := callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
@@ -677,7 +677,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
-	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(context.Background())
 	ctx = recorder.WithSinks(ctx, rec.Handle)
 	ctx = recorder.WithStep(ctx, "demo", "publish")
 
@@ -749,7 +749,7 @@ func (s *SecretGrantSuite) TestAnEndpointOutsideARunIsRefusedByName() {
 	grant.MapSet("ref", vm.StringValue("TOKEN"))
 	grant.MapSet("host", vm.StringValue("api.example.com"))
 	grant.MapSet("header", vm.StringValue("Authorization"))
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 
 	err := callVoidDirect(s.T(), requireDirect(s.T(), secretObj, "endpoint"), grant)
 	s.Require().ErrorContains(err, "belongs to a run")

@@ -280,7 +280,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	if err != nil {
 		return OutputDescriptor{}, err
 	}
-	if err :=file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, privateFilePerm); err != nil {
+	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, privateFilePerm); err != nil {
 		return OutputDescriptor{}, err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)

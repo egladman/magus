@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -20,7 +19,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 
 // Production installs a resolver in main; the journal refuses to write without one.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 func TestBuildSchedule_SkipsDisabledAndResolvesArgv(t *testing.T) {

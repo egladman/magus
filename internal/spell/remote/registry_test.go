@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,7 +32,7 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	spells := config.SpellsConfig{Registries: []config.SpellRegistry{
 		{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_TOKEN"},
 	}}
-	r := secrets.NewResolver()
+	r := testkit.EnvResolver(t)
 	t.Setenv("SPELL_REGISTRY_TOKEN", "ghp_abcdef123456")
 
 	user, pass, err := registryCredential(t.Context(), spells, "ghcr.io", r)
@@ -46,7 +47,7 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	require.ErrorContains(t, err, "no entry for docker.io")
 
 	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_UNSET"}}}
-	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secrets.NewResolver())
+	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", testkit.EnvResolver(t))
 	require.ErrorContains(t, err, "$SPELL_REGISTRY_UNSET is not set")
 }
 
@@ -55,7 +56,7 @@ func TestNewClientPicksItsCredentialSource(t *testing.T) {
 		{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_CLIENT_TOKEN"},
 	}}
 	t.Setenv("SPELL_CLIENT_TOKEN", "from-provider")
-	r := secrets.NewResolver()
+	r := testkit.EnvResolver(t)
 	login := Login{
 		ReadToken: func(context.Context) (secrets.Secret, error) { return secrets.New("from-stdin"), nil },
 		Secrets:   func(ctx context.Context) (context.Context, *secrets.Resolver, error) { return ctx, r, nil },

@@ -120,8 +120,9 @@ func restoreTerminal() {
 
 // applyDisplay writes the -v/-q/-s flags into globalCfg.Log when given, then installs
 // the process-global slog logger at the level globalCfg.Log names, filtered when the
-// display is quiet (see quietDisplay).
-func applyDisplay() {
+// display is quiet (see quietDisplay). The error is the logger's empty secret resolver
+// refusing to build.
+func applyDisplay() error {
 	// Release the previous handler's region before installing a replacement,
 	// so a second call does not strand the first one's scroll margins.
 	//
@@ -164,7 +165,12 @@ func applyDisplay() {
 	if global.output != string(outputJSONL) && quietDisplay() {
 		h = quiet.Wrap(h, global.verbose >= 1)
 	}
-	slog.SetDefault(slog.New(dirHandler{resolvingHandler{Handler: h, empty: recorder.NewSecretResolver()}}))
+	empty, err := recorder.NewSecretResolver()
+	if err != nil {
+		return err
+	}
+	slog.SetDefault(slog.New(dirHandler{resolvingHandler{Handler: h, empty: empty}}))
+	return nil
 }
 
 // resolvingHandler handles a record whose context carries no secret resolver under

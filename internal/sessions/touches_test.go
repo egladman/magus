@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -27,7 +26,7 @@ func TestTouches(t *testing.T) { suite.Run(t, new(TouchesSuite)) }
 // withSecrets gives ctx the resolver the recorder requires before it writes anything: with
 // none it refuses rather than store text it could not redact.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // record writes one observation the way the guard hook does.
@@ -340,7 +339,7 @@ func (s *TouchesSuite) TestForSessionCountsACallOnceWithItsToolTime() {
 func (s *TouchesSuite) TestForSessionRefusesARetiredDecision() {
 	t := s.T()
 	base := t.TempDir()
-	response := recorder.WritePayload(withSecrets(t.Context()), base, "agent",[]byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
+	response := recorder.WritePayload(withSecrets(t.Context()), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
 	ref := response.Ref
 	recorder.AppendCall(withSecrets(t.Context()), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: recorder.ToolShellCommand, Response: response})
 
@@ -365,7 +364,7 @@ func (s *TouchesSuite) TestForSessionReturnsEachCallsCostFacts() {
 	})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "grep -r x .", Decision: verdict.Defer, AgentFacts: passed})
 	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
-	recorder.AppendAgentSpawn(withSecrets(t.Context()), base,recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
+	recorder.AppendAgentSpawn(withSecrets(t.Context()), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
 
 	got, err := readActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)

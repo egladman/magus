@@ -29,7 +29,7 @@ import (
 
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
@@ -229,7 +229,7 @@ func verifiedAs(credential auth.Credential, next http.Handler) http.Handler {
 // refuse to run on a request context without one.
 func withSecrets(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(secrets.WithResolver(r.Context(), secrets.NewResolver())))
+		next.ServeHTTP(w, r.WithContext(testkit.WithEnvResolver(r.Context())))
 	})
 }
 

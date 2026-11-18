@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 )
 
@@ -299,7 +299,7 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 
 // withSecrets gives the trail writers the resolver they refuse to run without.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // loggedCalls is every call in the log under base, newest first.

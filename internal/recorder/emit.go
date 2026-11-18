@@ -197,14 +197,16 @@ func (s *FileSink) Flush() {
 // NewSecretResolver builds a secrets.Resolver the way every magus scope needs one: a value
 // too short to mask is reported as MGS2011, and the endpoint forwarder logs through
 // slog's default logger, which magus wraps in [secrets.NewRedactingHandler]. opts apply
-// after those, so a caller's own options win.
+// after those, so a caller's own options win. A read with no provider selected goes
+// through the environment, which is how a magusfile names a bare variable.
 //
 // It lives here, the lowest package every caller imports, so no caller builds a bare
-// resolver that would keep the MGS2011 notice to itself.
-func NewSecretResolver(opts ...secrets.Option) *secrets.Resolver {
+// resolver that would keep the MGS2011 notice to itself. The error is an option a caller
+// passed that the resolver refused.
+func NewSecretResolver(opts ...secrets.Option) (*secrets.Resolver, error) {
 	base := make([]secrets.Option, 0, 2+len(opts))
 	base = append(base, secrets.WithShortSecret(warnUnmasked), secrets.WithLogger(slog.New(defaultHandler{})))
-	return secrets.NewResolver(append(base, opts...)...)
+	return secrets.NewResolver(secrets.Config{Fallback: secrets.EnvProvider{}}, append(base, opts...)...)
 }
 
 // warnUnmasked says out loud that a resolved value will not be masked: the caller has no

@@ -15,7 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -45,7 +45,7 @@ func terminal(t *testing.T, fn func()) string {
 // emitResult feeds one step result into the handler observe threaded onto ctx, the way the
 // cache reports a step to a run's invocation log.
 func emitResult(ctx context.Context, run journal.Run) {
-	recorder.Emit(recorder.WithSinks(secrets.WithResolver(ctx, secrets.NewResolver()), ctx.Value(observedKey{}).(recorder.Sink)), run)
+	recorder.Emit(recorder.WithSinks(testkit.WithEnvResolver(ctx), ctx.Value(observedKey{}).(recorder.Sink)), run)
 }
 
 type observedKey struct{}

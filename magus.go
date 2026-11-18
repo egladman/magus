@@ -668,10 +668,13 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
 	workspace.BindRegistry(m, m.wsReg)
-	m.resolver = recorder.NewSecretResolver(append([]secrets.Option{secrets.WithTimeouts(secrets.Timeouts{
+	m.resolver, err = recorder.NewSecretResolver(append([]secrets.Option{secrets.WithTimeouts(secrets.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
 		Unattended:  m.cfg.Secret.Unattended,
 	})}, vo.secretsOpts...)...)
+	if err != nil {
+		return nil, fmt.Errorf("secret resolver: %w", err)
+	}
 	return m, nil
 }
 

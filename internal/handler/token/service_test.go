@@ -28,7 +28,6 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -421,7 +420,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 		connect.WithInterceptors(activityrpc.Interceptor(dir, journal.CallKindTokenLifecycle, activityrpc.WithSubject(AuditSubject))))
 	op := auth.Credential{Kind: auth.KindOperator, ID: "0badf00d", Grant: auth.AccessOperator()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := secrets.WithResolver(r.Context(), secrets.NewResolver())
+		ctx := testkit.WithEnvResolver(r.Context())
 		h.ServeHTTP(w, r.WithContext(recorder.ContextWithEntryPoint(recorder.ContextWithCredential(ctx, op), job.EntryPointRPC)))
 	}))
 	defer srv.Close()

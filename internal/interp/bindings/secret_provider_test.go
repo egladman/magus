@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -62,7 +63,7 @@ func TestOpenSpellSecretProviderRejectsAnUnregisteredSpell(t *testing.T) {
 // fail the same way. Go tests run without a terminal, so this is the non-interactive path
 // by construction.
 func TestSpellSecretProviderFailsFastWithoutATerminal(t *testing.T) {
-	r := secrets.NewResolver(secrets.WithTimeouts(secrets.Timeouts{Interactive: 2 * time.Second, Unattended: 50 * time.Millisecond}))
+	r := testkit.EnvResolver(t, secrets.WithTimeouts(secrets.Timeouts{Interactive: 2 * time.Second, Unattended: 50 * time.Millisecond}))
 	ctx := secrets.WithResolver(context.Background(), r)
 	// Spins until the deadline cancels the VM, standing in for a provider waiting on an
 	// unlock nobody is there to complete.

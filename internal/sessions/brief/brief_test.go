@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/secrets"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -469,7 +468,7 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 func briefClock(t *testing.T) sessions.PromptCacheClock {
 	t.Helper()
 	cacheDir := t.TempDir()
-	recorder.AppendAgentCommand(secrets.WithResolver(t.Context(), secrets.NewResolver()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
+	recorder.AppendAgentCommand(testkit.WithEnvResolver(t.Context()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
 	return sessions.PromptCacheForCheckout(t.Context(), cacheDir, time.Now().Add(7*time.Minute))
 }
 

@@ -448,23 +448,30 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 		return "", auth.Token{}, err
 	}
 	operator := auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}
-	auditMint(action, recorder.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
+	if err := auditMint(action, recorder.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator}); err != nil {
+		return "", auth.Token{}, err
+	}
 	// Revealed here because every caller prints it to stdout: that is the hand-out.
 	return secret.Reveal(), rec, nil
 }
 
 // auditMint records a CLI mint to the activity trail of the workspace the command runs in, and
 // says on stderr when there is no workspace to record it in.
-func auditMint(action string, rec recorder.MintRecord) {
+func auditMint(action string, rec recorder.MintRecord) error {
 	if root := resolveRootOrEmpty(""); root != "" {
 		if base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 			// The config commands carry no context, and this one read no secret through
 			// a resolver, so an empty one masks all there is.
-			recorder.AppendMint(secrets.WithResolver(context.Background(), recorder.NewSecretResolver()), base, action, rec)
-			return
+			resolver, err := recorder.NewSecretResolver()
+			if err != nil {
+				return fmt.Errorf("record the mint: %w", err)
+			}
+			recorder.AppendMint(secrets.WithResolver(context.Background(), resolver), base, action, rec)
+			return nil
 		}
 	}
 	slog.Info("no magus workspace here, so this mint is recorded in no activity trail", attr.Notice("note"))
+	return nil
 }
 
 // printMinted writes a freshly minted token: the secret alone on stdout, so `... > secret.txt`
@@ -827,7 +834,9 @@ func configTokenGenerate(args []string) error {
 		return err
 	}
 	operator := auth.Credential{Kind: auth.KindOperator, ID: auth.SecretID(tok), Grant: auth.AccessOperator()}
-	auditMint("cli.generate", recorder.MintRecord{Minted: operator, Minter: operator})
+	if err := auditMint("cli.generate", recorder.MintRecord{Minted: operator, Minter: operator}); err != nil {
+		return err
+	}
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
 	// terminal log that captures both.

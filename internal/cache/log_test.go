@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/screen"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -804,7 +805,7 @@ func TestRemoteSuffix(t *testing.T) {
 // the output tap nor journal.Emit's redaction covered it. Redacting in printf covers
 // every record kind this handler will ever render rather than just run.exec.
 func TestPrettyHandlerRedactsSecrets(t *testing.T) {
-	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(t.Context())
 	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_never_echo_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
 	require.NoError(t, err)

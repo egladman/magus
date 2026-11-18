@@ -134,7 +134,7 @@ func TestAGroupWatchIsReleasedBeforeTheLeaderIsReaped(t *testing.T) {
 			}
 		}
 	}
-	ctx := WithGroupWatch(WithGroupWatch(withTestResolver(t.Context()),watch("outer")), watch("inner"))
+	ctx := WithGroupWatch(WithGroupWatch(withTestResolver(t.Context()), watch("outer")), watch("inner"))
 
 	res, err := Exec(ctx, "sh", []string{"-c", "echo $$"}, ExecOptions{Capture: true, Quiet: true})
 	require.NoError(t, err)

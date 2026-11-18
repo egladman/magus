@@ -567,7 +567,7 @@ func (s *ChangeRiskWorkspaceSuite) TestAMovedFunctionIsNotTouched() {
 const riskPatch = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -7,1 +7,1 @@\n-\treturn 1\n+\treturn 0\n"
 
 func (s *ChangeRiskWorkspaceSuite) TestAttachChangeRiskChecksTheFunctionADiffChanged() {
-	got, err := s.m.diff(withSecrets(s.T().Context()),[]string{"a.go"}, diffConfig{patch: riskPatch, patchGiven: true})
+	got, err := s.m.diff(withSecrets(s.T().Context()), []string{"a.go"}, diffConfig{patch: riskPatch, patchGiven: true})
 	s.Require().NoError(err)
 
 	var checks []string
@@ -1011,7 +1011,7 @@ func (s *ChangeRiskRunSuite) TestABaseNoCacheHoldsIsAnErrorNamingTheBaseAndTheCo
 }
 
 func (s *ChangeRiskRunSuite) TestNewRiskMeterWithNoBaseJudgesNoBase() {
-	r, err := s.m.newRiskMeter(withSecrets(s.T().Context()),touchedSet{}, "")
+	r, err := s.m.newRiskMeter(withSecrets(s.T().Context()), touchedSet{}, "")
 
 	s.Require().NoError(err)
 	s.Equal("", r.commit)
@@ -1019,7 +1019,7 @@ func (s *ChangeRiskRunSuite) TestNewRiskMeterWithNoBaseJudgesNoBase() {
 }
 
 func (s *ChangeRiskRunSuite) TestNewRiskMeterResolvesTheMergeBase() {
-	r, err := s.m.newRiskMeter(withSecrets(s.T().Context()),touchedSet{}, "HEAD")
+	r, err := s.m.newRiskMeter(withSecrets(s.T().Context()), touchedSet{}, "HEAD")
 
 	s.Require().NoError(err)
 	s.Len(r.commit, 40)
@@ -1028,7 +1028,7 @@ func (s *ChangeRiskRunSuite) TestNewRiskMeterResolvesTheMergeBase() {
 }
 
 func (s *ChangeRiskRunSuite) TestNewRiskMeterRefusesABaseThatNamesNoRevision() {
-	_, err := s.m.newRiskMeter(withSecrets(s.T().Context()),touchedSet{}, "no-such-ref")
+	_, err := s.m.newRiskMeter(withSecrets(s.T().Context()), touchedSet{}, "no-such-ref")
 
 	s.ErrorContains(err, "change risk: ")
 }

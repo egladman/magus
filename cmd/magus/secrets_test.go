@@ -4,13 +4,13 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // withSecrets gives ctx the resolver redaction now refuses to run without; main
 // installs one on every real path.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // resolverHandler adds the resolver to the context a record is handled under.

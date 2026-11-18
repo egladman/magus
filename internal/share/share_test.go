@@ -35,7 +35,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // withSecrets is the call context a share carries into its listener: the "share link opened"
 // append refuses to run on a request context without a resolver.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 func addr(s string) netip.Addr { return netip.MustParseAddr(s) }

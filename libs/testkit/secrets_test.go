@@ -14,7 +14,7 @@ func TestSecretProvider(t *testing.T) { suite.Run(t, new(SecretProviderSuite)) }
 
 func (s *SecretProviderSuite) TestAResolverReadsThroughItOnce() {
 	p := NewSecretProvider(map[string]string{"vault/token": "fake-vault-token"})
-	r := secrets.NewResolver(secrets.WithOpener(p.Opener())).WithProvider("vault")
+	r := EnvResolver(s.T(), secrets.WithOpener(p.Opener())).WithProvider("vault")
 
 	for range 2 {
 		v, err := r.Read(s.T().Context(), "vault/token")

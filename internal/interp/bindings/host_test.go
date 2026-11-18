@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -20,7 +21,7 @@ const testSecret = "hunter2-token"
 // testCtx is a context carrying a resolver: capturing a command's output
 // refuses to run without one, so a test that captures needs this.
 func testCtx() context.Context {
-	return secrets.WithResolver(context.Background(), secrets.NewResolver())
+	return testkit.WithEnvResolver(context.Background())
 }
 
 type emitMagusLogSuite struct {
@@ -45,7 +46,7 @@ func (s *emitMagusLogSuite) SetupTest() {
 			return a
 		},
 	}))))
-	s.resolver = secrets.NewResolver()
+	s.resolver = testkit.EnvResolver(s.T())
 	s.Require().NoError(s.resolver.Register(secrets.New(testSecret)))
 }
 

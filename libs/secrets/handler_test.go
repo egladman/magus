@@ -22,7 +22,7 @@ func TestHandler(t *testing.T) { suite.Run(t, new(HandlerSuite)) }
 
 func (s *HandlerSuite) SetupTest() {
 	s.sink.Reset()
-	s.r = NewResolver()
+	s.r = newTestResolver(s.T())
 }
 
 // ctx is the test's context carrying the suite's resolver.

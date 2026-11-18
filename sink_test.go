@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +29,7 @@ import (
 // withSecrets gives a test context the resolver every production context carries;
 // redaction refuses to run without one.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // sinkEvents is one sample of every event an invocation emits through its sink.
@@ -487,7 +486,7 @@ func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	ts, err := NewSink(output.Text, io.Discard, &text)
 	require.NoError(t, err)
 	checkOutputOverlap(ctx, steps, ts)
-	checkMissingDependencies(ctx,[]*types.Project{consumer}, nil, written, ".", ts)
+	checkMissingDependencies(ctx, []*types.Project{consumer}, nil, written, ".", ts)
 	assert.Contains(t, text.String(), "["+string(types.OutputOverlapDetected)+"] declared output overlap")
 	assert.Contains(t, text.String(), "["+string(types.MissingDependencyDetected)+"] potential undeclared dependency")
 
@@ -495,7 +494,7 @@ func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	js, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
 	checkOutputOverlap(ctx, steps, js)
-	checkMissingDependencies(ctx,[]*types.Project{consumer}, nil, written, ".", js)
+	checkMissingDependencies(ctx, []*types.Project{consumer}, nil, written, ".", js)
 	require.NoError(t, js.Close())
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	require.Len(t, lines, 2)

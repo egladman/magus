@@ -22,7 +22,6 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -120,7 +119,7 @@ func TestSubmit_ProcErrorIsInternal(t *testing.T) {
 // submission resolved, and this never became one. Reachable only now that the RPC takes a name.
 // withSecrets gives the trail writers the resolver they refuse to run without.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 func TestRunJob_UnknownNameIsNotFound(t *testing.T) {

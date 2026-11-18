@@ -21,6 +21,10 @@
   took one.
 - **Breaking for SDK callers: `verdict.Decision("").Valid()` is false.** An unset
   decision is not a declared one; `UnmarshalText` still reads `""` as unset.
+- **Breaking for SDK callers: `secrets.NewResolver` takes a `Config` and returns an error.**
+  A nil option value is a `*secrets.OptionError`. A read with no provider selected is a
+  `*ReadError` wrapping `ErrNoFallback`, where it read the environment; set
+  `Config.Fallback` to `secrets.EnvProvider{}` to keep that.
 - **`safetyscissors.New` refuses any two stores in one directory.** Jobs, Sessions and
   Activity are compared pairwise after `filepath.Clean`, where only Jobs and Sessions
   were compared, as written.

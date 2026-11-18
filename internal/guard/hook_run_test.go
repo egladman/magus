@@ -27,7 +27,6 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/secrets"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/step"
@@ -85,7 +84,7 @@ func hookStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) 
 // withSecrets gives ctx the resolver the binary installs at startup; the journal and activity
 // log refuse to record without one.
 func withSecrets(ctx context.Context) context.Context {
-	return secrets.WithResolver(ctx, secrets.NewResolver())
+	return testkit.WithEnvResolver(ctx)
 }
 
 // hookCommand parses args the way the command line does, for the flags these tests pass:
