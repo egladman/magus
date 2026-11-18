@@ -1,7 +1,6 @@
 package types
 
 import (
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types/vcs"
 )
 
@@ -60,6 +59,6 @@ type Session struct {
 // JobRegistration is Job.register()'s answer: the stored row and the
 // sentence derived from it, apart so a caller reads facts from the row.
 type JobRegistration struct {
-	Job    job.Job `json:"job"`
-	Advice string  `json:"advice"`
+	Job    Job    `json:"job"`
+	Advice string `json:"advice"`
 }

@@ -21,6 +21,7 @@ type config struct {
 	invoked    bool
 	actor      func() job.Actor
 	notices    func(job.Notice)
+	checks     []job.StoreOption
 	clock      func() time.Time
 	jobOpts    []job.StoreOption
 	dirs       Dirs
@@ -102,6 +103,18 @@ func WithNotices(notices func(job.Notice)) Option {
 	}
 }
 
+// WithCheckSpec is how the job store reads the checks a row and its postconditions carry (see
+// [job.WithCheckSpec]). Required: a store without one refuses every write.
+func WithCheckSpec(spec job.CheckSpec) Option {
+	return func(c *config) error {
+		if spec == nil {
+			return &OptionError{Option: "WithCheckSpec", Problem: "the spec is nil"}
+		}
+		c.checks = []job.StoreOption{job.WithCheckSpec(spec)}
+		return nil
+	}
+}
+
 // WithClock replaces the real clock for the job store, the session writer and the
 // machine budget.
 func WithClock(clock func() time.Time) Option {
@@ -115,8 +128,8 @@ func WithClock(clock func() time.Time) Option {
 }
 
 // WithJobOptions passes the job store's other seams through (see [job.StoreOption]).
-// They apply before the store options New derives from [WithActor], [WithNotices] and
-// [WithClock], which win over the same seam passed here.
+// They apply before the store options New derives from [WithActor], [WithNotices],
+// [WithCheckSpec] and [WithClock], which win over the same seam passed here.
 func WithJobOptions(opts ...job.StoreOption) Option {
 	return func(c *config) error {
 		c.jobOpts = append(c.jobOpts, opts...)

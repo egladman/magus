@@ -72,7 +72,7 @@ func TestOwedRegenerationsRefusesAnIntegerStamp(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(older), 0o644))
 
 	_, err = OwedRegenerations(t.Context(), dir)
-	require.ErrorContains(t, err, "record carries no apiVersion")
+	require.ErrorContains(t, err, "record carries no api_version")
 }
 
 // TestOwedRegenerationOutsideARepository is the backend without hooks: nothing is

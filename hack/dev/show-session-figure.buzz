@@ -299,7 +299,7 @@ fun fixture() > result\Result::<JobTree> {
         final jobs = mut [<magus\Job>];
         foreach (j in raw["jobs"]) {
             final deps = mut [<str>];
-            foreach (d in j["dependsOn"] ?? []) { deps.append(d); }
+            foreach (d in j["depends_on"] ?? []) { deps.append(d); }
             final paths = mut [<str>];
             final declared: {str: any} = j["paths"] ?? {<str: any>};
             foreach (p in declared["write"] ?? []) { paths.append(p); }

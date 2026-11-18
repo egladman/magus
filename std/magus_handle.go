@@ -66,16 +66,16 @@ func MagusSessionOpen(ctx context.Context, opts feedback.ReadOptions) (types.Ses
 
 // MagusJobOpen backs magus\job(id): the stored row. An id no row carries
 // raises, since a handle on a row that is not there answers nothing.
-func MagusJobOpen(ctx context.Context, id string) (jobtypes.Job, error) {
+func MagusJobOpen(ctx context.Context, id string) (types.Job, error) {
 	list, err := MagusListJob(ctx)
 	if err != nil {
-		return jobtypes.Job{}, err
+		return types.Job{}, err
 	}
 	i := slices.IndexFunc(list.Jobs, func(j jobtypes.Job) bool { return j.ID == id })
 	if i < 0 {
-		return jobtypes.Job{}, fmt.Errorf("magus\\job: no row has id %q, and `magus job ls` lists the ids", id)
+		return types.Job{}, fmt.Errorf("magus\\job: no row has id %q, and `magus job ls` lists the ids", id)
 	}
-	return list.Jobs[i], nil
+	return types.NewJob(list.Jobs[i])
 }
 
 // MagusChangeOpen backs magus\change(base, opts): base "" is the configured
@@ -450,18 +450,26 @@ func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any)
 
 // MagusWorkspaceJobs answers Workspace.jobs.
 // It reads the workspace on ctx and raises MGS1022 outside one.
-func MagusWorkspaceJobs(ctx context.Context, _ types.MagusWorkspace) (jobtypes.List, error) {
-	return MagusListJob(ctx)
+func MagusWorkspaceJobs(ctx context.Context, _ types.MagusWorkspace) (types.JobList, error) {
+	list, err := MagusListJob(ctx)
+	if err != nil {
+		return types.JobList{}, err
+	}
+	return types.NewJobList(list)
 }
 
 // MagusWorkspacePutJob answers Workspace.putJob.
 // It reads the workspace on ctx and raises MGS1022 outside one.
-func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string, opts map[string]any) (jobtypes.Job, error) {
+func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string, opts map[string]any) (types.Job, error) {
 	put, err := decodeJobPut(opts)
 	if err != nil {
-		return jobtypes.Job{}, err
+		return types.Job{}, err
 	}
-	return MagusPutJob(ctx, id, put)
+	row, err := MagusPutJob(ctx, id, put)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return types.NewJob(row)
 }
 
 // MagusWorkspaceClearJobs answers Workspace.clearJobs.
@@ -543,20 +551,29 @@ func MagusWorkspaceSkills(ctx context.Context, _ types.MagusWorkspace, opts type
 
 // MagusJobExit is Job.exit(result): files result, or no_return when it is
 // empty.
-func MagusJobExit(ctx context.Context, j jobtypes.Job, result map[string]any) (jobtypes.Job, error) {
+func MagusJobExit(ctx context.Context, j types.Job, result map[string]any) (types.Job, error) {
+	var (
+		row jobtypes.Job
+		err error
+	)
 	if len(result) == 0 {
-		return MagusAbandonJob(ctx, j.ID)
+		row, err = MagusAbandonJob(ctx, j.ID)
+	} else {
+		var decoded jobtypes.Result
+		if decoded, err = decodeJobResult(result); err != nil {
+			return types.Job{}, err
+		}
+		row, err = MagusExitJob(ctx, j.ID, decoded)
 	}
-	decoded, err := decodeJobResult(result)
 	if err != nil {
-		return jobtypes.Job{}, err
+		return types.Job{}, err
 	}
-	return MagusExitJob(ctx, j.ID, decoded)
+	return types.NewJob(row)
 }
 
 // MagusJobWait is Job.wait(result): verifies result, or the one exit filed
 // when it is empty.
-func MagusJobWait(ctx context.Context, j jobtypes.Job, result map[string]any) (jobtypes.Status, error) {
+func MagusJobWait(ctx context.Context, j types.Job, result map[string]any) (jobtypes.Status, error) {
 	if len(result) == 0 {
 		return MagusWaitJob(ctx, j.ID, nil)
 	}
@@ -583,10 +600,14 @@ func decodeJobResult(result map[string]any) (jobtypes.Result, error) {
 }
 
 // MagusJobRegister is Job.register(): takes the job in this checkout.
-func MagusJobRegister(ctx context.Context, j jobtypes.Job) (types.JobRegistration, error) {
+func MagusJobRegister(ctx context.Context, j types.Job) (types.JobRegistration, error) {
 	row, advice, err := MagusRegisterJob(ctx, j.ID)
 	if err != nil {
 		return types.JobRegistration{}, err
 	}
-	return types.JobRegistration{Job: row, Advice: advice}, nil
+	view, err := types.NewJob(row)
+	if err != nil {
+		return types.JobRegistration{}, err
+	}
+	return types.JobRegistration{Job: view, Advice: advice}, nil
 }

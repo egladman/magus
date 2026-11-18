@@ -25,6 +25,7 @@ import (
 	gotypes "go/types"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -48,10 +49,33 @@ type jobRecord struct {
 	Title   string
 	File    string
 	Version string // the constant holding this record's api_version
+	// VersionPkg is the import path declaring Version, when it is not
+	// Type's: a view in types carries the module record's version.
+	VersionPkg string
+	// Pkg names the package declaring Struct for a record with no Type.
+	Pkg string
+}
+
+// pkg is the package name Struct is declared in, the qualifier goDecls keys
+// its structs by.
+func (r jobRecord) pkg() string {
+	if r.Type == nil {
+		return r.Pkg
+	}
+	return path.Base(r.Type.PkgPath())
+}
+
+func (r jobRecord) versionPkg() string {
+	if r.VersionPkg != "" {
+		return r.VersionPkg
+	}
+	return r.Type.PkgPath()
 }
 
 var jobRecords = []jobRecord{
-	{Struct: "Declaration", Type: reflect.TypeFor[job.Declaration](), Title: "magus job", File: "job.schema.json", Version: "APIVersion"},
+	// The declaration is the types view, so the check reads as the lease check
+	// the module leaves opaque; its version is the module's.
+	{Struct: "Declaration", Type: reflect.TypeFor[types.Declaration](), Title: "magus job", File: "job.schema.json", Version: "APIVersion", VersionPkg: reflect.TypeFor[job.Declaration]().PkgPath()},
 	{Struct: "Result", Type: reflect.TypeFor[job.Result](), Title: "magus job result", File: "result.schema.json", Version: "ResultAPIVersion"},
 }
 
@@ -128,7 +152,8 @@ func runJobSchema(args []string) error {
 //   - a description is the doc comment's first paragraph, so the rationale a later
 //     paragraph carries stays in the source.
 func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
-	st, ok := d.structs[rec.Struct]
+	pkg := rec.pkg()
+	st, ok := d.structs[qualified(pkg, rec.Struct)]
 	if !ok {
 		return nil, fmt.Errorf("no struct %s is declared in the sources the records reach", rec.Struct)
 	}
@@ -136,7 +161,7 @@ func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s: no constant %s is declared in the sources the records reach", rec.Struct, rec.Version)
 	}
-	props, required, err := properties(rec.Struct, st, d, version)
+	props, required, err := properties(pkg, rec.Struct, st, d, version)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +173,7 @@ func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 			" DO NOT EDIT; run `magus run job-generate .`.", rec.Struct)},
 		{"title", rec.Title},
 	}
-	if doc := d.docs[rec.Struct]; doc != "" {
+	if doc := d.docs[qualified(pkg, rec.Struct)]; doc != "" {
 		root = append(root, member{"description", doc})
 	}
 	root = append(root,
@@ -167,9 +192,50 @@ func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 }
 
 // properties renders one struct's fields, and the names of those a caller must send.
-func properties(structName string, st *ast.StructType, d *goDecls, version string) (node, []string, error) {
+func properties(pkg, structName string, st *ast.StructType, d *goDecls, version string) (node, []string, error) {
+	fields, err := collectFields(pkg, structName, st, d, version, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	fields, err = visibleFields(structName, fields)
+	if err != nil {
+		return nil, nil, err
+	}
+	return published(fields)
+}
+
+// published is fields as a schema's properties and its required names. A field whose
+// type has no schema fails it here, once no shallower field hides it.
+func published(fields []schemaField) (node, []string, error) {
 	var props node
 	required := []string{}
+	for _, f := range fields {
+		if f.err != nil {
+			return nil, nil, f.err
+		}
+		props = append(props, member{f.name, f.prop})
+		if f.required {
+			required = append(required, f.name)
+		}
+	}
+	return props, required, nil
+}
+
+// schemaField is one property a struct publishes, and how deep in embedded
+// structs it was declared. err is why its type has no schema, which matters only
+// if no shallower field hides it.
+type schemaField struct {
+	name     string
+	prop     node
+	required bool
+	depth    int
+	err      error
+}
+
+// collectFields lists st's properties in declaration order, an untagged
+// embedded struct's inline at the place it is embedded.
+func collectFields(pkg, structName string, st *ast.StructType, d *goDecls, version string, depth int) ([]schemaField, error) {
+	var out []schemaField
 	for _, f := range st.Fields.List {
 		tag := ""
 		if f.Tag != nil {
@@ -179,46 +245,109 @@ func properties(structName string, st *ast.StructType, d *goDecls, version strin
 		if len(f.Names) == 0 {
 			// An embedded struct with no json name is inlined by the decoder, so its
 			// properties are the parent's.
-			embedded, ok := f.Type.(*ast.Ident)
-			if !ok || name != "" || d.structs[embedded.Name] == nil {
-				return nil, nil, fmt.Errorf("%s: only an untagged embedded struct these sources declare can be published", structName)
+			innerPkg, innerName, ok := embeddedRef(f.Type, pkg)
+			if !ok || name != "" || d.structs[qualified(innerPkg, innerName)] == nil {
+				return nil, fmt.Errorf("%s: only an untagged embedded struct these sources declare can be published", structName)
 			}
-			inner, innerRequired, err := properties(embedded.Name, d.structs[embedded.Name], d, version)
+			inner, err := collectFields(innerPkg, innerName, d.structs[qualified(innerPkg, innerName)], d, version, depth+1)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
-			props = append(props, inner...)
-			required = append(required, innerRequired...)
+			out = append(out, inner...)
 			continue
 		}
 		if len(f.Names) != 1 {
-			return nil, nil, fmt.Errorf("%s: a multi-name field has no single json name", structName)
+			return nil, fmt.Errorf("%s: a multi-name field has no single json name", structName)
 		}
 		field := f.Names[0].Name
 		switch {
-		case name == "-", name == "" && opts == "unknown":
+		// encoding/json never reads or writes an unexported field, so a record never
+		// carries one: a type's hidden state, such as the members a Schema keeps.
+		case !ast.IsExported(field), name == "-", name == "" && opts == "unknown":
 			continue
 		case name == "":
-			return nil, nil, fmt.Errorf("%s.%s carries no json tag, so no schema can name it", structName, field)
+			return nil, fmt.Errorf("%s.%s carries no json tag, so no schema can name it", structName, field)
 		}
 		// Under jsonv2 omitempty keeps a false or a zero, so omitzero is how a scalar says it
 		// is optional, and either makes the field one a record may leave out.
 		tagOpts := strings.Split(opts, ",")
 		omitempty := slices.Contains(tagOpts, "omitempty") || slices.Contains(tagOpts, "omitzero")
 
-		prop, err := property(f, structName, field, name, omitempty, d, version)
-		if err != nil {
-			return nil, nil, err
-		}
-		props = append(props, member{name, prop})
-		if !omitempty {
-			required = append(required, name)
-		}
+		prop, err := property(f, pkg, structName, field, name, omitempty, d, version)
+		out = append(out, schemaField{name: name, prop: prop, required: !omitempty, depth: depth, err: err})
 	}
-	return props, required, nil
+	return out, nil
 }
 
-func property(f *ast.Field, structName, field, name string, omitempty bool, d *goDecls, version string) (node, error) {
+// visibleFields applies Go's field-visibility rule by json name: a property
+// an embedded struct declares is hidden by a shallower one of the same name,
+// and the shallower one takes the hidden one's position, as buzzgen's
+// MirroredFields does. Two at the shallowest depth are ambiguous, and a
+// schema that picked one would publish a guess.
+func visibleFields(structName string, fields []schemaField) ([]schemaField, error) {
+	winners, err := shallowestFields(structName, fields)
+	if err != nil {
+		return nil, err
+	}
+	var out []schemaField
+	placed := map[string]bool{}
+	for _, f := range fields {
+		if placed[f.name] {
+			continue
+		}
+		placed[f.name] = true
+		out = append(out, winners[f.name])
+	}
+	return out, nil
+}
+
+// shallowestFields is the field each json name publishes: the one declared at the
+// shallowest depth. Two there are ambiguous.
+func shallowestFields(structName string, fields []schemaField) (map[string]schemaField, error) {
+	shallowest := shallowestDepths(fields)
+	winners := map[string]schemaField{}
+	for _, f := range fields {
+		if f.depth != shallowest[f.name] {
+			continue
+		}
+		if _, dup := winners[f.name]; dup {
+			return nil, fmt.Errorf("%s: json name %q is declared twice at one depth, so neither is the one the decoder reads", structName, f.name)
+		}
+		winners[f.name] = f
+	}
+	return winners, nil
+}
+
+// shallowestDepths is the shallowest depth each json name is declared at.
+func shallowestDepths(fields []schemaField) map[string]int {
+	shallowest := map[string]int{}
+	for _, f := range fields {
+		if d, ok := shallowest[f.name]; !ok || f.depth < d {
+			shallowest[f.name] = f.depth
+		}
+	}
+	return shallowest
+}
+
+// embeddedRef names the struct an embedded field declares: a bare name is in
+// the embedding struct's package, a selector's qualifier is the package name.
+func embeddedRef(expr ast.Expr, pkg string) (string, string, bool) {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return pkg, t.Name, true
+	case *ast.SelectorExpr:
+		if x, ok := t.X.(*ast.Ident); ok {
+			return x.Name, t.Sel.Name, true
+		}
+	}
+	return "", "", false
+}
+
+// qualified is the key goDecls holds a package's struct and its docs under:
+// the job module and its types views declare structs of one name.
+func qualified(pkg, name string) string { return fmt.Sprintf("%s.%s", pkg, name) }
+
+func property(f *ast.Field, pkg, structName, field, name string, omitempty bool, d *goDecls, version string) (node, error) {
 	tag := ""
 	if f.Tag != nil {
 		tag = f.Tag.Value
@@ -228,11 +357,11 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 		prop = node{{"type", "string"}, {"const", version}}
 	} else {
 		var err error
-		if prop, err = typeMembers(f.Type, omitempty, godecl.Tag(tag, "schema"), d, version); err != nil {
+		if prop, err = typeMembers(f.Type, pkg, omitempty, godecl.Tag(tag, "schema"), d, version); err != nil {
 			return nil, fmt.Errorf("%s.%s: %w", structName, field, err)
 		}
 	}
-	if doc := d.docs[fmt.Sprintf("%s.%s", structName, field)]; doc != "" {
+	if doc := d.docs[qualified(qualified(pkg, structName), field)]; doc != "" {
 		prop = append(prop, member{"description", doc})
 	}
 	return prop, nil
@@ -240,18 +369,22 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 
 // typeMembers is the JSON shape of one Go type. A schema marker constrains the string it
 // sits on, or the items of a []string, since the array itself has no charset.
-func typeMembers(expr ast.Expr, omitempty bool, marker string, d *goDecls, version string) (node, error) {
+func typeMembers(expr ast.Expr, pkg string, omitempty bool, marker string, d *goDecls, version string) (node, error) {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
-		return typeMembers(t.X, omitempty, marker, d, version)
+		return typeMembers(t.X, pkg, omitempty, marker, d, version)
 	case *ast.ArrayType:
-		items, err := typeMembers(t.Elt, false, marker, d, version)
+		items, err := typeMembers(t.Elt, pkg, false, marker, d, version)
 		if err != nil {
 			return nil, err
 		}
 		return node{{"type", "array"}, {"items", items}}, nil
 	case *ast.SelectorExpr:
-		return namedType(t.Sel.Name, omitempty, marker, d, version)
+		qual := pkg
+		if x, ok := t.X.(*ast.Ident); ok {
+			qual = x.Name
+		}
+		return namedType(qual, t.Sel.Name, omitempty, marker, d, version)
 	case *ast.Ident:
 		switch t.Name {
 		case "string":
@@ -264,7 +397,7 @@ func typeMembers(expr ast.Expr, omitempty bool, marker string, d *goDecls, versi
 		case "float64":
 			return withoutMarker(node{{"type", "number"}}, marker)
 		}
-		return namedType(t.Name, omitempty, marker, d, version)
+		return namedType(pkg, t.Name, omitempty, marker, d, version)
 	}
 	return nil, fmt.Errorf("%T is not a type this generator can publish", expr)
 }
@@ -299,7 +432,7 @@ func withoutMarker(shape node, marker string) (node, error) {
 	return shape, nil
 }
 
-func namedType(name string, omitempty bool, marker string, d *goDecls, version string) (node, error) {
+func namedType(pkg, name string, omitempty bool, marker string, d *goDecls, version string) (node, error) {
 	if set, ok := d.sets[name]; ok {
 		values := set
 		if omitempty {
@@ -307,14 +440,14 @@ func namedType(name string, omitempty bool, marker string, d *goDecls, version s
 		}
 		return withoutMarker(node{{"type", "string"}, {"enum", values}}, marker)
 	}
-	st, ok := d.structs[name]
+	st, ok := d.structs[qualified(pkg, name)]
 	if !ok {
 		return nil, fmt.Errorf("type %s is neither a struct nor a closed set these sources declare", name)
 	}
 	if marker != "" {
 		return nil, fmt.Errorf("schema marker %q marks a string, and %s is a record", marker, name)
 	}
-	props, required, err := properties(name, st, d, version)
+	props, required, err := properties(pkg, name, st, d, version)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +480,7 @@ func leaseCheckChoice() []node {
 	}
 }
 
-// goDecls is what the sources declare: every struct, the first paragraph of every type
+// goDecls is what the sources declare: every struct, keyed by package name and struct name, the first paragraph of every type
 // and field doc comment, and every integer constant.
 type goDecls struct {
 	structs map[string]*ast.StructType
@@ -384,14 +517,14 @@ func versionConsts(records []jobRecord, d *goDecls) error {
 		if rec.Type == nil {
 			continue
 		}
-		pkg, err := prog.Package(rec.Type.PkgPath())
+		pkg, err := prog.Package(rec.versionPkg())
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		c, ok := pkg.Types.Scope().Lookup(rec.Version).(*gotypes.Const)
 		if !ok || c.Val().Kind() != constant.String {
-			errs = append(errs, fmt.Errorf("%s declares no string constant %s", rec.Type.PkgPath(), rec.Version))
+			errs = append(errs, fmt.Errorf("%s declares no string constant %s", rec.versionPkg(), rec.Version))
 			continue
 		}
 		d.consts[rec.Version] = constant.StringVal(c.Val())
@@ -446,7 +579,7 @@ func jobSources(records []jobRecord) ([]string, map[string][]string, error) {
 	}
 	for _, rec := range records {
 		walk(rec.Type)
-		locate(rec.Type.PkgPath(), rec.Version)
+		locate(rec.versionPkg(), rec.Version)
 	}
 	paths := slices.Sorted(maps.Keys(files))
 	return paths, sets, errors.Join(errs...)
@@ -481,31 +614,31 @@ func loadGoDecls(paths ...string) (*goDecls, error) {
 				continue
 			}
 			for _, spec := range gd.Specs {
-				d.read(gd, spec)
+				d.read(file.Name.Name, gd, spec)
 			}
 		}
 	}
 	return d, nil
 }
 
-func (d *goDecls) read(gd *ast.GenDecl, spec ast.Spec) {
+func (d *goDecls) read(pkg string, gd *ast.GenDecl, spec ast.Spec) {
 	switch s := spec.(type) {
 	case *ast.TypeSpec:
 		st, ok := s.Type.(*ast.StructType)
 		if !ok {
 			return
 		}
-		d.structs[s.Name.Name] = st
+		d.structs[qualified(pkg, s.Name.Name)] = st
 		// A lone type declaration carries its doc on the GenDecl; one inside a
 		// parenthesized block carries it on the spec.
 		doc := s.Doc
 		if doc == nil {
 			doc = gd.Doc
 		}
-		d.docs[s.Name.Name] = firstParagraph(doc.Text())
+		d.docs[qualified(pkg, s.Name.Name)] = firstParagraph(doc.Text())
 		for _, f := range st.Fields.List {
 			for _, name := range f.Names {
-				d.docs[fmt.Sprintf("%s.%s", s.Name.Name, name.Name)] = firstParagraph(f.Doc.Text())
+				d.docs[qualified(qualified(pkg, s.Name.Name), name.Name)] = firstParagraph(f.Doc.Text())
 			}
 		}
 	case *ast.ValueSpec:

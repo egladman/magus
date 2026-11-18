@@ -119,8 +119,8 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	v := validateMerge(t.Context(), s, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli", "cli/registry.go"}
-		u.Check = &job.LeaseCheck{Target: "nosuch", Project: "."}
-		u.Goals = []job.Goal{{ID: "elsewhere", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "nowhere"}}}
+		u.Check = fixtureCheck(types.LeaseCheck{Target: "nosuch", Project: "."})
+		u.Postconditions = []job.Postcondition{{ID: "elsewhere", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "nowhere"})}}
 	}, config.Jobs{}, nil)
 
 	got := codes(v.Problems)
@@ -134,7 +134,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 		switch p.Field {
 		case "check.target":
 			target = p
-		case "goals[0].check.project":
+		case "postconditions[0].check.project":
 			project = p
 		}
 	}
@@ -148,7 +148,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	assert.Contains(t, regen.Fix, `"reason":"the root regenerates it"`)
 	gate := problemAt(t, v.Problems, types.GateNotRun)
 	assert.Equal(t, "lint .", gate.Subject)
-	assert.Contains(t, gate.Fix, `"check":{"target":"lint","project":"."}`, "the fix is the goal that runs it")
+	assert.Contains(t, gate.Fix, `"check":{"target":"lint","project":"."}`, "the fix is the postcondition that runs it")
 	assert.Empty(t, v.Unchecked)
 	assert.Equal(t, "w", v.Job.ID, "the result carries the row as it would be stored")
 }
@@ -286,7 +286,7 @@ func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
 	s.Require().NoError(err)
 	want := plan.Validation.Job
 	want.Checkpoint = "amended"
-	s.Equal(RetryDeclaration(want), RetryDeclaration(stored), "the plan's settled merge, lint goal included, then the amend")
+	s.Equal(RetryDeclaration(want), RetryDeclaration(stored), "the plan's settled merge, lint postcondition included, then the amend")
 }
 
 func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
@@ -340,14 +340,14 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	seed(t, s, job.Job{
 		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/registry.go"}}, Check: forkCheck(),
-		Agent: &job.Agent{Instructions: "do the thing"},
-		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: *forkCheck()}},
+		Agent:          &job.Agent{Instructions: "do the thing"},
+		Postconditions: []job.Postcondition{{ID: "g", Kind: job.PostconditionKindCheck, Check: forkCheck()}},
 	})
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
 	wiped := func(u *job.Job) {
-		u.Agent, u.Paths.Write, u.Check, u.Goals = nil, nil, nil, nil
+		u.Agent, u.Paths.Write, u.Check, u.Postconditions = nil, nil, job.Check{}, nil
 	}
 	v := validateMerge(t.Context(), s, rows, "w", wiped, config.Jobs{}, nil)
 	var subjects []string
@@ -356,7 +356,7 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 			subjects = append(subjects, p.Subject)
 		}
 	}
-	assert.ElementsMatch(t, []string{"drops agent.instructions", "drops paths.write", "drops check", "drops goals"}, subjects)
+	assert.ElementsMatch(t, []string{"drops agent.instructions", "drops paths.write", "drops check", "drops postconditions"}, subjects)
 
 	said := func(u *job.Job) {
 		wiped(u)
@@ -364,7 +364,7 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 			{Code: job.Code(types.JobRecordInvalid), Subject: "drops agent.instructions", Reason: "the job is reset"},
 			{Code: job.Code(types.JobRecordInvalid), Subject: "drops paths.write", Reason: "the job is reset"},
 			{Code: job.Code(types.JobRecordInvalid), Subject: "drops check", Reason: "the job is reset"},
-			{Code: job.Code(types.JobRecordInvalid), Subject: "drops goals", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops postconditions", Reason: "the job is reset"},
 		}
 	}
 	v = validateMerge(t.Context(), s, rows, "w", said, config.Jobs{}, nil)
@@ -412,7 +412,7 @@ func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row job.Job) Check
 
 func (s *ReforkGradeSuite) declare(u *job.Job) {
 	u.State, u.Checkpoint = job.StateDeclared, s.head
-	u.Paths.Write, u.Check = []string{"a.txt"}, goTestCheck()
+	u.Paths.Write, u.Check = []string{"a.txt"}, fixtureCheck(*goTestCheck())
 }
 
 func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
@@ -548,7 +548,7 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	assert.Contains(t, codes(got.Permitted), types.GateNotRun)
 }
 
-func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
+func TestResolveMergeAddsALintPostconditionAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
@@ -566,25 +566,25 @@ func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 	}
 
 	row, note := resolve(declare("docs/notes.md", "cli/registry.go"))
-	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
-	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, job.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
-		Args: []string{"cli/registry.go", "docs/notes.md"}}, row.Goals[i].Check, "lint is scoped to the written files, sorted")
-	assert.Contains(t, note, `added the goal "lint" (2 files)`)
+	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "postconditions: %v", row.Postconditions)
+	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
+		Args: []string{"cli/registry.go", "docs/notes.md"}}, checkIn(t, row.Postconditions[i].Check), "lint is scoped to the written files, sorted")
+	assert.Contains(t, note, `added the postcondition "lint" (2 files)`)
 
 	row, note = resolve(func(u *job.Job) {
 		declare("cli/registry.go")(u)
-		u.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+		u.Postconditions = []job.Postcondition{job.Postcondition{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})}.Resolve()}
 	})
-	assert.Len(t, row.Goals, 1, "a goal that runs lint is kept alone")
+	assert.Len(t, row.Postconditions, 1, "a postcondition that runs lint is kept alone")
 	assert.Empty(t, note)
 
 	row, note = resolve(declare("docs/notes.md"))
-	assert.Empty(t, row.Goals, "no file lint declares it reads, no lint goal")
+	assert.Empty(t, row.Postconditions, "no file lint declares it reads, no lint postcondition")
 	assert.Empty(t, note)
 }
 
-func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
+func TestResolveMergeAddsALintPostconditionForAnyLanguageLintReads(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
@@ -599,9 +599,9 @@ func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
 	var row job.Job
 	merged(&row)
 
-	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
-	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, []string{"web/app.ts"}, row.Goals[i].Check.Args)
+	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "postconditions: %v", row.Postconditions)
+	assert.Equal(t, []string{"web/app.ts"}, checkIn(t, row.Postconditions[i].Check).Args)
 }
 
 func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {
@@ -613,7 +613,7 @@ func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {
 	assert.Empty(t, filesIn("libs/z", files))
 }
 
-func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *testing.T) {
+func TestAmbiguousSymbolProblemsRefuseAnUnresolvedPostconditionOnAnExistingSymbol(t *testing.T) {
 	t.Parallel()
 
 	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
@@ -622,16 +622,16 @@ func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *test
 		}
 		return SymbolFact{}, true
 	}
-	goals := []job.Goal{
-		{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"job.Declare", "job.Typo"}},
-		{ID: "new", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"job.Typo"}},
-		{ID: "bare", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Typo"}},
+	postconditions := []job.Postcondition{
+		{ID: "gone", Kind: job.PostconditionKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"job.Declare", "job.Typo"}},
+		{ID: "new", Kind: job.PostconditionKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"job.Typo"}},
+		{ID: "bare", Kind: job.PostconditionKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Typo"}},
 	}
 
-	ps := ambiguousSymbolProblems(t.Context(), goals, read)
+	ps := ambiguousSymbolProblems(t.Context(), postconditions, read)
 
-	require.Len(t, ps, 1, "a present goal names what the job will write, and a bare name may be a graph without an index")
-	assert.Equal(t, "goals[0].symbols[1]", ps[0].Field)
+	require.Len(t, ps, 1, "a present postcondition names what the job will write, and a bare name may be a graph without an index")
+	assert.Equal(t, "postconditions[0].symbols[1]", ps[0].Field)
 	assert.Contains(t, ps[0].Message, `"job.Typo"`)
 }
 
@@ -723,15 +723,17 @@ func (s *FootprintMayExtendSuite) TestAReadOnlyRowCannotExtend() {
 	s.False(FootprintMayExtend(s.root, job.Job{ReadOnly: true, Paths: job.Paths{Write: []string{"run/run.go"}}}))
 }
 
-// LintGoalTrackedFilesSuite pins that a derived lint goal skips the files the VCS ignores and
+// LintPostconditionTrackedFilesSuite pins that a derived lint postcondition skips the files the VCS ignores and
 // keeps every other one, tracked or not.
-type LintGoalTrackedFilesSuite struct {
+type LintPostconditionTrackedFilesSuite struct {
 	suite.Suite
 }
 
-func TestLintGoalTrackedFilesSuite(t *testing.T) { suite.Run(t, new(LintGoalTrackedFilesSuite)) }
+func TestLintPostconditionTrackedFilesSuite(t *testing.T) {
+	suite.Run(t, new(LintPostconditionTrackedFilesSuite))
+}
 
-func (s *LintGoalTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([]string, string) {
+func (s *LintPostconditionTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([]string, string) {
 	st := NewStore(tempLocation(s.T(), repo.Root())).InWorkspace(ws)
 	var notes bytes.Buffer
 	st.notices = &notes
@@ -741,12 +743,12 @@ func (s *LintGoalTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([
 	s.Require().NoError(err)
 	var row job.Job
 	merged(&row)
-	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
-	s.Require().GreaterOrEqual(i, 0, "goals: %v", row.Goals)
-	return row.Goals[i].Check.Args, notes.String()
+	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
+	s.Require().GreaterOrEqual(i, 0, "postconditions: %v", row.Postconditions)
+	return checkIn(s.T(), row.Postconditions[i].Check).Args, notes.String()
 }
 
-func (s *LintGoalTrackedFilesSuite) workspace(root string) Workspace {
+func (s *LintPostconditionTrackedFilesSuite) workspace(root string) Workspace {
 	top := &types.Project{
 		Path:             ".",
 		MagusfileTargets: []string{"ci", "lint", "test"},
@@ -756,7 +758,7 @@ func (s *LintGoalTrackedFilesSuite) workspace(root string) Workspace {
 	return Workspace{Projects: []*types.Project{top}, Ignored: VCSIgnored(s.T().Context(), root)}
 }
 
-func (s *LintGoalTrackedFilesSuite) TestAnIgnoredFileIsLeftOutAndEveryOtherKept() {
+func (s *LintPostconditionTrackedFilesSuite) TestAnIgnoredFileIsLeftOutAndEveryOtherKept() {
 	repo := testkit.NewRepository(s.T(), map[string]string{
 		".gitignore":       "skills/installed/\n",
 		"skills/kept/a.md": "# a\n",
@@ -776,10 +778,10 @@ func (s *LintGoalTrackedFilesSuite) TestAnIgnoredFileIsLeftOutAndEveryOtherKept(
 
 	s.Equal([]string{"skills/installed/forced.md", "skills/kept/a.md", "skills/new/c.md"}, args,
 		"the tracked, the force-added and the not yet tracked file stay; the ignored one goes")
-	s.Contains(note, "left 1 ignored file(s) out of the lint goal")
+	s.Contains(note, "left 1 ignored file(s) out of the lint postcondition")
 }
 
-func (s *LintGoalTrackedFilesSuite) TestAnUnaskableVCSKeepsEveryFileAndSaysSo() {
+func (s *LintPostconditionTrackedFilesSuite) TestAnUnaskableVCSKeepsEveryFileAndSaysSo() {
 	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
 	ws := s.workspace(repo.Root())
 	ws.Ignored = nil
@@ -790,7 +792,7 @@ func (s *LintGoalTrackedFilesSuite) TestAnUnaskableVCSKeepsEveryFileAndSaysSo() 
 	s.Contains(note, "keeps every one")
 }
 
-func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNamesTheError() {
+func (s *LintPostconditionTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNamesTheError() {
 	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
 	ws := s.workspace(repo.Root())
 	ws.Ignored = func([]string) ([]string, error) { return nil, errors.New("git check-ignore: exit status 128") }
@@ -805,22 +807,22 @@ func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNames
 func unrunGate() UnrunGate {
 	return UnrunGate{
 		Target: "unit", Project: ".", Source: "**/*.go",
-		Goal: job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "unit", Project: "."}},
+		Postcondition: types.Postcondition{Postcondition: job.Postcondition{ID: "unit", Kind: job.PostconditionKindCheck}, Check: types.LeaseCheck{Target: "unit", Project: "."}},
 	}
 }
 
-func TestUnrunGateFixAddsTheGoalWithoutAnOwner(t *testing.T) {
+func TestUnrunGateFixAddsThePostconditionWithoutAnOwner(t *testing.T) {
 	t.Parallel()
 
 	ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{})
 
-	goal := unrunGate().Goal
+	postcondition := unrunGate().Postcondition
 	assert.Equal(t, types.JobProblems{{
-		Code: types.GateNotRun, Field: "goals", Subject: "unit .",
-		Message: "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a goal runs it",
-		Fix:     `add the goal {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to goals, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`,
-		Goal:    &goal,
-	}}, ps, "the goal is the one remedy")
+		Code: types.GateNotRun, Field: "postconditions", Subject: "unit .",
+		Message:       "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a postcondition runs it",
+		Fix:           `add the postcondition {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to postconditions, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`,
+		Postcondition: &postcondition,
+	}}, ps, "the postcondition is the one remedy")
 }
 
 func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
@@ -830,15 +832,15 @@ func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
 		ps := unrunGateProblems([]UnrunGate{unrunGate()}, gateOwner{runs: runs})
 
 		assert.Equal(t, types.JobProblems{{
-			Code: types.GateNotRun, Field: "goals", Subject: "unit .",
-			Message:   "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a goal runs it",
+			Code: types.GateNotRun, Field: "postconditions", Subject: "unit .",
+			Message:   "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a postcondition runs it",
 			Fix:       fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs),
 			Deviation: &job.Deviation{Code: "MGS3045", Subject: "unit .", Reason: runs},
 		}}, ps, "the owner's deviation is the one remedy")
 	}
 }
 
-func TestUnrunLintGateFixStaysTheGoalWhoeverOwnsTheRest(t *testing.T) {
+func TestUnrunLintGateFixStaysThePostconditionWhoeverOwnsTheRest(t *testing.T) {
 	t.Parallel()
 
 	lint := unrunGate()
@@ -846,12 +848,12 @@ func TestUnrunLintGateFixStaysTheGoalWhoeverOwnsTheRest(t *testing.T) {
 
 	ps := unrunGateProblems([]UnrunGate{lint}, gateOwner{runs: "github-actions runs it"})
 
-	goal := lint.Goal
+	postcondition := lint.Postcondition
 	assert.Equal(t, types.JobProblems{{
-		Code: types.GateNotRun, Field: "goals", Subject: "lint .",
-		Message: "ci runs `lint .` over the write paths (it reads **/*.go), and neither the check nor a goal runs it",
-		Fix:     fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":"MGS3045","subject":"lint .","reason":"the root runs it"}`, `{"id":"unit","kind":"check","check":{"target":"unit","project":"."}}`),
-		Goal:    &goal,
+		Code: types.GateNotRun, Field: "postconditions", Subject: "lint .",
+		Message:       "ci runs `lint .` over the write paths (it reads **/*.go), and neither the check nor a postcondition runs it",
+		Fix:           fmt.Sprintf(`add the postcondition %s to postconditions, or permit it in deviations: {"code":"MGS3045","subject":"lint .","reason":"the root runs it"}`, `{"id":"unit","kind":"check","check":{"target":"unit","project":"."}}`),
+		Postcondition: &postcondition,
 	}}, ps)
 }
 
@@ -930,7 +932,7 @@ func (s *acceptValidationSuite) problems(accept ...job.Basis) types.JobProblems 
 	st, _ := validateWorkspace(s.T())
 	return validateMerge(s.T().Context(), st, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli/registry.go"}
-		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}, Accept: accept}}
+		u.Postconditions = []job.Postcondition{{ID: "unit", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), Accept: accept}}
 	}, config.Jobs{}, nil).Problems
 }
 
@@ -942,18 +944,18 @@ func (s *acceptValidationSuite) at(ps types.JobProblems, field string) (types.Jo
 	return ps[i], true
 }
 
-func (s *acceptValidationSuite) TestAnUnknownBasisIsAGoalProblem() {
-	p, ok := s.at(s.problems(job.BasisWitnessed, "trusted"), "goals[0].accept[1]")
+func (s *acceptValidationSuite) TestAnUnknownBasisIsAPostconditionProblem() {
+	p, ok := s.at(s.problems(job.BasisWitnessed, "trusted"), "postconditions[0].accept[1]")
 
 	s.Require().True(ok)
-	s.Equal(types.JobGoalInvalid, p.Code)
+	s.Equal(types.JobPostconditionInvalid, p.Code)
 	s.Contains(p.Message, `accepts "trusted", which is not a basis`)
 }
 
 func (s *acceptValidationSuite) TestANamedBasisIsNoProblem() {
 	ps := s.problems(job.BasisWitnessed, job.BasisReported)
 
-	_, ok := s.at(ps, "goals[0].accept")
+	_, ok := s.at(ps, "postconditions[0].accept")
 	s.False(ok, codes(ps))
 }
 
@@ -962,13 +964,13 @@ func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
 
 	plan, err := PlanFork(s.T().Context(), st, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli/registry.go"}
-		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}}}
+		u.Postconditions = []job.Postcondition{{ID: "unit", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}}
 	}, config.Jobs{}, nil, true)
 
 	s.Require().NoError(err)
-	unit := slices.IndexFunc(plan.Validation.Job.Goals, func(g job.Goal) bool { return g.ID == "unit" })
+	unit := slices.IndexFunc(plan.Validation.Job.Postconditions, func(g job.Postcondition) bool { return g.ID == "unit" })
 	s.Require().GreaterOrEqual(unit, 0)
-	s.Equal([]job.Basis{job.BasisWitnessed}, plan.Validation.Job.Goals[unit].Accept)
-	_, unresolved := s.at(plan.Validation.Problems, "goals[0].accept")
+	s.Equal([]job.Basis{job.BasisWitnessed}, plan.Validation.Job.Postconditions[unit].Accept)
+	_, unresolved := s.at(plan.Validation.Problems, "postconditions[0].accept")
 	s.False(unresolved)
 }

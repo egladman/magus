@@ -70,7 +70,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -198,15 +197,30 @@ func runCLI() int {
 	}
 
 	var dispatchErr error
+	var glue *guard.HookStdin
 	switch res.sub {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "--version":
 		dispatchErr = runVersion(dispatchCtx, res.subArgs)
 	default:
+		if hookGlueShaped(res.sub, res.subArgs) {
+			if glue, dispatchErr = guard.TeeHookStdin(); dispatchErr != nil {
+				break
+			}
+		}
 		dispatchErr = dispatchSub(dispatchCtx, res.root, res.rc, res.sub, res.subArgs)
 	}
 	code := mapExitCode(dispatchErr)
+	// A host runs the call of a hook that exits anything but 2, so a glue that failed
+	// before its verdict answers for itself.
+	if glue != nil && code != exit.OK && code != exit.Usage {
+		var reason string
+		code, reason = answerFailedGlue(glue, commands.ExtractRootFlag(args), res.subArgs, dispatchErr, code)
+		if reason != "" {
+			fmt.Fprintln(os.Stderr, reason)
+		}
+	}
 	// Offer the run's pinned failures for rerun or inspection, while they are
 	// still on screen. A no-op unless a run left failures on a terminal, so
 	// every other command reaches it and returns immediately.
@@ -1112,8 +1126,7 @@ func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string,
 	if sub == commands.Shell.Name {
 		return mapExitCode(shellCommand(guard.WithStaleConfig(ctx, cause), subArgs)), true
 	}
-	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
-	if sub != "buzz" || termkit.StdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
+	if !hookGlueShaped(sub, subArgs) {
 		return 0, false
 	}
 	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)

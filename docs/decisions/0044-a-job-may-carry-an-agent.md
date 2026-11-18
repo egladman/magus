@@ -68,6 +68,9 @@ is the store's to compute.
 
 ### 3. Records are `CRD`-shaped, and the conversion lives in the store
 
+> Amended 2026-11-17: the keys are snake_case and the enum values are Go values; see
+> the amendment of that date. The envelope shape stands.
+
 Every kind is `apiVersion`, `kind`, `metadata`, `spec`, `status` in group
 `batch.magus/v1alpha1`. That is the `<group>.<domain>` order of a Kubernetes CRD
 group, and it departs from the `magus.<format>` spelling of other magus formats. Keys
@@ -213,8 +216,9 @@ job agent specific. Evidence: Eli's rejection of 2026-11-11. It does not reopen.
   earlier draft had `readme[]`.
 - `maxAttempts` keeps today's meaning. Kubernetes' `backoffLimit` counts retries, one
   fewer than attempts, and implies a backoff magus never runs.
-- `libs/apiversion`'s `TypeMeta` keys: these kinds need camelCase, and
-  `types.Schema` uses `api_version`.
+- ~~`libs/apiversion`'s `TypeMeta` keys: these kinds need camelCase, and
+  `types.Schema` uses `api_version`.~~ Settled 2026-11-17 as `api_version`; see the
+  amendment of that date.
 
 ## Amendments
 
@@ -255,3 +259,25 @@ against its checkout writes nothing. This replaces the first two rows of the
 | Every write and migration stamps the writing magus in the header, and each refusal names the store's last writer                                                                                                                                             | done  |
 | A headerless store whose rows are enveloped is refused as damaged, not replayed from migration 0                                                                                                                                                             | done  |
 | Every job store write by a binary built from another contract than its checkout carries is refused with MGS1021. `internal/job` cannot import `internal/contract`, so each door fills `Location.Skew`, and a store with no `Skew` says so on its first write | done  |
+
+### 2026-11-17: job records spell their keys in snake_case, like every other magus format
+
+§3 gave these records alone camelCase keys and CamelCase enum values, the Kubernetes
+spelling. Measured on main at 4584cc73a: of 1,816 multi-word `json` keys in non-test
+Go, 1,690 are snake_case, and 62 of the 126 camelCase ones are these records and
+`libs/apiversion`. The rest of the job's own formats were snake already: the
+declaration, `job.schema.json`, `-o json`, the attest statement and grants.jsonl. One
+check had two spellings, `no_default_charms` and `noDefaultCharms`, and one enum value
+two, `no_return` and `NoReturn`. Eli decided on 2026-11-17 that every magus-owned JSON
+format is snake_case, the job store records included.
+
+#### Decision
+
+| Item                                                                                                                                                           | State |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Records keep the envelope: `api_version`, `kind`, `metadata`, `spec`, `status`, with `status.conditions[]` and `metadata.name`                                 | done  |
+| Every record key is snake_case, and an enum value is stored as its Go value. `kind` values (`Job`, `JobList`, `Attempt`) stay, since a kind names a type       | done  |
+| `libs/apiversion` keys `api_version`, `observed_generation` and `last_transition_time`, which settles the open question                                        | done  |
+| A store migration respells jobs.jsonl and attempts.jsonl through an explicit key table and each enum's value list, and refuses a value no list spells          | done  |
+| grades.jsonl has no migration: an old file is refused by the strict reader                                                                                     | done  |
+| A record converter that only respelled keys or enum values is deleted; one that changes shape (the envelope, unix millisecond times, the condition fold) stays | done  |

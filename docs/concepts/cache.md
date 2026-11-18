@@ -986,7 +986,7 @@ mode, size, and (for symlinks) the link target:
 
 ```json
 {
-  "projectPath": "api",
+  "project_path": "api",
   "hash": "ab34...f0",
   "target": "build",
   "outputs": [
@@ -997,7 +997,7 @@ mode, size, and (for symlinks) the link target:
       "size": 20481
     }
   ],
-  "createdAt": "2026-07-07T12:00:00Z"
+  "created_at": "2026-07-07T12:00:00Z"
 }
 ```
 

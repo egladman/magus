@@ -96,7 +96,7 @@ type SpawnRequest struct {
 	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
-	Lease *job.Job
+	Lease *Job
 	// ModelTier is the model tier recorded on the live row a spawn's `<parent>/<role> <job>`
 	// title names. Nil on a continue, when the title names no live row, or when the row was
 	// written with no model tiers declared.

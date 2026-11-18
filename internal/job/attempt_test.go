@@ -169,7 +169,7 @@ func (s *attemptStoreSuite) TestADroppedRowTakesItsTriesWithIt() {
 func (s *attemptStoreSuite) TestALineAnotherVersionWroteIsRefused() {
 	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(os.WriteFile(path, []byte(`{"apiVersion":"batch.magus/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
+	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"batch.magus/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
 
 	_, err := s.store.Attempts(s.T().Context())
 
@@ -186,12 +186,12 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 	var line map[string]any
 	s.Require().NoError(codec.Unmarshal([]byte(strings.TrimSpace(string(raw))), &line))
 	s.Equal(map[string]any{
-		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
+		"api_version": "safetyscissors.job/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": "a", "n": float64(1)},
-		"status": map[string]any{"ended": float64(30), "end": "Exit", "result": map[string]any{
-			"job": "a", "changedPaths": []any{"a.go"}, "unresolvedRisks": nil,
+		"status": map[string]any{"ended": float64(30), "end": "exit", "result": map[string]any{
+			"job": "a", "changed_paths": []any{"a.go"}, "unresolved_risks": nil,
 		}},
-	}, line, "camelCase keys, CamelCase enum values")
+	}, line, "snake_case keys, Go enum values")
 }
 
 // An attempts.jsonl an older magus wrote takes the envelope once, and a
@@ -213,7 +213,7 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	s.Equal(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, got[0])
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
-	s.Contains(string(raw), `"jobState":"NoReturn"`)
+	s.Contains(string(raw), `"job_state":"no_return"`)
 	s.Contains(string(raw), `"dropped":true`)
 }
 
@@ -279,6 +279,27 @@ func (s *attemptStoreSuite) TestMovingTriesTwiceReadsThemOnce() {
 	all, err := s.store.Attempts(s.T().Context())
 	s.Require().NoError(err)
 	s.Len(all, 3)
+}
+
+// A store whose rows still carry their tries can sit beside an attempts.jsonl a later magus
+// wrote in the camelCase spelling. Moving the tries appends without reading that file, and
+// the later rewrites bring its lines forward.
+func (s *attemptStoreSuite) TestMovingTriesBesideACamelCaseAttemptsFileReadsBoth() {
+	path := plantRaw(s.T(), s.store, triesMovedFrom)
+	attempts, err := s.store.AttemptsPath()
+	s.Require().NoError(err)
+	camel := `{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Attempt","spec":{"job":"b","n":1},` +
+		`"status":{"result":{"changedPaths":["b.go"],"validation":{"command":"magus run test .","outputRef":"out1"}}}}`
+	s.Require().NoError(os.WriteFile(attempts, []byte(camel+"\n"), 0o600))
+
+	_, err = s.store.List(s.T().Context())
+	s.Require().NoError(err)
+
+	tries := triesIn(s.T(), s.store)
+	s.Len(tries["a"], 3, "the row's tries moved")
+	s.Require().Len(tries["b"], 1, "the camelCase line reads")
+	s.Equal("out1", tries["b"][0].Status.Result.Validation.OutputRef)
+	s.InDelta(len(jobMigrations()), storedLines(s.T(), path)[0]["migration"], 0)
 }
 
 func (s *attemptStoreSuite) TestARowWithNoTriesMovesNothing() {

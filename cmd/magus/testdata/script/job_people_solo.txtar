@@ -143,13 +143,13 @@ grouping history
 
 the only check you run
 magus run test .
-refactor/pricing: 0 of 1 goal(s) met
+refactor/pricing: 0 of 1 postcondition(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
 net lines: +0 -0 (+0)
-exports no goal declares: none
+exports no postcondition declares: none
 left defined with no use: none
-goal commands
+postcondition commands
   check: magus run test .
 the result `magus job exit refactor/pricing --stdin` reads
 {
@@ -173,7 +173,7 @@ ended refactor/tax, recorded no_return: abandoned by its holder, which filed no 
 -- wait.out --
 verified refactor/pricing, recorded pass
 its holder reports it ran magus run test .
-goal check: verified (out<hex>)
+postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 -- ls-done.out --

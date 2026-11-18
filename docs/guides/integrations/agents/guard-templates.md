@@ -3098,7 +3098,7 @@ session goes idle) as `magus buzz -s magus-reclaim-disk.buzz -- --agent-name <ho
 harness spells declare it through `magus/harness.reclaimDiskHook`.
 
 It catches a disk filling up before it wedges the machine, and needs no daemon. On most
-turns it costs one stat: the free-space store at `$XDG_STATE_HOME/magus/disk/samples.jsonl`
+turns it costs one stat: the free-space store at `$XDG_STATE_HOME/magus/disk/space.jsonl`
 was written less than a minute ago. Past that it says what the store holds that nobody was
 told, and starts one `reclaimdisk\tick` detached. `magus job fork` and `magus run` start
 the same tick.

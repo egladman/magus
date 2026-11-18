@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
@@ -83,7 +82,7 @@ var boundaryRoots = []boundaryRoot{
 	{Type: reflect.TypeFor[verdict.Verdict](), Outbound: true},
 	// A script builds these and nothing hands one back. Result is declared
 	// at its placeholder; a method returning Result[X] brings its encoder.
-	{Type: reflect.TypeFor[job.Declaration]()},
+	{Type: reflect.TypeFor[types.Declaration]()},
 	{Type: reflect.TypeFor[types.Brief]()},
 	{Type: reflect.TypeFor[types.Result[buzzgen.T]]()},
 	{Type: reflect.TypeFor[tier.Bounds]()},

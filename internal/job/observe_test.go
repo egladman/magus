@@ -33,8 +33,8 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 		ID:      "unit",
 		Created: 1,
 		Paths:   job.Paths{Write: []string{"db", "api"}},
-		Goals: []job.Goal{
-			{ID: "migration", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**"}},
+		Postconditions: []job.Postcondition{
+			{ID: "migration", Kind: job.PostconditionKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
 	// The holder says it wrote the migration. The diff says it wrote something else.
@@ -53,8 +53,8 @@ func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 		ID:      "unit",
 		Created: 1,
 		Paths:   job.Paths{Write: []string{"db", "api"}},
-		Goals: []job.Goal{
-			{ID: "migration", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**", "api"}},
+		Postconditions: []job.Postcondition{
+			{ID: "migration", Kind: job.PostconditionKindPaths, Paths: []string{"db/migrations/**", "api"}},
 		},
 	}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql", "api/handler.go"}}
@@ -74,8 +74,8 @@ func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 		ID:      "unit",
 		Created: 1,
 		Paths:   job.Paths{Write: []string{"db"}},
-		Goals: []job.Goal{
-			{ID: "both", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
+		Postconditions: []job.Postcondition{
+			{ID: "both", Kind: job.PostconditionKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
 		},
 	}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
@@ -97,8 +97,8 @@ func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 		ID:      "unit",
 		Created: 1,
 		Paths:   job.Paths{Write: []string{"db"}},
-		Goals: []job.Goal{
-			{ID: "migration", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**"}},
+		Postconditions: []job.Postcondition{
+			{ID: "migration", Kind: job.PostconditionKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
@@ -117,7 +117,7 @@ func TestPathsGateSeparatesNothingChangedFromNobodyLooked(t *testing.T) {
 
 	// Resolved, as every stored gate is: the verifier grades the fields and never defaults
 	// them, so a raw gate here would exercise a shape production cannot produce.
-	gate := job.Goal{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"db/**"}}.Resolve()
+	gate := job.Postcondition{ID: "g", Kind: job.PostconditionKindPaths, Paths: []string{"db/**"}}.Resolve()
 
 	looked := verifySubjectGate(gate, Observed{ChangedKnown: true, ChangedFrom: "abc1234"})
 	assert.False(t, looked.Verified)
@@ -145,23 +145,23 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 	}
 	graded := 0
 	// Every kind but check, which is graded against the output store, not against Observed.
-	for _, kind := range []job.GoalKind{job.GoalKindPaths, job.GoalKindSymbol} {
-		for _, expect := range []job.GoalExpect{job.ExpectPassed, job.ExpectChanged, job.ExpectPresent, job.ExpectAbsent, job.ExpectUnreferenced, job.ExpectSignature} {
+	for _, kind := range []job.PostconditionKind{job.PostconditionKindPaths, job.PostconditionKindSymbol} {
+		for _, expect := range []job.PostconditionExpect{job.ExpectPassed, job.ExpectChanged, job.ExpectPresent, job.ExpectAbsent, job.ExpectUnreferenced, job.ExpectSignature} {
 			// ONE subject, matching the kind. Carrying both Paths and Symbols made
 			// Validate refuse every pair as two subjects, so this loop used to `continue`
 			// on every iteration and grade nothing at all.
-			gate := job.Goal{ID: "g", Kind: kind, Expect: expect}
-			if kind == job.GoalKindPaths {
+			gate := job.Postcondition{ID: "g", Kind: kind, Expect: expect}
+			if kind == job.PostconditionKindPaths {
 				gate.Paths = []string{"nope/**"}
 			} else {
 				gate.Symbols = []string{"Nope"}
 			}
-			if err := types.ValidateGoal(gate); err != nil {
+			if err := validatePostcondition(gate); err != nil {
 				continue // the matrix refuses this pair, so there is nothing to grade
 			}
 			graded++
 			status := verifySubjectGate(gate, seen)
-			if kind == job.GoalKindPaths && expect == job.ExpectAbsent {
+			if kind == job.PostconditionKindPaths && expect == job.ExpectAbsent {
 				// A path the tree was read for and holds nothing of IS absent.
 				assert.True(t, status.Verified, "%s/%s: nothing named is present, so it holds", kind, expect)
 				continue
@@ -187,13 +187,13 @@ func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 		ID:      "unit",
 		Created: 1,
 		Paths:   job.Paths{Write: []string{"api"}},
-		Check:   &job.LeaseCheck{Target: "go-test", Project: "api"},
+		Check:   fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "api"}),
 	}
 	status := VerifyGates(row, job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}},
 		job.CapturedRun{}, nil, []job.Job{row}, Observed{})
 
 	require.Len(t, status.Gates, 1, "a job whose only gate is its primary check must report that gate")
-	assert.Equal(t, job.PrimaryGoalID, status.Gates[0].ID)
+	assert.Equal(t, job.PrimaryPostconditionID, status.Gates[0].ID)
 	assert.False(t, status.Gates[0].Verified, "no run was recorded, so the check is unmet")
 }
 
@@ -362,7 +362,7 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "api"}}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "api"})}
 	regions := []job.RegionChange{{File: job.FileChange{Path: "api/x.go"}, Side: job.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
@@ -386,15 +386,15 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 }
 
 // The symbol delta and the net lines are reports: they land in the status sorted, an
-// export a goal of the job or an ancestor names is declared, and the verdict is the one the
+// export a postcondition of the job or an ancestor names is declared, and the verdict is the one the
 // same diff reaches without them.
 func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "api"},
-		Goals: []job.Goal{
-			{ID: "new", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Declared"}},
-			{ID: "root/field", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Goal#Signature"}},
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "api"}),
+		Postconditions: []job.Postcondition{
+			{ID: "new", Kind: job.PostconditionKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Declared"}},
+			{ID: "root/field", Kind: job.PostconditionKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Postcondition#Signature"}},
 		}}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234", RegionsKnown: true,
@@ -403,7 +403,7 @@ func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 			{File: job.FileChange{Path: "api/x.go"}, Side: job.RegionOld, Lines: [2]int{2, 3}},
 		}}
 	delta := base
-	delta.AddedExports = []string{"Zeta", "Goal#Signature", "Declared", "Alpha"}
+	delta.AddedExports = []string{"Zeta", "Postcondition#Signature", "Declared", "Alpha"}
 	delta.LeftUnreferenced = []string{"old (api/y.go:3)", "helper (api/x.go:9)"}
 	delta.SymbolDeltaKnown = true
 

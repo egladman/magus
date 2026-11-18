@@ -98,34 +98,11 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	// An attempt stores its result without the result's own api_version, as the store writes it.
 	delete(filed, "api_version")
 	line, err := codec.Marshal(map[string]any{
-		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
-		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
+		"api_version": "safetyscissors.job/v1alpha1", "kind": "Attempt",
+		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": filed},
 	})
 	require.NoError(t, err)
 	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
-}
-
-// fixtureCamelKeys is v with every object key camelCased, as the
-// attempts.jsonl record spells them.
-func fixtureCamelKeys(v any) any {
-	switch v := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(v))
-		for k, x := range v {
-			parts := strings.Split(k, "_")
-			for i := 1; i < len(parts); i++ {
-				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
-			}
-			out[strings.Join(parts, "")] = fixtureCamelKeys(x)
-		}
-		return out
-	case []any:
-		for i := range v {
-			v[i] = fixtureCamelKeys(v[i])
-		}
-		return v
-	}
-	return v
 }
 
 // A deny path naming a declaration of a file no diff driver reads is refused at fork
@@ -267,11 +244,19 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 // judges the record against it, so a live job in the forking checkout refuses nothing.
 // The same record without the flag is still refused, and a record naming another checkout
 // is refused rather than one of the two being dropped.
+// storedCheck is c as a row stores it.
+func storedCheck(t testing.TB, c types.LeaseCheck) jobtypes.Check {
+	t.Helper()
+	raw, err := types.EncodeLeaseCheck(c)
+	require.NoError(t, err)
+	return raw
+}
+
 func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	resetOpenedWorkspaces(t)
 	repo, cacheDir := execRepositoryFixture(t, jobtypes.Job{
 		ID: "live", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"a.go"}},
-		Check: &jobtypes.LeaseCheck{Target: "test", Project: "."},
+		Check: storedCheck(t, types.LeaseCheck{Target: "test", Project: "."}),
 	})
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
@@ -545,7 +530,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
 	writeStdin(t, `{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
-		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
+		` "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin"}))
@@ -653,7 +638,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 
 	row := jobtypes.Job{
 		ID: "w", Created: 1, State: jobtypes.StateExited, Paths: jobtypes.Paths{Write: []string{"a.go"}}, CheckoutRoot: holder.Root(),
-		Check:   &jobtypes.LeaseCheck{Target: "go-test", Project: "."},
+		Check:   storedCheck(t, types.LeaseCheck{Target: "go-test", Project: "."}),
 		Attempt: &jobtypes.CapturedRun{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
 	}
 	seedJobStore(t, waiter.Root(), row)
@@ -665,7 +650,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 		return job.Observed{Changed: []string{"a.go"}, ChangedKnown: true}, nil
 	}
 
-	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{jobtypes.PrimaryGoalID: passed.Ref})
+	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{jobtypes.PrimaryPostconditionID: passed.Ref})
 
 	require.ErrorContains(t, err, "names no run this checkout recorded")
 	rows, err := store.List(t.Context())
@@ -1055,7 +1040,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
-	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: storedCheck(t, types.LeaseCheck{Target: "go-build", Project: "."})}
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
 	require.NoError(t, os.MkdirAll(elsewhere, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(elsewhere, "magus.yaml"), []byte("{}\n"), 0o644))
@@ -1065,7 +1050,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
 		t.Chdir(elsewhere)
 		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
-			Input:      "./" + guard.WorkerCheckCommand(*row.Check),
+			Input:      "./" + guard.WorkerCheckCommand(types.LeaseCheck{Target: "go-build", Project: "."}),
 			DryRun:     true,
 			Lease:      row.ID,
 			PendingRow: &row,
@@ -1108,7 +1093,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: storedCheck(t, types.LeaseCheck{Target: "go-build", Project: "."})}
 	grade := gradingWith(nil)
 
 	before := grade(t.Context(), root, row)
@@ -1136,8 +1121,8 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	repo.Git("worktree", "add", "-q", "--detach", own)
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	ci := &jobtypes.LeaseCheck{Target: types.TargetCI, Project: "."}
-	held := jobtypes.Job{ID: "w", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: ci, Worktree: &jobtypes.Worktree{Root: own}}
+	ci := types.LeaseCheck{Target: types.TargetCI, Project: "."}
+	held := jobtypes.Job{ID: "w", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: storedCheck(t, ci), Worktree: &jobtypes.Worktree{Root: own}}
 	shared := held
 	shared.Worktree = nil
 	deps := guardDependencies(t.Context(), root)
@@ -1150,7 +1135,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 
 		taken := held
 		taken.State, taken.CheckoutRoot = jobtypes.StateRunning, own
-		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
+		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
 		assert.NotEqual(t, guardverdict.Deny, ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
@@ -1186,7 +1171,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(t)
 	t.Chdir(root)
-	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: storedCheck(t, types.LeaseCheck{Target: "go-build", Project: "."})}
 
 	verdict := gradingWith(nil)(t.Context(), root, row)
 
@@ -1250,7 +1235,7 @@ func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
 	global = globalFlags{}
 	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetOpenedWorkspaces(s.T())
-	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: storedCheck(s.T(), types.LeaseCheck{Target: "go-build", Project: "."})}
 	ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
 	defer cancel()
 	release := make(chan struct{})
@@ -1279,8 +1264,8 @@ func TestJobApplyAddWritePath(t *testing.T) { suite.Run(t, new(jobApplyAddWriteP
 func (s *jobApplyAddWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
 	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go"}
-	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = job.CheckCommand(*row.Check)
+	row.Check = storedCheck(s.T(), types.LeaseCheck{Target: "test", Project: "."})
+	row.Validation = job.CheckCommand(types.LeaseCheck{Target: "test", Project: "."})
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
@@ -1353,8 +1338,8 @@ func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.
 	resetOpenedWorkspaces(s.T())
 	row := leaseRow("integration", "")
 	row.Paths.Write = []string{"magus.yaml"}
-	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = job.CheckCommand(*row.Check)
+	row.Check = storedCheck(s.T(), types.LeaseCheck{Target: "test", Project: "."})
+	row.Validation = job.CheckCommand(types.LeaseCheck{Target: "test", Project: "."})
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 	return root, store, jobtypes.Declaration{
@@ -1560,9 +1545,9 @@ func TestJobApplyReleaseWritePath(t *testing.T) { suite.Run(t, new(jobApplyRelea
 func (s *jobApplyReleaseWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
 	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
-	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = job.CheckCommand(*row.Check)
-	row.Goals = []jobtypes.Goal{{ID: "g", Kind: jobtypes.GoalKindPaths, Paths: []string{"a.go"}}}
+	row.Check = storedCheck(s.T(), types.LeaseCheck{Target: "test", Project: "."})
+	row.Validation = job.CheckCommand(types.LeaseCheck{Target: "test", Project: "."})
+	row.Postconditions = []jobtypes.Postcondition{{ID: "g", Kind: jobtypes.PostconditionKindPaths, Paths: []string{"a.go"}}}
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})

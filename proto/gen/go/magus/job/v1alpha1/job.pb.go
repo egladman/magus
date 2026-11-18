@@ -244,9 +244,9 @@ type Job struct {
 	Releases   []*JobRelease `protobuf:"bytes,19,rep,name=releases,proto3" json:"releases,omitempty"`
 	Created    int64         `protobuf:"varint,20,opt,name=created,proto3" json:"created,omitempty"` // unix SECONDS, as the store records them
 	Updated    int64         `protobuf:"varint,21,opt,name=updated,proto3" json:"updated,omitempty"`
-	// Goals are the job's declared definition of done, graded by `magus job wait`, empty on a
-	// job that named none beyond its primary check. See CompletionGate.
-	Goals []*CompletionGate `protobuf:"bytes,22,rep,name=goals,proto3" json:"goals,omitempty"`
+	// Postconditions are the job's declared definition of done, graded by `magus job wait`,
+	// empty on a job that named none beyond its primary check. See Postcondition.
+	Postconditions []*Postcondition `protobuf:"bytes,22,rep,name=postconditions,proto3" json:"postconditions,omitempty"`
 	// Result is what the holder filed on exit, unset until it has.
 	Result *JobResult `protobuf:"bytes,23,opt,name=result,proto3" json:"result,omitempty"`
 	// Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork
@@ -257,23 +257,24 @@ type Job struct {
 	// did. write_proof is alone, disjoint or overlapping, what fork could prove about the
 	// write paths. reported_base and base_verdict are the base the worker landed on and how
 	// it compares to checkpoint. checkout_root is the checkout that took the job.
-	EndReason    string                  `protobuf:"bytes,25,opt,name=end_reason,json=endReason,proto3" json:"end_reason,omitempty"`
-	WriteProof   string                  `protobuf:"bytes,26,opt,name=write_proof,json=writeProof,proto3" json:"write_proof,omitempty"`
-	ReportedBase string                  `protobuf:"bytes,27,opt,name=reported_base,json=reportedBase,proto3" json:"reported_base,omitempty"`
-	BaseVerdict  string                  `protobuf:"bytes,28,opt,name=base_verdict,json=baseVerdict,proto3" json:"base_verdict,omitempty"`
-	CheckoutRoot string                  `protobuf:"bytes,29,opt,name=checkout_root,json=checkoutRoot,proto3" json:"checkout_root,omitempty"`
-	Registered   int64                   `protobuf:"varint,30,opt,name=registered,proto3" json:"registered,omitempty"`                        // unix seconds the holder took the job, 0 while untaken
-	RegisteredBy *JobOrigin              `protobuf:"bytes,31,opt,name=registered_by,json=registeredBy,proto3" json:"registered_by,omitempty"` // who declared the row
-	Attempt      *JobAttempt             `protobuf:"bytes,32,opt,name=attempt,proto3" json:"attempt,omitempty"`                               // the newest recorded run of the job's own check
-	GateAttempts []*JobGateAttempt       `protobuf:"bytes,33,rep,name=gate_attempts,json=gateAttempts,proto3" json:"gate_attempts,omitempty"`
-	Unattributed []*JobUnattributedWrite `protobuf:"bytes,34,rep,name=unattributed,proto3" json:"unattributed,omitempty"`
-	Entries      []*JobEntry             `protobuf:"bytes,35,rep,name=entries,proto3" json:"entries,omitempty"`
-	Integration  *JobIntegration         `protobuf:"bytes,36,opt,name=integration,proto3" json:"integration,omitempty"` // unset until the integrator verified the job
-	ApiVersion   string                  `protobuf:"bytes,45,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
-	Requires     []string                `protobuf:"bytes,37,rep,name=requires,proto3" json:"requires,omitempty"`
-	// waiter_evidence is the goals whose passing run came from the waiter's checkout rather than
-	// the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
-	// holder's own attempts untouched; this is the second fact beside them.
+	EndReason             string                     `protobuf:"bytes,25,opt,name=end_reason,json=endReason,proto3" json:"end_reason,omitempty"`
+	WriteProof            string                     `protobuf:"bytes,26,opt,name=write_proof,json=writeProof,proto3" json:"write_proof,omitempty"`
+	ReportedBase          string                     `protobuf:"bytes,27,opt,name=reported_base,json=reportedBase,proto3" json:"reported_base,omitempty"`
+	BaseVerdict           string                     `protobuf:"bytes,28,opt,name=base_verdict,json=baseVerdict,proto3" json:"base_verdict,omitempty"`
+	CheckoutRoot          string                     `protobuf:"bytes,29,opt,name=checkout_root,json=checkoutRoot,proto3" json:"checkout_root,omitempty"`
+	Registered            int64                      `protobuf:"varint,30,opt,name=registered,proto3" json:"registered,omitempty"`                        // unix seconds the holder took the job, 0 while untaken
+	RegisteredBy          *JobOrigin                 `protobuf:"bytes,31,opt,name=registered_by,json=registeredBy,proto3" json:"registered_by,omitempty"` // who declared the row
+	Attempt               *JobAttempt                `protobuf:"bytes,32,opt,name=attempt,proto3" json:"attempt,omitempty"`                               // the newest recorded run of the job's own check
+	PostconditionAttempts []*JobPostconditionAttempt `protobuf:"bytes,33,rep,name=postcondition_attempts,json=postconditionAttempts,proto3" json:"postcondition_attempts,omitempty"`
+	Unattributed          []*JobUnattributedWrite    `protobuf:"bytes,34,rep,name=unattributed,proto3" json:"unattributed,omitempty"`
+	Entries               []*JobEntry                `protobuf:"bytes,35,rep,name=entries,proto3" json:"entries,omitempty"`
+	Integration           *JobIntegration            `protobuf:"bytes,36,opt,name=integration,proto3" json:"integration,omitempty"` // unset until the integrator verified the job
+	ApiVersion            string                     `protobuf:"bytes,45,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	Requires              []string                   `protobuf:"bytes,37,rep,name=requires,proto3" json:"requires,omitempty"`
+	// waiter_evidence is the postconditions whose passing run came from the waiter's checkout
+	// rather than the holder's, unset unless `magus job wait --evidence` took some.
+	// postcondition_attempts keep the holder's own attempts untouched; this is the second fact
+	// beside them.
 	WaiterEvidence *JobIntegration `protobuf:"bytes,39,opt,name=waiter_evidence,json=waiterEvidence,proto3" json:"waiter_evidence,omitempty"`
 	// breaks are the flags, JSON keys, exported symbols or stored formats the root approved this
 	// job breaking; empty means it breaks nothing on its own authority.
@@ -442,9 +443,9 @@ func (x *Job) GetUpdated() int64 {
 	return 0
 }
 
-func (x *Job) GetGoals() []*CompletionGate {
+func (x *Job) GetPostconditions() []*Postcondition {
 	if x != nil {
-		return x.Goals
+		return x.Postconditions
 	}
 	return nil
 }
@@ -519,9 +520,9 @@ func (x *Job) GetAttempt() *JobAttempt {
 	return nil
 }
 
-func (x *Job) GetGateAttempts() []*JobGateAttempt {
+func (x *Job) GetPostconditionAttempts() []*JobPostconditionAttempt {
 	if x != nil {
-		return x.GateAttempts
+		return x.PostconditionAttempts
 	}
 	return nil
 }
@@ -1188,29 +1189,29 @@ func (x *JobAttempt) GetExtraArgs() []string {
 	return nil
 }
 
-// JobGateAttempt is the newest recorded run of one goal's check.
-type JobGateAttempt struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GateId        string                 `protobuf:"bytes,1,opt,name=gate_id,json=gateId,proto3" json:"gate_id,omitempty"`
-	Attempt       *JobAttempt            `protobuf:"bytes,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+// JobPostconditionAttempt is the newest recorded run of one postcondition's check.
+type JobPostconditionAttempt struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PostconditionId string                 `protobuf:"bytes,1,opt,name=postcondition_id,json=postconditionId,proto3" json:"postcondition_id,omitempty"`
+	Attempt         *JobAttempt            `protobuf:"bytes,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
-func (x *JobGateAttempt) Reset() {
-	*x = JobGateAttempt{}
+func (x *JobPostconditionAttempt) Reset() {
+	*x = JobPostconditionAttempt{}
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *JobGateAttempt) String() string {
+func (x *JobPostconditionAttempt) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*JobGateAttempt) ProtoMessage() {}
+func (*JobPostconditionAttempt) ProtoMessage() {}
 
-func (x *JobGateAttempt) ProtoReflect() protoreflect.Message {
+func (x *JobPostconditionAttempt) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1222,19 +1223,19 @@ func (x *JobGateAttempt) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use JobGateAttempt.ProtoReflect.Descriptor instead.
-func (*JobGateAttempt) Descriptor() ([]byte, []int) {
+// Deprecated: Use JobPostconditionAttempt.ProtoReflect.Descriptor instead.
+func (*JobPostconditionAttempt) Descriptor() ([]byte, []int) {
 	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *JobGateAttempt) GetGateId() string {
+func (x *JobPostconditionAttempt) GetPostconditionId() string {
 	if x != nil {
-		return x.GateId
+		return x.PostconditionId
 	}
 	return ""
 }
 
-func (x *JobGateAttempt) GetAttempt() *JobAttempt {
+func (x *JobPostconditionAttempt) GetAttempt() *JobAttempt {
 	if x != nil {
 		return x.Attempt
 	}
@@ -1687,12 +1688,12 @@ func (x *JobOverlapFootprint) GetReason() string {
 	return ""
 }
 
-// CompletionGate is one machine-verifiable condition a job's completion is checked against,
-// projected from types.Goal. kind names WHAT it examines and expect names what must be true of
-// it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as
+// Postcondition is one machine-verifiable condition a job's completion is checked against,
+// projected from types.Postcondition. kind names WHAT it examines and expect names what must
+// be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as
 // the command that runs it, the same way Job.check is - the wire never carries the unrendered
 // form, so a client needs no second parser for it.
-type CompletionGate struct {
+type Postcondition struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
@@ -1702,26 +1703,27 @@ type CompletionGate struct {
 	Paths       []string               `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
 	Symbols     []string               `protobuf:"bytes,7,rep,name=symbols,proto3" json:"symbols,omitempty"`
 	DependsOn   []string               `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
-	// The declaration a `signature` goal holds its one symbol to, as the symbol index renders it.
+	// The declaration a `signature` postcondition holds its one symbol to, as the symbol
+	// index renders it.
 	Signature     string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CompletionGate) Reset() {
-	*x = CompletionGate{}
+func (x *Postcondition) Reset() {
+	*x = Postcondition{}
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CompletionGate) String() string {
+func (x *Postcondition) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CompletionGate) ProtoMessage() {}
+func (*Postcondition) ProtoMessage() {}
 
-func (x *CompletionGate) ProtoReflect() protoreflect.Message {
+func (x *Postcondition) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1733,68 +1735,68 @@ func (x *CompletionGate) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompletionGate.ProtoReflect.Descriptor instead.
-func (*CompletionGate) Descriptor() ([]byte, []int) {
+// Deprecated: Use Postcondition.ProtoReflect.Descriptor instead.
+func (*Postcondition) Descriptor() ([]byte, []int) {
 	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *CompletionGate) GetId() string {
+func (x *Postcondition) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *CompletionGate) GetDescription() string {
+func (x *Postcondition) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
 }
 
-func (x *CompletionGate) GetKind() string {
+func (x *Postcondition) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *CompletionGate) GetExpect() string {
+func (x *Postcondition) GetExpect() string {
 	if x != nil {
 		return x.Expect
 	}
 	return ""
 }
 
-func (x *CompletionGate) GetCheck() string {
+func (x *Postcondition) GetCheck() string {
 	if x != nil {
 		return x.Check
 	}
 	return ""
 }
 
-func (x *CompletionGate) GetPaths() []string {
+func (x *Postcondition) GetPaths() []string {
 	if x != nil {
 		return x.Paths
 	}
 	return nil
 }
 
-func (x *CompletionGate) GetSymbols() []string {
+func (x *Postcondition) GetSymbols() []string {
 	if x != nil {
 		return x.Symbols
 	}
 	return nil
 }
 
-func (x *CompletionGate) GetDependsOn() []string {
+func (x *Postcondition) GetDependsOn() []string {
 	if x != nil {
 		return x.DependsOn
 	}
 	return nil
 }
 
-func (x *CompletionGate) GetSignature() string {
+func (x *Postcondition) GetSignature() string {
 	if x != nil {
 		return x.Signature
 	}
@@ -1887,7 +1889,7 @@ func (x *JobResult) GetVerificationEvidence() []*JobVerificationEvidence {
 	return nil
 }
 
-// JobVerificationEvidence is the run a holder offered for one goal.
+// JobVerificationEvidence is the run a holder offered for one postcondition.
 type JobVerificationEvidence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GateId        string                 `protobuf:"bytes,1,opt,name=gate_id,json=gateId,proto3" json:"gate_id,omitempty"`
@@ -2472,7 +2474,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xa5\x0e\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xd1\x0e\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -2494,8 +2496,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"checkpoint\x12:\n" +
 	"\breleases\x18\x13 \x03(\v2\x1e.magus.job.v1alpha1.JobReleaseR\breleases\x12\x18\n" +
 	"\acreated\x18\x14 \x01(\x03R\acreated\x12\x18\n" +
-	"\aupdated\x18\x15 \x01(\x03R\aupdated\x128\n" +
-	"\x05goals\x18\x16 \x03(\v2\".magus.job.v1alpha1.CompletionGateR\x05goals\x125\n" +
+	"\aupdated\x18\x15 \x01(\x03R\aupdated\x12I\n" +
+	"\x0epostconditions\x18\x16 \x03(\v2!.magus.job.v1alpha1.PostconditionR\x0epostconditions\x125\n" +
 	"\x06result\x18\x17 \x01(\v2\x1d.magus.job.v1alpha1.JobResultR\x06result\x12\x1a\n" +
 	"\bdeadline\x18\x18 \x01(\x03R\bdeadline\x12\x1d\n" +
 	"\n" +
@@ -2509,8 +2511,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"registered\x18\x1e \x01(\x03R\n" +
 	"registered\x12B\n" +
 	"\rregistered_by\x18\x1f \x01(\v2\x1d.magus.job.v1alpha1.JobOriginR\fregisteredBy\x128\n" +
-	"\aattempt\x18  \x01(\v2\x1e.magus.job.v1alpha1.JobAttemptR\aattempt\x12G\n" +
-	"\rgate_attempts\x18! \x03(\v2\".magus.job.v1alpha1.JobGateAttemptR\fgateAttempts\x12L\n" +
+	"\aattempt\x18  \x01(\v2\x1e.magus.job.v1alpha1.JobAttemptR\aattempt\x12b\n" +
+	"\x16postcondition_attempts\x18! \x03(\v2+.magus.job.v1alpha1.JobPostconditionAttemptR\x15postconditionAttempts\x12L\n" +
 	"\funattributed\x18\" \x03(\v2(.magus.job.v1alpha1.JobUnattributedWriteR\funattributed\x126\n" +
 	"\aentries\x18# \x03(\v2\x1c.magus.job.v1alpha1.JobEntryR\aentries\x12D\n" +
 	"\vintegration\x18$ \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\vintegration\x12\x1f\n" +
@@ -2580,9 +2582,9 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x05dirty\x18\v \x01(\bR\x05dirty\x12\x14\n" +
 	"\x05lease\x18\f \x01(\tR\x05lease\x12\x1d\n" +
 	"\n" +
-	"extra_args\x18\r \x03(\tR\textraArgs\"c\n" +
-	"\x0eJobGateAttempt\x12\x17\n" +
-	"\agate_id\x18\x01 \x01(\tR\x06gateId\x128\n" +
+	"extra_args\x18\r \x03(\tR\textraArgs\"~\n" +
+	"\x17JobPostconditionAttempt\x12)\n" +
+	"\x10postcondition_id\x18\x01 \x01(\tR\x0fpostconditionId\x128\n" +
 	"\aattempt\x18\x02 \x01(\v2\x1e.magus.job.v1alpha1.JobAttemptR\aattempt\"R\n" +
 	"\x14JobUnattributedWrite\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
@@ -2616,8 +2618,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x13JobOverlapFootprint\x12\x18\n" +
 	"\averdict\x18\x01 \x01(\tR\averdict\x12\x16\n" +
 	"\x06shared\x18\x02 \x03(\tR\x06shared\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xf1\x01\n" +
-	"\x0eCompletionGate\x12\x0e\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xf0\x01\n" +
+	"\rPostcondition\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x16\n" +
@@ -2723,7 +2725,7 @@ var file_magus_job_v1alpha1_job_proto_goTypes = []any{
 	(*JobModelTier)(nil),            // 8: magus.job.v1alpha1.JobModelTier
 	(*JobOrigin)(nil),               // 9: magus.job.v1alpha1.JobOrigin
 	(*JobAttempt)(nil),              // 10: magus.job.v1alpha1.JobAttempt
-	(*JobGateAttempt)(nil),          // 11: magus.job.v1alpha1.JobGateAttempt
+	(*JobPostconditionAttempt)(nil), // 11: magus.job.v1alpha1.JobPostconditionAttempt
 	(*JobUnattributedWrite)(nil),    // 12: magus.job.v1alpha1.JobUnattributedWrite
 	(*JobEntry)(nil),                // 13: magus.job.v1alpha1.JobEntry
 	(*JobIntegration)(nil),          // 14: magus.job.v1alpha1.JobIntegration
@@ -2731,7 +2733,7 @@ var file_magus_job_v1alpha1_job_proto_goTypes = []any{
 	(*JobBlock)(nil),                // 16: magus.job.v1alpha1.JobBlock
 	(*JobReadOnly)(nil),             // 17: magus.job.v1alpha1.JobReadOnly
 	(*JobOverlapFootprint)(nil),     // 18: magus.job.v1alpha1.JobOverlapFootprint
-	(*CompletionGate)(nil),          // 19: magus.job.v1alpha1.CompletionGate
+	(*Postcondition)(nil),           // 19: magus.job.v1alpha1.Postcondition
 	(*JobResult)(nil),               // 20: magus.job.v1alpha1.JobResult
 	(*JobVerificationEvidence)(nil), // 21: magus.job.v1alpha1.JobVerificationEvidence
 	(*JobRelease)(nil),              // 22: magus.job.v1alpha1.JobRelease
@@ -2753,11 +2755,11 @@ var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	1,  // 4: magus.job.v1alpha1.Job.holder:type_name -> magus.job.v1alpha1.JobHolder
 	4,  // 5: magus.job.v1alpha1.Job.paths:type_name -> magus.job.v1alpha1.JobPaths
 	22, // 6: magus.job.v1alpha1.Job.releases:type_name -> magus.job.v1alpha1.JobRelease
-	19, // 7: magus.job.v1alpha1.Job.goals:type_name -> magus.job.v1alpha1.CompletionGate
+	19, // 7: magus.job.v1alpha1.Job.postconditions:type_name -> magus.job.v1alpha1.Postcondition
 	20, // 8: magus.job.v1alpha1.Job.result:type_name -> magus.job.v1alpha1.JobResult
 	9,  // 9: magus.job.v1alpha1.Job.registered_by:type_name -> magus.job.v1alpha1.JobOrigin
 	10, // 10: magus.job.v1alpha1.Job.attempt:type_name -> magus.job.v1alpha1.JobAttempt
-	11, // 11: magus.job.v1alpha1.Job.gate_attempts:type_name -> magus.job.v1alpha1.JobGateAttempt
+	11, // 11: magus.job.v1alpha1.Job.postcondition_attempts:type_name -> magus.job.v1alpha1.JobPostconditionAttempt
 	12, // 12: magus.job.v1alpha1.Job.unattributed:type_name -> magus.job.v1alpha1.JobUnattributedWrite
 	13, // 13: magus.job.v1alpha1.Job.entries:type_name -> magus.job.v1alpha1.JobEntry
 	14, // 14: magus.job.v1alpha1.Job.integration:type_name -> magus.job.v1alpha1.JobIntegration
@@ -2767,7 +2769,7 @@ var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	6,  // 18: magus.job.v1alpha1.JobAgent.model:type_name -> magus.job.v1alpha1.JobAgentModel
 	7,  // 19: magus.job.v1alpha1.JobAgent.worker:type_name -> magus.job.v1alpha1.JobAgentWorker
 	29, // 20: magus.job.v1alpha1.JobOrigin.credential:type_name -> magus.activity.v1alpha1.Credential
-	10, // 21: magus.job.v1alpha1.JobGateAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
+	10, // 21: magus.job.v1alpha1.JobPostconditionAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
 	9,  // 22: magus.job.v1alpha1.JobEntry.by:type_name -> magus.job.v1alpha1.JobOrigin
 	15, // 23: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobVerificationStatus
 	21, // 24: magus.job.v1alpha1.JobResult.verification_evidence:type_name -> magus.job.v1alpha1.JobVerificationEvidence

@@ -16,11 +16,11 @@ import (
 
 // Manifest is the on-disk record of a single cache entry.
 type Manifest struct {
-	ProjectPath string         `json:"projectPath"`
+	ProjectPath string         `json:"project_path"`
 	Hash        string         `json:"hash"`
 	Target      string         `json:"target,omitempty"`
 	Outputs     []OutputRecord `json:"outputs"`
-	CreatedAt   time.Time      `json:"createdAt"`
+	CreatedAt   time.Time      `json:"created_at"`
 	// Platform is runtime.GOOS+"/"+runtime.GOARCH at the time this entry was
 	// produced (e.g. "darwin/arm64"). It is NOT part of the cache key: the key
 	// must stay platform-free so an output ref (a truncated key) is identical on
@@ -40,7 +40,7 @@ type Manifest struct {
 	// timed. Those hits count toward Hit and contribute nothing to Saved, so the total understates
 	// rather than invents, which is why the console labels it as saved THIS SESSION rather than
 	// implying it covers the cache's whole history.
-	DurationMs int64 `json:"durationMs,omitempty"`
+	DurationMs int64 `json:"duration_ms,omitempty"`
 	// Return is what the target returned (str or [str]), stored so a cache HIT can
 	// replay it. A hit never invokes the target, so without this a target would
 	// print its result on the first run and nothing on the second. Absent for the
@@ -58,7 +58,7 @@ type Manifest struct {
 	// LogRecords locates each magus log record in the entry's log, so a hit
 	// shows only those at the console's level. Empty on an entry whose run
 	// logged none.
-	LogRecords []logSpan `json:"logRecords,omitempty"`
+	LogRecords []logSpan `json:"log_records,omitempty"`
 }
 
 // OutputRecord captures one declared output file.

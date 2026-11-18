@@ -132,10 +132,10 @@ Then make the declaration gradeable{{if .Full}}, so the names are a contract, no
   cannot tell the defining file or an import from real use{{end}}.
 - `symbol` + `unreferenced` for each helper the shared API replaces.
 
-A job that adds or changes an exported API gets a `symbol` + `signature` goal by
+A job that adds or changes an exported API gets `symbol` + `signature` postconditions by
 default. A stub job lands the stub, and the root runs `{{cmd "graph build"}}`. The root
-then forks the `signature` goal empty. The fork records the indexed stub as the
-contract, beside a `changed` goal on the same name.
+then forks the `signature` one empty. The fork records the indexed stub as the
+contract, beside a `changed` one on the same name.
 
 A job's `breaks` list names the flags, JSON keys, exported symbols or stored formats
 you approved it breaking. A worker that finds a break outside it stops and reports.
@@ -213,7 +213,7 @@ definitive end without capping depth:
   what changes first (`{{cmd "job apply"}}` to widen, a config edit, or you). Make it, or
   do the job locally; never re-fork it unchanged.
 
-  A goal unmet twice marks it so: the root re-scopes the job, or serializes it behind
+  A postcondition unmet twice marks it so: the root re-scopes the job, or serializes it behind
   whatever keeps breaking it{{if .Full}}. Two jobs with an undeclared dependency each break
   the other's criteria, and re-forking the failing one satisfies every instruction above
   while alternating forever. The budget is what ends it{{end}}.
@@ -364,7 +364,7 @@ an editor magus cannot attribute{{end}}.
      --checkpoint <checkpoint>
    ```
 
-   Or fork from a record with `{{cmd "job fork"}} --stdin`, the form that carries goals;
+   Or fork from a record with `{{cmd "job fork"}} --stdin`, the form that sets them;
    [reference.md](reference.md) shows one.
 
    Before every fork, run `{{cmd "job fork"}} --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
@@ -419,7 +419,7 @@ any cap the user set for the tree. Require the worker to:
   `{{cmd "session"}} ls`, and no verdict is keyed on them{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget. Its check runs with `--budget-wait 0`, so a refused check (MGS3009) returns at once; it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `verification_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
+- never wait for the build budget. Its check runs with `--budget-wait 0`, so a refused check (MGS3009) returns at once; it commits and files the check as owed, `"owed": "no seat"` in `validation` or its `verification_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
 - never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every spawn prompt with the step that files the result, as the worker's LAST act
@@ -443,7 +443,7 @@ After the spawn, the row carries the job:
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
-- Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
+- Only a row with a check or postcondition can pass. Fork a scout `--read-only`; it passes only
   through a script check (reference.md) or by filing a result: a read-only row whose holder files a result is
   recorded pass, and only a row with nothing filed ends no_return.
 
@@ -452,9 +452,9 @@ job's boundary, how magus ends abandoned jobs, and what `{{cmd "job wait"}}` che
 
 ## Declare the criteria magus can check for you
 
-A GOAL is the part of a job's criteria magus grades itself, from evidence the worker
+A POSTCONDITION is the part of a job's criteria magus grades from evidence the worker
 cannot author. It is a check that passed, or paths or symbols changed, present, absent
-or unreferenced. Write goals in the record's `goals`. `{{cmd "job wait"}}` refuses pass until
+or unreferenced. Write them in the record's `postconditions`. `{{cmd "job wait"}}` refuses pass until
 each verifies. [reference.md](reference.md) has the table and the rename pattern.
 
 ## Observe through the correct control plane

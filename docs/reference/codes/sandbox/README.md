@@ -160,8 +160,8 @@ Two layers run together:
 - [MGS3035](MGS3035.md): a tool runs but its version probe fails, so no cache key could tell its builds apart.
 - [MGS3036](MGS3036.md): a job forked with a write path that holds a project's magusfile or `magus.yaml` whole.
 - [MGS3037](MGS3037.md): a job record field fails its shape.
-- [MGS3038](MGS3038.md): a job goal no evidence could grade.
-- [MGS3039](MGS3039.md): a job writes with no check or goal, or declares no write paths and is not read-only.
+- [MGS3038](MGS3038.md): a job postcondition no evidence could grade.
+- [MGS3039](MGS3039.md): a job writes with no check or postcondition, or declares no write paths and is not read-only.
 - [MGS3040](MGS3040.md): a job check its worker cannot run to a passing record.
 - [MGS3041](MGS3041.md): a job checkpoint this checkout cannot start from.
 - [MGS3042](MGS3042.md): a job fork past `jobs.max_depth` or `jobs.max_live`.

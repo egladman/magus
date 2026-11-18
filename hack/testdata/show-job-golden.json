@@ -7,7 +7,7 @@
   "",
   "magus shell judges a quoted pipe as one word; a regression test pins it",
   "",
-  "- goal `docs-untouched`: docs/ stays as it is",
+  "- postcondition `docs-untouched`: docs/ stays as it is",
   "",
   "## Setup",
   "",

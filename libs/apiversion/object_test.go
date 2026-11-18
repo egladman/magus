@@ -36,10 +36,10 @@ func (s *ObjectSuite) TestNewStampsHeader() {
 	s.Equal(Kind("Widget"), object.Kind)
 }
 
-func (s *ObjectSuite) TestMarshalUsesKubernetesKeys() {
+func (s *ObjectSuite) TestMarshalUsesSnakeCaseKeys() {
 	data, err := json.Marshal(New(Metadata{Name: "w", Generation: 2}, widgetSpec{Size: 3}))
 	s.Require().NoError(err)
-	s.JSONEq(`{"apiVersion":"example.widget/v1alpha1","kind":"Widget",
+	s.JSONEq(`{"api_version":"example.widget/v1alpha1","kind":"Widget",
 		"metadata":{"name":"w","generation":2},"spec":{"size":3}}`, string(data))
 }
 
@@ -53,7 +53,7 @@ func (s *ObjectSuite) TestReadRoundTrips() {
 }
 
 func (s *ObjectSuite) TestReadHeaderIgnoresBody() {
-	header, err := ReadHeader([]byte(`{"apiVersion":"example.widget/v1","kind":"Other","spec":{"x":1}}`), json.Unmarshal)
+	header, err := ReadHeader([]byte(`{"api_version":"example.widget/v1","kind":"Other","spec":{"x":1}}`), json.Unmarshal)
 	s.Require().NoError(err)
 	s.Equal(TypeMeta{APIVersion: "example.widget/v1", Kind: "Other"}, header)
 }
@@ -64,7 +64,7 @@ func (s *ObjectSuite) TestReadHeaderWrapsDecodeError() {
 }
 
 func (s *ObjectSuite) TestReadRefusesOtherKind() {
-	_, err := Read[widgetSpec]([]byte(`{"apiVersion":"example.widget/v1alpha1","kind":"Gadget"}`), json.Unmarshal)
+	_, err := Read[widgetSpec]([]byte(`{"api_version":"example.widget/v1alpha1","kind":"Gadget"}`), json.Unmarshal)
 	var refused *RefusedError
 	s.Require().True(errors.As(err, &refused))
 	s.Equal(Kind("Gadget"), refused.Got.Kind)
@@ -73,7 +73,7 @@ func (s *ObjectSuite) TestReadRefusesOtherKind() {
 }
 
 func (s *ObjectSuite) TestReadRefusesNewerVersionAsNewerSentinel() {
-	_, err := Read[widgetSpec]([]byte(`{"apiVersion":"example.widget/v1","kind":"Widget"}`), json.Unmarshal)
+	_, err := Read[widgetSpec]([]byte(`{"api_version":"example.widget/v1","kind":"Widget"}`), json.Unmarshal)
 	s.ErrorIs(err, ErrNewer)
 }
 
@@ -85,13 +85,13 @@ func (s *ObjectSuite) TestReadRefusesMissingHeader() {
 }
 
 func (s *ObjectSuite) TestReadHeaderLenientBodyStrict() {
-	data := []byte(`{"apiVersion":"example.widget/v1alpha1","kind":"Widget","spec":{"size":1,"extra":2}}`)
+	data := []byte(`{"api_version":"example.widget/v1alpha1","kind":"Widget","spec":{"size":1,"extra":2}}`)
 	_, err := Read[widgetSpec](data, json.Unmarshal, WithBodyUnmarshal(strictUnmarshal))
 	s.Error(err)
 }
 
 func (s *ObjectSuite) TestReadWithoutBodyOptionIsLenient() {
-	data := []byte(`{"apiVersion":"example.widget/v1alpha1","kind":"Widget","spec":{"size":1,"extra":2}}`)
+	data := []byte(`{"api_version":"example.widget/v1alpha1","kind":"Widget","spec":{"size":1,"extra":2}}`)
 	object, err := Read[widgetSpec](data, json.Unmarshal)
 	s.Require().NoError(err)
 	s.Equal(1, object.Spec.Size)
@@ -135,7 +135,7 @@ func (s *ObjectSuite) TestEmbeddedTypeMetaStaysTopLevel() {
 	}
 	data, err := json.Marshal(record{TypeMeta: TypeMeta{APIVersion: "example.widget/v1alpha1", Kind: "Widget"}, Status: "ok"})
 	s.Require().NoError(err)
-	s.JSONEq(`{"apiVersion":"example.widget/v1alpha1","kind":"Widget","status":"ok"}`, string(data))
+	s.JSONEq(`{"api_version":"example.widget/v1alpha1","kind":"Widget","status":"ok"}`, string(data))
 }
 
 func (s *ObjectSuite) TestUnmetNilWhenAllKnown() {

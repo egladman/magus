@@ -9,7 +9,7 @@
 //
 // KIND AND GOALS ARE NEVER DRAWER-ONLY. The holder (server or session), the criteria, and the
 // parent are on the row and the card, truncated where space is tight - the drawer is where the
-// FULL text and the declared goals and filed result live, never the only place any of
+// FULL text and the declared postconditions and filed result live, never the only place any of
 // them appear.
 //
 // TWO SOURCES, ONE GRAMMAR. The second tenant is not a job at all, and shares the stage, the
@@ -44,7 +44,7 @@
 import { createClient } from "@connectrpc/connect";
 import { ViewerService } from "@wire/viewer/v1alpha1/viewer_pb";
 import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
-import { JobHolder, type CompletionGate, type JobRelease } from "@wire/job/v1alpha1/job_pb";
+import { JobHolder, type JobRelease, type Postcondition } from "@wire/job/v1alpha1/job_pb";
 import {
   adoptServerOrigin,
   createServerTransport,
@@ -734,12 +734,12 @@ function releaseField(dl: HTMLElement, releases: readonly JobRelease[]): void {
   dl.append(dd);
 }
 
-// gateField renders the declared goals: what each examines (kind, expect) and its
+// gateField renders the declared postconditions: what each examines (kind, expect) and its
 // subject, with a check rendered as the command that runs it - the server already did that
 // rendering, the same way it renders the primary Check field, so this only displays it.
-function gateField(dl: HTMLElement, gates: readonly CompletionGate[]): void {
+function gateField(dl: HTMLElement, gates: readonly Postcondition[]): void {
   if (!gates.length) return;
-  dl.append(h("dt", "console-plan-detail__label", "Goals"));
+  dl.append(h("dt", "console-plan-detail__label", "Postconditions"));
   const dd = h("dd", "console-plan-detail__value");
   const ul = h("ul", "console-plan-detail__gates");
   ul.setAttribute("role", "list");
@@ -981,7 +981,15 @@ export function activate(host: HTMLElement): JobsInstance {
         String(n.job.updated),
         sizeLine(n.job),
         n.overlaps.map((o) => [o.jobA, o.jobB, o.pathsA, o.pathsB]),
-        n.job.goals.map((g) => [g.id, g.kind, g.expect, g.check, g.paths, g.symbols, g.dependsOn]),
+        n.job.postconditions.map((g) => [
+          g.id,
+          g.kind,
+          g.expect,
+          g.check,
+          g.paths,
+          g.symbols,
+          g.dependsOn,
+        ]),
         n.job.result
           ? [n.job.result.changedPaths, n.job.result.unresolvedRisks, n.job.result.descendants]
           : null,
@@ -1318,7 +1326,7 @@ export function activate(host: HTMLElement): JobsInstance {
     // The declared acceptance conditions, and - once a holder has filed one - the result: what it
     // changed, what it left unresolved, and what it spawned. Both render nothing when the job
     // carries neither, the same "empty field says nothing" rule as everything above.
-    gateField(dl, n.job.goals);
+    gateField(dl, n.job.postconditions);
     if (n.job.result) {
       pathField(dl, "Changed paths", n.job.result.changedPaths);
       riskField(dl, "Unresolved risks", n.job.result.unresolvedRisks);

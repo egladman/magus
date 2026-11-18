@@ -254,31 +254,59 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 		fmt.Fprintf(os.Stderr, "magus buzz: --record: the job store cannot be read (%v); the run is recorded without a lease\n", err)
 		return "", nil
 	}
-	return scriptCheckHolder(rows, here, script), nil
+	holder, err := scriptCheckHolder(rows, here, script)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: no job row could be matched to the run (%v); it is recorded without a lease\n", err)
+		return "", nil
+	}
+	return holder, nil
 }
 
-// scriptCheckHolder names the one live row here whose goal checks script.
+// scriptCheckHolder names the one live row here whose postcondition checks script.
 // A CLI process cannot see the host session a hook bound its worker by.
 // Two such rows leave it empty: the run cannot say whose it was.
-func scriptCheckHolder(rows []jobtypes.Job, root, script string) string {
+// A postcondition whose check will not read is an error, since it could be the one.
+func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error) {
 	here, err := resolvedDir(root)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("resolving %s: %w", root, err)
 	}
 	holder := ""
 	for _, row := range rows {
 		there, err := resolvedDir(row.CheckoutRoot)
-		if err != nil || there != here || !job.Editing(row) || !slices.ContainsFunc(row.EffectiveGoals(), func(g jobtypes.Goal) bool {
-			return g.Check.Script != "" && path.Clean(g.Check.Script) == path.Clean(script)
-		}) {
+		if err != nil || there != here || !job.Editing(row) {
+			continue
+		}
+		checks, err := postconditionChecksScript(row, script)
+		if err != nil {
+			return "", err
+		}
+		if !checks {
 			continue
 		}
 		if holder != "" {
-			return ""
+			return "", nil
 		}
 		holder = row.ID
 	}
-	return holder
+	return holder, nil
+}
+
+// postconditionChecksScript reports whether one of row's postconditions is a check that runs script.
+func postconditionChecksScript(row jobtypes.Job, script string) (bool, error) {
+	for _, g := range row.EffectivePostconditions() {
+		if g.Check.IsZero() {
+			continue
+		}
+		check, err := job.PostconditionCheck(g)
+		if err != nil {
+			return false, fmt.Errorf("job %s postcondition %s: %w", row.ID, g.ID, err)
+		}
+		if check.Script != "" && path.Clean(check.Script) == path.Clean(script) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // resolvedDir is dir absolute with symlinks followed: exec records the

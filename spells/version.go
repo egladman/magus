@@ -141,7 +141,7 @@ type VersionKey struct {
 	Const string `json:"const,omitempty"`
 	// UpTo asks for extraction and names how much of the extracted version to keep.
 	// Absent means no extraction: the whole output keys the cache.
-	UpTo VersionComponent `json:"upTo,omitempty"`
+	UpTo VersionComponent `json:"up_to,omitempty"`
 }
 
 // IsZero reports whether the key asks for anything beyond the exact version.

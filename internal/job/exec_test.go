@@ -319,7 +319,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	handed := repo.Head()
 	repo.Commit("elsewhere", map[string]string{"b.txt": "b\n"})
 	s := tempStore(t, repo.Root())
-	seed(t, s, job.Job{ID: "u1", Checkpoint: handed, Agent: job.Instructed("declared goal")})
+	seed(t, s, job.Job{ID: "u1", Checkpoint: handed, Agent: job.Instructed("declared postcondition")})
 
 	diverged, err := s.Exec(ctx, "u1")
 	require.NoError(t, err)
@@ -330,7 +330,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	require.NoError(t, err)
 	want := stamped(job.Job{
 		ID:           "u1",
-		Agent:        job.Instructed("declared goal"),
+		Agent:        job.Instructed("declared postcondition"),
 		Checkpoint:   handed,
 		State:        job.StateRunning,
 		ReportedBase: handed,

@@ -113,19 +113,19 @@ func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolRea
 		}
 	}
 	cover := narrowestCover(ctx, root, row, answering)
-	asksGraph := slices.ContainsFunc(row.Goals, func(g job.Goal) bool {
-		return g.Kind == job.GoalKindSymbol && len(g.Symbols) > 0
+	asksGraph := slices.ContainsFunc(row.Postconditions, func(g job.Postcondition) bool {
+		return g.Kind == job.PostconditionKindSymbol && len(g.Symbols) > 0
 	})
 	return func(wp string) string {
 		var b strings.Builder
 		if len(cover) > 0 {
 			listed, _ := codec.Marshal(cover)
-			fmt.Fprintf(&b, "replace %q with the files the goals and criteria name: \"paths\": {\"write\": %s}", wp, listed)
+			fmt.Fprintf(&b, "replace %q with the files the postconditions and criteria name: \"paths\": {\"write\": %s}", wp, listed)
 		} else {
-			fmt.Fprintf(&b, "replace %q with the files this job edits, each by name: the criteria and goals name no file the graph resolves", wp)
+			fmt.Fprintf(&b, "replace %q with the files this job edits, each by name: the criteria and postconditions name no file the graph resolves", wp)
 		}
 		if asksGraph && graphless {
-			b.WriteString(" (the knowledge graph did not answer the symbol goals, so only the criteria were read; `magus graph build` and fork again for a fuller list)")
+			b.WriteString(" (the knowledge graph did not answer the symbol postconditions, so only the criteria were read; `magus graph build` and fork again for a fuller list)")
 		}
 		deviation, _ := codec.Marshal(job.Deviation{Code: job.Code(types.WritePathTooBroad), Subject: wp, Reason: "<why this job needs all of it>"})
 		fmt.Fprintf(&b, "; or keep it with the deviation %s", deviation)
@@ -133,8 +133,8 @@ func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolRea
 	}
 }
 
-// narrowestCover returns the write paths the row's own goals and criteria point at: the
-// files defining its symbol goals with the Go tests beside them, then each existing file
+// narrowestCover returns the write paths the row's own postconditions and criteria point at: the
+// files defining its symbol postconditions with the Go tests beside them, then each existing file
 // or `file#declaration` claim named in its criteria. A nil read or an unanswered symbol
 // contributes nothing, so the cover is then the criteria's alone.
 func narrowestCover(ctx context.Context, root string, row job.Job, read SymbolReader) []string {
@@ -144,8 +144,8 @@ func narrowestCover(ctx context.Context, root string, row job.Job, read SymbolRe
 			cover = append(cover, p)
 		}
 	}
-	for _, g := range row.Goals {
-		if g.Kind != job.GoalKindSymbol || read == nil {
+	for _, g := range row.Postconditions {
+		if g.Kind != job.PostconditionKindSymbol || read == nil {
 			continue
 		}
 		for _, name := range g.Symbols {

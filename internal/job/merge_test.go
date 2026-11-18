@@ -30,9 +30,9 @@ func applyPut(t *testing.T, put job.Put, base job.Job) job.Job {
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original goal", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
+	base := job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original postcondition", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
-	assert.Equal(t, job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original goal", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, State: job.StateRunning}, got,
+	assert.Equal(t, job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original postcondition", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, State: job.StateRunning}, got,
 		"an absent key must not erase what an earlier put set")
 	assert.Equal(t, base, applyPut(t, job.Put{}, base), "a put naming nothing changes nothing")
 }
@@ -40,7 +40,7 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 	t.Parallel()
 
-	base := job.Job{ID: "u1", Agent: job.Instructed("original goal")}
+	base := job.Job{ID: "u1", Agent: job.Instructed("original postcondition")}
 	got := applyMerge(t, map[string]any{"agent": nil}, base)
 	assert.Nil(t, got.Agent, "agent present with a null value clears it, unlike an absent key")
 }
@@ -158,14 +158,14 @@ func TestMergeSetsOrClearsTheCheck(t *testing.T) {
 
 	base := job.Job{ID: "u1"}
 	set := applyMerge(t, map[string]any{"check": "test ."}, base)
-	require.NotNil(t, set.Check)
-	assert.Equal(t, "test", set.Check.Target)
-	assert.Equal(t, CheckCommand(*set.Check), set.Validation, "the row stores both halves")
+	require.False(t, set.Check.IsZero())
+	assert.Equal(t, "test", checkIn(t, set.Check).Target)
+	assert.Equal(t, CheckCommand(checkIn(t, set.Check)), set.Validation, "the row stores both halves")
 
-	cleared := applyPut(t, job.Put{Check: &job.LeaseCheck{}}, set)
-	assert.Nil(t, cleared.Check, "a check naming neither a target nor a script clears it")
+	cleared := applyPut(t, job.Put{Check: &job.Check{}}, set)
+	assert.True(t, cleared.Check.IsZero(), "a check that declares none clears it")
 	assert.Empty(t, cleared.Validation)
-	assert.Nil(t, applyMerge(t, map[string]any{"check": " "}, set).Check, "an empty check line clears it")
+	assert.True(t, applyMerge(t, map[string]any{"check": " "}, set).Check.IsZero(), "an empty check line clears it")
 
 	_, err := DecodePut(map[string]any{"check": "test .", "validation": "magus run test ."})
 	require.ErrorContains(t, err, "not both")

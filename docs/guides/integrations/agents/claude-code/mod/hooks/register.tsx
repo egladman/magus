@@ -979,9 +979,9 @@ export const register: Register = (on, options) => {
                 {picked.writePaths.length > 6 ? ` +${picked.writePaths.length - 6}` : ''}
               </Text>
             ) : null}
-            {picked.goals.length ? (
+            {picked.postconditions.length ? (
               <Text dimColor wrap="truncate-end">
-                goals: {picked.goals.join(', ')}
+                postconditions: {picked.postconditions.join(', ')}
               </Text>
             ) : null}
             {picked.proof || picked.baseVerdict ? (

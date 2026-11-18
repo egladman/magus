@@ -17,9 +17,9 @@ import {
   JobHolder,
   JobService,
   SubmitState,
-  type CompletionGate,
   type Job,
   type JobOverlap,
+  type Postcondition,
 } from "@wire/job/v1alpha1/job_pb";
 import {
   createServerTransport,
@@ -180,11 +180,11 @@ export function lastRunLine(job: Job, nowMs: number): string {
   return "last run " + (age ? age + " ago" : "just now") + (last.ok ? "" : " (failed)");
 }
 
-// gateSubject is what a goal examines, rendered for the detail sheet - the TS mirror
-// of CompletionGate.Subject() in types/job.go, so the two apps name a gate's subject the same
+// gateSubject is what a postcondition examines, rendered for the detail sheet - the TS mirror
+// of Postcondition.Subject() in types/job.go, so the two apps name a gate's subject the same
 // way. check is already rendered as the command that runs it (the server does that, the same way
 // it renders the primary Check field), so this never re-renders it.
-export function gateSubject(gate: CompletionGate): string {
+export function gateSubject(gate: Postcondition): string {
   if (gate.check) return gate.check;
   if (gate.paths.length) return gate.paths.join(", ");
   if (gate.symbols.length) return gate.symbols.join(", ");

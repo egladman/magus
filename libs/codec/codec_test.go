@@ -62,6 +62,12 @@ func (s *ConformanceSuite) TestMarshalNormalizesARawMessage() {
 		s.marshal(map[string]RawMessage{"raw": RawMessage(`{ "a" : "\u003c\u2028", "n": 1.50 }`)}))
 }
 
+// A stored RawMessage keeps its author's member order: only a Go map is sorted.
+func (s *ConformanceSuite) TestMarshalKeepsARawMessagesMemberOrder() {
+	s.Equal(`{"raw":{"z":1,"a":{"y":2,"b":3}}}`,
+		s.marshal(map[string]RawMessage{"raw": RawMessage(`{"z": 1, "a": {"y": 2, "b": 3}}`)}))
+}
+
 func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8() {
 	_, err := Marshal(map[string]string{"bad": "a\xffb"})
 	s.Require().ErrorIs(err, ErrInvalidUTF8)
@@ -565,4 +571,95 @@ func (s *ConformanceSuite) TestUnmarshalStrictRefusesWhatAKeeperWouldKeep() {
 func (s *ConformanceSuite) TestMarshalWithUnknownRefusesADeclaredName() {
 	_, err := Marshal(keeper{Name: "x", keeperEnvelope: keeperEnvelope{Unknown: map[string]RawMessage{"name": RawMessage(`"y"`)}}})
 	s.ErrorIs(err, ErrDuplicateKey)
+}
+
+// opaque holds a JSON value it never reads, the way a record carries a value only its
+// host interprets: unexported canonical bytes, its own methods, and an IsZero that
+// omitzero calls.
+type opaque struct{ raw []byte }
+
+func (o opaque) IsZero() bool { return len(o.raw) == 0 }
+
+func (o opaque) MarshalJSON() ([]byte, error) {
+	if o.IsZero() {
+		return []byte("null"), nil
+	}
+	return o.raw, nil
+}
+
+func (o *opaque) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*o = opaque{}
+		return nil
+	}
+	canonical, err := Marshal(RawMessage(trimmed))
+	if err != nil {
+		return err
+	}
+	*o = opaque{raw: canonical}
+	return nil
+}
+
+type holdsOpaque struct {
+	ID    string `json:"id"`
+	Check opaque `json:"check,omitzero"`
+}
+
+func (s *ConformanceSuite) TestAnOpaqueValueRoundTripsByteForByte() {
+	in := `{"id":"a","check":{"target":"test","project":".","args":["-run","X"]}}`
+	var got holdsOpaque
+	s.Require().NoError(Unmarshal([]byte(in), &got))
+	s.Equal(in, s.marshal(got))
+
+	var strict holdsOpaque
+	s.Require().NoError(UnmarshalStrict([]byte(in), &strict), "the strict walk leaves the value to its own method")
+	s.Equal(got, strict)
+}
+
+func (s *ConformanceSuite) TestAnOpaqueValueIsKeptInTheCodecsForm() {
+	var got holdsOpaque
+	s.Require().NoError(Unmarshal([]byte(`{"id":"a","check":{ "z" : "< ", "a": [1, 2] }}`), &got))
+	s.Equal("{\"z\":\"< \",\"a\":[1,2]}", string(got.Check.raw))
+	s.Equal("{\"id\":\"a\",\"check\":{\"z\":\"< \",\"a\":[1,2]}}", s.marshal(got))
+}
+
+func (s *ConformanceSuite) TestAZeroOpaqueValueIsOmittedAndNullReadsAsZero() {
+	s.Equal(`{"id":"a"}`, s.marshal(holdsOpaque{ID: "a"}))
+	got := holdsOpaque{Check: opaque{raw: []byte(`1`)}}
+	s.Require().NoError(Unmarshal([]byte(`{"id":"a","check":null}`), &got))
+	s.True(got.Check.IsZero())
+}
+
+// hidden keeps its undeclared members in an unexported bag, so a caller reads them only
+// through a method: the tag alone tells the strict walk the type keeps them.
+type hidden struct {
+	Name    string                `json:"name"`
+	unknown map[string]RawMessage `codec:"unknown"`
+}
+
+func (h hidden) MarshalJSON() ([]byte, error) {
+	type plain hidden
+	return MarshalWithUnknown(plain(h), h.unknown)
+}
+
+func (h *hidden) UnmarshalJSON(data []byte) error {
+	type plain hidden
+	var p plain
+	unknown, err := UnmarshalWithUnknown(data, &p)
+	if err != nil {
+		return err
+	}
+	*h = hidden(p)
+	h.unknown = unknown
+	return nil
+}
+
+func (s *ConformanceSuite) TestAnUnexportedBagKeepsUnknownMembers() {
+	in := `{"name":"x","later":{"b":[1,2]},"added":true}`
+	var got hidden
+	s.Require().NoError(Unmarshal([]byte(in), &got))
+	s.Equal(map[string]RawMessage{"added": RawMessage(`true`), "later": RawMessage(`{"b":[1,2]}`)}, got.unknown)
+	s.Equal(`{"name":"x","added":true,"later":{"b":[1,2]}}`, s.marshal(got))
+	s.Require().ErrorIs(UnmarshalStrict([]byte(in), &got), ErrUnknownField)
 }

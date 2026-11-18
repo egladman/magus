@@ -99,7 +99,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 	row := job.Job{
 		ID: "guard/slice", Agent: job.Instructed("fix the guard"), Paths: job.Paths{Write: []string{"internal/guard/**"}},
-		Check: &job.LeaseCheck{Target: "test", Project: "."}, State: job.StateRunning, Registered: 1,
+		Check: rawCheck("test", "."), State: job.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
@@ -253,7 +253,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 	assert.False(t, found, "--no-default-charms keeps the defaults off")
 
 	vet := figuresLease()
-	vet.Check = &job.LeaseCheck{Target: "go-vet", Project: "docs"}
+	vet.Check = rawCheck("go-vet", "docs")
 	_, _, found = briefOffCheck(briefRuns("Check with `./magus run go::go-vet docs`."), judgeWith(vet, []string{"rw"}))
 	assert.False(t, found, "a check declaring no write passes under default rw")
 }
@@ -265,7 +265,7 @@ func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 	deps := composingWorkspace(t)
 	row := job.Job{
 		ID: "guard/slice", Agent: job.Instructed("fix the guard"), Paths: job.Paths{Write: []string{"internal/guard/**"}},
-		Check: &job.LeaseCheck{Target: "test", Project: "."}, State: job.StateRunning, Registered: 1,
+		Check: rawCheck("test", "."), State: job.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
@@ -361,7 +361,7 @@ func TestBriefNamesItsRow(t *testing.T) {
 
 	for name, change := range map[string]func(*job.Job){
 		"a terminal row":           func(j *job.Job) { j.State = job.StatePass },
-		"a row declaring no check": func(j *job.Job) { j.Check = nil },
+		"a row declaring no check": func(j *job.Job) { j.Check = job.Check{} },
 	} {
 		r := figuresLease()
 		change(&r)

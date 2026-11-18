@@ -28,6 +28,19 @@ type ReachHolder struct {
 	Box ReachGeneric[ReachLeaf]
 }
 
+type ReachShadowed struct{ Name string }
+
+type ReachShadowing struct {
+	Name string
+}
+
+type ReachBase struct{ Hidden ReachShadowed }
+
+type ReachOuter struct {
+	ReachBase
+	Hidden ReachShadowing
+}
+
 type reachHidden struct{ Name string }
 
 type ReachLeaky struct{ Hidden reachHidden }
@@ -185,4 +198,12 @@ func (s *ReachSuite) TestPackagesListsWhereEachReachedTypeLives() {
 	r.Walk(reflect.TypeFor[ReachArg](), Inbound, "root")
 
 	s.Equal([]string{reachPackage}, r.Packages())
+}
+
+func (s *ReachSuite) TestAShadowedEmbeddedFieldDoesNotCross() {
+	r := s.reach("")
+	r.Walk(reflect.TypeFor[ReachOuter](), Outbound, "root")
+
+	_, ok := s.member(r, reflect.TypeFor[ReachShadowed]())
+	s.False(ok, "the outer field hides the embedded one, so its type is never mirrored")
 }

@@ -113,8 +113,8 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		// A holder that raised its own cap could fork itself past it.
 		"max_attempts": func(u *job.Job) { u.MaxAttempts = 9 },
 		"max_claims":   func(u *job.Job) { u.MaxClaims = 9 },
-		"goals": func(u *job.Job) {
-			u.Goals = []job.Goal{{ID: "gate", Check: job.LeaseCheck{Target: "ci", Project: "."}}}
+		"postconditions": func(u *job.Job) {
+			u.Postconditions = []job.Postcondition{{ID: "gate", Check: fixtureCheck(types.LeaseCheck{Target: "ci", Project: "."})}}
 		},
 	}
 	for field, apply := range cases {
@@ -128,29 +128,29 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 	}
 }
 
-// A holder that could loosen its own goal could grade itself done. The kind, the
+// A holder that could loosen its own postcondition could grade itself done. The kind, the
 // expectation and the subject were once left out of the comparison, so each one alone
 // went through.
-func TestBoundWorkerCannotLoosenItsGoals(t *testing.T) {
+func TestBoundWorkerCannotLoosenItsPostconditions(t *testing.T) {
 	t.Parallel()
 
 	row := workerRow()
-	row.Goals = []job.Goal{{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Legacy"}}}
+	row.Postconditions = []job.Postcondition{{ID: "gone", Kind: job.PostconditionKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Legacy"}}}
 	loc := declared(t, row)
-	for name, loosen := range map[string]func(*job.Goal){
-		"kind": func(g *job.Goal) {
-			g.Kind, g.Symbols, g.Paths = job.GoalKindPaths, nil, []string{"nothing"}
+	for name, loosen := range map[string]func(*job.Postcondition){
+		"kind": func(g *job.Postcondition) {
+			g.Kind, g.Symbols, g.Paths = job.PostconditionKindPaths, nil, []string{"nothing"}
 		},
-		"expect":  func(g *job.Goal) { g.Expect = job.ExpectPresent },
-		"symbols": func(g *job.Goal) { g.Symbols = []string{"NeverExisted"} },
-		"paths":   func(g *job.Goal) { g.Paths = []string{"x"} },
+		"expect":  func(g *job.Postcondition) { g.Expect = job.ExpectPresent },
+		"symbols": func(g *job.Postcondition) { g.Symbols = []string{"NeverExisted"} },
+		"paths":   func(g *job.Postcondition) { g.Paths = []string{"x"} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *job.Job) { loosen(&u.Goals[0]) })
+			_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *job.Job) { loosen(&u.Postconditions[0]) })
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "may not change goals")
+			assert.Contains(t, err.Error(), "may not change postconditions")
 		})
 	}
 }
@@ -253,7 +253,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 			name: "a check the parent's does not name",
 			child: job.Job{
 				Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
-				Check: &job.LeaseCheck{Target: types.TargetCI, Project: "."},
+				Check: fixtureCheck(types.LeaseCheck{Target: types.TargetCI, Project: "."}),
 			},
 			want: "only a lease whose parent runs the gate runs the gate",
 		},
@@ -261,7 +261,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 			name: "a check of its own that is not the gate",
 			child: job.Job{
 				Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
-				Check: &job.LeaseCheck{Target: "test", Project: "internal/ledger"},
+				Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "internal/ledger"}),
 			},
 		},
 	}

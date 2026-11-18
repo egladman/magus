@@ -1,6 +1,6 @@
 # `magus job fork` refuses a file another checkout already holds (MGS3032) and prints the
 # claim pair that would split it, computed from what the holder has touched and the symbols
-# the new job's goals name, without writing either claim. A fork claiming only
+# the new job's postconditions name, without writing either claim. A fork claiming only
 # declarations the holder has not touched is granted them. A claim word that several
 # declarations of its file share is refused (MGS3031), with words that name one each. A
 # project's magusfile held whole is refused (MGS3036) in favour of its key claims.
@@ -25,7 +25,7 @@ exec magus job fork wave/a --instructions 'change A' --write-paths run.go --chec
 exec magus job exec wave/a
 cp $WORK/run_a.go run.go
 
-# The holder has touched A and the new job's goals name C: the pair is disjoint.
+# The holder has touched A and the new job's postconditions name C: the pair is disjoint.
 cd ../ben
 stdin $WORK/c.json
 ! exec magus job fork --stdin
@@ -39,7 +39,7 @@ exec magus ls jobs -o name
 stdin $WORK/a.json
 ! exec magus job fork --stdin
 stderr 'MGS3032'
-stderr 'wave/b.s symbol goals and wave/a.s touched work both reach A in it, so a claim cannot split them'
+stderr 'wave/b.s symbol postconditions and wave/a.s touched work both reach A in it, so a claim cannot split them'
 
 # A claim on C alone is granted: wave/a had not touched it, so wave/a now holds run.go
 # by the declaration it changed, and a claim on that one is still refused.
@@ -165,7 +165,7 @@ func C() {
 }
 -- c.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change C", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."},
- "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
+ "postconditions": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
 -- a.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change A again", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."},
- "goals": [{"id": "a", "kind": "symbol", "expect": "changed", "symbols": ["A"]}]}
+ "postconditions": [{"id": "a", "kind": "symbol", "expect": "changed", "symbols": ["A"]}]}

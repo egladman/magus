@@ -9,19 +9,20 @@ import (
 	"github.com/egladman/magus/libs/codec"
 )
 
-// Statement is what an attester signs about one run of a check goal's check: a CI job, a
+// Statement is what an attester signs about one run of a check postcondition's check: a CI job, a
 // remote runner, any process holding a key the worker whose check it is cannot reach.
 // The payload [Store.Attest] reads is its JSON, decoded strictly, so a member the
 // attester did not sign as a Statement member is refused rather than dropped.
 type Statement struct {
-	Job     string     `json:"job"`
-	Goal    string     `json:"goal"`
-	Check   LeaseCheck `json:"check"`
-	Tree    string     `json:"tree"`
-	Exit    int        `json:"exit"`
-	Output  string     `json:"output,omitempty"`
-	Started time.Time  `json:"started"`
-	Ended   time.Time  `json:"ended"`
+	Job           string `json:"job"`
+	Postcondition string `json:"postcondition"`
+	// Check is the check that ran, which the store reads through its [CheckSpec].
+	Check   Check     `json:"check"`
+	Tree    string    `json:"tree"`
+	Exit    int       `json:"exit"`
+	Output  string    `json:"output,omitempty"`
+	Started time.Time `json:"started"`
+	Ended   time.Time `json:"ended"`
 }
 
 // Verifier checks sig over payload and names who signed it, or fails. The store never
@@ -48,16 +49,20 @@ func (e *StatementError) Error() string {
 func (e *StatementError) Unwrap() error { return e.Err }
 
 // Attest records the run payload, a JSON [Statement], describes, once the store's
-// [Verifier] accepts sig, and returns its ref. The run grades only a goal that accepts
+// [Verifier] accepts sig, and returns its ref. The run grades only a postcondition that accepts
 // [BasisAttested].
 //
-// A store opened without [WithVerifier] or [WithTree] refuses with a
+// A store opened without [WithVerifier], [WithTree] or [WithCheckSpec] refuses with a
 // [*GradingUnconfiguredError] rather than record a statement unchecked or ungradable.
 // A signature the verifier refuses, or one it names no signer for, is a
-// [*SignatureError]; a payload that is not a Statement a [*StatementError]; one naming a
-// goal its job does not declare as a check a [*GoalError].
+// [*SignatureError]; a payload that is not a Statement, or one whose check the store's
+// [CheckSpec] refuses, a [*StatementError]; one naming a postcondition its job does not
+// declare as a check a [*PostconditionError].
 func (s *Store) Attest(ctx context.Context, payload, sig []byte) (RunRef, error) {
 	if err := s.needTree("Attest"); err != nil {
+		return "", err
+	}
+	if err := s.needChecks("Attest"); err != nil {
 		return "", err
 	}
 	if s.verifier == nil {
@@ -74,11 +79,15 @@ func (s *Store) Attest(ctx context.Context, payload, sig []byte) (RunRef, error)
 	if err := codec.UnmarshalStrict(payload, &st); err != nil {
 		return "", s.wrap(&StatementError{Err: err})
 	}
-	if _, _, err := s.checkGoal(ctx, st.Job, st.Goal); err != nil {
+	if _, _, err := s.checkPostcondition(ctx, st.Job, st.Postcondition); err != nil {
 		return "", err
 	}
+	check, err := s.checks.runCheck(st.Job, "statement.check", st.Check)
+	if err != nil {
+		return "", s.wrap(&StatementError{Err: err})
+	}
 	return s.record(ctx, run{
-		job: st.Job, goal: st.Goal, basis: BasisAttested, check: st.Check, tree: st.Tree, exit: st.Exit,
+		job: st.Job, postcondition: st.Postcondition, basis: BasisAttested, check: check, tree: st.Tree, exit: st.Exit,
 		output: st.Output, started: st.Started, ended: st.Ended, signer: signer,
 	})
 }

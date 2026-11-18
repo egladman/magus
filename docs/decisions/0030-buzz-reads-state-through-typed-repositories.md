@@ -22,17 +22,17 @@ skeptic) over the store layer:
 
 14 call sites in 10 hand-written Buzz files:
 
-| file                                                      | store                                                     | what it does                                                                                          | door today                                       |
-| --------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `hack/policy/mandate.buzz` (4 sites)                      | mandate, mandate attention                                | names `mandate.jsonl` and `mandate-attention.jsonl`, splits, last line wins, appends                  | none: repo Buzz owns the store                   |
-| `hack/dev/issue-mandate.buzz` (3)                         | mandate, attention                                        | appends, splits, last line wins                                                                       | none                                             |
-| `std/lib/diskwatch.buzz`                                  | disk samples (`$XDG_STATE_HOME/magus/disk/samples.jsonl`) | the only writer: `append`, compaction, `read`, `storePath` over `fs`; Go's doctor reads the same file | none: two owners                                 |
-| `hack/retro/trace.buzz`                                   | guard trail                                               | reads `events.jsonl` and blobs, splits, filters                                                       | `session().trail()`, which drops the request ref |
-| `hack/retro/cursor-audit.buzz`                            | guard trail                                               | reads `.magus/activity/events.jsonl`, splits                                                          | `session().trail()`                              |
-| `hack/ci/show-failures.buzz`                              | `.magus/logs/failed-outputs.jsonl`                        | names the path, splits; a shell step in `.github/workflows/ci.yaml:836` writes it                     | none: no magus owner                             |
-| `hack/dev/bootstrap-checkout.buzz`                        | jobs                                                      | parses `magus ls jobs -o json` text                                                                   | `workspace().jobs()`                             |
-| `hack/dev/bootstrap-worktree.buzz`                        | jobs                                                      | parses `magus describe job -o json` text                                                              | `magus\job(id)`                                  |
-| `hack/dev/count-feedback.buzz`, `merge-job-branches.buzz` | marks, jobs                                               | decode fixture lines in tests                                                                         | `session().marks()`, `workspace().jobs()`        |
+| file                                                      | store                                                   | what it does                                                                                          | door today                                       |
+| --------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `hack/policy/mandate.buzz` (4 sites)                      | mandate, mandate attention                              | names `mandate.jsonl` and `mandate-attention.jsonl`, splits, last line wins, appends                  | none: repo Buzz owns the store                   |
+| `hack/dev/issue-mandate.buzz` (3)                         | mandate, attention                                      | appends, splits, last line wins                                                                       | none                                             |
+| `std/lib/diskwatch.buzz`                                  | disk samples (`$XDG_STATE_HOME/magus/disk/space.jsonl`) | the only writer: `append`, compaction, `read`, `storePath` over `fs`; Go's doctor reads the same file | none: two owners                                 |
+| `hack/retro/trace.buzz`                                   | guard trail                                             | reads `events.jsonl` and blobs, splits, filters                                                       | `session().trail()`, which drops the request ref |
+| `hack/retro/cursor-audit.buzz`                            | guard trail                                             | reads `.magus/activity/events.jsonl`, splits                                                          | `session().trail()`                              |
+| `hack/ci/show-failures.buzz`                              | `.magus/logs/failed-outputs.jsonl`                      | names the path, splits; a shell step in `.github/workflows/ci.yaml:836` writes it                     | none: no magus owner                             |
+| `hack/dev/bootstrap-checkout.buzz`                        | jobs                                                    | parses `magus ls jobs -o json` text                                                                   | `workspace().jobs()`                             |
+| `hack/dev/bootstrap-worktree.buzz`                        | jobs                                                    | parses `magus describe job -o json` text                                                              | `magus\job(id)`                                  |
+| `hack/dev/count-feedback.buzz`, `merge-job-branches.buzz` | marks, jobs                                             | decode fixture lines in tests                                                                         | `session().marks()`, `workspace().jobs()`        |
 
 ### The Go layer under the doors is uneven
 
@@ -192,7 +192,7 @@ The verbs stay as they are, including `Job.exit` with an empty result meaning ab
 
 ### Two stores gain a Go owner
 
-- The disk samples (`$XDG_STATE_HOME/magus/disk/samples.jsonl`) have two owners today:
+- The disk samples (`$XDG_STATE_HOME/magus/disk/space.jsonl`) have two owners today:
   the shipped `std/lib/diskwatch.buzz` writes and compacts them, and Go's doctor reads
   the file. A Go repository becomes the one owner; `diskwatch.buzz`, `reclaimdisk.buzz`
   and doctor go through it, and the Buzz line code is deleted (Eli, 2026-11-07).

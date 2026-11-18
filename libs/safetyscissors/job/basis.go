@@ -3,7 +3,7 @@ package job
 import "github.com/egladman/magus/libs/safetyscissors/internal/enum"
 
 // Basis names what a recorded run of a check rests on, ordered by how little of it the
-// worker whose check it is can make up. A check goal names the bases it accepts; a run on
+// worker whose check it is can make up. A check postcondition names the bases it accepts; a run on
 // any other basis grades it as a violation, never as a pass.
 type Basis string
 
@@ -16,7 +16,7 @@ const (
 	// ([Store.Attest]). It is as strong as the custody of the key behind that verifier.
 	BasisAttested Basis = "attested"
 	// BasisReported is the caller's word ([Store.ReportRun]). It is recorded, and grades
-	// only a goal that accepts it.
+	// only a postcondition that accepts it.
 	BasisReported Basis = "reported"
 )
 
@@ -25,8 +25,8 @@ func Bases() []Basis { return []Basis{BasisWitnessed, BasisAttested, BasisReport
 
 func (v Basis) Values() []string { return enum.Set[Basis](Bases()).Strings() }
 
-// Valid reports whether v is one of [Bases] or empty. A goal's accept list refuses the
-// empty basis itself; see [Goal.Faults].
+// Valid reports whether v is one of [Bases] or empty. A postcondition's accept list
+// refuses the empty basis itself; see [Postcondition.Faults].
 func (v Basis) Valid() bool    { return enum.Set[Basis](Bases()).Valid(v) }
 func (v Basis) String() string { return enum.String(v) }
 

@@ -87,14 +87,23 @@ func checkStaleWorktrees(root string) check.Check {
 }
 
 // diskSamplesPath is the store the reclaim hook appends a types.DiskSample to, one JSON
-// object a line: $XDG_STATE_HOME/magus/disk/samples.jsonl, the path the diskwatch module
+// object a line: $XDG_STATE_HOME/magus/disk/space.jsonl, the path the diskwatch module
 // builds with fs\stateDir("disk").
 func diskSamplesPath() (string, error) {
 	base, err := xdg.StateDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "magus", "disk", "samples.jsonl"), nil
+	return filepath.Join(base, "magus", "disk", "space.jsonl"), nil
+}
+
+// retiredDiskSamples is the store from before the sample keys went snake_case. Nothing
+// reads or writes it; doctor names it so a person can delete it.
+//
+// compat(until: a release has shipped disk/space.jsonl): until then a machine that ran
+// an older magus holds one.
+func retiredDiskSamples(store string) string {
+	return filepath.Join(filepath.Dir(store), "samples.jsonl")
 }
 
 // readDiskSamples reads every line of the store; a line that does not decode is an error
@@ -109,7 +118,7 @@ func readDiskSamples(path string) ([]types.DiskSample, error) {
 	scan := bufio.NewScanner(f)
 	for n := 1; scan.Scan(); n++ {
 		var s types.DiskSample
-		if err := codec.Unmarshal(scan.Bytes(), &s); err != nil {
+		if err := codec.UnmarshalStrict(scan.Bytes(), &s); err != nil {
 			return nil, fmt.Errorf("%s line %d: %w", path, n, err)
 		}
 		samples = append(samples, s)
@@ -180,5 +189,16 @@ func (r *runner) checkDiskTrend() check.Check {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return check.Check{Name: "disk-trend", Status: check.Advice, Message: fmt.Sprintf("cannot read the disk samples: %v", err)}
 	}
-	return diskTrend(samples, r.opts.cfg.Disk)
+	trend := diskTrend(samples, r.opts.cfg.Disk)
+	if retired := retiredDiskSamples(path); exists(retired) {
+		trend.Details = append(trend.Details, fmt.Sprintf("%s is the disk samples store from before its keys went snake_case; nothing reads it, so it can be deleted", retired))
+	}
+	return trend
+}
+
+// exists reports whether path names anything; a stat that fails for another reason is
+// reported as absent, since the note it guards is advice.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

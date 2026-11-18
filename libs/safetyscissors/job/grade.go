@@ -17,28 +17,28 @@ import (
 )
 
 // RunRef names one run the store recorded. Only the store mints one, and a ref grades only
-// the job and goal it was recorded for.
+// the job and postcondition it was recorded for.
 type RunRef string
 
-// GoalGrade is one check goal's grade. Passed says whether the run's check exited zero;
-// Verified whether the goal holds, which also needs a basis the goal accepts, a run of the
-// goal's own check and of the tree as it is now. Violations say why a goal is not verified.
-type GoalGrade struct {
-	Goal       string   `json:"goal"`
-	Ref        RunRef   `json:"ref,omitempty"`
-	Basis      Basis    `json:"basis,omitempty"`
-	Passed     bool     `json:"passed"`
-	Verified   bool     `json:"verified"`
-	Violations []string `json:"violations,omitempty"`
+// PostconditionGrade is one check postcondition's grade. Passed says whether the run's check exited zero;
+// Verified whether the postcondition holds, which also needs a basis the postcondition accepts, a run of the
+// postcondition's own check and of the tree as it is now. Violations say why a postcondition is not verified.
+type PostconditionGrade struct {
+	Postcondition string   `json:"postcondition"`
+	Ref           RunRef   `json:"ref,omitempty"`
+	Basis         Basis    `json:"basis,omitempty"`
+	Passed        bool     `json:"passed"`
+	Verified      bool     `json:"verified"`
+	Violations    []string `json:"violations,omitempty"`
 }
 
 // Grade is a job's grade from the runs it cites. Verified only when the job has a check
-// goal and every one is: a job with none is not graded from runs, so it never verifies
+// postcondition and every one is: a job with none is not graded from runs, so it never verifies
 // here.
 type Grade struct {
-	Job      string      `json:"job"`
-	Verified bool        `json:"verified"`
-	Goals    []GoalGrade `json:"goals"`
+	Job            string               `json:"job"`
+	Verified       bool                 `json:"verified"`
+	Postconditions []PostconditionGrade `json:"postconditions"`
 }
 
 // GradingUnconfiguredError is a grading call on a store opened without an option it needs.
@@ -52,19 +52,19 @@ func (e *GradingUnconfiguredError) Error() string {
 	return fmt.Sprintf("job: %s needs a store opened with %s, and this one was opened without it", e.Op, e.Option)
 }
 
-// GoalError is a run or a grade naming a goal Job does not declare as a check.
-type GoalError struct {
-	Job, Goal string
-	// Kind is the goal's kind when Job declares it as another kind, and empty when Job
-	// declares no such goal.
-	Kind GoalKind
+// PostconditionError is a run or a grade naming a postcondition Job does not declare as a check.
+type PostconditionError struct {
+	Job, Postcondition string
+	// Kind is the postcondition's kind when Job declares it as another kind, and empty when Job
+	// declares no such postcondition.
+	Kind PostconditionKind
 }
 
-func (e *GoalError) Error() string {
+func (e *PostconditionError) Error() string {
 	if e.Kind != "" {
-		return fmt.Sprintf("job: %s's goal %q is a %s goal, and only a check goal is graded from a run", e.Job, e.Goal, e.Kind)
+		return fmt.Sprintf("job: %s's postcondition %q is a %s postcondition, and only a check postcondition is graded from a run", e.Job, e.Postcondition, e.Kind)
 	}
-	return fmt.Sprintf("job: %s declares no goal %q", e.Job, e.Goal)
+	return fmt.Sprintf("job: %s declares no postcondition %q", e.Job, e.Postcondition)
 }
 
 // TreeError is the caller's [WithTree] digest failing. When is the moment the store asked
@@ -80,29 +80,33 @@ func (e *TreeError) Error() string {
 
 func (e *TreeError) Unwrap() error { return e.Err }
 
-// Grade grades every check goal of job id by the run refs cites for it, keyed by goal id,
-// and appends the grade to grades.jsonl. A goal with no cited ref is not verified; a ref
-// cited for a goal id the job does not declare as a check is a [*GoalError]. Paths and
-// symbol goals are not graded here: their evidence is the diff and the graph, not a run.
+// Grade grades every check postcondition of job id by the run refs cites for it, keyed by postcondition id,
+// and appends the grade to grades.jsonl. A postcondition with no cited ref is not verified; a ref
+// cited for a postcondition id the job does not declare as a check is a [*PostconditionError]. Paths and
+// symbol postconditions are not graded here: their evidence is the diff and the graph, not a run.
 //
-// It needs [WithTree], to tell a run of the tree as it is from a run of an older one.
+// It needs [WithTree], to tell a run of the tree as it is from a run of an older one, and
+// [WithCheckSpec], to tell a run of the postcondition's check from a run of another.
 func (s *Store) Grade(ctx context.Context, id string, refs map[string]RunRef) (Grade, error) {
 	if err := s.needTree("Grade"); err != nil {
+		return Grade{}, err
+	}
+	if err := s.needChecks("Grade"); err != nil {
 		return Grade{}, err
 	}
 	row, err := s.row(ctx, id)
 	if err != nil {
 		return Grade{}, err
 	}
-	var checks []Goal
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind == GoalKindCheck {
+	var checks []Postcondition
+	for _, g := range row.EffectivePostconditions() {
+		if g.Kind == PostconditionKindCheck {
 			checks = append(checks, g)
 		}
 	}
-	for _, goal := range slices.Sorted(maps.Keys(refs)) {
-		if !slices.ContainsFunc(checks, func(g Goal) bool { return g.ID == goal }) {
-			return Grade{}, s.goalError(row, goal)
+	for _, postcondition := range slices.Sorted(maps.Keys(refs)) {
+		if !slices.ContainsFunc(checks, func(g Postcondition) bool { return g.ID == postcondition }) {
+			return Grade{}, s.postconditionError(row, postcondition)
 		}
 	}
 	runs, err := s.runs()
@@ -115,17 +119,17 @@ func (s *Store) Grade(ctx context.Context, id string, refs map[string]RunRef) (G
 	}
 	out := Grade{Job: id}
 	for _, g := range checks {
-		out.Goals = append(out.Goals, gradeGoal(row, g, refs[g.ID], runs, tree))
+		out.Postconditions = append(out.Postconditions, s.checks.gradePostcondition(row, g, refs[g.ID], runs, tree))
 	}
-	out.Verified = len(out.Goals) > 0 && !slices.ContainsFunc(out.Goals, func(gg GoalGrade) bool { return !gg.Verified })
+	out.Verified = len(out.Postconditions) > 0 && !slices.ContainsFunc(out.Postconditions, func(gg PostconditionGrade) bool { return !gg.Verified })
 	if err := s.appendGrades(ctx, gradesEntry{grade: recordGrade(out, s.Now())}); err != nil {
 		return Grade{}, err
 	}
 	return out, nil
 }
 
-func gradeGoal(row Job, g Goal, ref RunRef, runs map[RunRef]run, tree string) GoalGrade {
-	gg := GoalGrade{Goal: g.ID, Ref: ref}
+func (spec *checkSpec) gradePostcondition(row Job, g Postcondition, ref RunRef, runs map[RunRef]run, tree string) PostconditionGrade {
+	gg := PostconditionGrade{Postcondition: g.ID, Ref: ref}
 	if ref == "" {
 		gg.Violations = []string{"cites no run"}
 		return gg
@@ -137,14 +141,17 @@ func gradeGoal(row Job, g Goal, ref RunRef, runs map[RunRef]run, tree string) Go
 	}
 	gg.Basis, gg.Passed = r.basis, r.exit == 0
 	var v []string
-	if r.job != row.ID || r.goal != g.ID {
-		v = append(v, fmt.Sprintf("ref %q is job %q goal %q's run, not this goal's", ref, r.job, r.goal))
+	if r.job != row.ID || r.postcondition != g.ID {
+		v = append(v, fmt.Sprintf("ref %q is job %q postcondition %q's run, not this postcondition's", ref, r.job, r.postcondition))
 	}
 	if !slices.Contains(g.Accept, r.basis) {
-		v = append(v, fmt.Sprintf("the run is %s and this goal accepts only %v", r.basis, g.Accept))
+		v = append(v, fmt.Sprintf("the run is %s and this postcondition accepts only %v", r.basis, g.Accept))
 	}
-	if !SameLeaseCheck(&r.check, &g.Check) {
-		v = append(v, fmt.Sprintf("the run is of `%s` and this goal's check is `%s`", r.check.words(), g.Check.words()))
+	switch same, err := spec.Equal(r.check, g.Check); {
+	case err != nil:
+		v = append(v, fmt.Sprintf("the run's check could not be compared with this postcondition's: %v", err))
+	case !same:
+		v = append(v, fmt.Sprintf("the run is of `%s` and this postcondition's check is `%s`", spec.renderCheck(r.check), spec.renderCheck(g.Check)))
 	}
 	if row.Created != 0 && r.started.Unix() < row.Created {
 		v = append(v, "the run started before the job was declared")
@@ -201,41 +208,41 @@ func (s *Store) row(ctx context.Context, id string) (Job, error) {
 	return f.Jobs[i], nil
 }
 
-// checkGoal is row id and its check goal named goal, the primary check included.
-func (s *Store) checkGoal(ctx context.Context, id, goal string) (Job, Goal, error) {
+// checkPostcondition is row id and its check postcondition named postcondition, the primary check included.
+func (s *Store) checkPostcondition(ctx context.Context, id, postcondition string) (Job, Postcondition, error) {
 	row, err := s.row(ctx, id)
 	if err != nil {
-		return Job{}, Goal{}, err
+		return Job{}, Postcondition{}, err
 	}
-	for _, g := range row.EffectiveGoals() {
-		if g.ID == goal && g.Kind == GoalKindCheck {
+	for _, g := range row.EffectivePostconditions() {
+		if g.ID == postcondition && g.Kind == PostconditionKindCheck {
 			return row, g, nil
 		}
 	}
-	return Job{}, Goal{}, s.goalError(row, goal)
+	return Job{}, Postcondition{}, s.postconditionError(row, postcondition)
 }
 
-func (s *Store) goalError(row Job, goal string) error {
-	refused := &GoalError{Job: row.ID, Goal: goal}
-	if i := slices.IndexFunc(row.EffectiveGoals(), func(g Goal) bool { return g.ID == goal }); i >= 0 {
-		refused.Kind = row.EffectiveGoals()[i].Kind
+func (s *Store) postconditionError(row Job, postcondition string) error {
+	refused := &PostconditionError{Job: row.ID, Postcondition: postcondition}
+	if i := slices.IndexFunc(row.EffectivePostconditions(), func(g Postcondition) bool { return g.ID == postcondition }); i >= 0 {
+		refused.Kind = row.EffectivePostconditions()[i].Kind
 	}
 	return s.wrap(refused)
 }
 
-// run is one recorded run of a check goal's check.
+// run is one recorded run of a check postcondition's check.
 type run struct {
-	job, goal      string
-	basis          Basis
-	check          LeaseCheck
-	argv           []string
-	dir            string
-	tree           string
-	exit           int
-	output         string
-	started, ended time.Time
-	moved          bool
-	signer, by     string
+	job, postcondition string
+	basis              Basis
+	check              Check
+	argv               []string
+	dir                string
+	tree               string
+	exit               int
+	output             string
+	started, ended     time.Time
+	moved              bool
+	signer, by         string
 }
 
 // record appends r to grades.jsonl and returns the ref it minted: the digest of the line,
@@ -347,11 +354,20 @@ func (e gradesEntry) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON reads a run or a grade by the type the line is stamped with, and refuses
-// a line of another version or kind with an [*apiversion.RefusedError].
+// a line of another version or kind with an [*apiversion.RefusedError]. A line spelling
+// goal or goals, the names postcondition and postconditions had before, is refused: no
+// migration reads grades.jsonl, and read as it stands it would grade nothing.
 func (e *gradesEntry) UnmarshalJSON(data []byte) error {
-	var probe struct{ apiversion.TypeMeta }
+	var probe struct {
+		apiversion.TypeMeta
+		Goal  codec.RawMessage `json:"goal"`
+		Goals codec.RawMessage `json:"goals"`
+	}
 	if err := codec.Unmarshal(data, &probe); err != nil {
 		return err
+	}
+	if probe.Goal != nil || probe.Goals != nil {
+		return fmt.Errorf("job: a grades.jsonl %s line spells goal, which this build reads only as postcondition", probe.Kind)
 	}
 	switch probe.TypeMeta {
 	case runType():
@@ -375,27 +391,27 @@ func (e *gradesEntry) UnmarshalJSON(data []byte) error {
 // checkRunRecord is a [run] as grades.jsonl stores it. Started and Ended are unix milliseconds.
 type checkRunRecord struct {
 	apiversion.TypeMeta
-	Ref     RunRef           `json:"ref,omitempty"`
-	Job     string           `json:"job"`
-	Goal    string           `json:"goal"`
-	Basis   string           `json:"basis"`
-	Check   leaseCheckRecord `json:"check"`
-	Argv    []string         `json:"argv,omitempty"`
-	Dir     string           `json:"dir,omitempty"`
-	Tree    string           `json:"tree"`
-	Exit    int              `json:"exit"`
-	Output  string           `json:"output,omitempty"`
-	Started int64            `json:"started"`
-	Ended   int64            `json:"ended"`
-	Moved   bool             `json:"moved,omitzero"`
-	Signer  string           `json:"signer,omitempty"`
-	By      string           `json:"by,omitempty"`
+	Ref           RunRef   `json:"ref,omitempty"`
+	Job           string   `json:"job"`
+	Postcondition string   `json:"postcondition"`
+	Basis         string   `json:"basis"`
+	Check         Check    `json:"check"`
+	Argv          []string `json:"argv,omitempty"`
+	Dir           string   `json:"dir,omitempty"`
+	Tree          string   `json:"tree"`
+	Exit          int      `json:"exit"`
+	Output        string   `json:"output,omitempty"`
+	Started       int64    `json:"started"`
+	Ended         int64    `json:"ended"`
+	Moved         bool     `json:"moved,omitzero"`
+	Signer        string   `json:"signer,omitempty"`
+	By            string   `json:"by,omitempty"`
 }
 
 func recordCheckRun(r run) checkRunRecord {
 	return checkRunRecord{
-		TypeMeta: runType(), Job: r.job, Goal: r.goal, Basis: wireBasis().spell(r.basis),
-		Check: leaseCheckRecord(r.check), Argv: slices.Clone(r.argv), Dir: r.dir, Tree: r.tree, Exit: r.exit,
+		TypeMeta: runType(), Job: r.job, Postcondition: r.postcondition, Basis: string(r.basis),
+		Check: r.check, Argv: slices.Clone(r.argv), Dir: r.dir, Tree: r.tree, Exit: r.exit,
 		Output: r.output, Started: r.started.UnixMilli(), Ended: r.ended.UnixMilli(), Moved: r.moved,
 		Signer: r.signer, By: r.by,
 	}
@@ -409,7 +425,7 @@ func (r checkRunRecord) run() (run, error) {
 		return run{}, fmt.Errorf("run %s: %w", r.Ref, err)
 	}
 	return run{
-		job: r.Job, goal: r.Goal, basis: basis, check: LeaseCheck(r.Check), argv: r.Argv, dir: r.Dir,
+		job: r.Job, postcondition: r.Postcondition, basis: basis, check: r.Check, argv: r.Argv, dir: r.Dir,
 		tree: r.Tree, exit: r.Exit, output: r.Output, started: time.UnixMilli(r.Started), ended: time.UnixMilli(r.Ended),
 		moved: r.Moved, signer: r.Signer, by: r.By,
 	}, nil
@@ -418,26 +434,26 @@ func (r checkRunRecord) run() (run, error) {
 // gradeRecord is a [Grade] as grades.jsonl stores it. Graded is unix milliseconds.
 type gradeRecord struct {
 	apiversion.TypeMeta
-	Job      string            `json:"job"`
-	Graded   int64             `json:"graded"`
-	Verified bool              `json:"verified"`
-	Goals    []goalGradeRecord `json:"goals"`
+	Job            string                     `json:"job"`
+	Graded         int64                      `json:"graded"`
+	Verified       bool                       `json:"verified"`
+	Postconditions []postconditionGradeRecord `json:"postconditions"`
 }
 
-type goalGradeRecord struct {
-	Goal       string   `json:"goal"`
-	Ref        RunRef   `json:"ref,omitempty"`
-	Basis      string   `json:"basis,omitempty"`
-	Passed     bool     `json:"passed"`
-	Verified   bool     `json:"verified"`
-	Violations []string `json:"violations,omitempty"`
+type postconditionGradeRecord struct {
+	Postcondition string   `json:"postcondition"`
+	Ref           RunRef   `json:"ref,omitempty"`
+	Basis         string   `json:"basis,omitempty"`
+	Passed        bool     `json:"passed"`
+	Verified      bool     `json:"verified"`
+	Violations    []string `json:"violations,omitempty"`
 }
 
 func recordGrade(g Grade, now time.Time) *gradeRecord {
 	out := &gradeRecord{TypeMeta: gradeType(), Job: g.Job, Graded: now.UnixMilli(), Verified: g.Verified}
-	for _, gg := range g.Goals {
-		out.Goals = append(out.Goals, goalGradeRecord{
-			Goal: gg.Goal, Ref: gg.Ref, Basis: wireBasis().spell(gg.Basis), Passed: gg.Passed, Verified: gg.Verified,
+	for _, gg := range g.Postconditions {
+		out.Postconditions = append(out.Postconditions, postconditionGradeRecord{
+			Postcondition: gg.Postcondition, Ref: gg.Ref, Basis: string(gg.Basis), Passed: gg.Passed, Verified: gg.Verified,
 			Violations: slices.Clone(gg.Violations),
 		})
 	}

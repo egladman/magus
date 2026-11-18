@@ -116,7 +116,7 @@ async function relay(): Promise<void> {
     assert.equal(graphed.kind, "ok", JSON.stringify(graphed));
     assert.match(graphed.kind === "ok" ? graphed.svg : "", /data-edge="internal\/a->internal\/b"/);
 
-    const refused = toRelayout(rt.drawFigure({ ...actors, unscopedWhy: "" }, ""));
+    const refused = toRelayout(rt.drawFigure({ ...actors, unscoped_why: "" }, ""));
     assert.deepEqual(refused, {
       kind: "refused",
       detail:

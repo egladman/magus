@@ -36,7 +36,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	v, err := newVerifier([][]byte{pub})
 	require.NoError(t, err, "newVerifier")
 
-	manifest := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[]}`)
+	manifest := []byte(`{"project_path":"test/pkg","hash":"abc123","outputs":[]}`)
 	sig, err := s.sign(domainArtifact, manifest, nil)
 	require.NoError(t, err, "sign")
 	require.NoError(t, v.verify(domainArtifact, sig, manifest, nil), "verify valid signature")
@@ -220,7 +220,7 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
 	// The current KeyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
-	const wantKeyVersion = 7
+	const wantKeyVersion = 8
 	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 
@@ -418,7 +418,7 @@ func TestVerifyRefusesPreDomainEnvelope(t *testing.T) {
 	s, _ := newSigner(seed)
 	v, _ := newVerifier([][]byte{pub})
 
-	manifest := []byte(`{"projectPath":"p","hash":"abc"}`)
+	manifest := []byte(`{"project_path":"p","hash":"abc"}`)
 	sum := sha256.Sum256(manifest)
 	env, err := codec.Marshal(sigEnvelope{
 		Alg:            "ed25519",

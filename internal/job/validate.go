@@ -32,7 +32,7 @@ import (
 //
 // A merge that creates the row, or brings an ended one back, meets every rule. The record
 // holds its own shape, a boundary and a grade (JobUngraded), the jobs limits
-// (JobForkLimitExceeded) and unambiguous symbol goals (JobGoalInvalid). Its write paths
+// (JobForkLimitExceeded) and unambiguous symbol postconditions (JobPostconditionInvalid). Its write paths
 // name no directory (WritePathIsDirectory), no ungradable claim (WritePathClaimUngradable),
 // no project configuration held whole (WritePathConfigWholeFile), no file the workspace
 // loads while another job works in this checkout (CheckoutConfigHeld), no unordered shared
@@ -42,7 +42,7 @@ import (
 // (JobCheckUnrunnable). No regenerated output sits outside the write paths
 // (OutputOutsideWritePaths), and no ci target over them goes unrun (GateNotRun).
 //
-// A merge onto a row that has not ended meets the same rules for what it ADDS: the goals,
+// A merge onto a row that has not ended meets the same rules for what it ADDS: the postconditions,
 // checks, write paths and deny paths it did not carry, the outputs and gates those bring
 // in, and the shape problems the row did not already have, so a path the row already held
 // never blocks an unrelated update. A path an entry the row held already covers
@@ -78,16 +78,16 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	// write paths with every check it runs for an update.
 	judged := merged
 	if updates {
-		ps = append(ps, newProblems(types.DeclarationProblems(rowDeclaration(prev)), types.DeclarationProblems(rowDeclaration(merged)))...)
+		ps = append(ps, newProblems(declarationProblems(rowDeclaration(prev)), declarationProblems(rowDeclaration(merged)))...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, droppedProblems(prev, merged)...)
-		var goals []job.Goal
-		for _, gate := range merged.Goals {
-			if !slices.ContainsFunc(prev.Goals, func(g job.Goal) bool { return g.ID == gate.ID }) {
-				goals = append(goals, gate)
+		var postconditions []job.Postcondition
+		for _, gate := range merged.Postconditions {
+			if !slices.ContainsFunc(prev.Postconditions, func(g job.Postcondition) bool { return g.ID == gate.ID }) {
+				postconditions = append(postconditions, gate)
 			}
 		}
-		ps = append(ps, onRow(ambiguousSymbolProblems(ctx, goals, read), job.Job{Goals: goals}, merged)...)
+		ps = append(ps, onRow(ambiguousSymbolProblems(ctx, postconditions, read), job.Job{Postconditions: postconditions}, merged)...)
 		added := slices.DeleteFunc(slices.Clone(merged.Paths.Write), func(p string) bool {
 			return slices.ContainsFunc(prev.Paths.Write, func(held string) bool { return job.PathWithin(p, held) })
 		})
@@ -97,31 +97,31 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
 		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
 		// Judged on what the update changes, so a check the row already held never blocks an
-		// unrelated update: a new check or goal is graded against every write path, an old
+		// unrelated update: a new check or postcondition is graded against every write path, an old
 		// one only against the paths this update adds.
-		checkChanged := !job.SameLeaseCheck(prev.Check, merged.Check)
-		newChecks := job.Job{ID: id, Paths: job.Paths{Write: merged.Paths.Write}, Goals: goals}
+		checkChanged := !sameStoredCheck(prev.Check, merged.Check)
+		newChecks := job.Job{ID: id, Paths: job.Paths{Write: merged.Paths.Write}, Postconditions: postconditions}
 		if checkChanged {
 			newChecks.Check = merged.Check
 		}
 		ps = append(ps, onRow(narrowedTestProblems(store, newChecks), newChecks, merged)...)
 		if len(added) > 0 {
-			oldChecks := job.Job{ID: id, Paths: job.Paths{Write: added}, Check: merged.Check, Goals: merged.Goals}
+			oldChecks := job.Job{ID: id, Paths: job.Paths{Write: added}, Check: merged.Check, Postconditions: merged.Postconditions}
 			ps = append(ps, onRow(narrowedTestProblems(store, oldChecks), oldChecks, merged)...)
 		}
 		checks := addedChecks(prev, merged, checkChanged)
 		ps = append(ps, deniedCheckProblems(graded, store, checks)...)
-		judged = job.Job{ID: id, Paths: job.Paths{Write: added}, Check: checks.Check, Goals: checks.Goals, ReadOnly: merged.ReadOnly}
+		judged = job.Job{ID: id, Paths: job.Paths{Write: added}, Check: checks.Check, Postconditions: checks.Postconditions, ReadOnly: merged.ReadOnly}
 		if !slices.Equal(prev.Paths.Write, merged.Paths.Write) {
 			v.WriteProof = store.WriteProof(rows, merged)
 		}
 	} else {
-		ps = append(ps, types.DeclarationProblems(rowDeclaration(merged))...)
+		ps = append(ps, declarationProblems(rowDeclaration(merged))...)
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
 		ps = append(ps, claimCeilingProblems(merged, limits)...)
-		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Goals, read)...)
+		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Postconditions, read)...)
 		ps = append(ps, mergedDirectoryProblems(ctx, store, merged, merged.Integrates)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
@@ -150,7 +150,7 @@ func mergeOnto(prev job.Job, merge func(*job.Job)) job.Job {
 }
 
 // droppedProblems is each declared field of the live row prev that merged leaves empty:
-// the instructions, the write paths, the check and the goals. A record that re-declares a
+// the instructions, the write paths, the check and the postconditions. A record that re-declares a
 // live job without them erases what its holder was given, so it is refused unless a
 // deviation on the field's "drops <field>" subject says the erasure is meant.
 func droppedProblems(prev, merged job.Job) types.JobProblems {
@@ -170,8 +170,8 @@ func droppedProblems(prev, merged job.Job) types.JobProblems {
 	}
 	dropped("agent.instructions", prev.Instructions() != "", merged.Instructions() != "")
 	dropped("paths.write", len(prev.Paths.Write) > 0, len(merged.Paths.Write) > 0)
-	dropped("check", prev.Check != nil, merged.Check != nil)
-	dropped("goals", len(prev.Goals) > 0, len(merged.Goals) > 0)
+	dropped("check", !prev.Check.IsZero(), !merged.Check.IsZero())
+	dropped("postconditions", len(prev.Postconditions) > 0, len(merged.Postconditions) > 0)
 	return ps
 }
 
@@ -189,7 +189,7 @@ func contendedFork(ctx context.Context, store *Store, rows []job.Job, id string,
 	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
 		return types.JobValidation{}, false
 	}
-	ps := slices.Concat(types.DeclarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
+	ps := slices.Concat(declarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
 		claimCeilingProblems(merged, limits), directoryWritePathProblems(store, merged), contended)
 	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
@@ -221,7 +221,7 @@ func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitte
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
-// lintGoals is a lint goal per project whose lint reads a file the row writes
+// lintPostconditions is a lint postcondition per project whose lint reads a file the row writes
 // and nothing runs. It only reports, and over the written files alone: a
 // finding elsewhere is not the worker's. See [ranOver] for a soft path.
 //
@@ -229,7 +229,7 @@ func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitte
 // wrote. A file not yet tracked stays, since the args are fixed at fork time and a path the
 // worker will create is untracked then. The notes say how many files were left out, or that
 // the VCS could not be asked and every file was kept.
-func lintGoals(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (goals []job.Goal, notes []string) {
+func lintPostconditions(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (postconditions []types.Postcondition, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
 		return nil, nil
 	}
@@ -250,12 +250,12 @@ func lintGoals(ctx context.Context, root string, row job.Job, ws Workspace, grad
 		notes = append(notes, note)
 	}
 	for _, g := range lint {
-		goal := g.Goal
-		goal.Check.NoDefaultCharms = true
-		goal.Check.Args = filesIn(g.Project, written)
-		goals = append(goals, goal)
+		postcondition := g.Postcondition
+		postcondition.Check.NoDefaultCharms = true
+		postcondition.Check.Args = filesIn(g.Project, written)
+		postconditions = append(postconditions, postcondition)
 	}
-	return goals, notes
+	return postconditions, notes
 }
 
 // withoutIgnored is files less those the VCS ignores, and a note when it left some out or
@@ -266,11 +266,11 @@ func withoutIgnored(ctx context.Context, root string, ws Workspace, files []stri
 		return files, ""
 	}
 	if ws.Ignored == nil {
-		return files, "no version control could be asked which written files it ignores, so the lint goal keeps every one"
+		return files, "no version control could be asked which written files it ignores, so the lint postcondition keeps every one"
 	}
 	ignored, err := ws.Ignored(files)
 	if err != nil {
-		return files, fmt.Sprintf("the lint goal keeps every written file: %v", err)
+		return files, fmt.Sprintf("the lint postcondition keeps every written file: %v", err)
 	}
 	if len(ignored) == 0 {
 		return files, ""
@@ -282,7 +282,7 @@ func withoutIgnored(ctx context.Context, root string, ws Workspace, files []stri
 	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.VCS != nil {
 		tracked, err := res.VCS.TrackedFiles(ctx, root, ignored)
 		if err != nil {
-			return files, fmt.Sprintf("%s could not say which ignored files it tracks (%v), so the lint goal keeps every written file", res.Name, err)
+			return files, fmt.Sprintf("%s could not say which ignored files it tracks (%v), so the lint postcondition keeps every written file", res.Name, err)
 		}
 		for _, f := range tracked {
 			delete(drop, f)
@@ -290,7 +290,7 @@ func withoutIgnored(ctx context.Context, root string, ws Workspace, files []stri
 	}
 	kept := slices.DeleteFunc(slices.Clone(files), func(f string) bool { return drop[f] })
 	if left := len(files) - len(kept); left > 0 {
-		return kept, fmt.Sprintf("left %d ignored file(s) out of the lint goal", left)
+		return kept, fmt.Sprintf("left %d ignored file(s) out of the lint postcondition", left)
 	}
 	return kept, ""
 }
@@ -433,7 +433,7 @@ func IntegratorDeviations(root string, row job.Job, projects []*types.Project, i
 }
 
 // validateDryFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
-// and symbol goals settled as a fork settles them, and [validateMerge] over a dry view of
+// and symbol postconditions settled as a fork settles them, and [validateMerge] over a dry view of
 // store, so nothing is written, no release is requested, no sweep runs and no worktree is
 // made. The error is only a store that could not be read.
 func validateDryFork(ctx context.Context, store *Store, id string, merge func(*job.Job)) (types.JobValidation, error) {
@@ -452,7 +452,7 @@ type ForkPlan struct {
 }
 
 // PlanFork settles the merge into job id and validates it once:
-// its checkpoint expanded, its symbol goals resolved. With dry it
+// its checkpoint expanded, its symbol postconditions resolved. With dry it
 // reads store's dry view and writes nothing. Without, it reads as
 // a real fork: the sweep writes, and a refusal asks a holder to
 // release a file the fork wanted. The error is only a store that
@@ -541,16 +541,16 @@ func (r planRead) movedIn(now planRead, id string) string {
 	return ""
 }
 
-// validateFork settles a fork's merge (its checkpoint expanded, its check goals' accept
-// resolved, its symbol goals resolved) and validates it, returning the merge a fork
+// validateFork settles a fork's merge (its checkpoint expanded, its check postconditions' accept
+// resolved, its symbol postconditions resolved) and validates it, returning the merge a fork
 // writes. A merge that cannot be settled is a problem in the same pass, and the rest is
-// judged on the merge as given. A check goal naming an unknown basis stays as declared,
-// so validation reports it as a JobGoalInvalid problem.
+// judged on the merge as given. A check postcondition naming an unknown basis stays as declared,
+// so validation reports it as a JobPostconditionInvalid problem.
 func validateFork(ctx context.Context, store *Store, rows []job.Job, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) (types.JobValidation, func(*job.Job)) {
 	declared := merge
 	merge = func(u *job.Job) {
 		declared(u)
-		u.Goals, _ = resolveAccept(u.Goals)
+		u.Postconditions, _ = resolveAccept(u.Postconditions)
 	}
 	merge, ps := store.declaredMerge(ctx, rows, id, merge)
 	if resolved, err := resolveMerge(ctx, store, rows, id, merge, read); err != nil {
@@ -586,7 +586,7 @@ func (s *Store) loadedWorkspace() (Workspace, string) {
 // workspaceProblems is every problem of judged that only the loaded workspace shows: a
 // check naming a project or target it lacks, an output regenerated from judged's write
 // paths that sits outside every write path of merged, a ci target over judged's write paths
-// that no check or goal of merged runs, and a write path broader than it allows. Each check
+// that no check or postcondition of merged runs, and a write path broader than it allows. Each check
 // that could not run is named, with why, in the second result.
 // rows is the plan [declaredGateOwner] reads.
 func workspaceProblems(ctx context.Context, store *Store, rows []job.Job, merged, judged job.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
@@ -599,7 +599,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []job.Job, merged
 	writes := !judged.ReadOnly && len(judged.Paths.Write) > 0
 	if why != "" {
 		var unchecked []string
-		if slices.ContainsFunc(judged.EffectiveGoals(), func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && g.Check.Target != "" }) {
+		if slices.ContainsFunc(judged.EffectivePostconditions(), func(g job.Postcondition) bool { return g.Kind == job.PostconditionKindCheck && !g.Check.IsZero() }) {
 			unchecked = append(unchecked, "the check's project, target and test-selection semantics: "+why)
 		}
 		if writes {
@@ -617,7 +617,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []job.Job, merged
 		return ps, unchecked
 	}
 	// The sources are judged's paths, and the checks that run gates are all of merged's.
-	gated := job.Job{ID: merged.ID, Paths: job.Paths{Write: judged.Paths.Write, Deny: merged.Paths.Deny}, Check: merged.Check, Goals: merged.Goals}
+	gated := job.Job{ID: merged.ID, Paths: job.Paths{Write: judged.Paths.Write, Deny: merged.Paths.Deny}, Check: merged.Check, Postconditions: merged.Postconditions}
 	regenerated := RegeneratedOutside(store.root, gated, ws.Projects, ws.Ignored)
 	if updates {
 		// An output a path the row already held covers is inside its write paths.
@@ -644,12 +644,17 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		ps        types.JobProblems
 		unchecked []string
 	)
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != job.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return types.JobProblems{unreadableCheckProblem(err)}, nil
+	}
+	for _, gc := range checks {
+		g, check := gc.Postcondition, gc.Check
+		if g.Kind != job.PostconditionKindCheck || check.Script != "" || check.Target == "" {
 			continue
 		}
-		field := goalCheckField(row, g)
-		project := cmp.Or(strings.TrimSpace(g.Check.Project), ".")
+		field := postconditionCheckField(row, g)
+		project := cmp.Or(strings.TrimSpace(check.Project), ".")
 		i := slices.IndexFunc(ws.Projects, func(p *types.Project) bool { return p.Path == project })
 		if i < 0 {
 			paths := make([]string, len(ws.Projects))
@@ -659,15 +664,15 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			slices.Sort(paths)
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".project",
-				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(g.Check), project),
+				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(check), project),
 				Fix:     "name one of its projects: " + listNames(paths),
 			})
 			continue
 		}
 		p := ws.Projects[i]
-		spell, name, qualified := strings.Cut(g.Check.Target, "::")
+		spell, name, qualified := strings.Cut(check.Target, "::")
 		if !qualified {
-			spell, name = "", g.Check.Target
+			spell, name = "", check.Target
 		}
 		name, _, _ = strings.Cut(name, ":")
 		name = types.Normalize(name)
@@ -675,7 +680,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			continue
 		}
 		if spellsUnresolved(p) {
-			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", CheckCommand(g.Check), project))
+			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", CheckCommand(check), project))
 			continue
 		}
 		var targets []string
@@ -695,7 +700,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		if spell != "" && !bound {
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".target",
-				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(g.Check), spell, project),
+				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(check), spell, project),
 				Fix:     "name a spell it binds: " + listNames(p.Spells),
 			})
 			continue
@@ -706,7 +711,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		slices.Sort(targets)
 		ps = append(ps, types.JobProblem{
 			Code: types.JobCheckUnrunnable, Field: field + ".target",
-			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(g.Check), name, project),
+			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(check), name, project),
 			Fix:     "name one of its targets: " + listNames(slices.Compact(targets)),
 		})
 	}
@@ -749,16 +754,16 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			continue
 		}
 		subject := fmt.Sprintf("%s %s", g.Target, g.Project)
-		goal, _ := codec.Marshal(g.Goal)
+		postcondition, _ := codec.Marshal(g.Postcondition)
 		p := types.JobProblem{
-			Code: types.GateNotRun, Field: "goals", Subject: subject,
-			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),
-			Fix: fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
-				goal, types.GateNotRun, subject),
-			Goal: &g.Goal,
+			Code: types.GateNotRun, Field: "postconditions", Subject: subject,
+			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a postcondition runs it", subject, g.Source),
+			Fix: fmt.Sprintf(`add the postcondition %s to postconditions, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
+				postcondition, types.GateNotRun, subject),
+			Postcondition: &g.Postcondition,
 		}
 		if g.Target != lintTarget && owner.runs != "" {
-			p.Goal = nil
+			p.Postcondition = nil
 			p.Deviation = &job.Deviation{Code: job.Code(types.GateNotRun), Subject: subject, Reason: owner.runs}
 			p.Fix = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
 		}
@@ -773,16 +778,18 @@ func rowDeclaration(row job.Job) job.Declaration {
 	rec := job.Declaration{
 		ID: row.ID, Parent: row.Parent, Agent: row.Agent.Clone(), Checkpoint: row.Checkpoint,
 		Paths: job.Paths{Write: row.Paths.Write, Read: row.Paths.Read, Deny: row.Paths.Deny}, DependsOn: row.DependsOn,
-		Breaks: row.Breaks, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
+		Breaks: row.Breaks, Postconditions: row.Postconditions, State: row.State, ReadOnly: row.ReadOnly,
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
 		Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}
 	// A row stored before the check record carries only the rendered line; one it could not
 	// parse was refused at the door, so a line that fails here declares no check.
 	rec.Check = row.Check
-	if row.Check == nil && strings.TrimSpace(row.Validation) != "" {
+	if row.Check.IsZero() && strings.TrimSpace(row.Validation) != "" {
 		if c, err := ParseCheckCommand(row.Validation); err == nil {
-			rec.Check = &c
+			if raw, err := types.EncodeLeaseCheck(c); err == nil {
+				rec.Check = raw
+			}
 		}
 	}
 	return rec
@@ -808,7 +815,7 @@ func newProblems(before, after types.JobProblems) types.JobProblems {
 }
 
 // onRow moves each field of ps found on part, a row cut to what a merge adds, to the index
-// the same entry has in whole: a write or deny path by its value, a goal by its id.
+// the same entry has in whole: a write or deny path by its value, a postcondition by its id.
 func onRow(ps types.JobProblems, part, whole job.Job) types.JobProblems {
 	for i, p := range ps {
 		list, rest, ok := strings.Cut(p.Field, "[")
@@ -830,9 +837,9 @@ func onRow(ps types.JobProblems, part, whole job.Job) types.JobProblems {
 			if k < len(part.Paths.Deny) {
 				at = slices.Index(whole.Paths.Deny, part.Paths.Deny[k])
 			}
-		case "goals":
-			if k < len(part.Goals) {
-				at = slices.IndexFunc(whole.Goals, func(g job.Goal) bool { return g.ID == part.Goals[k].ID })
+		case "postconditions":
+			if k < len(part.Postconditions) {
+				at = slices.IndexFunc(whole.Postconditions, func(g job.Postcondition) bool { return g.ID == part.Postconditions[k].ID })
 			}
 		}
 		if at >= 0 {
@@ -842,24 +849,24 @@ func onRow(ps types.JobProblems, part, whole job.Job) types.JobProblems {
 	return ps
 }
 
-// goalCheckField is the field of row that declares goal's check: `check` for the row's own,
-// `goals[i].check` for a goal's.
-func goalCheckField(row job.Job, goal job.Goal) string {
-	if goal.ID == job.PrimaryGoalID && row.Check != nil {
+// postconditionCheckField is the field of row that declares postcondition's check: `check` for the row's own,
+// `postconditions[i].check` for a postcondition's.
+func postconditionCheckField(row job.Job, postcondition job.Postcondition) string {
+	if postcondition.ID == job.PrimaryPostconditionID && !row.Check.IsZero() {
 		return "check"
 	}
-	if i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == goal.ID }); i >= 0 {
-		return fmt.Sprintf("goals[%d].check", i)
+	if i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == postcondition.ID }); i >= 0 {
+		return fmt.Sprintf("postconditions[%d].check", i)
 	}
 	return "check"
 }
 
-// resolveProblem is a merge's symbol goals that could not be settled (see
-// [ResolveSymbolGoals] and [PlaceDerivedClaims]) as a problem, under the code the failure
-// carries, else JobGoalInvalid.
+// resolveProblem is a merge's symbol postconditions that could not be settled (see
+// [ResolveSymbolPostconditions] and [PlaceDerivedClaims]) as a problem, under the code the failure
+// carries, else JobPostconditionInvalid.
 func resolveProblem(err error) types.JobProblem {
-	p := types.JobProblem{Code: types.JobGoalInvalid, Field: "goals", Message: strings.TrimPrefix(err.Error(), "job: "),
-		Fix: fmt.Sprintf("declare each signature goal's signature, or write the symbol, run `%s` and fork again", hint.GraphBuild)}
+	p := types.JobProblem{Code: types.JobPostconditionInvalid, Field: "postconditions", Message: strings.TrimPrefix(err.Error(), "job: "),
+		Fix: fmt.Sprintf("declare each signature postcondition's signature, or write the symbol, run `%s` and fork again", hint.GraphBuild)}
 	var coded *types.DiagnosticError
 	if errors.As(err, &coded) {
 		p.Code, p.Message = coded.Code, coded.Msg
@@ -928,18 +935,18 @@ func branchLeaves(ctx context.Context, root string, integrates []string) map[str
 	return leaves
 }
 
-// ungradedProblems finds a writing job that declares neither a check nor a goal, as
+// ungradedProblems finds a writing job that declares neither a check nor a postcondition, as
 // JobUngraded: `job wait` could never pass it, so the row would end by `job exit` on the
 // holder's word. A read-only job writes nothing to grade and is exempt.
 func ungradedProblems(row job.Job) types.JobProblems {
-	if row.ReadOnly || len(row.Paths.Write) == 0 || row.Check != nil || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
+	if row.ReadOnly || len(row.Paths.Write) == 0 || !row.Check.IsZero() || strings.TrimSpace(row.Validation) != "" || len(row.Postconditions) > 0 {
 		return nil
 	}
 	return types.JobProblems{{
 		Code: types.JobUngraded, Field: "check",
-		Message: fmt.Sprintf("%s writes %s and declares neither a check nor a goal, so `%s` has nothing to grade it by",
+		Message: fmt.Sprintf("%s writes %s and declares neither a check nor a postcondition, so `%s` has nothing to grade it by",
 			row.ID, strings.Join(row.Paths.Write, ", "), hint.JobWait.With(row.ID)),
-		Fix: fmt.Sprintf(`add "check" (the target that proves it, as "<target> <project>") or "goals" to the record, such as`+
+		Fix: fmt.Sprintf(`add "check" (the target that proves it, as "<target> <project>") or "postconditions" to the record, such as`+
 			` {"id":"done","kind":"paths","expect":"changed","paths":["<glob>"]} (`+"`%s`"+` prints every field),`+
 			` or mark a job that writes nothing "read_only"`, hint.JobFork.With("--schema")),
 	}}
@@ -1014,36 +1021,36 @@ func forkLimitProblems(rows []job.Job, id, parent string, limits config.Jobs) ty
 	return ps
 }
 
-// namesExistingSymbol reports whether a symbol goal of expect grades a symbol that exists
+// namesExistingSymbol reports whether a symbol postcondition of expect grades a symbol that exists
 // when the job is declared: one a job is to create (present) is the exception, and a name
 // that resolves to nothing under any other expectation is a typo that grades vacuously.
-func namesExistingSymbol(expect job.GoalExpect) bool {
-	return slices.Contains([]job.GoalExpect{job.ExpectChanged, job.ExpectAbsent, job.ExpectUnreferenced}, expect)
+func namesExistingSymbol(expect job.PostconditionExpect) bool {
+	return slices.Contains([]job.PostconditionExpect{job.ExpectChanged, job.ExpectAbsent, job.ExpectUnreferenced}, expect)
 }
 
-// ambiguousSymbolProblems finds each symbol a goal names whose bare name resolves to more
-// than one definition, or a `<package>.<Name>` that resolves to none when the goal grades an
-// existing symbol, as JobGoalInvalid, naming each. A name the reader cannot answer for is no
-// problem: a cold graph must not block a declaration, and the goal refuses to certify later.
-func ambiguousSymbolProblems(ctx context.Context, goals []job.Goal, read SymbolReader) types.JobProblems {
+// ambiguousSymbolProblems finds each symbol a postcondition names whose bare name resolves to more
+// than one definition, or a `<package>.<Name>` that resolves to none when the postcondition grades an
+// existing symbol, as JobPostconditionInvalid, naming each. A name the reader cannot answer for is no
+// problem: a cold graph must not block a declaration, and the postcondition refuses to certify later.
+func ambiguousSymbolProblems(ctx context.Context, postconditions []job.Postcondition, read SymbolReader) types.JobProblems {
 	if read == nil {
 		return nil
 	}
 	var ps types.JobProblems
-	for i, goal := range goals {
-		if goal.Resolve().Kind != job.GoalKindSymbol {
+	for i, postcondition := range postconditions {
+		if postcondition.Resolve().Kind != job.PostconditionKindSymbol {
 			continue
 		}
-		for j, name := range goal.Symbols {
+		for j, name := range postcondition.Symbols {
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
 			fact, ok := read(ctx, name, "")
-			if _, _, qualified := packageQualified(name); qualified && ok && len(fact.DefinedIn) == 0 && namesExistingSymbol(goal.Resolve().Expect) {
+			if _, _, qualified := packageQualified(name); qualified && ok && len(fact.DefinedIn) == 0 && namesExistingSymbol(postcondition.Resolve().Expect) {
 				ps = append(ps, types.JobProblem{
-					Code: types.JobGoalInvalid, Field: fmt.Sprintf("goals[%d].symbols[%d]", i, j),
-					Message: fmt.Sprintf("goal %q expects %q to be %s, and the graph resolves it to no definition, so it would grade a name nothing defines",
-						goal.ID, name, goal.Resolve().Expect),
+					Code: types.JobPostconditionInvalid, Field: fmt.Sprintf("postconditions[%d].symbols[%d]", i, j),
+					Message: fmt.Sprintf("postcondition %q expects %q to be %s, and the graph resolves it to no definition, so it would grade a name nothing defines",
+						postcondition.ID, name, postcondition.Resolve().Expect),
 					Fix: fmt.Sprintf("name a definition `%s` finds, as `<package>.<Name>` or a symbol id; with no symbol index built, `%s` builds one", hint.Refs.With(name), hint.GraphBuild),
 				})
 				continue
@@ -1052,9 +1059,9 @@ func ambiguousSymbolProblems(ctx context.Context, goals []job.Goal, read SymbolR
 				continue
 			}
 			ps = append(ps, types.JobProblem{
-				Code: types.JobGoalInvalid, Field: fmt.Sprintf("goals[%d].symbols[%d]", i, j),
-				Message: fmt.Sprintf("goal %q names %q, which the graph resolves to %d definitions (%s), so it would grade whichever ranks first",
-					goal.ID, name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", ")),
+				Code: types.JobPostconditionInvalid, Field: fmt.Sprintf("postconditions[%d].symbols[%d]", i, j),
+				Message: fmt.Sprintf("postcondition %q names %q, which the graph resolves to %d definitions (%s), so it would grade whichever ranks first",
+					postcondition.ID, name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", ")),
 				Fix: fmt.Sprintf("name one by the symbol id `%s` prints", hint.Refs.With(name)),
 			})
 		}

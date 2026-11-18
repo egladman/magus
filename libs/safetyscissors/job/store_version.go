@@ -34,6 +34,49 @@ func (e *NewerWriterError) Error() string {
 	return fmt.Sprintf("job store %s is at migration %d, past this build's %d", e.Path, e.Found, e.Known)
 }
 
+// RetiredNameError is a store line spelling a member or a required feature by a name this
+// build retired. Read as it stands, the member would be kept as unknown and what it holds
+// would reach no reader, so the line is refused until the caller's migration respells it.
+type RetiredNameError struct {
+	// Record names the row, "" for the header.
+	Record string
+	// Retired is the name the line spells, and Now the name this build reads.
+	Retired, Now string
+}
+
+func (e *RetiredNameError) Error() string {
+	at := "the header"
+	if e.Record != "" {
+		at = "job " + e.Record
+	}
+	return fmt.Sprintf("%s spells %s, a name this build retired for %s: migrate the store, respelling %s as %s, before reading it",
+		at, e.Retired, e.Now, e.Retired, e.Now)
+}
+
+// retiredNames pairs each spec member and required feature a store spelled before the
+// postcondition rename with its name after it.
+func retiredNames() map[string]string {
+	return map[string]string{"spec.goals": "spec.postconditions", "signature-goals": "signature-postconditions"}
+}
+
+// refuseRetired is a [*RetiredNameError] for the first spec member in specUnknown or
+// feature in requires that [retiredNames] lists, nil when there is none. record is the
+// row's id, "" for the header.
+func refuseRetired(record string, specUnknown map[string]codec.RawMessage, requires []apiversion.Feature) error {
+	renamed := retiredNames()
+	for member := range specUnknown {
+		if now, ok := renamed["spec."+member]; ok {
+			return &RetiredNameError{Record: record, Retired: "spec." + member, Now: now}
+		}
+	}
+	for _, f := range requires {
+		if now, ok := renamed[string(f)]; ok {
+			return &RetiredNameError{Record: record, Retired: string(f), Now: now}
+		}
+	}
+	return nil
+}
+
 // NewerRecordsError is a record a newer writer stored that this build may read but not
 // write: a row requiring features this build lacks, or an attempt of another version or
 // kind.
@@ -53,7 +96,7 @@ func (e *NewerRecordsError) Error() string {
 	return fmt.Sprintf("%s: %s is %s %s, and this build reads %s %s", e.Path, e.Record, e.Got.APIVersion, e.Got.Kind, e.Want.APIVersion, e.Want.Kind)
 }
 
-// RecordVersionError is a line of the store stamped with an apiVersion this build does not
+// RecordVersionError is a line of the store stamped with an api_version this build does not
 // read. A line of a known version but another kind is a [*codec.LineError] instead.
 type RecordVersionError struct {
 	Path string
@@ -113,13 +156,15 @@ func shellQuote(p string) string {
 const AcceptWitnessedMigration = "check goals accept witnessed runs"
 
 // AcceptWitnessed rewrites one stored line of jobs.jsonl, as its JSON members, so every
-// check goal it holds accepts [BasisWitnessed]: the goals a store held before [Goal.Accept]
-// existed were graded only from runs the store's own caller started, which is witnessed.
-// A goal that names an accept list keeps it, and the header and any other line come back
-// unchanged, so the rewrite is the same applied twice.
+// check postcondition it holds accepts [BasisWitnessed]: the postconditions a store held
+// before [Postcondition.Accept] existed were graded only from runs the store's own caller
+// started, which is witnessed. A postcondition that names an accept list keeps it, and the
+// header and any other line come back unchanged, so the rewrite is the same applied twice.
+// The line is read as the store spelled it at this migration, with its postconditions
+// under spec.goals.
 //
 // It is a one-time rewrite of the file under the caller's migration, never a default a
-// reader applies: a goal read without accept is a fault.
+// reader applies: a postcondition read without accept is a fault.
 func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMessage, error) {
 	raw, ok := line["spec"]
 	if !ok {
@@ -137,11 +182,12 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 	if err := codec.Unmarshal(goalsRaw, &goals); err != nil {
 		return nil, fmt.Errorf("reading spec.goals: %w", err)
 	}
-	witnessed, err := codec.Marshal([]string{wireBasis().spell(BasisWitnessed)})
+	// The CamelCase values the store wrote at this migration, before it stored Go values.
+	witnessed, err := codec.Marshal([]string{"Witnessed"})
 	if err != nil {
 		return nil, err
 	}
-	check := wireGoalKind().spell(GoalKindCheck)
+	const check = "Check"
 	changed := false
 	for i, g := range goals {
 		var kind string
@@ -150,7 +196,7 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 				return nil, fmt.Errorf("reading spec.goals[%d].kind: %w", i, err)
 			}
 		}
-		// An empty kind is a check, as [Goal.Resolve] reads it.
+		// An empty kind is a check, as [Postcondition.Resolve] reads it.
 		if _, named := g["accept"]; named || (kind != check && kind != "") {
 			continue
 		}

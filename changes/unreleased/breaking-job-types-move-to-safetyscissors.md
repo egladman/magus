@@ -1,7 +1,7 @@
 ### Changed
 
 - **Breaking for SDK callers: the job record types live in `libs/safetyscissors/job`.**
-  `types.Job`, `Declaration`, `Goal`, `LeaseCheck`, `Deviation`, `Attempt`, `Origin`,
+  `types.Job`, `Declaration`, `Postcondition`, `LeaseCheck`, `Deviation`, `Attempt`, `Origin`,
   `Credential` and the claim grammar move there. No alias remains; Buzz names and the
   JSON records are unchanged.
 - **Breaking for SDK callers: each moved name drops its `Job` prefix.** `JobState`,
@@ -13,5 +13,5 @@
   `internal/auth`'s `Access`, since `job.Grant` is a job's rule grant.
 - **Breaking for SDK callers: a record's own faults are `job.Fault` values with no
   code.** magus reports them as MGS3037 and MGS3038 through `types.DeclarationProblems`,
-  `ValidateDeclaration` and `ValidateGoal`, which replace the `Declaration` and `Goal`
+  `ValidateDeclaration` and `ValidatePostcondition`, which replace the `Declaration` and `Postcondition`
   methods.

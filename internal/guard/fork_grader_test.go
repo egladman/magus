@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,11 @@ func (s *ForkGraderSuite) load(context.Context, string) (Dependencies, *Workspac
 }
 
 func (s *ForkGraderSuite) row(target string, noCharms bool) job.Job {
-	return job.Job{ID: "w", Check: &job.LeaseCheck{Target: target, Project: ".", NoDefaultCharms: noCharms}}
+	check := rawCheck(target, ".")
+	if noCharms {
+		check = storedJSON(fmt.Sprintf(`{"target":%q,"project":".","no_default_charms":true}`, target))
+	}
+	return job.Job{ID: "w", Check: check}
 }
 
 func (s *ForkGraderSuite) TestAGradeReachedOnceIsReadBack() {

@@ -79,7 +79,7 @@ export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
       criteria: str(agent.instructions) || str(j.description),
       check: str(j.check),
       writePaths: strs(record(j.paths).write),
-      goals: records(j.goals).map(g => `${str(g.kind) || '?'} ${str(g.id)}`.trim()),
+      postconditions: records(j.postconditions).map(g => `${str(g.kind) || '?'} ${str(g.id)}`.trim()),
       proof: str(j.writeProof),
       endReason: str(j.endReason),
       baseVerdict: str(j.baseVerdict),

@@ -32,8 +32,19 @@ func required() []Option {
 		WithInvocation("inv1", session.InvocationStart{Command: "test"}),
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
+		WithCheckSpec(keptChecks{}),
 	}
 }
+
+// keptChecks stands in for the caller's check spec: a check is whatever JSON it is,
+// compared as written.
+type keptChecks struct{}
+
+func (keptChecks) Validate(c job.Check) (job.Check, error) { return c, nil }
+
+func (keptChecks) Equal(a, b job.Check) (bool, error) { return a.String() == b.String(), nil }
+
+func (keptChecks) Render(c job.Check) (string, error) { return c.String(), nil }
 
 func (s *NewSuite) open(opts ...Option) *SafetyScissors {
 	ss, err := New(s.T().Context(), s.dir, append(required(), opts...)...)
@@ -78,7 +89,13 @@ func (s *NewSuite) optionProblems(err error) []string {
 func (s *NewSuite) TestNewNamesEveryMissingRequiredOptionAtOnce() {
 	_, err := New(s.T().Context(), s.dir)
 	s.Require().Error(err)
-	s.Equal([]string{"WithInvocation", "WithActor", "WithNotices"}, s.optionProblems(err))
+	s.Equal([]string{"WithInvocation", "WithActor", "WithNotices", "WithCheckSpec"}, s.optionProblems(err))
+}
+
+func (s *NewSuite) TestNewRefusesACheckSpecWithANilFunction() {
+	_, err := New(s.T().Context(), s.dir, append(required(), WithCheckSpec(nil))...)
+	s.Require().Error(err)
+	s.Equal([]string{"WithCheckSpec"}, s.optionProblems(err))
 }
 
 func (s *NewSuite) TestNewRefusesAnEmptyDir() {
@@ -259,20 +276,33 @@ func ExampleNew() {
 		WithInvocation("inv1", session.InvocationStart{Command: "example"}),
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
-		WithSlots(2),
+		WithCheckSpec(keptChecks{}),
 	)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	slots, err := ss.Slots()
-	fmt.Println(slots.Capacity(), err)
+	check, err := job.NewCheck([]string{"go", "test", "./auth/..."})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	row, err := ss.Jobs().Update(ctx, "fix-login", func(j *job.Job) {
+		j.Parent = "root"
+		j.Paths = job.Paths{Write: []string{"auth/**"}}
+		j.Check = check
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(row.ID, row.Paths.Write, row.Check)
 
-	_, err = ss.Command(ctx, "", "go", "version")
+	_, err = ss.Slots()
 	var unconfigured *UnconfiguredError
 	fmt.Println(errors.As(err, &unconfigured), unconfigured.Option)
 	// Output:
-	// 2 <nil>
-	// true WithSandbox
+	// fix-login [auth/**] ["go","test","./auth/..."]
+	// true WithSlots
 }

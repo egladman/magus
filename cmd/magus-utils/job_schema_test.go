@@ -11,7 +11,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	internaljob "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -131,7 +133,7 @@ func writeRecordFixture(t *testing.T, src string) string {
 	return path
 }
 
-var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureAPIVersion"}
+var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureAPIVersion", Pkg: "fixture"}
 
 // fixtureDecls reads a fixture with the closed sets the job records reach.
 func fixtureDecls(t *testing.T, src string) (*goDecls, error) {
@@ -283,13 +285,13 @@ func TestWritePathPatternMatchesTheValidator(t *testing.T) {
 		if !tc.accept {
 			continue
 		}
-		for _, p := range types.DeclarationProblems((job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}})) {
-			assert.NotContains(t, p.Field, "paths.write", "%q: %s", tc.path, p.Message)
+		if err := internaljob.ValidateDeclaration(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}}); err != nil {
+			assert.NotContains(t, err.Error(), "paths.write", "%q", tc.path)
 		}
 	}
 	for _, refused := range []string{"~/x", "/abs/x", "../x"} {
-		problems := types.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
-		assert.NotEmpty(t, problems, "the validator accepts %q, and the pattern refuses it", refused)
+		err := internaljob.ValidateDeclaration(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
+		assert.Error(t, err, "the validator accepts %q, and the pattern refuses it", refused)
 	}
 }
 
@@ -420,4 +422,146 @@ type Fixture struct {
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+type ViewSchemaSuite struct{ suite.Suite }
+
+func TestViewSchema(t *testing.T) { suite.Run(t, new(ViewSchemaSuite)) }
+
+// viewDecls reads two packages that each declare a Record, the way the job
+// module and its types view do.
+func (s *ViewSchemaSuite) viewDecls(inner, view string) *goDecls {
+	dir := s.T().TempDir()
+	innerPath := filepath.Join(dir, "inner.go")
+	viewPath := filepath.Join(dir, "view.go")
+	s.Require().NoError(os.WriteFile(innerPath, []byte(strings.ReplaceAll(inner, "@", "`")), 0o644))
+	s.Require().NoError(os.WriteFile(viewPath, []byte(strings.ReplaceAll(view, "@", "`")), 0o644))
+	decls, err := loadGoDecls(innerPath, viewPath)
+	s.Require().NoError(err)
+	decls.sets = map[string][]string{}
+	return decls
+}
+
+const viewInner = `package inner
+
+const InnerAPIVersion = "magus.inner/v1alpha1"
+
+// Record is the module's.
+type Record struct {
+	ID    string @json:"id"@
+	Check string @json:"check,omitempty"@
+	Name  string @json:"name"@
+}
+`
+
+// A view redeclares one embedded field under the same json name: the schema
+// publishes the view's, at the position of the field it hides, and reads the
+// view's struct although the module declares one of the same name.
+func (s *ViewSchemaSuite) TestShallowerPropertyReplacesTheEmbeddedOneInPlace() {
+	decls := s.viewDecls(viewInner, `package view
+
+// Record is the view's.
+type Record struct {
+	inner.Record
+	Check *Check @json:"check,omitempty"@
+}
+
+type Check struct {
+	Target string @json:"target"@
+}
+`)
+	rec := jobRecord{Struct: "Record", Pkg: "view", Title: "view", File: "view.schema.json", Version: "InnerAPIVersion"}
+	body, err := renderJobSchema(rec, decls)
+	s.Require().NoError(err)
+
+	type schemaDoc struct {
+		Description string                    `json:"description"`
+		Required    []string                  `json:"required"`
+		Properties  map[string]map[string]any `json:"properties"`
+	}
+	var doc schemaDoc
+	s.Require().NoError(codec.Unmarshal(body, &doc))
+	s.Equal(schemaDoc{Description: "Record is the view's.", Required: []string{"id", "name"}, Properties: doc.Properties}, doc)
+	s.Equal("object", doc.Properties["check"]["type"])
+	_, props, found := strings.Cut(string(body), `"properties"`)
+	s.Require().True(found)
+	s.Less(strings.Index(props, `"id"`), strings.Index(props, `"check"`))
+	s.Less(strings.Index(props, `"check"`), strings.Index(props, `"name"`))
+}
+
+func (s *ViewSchemaSuite) TestSamePropertyAtOneDepthIsRefused() {
+	decls := s.viewDecls(viewInner, `package view
+
+type Other struct {
+	Name string @json:"name"@
+}
+
+type Record struct {
+	inner.Record
+	Other
+}
+`)
+	rec := jobRecord{Struct: "Record", Pkg: "view", Title: "view", File: "view.schema.json", Version: "InnerAPIVersion"}
+	_, err := renderJobSchema(rec, decls)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `json name "name" is declared twice at one depth`)
+}
+
+// The module's check is opaque bytes, a type no schema can publish. The view hides it,
+// so the schema publishes the view's and never asks after the hidden one; left
+// unhidden, the opaque field is still refused.
+func (s *ViewSchemaSuite) TestAHiddenFieldNeedsNoSchema() {
+	const opaqueInner = `package inner
+
+const InnerAPIVersion = "magus.inner/v1alpha1"
+
+type Raw []byte
+
+type Record struct {
+	ID    string @json:"id"@
+	Check Raw    @json:"check,omitempty"@
+}
+`
+	rec := jobRecord{Struct: "Record", Pkg: "view", Title: "view", File: "view.schema.json", Version: "InnerAPIVersion"}
+	hidden := s.viewDecls(opaqueInner, `package view
+
+type Record struct {
+	inner.Record
+	Check *Check @json:"check,omitempty"@
+}
+
+type Check struct {
+	Target string @json:"target"@
+}
+`)
+	_, err := renderJobSchema(rec, hidden)
+	s.Require().NoError(err)
+
+	unhidden := s.viewDecls(opaqueInner, `package view
+
+type Record struct {
+	inner.Record
+}
+`)
+	_, err = renderJobSchema(rec, unhidden)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Record.Check")
+}
+
+type RecordFieldSuite struct{ suite.Suite }
+
+func TestRecordFields(t *testing.T) { suite.Run(t, new(RecordFieldSuite)) }
+
+// An unexported field is no member of the record, so it needs no json tag and is never
+// published.
+func (s *RecordFieldSuite) TestAnUnexportedFieldIsNotPublished() {
+	decls, err := fixtureDecls(s.T(), "package fixture\nconst FixtureAPIVersion = \"magus.fixture/v1alpha1\"\n"+
+		"type Fixture struct {\n\tID string @json:\"id\"@\n\tunknown map[string]string\n}\n")
+	s.Require().NoError(err)
+
+	body, err := renderJobSchema(fixtureRecord, decls)
+
+	s.Require().NoError(err)
+	s.Contains(string(body), `"id"`)
+	s.NotContains(string(body), "unknown")
 }

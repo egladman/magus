@@ -24,7 +24,7 @@ import (
 //
 // A read that must not build (rebuild false, which is `describe job`) asks first whether a
 // stale symbol index could hold a change to the row's write paths. While one could, it
-// loads nothing: bringing the graph up to date is a build of seconds, and the symbol goals
+// loads nothing: bringing the graph up to date is a build of seconds, and the symbol postconditions
 // graded against it would answer from an index that misses that change. They print as not
 // graded, beside the stale-index line that names the rebuild. An index whose changed files
 // all fall outside the write paths does not stop the read: the files the row writes are as

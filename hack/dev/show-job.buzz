@@ -36,12 +36,12 @@ final SPEC = [
     "## Criteria",
     "",
     "<%& criteria %>",
-    "<%#hasGoals%>",
+    "<%#hasPostconditions%>",
     "",
-    "<%/hasGoals%>",
-    "<%#goals%>",
-    "- goal `<%& id %>`: <%& description %>",
-    "<%/goals%>",
+    "<%/hasPostconditions%>",
+    "<%#postconditions%>",
+    "- postcondition `<%& id %>`: <%& description %>",
+    "<%/postconditions%>",
     "",
     "## Setup",
     "",
@@ -102,7 +102,7 @@ final SPEC = [
     "    <%& check %>",
     "<%/check%>",
     "<%^check%>",
-    "The spec names no check: the goals above grade the work.",
+    "The spec names no check: the postconditions above grade the work.",
     "<%/check%>",
     "",
     "Run nothing else that validates: no `magus affected ci`, no other target, no raw tool. The root runs everything else, serially.",
@@ -332,11 +332,11 @@ fun lineMaps(lines: [str]) > [{str: any}] {
 // it depends on and the live jobs it overlaps.
 export fun specView(row: magus\Job, list: magus\JobList) > result\Result::<str> {
     final check = leaseCheckCommand(row.check, validation: row.validation);
-    final goals = mut [<{str: any}>];
+    final postconditions = mut [<{str: any}>];
     final gates = mut [<str>];
-    foreach (g in row.goals) {
+    foreach (g in row.postconditions) {
         if (g.id != "check" and g.description != "") {
-            goals.append({"id": g.id, "description": g.description});
+            postconditions.append({"id": g.id, "description": g.description});
         }
         if (leaseCheckCommand(g.check, validation: "") != "") {
             gates.append(g.id);
@@ -358,8 +358,8 @@ export fun specView(row: magus\Job, list: magus\JobList) > result\Result::<str> 
     final data: {str: any} = {
         "id": row.id,
         "criteria": row.agent?.instructions ?? "",
-        "hasGoals": goals.len() > 0,
-        "goals": goals,
+        "hasPostconditions": postconditions.len() > 0,
+        "postconditions": postconditions,
         "base": if (row.checkpoint == "") "The spec names no checkpoint." else "Your worktree must sit at checkpoint `{row.checkpoint}`.",
         "readOnly": row.readOnly,
         "writePaths": if (row.readOnly) [<str>] else row.paths.write,
@@ -486,10 +486,10 @@ export fun fixtureRow() > magus\Job {
         },
         dependsOn = ["guard-tokenizer", "guard-catalog"],
         check = check,
-        goals = [
-            magus\Goal{ id = "check", kind = magus\GoalKind.check, expect = magus\GoalExpect.passed, check = check },
-            magus\Goal{ id = "docs-untouched", description = "docs/ stays as it is", kind = magus\GoalKind.paths,
-                expect = magus\GoalExpect.absent, paths = ["docs/**"] },
+        postconditions = [
+            magus\Postcondition{ id = "check", kind = magus\PostconditionKind.check, expect = magus\PostconditionExpect.passed, check = check },
+            magus\Postcondition{ id = "docs-untouched", description = "docs/ stays as it is", kind = magus\PostconditionKind.paths,
+                expect = magus\PostconditionExpect.absent, paths = ["docs/**"] },
         ],
         state = magus\JobState.declared,
     };

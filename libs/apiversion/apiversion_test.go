@@ -104,5 +104,5 @@ func (s *VersionSuite) TestRefuseOtherGroupIsNotNewer() {
 func (s *VersionSuite) TestRefuseMissingVersion() {
 	err := APIVersion("example.widget/v1").Refuse("")
 	s.Require().Error(err)
-	s.Contains(err.Error(), "no apiVersion")
+	s.Contains(err.Error(), "no api_version")
 }

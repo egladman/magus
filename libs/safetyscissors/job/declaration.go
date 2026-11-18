@@ -19,8 +19,8 @@ import (
 // It is a DECLARATION and not a merge: an omitted field is cleared rather than
 // kept. A [Put] does the opposite: it merges.
 //
-// JSON only, so no yaml tags. The members it does not declare are kept in
-// Schema.Unknown by its own MarshalJSON and UnmarshalJSON, which plain encoding/json
+// JSON only, so no yaml tags. The members it does not declare are kept in its
+// [Schema] by its own MarshalJSON and UnmarshalJSON, which plain encoding/json
 // calls; libs/codec's UnmarshalStrict refuses them instead.
 type Declaration struct {
 	// Schema is the job shape this record is written in. The version is
@@ -61,9 +61,10 @@ type Declaration struct {
 	// checkout's revision when it names none.
 	// The job owns it: see [Worktree]. Empty works wherever the job is taken.
 	Checkout string `json:"checkout,omitempty" schema:"abspath"`
-	// Check is the one check this lease runs, and acceptance binds a worker's evidence
-	// to it.
-	Check *LeaseCheck `json:"check,omitzero"`
+	// Check is the one check this lease runs, which the store reads through
+	// [WithCheckSpec], and acceptance binds a worker's evidence to it. The zero Check
+	// declares none.
+	Check Check `json:"check,omitzero"`
 	// State is the job's lifecycle position, empty for a job that has not said
 	// where it stands. no_return is a lease that never reported, which is not
 	// a failure.
@@ -71,8 +72,8 @@ type Declaration struct {
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitzero"`
-	// Goals are what done means, graded by [Store.Grade]. See [Job.Goals].
-	Goals []Goal `json:"goals,omitempty"`
+	// Postconditions are what done means, graded by [Store.Grade]. See [Job.Postconditions].
+	Postconditions []Postcondition `json:"postconditions,omitempty"`
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
 	// it writes the job, so a declaration carries a length and never an
 	// instant. Empty is no bound; there is no default here (a workspace may
@@ -202,7 +203,8 @@ func pathOutsideWorkspace(p string) string {
 }
 
 // Faults is every fault the record shows on its own, without a workspace: each field's
-// shape, the check, the deviations and the goals. It never stops at the first. A
+// shape, the deviations and the postconditions. What a check says is the store's [CheckSpec]'s
+// to refuse, at write. It never stops at the first. A
 // deviation may permit only a code in permissible, the caller's own.
 func (d Declaration) Faults(permissible ...Code) []Fault {
 	var ps []Fault
@@ -305,8 +307,6 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 				"name an entry of paths.write, or drop it")
 		}
 	}
-	_, declared, checkFaults := d.check()
-	ps = append(ps, checkFaults...)
 	for i, b := range d.Breaks {
 		if strings.TrimSpace(b) == "" {
 			at := fmt.Sprintf("breaks[%d]", i)
@@ -326,7 +326,7 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
 		}
 	}
-	return append(ps, goalFaults(d.Goals, declared)...)
+	return append(ps, postconditionFaults(d.Postconditions, !d.Check.IsZero())...)
 }
 
 // claimFaults is every fault of a claim record: it carries only schema_version, id
@@ -422,33 +422,6 @@ func (e *TimeoutError) Error() string {
 	return fmt.Sprintf("timeout %q is not a positive duration such as 30m or 2h", e.Timeout)
 }
 
-// check is the job's declared check and whether it declares one. A check that does not
-// parse is refused HERE, at the door.
-func (d Declaration) check() (LeaseCheck, bool, []Fault) {
-	invalid := func(field string, err error, fix string) []Fault {
-		return []Fault{{Kind: FaultRecord, Field: field, Message: err.Error(), Fix: fix}}
-	}
-	switch {
-	case d.Check != nil && d.Check.Script != "":
-		if err := d.Check.validScript(); err != nil {
-			return LeaseCheck{}, false, invalid("check.script", err, "name a target or a script, and give a script no project or charms")
-		}
-		return LeaseCheck{Script: d.Check.Script, Args: d.Check.Args, Test: d.Check.Test}, true, nil
-	case d.Check != nil:
-		if err := d.Check.validScript(); err != nil {
-			return LeaseCheck{}, false, invalid("check.test", err, "drop test, or name a script")
-		}
-		parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", d.Check.Target, d.Check.Project))
-		if err != nil {
-			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")
-		}
-		parsed.Args = d.Check.Args
-		parsed.NoDefaultCharms = d.Check.NoDefaultCharms
-		return parsed, true, nil
-	}
-	return LeaseCheck{}, false, nil
-}
-
 // The deliveries a person picks for a job's work.
 const (
 	// DeliveryFold folds the work into the parent's pull request.
@@ -497,13 +470,9 @@ func (d Declaration) Apply(j *Job) {
 	j.Delivery = d.Delivery
 	j.ParentHead = strings.TrimSpace(d.ParentHead)
 	j.Follows = strings.TrimSpace(d.Follows)
-	// Faults refused an unparsable check before the job reached a store.
-	check, declared, _ := d.check()
-	j.Check = nil
-	if declared {
-		j.Check = &check
-	}
-	j.Goals = cloneGoals(d.Goals)
+	// The store validates the check when it writes the row; see [WithCheckSpec].
+	j.Check = d.Check
+	j.Postconditions = clonePostconditions(d.Postconditions)
 	j.State = d.State
 	j.ReadOnly = d.ReadOnly
 	j.MaxAttempts = d.MaxAttempts
@@ -523,21 +492,21 @@ func (d Declaration) ApplySpec(j *Job) {
 	}
 }
 
-func cloneGoals(in []Goal) []Goal {
+func clonePostconditions(in []Postcondition) []Postcondition {
 	if in == nil {
 		return nil
 	}
-	out := make([]Goal, len(in))
-	for i, goal := range in {
+	out := make([]Postcondition, len(in))
+	for i, postcondition := range in {
 		// RESOLVED on the way through, which is what makes this the write boundary the
-		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
+		// enums' no-empty-member rule depends on: every path that stores postconditions (Apply,
 		// job.PutMerge) clones them through here.
-		out[i] = goal.Resolve()
-		out[i].Check.Args = slices.Clone(goal.Check.Args)
-		out[i].Paths = slices.Clone(goal.Paths)
-		out[i].Symbols = slices.Clone(goal.Symbols)
-		out[i].DependsOn = slices.Clone(goal.DependsOn)
-		out[i].Accept = slices.Clone(goal.Accept)
+		out[i] = postcondition.Resolve()
+		out[i].Check = postcondition.Check
+		out[i].Paths = slices.Clone(postcondition.Paths)
+		out[i].Symbols = slices.Clone(postcondition.Symbols)
+		out[i].DependsOn = slices.Clone(postcondition.DependsOn)
+		out[i].Accept = slices.Clone(postcondition.Accept)
 	}
 	return out
 }
@@ -553,14 +522,14 @@ func trimmedNonEmpty(in []string) []string {
 	return out
 }
 
-// MarshalJSON writes the declaration with the members it kept in Unknown.
+// MarshalJSON writes the declaration with the members it does not declare that it kept.
 func (d Declaration) MarshalJSON() ([]byte, error) {
 	type plain Declaration
-	return codec.MarshalWithUnknown(plain(d), d.Unknown)
+	return codec.MarshalWithUnknown(plain(d), d.unknown)
 }
 
-// UnmarshalJSON reads the declaration, keeping the members it does not declare in
-// Unknown. libs/codec's UnmarshalStrict refuses them instead.
+// UnmarshalJSON reads the declaration, keeping the members it does not declare.
+// libs/codec's UnmarshalStrict refuses them instead.
 func (d *Declaration) UnmarshalJSON(data []byte) error {
 	type plain Declaration
 	var p plain
@@ -569,6 +538,6 @@ func (d *Declaration) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*d = Declaration(p)
-	d.Unknown = unknown
+	d.unknown = unknown
 	return nil
 }

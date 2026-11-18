@@ -175,8 +175,8 @@ func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 		"opaque": false, "version_probe": false,
 		"language": "demo", "extensions": [".demo"],
 		"syntax": {
-			"comments": {"lineComments": ["//"], "nested": false},
-			"stubs": {"kinds": ["Function"], "bodyStyle": "brace", "body": "{ todo }"}
+			"comments": {"line_comments": ["//"], "nested": false},
+			"stubs": {"kinds": ["Function"], "body_style": "brace", "body": "{ todo }"}
 		}
 	}`, name, name), string(raw))
 }

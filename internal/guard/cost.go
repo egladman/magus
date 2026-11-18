@@ -1224,8 +1224,9 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 }
 
 // runsCheck reports a run of check's target in check's project, "." when it names none.
-func runsCheck(check *job.LeaseCheck, r targetRun) bool {
-	if check == nil || check.Target == "" || r.verb != "run" || r.target != check.Target {
+func runsCheck(stored job.Check, r targetRun) bool {
+	check, err := readCheck(stored)
+	if err != nil || check.Target == "" || r.verb != "run" || r.target != check.Target {
 		return false
 	}
 	project := cmp.Or(check.Project, ".")

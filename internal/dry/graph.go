@@ -10,12 +10,12 @@ import (
 // playground surfaces.
 type Project struct {
 	Path      string   `json:"path"`
-	DependsOn []string `json:"dependsOn"`
+	DependsOn []string `json:"depends_on"`
 	Outputs   []string `json:"outputs"`
 	Sources   []string `json:"sources"`
 	Spells    []string `json:"spells"`
-	NoCache   []string `json:"noCache"` // target names opted out of caching (skip_cache)
-	Slots     []string `json:"slots"`   // "name=N" for targets that hold N concurrency slots
+	NoCache   []string `json:"no_cache"` // target names opted out of caching (skip_cache)
+	Slots     []string `json:"slots"`    // "name=N" for targets that hold N concurrency slots
 }
 
 // Target is an exported function discovered as a runnable target.

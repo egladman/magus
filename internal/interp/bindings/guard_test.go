@@ -331,7 +331,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 	got, err = rule(t.Context(), types.CommandRequest{
 		Host: "codex", Command: "while true; do make; done", Role: types.AgentRoleWorker,
-		Lease:    &jobtypes.Job{ID: "guard-command"},
+		Lease:    &types.Job{Job: jobtypes.Job{ID: "guard-command"}},
 		Parent:   "orchestrator/feat guard-command",
 		Agent:    "a534fcfe",
 		Commands: []types.CommandInvocation{{Program: "true", Repeats: true}, {Program: "make", Repeats: true}},
@@ -484,7 +484,7 @@ func TestSpawnRuleSeesTheRequestAfterTheLoadCloses(t *testing.T) {
 	idle := int64(90_000)
 	got, err = rule(t.Context(), types.SpawnRequest{
 		Kind: types.SpawnKindContinue, Host: "claude-code", Model: "sonnet", Role: types.AgentRoleWorker,
-		Lease:  &jobtypes.Job{ID: "guard-spawn"},
+		Lease:  &types.Job{Job: jobtypes.Job{ID: "guard-spawn"}},
 		Target: &types.SpawnTarget{Agent: "auditor", IdleMs: &idle},
 		Parent: "orchestrator/brisk-heron/implement adr 0002",
 	}, facts)

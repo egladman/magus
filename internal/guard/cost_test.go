@@ -663,8 +663,8 @@ func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
 	t.Parallel()
 	at, _ := orchestratorFixture(t)
 	rows := []jobtypes.Job{
-		{ID: "a1", State: jobtypes.StateRunning, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}},
-		{ID: "a2", State: jobtypes.StatePass, Check: &jobtypes.LeaseCheck{Target: "lint", Project: "docs"}},
+		{ID: "a1", State: jobtypes.StateRunning, Check: rawCheck("go-test", ".")},
+		{ID: "a2", State: jobtypes.StatePass, Check: rawCheck("lint", "docs")},
 	}
 	tries := []jobtypes.Attempt{filedResult("a2", &jobtypes.Result{Validation: jobtypes.ResultValidation{OutputRef: "out9"}})}
 	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows, Attempts: tries})

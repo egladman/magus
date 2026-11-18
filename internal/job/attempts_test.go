@@ -20,7 +20,7 @@ func TestAttemptsSuite(t *testing.T) {
 	suite.Run(t, new(AttemptsSuite))
 }
 
-func unmetGoals(ids ...string) []job.VerificationStatus {
+func unmetPostconditions(ids ...string) []job.VerificationStatus {
 	out := make([]job.VerificationStatus, len(ids))
 	for i, id := range ids {
 		out[i] = job.VerificationStatus{ID: id}
@@ -44,18 +44,18 @@ func (s *AttemptsSuite) TestAChangedPathOutsideTheWritePathsNeedsAWidening() {
 	s.Equal(job.RetryVerdict{Change: job.RetryAfterWidening, Reason: v}, classifyAttempt(p, nil))
 }
 
-func (s *AttemptsSuite) TestAGoalUnmetTwiceRunningNeedsAPerson() {
-	p := tried(2, job.AttemptStatus{Unmet: unmetGoals("lint", "check")})
-	earlier := []job.Attempt{tried(1, job.AttemptStatus{Unmet: unmetGoals("check")})}
-	s.Equal(job.RetryVerdict{Change: job.RetryAfterPerson, Reason: "goal check was unmet in attempts 1 and 2"},
+func (s *AttemptsSuite) TestAPostconditionUnmetTwiceRunningNeedsAPerson() {
+	p := tried(2, job.AttemptStatus{Unmet: unmetPostconditions("lint", "check")})
+	earlier := []job.Attempt{tried(1, job.AttemptStatus{Unmet: unmetPostconditions("check")})}
+	s.Equal(job.RetryVerdict{Change: job.RetryAfterPerson, Reason: "postcondition check was unmet in attempts 1 and 2"},
 		classifyAttempt(p, earlier))
 }
 
-func (s *AttemptsSuite) TestAGoalUnmetOnlyInAnOlderAttemptIsRetryable() {
-	p := tried(3, job.AttemptStatus{Unmet: unmetGoals("check")})
+func (s *AttemptsSuite) TestAPostconditionUnmetOnlyInAnOlderAttemptIsRetryable() {
+	p := tried(3, job.AttemptStatus{Unmet: unmetPostconditions("check")})
 	earlier := []job.Attempt{
-		tried(1, job.AttemptStatus{Unmet: unmetGoals("check")}),
-		tried(2, job.AttemptStatus{Unmet: unmetGoals("lint")}),
+		tried(1, job.AttemptStatus{Unmet: unmetPostconditions("check")}),
+		tried(2, job.AttemptStatus{Unmet: unmetPostconditions("lint")}),
 	}
 	s.Equal(job.RetryVerdict{Retryable: true}, classifyAttempt(p, earlier))
 }
@@ -65,8 +65,8 @@ func (s *AttemptsSuite) TestAnEndTheSweepWroteIsRetryableAsIs() {
 	s.Equal(job.RetryVerdict{Retryable: true}, classifyAttempt(p, nil))
 }
 
-func (s *AttemptsSuite) TestAFirstUnmetGoalIsRetryable() {
-	p := tried(1, job.AttemptStatus{Unmet: unmetGoals("check"), Denials: []job.Denial{{Rule: "raw-tool"}}})
+func (s *AttemptsSuite) TestAFirstUnmetPostconditionIsRetryable() {
+	p := tried(1, job.AttemptStatus{Unmet: unmetPostconditions("check"), Denials: []job.Denial{{Rule: "raw-tool"}}})
 	s.Equal(job.RetryVerdict{Retryable: true}, classifyAttempt(p, nil))
 }
 
@@ -93,9 +93,9 @@ func foldedRow() job.Job {
 	prev.Updated, prev.ReworkRounds, prev.Widenings = 40, 2, 1
 	prev.ModelTier = &tier.Assignment{Name: "routine"}
 	prev.Attempt = &job.CapturedRun{Ref: "out1", Failed: true}
-	prev.GateAttempts = []job.GateAttempt{
-		{GateID: "lint", Attempt: job.CapturedRun{Ref: "out2"}},
-		{GateID: "unit", Attempt: job.CapturedRun{Ref: "out3", Failed: true}},
+	prev.PostconditionAttempts = []job.PostconditionAttempt{
+		{PostconditionID: "lint", Attempt: job.CapturedRun{Ref: "out2"}},
+		{PostconditionID: "unit", Attempt: job.CapturedRun{Ref: "out3", Failed: true}},
 	}
 	prev.Rejection = &job.Rejection{Unmet: []job.VerificationStatus{{ID: "check", Violations: []string{"failed"}}}, Violations: []string{"v"}}
 	return prev
@@ -158,10 +158,10 @@ func (s *AttemptsSuite) TestEvidenceAtSetsAsideRunsOfAnEarlierSpec() {
 	row := job.Job{ID: "a", Generation: 3}
 	result := &job.Result{ChangedPaths: []string{"a.go"}, ObservedGeneration: 2}
 	row.Attempt = &job.CapturedRun{Ref: "out1", ObservedGeneration: 2}
-	row.GateAttempts = []job.GateAttempt{
-		{GateID: "lint", Attempt: job.CapturedRun{Ref: "out2", ObservedGeneration: 3}},
-		{GateID: "unit", Attempt: job.CapturedRun{Ref: "out3", ObservedGeneration: 1}},
-		{GateID: "vet", Attempt: job.CapturedRun{Ref: "out4"}},
+	row.PostconditionAttempts = []job.PostconditionAttempt{
+		{PostconditionID: "lint", Attempt: job.CapturedRun{Ref: "out2", ObservedGeneration: 3}},
+		{PostconditionID: "unit", Attempt: job.CapturedRun{Ref: "out3", ObservedGeneration: 1}},
+		{PostconditionID: "vet", Attempt: job.CapturedRun{Ref: "out4"}},
 	}
 
 	ev, prior := evidenceAt(row, result)
@@ -169,9 +169,9 @@ func (s *AttemptsSuite) TestEvidenceAtSetsAsideRunsOfAnEarlierSpec() {
 	s.Equal(1, prior, "the oldest generation set aside")
 	s.Equal([]string{"a.go"}, ev.result.ChangedPaths, "a result of an earlier spec still grades")
 	s.Equal(job.CapturedRun{}, ev.attempt, "a run of an earlier spec does not")
-	s.Require().Len(ev.gateAttempts, 2)
-	s.Equal("lint", ev.gateAttempts[0].GateID)
-	s.Equal("vet", ev.gateAttempts[1].GateID, "an unstamped run is unknown, never prior")
+	s.Require().Len(ev.postconditionAttempts, 2)
+	s.Equal("lint", ev.postconditionAttempts[0].PostconditionID)
+	s.Equal("vet", ev.postconditionAttempts[1].PostconditionID, "an unstamped run is unknown, never prior")
 }
 
 func (s *AttemptsSuite) TestEvidenceAtSetsAsideNothingOfTheCurrentSpec() {

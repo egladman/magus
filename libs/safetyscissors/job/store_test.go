@@ -30,9 +30,10 @@ func (s *StoreSuite) open(opts ...StoreOption) *Store {
 	return st
 }
 
-// writable is opts with the seams every write needs: an unbound actor and a notice sink.
+// writable is opts with the seams every write needs: an unbound actor, a notice sink and
+// the tests' check spec.
 func writable(opts ...StoreOption) []StoreOption {
-	return append([]StoreOption{WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {})}, opts...)
+	return append([]StoreOption{WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {}), testCheckSpec()}, opts...)
 }
 
 func (s *StoreSuite) TestAStoreWithNoActorRefusesAWrite() {
@@ -59,7 +60,7 @@ func (s *StoreSuite) TestAStoreWithNoNoticesRefusesAWrite() {
 }
 
 func (s *StoreSuite) TestAPinnedActorNeedsNoActorOption() {
-	st, err := Open(s.dir, WithNotices(func(Notice) {}))
+	st, err := Open(s.dir, WithNotices(func(Notice) {}), testCheckSpec())
 	s.Require().NoError(err)
 
 	_, err = st.As(Actor{}).Update(s.T().Context(), "a", func(*Job) {})
@@ -96,7 +97,7 @@ func (s *StoreSuite) TestAWriteReadsTheStoresClock() {
 }
 
 func (s *StoreSuite) TestACancelledReadStopsWaitingOnAnAppendInFlight() {
-	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(`{"apiVersion":`), 0o600))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(`{"api_version":`), 0o600))
 	ctx, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
@@ -157,13 +158,13 @@ func (s *StoreSuite) TestTheFileIsStampedWithTheModuleGroup() {
 	s.Require().NoError(err)
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	s.Require().Len(lines, 2)
-	s.Contains(lines[0], `"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList"`)
-	s.Contains(lines[1], `"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job"`)
+	s.Contains(lines[0], `"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"`)
+	s.Contains(lines[1], `"api_version":"safetyscissors.job/v1alpha1","kind":"Job"`)
 }
 
 func (s *StoreSuite) TestALineOfAnotherGroupIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
-		[]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
+		[]byte(`{"api_version":"batch.magus/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
 
 	_, err := s.open().List(s.T().Context())
 
@@ -172,9 +173,24 @@ func (s *StoreSuite) TestALineOfAnotherGroupIsRefused() {
 	s.Equal(1, version.Line)
 }
 
+// A file an older build wrote, keyed in camelCase at this build's migration, names no
+// api_version, so it is refused rather than read as an empty plan.
+func (s *StoreSuite) TestAnOlderBuildsCamelCaseFileIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
+		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"+
+			`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"readOnly":true},"status":{"created":1,"updated":1}}`+"\n"), 0o600))
+
+	_, err := s.open().List(s.T().Context())
+
+	var refused *RecordVersionError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal(1, refused.Line)
+	s.Empty(refused.Got)
+}
+
 func (s *StoreSuite) TestAFileAtANewerMigrationIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
-		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":3}`+"\n"), 0o600))
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":3}`+"\n"), 0o600))
 
 	_, err := s.open(WithMigrations(1, nil)).List(s.T().Context())
 
@@ -186,11 +202,11 @@ func (s *StoreSuite) TestAFileAtANewerMigrationIsRefused() {
 
 func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
-		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
 	var found []int
 	migrate := func(_ context.Context, path string, from int, _ []codec.Line) error {
 		found = append(found, from)
-		return os.WriteFile(path, []byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
+		return os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
 	}
 
 	_, err := s.open(WithMigrations(1, migrate)).List(s.T().Context())
@@ -339,7 +355,7 @@ func (s *StoreSuite) TestARewriteDroppingAnUnfinishedAttemptLineIsANotice() {
 	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
 	s.Require().NoError(err)
 	path := filepath.Join(s.dir, attemptsFileName)
-	s.Require().NoError(os.WriteFile(path, []byte(`{"apiVersion":`), 0o600))
+	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":`), 0o600))
 
 	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
 
@@ -368,7 +384,7 @@ func (s *StoreSuite) TestAttemptsLiveBesideTheRows() {
 
 func (s *StoreSuite) TestAnAttemptOfAnotherVersionIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, attemptsFileName),
-		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
 
 	_, err := s.open().Attempts(s.T().Context())
 

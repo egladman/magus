@@ -35,18 +35,22 @@ type ForegroundMax func() (time.Duration, bool)
 // reports it, took longer than limit reports; false when none did, when the row names no
 // target check, or when the limit is unknown. A check with no recorded run is passed over.
 // limit is asked once, and only once a run is found, since answering it loads the wired
-// harnesses.
+// harnesses. A row whose checks do not read, which no store keeps, overruns nothing.
 func OverrunsForeground(row job.Job, lastRun LastRun, limit ForegroundMax) (ForegroundOverrun, bool) {
 	var (
 		longest         time.Duration
 		asked, declared bool
 	)
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != job.GoalKindCheck || g.Check.Target == "" {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return ForegroundOverrun{}, false
+	}
+	for _, gc := range checks {
+		if gc.Postcondition.Kind != job.PostconditionKindCheck || gc.Check.Target == "" {
 			continue
 		}
-		project := cmp.Or(g.Check.Project, ".")
-		took, ok := lastRun(project, g.Check.Target)
+		project := cmp.Or(gc.Check.Project, ".")
+		took, ok := lastRun(project, gc.Check.Target)
 		if !ok {
 			continue
 		}
@@ -61,7 +65,7 @@ func OverrunsForeground(row job.Job, lastRun LastRun, limit ForegroundMax) (Fore
 			continue
 		}
 		return ForegroundOverrun{
-			Check:           hint.Run.With(g.Check.Target, project),
+			Check:           hint.Run.With(gc.Check.Target, runProject(project)),
 			LastRunMs:       took.Milliseconds(),
 			ForegroundMaxMs: longest.Milliseconds(),
 		}, true

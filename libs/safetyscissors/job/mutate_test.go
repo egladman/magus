@@ -138,7 +138,12 @@ func (s *MutateSuite) TestAWideningOfTheWritePathsKeepsTheGeneration() {
 	widened := Job{Paths: Paths{Write: []string{"internal/**"}}}
 	moved := Job{Paths: Paths{Write: []string{"docs"}}}
 
-	s.Equal(2, nextGeneration(prev, widened, true, AsDeclaration))
-	s.Equal(3, nextGeneration(prev, moved, true, AsDeclaration))
-	s.Equal(1, nextGeneration(Job{}, moved, false, AsDeclaration))
+	for want, next := range map[int]Job{2: widened, 3: moved} {
+		got, err := nextGeneration(prev, next, true, AsDeclaration, specChecks{})
+		s.Require().NoError(err)
+		s.Equal(want, got)
+	}
+	got, err := nextGeneration(Job{}, moved, false, AsDeclaration, specChecks{})
+	s.Require().NoError(err)
+	s.Equal(1, got)
 }

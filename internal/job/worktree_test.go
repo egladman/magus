@@ -260,7 +260,7 @@ func TestInstallProjectsSkipsAProjectTheCheckoutLacks(t *testing.T) {
 	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), row, projects))
 }
 
-func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
+func TestAPostconditionAddedDuringAForkIsSaidOnce(t *testing.T) {
 	t.Parallel()
 	s, _ := validateWorkspace(t)
 	var notes strings.Builder
@@ -272,7 +272,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	_, err := validateDryFork(t.Context(), quiet, "w", merge)
 	require.NoError(t, err)
 	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
-	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())
+	assert.Equal(t, 1, strings.Count(notes.String(), `added the postcondition "lint"`), notes.String())
 }
 
 func TestInstallProjectsSaysNoneForAReadOnlyJob(t *testing.T) {
@@ -293,7 +293,7 @@ func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
 func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
 	t.Parallel()
 	store, _ := validateWorkspace(t)
-	cold := job.Job{ID: "w", Paths: job.Paths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: &job.LeaseCheck{Target: "site-generate", Project: "docs"}}
+	cold := job.Job{ID: "w", Paths: job.Paths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: fixtureCheck(types.LeaseCheck{Target: "site-generate", Project: "docs"})}
 	warm := cold.Clone()
 	warm.Paths.Write = append(warm.Paths.Write, "cli/registry_test.go")
 	warm.Paths.Soft = []string{"cli/registry_test.go"}

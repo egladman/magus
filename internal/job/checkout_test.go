@@ -92,7 +92,9 @@ var loadableFiles = map[string]string{
 
 // forkCheck is the check every writing fixture here declares, since a fork refuses a
 // writing job with nothing to grade it by.
-func forkCheck() *job.LeaseCheck { return &job.LeaseCheck{Target: "test", Project: "."} }
+func forkCheck() job.Check {
+	return fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
+}
 
 // TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout is the refusal three workers in
 // one checkout were missing: one of them held the root magusfile in its write paths, saved
@@ -363,7 +365,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 	assert.Contains(t, ps[0].Message, "; running, updated")
 	assert.Contains(t, ps[0].Message, "wave/worker-one has changed nothing under internal/job/store.go")
 	assert.Contains(t, ps[0].Fix, "--depends-on wave/worker-one")
-	assert.Contains(t, ps[0].Fix, "the root narrows wave/worker-one to what it has changed with `magus job apply wave/worker-one --release-write-path internal/job/store.go`, which keeps its goals")
+	assert.Contains(t, ps[0].Fix, "the root narrows wave/worker-one to what it has changed with `magus job apply wave/worker-one --release-write-path internal/job/store.go`, which keeps its postconditions")
 
 	requests := releaseRequests(t, root)
 	require.Len(t, requests, 1)

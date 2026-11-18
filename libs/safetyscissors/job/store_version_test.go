@@ -1,6 +1,9 @@
 package job
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -33,6 +36,64 @@ func (s *StoreVersionSuite) TestARecordOfAnotherVersionNamesBoth() {
 	s.Equal("job: /s/jobs.jsonl:2 is batch.magus/v1alpha1, and this build reads safetyscissors.job/v1alpha1", err.Error())
 }
 
+func (s *StoreVersionSuite) TestARetiredNameNamesTheRowAndTheRespelling() {
+	err := &RetiredNameError{Record: "a", Retired: "spec.goals", Now: "spec.postconditions"}
+
+	s.Equal("job a spells spec.goals, a name this build retired for spec.postconditions: migrate the store, respelling spec.goals as spec.postconditions, before reading it", err.Error())
+}
+
+// A row spelling its postconditions goals would keep them as an unknown member, and every
+// reader would see a row with none.
+func (s *StoreVersionSuite) TestARowSpellingGoalsIsRefused() {
+	_, _, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
+		`"spec":{"goals":[{"id":"tests","kind":"check","expect":"passed","check":{"target":"test","project":"."}}]},"status":{"created":1,"updated":1}}`))
+
+	retired, ok := errors.AsType[*RetiredNameError](err)
+	s.Require().True(ok, err)
+	s.Equal(RetiredNameError{Record: "a", Retired: "spec.goals", Now: "spec.postconditions"}, *retired)
+}
+
+func (s *StoreVersionSuite) TestARowRequiringSignatureGoalsIsRefused() {
+	_, _, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job",` +
+		`"metadata":{"name":"a","annotations":{"safetyscissors.job/requires":"signature-goals"}},"spec":{},"status":{"created":1,"updated":1}}`))
+
+	retired, ok := errors.AsType[*RetiredNameError](err)
+	s.Require().True(ok, err)
+	s.Equal(RetiredNameError{Record: "a", Retired: "signature-goals", Now: "signature-postconditions"}, *retired)
+}
+
+// The store refuses the file rather than read it as rows with no postconditions.
+func (s *StoreSuite) TestAStoreHoldingARetiredNameIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","metadata":{"annotations":{"safetyscissors.job/requires":"signature-goals"}}}`+"\n"), 0o600))
+
+	_, err := s.open().List(s.T().Context())
+
+	var retired *RetiredNameError
+	s.Require().ErrorAs(err, &retired)
+	s.Equal(RetiredNameError{Retired: "signature-goals", Now: "signature-postconditions"}, *retired)
+}
+
+func (s *StoreSuite) TestAStoredRowSpellingGoalsIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"+
+			`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"goals":[]},"status":{"created":1,"updated":1}}`+"\n"), 0o600))
+
+	_, err := s.open().List(s.T().Context())
+
+	var retired *RetiredNameError
+	s.Require().ErrorAs(err, &retired)
+	s.Equal("spec.goals", retired.Retired)
+}
+
+func (s *StoreVersionSuite) TestARowSpellingPostconditionsReads() {
+	row, ok, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{},"status":{"created":1,"updated":1}}`))
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal("a", row.ID)
+}
+
 func (s *StoreVersionSuite) TestAShellWordIsQuotedOnlyWhenItMustBe() {
 	s.Equal("/a/b.json", shellQuote("/a/b.json"))
 	s.Equal(`'it'\''s here'`, shellQuote("it's here"))
@@ -48,7 +109,7 @@ func (s *StoreVersionSuite) spec(line map[string]codec.RawMessage) string {
 	return string(line["spec"])
 }
 
-func (s *StoreVersionSuite) TestAStoredCheckGoalComesToAcceptWitnessed() {
+func (s *StoreVersionSuite) TestAStoredCheckPostconditionComesToAcceptWitnessed() {
 	line := s.line(`{"kind":"Job","spec":{"goals":[{"id":"tests","kind":"Check"},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}}`)
 
 	got, err := AcceptWitnessed(line)
@@ -60,7 +121,7 @@ func (s *StoreVersionSuite) TestAStoredCheckGoalComesToAcceptWitnessed() {
 	s.JSONEq(s.spec(got), s.spec(again), "the rewrite is the same applied twice")
 }
 
-func (s *StoreVersionSuite) TestALineWithNoGoalsComesBackAsItWas() {
+func (s *StoreVersionSuite) TestALineWithNoPostconditionsComesBackAsItWas() {
 	header := s.line(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":7}`)
 
 	got, err := AcceptWitnessed(header)
@@ -69,7 +130,10 @@ func (s *StoreVersionSuite) TestALineWithNoGoalsComesBackAsItWas() {
 	s.Equal(header, got)
 }
 
-func (s *StoreVersionSuite) TestAMigratedRowReadsItsBasis() {
+// AcceptWitnessed rewrites a line of the CamelCase layout an older build stored, so it
+// writes that layout's spelling, and the line it leaves is still one this build refuses:
+// only the caller's later migration brings it forward.
+func (s *StoreVersionSuite) TestAMigratedRowKeepsTheOlderLayout() {
 	line := s.line(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{"goals":[{"id":"tests","kind":"Check","expect":"Passed","check":{"target":"test","project":"."}}]},"status":{}}`)
 
@@ -77,9 +141,10 @@ func (s *StoreVersionSuite) TestAMigratedRowReadsItsBasis() {
 	s.Require().NoError(err)
 	text, err := codec.Marshal(got)
 	s.Require().NoError(err)
-	row, ok, err := ReadRecord(text)
+	_, _, err = ReadRecord(text)
 
-	s.Require().NoError(err)
-	s.Require().True(ok)
-	s.Equal([]Basis{BasisWitnessed}, row.Goals[0].Accept)
+	s.Contains(s.spec(got), `"accept":["Witnessed"]`)
+	refused, ok := errors.AsType[*apiversion.RefusedError](err)
+	s.Require().True(ok, err)
+	s.Empty(refused.Got.APIVersion, "the older layout keyed its version apiVersion")
 }

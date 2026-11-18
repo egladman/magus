@@ -56,7 +56,7 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and every declared goal held: a recorded passing run for a check,
+store carries, and every declared postcondition held: a recorded passing run for a check,
 the diff since the checkpoint and the knowledge graph for paths and symbols.
 Evidence must have been captured after the job was declared, so an old green run
 cannot satisfy new work. A target's own run policy bounds its execution; wait does
@@ -110,7 +110,7 @@ them and magus describe job prints one job's terms.
 : A job this one waits on; repeatable or comma-separated
 
 **--instructions** *string*
-: What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the goals a --stdin record declares
+: What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the postconditions a --stdin record declares
 
 **--model** *string*
 : The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
@@ -148,7 +148,7 @@ them and magus describe job prints one job's terms.
 : The records to apply from a file: one JSON job, a JSON array, or one job per line
 
 **--release-write-path** *\<file\>#\<declaration\>*
-: A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a \<file\>#\<declaration\> claim is one path
+: A write path to drop from the job, keeping its postconditions and check; repeatable or comma-separated, and a \<file\>#\<declaration\> claim is one path
 
 **--[no-]stdin** (default: off)
 : Read the records from stdin instead of a file, as job fork --stdin does
@@ -171,11 +171,11 @@ them and magus describe job prints one job's terms.
 
 ### job wait options
 
-**--evidence** *\<goal\>*
-: Grade check goal \<goal\> against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
+**--evidence** *\<postcondition\>*
+: Grade check postcondition \<postcondition\> against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 
 **--[no-]integration** (default: off)
-: Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state
+: Grade only the job's check postconditions against the runs the --stdin result names in THIS checkout, and record that beside its state
 
 **--[no-]schema** (default: off)
 : Print the JSON schema a result must satisfy, and exit

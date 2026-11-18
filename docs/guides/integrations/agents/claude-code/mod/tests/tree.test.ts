@@ -13,7 +13,7 @@ const row = (id: string, parent: string, state: JobRow['state'], updated = NOW -
   criteria: '',
   check: '',
   writePaths: [],
-  goals: [],
+  postconditions: [],
   proof: '',
   endReason: '',
   baseVerdict: '',

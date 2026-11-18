@@ -484,10 +484,9 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	repo.Write("api/x.go", "package api\n\nfunc X() {\n\tpanic(1)\n}\n")
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
-	check, err := jobtypes.ParseLeaseCheck("test .")
-	require.NoError(t, err)
+	check := rawLeaseCheck(t, "test .")
 	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, jobtypes.Put{Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: new(check), State: new(jobtypes.StateRunning)})
+		_, err := MagusPutJob(ctx, id, jobtypes.Put{Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: &check, State: new(jobtypes.StateRunning)})
 		require.NoError(t, err)
 		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
@@ -577,7 +576,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	assert.Equal(t, jobtypes.StatePass, got.State)
 	assert.Equal(t, "the declared goal", got.Instructions(), "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.Paths.Write)
-	require.NotNil(t, got.Check, "the state advance must not erase the check")
+	require.True(t, !got.Check.IsZero(), "the state advance must not erase the check")
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
@@ -955,7 +954,9 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	var roots []string
 	grader := func(_ context.Context, root string, row jobtypes.Job) job.CheckVerdict {
 		roots = append(roots, root)
-		if row.Check.Target != "go-build" {
+		view, err := types.NewJob(row)
+		require.NoError(t, err)
+		if view.Check.Target != "go-build" {
 			return job.CheckVerdict{}
 		}
 		return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
@@ -964,9 +965,8 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	root := t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &gradedWorkspace{ledgerWorkspace: &ledgerWorkspace{cacheDir: t.TempDir(), root: root}, grader: grader})
 	put := func(check string) error {
-		c, err := jobtypes.ParseLeaseCheck(check)
-		require.NoError(t, err)
-		_, err = MagusPutJob(ctx, "w", jobtypes.Put{Paths: jobtypes.PathsPut{Write: new([]string{"run.go"})}, Check: &c})
+		stored := rawLeaseCheck(t, check)
+		_, err := MagusPutJob(ctx, "w", jobtypes.Put{Paths: jobtypes.PathsPut{Write: new([]string{"run.go"})}, Check: &stored})
 		return err
 	}
 
@@ -999,6 +999,15 @@ func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, types.WritePathIsDirectory, "the directory is named")
 	assert.ErrorIs(t, err, types.JobUngraded, "so is the missing grade, in the same error")
+}
+
+// rawLeaseCheck is the stored form of a `<target> <project>` check, the way a put carries it.
+func rawLeaseCheck(t *testing.T, text string) jobtypes.Check {
+	t.Helper()
+	target, project, _ := strings.Cut(text, " ")
+	raw, err := types.EncodeLeaseCheck(types.LeaseCheck{Target: target, Project: project})
+	require.NoError(t, err)
+	return raw
 }
 
 func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {

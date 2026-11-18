@@ -569,7 +569,7 @@ func readsOwnProjects(r targetRun, row jobtypes.Job) bool {
 	checks := rowChecks(row)
 	return !slices.ContainsFunc(r.selection(), func(p string) bool {
 		p = path.Clean(p)
-		return !holdsWritePaths([]string{p}, paths) && (p == "/" || !slices.ContainsFunc(checks, func(c jobtypes.LeaseCheck) bool { return path.Clean(c.Project) == p }))
+		return !holdsWritePaths([]string{p}, paths) && (p == "/" || !slices.ContainsFunc(checks, func(c types.LeaseCheck) bool { return path.Clean(c.Project) == p }))
 	})
 }
 
@@ -600,7 +600,7 @@ func lazyWorkspace(ctx context.Context, deps Dependencies, root string) func() (
 type rowJudge struct {
 	deps   Dependencies
 	row    jobtypes.Job
-	checks []jobtypes.LeaseCheck
+	checks []types.LeaseCheck
 	// root is the workspace, and dir the directory the runs are made in.
 	root, dir string
 	workspace func() (types.WorkspaceRepository, error)
@@ -863,7 +863,7 @@ func (v runVerdict) opNext(defaults []string) string {
 // than pass the run unchecked: no silent default stands in for the write paths. The next
 // run is judged without the workspace: a permitted run without the rw charm, or the check,
 // which names its project.
-func uncheckedDenial(v runVerdict, me jobtypes.Job, checks []jobtypes.LeaseCheck, defaults []string) denial {
+func uncheckedDenial(v runVerdict, me jobtypes.Job, checks []types.LeaseCheck, defaults []string) denial {
 	next := checkCommand(checks[0])
 	if v.permitted {
 		next = v.run.readOnly(defaults)
@@ -1024,9 +1024,9 @@ func verbFlagTakesValue(verb, name string) bool {
 }
 
 // isCheck reports whether r runs one of checks over that check's project alone.
-func (r targetRun) isCheck(checks []jobtypes.LeaseCheck) bool {
+func (r targetRun) isCheck(checks []types.LeaseCheck) bool {
 	projects := r.selection()
-	return r.verb == "run" && slices.ContainsFunc(checks, func(c jobtypes.LeaseCheck) bool {
+	return r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
 		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
 	})
 }
@@ -1037,7 +1037,7 @@ func (r targetRun) isCheck(checks []jobtypes.LeaseCheck) bool {
 // worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
-func (r targetRun) allowed(checks []jobtypes.LeaseCheck, produces lazyProducers) bool {
+func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
 	if r.isCheck(checks) {
 		return true
 	}
@@ -1339,7 +1339,7 @@ func (r targetRun) installs(deps Dependencies) bool {
 // reaches through ctx.needs, in its own project or another, and every spell op those
 // targets call, read from the workspace's static target graph. A workspace that cannot
 // be read composes nothing, which leaves each run to the check alone.
-func checksCompose(targetGraph func() (types.TargetGraphOutput, error), checks []jobtypes.LeaseCheck) func(target, project string) bool {
+func checksCompose(targetGraph func() (types.TargetGraphOutput, error), checks []types.LeaseCheck) func(target, project string) bool {
 	graph, err := targetGraph()
 	if err != nil {
 		return func(string, string) bool { return false }
@@ -1430,12 +1430,24 @@ func (j rowJudge) runsOffCheck(r targetRun) bool {
 	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
-// rowChecks are the runs a row names as its checks: the check record and every check goal.
-func rowChecks(row jobtypes.Job) []jobtypes.LeaseCheck {
-	var out []jobtypes.LeaseCheck
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind == jobtypes.GoalKindCheck && g.Check.Target != "" {
-			out = append(out, g.Check)
+// readCheck reads the check a row or postcondition stores. The store validated it when it wrote the
+// row, so an error here means a row that bypassed the store.
+func readCheck(stored jobtypes.Check) (types.LeaseCheck, error) {
+	var c types.LeaseCheck
+	err := stored.Decode(&c)
+	return c, err
+}
+
+// rowChecks are the runs a row names as its checks: the check record and every check postcondition.
+// A check that cannot be read names no run, which narrows what a worker may run.
+func rowChecks(row jobtypes.Job) []types.LeaseCheck {
+	var out []types.LeaseCheck
+	for _, g := range row.EffectivePostconditions() {
+		if g.Kind != jobtypes.PostconditionKindCheck {
+			continue
+		}
+		if c, err := readCheck(g.Check); err == nil && c.Target != "" {
+			out = append(out, c)
 		}
 	}
 	if len(out) > 0 || row.Validation == "" {
@@ -1521,12 +1533,17 @@ func zeroDuration(word string) bool {
 }
 
 // WorkerCheckCommand is the check as its worker types it, for a fork to grade.
-func WorkerCheckCommand(c jobtypes.LeaseCheck) string { return checkCommand(c) }
+func WorkerCheckCommand(c types.LeaseCheck) string { return checkCommand(c) }
 
 // checkCommand renders a check as the command that runs it, quoted for a shell.
-// It carries --budget-wait 0 because a worker never queues for a seat.
-func checkCommand(c jobtypes.LeaseCheck) string {
-	args := []string{c.Target, cmp.Or(c.Project, "."), "--budget-wait", "0"}
+// It carries --budget-wait 0 because a worker never queues for a seat. A check over
+// the workspace root, project `/`, runs as --all, since `run` refuses `/`.
+func checkCommand(c types.LeaseCheck) string {
+	project := cmp.Or(c.Project, ".")
+	if project == "/" {
+		project = "--all"
+	}
+	args := []string{c.Target, project, "--budget-wait", "0"}
 	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}
@@ -2145,11 +2162,14 @@ func cliFork(args []string, stdin string) childFork {
 		if err != nil {
 			return childFork{}
 		}
-		scriptOnly := row.Check != nil && row.Check.Target == "" && row.Check.Script != ""
+		hasCheck := !row.Check.IsZero()
+		// A check that cannot be read is not script-only, so the child counts as bounded.
+		declared, err := readCheck(row.Check)
+		scriptOnly := hasCheck && err == nil && declared.Target == "" && declared.Script != ""
 		return childFork{
 			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.Paths.Write) > 0,
-			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Goals) > 0 ||
-				(row.Check != nil && !scriptOnly) || (row.State != "" && row.State != jobtypes.StateDeclared),
+			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Postconditions) > 0 ||
+				(hasCheck && !scriptOnly) || (row.State != "" && row.State != jobtypes.StateDeclared),
 		}
 	}
 	f := childFork{parent: flags["parent"], writePaths: flags["write-paths"] != ""}
@@ -2547,23 +2567,27 @@ func withoutRelocation(args []string) []string {
 //
 // It exists because the refusal quoted row.Validation whatever had actually matched, and a
 // row can now name the gate from any of several places: told that its check `go-test api`
-// names `ci`, a reader goes looking for a bug in a line that is fine while the goal that
+// names `ci`, a reader goes looking for a bug in a line that is fine while the postcondition that
 // really did it goes unmentioned.
 func LeaseGateSource(row jobtypes.Job) (string, bool) {
-	// EVERY goal is asked, and the primary check no longer answers for the row. Returning
+	// EVERY postcondition is asked, and the primary check no longer answers for the row. Returning
 	// on row.Check alone meant a job whose check was some narrow target stopped the walk
-	// before its goals were read, so a narrow check beside a `ci` check goal took the gate
+	// before its postconditions were read, so a narrow check beside a `ci` check postcondition took the gate
 	// through the door the check rule holds shut.
-	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != jobtypes.GoalKindCheck {
+	for _, gate := range row.EffectivePostconditions() {
+		if gate.Kind != jobtypes.PostconditionKindCheck {
 			continue
 		}
-		t, err := types.ParseTarget(gate.Check.Target)
+		check, err := readCheck(gate.Check)
+		if err != nil {
+			continue
+		}
+		t, err := types.ParseTarget(check.Target)
 		if err == nil && t.Name == types.TargetCI {
-			if gate.ID == jobtypes.PrimaryGoalID {
-				return job.CheckCommand(gate.Check), true
+			if gate.ID == jobtypes.PrimaryPostconditionID {
+				return job.CheckCommand(check), true
 			}
-			return fmt.Sprintf("goal %q (%s)", gate.ID, job.CheckCommand(gate.Check)), true
+			return fmt.Sprintf("postcondition %q (%s)", gate.ID, job.CheckCommand(check)), true
 		}
 	}
 	if validationNamesGate(row.Validation) {
@@ -2573,7 +2597,7 @@ func LeaseGateSource(row jobtypes.Job) (string, bool) {
 }
 
 // compat(until: no ledger row is written without a check record): rows predating
-// jobtypes.LeaseCheck carry only the rendered validation line, so it is read as words. `ci`,
+// types.LeaseCheck carry only the rendered validation line, so it is read as words. `ci`,
 // `magus run ci` and `affected ci` are all things a person writes there, and a stray `ci`
 // elsewhere in the field reads as ownership and clears the deny, which is the direction
 // this rule fails in on purpose. Observe it is safe to drop when every row
@@ -4053,9 +4077,15 @@ func vcsMutation(c hint.Invocation) string {
 // a non-reader command was pointed at, which is the safe direction for a boundary as
 // specific as the cache dir but not for one as ordinary as a path: grading every word would
 // refuse `echo hi` for writing outside the boundary.
+//
+// With no acting lease, only an agent's write into a job's checkout is refused
+// ([denyUnboundShellWrite]); a person and the root session write anywhere.
 func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
-		return ""
+		if deps.caller.Agent == "" {
+			return ""
+		}
+		return denyUnboundShellWrite(ctx, deps, command)
 	}
 	location := hookLocation(ctx, deps)
 	if location.workspace == "" {

@@ -403,7 +403,7 @@ func lsJobs(root string, args []string) error {
 // describeJob is `magus describe job`: one job's terms, which is what a holder reads on
 // arrival. It prints the criteria, the write paths, the check, the model, the checkpoint, the
 // dependencies, what the workspace itself puts out of reach, the graph's blast radius for
-// each write path, and where each declared goal stands graded against the evidence magus
+// each write path, and where each declared postcondition stands graded against the evidence magus
 // holds now. It prints no procedure: taking the job is `magus job exec`'s work to DO,
 // not a paragraph for somebody to follow by hand.
 func describeJob(ctx context.Context, root string, args []string) error {
@@ -413,10 +413,10 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print one job's terms: its criteria, write paths, check and dependencies, the paths this")
 			fmt.Fprintln(os.Stderr, "workspace puts out of reach, the graph's blast radius for each write path, and where each")
-			fmt.Fprintln(os.Stderr, "declared goal stands graded against the evidence magus holds now.")
+			fmt.Fprintln(os.Stderr, "declared postcondition stands graded against the evidence magus holds now.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a status: magus assembles what it holds and you")
-			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job. Grading a goal is")
+			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job. Grading a postcondition is")
 			fmt.Fprintln(os.Stderr, "still a READ: it records nothing, so asking never advances a job and never blocks the")
 			fmt.Fprintf(os.Stderr, "holder still working on it. It is the same grading `%s` does, so the\n", hint.JobWait)
 			fmt.Fprintln(os.Stderr, "two cannot disagree.")
@@ -459,7 +459,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	})
 	defer waiting.Stop()
 
-	// A read: the symbol goals, their delta, the deletion candidates and the graph evidence
+	// A read: the symbol postconditions, their delta, the deletion candidates and the graph evidence
 	// take the graph as built, and none while a symbol index is stale (see evidence.Graph).
 	graph := newJobGraph(root, false)
 	facts := leaseBoundary(ctx, root, store, row, leases, graph)
@@ -491,7 +491,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		fmt.Print(brief.String())
 		job.PrintWorktree(os.Stdout, row, false)
 		job.RenderGates(os.Stdout, status)
-		job.RenderGoalCommands(os.Stdout, row)
+		job.RenderPostconditionCommands(os.Stdout, row)
 		if running := guard.JobBackgroundCommands(root, row, time.Now()); running != "" {
 			fmt.Printf("background commands its session still runs\n%s\n", running)
 		}
@@ -504,7 +504,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		pointAtConsole(ctx, row.ID, false)
 		return nil
 	default:
-		return emitFormatted(opts, job.DescribeOutput{Terms: brief, Goals: status})
+		return emitFormatted(opts, job.DescribeOutput{Terms: brief, Postconditions: status})
 	}
 }
 
@@ -538,32 +538,32 @@ func checkoutBaseToken(ctx context.Context, root string) (string, error) {
 }
 
 // evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
-const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
-	jobtypes.PrimaryGoalID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
+const evidenceFlagDoc = "Grade check postcondition `<postcondition>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
+	jobtypes.PrimaryPostconditionID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
 	" and as the run read them: at its revision for a run of a clean tree, else unchanged since it started; repeatable"
 
-// evidenceFlag collects `--evidence <goal>=<ref>` pairs. A goal named twice is refused
+// evidenceFlag collects `--evidence <postcondition>=<ref>` pairs. A postcondition named twice is refused
 // rather than resolved to whichever came last, since the two refs may be different runs.
 // Set writes through the map it was made with, so it must not be nil.
 type evidenceFlag map[string]string
 
 func (e evidenceFlag) String() string {
 	pairs := make([]string, 0, len(e))
-	for _, goal := range slices.Sorted(maps.Keys(e)) {
-		pairs = append(pairs, fmt.Sprintf("%s=%s", goal, e[goal]))
+	for _, postcondition := range slices.Sorted(maps.Keys(e)) {
+		pairs = append(pairs, fmt.Sprintf("%s=%s", postcondition, e[postcondition]))
 	}
 	return strings.Join(pairs, ",")
 }
 
 func (e evidenceFlag) Set(value string) error {
-	goal, ref, ok := strings.Cut(value, "=")
-	if goal, ref = strings.TrimSpace(goal), strings.TrimSpace(ref); !ok || goal == "" || ref == "" {
-		return fmt.Errorf("want <goal>=<ref>, got %q", value)
+	postcondition, ref, ok := strings.Cut(value, "=")
+	if postcondition, ref = strings.TrimSpace(postcondition), strings.TrimSpace(ref); !ok || postcondition == "" || ref == "" {
+		return fmt.Errorf("want <postcondition>=<ref>, got %q", value)
 	}
-	if _, dup := e[goal]; dup {
-		return fmt.Errorf("goal %q is named twice", goal)
+	if _, dup := e[postcondition]; dup {
+		return fmt.Errorf("postcondition %q is named twice", postcondition)
 	}
-	e[goal] = ref
+	e[postcondition] = ref
 	return nil
 }
 
@@ -600,10 +600,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "check it runs. It replaces any job with the same id; an id with no spec flag")
 			fmt.Fprintln(os.Stderr, "forks that job again with the spec it was declared with.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Goals are data: the record's `goals` declares what done means (a check that")
+			fmt.Fprintln(os.Stderr, "Postconditions are data: the record's `postconditions` declares what done means (a check that")
 			fmt.Fprintln(os.Stderr, "passed; paths or symbols changed, present, absent or unreferenced), and")
 			fmt.Fprintf(os.Stderr, "`%s` grades them. `--schema` prints the record. A job that\n", hint.JobWait)
-			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal, and one naming no write paths must")
+			fmt.Fprintln(os.Stderr, "writes is refused without a check or a postcondition, and one naming no write paths must")
 			fmt.Fprintln(os.Stderr, "be --read-only. A read-only job passes only by a script check, `\"check\":")
 			fmt.Fprintln(os.Stderr, "{\"script\": \"<probe>.buzz\"}` in a --stdin record, whose result cites the ref")
 			fmt.Fprintf(os.Stderr, "`%s` prints; without one its holder ends it with\n", hint.Buzz.With("--record", "<probe>.buzz"))
@@ -711,7 +711,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if row, err = job.FlagDeclaration(pos[0], *spec, store.ModelRequest); err != nil {
 			return err
 		}
-		if err := types.ValidateDeclaration(row); err != nil {
+		if err := job.ValidateDeclaration(row); err != nil {
 			return exit.Usagef("magus job fork: %s", err)
 		}
 	}
@@ -749,7 +749,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			if len(paths) == 0 {
 				return exit.Usagef("magus job fork: integrates: %s change nothing since %s, so there is nothing to merge", strings.Join(row.Integrates, ", "), base)
 			}
-			slog.InfoContext(ctx, fmt.Sprintf("%s changes nothing left to merge, and %s's goals are unmet, so it is forked again on the paths it held", strings.Join(row.Integrates, ", "), row.ID), attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("%s changes nothing left to merge, and %s's postconditions are unmet, so it is forked again on the paths it held", strings.Join(row.Integrates, ", "), row.ID), attr.Notice("note"))
 		}
 		switch {
 		case row.Checkpoint == "":
@@ -775,7 +775,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	releaseSeat := sync.OnceFunc(seated)
 	defer releaseSeat()
-	// The graph loads only when a goal names a symbol, the footprint could extend by its
+	// The graph loads only when a postcondition names a symbol, the footprint could extend by its
 	// referrers, or the report lists deletion candidates, and they share one load.
 	graph := newJobGraph(root, true)
 	reader := evidence.GraphSymbolReader(graph.Load)
@@ -789,14 +789,14 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	// Judged before the worktree is made, so a refusal leaves
 	// nothing behind.
-	slog.InfoContext(ctx, fmt.Sprintf("judging %s's goals; a goal naming a symbol loads the symbol graph", row.ID), attr.Notice("note"))
+	slog.InfoContext(ctx, fmt.Sprintf("judging %s's postconditions; a postcondition naming a symbol loads the symbol graph", row.ID), attr.Notice("note"))
 	judging := time.Now()
 	forkPlan, err := job.PlanFork(ctx, store, row.ID, job.JudgedMerge(row, globalCfg.Jobs.DefaultTimeout), globalCfg.Jobs, reader, globalCfg.DryRun)
 	if err != nil {
 		return err
 	}
 	validation := forkPlan.Validation
-	slog.InfoContext(ctx, fmt.Sprintf("judged %s's goals in %s", row.ID, cache.FormatDuration(time.Since(judging))), attr.Notice("note"))
+	slog.InfoContext(ctx, fmt.Sprintf("judged %s's postconditions in %s", row.ID, cache.FormatDuration(time.Since(judging))), attr.Notice("note"))
 	releaseSeat()
 	judgedLive := job.NoteForkJudgedAsUpdate(ctx, store, row.ID)
 	if row.Parent == "" && len(row.Integrates) == 0 && len(validation.Problems) == 0 {
@@ -946,7 +946,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Println(line)
 		}
 		if len(derived) > 0 {
-			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
+			fmt.Printf("its symbol postconditions claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
 		job.RenderDeletionCandidates(os.Stdout, evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored))
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
@@ -1262,7 +1262,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Do the work first, then file this. It is a record of what happened, not a form to")
 			fmt.Fprintln(os.Stderr, "fill in while you are still deciding what to do.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "A read-only job declaring no check or goal has nothing `magus job wait` could")
+			fmt.Fprintln(os.Stderr, "A read-only job declaring no check or postcondition has nothing `magus job wait` could")
 			fmt.Fprintf(os.Stderr, "grade, so filing its result records it %s and ends it.\n", jobtypes.StatePass)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "With no --stdin each named job is ended and recorded %s, which is\n", jobtypes.StateNoReturn)
@@ -1431,12 +1431,12 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job wait <job>")
 			fmt.Fprintln(os.Stderr, "       magus job wait <job> --stdin < result.json")
-			fmt.Fprintln(os.Stderr, "       magus job wait <job> --evidence <goal>=<ref> [--evidence <goal>=<ref> ...]")
+			fmt.Fprintln(os.Stderr, "       magus job wait <job> --evidence <postcondition>=<ref> [--evidence <postcondition>=<ref> ...]")
 			fmt.Fprintln(os.Stderr, "       magus job wait <job> --integration --stdin < evidence.json")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Verify the result a job was exited with, against the job it was handed: every")
 			fmt.Fprintln(os.Stderr, "changed path inside its write paths and outside its denied ones, a change set")
-			fmt.Fprintln(os.Stderr, "that is not empty, descendants the store carries, and every goal held: PASSING")
+			fmt.Fprintln(os.Stderr, "that is not empty, descendants the store carries, and every postcondition held: PASSING")
 			fmt.Fprintln(os.Stderr, "output for a check, the diff and the graph for the rest. Evidence must be newer")
 			fmt.Fprintln(os.Stderr, "than this job's declaration; each target keeps its own execution timeout. A job")
 			fmt.Fprintf(os.Stderr, "that verifies is recorded %s.\n", jobtypes.StatePass)
@@ -1448,22 +1448,22 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "It checks what is mechanical. Whether the work is GOOD, and whether the job's")
 			fmt.Fprintln(os.Stderr, "acceptance criteria are met, stay the reading of whoever forked it.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--evidence <goal>=<ref> grades a check goal against a run recorded in THIS checkout")
-			fmt.Fprintf(os.Stderr, "instead of the one the job was exited with; the job's own check is `%s`.\n", jobtypes.PrimaryGoalID)
-			fmt.Fprintln(os.Stderr, "It is for a goal that failed where the work was written but passes when run here,")
-			fmt.Fprintln(os.Stderr, "such as a build the author's machine could not complete. Repeat it for each goal.")
+			fmt.Fprintln(os.Stderr, "--evidence <postcondition>=<ref> grades a check postcondition against a run recorded in THIS checkout")
+			fmt.Fprintf(os.Stderr, "instead of the one the job was exited with; the job's own check is `%s`.\n", jobtypes.PrimaryPostconditionID)
+			fmt.Fprintln(os.Stderr, "It is for a postcondition that failed where the work was written but passes when run here,")
+			fmt.Fprintln(os.Stderr, "such as a build the author's machine could not complete. Repeat it for each postcondition.")
 			fmt.Fprintln(os.Stderr, "The ref is looked up in this checkout only and must be a fresh, passing run of")
-			fmt.Fprintln(os.Stderr, "that goal's own check. It is refused for a goal the job does not hold, one that is")
+			fmt.Fprintln(os.Stderr, "that postcondition's own check. It is refused for a postcondition the job does not hold, one that is")
 			fmt.Fprintln(os.Stderr, "not a check, and one the job's own evidence already passes. Every changed path")
 			fmt.Fprintln(os.Stderr, "the result names must read byte for byte the same here as in the job's checkout,")
 			fmt.Fprintln(os.Stderr, "and as the run read them: a run of a clean tree read its recorded revision, so they")
 			fmt.Fprintln(os.Stderr, "must read now as they do there; any other run is held to file times, and nothing")
 			fmt.Fprintln(os.Stderr, "under or above them may have changed since it started. Only then does the run here")
-			fmt.Fprintln(os.Stderr, "cover the work it stands in for. The goals that took a run from")
+			fmt.Fprintln(os.Stderr, "cover the work it stands in for. The postconditions that took a run from")
 			fmt.Fprintln(os.Stderr, "here are recorded on the job, beside the runs it was exited with.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--integration asks whether the work still passes in THIS tree, such as a branch")
-			fmt.Fprintln(os.Stderr, "it was merged into: the job's check and check goals are graded against the runs")
+			fmt.Fprintln(os.Stderr, "it was merged into: the job's check and check postconditions are graded against the runs")
 			fmt.Fprintln(os.Stderr, "the result's validation.output_ref and verification_evidence name here, and the grade is")
 			fmt.Fprintln(os.Stderr, "recorded as the job's integration. Its state does not move, and an ended job is")
 			fmt.Fprintln(os.Stderr, "graded too.")
@@ -1550,7 +1550,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	return exit.Reported(exit.Failure)
 }
 
-// jobWaitIntegration is `job wait --integration`: the job's check goals graded against
+// jobWaitIntegration is `job wait --integration`: the job's check postconditions graded against
 // runs recorded in this checkout, with the same exit statuses as a wait.
 func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, result jobtypes.Result) error {
 	if root == "" {
@@ -1743,7 +1743,7 @@ func recentTrail(ctx context.Context, cacheDir string) []journal.Call {
 // to be wider than one second of a very busy machine.
 const jobWatchWindow = 2000
 
-// noteDefaultedAccepts says, one line each, which check goals defaulted to accept a
+// noteDefaultedAccepts says, one line each, which check postconditions defaulted to accept a
 // witnessed run because the record named no accept.
 func noteDefaultedAccepts(ctx context.Context, defaulted []job.DefaultedAccept) {
 	for _, d := range defaulted {

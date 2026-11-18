@@ -80,7 +80,7 @@ func authorizeRow(actor job.Actor, id string, kind job.WriteKind, prev, next job
 	if kind == job.AsClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
 	}
-	if err := job.AuthorizeRow(actor, id, kind, prev, next, exists, rows); err != nil {
+	if err := job.AuthorizeRow(actor, id, kind, prev, next, exists, rows, leaseChecks{}); err != nil {
 		return diagnose(err)
 	}
 	return authorizeGate(actor, id, next, exists, rows)
@@ -98,7 +98,16 @@ func authorizeGate(actor job.Actor, id string, next job.Job, exists bool, rows [
 	if own < 0 {
 		return nil
 	}
-	if parent := rows[own]; runsTheGate(next) && !runsTheGate(parent) {
+	parent := rows[own]
+	childRuns, err := runsTheGate(next)
+	if err != nil {
+		return err
+	}
+	parentRuns, err := runsTheGate(parent)
+	if err != nil {
+		return err
+	}
+	if childRuns && !parentRuns {
 		return refuse(actor, id, "only a lease whose parent runs the gate runs the gate, and this parent runs "+checkLine(parent))
 	}
 	return nil
@@ -106,21 +115,29 @@ func authorizeGate(actor job.Actor, id string, next job.Job, exists bool, rows [
 
 // runsTheGate reports whether a row's declared check IS the release gate, the one check
 // that carries a capability with it.
-func runsTheGate(row job.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(gate job.Goal) bool {
-		return gate.Check.Target == types.TargetCI
-	})
+func runsTheGate(row job.Job) (bool, error) {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(checks, func(c postconditionCheck) bool { return c.Check.Target == types.TargetCI }), nil
 }
 
 // checkLine names a row's check as a refusal quotes it.
 func checkLine(row job.Job) string {
-	gates := row.EffectiveGoals()
+	gates := row.EffectivePostconditions()
 	if len(gates) == 0 {
 		return "no check at all"
 	}
 	lines := make([]string, 0, len(gates))
 	for _, gate := range gates {
-		lines = append(lines, CheckCommand(gate.Check))
+		if gate.Check.IsZero() {
+			continue
+		}
+		lines = append(lines, renderPostconditionCheck(gate))
+	}
+	if len(lines) == 0 {
+		return "no check at all"
 	}
 	return strings.Join(lines, ", ")
 }

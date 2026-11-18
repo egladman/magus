@@ -25,7 +25,7 @@ func TestGradeCheckSuite(t *testing.T) { suite.Run(t, new(GradeCheckSuite)) }
 
 func (s *GradeCheckSuite) SetupTest() {
 	testkit.Isolate(s.T())
-	s.row = jobtypes.Job{ID: "w", Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
+	s.row = jobtypes.Job{ID: "w", Check: rawCheck("go-build", ".")}
 }
 
 // A workspace whose rules did not load defers the grade, and says so rather than refuse on a

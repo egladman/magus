@@ -211,7 +211,7 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"unknown", "releases", "unattributed", "entries", "release_requests", "write_proof", "validated", "reported_base",
 		"base_verdict", "registered_by", "authority", "registered", "checkout_root", "worktree", "end_reason", "created",
-		"updated", "deadline", "attempt", "gate_attempts", "last_run", "integration",
+		"updated", "deadline", "attempt", "postcondition_attempts", "last_run", "integration",
 		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation",
 		"rejection", "paused", "paused_by", "pause_reason", "paused_until", "holder_stopped", "landed",
 	}, storeStamped)
@@ -251,7 +251,7 @@ func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 	require.NoError(t, err)
 
 	described := `{"job":{"id":"a","paths":{"write":["internal/job"]},"state":"declared","created":1},` +
-		`"projects":["."],"graph_cold":true,"goals":{"id":"a"}}`
+		`"projects":["."],"graph_cold":true,"postconditions":{"id":"a"}}`
 	rows, _, err := DecodeDeclarations(strings.NewReader(described))
 	require.NoError(t, err)
 	assert.Equal(t, plain, rows)
@@ -272,14 +272,14 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	rows, _, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.NotNil(t, rows[0].Check)
-	assert.Equal(t, "go-test", rows[0].Check.Target)
+	require.False(t, rows[0].Check.IsZero())
+	assert.Equal(t, "go-test", checkIn(t, rows[0].Check).Target)
 
 	line := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},"validation":"magus run go-test ."}`, job.APIVersion)
 	rows, _, err = DecodeDeclarations(strings.NewReader(line))
 	require.NoError(t, err)
 	require.NotNil(t, rows[0].Check, "a line alone is the declaration's own check")
-	assert.Equal(t, job.LeaseCheck{Target: "go-test", Project: "."}, *rows[0].Check)
+	assert.Equal(t, types.LeaseCheck{Target: "go-test", Project: "."}, checkIn(t, rows[0].Check))
 
 	_, _, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "not both", "fork's decoder stays strict")
@@ -345,14 +345,14 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	assert.ElementsMatch(t, jsonFields(job.Declaration{}), keys(schema.Properties))
 }
 
-// A goal naming only its kind and subject is the common one, so the schema must not
+// A postcondition naming only its kind and subject is the common one, so the schema must not
 // require the expect the decoder fills in, and it states the default a reader would get.
-func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
+func TestPostconditionExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 	t.Parallel()
 
 	var schema struct {
 		Properties struct {
-			Goals struct {
+			Postconditions struct {
 				Items struct {
 					Required   []string `json:"required"`
 					Properties struct {
@@ -361,24 +361,24 @@ func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 						} `json:"expect"`
 					} `json:"properties"`
 				} `json:"items"`
-			} `json:"goals"`
+			} `json:"postconditions"`
 		} `json:"properties"`
 	}
 	require.NoError(t, codec.Unmarshal([]byte(DeclarationSchema), &schema))
-	goal := schema.Properties.Goals.Items
-	assert.NotContains(t, goal.Required, "expect")
-	assert.Contains(t, goal.Properties.Expect.Description, "passed for check")
-	assert.Contains(t, goal.Properties.Expect.Description, "changed for paths and symbol")
+	postcondition := schema.Properties.Postconditions.Items
+	assert.NotContains(t, postcondition.Required, "expect")
+	assert.Contains(t, postcondition.Properties.Expect.Description, "passed for check")
+	assert.Contains(t, postcondition.Properties.Expect.Description, "changed for paths and symbol")
 
-	decl, _, err := decodeDeclaration(declaration(`"id":"adj/store"`, `"goals":[`+
+	decl, _, err := decodeDeclaration(declaration(`"id":"adj/store"`, `"postconditions":[`+
 		`{"id":"unit","kind":"check","check":{"target":"test"}},`+
 		`{"id":"done","kind":"paths","paths":["internal/job"]}]`))
 	require.NoError(t, err)
 	var row job.Job
 	decl.Apply(&row)
-	require.Len(t, row.Goals, 2)
-	assert.Equal(t, job.ExpectPassed, row.Goals[0].Expect)
-	assert.Equal(t, job.ExpectChanged, row.Goals[1].Expect)
+	require.Len(t, row.Postconditions, 2)
+	assert.Equal(t, job.ExpectPassed, row.Postconditions[0].Expect)
+	assert.Equal(t, job.ExpectChanged, row.Postconditions[1].Expect)
 }
 
 func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
@@ -445,7 +445,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = "test internal/job"
 		case "validation":
 			value = "magus run test internal/job"
-		case "goals":
+		case "postconditions":
 			value = []any{map[string]any{
 				"id":    "unit",
 				"check": map[string]any{"target": "test", "project": "internal/job"},

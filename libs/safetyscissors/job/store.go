@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -103,6 +104,7 @@ type storeConfig struct {
 	tree     func(context.Context) (string, error)
 	verifier Verifier
 	command  CheckCommand
+	checks   *checkSpec
 }
 
 // StoreOption sets one of a Store's seams. Each option a caller leaves out has the
@@ -190,9 +192,9 @@ func WithMigrations(version int, migrate Migrate) StoreOption {
 	return func(c *storeConfig) { c.version, c.migrate = version, migrate }
 }
 
-// WithCredentialKinds are the credential kinds an origin the store records may carry. A
-// stored kind none of them spells is refused rather than read. Without it an origin
-// carrying any kind is refused.
+// WithCredentialKinds are the credential kinds an origin the store records may carry,
+// stored as the caller spells them. A stored kind none of them names is refused rather
+// than read. Without it an origin carrying any kind is refused.
 func WithCredentialKinds(kinds ...CredentialKind) StoreOption {
 	return func(c *storeConfig) { c.creds = newWireEnum(kinds...) }
 }
@@ -216,16 +218,17 @@ func WithTree(tree func(context.Context) (string, error)) StoreOption {
 // refuses every statement rather than record one unchecked.
 func WithVerifier(v Verifier) StoreOption { return func(c *storeConfig) { c.verifier = v } }
 
-// WithCheckCommand names the command a check goal is run by. A [LeaseCheck] names a target
-// or a script, not an argv, so the store derives none itself. Without it [Store.Witness]
-// refuses.
+// WithCheckCommand names the command a check postcondition is run by. The store never reads what
+// a check names (see [WithCheckSpec]), so it derives no argv itself. Without it
+// [Store.Witness] refuses.
 func WithCheckCommand(command CheckCommand) StoreOption {
 	return func(c *storeConfig) { c.command = command }
 }
 
 // Open returns the ledger kept in dir, which holds jobs.jsonl, attempts.jsonl,
 // grants.jsonl, grades.jsonl and the lock. The files are created by the first write. dir is the
-// caller's: Open resolves nothing about a repository.
+// caller's: Open resolves nothing about a repository. A [WithCheckSpec] given a nil function
+// is a [*CheckSpecError].
 func Open(dir string, opts ...StoreOption) (*Store, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("job: open a store on the directory that holds it, and none was named")
@@ -233,6 +236,9 @@ func Open(dir string, opts ...StoreOption) (*Store, error) {
 	s := &Store{storeConfig: storeConfig{path: filepath.Join(dir, jobsFileName), creds: newWireEnum[CredentialKind]()}}
 	for _, opt := range opts {
 		opt(&s.storeConfig)
+	}
+	if err := s.checks.refusal(); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -351,21 +357,38 @@ type Rows struct {
 	// A file past this build's is refused.
 	Migration int `json:"migration,omitzero"`
 	// Retained is when the last retention pass ran, in unix seconds; see [WithRetention].
-	Retained int64                       `json:"retained"`
-	Unknown  map[string]codec.RawMessage `json:"-" codec:"unknown"`
-	Jobs     []Job                       `json:"-"`
+	Retained int64 `json:"retained"`
+	Jobs     []Job `json:"-"`
+	// unknown holds every header member Rows does not declare, written back unchanged;
+	// [Rows.Unknown] names them and [Rows.WithMember] adds one.
+	unknown map[string]codec.RawMessage `codec:"unknown"`
 	// stored are the rows' records as read, by id, so a rewrite keeps
 	// what this build does not declare.
 	stored map[string]jobRecord
 }
 
-// MarshalJSON writes the header with the members it kept in Unknown.
-func (f Rows) MarshalJSON() ([]byte, error) {
-	type plain Rows
-	return codec.MarshalWithUnknown(plain(f), f.Unknown)
+// Unknown names the header members Rows does not declare, sorted: what a newer writer or
+// a host stored, which a rewrite carries back out unchanged. Nil when there are none.
+func (f Rows) Unknown() []string { return slices.Sorted(maps.Keys(f.unknown)) }
+
+// WithMember is f with the header member name set to raw, a member Rows does not
+// declare, such as a host's stamp of the build that wrote the store.
+func (f Rows) WithMember(name string, raw codec.RawMessage) Rows {
+	f.unknown = maps.Clone(f.unknown)
+	if f.unknown == nil {
+		f.unknown = map[string]codec.RawMessage{}
+	}
+	f.unknown[name] = raw
+	return f
 }
 
-// UnmarshalJSON reads the header, keeping the members it does not declare in Unknown.
+// MarshalJSON writes the header with the members it does not declare that it kept.
+func (f Rows) MarshalJSON() ([]byte, error) {
+	type plain Rows
+	return codec.MarshalWithUnknown(plain(f), f.unknown)
+}
+
+// UnmarshalJSON reads the header, keeping the members it does not declare.
 func (f *Rows) UnmarshalJSON(data []byte) error {
 	type plain Rows
 	var p plain
@@ -374,13 +397,13 @@ func (f *Rows) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*f = Rows(p)
-	f.Unknown = unknown
+	f.unknown = unknown
 	return nil
 }
 
 // Header is f without its rows.
 func (f Rows) Header() Rows {
-	return Rows{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Migration: f.Migration, Retained: f.Retained, Unknown: f.Unknown, stored: f.stored}
+	return Rows{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Migration: f.Migration, Retained: f.Retained, unknown: f.unknown, stored: f.stored}
 }
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.
@@ -408,7 +431,7 @@ func Unwritable(row Job) error {
 }
 
 // requiredFeatures are the JobSchema features row's content needs a reader to implement,
-// sorted: a `file#Declaration` claim, a `signature` goal and an attempt record (a cap, a
+// sorted: a `file#Declaration` claim, a `signature` postcondition and an attempt record (a cap, a
 // prior attempt, a second attempt) are each read wrongly by a reader older than the version
 // that named them, so a row carrying one is read-only to it. Derived from the content on
 // every write, so a row that drops its last claim is writable again.
@@ -417,8 +440,8 @@ func requiredFeatures(row Job) []string {
 	if slices.ContainsFunc(slices.Concat(row.Paths.Write, row.Paths.Deny), HasClaim) {
 		out = append(out, "claim-declarations")
 	}
-	if slices.ContainsFunc(row.Goals, func(g Goal) bool { return g.Resolve().Expect == ExpectSignature }) {
-		out = append(out, "signature-goals")
+	if slices.ContainsFunc(row.Postconditions, func(g Postcondition) bool { return g.Resolve().Expect == ExpectSignature }) {
+		out = append(out, "signature-postconditions")
 	}
 	// Every row has a generation, so a row carrying only that is not stamped: it would make
 	// every row read-only to an older reader.
@@ -535,13 +558,17 @@ func requestsEntry(prev, next Job) bool {
 
 // authorizeEntry grades an entry: prev is the row before it and next carries the one
 // entry appended to it.
-func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []Job) error {
+func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []Job, spec CheckSpec) error {
 	entry := next.Entries[len(next.Entries)-1]
-	switch {
-	case !exists:
+	if !exists {
 		return fmt.Errorf("%q: there is nothing to enter: %w", id, ErrUnknownJob)
-	case len(ChangedFields(prev, next)) > 0:
-		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(ChangedFields(prev, next), ", "))
+	}
+	changed, err := ChangedFields(prev, next, spec)
+	switch {
+	case err != nil:
+		return err
+	case len(changed) > 0:
+		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(changed, ", "))
 	case actor.Lease == id:
 		return refuse(actor, id, "a holder writes its own paths and never enters them")
 	case actor.Bound() && !slices.ContainsFunc(Ancestors(rows, id), func(r Job) bool { return r.ID == actor.Lease }):
@@ -593,32 +620,6 @@ func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
 		return nil
 	}
 	return err
-}
-
-// boundaryFields are the declared fields a widen or narrow changes, in ChangedFields'
-// spelling.
-func boundaryFields() []string { return []string{"paths.write", "paths.deny", "paths.read"} }
-
-// widensInPlace reports a declaration that changes a live row's boundaries and nothing
-// else it declares, while resetting a state its holder already moved past declared: a
-// re-fork that only moves paths. Such a write keeps the stored state, since resetting it
-// would hand the holder's job out again. A deadline may move with it. A re-fork that
-// changes no boundary still resets the state, which is how a rejected job is handed out
-// again.
-func widensInPlace(prev, next Job) bool {
-	if !prev.State.Live() || prev.State == StateDeclared || next.State != StateDeclared {
-		return false
-	}
-	moved := false
-	for _, field := range ChangedFields(prev, next) {
-		switch {
-		case slices.Contains(boundaryFields(), field):
-			moved = true
-		case field != "state" && field != "deadline":
-			return false
-		}
-	}
-	return moved
 }
 
 // ReasonIntegratorRegenerates is the reason of a deviation a fork derives for an output
@@ -811,6 +812,9 @@ func (s *Store) Rewrite(ctx context.Context, fn func(*Rows) error) error {
 func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
 	if err := s.needWriter("Rewrite"); err != nil {
 		return err
+	}
+	if s.checks == nil {
+		return s.wrap(&UnconfiguredError{Op: "Rewrite", Option: "WithCheckSpec"})
 	}
 	// Made here, before the lock and file helpers create it world-readable. Rows carry a
 	// repository's plan and its checkout paths.
@@ -1060,8 +1064,11 @@ func (s *Store) decodeRows(texts []codec.Line, f *Rows, log *jobsLog) error {
 	return nil
 }
 
-// refuseUnmetFeatures refuses a file requiring a feature this build lacks.
+// refuseUnmetFeatures refuses a file requiring a feature this build lacks or retired.
 func (s *Store) refuseUnmetFeatures(f Rows) error {
+	if err := refuseRetired("", nil, f.Metadata.Requires(recordGroup)); err != nil {
+		return s.wrap(err)
+	}
 	known := make([]apiversion.Feature, len(features()))
 	for i, k := range features() {
 		known[i] = apiversion.Feature(k)
@@ -1092,7 +1099,7 @@ func (s *Store) encodeJobs(f Rows) ([][]byte, error) {
 		if r, ok := f.stored[row.ID]; ok {
 			stored = &r
 		}
-		line, err := codec.Marshal(recordJob(row, stored, s.creds))
+		line, err := codec.Marshal(recordJob(row, stored))
 		if err != nil {
 			return nil, fmt.Errorf("job: %s: %w", row.ID, err)
 		}
@@ -1102,10 +1109,9 @@ func (s *Store) encodeJobs(f Rows) ([][]byte, error) {
 }
 
 // MarshalRecord is row as the line jobs.jsonl stores, with unknown kept beside its
-// declared members and kinds the credential kinds its origins may carry, for a migration
-// that writes a row an older layout held.
-func MarshalRecord(row Job, unknown map[string]codec.RawMessage, kinds ...CredentialKind) ([]byte, error) {
-	r := recordJob(row, nil, newWireEnum(kinds...))
+// declared members, for a migration that writes a row an older layout held.
+func MarshalRecord(row Job, unknown map[string]codec.RawMessage) ([]byte, error) {
+	r := recordJob(row, nil)
 	r.Unknown = unknown
 	return codec.Marshal(r)
 }

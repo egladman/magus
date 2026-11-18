@@ -56,16 +56,23 @@ func (s *ForkGraderSuite) counted(ctx context.Context, root string) (guard.Depen
 // rows are checks a fork's validation grades, the denied go-build among them.
 func (s *ForkGraderSuite) rows() []jobtypes.Job {
 	var rows []jobtypes.Job
-	for _, c := range []jobtypes.LeaseCheck{
+	for _, c := range s.checks() {
+		raw, err := types.EncodeLeaseCheck(c)
+		s.Require().NoError(err)
+		rows = append(rows, jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: raw})
+	}
+	return rows
+}
+
+// checks are what rows carry, one each and in order.
+func (s *ForkGraderSuite) checks() []types.LeaseCheck {
+	return []types.LeaseCheck{
 		{Target: "go-build", Project: "."},
 		{Target: "go::go-vet", Project: "."},
 		{Target: "go-test", Project: "."},
 		{Target: "lint", Project: ".", NoDefaultCharms: true, Args: []string{"run.go"}},
 		{Target: types.TargetCI, Project: "."},
-	} {
-		rows = append(rows, jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &c})
 	}
-	return rows
 }
 
 func (s *ForkGraderSuite) TestTheUnsharedGraderOpensTheWorkspacePerJudgment() {
@@ -101,11 +108,12 @@ func (s *ForkGraderSuite) TestEveryVerdictMatchesTheUnsharedGrader() {
 	grade := guard.NewCheckGrader(s.counted)
 	denied := map[string]bool{}
 	for range 2 {
-		for _, row := range s.rows() {
+		for i, row := range s.rows() {
+			check := s.checks()[i]
 			want := grade(s.T().Context(), s.root, row)
-			s.Equal(want, g.Grade(s.T().Context(), s.root, row), job.CheckCommand(*row.Check))
+			s.Equal(want, g.Grade(s.T().Context(), s.root, row), job.CheckCommand(check))
 			if want.Denied {
-				denied[row.Check.Target] = true
+				denied[check.Target] = true
 			}
 		}
 	}

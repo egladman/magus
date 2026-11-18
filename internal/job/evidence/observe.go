@@ -49,7 +49,7 @@ func runsAtCurrentKey(graphIn func(tree string) *Graph, env Env) job.CurrentRun 
 
 // Observer is the checkpoint observer plus the symbol delta of the job's diff and, for a
 // job with a check gate on ci, the newest green ci gate on this checkout's branch and the
-// tier of the change since it. One graph load serves the symbol goals and the delta, and it
+// tier of the change since it. One graph load serves the symbol postconditions and the delta, and it
 // is the graph of the checkout the job's work lives in: a worker's unintegrated branch is
 // invisible to the waiter's.
 func Observer(root string, graphIn func(tree string) *Graph, env Env) job.Observer {

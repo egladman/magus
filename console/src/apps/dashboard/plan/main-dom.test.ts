@@ -670,13 +670,13 @@ test("a server job's card still names its kind even with no criteria to show", a
   }
 });
 
-// ---- goals and a filed result ------------------------------------------------
+// ---- postconditions and a filed result --------------------------------------
 
-test("the drawer shows the declared goals: kind, expect and the subject", async () => {
+test("the drawer shows the declared postconditions: kind, expect and the subject", async () => {
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        goals: [
+        postconditions: [
           {
             id: "unit",
             kind: "check",
@@ -699,7 +699,7 @@ test("the drawer shows the declared goals: kind, expect and the subject", async 
     await settle();
     host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
     const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
-    assert.match(detail, /Goals/);
+    assert.match(detail, /Postconditions/);
     assert.match(detail, /unit/);
     assert.match(detail, /check passed/);
     assert.match(

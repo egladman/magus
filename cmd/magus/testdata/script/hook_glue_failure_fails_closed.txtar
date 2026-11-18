@@ -1,0 +1,56 @@
+# A hook line whose glue fails before it answers refuses the call, whatever wiring the
+# host still holds. buzzed ran unjudged for days on an unwrapped line whose script was
+# missing: magus exited 1, which Claude Code runs the call on.
+
+[windows] skip 'the exit codes are read through POSIX sh'
+
+# A missing script refuses the call, naming the cause and both remedies.
+stdin touch.json
+exec sh -c 'magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code; echo "exit $?"'
+stdout '^exit 2$'
+stderr 'magus guard could not judge this call, so it is refused'
+stderr 'its hook glue stopped before it answered'
+stderr 'magus-command.buzz'
+stderr 'Rebuild magus, or reinstall the hooks with `magus agent harness install`'
+
+# A glue that fails while it runs is refused the same way, from the event it already read.
+stdin touch.json
+exec sh -c 'magus buzz -s crash.buzz -- --agent-name claude-code; echo "exit $?"'
+stdout '^exit 2$'
+stderr 'crashed after reading'
+stderr 'magus guard could not judge this call, so it is refused'
+
+# Unnamed, a host's envelope still makes it a hook.
+stdin touch.json
+exec sh -c 'magus buzz -s missing.buzz; echo "exit $?"'
+stdout '^exit 2$'
+stderr 'magus guard could not judge this call, so it is refused'
+
+# A stop ends unjudged rather than sending the agent back to work.
+stdin stop.json
+exec sh -c 'magus buzz -s missing.buzz -- --agent-name claude-code; echo "exit $?"'
+stdout '^exit 1$'
+stderr 'magus guard could not judge this stop, so it ends unjudged'
+
+# A script some other program pipes into keeps its own failure.
+stdin plain.txt
+exec sh -c 'magus buzz -s missing.buzz; echo "exit $?"'
+stdout '^exit 1$'
+! stderr 'could not judge'
+
+-- magus.yaml --
+{}
+-- magusfile.buzz --
+-- crash.buzz --
+import "io";
+
+fun main(args: [str]) > void !> any {
+    final event = io\stdin.readAll() catch null;
+    throw "crashed after reading {event?.len() ?? 0} bytes";
+}
+-- touch.json --
+{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"touch x"}}
+-- stop.json --
+{"session_id":"s1","hook_event_name":"Stop","stop_hook_active":false}
+-- plain.txt --
+some lines

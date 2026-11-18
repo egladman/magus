@@ -356,7 +356,7 @@ export fun render(groups: [Group], base: str) > str {
 
 fun newLayer(branch: str, parent: str, paths: [str], declarations: [str], check: str, status: str, reason: str) > branchstack\StackLayer {
     return branchstack\StackLayer{ branch = branch, parent = parent, paths = paths, declarations = declarations,
-        check = check, goals = [<branchstack\CheckGoal>], status = status, reason = reason };
+        check = check, postconditions = [<branchstack\CheckPostcondition>], status = status, reason = reason };
 }
 
 // projectStack is a --by project plan as the stack merge-job-branches reads back.

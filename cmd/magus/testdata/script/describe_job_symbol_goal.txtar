@@ -1,5 +1,5 @@
 # `magus describe job` loads the workspace under the --root flag as given ("") and then
-# grades a symbol goal through a graph load keyed on the path "" resolved to. Both name
+# grades a symbol postcondition through a graph load keyed on the path "" resolved to. Both name
 # one workspace, so the second load reuses the first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
@@ -8,10 +8,10 @@ exec magus init -local -vcs git
 stdin job.json
 exec magus job fork --stdin
 exec magus describe job wave/sym
-stdout 'wave/sym: 0 of 1 goal\(s\) met'
+stdout 'wave/sym: 0 of 1 postcondition\(s\) met'
 stdout '"NeverDefined" is defined nowhere the graph can see'
 
 -- job.json --
-{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/sym", "agent": {"instructions": "define NeverDefined", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]}, "goals": [{"id": "sym", "kind": "symbol", "expect": "present", "symbols": ["NeverDefined"]}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/sym", "agent": {"instructions": "define NeverDefined", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]}, "postconditions": [{"id": "sym", "kind": "symbol", "expect": "present", "symbols": ["NeverDefined"]}]}
 -- code.go --
 package pkg

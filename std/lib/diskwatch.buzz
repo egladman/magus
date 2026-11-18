@@ -3,8 +3,9 @@
 /// magus module, so a hook using it never opens the workspace. The tick that
 /// acts on a decision lives in magus/reclaimdisk.
 ///
-/// The store is $XDG_STATE_HOME/magus/disk/samples.jsonl, one DiskSample a line, and
-/// `magus doctor`'s disk-trend check reads it.
+/// The store is $XDG_STATE_HOME/magus/disk/space.jsonl, one DiskSample a line, and
+/// `magus doctor`'s disk-trend check reads it. The disk/samples.jsonl beside it is the
+/// store from before its keys went snake_case, which nothing reads.
 namespace diskwatch;
 
 import "std";
@@ -75,7 +76,7 @@ export object Report {
 
 /// storePath is the store's path, creating its directory.
 export fun storePath() > str !> any { //nolint:no-throw // a std call; its callers catch the raise
-    return fs\join(fs\stateDir("disk"), name: "samples.jsonl");
+    return fs\join(fs\stateDir("disk"), name: "space.jsonl");
 }
 
 /// thresholds reads the disk section of `magus config view -o json`. A key the config does
@@ -197,16 +198,19 @@ export fun pendingLine(samples: [DiskSample], now: double) > str? {
 }
 
 export fun encode(s: DiskSample) > str !> any { //nolint:no-throw // a std call; its callers catch the raise
-    return json\stringify({"at": s.at, "path": s.path, "totalBytes": s.totalBytes, "freeBytes": s.freeBytes, "action": s.action, "detail": s.detail});
+    return json\stringify({"at": s.at, "path": s.path, "total_bytes": s.totalBytes, "free_bytes": s.freeBytes, "action": s.action, "detail": s.detail});
 }
 
 export fun decode(text: str) > DiskSample !> any { //nolint:no-throw // a std call; its callers catch the raise
     final doc = json\parse(text);
+    if (doc["total_bytes"] == null or doc["free_bytes"] == null) {
+        throw "diskwatch: a line carries no total_bytes or free_bytes, so it is no sample: {text}";
+    }
     return DiskSample{
         at = std\toDouble(doc["at"]),
         path = "{doc["path"]}",
-        totalBytes = std\toInt(doc["totalBytes"]),
-        freeBytes = std\toInt(doc["freeBytes"]),
+        totalBytes = std\toInt(doc["total_bytes"]),
+        freeBytes = std\toInt(doc["free_bytes"]),
         action = "{doc["action"]}",
         detail = "{doc["detail"] ?? ""}",
     };
@@ -298,4 +302,15 @@ test "a sample round-trips through its line" {
     final back = decode(encode(s));
     assert\equal(back.detail, want: "d", message: "detail");
     assert\equal(back.freeBytes, want: 2, message: "freeBytes");
+}
+
+test "a line with no byte counts is refused" {
+    final old = `\{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""\}`;
+    var refused = false;
+    try {
+        refused = decode(old).totalBytes < 0;
+    } catch (err: any) {
+        refused = true;
+    }
+    assert\isTrue(refused, message: "a line without the keys does not read as a sample of nothing");
 }

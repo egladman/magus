@@ -20,7 +20,7 @@ exec magus job fork wave/a --instructions 'change A' --write-paths run.go --chec
 
 stdin c.json
 exec magus job fork --stdin
-stdout '^note: wave/b and wave/a both write run.go. Claim `run.go#C` on wave/b \(its symbol goals name it\) and a declaration other than that on wave/a, or add `--depends-on wave/a` to wave/b, or fold wave/b into wave/a$'
+stdout '^note: wave/b and wave/a both write run.go. Claim `run.go#C` on wave/b \(its symbol postconditions name it\) and a declaration other than that on wave/a, or add `--depends-on wave/a` to wave/b, or fold wave/b into wave/a$'
 ! stdout 'wave/new both write'
 
 stdin c.json
@@ -86,7 +86,7 @@ func Open(ctx int) {
 }
 -- c.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change C", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."},
- "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
+ "postconditions": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
 -- wide1.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/w1", "agent": {"instructions": "change P", "worker": {"type": "resumed"}}, "paths": {"write": ["p.go", "q.go", "r.go"]}, "check": {"target": "lint", "project": "."}}
 -- wide2.json --
@@ -105,4 +105,4 @@ package run
 func R() {}
 -- both.jsonl --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/new", "agent": {"instructions": "add helper", "worker": {"type": "resumed"}}, "paths": {"write": ["util.go#helper"]}, "check": {"target": "lint", "project": "."}}
-{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change C", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."}, "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change C", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."}, "postconditions": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}

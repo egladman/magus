@@ -80,17 +80,18 @@ func (l FormatLedger) Features() []string {
 // Its features are the ones a stored row requires; see [JobFeatures].
 var DeclarationSchema = FormatLedger{
 	Name:    "declaration",
-	Type:    reflect.TypeFor[job.Declaration](),
+	Type:    reflect.TypeFor[Declaration](),
 	Version: APIVersion(job.APIVersion),
-	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
-	// refused as an unknown member.
-	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
+	// completion_gates and goals are postconditions' earlier spellings, and waivers is
+	// deviations' first name. A record sending one is refused as an unknown member.
+	Added: map[string]APIVersion{"postconditions": APIVersion(job.APIVersion)},
+	Reserved: []string{"completion_gates", "goals", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
 		"write_paths", "deny_paths", "read_paths", "soft_paths", "focus", "forbidden_paths", "owned_paths", "validation"},
 	Requires: map[string]APIVersion{
-		"dead-job-end":       APIVersion(job.APIVersion),
-		"claim-declarations": APIVersion(job.APIVersion),
-		"signature-goals":    APIVersion(job.APIVersion),
-		"job-generations":    APIVersion(job.APIVersion),
+		"dead-job-end":             APIVersion(job.APIVersion),
+		"claim-declarations":       APIVersion(job.APIVersion),
+		"signature-postconditions": APIVersion(job.APIVersion),
+		"job-generations":          APIVersion(job.APIVersion),
 	},
 }
 

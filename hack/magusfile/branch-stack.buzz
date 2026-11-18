@@ -13,8 +13,8 @@ export final STATUSES = ["planned", "created", "merged", "needs-stub", "conflict
 // fall off past 200 to 400 lines; this is that range's ceiling.
 export final reviewBudget = 400;
 
-// CheckGoal is a job row goal of kind check: `magus run <target> <project> -- <args>`.
-export object CheckGoal {
+// CheckPostcondition is a job row postcondition of kind check: `magus run <target> <project> -- <args>`.
+export object CheckPostcondition {
     id: str,
     target: str,
     project: str,
@@ -24,7 +24,7 @@ export object CheckGoal {
 // StackLayer is one branch of the stack. parent is the branch it goes on top of: for a
 // split, the branch it was cut on; for a merge, the layer merged before it. Either way it
 // is the stack's base or another layer's branch. check is the job row's own check as a
-// command; goals are its check goals.
+// command; postconditions are its check postconditions.
 export object StackLayer {
     branch: str,
     parent: str,
@@ -32,7 +32,7 @@ export object StackLayer {
     paths: [str],
     declarations: [str],
     check: str = "",
-    goals: [CheckGoal],
+    postconditions: [CheckPostcondition],
     status: str,
     reason: str = "",
 }
@@ -141,7 +141,7 @@ fun requireMap(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
 }
 
 // readStack decodes a stack and refuses what it cannot act on: another schema, an unknown
-// member, a status outside STATUSES, a goal missing its id, target or project, a goal id
+// member, a status outside STATUSES, a postcondition missing its id, target or project, a postcondition id
 // given twice in one layer. Members left out read as empty. It does not order the layers;
 // orderLayers does.
 export fun readStack(json: str) > BranchStack !> any {
@@ -153,17 +153,17 @@ export fun readStack(json: str) > BranchStack !> any {
     foreach (i, lb in listField(doc, key: "layers", where: "the stack")) {
         final where = "layer {i}";
         final m = requireMap(lb, where: where);
-        checkKeys(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "goals", "status", "reason"], where: where);
-        final goals = mut [<CheckGoal>];
+        checkKeys(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "postconditions", "status", "reason"], where: where);
+        final postconditions = mut [<CheckPostcondition>];
         final ids = mut [<str>];
-        foreach (j, gb in listField(m, key: "goals", where: where)) {
-            final gw = "{where}'s goals[{j}]";
+        foreach (j, gb in listField(m, key: "postconditions", where: where)) {
+            final gw = "{where}'s postconditions[{j}]";
             final gm = requireMap(gb, where: gw);
             checkKeys(gm, allowed: ["id", "target", "project", "args"], where: gw);
             final id = strField(gm, key: "id", where: gw, required: true);
-            if (ids.indexOf(id) != null) { throw "branch-stack: {where} names goal {id} twice"; }
+            if (ids.indexOf(id) != null) { throw "branch-stack: {where} names postcondition {id} twice"; }
             ids.append(id);
-            goals.append(CheckGoal{ id = id, target = strField(gm, key: "target", where: gw, required: true),
+            postconditions.append(CheckPostcondition{ id = id, target = strField(gm, key: "target", where: gw, required: true),
                 project = strField(gm, key: "project", where: gw, required: true), args = strsField(gm, key: "args", where: gw) });
         }
         final status = strField(m, key: "status", where: where, required: true);
@@ -177,7 +177,7 @@ export fun readStack(json: str) > BranchStack !> any {
             paths = strsField(m, key: "paths", where: where),
             declarations = strsField(m, key: "declarations", where: where),
             check = strField(m, key: "check", where: where, required: false),
-            goals = goals,
+            postconditions = postconditions,
             status = status,
             reason = strField(m, key: "reason", where: where, required: false),
         });
@@ -189,11 +189,11 @@ export fun readStack(json: str) > BranchStack !> any {
 export fun writeStack(stack: BranchStack) > str {
     final layers = mut [<any>];
     foreach (l in stack.layers) {
-        final goals = mut [<any>];
-        foreach (g in l.goals) { goals.append({"id": g.id, "target": g.target, "project": g.project, "args": g.args}); }
+        final postconditions = mut [<any>];
+        foreach (g in l.postconditions) { postconditions.append({"id": g.id, "target": g.target, "project": g.project, "args": g.args}); }
         layers.append({
             "branch": l.branch, "parent": l.parent, "job": l.job, "paths": l.paths,
-            "declarations": l.declarations, "check": l.check, "goals": goals,
+            "declarations": l.declarations, "check": l.check, "postconditions": postconditions,
             "status": l.status, "reason": l.reason,
         });
     }
@@ -201,7 +201,7 @@ export fun writeStack(stack: BranchStack) > str {
 }
 
 fun layer(branch: str, parent: str) > StackLayer {
-    return StackLayer{ branch = branch, parent = parent, paths = [<str>], declarations = [<str>], goals = [<CheckGoal>], status = "planned" };
+    return StackLayer{ branch = branch, parent = parent, paths = [<str>], declarations = [<str>], postconditions = [<CheckPostcondition>], status = "planned" };
 }
 
 fun branches(stack: BranchStack) > str {
@@ -238,13 +238,13 @@ test "orderLayers names a cycle, an unknown parent and a duplicate branch" {
 
 test "writeStack and readStack round-trip every member" {
     final l = StackLayer{ branch = "topic-1-root", parent = "main", job = "j", paths = ["a.go"], declarations = ["a.go#F"],
-        check = "magus run test .", goals = [CheckGoal{ id = "lint", target = "lint", project = "docs", args = ["--fix"] }],
+        check = "magus run test .", postconditions = [CheckPostcondition{ id = "lint", target = "lint", project = "docs", args = ["--fix"] }],
         status = "conflict", reason = "a.go conflicts" };
     final stack = BranchStack{ base = "main", layers = [l] };
     final text = writeStack(stack);
     final back = readStack(text);
     assert\equal(writeStack(back), want: text, message: "round trip");
-    assert\equal(back.layers[0].goals[0].args, want: ["--fix"], message: "goal args");
+    assert\equal(back.layers[0].postconditions[0].args, want: ["--fix"], message: "postcondition args");
     final sparse = readStack(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned"}]}`);
     assert\equal(sparse.layers[0].paths.len(), want: 0, message: "a left-out list reads empty");
 }
@@ -258,15 +258,15 @@ fun refused(text: str) > str {
     return "";
 }
 
-test "readStack refuses another schema, an unknown member, a bad status and an incomplete or repeated goal" {
+test "readStack refuses another schema, an unknown member, a bad status and an incomplete or repeated postcondition" {
     assert\equal(refused(`{"schema": "magus.branch-stack/v2", "base": "main", "layers": []}`),
         want: "branch-stack: the stack is magus.branch-stack/v2, and this reads magus.branch-stack/v1", message: "schema");
     assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [], "extra": 1}`),
         want: "branch-stack: the stack has unknown member extra; it takes schema, base, layers", message: "unknown member");
     assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "done"}]}`),
         want: "branch-stack: layer 0's status is done; it takes planned, created, merged, needs-stub, conflict", message: "status");
-    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "goals": [{"id": "g", "target": "", "project": "."}]}]}`),
-        want: "branch-stack: layer 0's goals[0]'s target is empty", message: "empty target");
-    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "goals": [{"id": "g", "target": "t", "project": "."}, {"id": "g", "target": "u", "project": "."}]}]}`),
-        want: "branch-stack: layer 0 names goal g twice", message: "repeated id");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "postconditions": [{"id": "g", "target": "", "project": "."}]}]}`),
+        want: "branch-stack: layer 0's postconditions[0]'s target is empty", message: "empty target");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "postconditions": [{"id": "g", "target": "t", "project": "."}, {"id": "g", "target": "u", "project": "."}]}]}`),
+        want: "branch-stack: layer 0 names postcondition g twice", message: "repeated id");
 }

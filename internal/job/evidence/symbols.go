@@ -288,7 +288,7 @@ func ReadSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 	return delta, true
 }
 
-// goExport is a Go symbol's name as a goal spells it, `Type#Member` for a member, and
+// goExport is a Go symbol's name as a postcondition spells it, `Type#Member` for a member, and
 // whether code outside its package can name it: every step of the path exported.
 func goExport(id string) (string, bool) {
 	names := descriptorNames(id)
@@ -304,7 +304,7 @@ func goExport(id string) (string, bool) {
 }
 
 // descriptorNames are the names along a symbol node id's path inside its package:
-// `Goal#Signature.` is [Goal Signature], `Resolve().` is [Resolve], and a parameter adds its
+// `Postcondition#Signature.` is [Postcondition Signature], `Resolve().` is [Resolve], and a parameter adds its
 // own name. The id is `symbol:<manager> <package> <descriptors>`, and the descriptors' own
 // namespace ends at their last `/`.
 func descriptorNames(id string) []string {

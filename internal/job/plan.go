@@ -37,7 +37,7 @@ func Declare(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 	}
 	return func(u *job.Job) {
 		row.Apply(u)
-		u.Validation = validationLine(u.Check)
+		u.Validation = validationLine(*u)
 		u.Deadline = 0
 		if d > 0 {
 			u.Deadline = deadlineAfter(d)
@@ -49,7 +49,7 @@ func Declare(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 // goes through [PlanFork]. It takes
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
 // [validateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
-// symbol goals settled in the same pass: the error joins every problem left after the row's
+// symbol postconditions settled in the same pass: the error joins every problem left after the row's
 // deviations, and nothing is written then. read may be nil where no graph is at hand, which
 // skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) (job.Job, error) {
@@ -101,17 +101,19 @@ func mergeBase(rows []job.Job, id string, merge func(*job.Job)) (job.Job, bool) 
 }
 
 // addedChecks is merged cut to the checks an update adds to prev: its check when it
-// changed, and every goal check prev carried under no goal. A check the row already held
-// was graded when it entered, so an unrelated update never re-grades it.
+// changed, and every postcondition check prev carried under no postcondition. A check the row already held
+// was graded when it entered, so an unrelated update never re-grades it. Two checks that
+// cannot be compared count as different, so an unreadable one is graded again.
 func addedChecks(prev, merged job.Job, checkChanged bool) job.Job {
 	added := merged
 	if !checkChanged {
-		added.Check = nil
+		added.Check = job.Check{}
 	}
-	held := prev.EffectiveGoals()
-	added.Goals = slices.DeleteFunc(slices.Clone(merged.Goals), func(goal job.Goal) bool {
-		return goal.Kind != job.GoalKindCheck || slices.ContainsFunc(held, func(g job.Goal) bool {
-			return g.Kind == job.GoalKindCheck && job.SameLeaseCheck(&g.Check, &goal.Check)
+	held := prev.EffectivePostconditions()
+	added.Postconditions = slices.DeleteFunc(slices.Clone(merged.Postconditions), func(postcondition job.Postcondition) bool {
+		return postcondition.Kind != job.PostconditionKindCheck || slices.ContainsFunc(held, func(g job.Postcondition) bool {
+			same, err := leaseChecks{}.Equal(g.Check, postcondition.Check)
+			return g.Kind == job.PostconditionKindCheck && err == nil && same
 		})
 	})
 	return added
@@ -130,14 +132,14 @@ type Applied struct {
 // and lost, or the field's name for a value that changed.
 func (a Applied) ChangeLines() []string {
 	lists := map[string][2][]string{
-		"paths.write": {a.Prev.Paths.Write, a.Next.Paths.Write},
-		"paths.deny":  {a.Prev.Paths.Deny, a.Next.Paths.Deny},
-		"paths.read":  {a.Prev.Paths.Read, a.Next.Paths.Read},
-		"depends_on":  {a.Prev.DependsOn, a.Next.DependsOn},
-		"integrates":  {a.Prev.Integrates, a.Next.Integrates},
-		"paths.soft":  {a.Prev.Paths.Soft, a.Next.Paths.Soft},
-		"breaks":      {a.Prev.Breaks, a.Next.Breaks},
-		"goals":       {goalIDs(a.Prev.Goals), goalIDs(a.Next.Goals)},
+		"paths.write":    {a.Prev.Paths.Write, a.Next.Paths.Write},
+		"paths.deny":     {a.Prev.Paths.Deny, a.Next.Paths.Deny},
+		"paths.read":     {a.Prev.Paths.Read, a.Next.Paths.Read},
+		"depends_on":     {a.Prev.DependsOn, a.Next.DependsOn},
+		"integrates":     {a.Prev.Integrates, a.Next.Integrates},
+		"paths.soft":     {a.Prev.Paths.Soft, a.Next.Paths.Soft},
+		"breaks":         {a.Prev.Breaks, a.Next.Breaks},
+		"postconditions": {postconditionIDs(a.Prev.Postconditions), postconditionIDs(a.Next.Postconditions)},
 	}
 	lines := make([]string, len(a.Changed))
 	for i, field := range a.Changed {
@@ -165,9 +167,9 @@ func listChange(pair [2][]string) []string {
 	return parts
 }
 
-func goalIDs(goals []job.Goal) []string {
-	ids := make([]string, len(goals))
-	for i, g := range goals {
+func postconditionIDs(postconditions []job.Postcondition) []string {
+	ids := make([]string, len(postconditions))
+	for i, g := range postconditions {
 		ids[i] = g.ID
 	}
 	return ids
@@ -270,7 +272,7 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 				fmt.Sprintf("keep a write path, or end the job with `%s`", hint.JobExit.With(rec.ID)))
 		}
 		if i >= 0 {
-			ps = append(ps, droppedGoalProblems(prev, next)...)
+			ps = append(ps, droppedPostconditionProblems(prev, next)...)
 		}
 		actor := store.Actor()
 		if err := authorizeRow(actor, rec.ID, job.AsDeclaration, prev, next, i >= 0, rows); err != nil {
@@ -279,7 +281,11 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 		v := validateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		problems = append(problems, prefixed(rec.ID, append(ps, v.Problems...))...)
 		next.Releases = store.Releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
-		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: job.SpecChanges(prev, next)})
+		changed, err := job.SpecChanges(prev, next, leaseChecks{})
+		if err != nil {
+			return nil, err
+		}
+		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: changed})
 		merges, proofs = append(merges, merge), append(proofs, v.WriteProof)
 		returning = append(returning, redeclares && !ended)
 		if i >= 0 {
@@ -311,21 +317,21 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 	return plan, nil
 }
 
-// droppedGoalProblems is one problem per goal next lacks, when it also
+// droppedPostconditionProblems is one problem per postcondition next lacks, when it also
 // gives up a write path.
-func droppedGoalProblems(prev, next job.Job) types.JobProblems {
+func droppedPostconditionProblems(prev, next job.Job) types.JobProblems {
 	if job.Subset(prev.Paths.Write, next.Paths.Write) {
 		return nil
 	}
 	var ps types.JobProblems
-	for _, g := range prev.Goals {
-		if slices.ContainsFunc(next.Goals, func(n job.Goal) bool { return n.ID == g.ID }) {
+	for _, g := range prev.Postconditions {
+		if slices.ContainsFunc(next.Postconditions, func(n job.Postcondition) bool { return n.ID == g.ID }) {
 			continue
 		}
 		ps = append(ps, types.JobProblem{
-			Code: types.JobRecordInvalid, Field: "goals", Subject: g.ID,
-			Message: fmt.Sprintf("the record releases a write path of %s and drops its goal %q", prev.ID, g.ID),
-			Fix:     fmt.Sprintf("keep the goal %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
+			Code: types.JobRecordInvalid, Field: "postconditions", Subject: g.ID,
+			Message: fmt.Sprintf("the record releases a write path of %s and drops its postcondition %q", prev.ID, g.ID),
+			Fix:     fmt.Sprintf("keep the postcondition %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
 		})
 	}
 	return ps
@@ -367,7 +373,7 @@ func specMerge(rec job.Declaration, creates bool, checkpoint func() string) func
 	}
 	return func(u *job.Job) {
 		rec.ApplySpec(u)
-		u.Validation = validationLine(u.Check)
+		u.Validation = validationLine(*u)
 		if soft := slices.DeleteFunc(slices.Clone(u.Paths.Soft), func(p string) bool { return !slices.Contains(u.Paths.Write, p) }); len(soft) != len(u.Paths.Soft) {
 			u.Paths.Soft = soft
 			if len(soft) == 0 {
@@ -391,32 +397,32 @@ func prefixed(id string, ps types.JobProblems) types.JobProblems {
 	return ps
 }
 
-// ResolveSymbolGoals settles what row's symbol goals name before a door stores it, and
+// ResolveSymbolPostconditions settles what row's symbol postconditions name before a door stores it, and
 // returns the row with the write path claims it added, sorted.
 //
-// A signature goal that declares no signature takes the one the symbol index holds, which
+// A signature postcondition that declares no signature takes the one the symbol index holds, which
 // is how a stub the root wrote and indexed becomes the contract. One it cannot freeze is an
 // error, never a skip: no reader, a graph that could not be read, a symbol the index does
 // not define or defines more than once, or one it holds no signature for.
 //
-// A goal that changes, removes or reshapes an EXISTING symbol defined in exactly one file
+// A postcondition that changes, removes or reshapes an EXISTING symbol defined in exactly one file
 // the write paths do not cover claims that symbol's declaration, `<file>#<declaration>`,
-// since its holder has to write it. A goal that only asks a symbol to be present or
+// since its holder has to write it. A postcondition that only asks a symbol to be present or
 // unreferenced claims nothing, a read-only row claims nothing, and so does a symbol whose
 // declaration line has no form a claim can name (a field, a value). Every door then holds
 // the claims to [PlaceDerivedClaims].
 //
 // A literal whole-file entry does not cover its file here. The fork
 // narrows that hold to the claims.
-func ResolveSymbolGoals(ctx context.Context, row job.Job, read SymbolReader) (job.Job, []string, error) {
+func ResolveSymbolPostconditions(ctx context.Context, row job.Job, read SymbolReader) (job.Job, []string, error) {
 	row = row.Clone()
 	var refused, claims []string
-	for i, goal := range row.Goals {
-		goal = goal.Resolve()
-		if goal.Kind != job.GoalKindSymbol {
+	for i, postcondition := range row.Postconditions {
+		postcondition = postcondition.Resolve()
+		if postcondition.Kind != job.PostconditionKindSymbol {
 			continue
 		}
-		for _, name := range goal.Symbols {
+		for _, name := range postcondition.Symbols {
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
@@ -425,15 +431,15 @@ func ResolveSymbolGoals(ctx context.Context, row job.Job, read SymbolReader) (jo
 			if read != nil {
 				fact, ok = read(ctx, name, "")
 			}
-			if goal.Expect == job.ExpectSignature && strings.TrimSpace(goal.Signature) == "" {
+			if postcondition.Expect == job.ExpectSignature && strings.TrimSpace(postcondition.Signature) == "" {
 				signature, why := frozenSignature(name, read != nil, ok, fact)
 				if why != "" {
-					refused = append(refused, fmt.Sprintf("goal %q %s", goal.ID, why))
+					refused = append(refused, fmt.Sprintf("postcondition %q %s", postcondition.ID, why))
 					continue
 				}
-				row.Goals[i].Signature = signature
+				row.Postconditions[i].Signature = signature
 			}
-			if claim := derivedClaim(row, goal.Expect, ok, fact); claim != "" && !slices.Contains(claims, claim) {
+			if claim := derivedClaim(row, postcondition.Expect, ok, fact); claim != "" && !slices.Contains(claims, claim) {
 				claims = append(claims, claim)
 			}
 		}
@@ -446,7 +452,7 @@ func ResolveSymbolGoals(ctx context.Context, row job.Job, read SymbolReader) (jo
 	return row, claims, nil
 }
 
-// frozenSignature is the indexed signature a signature goal on name records, or why there
+// frozenSignature is the indexed signature a signature postcondition on name records, or why there
 // is none to record.
 func frozenSignature(name string, hasReader, read bool, fact SymbolFact) (string, string) {
 	switch {
@@ -468,9 +474,9 @@ func frozenSignature(name string, hasReader, read bool, fact SymbolFact) (string
 	return fact.Signature, ""
 }
 
-// derivedClaim is the write path claim a goal expecting expect of an existing symbol adds
+// derivedClaim is the write path claim a postcondition expecting expect of an existing symbol adds
 // to row, or "" when it adds none.
-func derivedClaim(row job.Job, expect job.GoalExpect, read bool, fact SymbolFact) string {
+func derivedClaim(row job.Job, expect job.PostconditionExpect, read bool, fact SymbolFact) string {
 	switch expect {
 	case job.ExpectChanged, job.ExpectAbsent, job.ExpectSignature:
 	default:
@@ -528,9 +534,9 @@ func declarationWord(signature string) string {
 	return ""
 }
 
-// resolveMerge wraps merge so the row it writes carries ResolveSymbolGoals' frozen
+// resolveMerge wraps merge so the row it writes carries ResolveSymbolPostconditions' frozen
 // signatures and the derived claims store can place. A signature the stored row already
-// froze for the same goal is kept rather than read again, so a re-applied record does not
+// froze for the same postcondition is kept rather than read again, so a re-applied record does not
 // re-freeze a shape its holder has since changed.
 func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, merge func(*job.Job), read SymbolReader) (func(*job.Job), error) {
 	probe := job.Job{ID: id}
@@ -541,7 +547,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 	}
 	merge(&probe)
 	keepFrozenSignatures(&probe, prev)
-	resolved, derived, err := ResolveSymbolGoals(ctx, probe, read)
+	resolved, derived, err := ResolveSymbolPostconditions(ctx, probe, read)
 	if err != nil {
 		return nil, err
 	}
@@ -549,12 +555,20 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 	if err != nil {
 		return nil, err
 	}
-	goals := resolved.Goals
+	postconditions := resolved.Postconditions
 	paths := append(slices.Clone(probe.Paths.Write), placed...)
 	if ws, why := store.loadedWorkspace(); why == "" {
-		probe.Goals, probe.Paths.Write = goals, paths
-		if added, notes := lintGoals(ctx, store.root, probe, ws, store.checkGrader()); len(added) > 0 {
-			goals = append(slices.Clone(goals), added...)
+		probe.Postconditions, probe.Paths.Write = postconditions, paths
+		if added, notes := lintPostconditions(ctx, store.root, probe, ws, store.checkGrader()); len(added) > 0 {
+			modules := make([]job.Postcondition, len(added))
+			for i, g := range added {
+				m, err := g.Module()
+				if err != nil {
+					return nil, err
+				}
+				modules[i] = m
+			}
+			postconditions = append(slices.Clone(postconditions), modules...)
 			out := store.notices
 			if out == nil {
 				out = os.Stderr
@@ -563,21 +577,21 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 				fmt.Fprintf(out, "job: %s: %s\n", id, n)
 			}
 			for _, g := range added {
-				fmt.Fprintf(out, "job: %s: added the goal %q (%d files): the write paths include Go source and no check or goal runs lint\n", id, g.ID, len(g.Check.Args))
+				fmt.Fprintf(out, "job: %s: added the postcondition %q (%d files): the write paths include Go source and no check or postcondition runs lint\n", id, g.ID, len(g.Check.Args))
 			}
 		}
 	}
 	return func(u *job.Job) {
 		merge(u)
-		u.Goals, u.Paths.Write = goals, paths
+		u.Postconditions, u.Paths.Write = postconditions, paths
 	}, nil
 }
 
-// PlaceDerivedClaims holds the claims [ResolveSymbolGoals] derived to the one rule every
+// PlaceDerivedClaims holds the claims [ResolveSymbolPostconditions] derived to the one rule every
 // door that stores a job shares, and returns those it keeps. A derived claim names a
 // declaration that exists, so its word must name exactly one declaration of its file as
 // store's version control places them: none means the symbol index is behind the tree, and
-// several mean the claim would guard more than the goal asked for, and either is refused
+// several mean the claim would guard more than the postcondition asked for, and either is refused
 // (MGS3031). A file no diff driver places gets no claim, and a store with no tree to ask,
 // or whose version control is disabled, places none; version control that cannot answer
 // is an error. A claim written by hand is held to [ungradableClaimProblems] instead, which
@@ -595,7 +609,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	case errors.Is(err, errVCSDisabled):
 		return nil, nil
 	case err != nil:
-		return nil, fmt.Errorf("the claims derived from symbol goals cannot be placed: %w", err)
+		return nil, fmt.Errorf("the claims derived from symbol postconditions cannot be placed: %w", err)
 	}
 	var kept, refused []string
 	for _, claim := range derived {
@@ -620,22 +634,22 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	}
 	if len(refused) > 0 {
 		return nil, types.DiagnosticErrorf(types.WritePathClaimUngradable,
-			"a claim derived from a symbol goal must name exactly one declaration: %s. Claim the declaration in paths.write instead, or fix what is named",
+			"a claim derived from a symbol postcondition must name exactly one declaration: %s. Claim the declaration in paths.write instead, or fix what is named",
 			strings.Join(refused, "; "))
 	}
 	return kept, nil
 }
 
-// keepFrozenSignatures fills each signature goal of row that declares none from prev's goal
+// keepFrozenSignatures fills each signature postcondition of row that declares none from prev's postcondition
 // of the same id on the same symbols.
 func keepFrozenSignatures(row *job.Job, prev job.Job) {
-	for i, goal := range row.Goals {
-		if goal.Resolve().Expect != job.ExpectSignature || strings.TrimSpace(goal.Signature) != "" {
+	for i, postcondition := range row.Postconditions {
+		if postcondition.Resolve().Expect != job.ExpectSignature || strings.TrimSpace(postcondition.Signature) != "" {
 			continue
 		}
-		for _, old := range prev.Goals {
-			if old.ID == goal.ID && old.Resolve().Expect == job.ExpectSignature && slices.Equal(old.Symbols, goal.Symbols) {
-				row.Goals[i].Signature = old.Signature
+		for _, old := range prev.Postconditions {
+			if old.ID == postcondition.ID && old.Resolve().Expect == job.ExpectSignature && slices.Equal(old.Symbols, postcondition.Symbols) {
+				row.Postconditions[i].Signature = old.Signature
 			}
 		}
 	}
@@ -648,7 +662,7 @@ func emptyResult(r job.Result) bool {
 }
 
 // resultShape is the result row's holder files, as JSON naming the row's
-// goals, then how a check the machine would not seat is filed.
+// postconditions, then how a check the machine would not seat is filed.
 func resultShape(row job.Job) string {
 	shape := job.Result{
 		Schema:          job.Schema{Version: job.ResultAPIVersion},
@@ -659,13 +673,13 @@ func resultShape(row job.Job) string {
 	if !row.ReadOnly {
 		shape.ChangedPaths = []string{"<each file you changed>"}
 	}
-	for _, goal := range row.EffectiveGoals() {
+	for _, postcondition := range row.EffectivePostconditions() {
 		switch {
-		case goal.Kind != job.GoalKindCheck:
-		case goal.ID == job.PrimaryGoalID:
-			shape.Validation = job.ResultValidation{Command: CheckCommand(goal.Check), OutputRef: "<ref its run printed>"}
+		case postcondition.Kind != job.PostconditionKindCheck:
+		case postcondition.ID == job.PrimaryPostconditionID:
+			shape.Validation = job.ResultValidation{Command: renderPostconditionCheck(postcondition), OutputRef: "<ref its run printed>"}
 		default:
-			shape.VerificationEvidence = append(shape.VerificationEvidence, job.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
+			shape.VerificationEvidence = append(shape.VerificationEvidence, job.VerificationEvidence{GateID: postcondition.ID, OutputRef: "<ref its run printed>"})
 		}
 	}
 	encoded, err := codec.MarshalIndent(shape, "", "  ")
@@ -688,13 +702,13 @@ func FiledShape(ctx context.Context, store *Store, id string) string {
 	return fmt.Sprintf("`%s` prints the schema", hint.JobExit.With("--schema"))
 }
 
-// RenderGoalCommands writes the exact command of each of row's check goals,
+// RenderPostconditionCommands writes the exact command of each of row's check postconditions,
 // so a holder never guesses one a fork added, then the result it files.
-func RenderGoalCommands(out io.Writer, row job.Job) {
-	fmt.Fprintln(out, "goal commands")
-	for _, goal := range row.EffectiveGoals() {
-		if goal.Kind == job.GoalKindCheck {
-			fmt.Fprintf(out, "  %s: %s\n", goal.ID, CheckCommand(goal.Check))
+func RenderPostconditionCommands(out io.Writer, row job.Job) {
+	fmt.Fprintln(out, "postcondition commands")
+	for _, postcondition := range row.EffectivePostconditions() {
+		if postcondition.Kind == job.PostconditionKindCheck {
+			fmt.Fprintf(out, "  %s: %s\n", postcondition.ID, renderPostconditionCheck(postcondition))
 		}
 	}
 	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), resultShape(row))
@@ -712,10 +726,10 @@ func RenderFiled(out io.Writer, row job.Job) {
 		fmt.Fprintf(out, "  %s: %s is attempt %s, which %s\n", id, a.Ref, a.AttemptID, outcome)
 	}
 	if row.Attempt != nil {
-		line(job.PrimaryGoalID, *row.Attempt)
+		line(job.PrimaryPostconditionID, *row.Attempt)
 	}
-	for _, gate := range row.GateAttempts {
-		line(gate.GateID, gate.Attempt)
+	for _, gate := range row.PostconditionAttempts {
+		line(gate.PostconditionID, gate.Attempt)
 	}
 }
 
@@ -771,11 +785,11 @@ func LeaseRewrites(ctx context.Context, loc Location, target string, projects []
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, then
 // the grade's notes, and says when evidence was taken against an earlier spec or a stale
-// symbol index left the symbol goals ungraded.
+// symbol index left the symbol postconditions ungraded.
 func RenderGates(out io.Writer, status job.Status) {
 	if len(status.Gates) == 0 {
-		fmt.Fprintf(out, "%s declares no check and no goal, so there is nothing here to grade.\n", status.Job)
-		fmt.Fprintf(out, "Declare one in the record's goals: `%s` prints the shape.\n", hint.JobFork.With("--schema"))
+		fmt.Fprintf(out, "%s declares no check and no postcondition, so there is nothing here to grade.\n", status.Job)
+		fmt.Fprintf(out, "Declare one in the record's postconditions: `%s` prints the shape.\n", hint.JobFork.With("--schema"))
 		return
 	}
 	met := 0
@@ -784,7 +798,7 @@ func RenderGates(out io.Writer, status job.Status) {
 			met++
 		}
 	}
-	fmt.Fprintf(out, "%s: %d of %d goal(s) met\n", status.Job, met, len(status.Gates))
+	fmt.Fprintf(out, "%s: %d of %d postcondition(s) met\n", status.Job, met, len(status.Gates))
 	for _, gate := range status.Gates {
 		mark := "unmet"
 		if gate.Verified {
@@ -812,13 +826,13 @@ func RenderGates(out io.Writer, status job.Status) {
 	renderDelta(out, status)
 	if len(status.StaleIndexes) > 0 {
 		fmt.Fprintf(out, "\nstale index: the symbol index of %s is older than its sources,"+
-			" so the symbol goals were not graded against it.\n  refresh and ask again: %s\n",
+			" so the symbol postconditions were not graded against it.\n  refresh and ask again: %s\n",
 			strings.Join(status.StaleIndexes, ", "), hint.GraphBuild)
 	}
 }
 
-// renderDelta writes what the diff did beside what its goals asked: net lines, exports no
-// goal declares, and symbols it left defined with no use. Each says when it was not
+// renderDelta writes what the diff did beside what its postconditions asked: net lines, exports no
+// postcondition declares, and symbols it left defined with no use. Each says when it was not
 // measured, since an empty list would otherwise read as nothing found. Reports only: none of
 // them decides a verdict.
 //
@@ -837,7 +851,7 @@ func renderDelta(out io.Writer, status job.Status) {
 		title string
 		names []string
 	}{
-		{"exports no goal declares", status.UndeclaredExports},
+		{"exports no postcondition declares", status.UndeclaredExports},
 		{"left defined with no use", status.LeftUnreferenced},
 	} {
 		switch {
@@ -854,27 +868,27 @@ func renderDelta(out io.Writer, status job.Status) {
 	}
 }
 
-// inheritGoals returns row with its ancestors' symbol goals appended, each renamed
-// `<ancestor>/<goal>` so it cannot collide with the row's own. Only symbol goals travel: a
-// check or a paths goal names work the ancestor does, while a symbol goal names a fact
+// inheritPostconditions returns row with its ancestors' symbol postconditions appended, each renamed
+// `<ancestor>/<postcondition>` so it cannot collide with the row's own. Only symbol postconditions travel: a
+// check or a paths postcondition names work the ancestor does, while a symbol postcondition names a fact
 // about the tree that a child's changes can break.
-func inheritGoals(row job.Job, rows []job.Job) job.Job {
-	var inherited []job.Goal
+func inheritPostconditions(row job.Job, rows []job.Job) job.Job {
+	var inherited []job.Postcondition
 	for _, ancestor := range job.Ancestors(rows, row.ID) {
-		for _, goal := range ancestor.Goals {
-			if goal = goal.Resolve(); goal.Kind != job.GoalKindSymbol {
+		for _, postcondition := range ancestor.Postconditions {
+			if postcondition = postcondition.Resolve(); postcondition.Kind != job.PostconditionKindSymbol {
 				continue
 			}
-			goal.ID = fmt.Sprintf("%s/%s", ancestor.ID, goal.ID)
-			// Its dependencies name goals of the ancestor's this row does not carry.
-			goal.DependsOn = nil
-			inherited = append(inherited, goal)
+			postcondition.ID = fmt.Sprintf("%s/%s", ancestor.ID, postcondition.ID)
+			// Its dependencies name postconditions of the ancestor's this row does not carry.
+			postcondition.DependsOn = nil
+			inherited = append(inherited, postcondition)
 		}
 	}
 	if len(inherited) == 0 {
 		return row
 	}
 	row = row.Clone()
-	row.Goals = append(row.Goals, inherited...)
+	row.Postconditions = append(row.Postconditions, inherited...)
 	return row
 }

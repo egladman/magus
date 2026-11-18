@@ -365,11 +365,11 @@ type ChainStep struct {
 	// returns when all of them have run, so a later call is ordered after every earlier
 	// one by the body itself; that is the only within-step sequencing there is, and the
 	// order derivation reads it from here. Zero for the first call, the common case.
-	CallIndex int `json:"callIndex,omitzero" yaml:"callIndex,omitempty"`
+	CallIndex int `json:"call_index,omitzero" yaml:"call_index,omitempty"`
 	// WhenArgs: true runs the step only with args after `--`, false only without, read from
 	// an `if (args.len() == 0)`, `> 0` or `!= 0` arm. Nil runs it either way; a static read
 	// evaluates no other condition.
-	WhenArgs *bool `json:"whenArgs,omitempty" yaml:"whenArgs,omitempty"`
+	WhenArgs *bool `json:"when_args,omitempty" yaml:"when_args,omitempty"`
 }
 
 // Runs reports whether the step runs for an invocation given args.

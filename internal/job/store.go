@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -240,6 +239,7 @@ func (s *Store) open() *Store {
 		job.WithHead(s.committedRevision),
 		job.WithMigrations(len(s.migrations), s.migrate),
 		job.WithCredentialKinds(credentialKinds()...),
+		checkSpec(),
 		job.WithErrorWrap(diagnose),
 		job.WithTree(s.CheckoutToken),
 		job.WithCheckCommand(s.checkCommand),
@@ -576,6 +576,11 @@ func (s *Store) migrate(ctx context.Context, storePath string, found int, lines 
 			return fmt.Errorf("regrouping %s: %w", attemptsFileName, err)
 		}
 	}
+	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == keysSnaked }); i >= found {
+		if err := s.snakeAttempts(ctx); err != nil {
+			return fmt.Errorf("respelling %s in snake_case: %w", attemptsFileName, err)
+		}
+	}
 	res, err := st.Apply()
 	if err != nil {
 		return refuse(err)
@@ -667,11 +672,7 @@ func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) err
 	if err != nil {
 		return fmt.Errorf("job: stamping the writer: %w", err)
 	}
-	f.Unknown = maps.Clone(f.Unknown)
-	if f.Unknown == nil {
-		f.Unknown = map[string]codec.RawMessage{}
-	}
-	f.Unknown[writerMember] = raw
+	*f = f.WithMember(writerMember, raw)
 	return s.retainDue(ctx, f, now)
 }
 
@@ -740,7 +741,8 @@ func refuseHeaderless(path string, lines []codec.Line) error {
 		if err != nil {
 			continue
 		}
-		if _, ok := e["apiVersion"]; ok {
+		// An enveloped row carries a spec; a flat one carries its id at the top.
+		if _, ok := e["spec"]; ok {
 			return &headerlessStoreError{Path: path, Line: line.N}
 		}
 	}
@@ -866,13 +868,17 @@ func digestSpans(body []byte, spans [][2]int) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// checkCommand is the argv a witnessed run of goal's check carries, run in this store's
+// checkCommand is the argv a witnessed run of postcondition's check carries, run in this store's
 // checkout: [checkArgv].
-func (s *Store) checkCommand(_ job.Job, goal job.Goal) ([]string, string, error) {
+func (s *Store) checkCommand(_ job.Job, postcondition job.Postcondition) ([]string, string, error) {
 	if s.root == "" {
 		return nil, "", errors.New("this job store has no checkout to run a check in")
 	}
-	return checkArgv(goal.Check), s.root, nil
+	c, err := PostconditionCheck(postcondition)
+	if err != nil {
+		return nil, "", err
+	}
+	return checkArgv(c), s.root, nil
 }
 
 // quoteAll is names each quoted, joined by commas.

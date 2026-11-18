@@ -919,6 +919,12 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 		//nolint:nilerr // an unparseable host config is an invalid verdict, carried in Reason, not a command failure
 		return result, nil
 	}
+	if open := failOpenHooks(ctx, root, config, d); len(open) > 0 {
+		result.Status = HarnessUncovered
+		result.Reason = fmt.Sprintf("a hook line fails open: %s; run `magus agent harness install`", strings.Join(open, "; "))
+		verifyHarnessMCP(d, &result)
+		return result, nil
+	}
 	for _, group := range d.ManagedEntries {
 		entries, err := pathEntries(config, group.Path)
 		if err != nil {

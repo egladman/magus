@@ -75,7 +75,7 @@ stdout '^unchanged wave/a'
 package pkg
 -- widen.jsonl --
 {"api_version":"safetyscissors.job/v1alpha1","id":"wave/a","paths":{"write":["src/pkg/code.go","src/pkg/other.go"]},"check":{"target":"test","project":"."}}
-{"api_version":"safetyscissors.job/v1alpha1","id":"wave/b","paths":{"write":["src/fresh"]},"goals":[{"id":"created","kind":"paths","expect":"present","paths":["src/fresh"]}]}
+{"api_version":"safetyscissors.job/v1alpha1","id":"wave/b","paths":{"write":["src/fresh"]},"postconditions":[{"id":"created","kind":"paths","expect":"present","paths":["src/fresh"]}]}
 -- narrow.json --
 {"api_version":"safetyscissors.job/v1alpha1","id":"wave/a","paths":{"write":["src/pkg/code.go"]},"check":{"target":"test","project":"."}}
 -- fresh.json --

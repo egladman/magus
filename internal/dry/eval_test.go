@@ -501,12 +501,12 @@ func TestPlaygroundSourceModules(t *testing.T) {
 
 const actorFigureJSON = `{
   "id": "t", "title": "T", "eyebrow": "", "desc": "", "direction": "down",
-  "unscopedWhy": "a process", "graphEdges": false,
+  "unscoped_why": "a process", "graph_edges": false,
   "boxes": [
     {"actor": {"name": "a", "sub": "", "tag": "", "link": "/code/a", "look": "plain"}, "label": "", "sub": "", "tag": "", "focal": false},
     {"actor": {"name": "b", "sub": "", "tag": "", "link": "", "look": "plain"}, "label": "", "sub": "", "tag": "", "focal": false}
   ],
-  "scopes": [], "exclusions": [], "hiddenEdges": [], "edgeMarks": [],
+  "scopes": [], "exclusions": [], "hidden_edges": [], "edge_marks": [],
   "flows": [{"src": {"actor": {"name": "a", "sub": "", "tag": "", "link": "/code/a", "look": "plain"}}, "dst": {"actor": {"name": "b", "sub": "", "tag": "", "link": "", "look": "plain"}}, "label": "", "stroke": "focal"}],
   "zones": [], "alignments": [], "legends": [{"look": "focal", "label": "hot"}]
 }`
@@ -520,7 +520,7 @@ func TestDrawFigure(t *testing.T) {
 	assert.Contains(t, r.SVG, `data-node="external:a"`)
 	assert.Contains(t, r.SVG, `data-edge="external:a->external:b"`)
 
-	refused := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"unscopedWhy": "a process"`, `"unscopedWhy": ""`, 1), "")
+	refused := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"unscoped_why": "a process"`, `"unscoped_why": ""`, 1), "")
 	assert.Equal(t, DrawResult{Findings: `figure "t": draws no directory; draw a box() or group(), or say why in unscoped(why:)`}, refused)
 
 	unknownCase := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"look": "focal"`, `"look": "shiny"`, 1), "")

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"path"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
@@ -231,26 +233,33 @@ func isPullRequestText(c hint.Invocation) bool {
 
 // actingRole is where a caller acting under lease, spawned as spawned, stands, and the
 // lease's job row. A bound id the job store does not carry comes back with only its ID set,
-// so the rule can tell a dangling binding from no binding.
-func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *job.Job) {
+// so the rule can tell a dangling binding from no binding. So does a row whose check the
+// view cannot read, which is logged, since a rule given that row would otherwise judge it
+// as one with no check.
+func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *types.Job) {
 	if lease == "" {
 		return types.AgentRoleRoot, nil
 	}
-	row := &job.Job{ID: lease}
+	row := job.Job{ID: lease}
 	if rows, err := leaseRows(ctx, at); err == nil {
 		for _, r := range rows {
 			if r.ID == lease {
 				// The rows are the pinned snapshot's own; the rule gets a copy it may keep.
-				clone := r.Clone()
-				row = &clone
+				row = r.Clone()
 				break
 			}
 		}
 	}
-	if integrates(*row, spawned, at.workspace) {
-		return types.AgentRoleIntegrator, row
+	role := types.AgentRoleWorker
+	if integrates(row, spawned, at.workspace) {
+		role = types.AgentRoleIntegrator
 	}
-	return types.AgentRoleWorker, row
+	view, err := types.NewJob(row)
+	if err != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("job %s's check could not be read for the workspace rule, which sees the row with its ID alone", lease), attr.Error(err), attr.Unchecked())
+		view = types.Job{Job: job.Job{ID: lease}}
+	}
+	return role, &view
 }
 
 // commandInvocations resolves a shell line into the programs it runs, the way

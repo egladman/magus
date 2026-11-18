@@ -117,7 +117,7 @@ func benchWorker() job.Job {
 		Parent:     "root",
 		Agent:      job.Instructed("run the benchmark"),
 		Paths:      job.Paths{Write: []string{"benchmarks/agent/**"}},
-		Check:      &job.LeaseCheck{Target: "agent-bench-run", Project: "."},
+		Check:      rawCheck("agent-bench-run", "."),
 		State:      job.StateRunning,
 		Registered: 1,
 	}

@@ -15,9 +15,9 @@ import (
 
 // testSelection is resolved from the loaded workspace, never from a check's
 // spelling. Nil means it was unavailable and permits no selector-specific evidence.
-type testSelection func(job.LeaseCheck) (string, bool)
+type testSelection func(types.LeaseCheck) (string, bool)
 
-func (selection testSelection) goTests(check job.LeaseCheck) bool {
+func (selection testSelection) goTests(check types.LeaseCheck) bool {
 	if check.Script != "" || selection == nil {
 		return false
 	}
@@ -25,7 +25,7 @@ func (selection testSelection) goTests(check job.LeaseCheck) bool {
 	return known && dialect == "go"
 }
 
-func (selection testSelection) known(check job.LeaseCheck) bool {
+func (selection testSelection) known(check types.LeaseCheck) bool {
 	if selection == nil {
 		return false
 	}
@@ -38,14 +38,14 @@ func (store *Store) testSelection() testSelection {
 	if why != "" {
 		return nil
 	}
-	return func(check job.LeaseCheck) (string, bool) { return resolvedTestSelection(ws, check) }
+	return func(check types.LeaseCheck) (string, bool) { return resolvedTestSelection(ws, check) }
 }
 
 // resolvedTestSelection follows the same direct dispatch the runner proves.
 // ctx.needs clears forwarded args only for its dependencies.
 // A body merely mentioning an op, or supplying explicit opts.args,
 // is not evidence that its caller's selector reaches that op.
-func resolvedTestSelection(ws Workspace, check job.LeaseCheck) (string, bool) {
+func resolvedTestSelection(ws Workspace, check types.LeaseCheck) (string, bool) {
 	if check.Script != "" {
 		return "", true
 	}
@@ -237,21 +237,26 @@ func scopedOps(sp *spells.Spell) []string {
 
 // uncheckedTestSelection skips a check already in refused: it cannot run.
 func uncheckedTestSelection(ws Workspace, row job.Job, refused types.JobProblems) []string {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return []string{fmt.Sprintf("test selection: %v", err)}
+	}
 	var unchecked []string
-	for _, goal := range row.EffectiveGoals() {
-		if goal.Kind != job.GoalKindCheck || goal.Check.Script != "" {
+	for _, gc := range checks {
+		postcondition, check := gc.Postcondition, gc.Check
+		if postcondition.Kind != job.PostconditionKindCheck || check.Script != "" {
 			continue
 		}
-		field := goalCheckField(row, goal)
+		field := postconditionCheckField(row, postcondition)
 		if slices.ContainsFunc(refused, func(p types.JobProblem) bool {
 			return p.Code == types.JobCheckUnrunnable && strings.HasPrefix(p.Field, field+".")
 		}) {
 			continue
 		}
-		if _, known := resolvedTestSelection(ws, goal.Check); known {
+		if _, known := resolvedTestSelection(ws, check); known {
 			continue
 		}
-		unchecked = append(unchecked, fmt.Sprintf("test selection for `%s`: the workspace does not prove that forwarded arguments reach a declared selector; selector-specific narrowing was not judged and recorded evidence arguments must match exactly (use a qualified spell op or a target that only forwards its own context)", CheckCommand(goal.Check)))
+		unchecked = append(unchecked, fmt.Sprintf("test selection for `%s`: the workspace does not prove that forwarded arguments reach a declared selector; selector-specific narrowing was not judged and recorded evidence arguments must match exactly (use a qualified spell op or a target that only forwards its own context)", CheckCommand(check)))
 	}
 	return unchecked
 }

@@ -24,7 +24,7 @@ import (
 //
 // The row carries no token count or cost; [Store.endedOutcome] prices them from the
 // holder's trail. ChecksRun counts the runs the row kept evidence of: its own check's and one per
-// goal. Retry classifies the attempt from the row alone: an outcome is recorded under the
+// postcondition. Retry classifies the attempt from the row alone: an outcome is recorded under the
 // store's lock, where the trail's denials are not read. tries are the store's.
 func newJobOutcome(row job.Job, tries job.Attempts, ended int64) types.JobOutcome {
 	out := types.JobOutcome{
@@ -33,7 +33,7 @@ func newJobOutcome(row job.Job, tries job.Attempts, ended int64) types.JobOutcom
 		Model:        row.Agent.RequestedModel().String(),
 		WriteFiles:   writeFileCount(row.Paths.Write),
 		State:        row.State,
-		ChecksRun:    len(row.GateAttempts),
+		ChecksRun:    len(row.PostconditionAttempts),
 		Ended:        ended,
 		ReworkRounds: row.ReworkRounds,
 		Widenings:    row.Widenings,

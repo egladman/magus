@@ -96,17 +96,17 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	assert.Contains(t, out.String(), fmt.Sprintf("`%s` MCP tool", hint.ToolClient.String()))
 }
 
-// TestPrintJobStatusFailedGateNamesHowToReadIt pins step 3 of the plan that added goals:
-// a failed goal named an output ref but not how to read it, leaving the holder to
+// TestPrintJobStatusFailedGateNamesHowToReadIt pins step 3 of the plan that added postconditions:
+// a failed postcondition named an output ref but not how to read it, leaving the holder to
 // reconstruct `magus query output <ref>` by hand. The line must be rendered through
-// hint.QueryOutput (never a hardcoded string), and must appear only for a goal that
+// hint.QueryOutput (never a hardcoded string), and must appear only for a postcondition that
 // actually failed and actually carries a ref.
 func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	t.Parallel()
 
 	status := Status{
 		Job:        "plan",
-		Violations: []string{`goal "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
+		Violations: []string{`postcondition "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
 		Gates: []job.VerificationStatus{
 			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
 			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
@@ -117,7 +117,7 @@ func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	PrintStatus(&out, status)
 	got := out.String()
 
-	assert.Contains(t, got, "goal ci: rejected (outdeadbeef)")
+	assert.Contains(t, got, "postcondition ci: rejected (outdeadbeef)")
 	assert.Contains(t, got, "magus query output outdeadbeef", "a failed gate must name how to read its ref")
 	assert.NotContains(t, got, "magus query output outfeedface", "a verified gate needs no query-output line")
 }
@@ -403,7 +403,7 @@ func (s *DescribeJobRecordSuite) SetupTest() {
 	s.out = DescribeOutput{Terms: Terms{Lease: job.Job{
 		ID:    "wave/a",
 		Paths: job.Paths{Write: []string{"a.go"}},
-		Check: &job.LeaseCheck{Target: "test", Project: "."},
+		Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}),
 		State: job.StateDeclared,
 	}}}
 }
@@ -422,9 +422,9 @@ func (s *DescribeJobRecordSuite) TestTheJobNamesTheAPIVersionApplyReads() {
 	s.JSONEq(fmt.Sprintf("%q", job.APIVersion), string(row["api_version"]))
 }
 
-func (s *DescribeJobRecordSuite) TestTheTermsAndGoalsStayBesideTheJob() {
+func (s *DescribeJobRecordSuite) TestTheTermsAndPostconditionsStayBesideTheJob() {
 	members := s.printed()
-	s.Contains(members, "goals")
+	s.Contains(members, "postconditions")
 	s.Contains(members, "stage")
 	s.Contains(members, "job")
 }

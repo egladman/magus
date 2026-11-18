@@ -10,8 +10,8 @@ import (
 // JobKind is what a job's work is judged by, derived from its row.
 type JobKind string
 
-// A job is judged by a target check, symbol goals, path goals, a script check, or,
-// with none of those, by reading its prose.
+// A job is judged by a target check, its symbol or path postconditions, a script check,
+// or else by reading its prose.
 const (
 	JobKindCheck  JobKind = "check"
 	JobKindSymbol JobKind = "symbol"
@@ -34,8 +34,8 @@ type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*tier.Assi
 type ModelTierRequest struct {
 	ID, Parent, Instructions             string
 	ReadOnly                             bool
-	Check                                *job.LeaseCheck
-	Goals                                []job.Goal
+	Check                                *LeaseCheck
+	Postconditions                       []Postcondition
 	Kind                                 JobKind
 	WritePaths, WriteProjects, ReadPaths []string
 	DependsOn                            []string

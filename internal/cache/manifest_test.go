@@ -330,3 +330,21 @@ func BenchmarkManifestWrite(b *testing.B) {
 		}
 	}
 }
+
+// TestManifestOldSpellingIsRefused: a manifest written with the camelCase keys decodes to
+// empty values, and its identity check is what refuses it rather than replaying nothing.
+func TestManifestOldSpellingIsRefused(t *testing.T) {
+	_, _, c := newMutableCache(t)
+	old := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[],"createdAt":"2020-01-01T00:00:00Z"}`)
+	_, err := c.parseManifest(old, "test/pkg", "abc123")
+	require.Error(t, err, "an old-spelling manifest must not read back as an entry")
+	assert.ErrorContains(t, err, "manifest names")
+}
+
+func TestManifestWritesSnakeCaseKeys(t *testing.T) {
+	raw, err := codec.Marshal(Manifest{ProjectPath: "p", Hash: "h", DurationMs: 3, LogRecords: []logSpan{{}}})
+	require.NoError(t, err)
+	for _, key := range []string{`"project_path"`, `"created_at"`, `"duration_ms"`, `"log_records"`} {
+		assert.Contains(t, string(raw), key)
+	}
+}

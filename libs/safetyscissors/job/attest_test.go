@@ -35,14 +35,14 @@ func (s *AttestSuite) verify(payload, sig []byte) (string, error) {
 }
 
 func (s *AttestSuite) statement(exit int, started time.Time) []byte {
-	b, err := codec.Marshal(Statement{Job: "j1", Goal: "tests", Check: testCheck(), Tree: s.tree, Exit: exit,
+	b, err := codec.Marshal(Statement{Job: "j1", Postcondition: "tests", Check: testCheck(), Tree: s.tree, Exit: exit,
 		Started: started, Ended: started.Add(time.Second)})
 	s.Require().NoError(err)
 	return b
 }
 
 func (s *AttestSuite) TestAnAttestedPassVerifies() {
-	s.declare(checkGoalAccepting("tests", BasisWitnessed, BasisAttested))
+	s.declare(checkPostconditionAccepting("tests", BasisWitnessed, BasisAttested))
 	payload := s.statement(0, time.Now().Add(time.Second))
 
 	ref, err := s.store.Attest(s.T().Context(), payload, ed25519.Sign(s.priv, payload))
@@ -54,7 +54,7 @@ func (s *AttestSuite) TestAnAttestedPassVerifies() {
 }
 
 func (s *AttestSuite) TestAnAttestedFailureFails() {
-	s.declare(checkGoalAccepting("tests", BasisAttested))
+	s.declare(checkPostconditionAccepting("tests", BasisAttested))
 	payload := s.statement(2, time.Now().Add(time.Second))
 
 	ref, err := s.store.Attest(s.T().Context(), payload, ed25519.Sign(s.priv, payload))
@@ -66,7 +66,7 @@ func (s *AttestSuite) TestAnAttestedFailureFails() {
 }
 
 func (s *AttestSuite) TestAnEditedStatementIsRefused() {
-	s.declare(checkGoalAccepting("tests", BasisAttested))
+	s.declare(checkPostconditionAccepting("tests", BasisAttested))
 	now := time.Now()
 	sig := ed25519.Sign(s.priv, s.statement(1, now))
 
@@ -77,7 +77,7 @@ func (s *AttestSuite) TestAnEditedStatementIsRefused() {
 }
 
 func (s *AttestSuite) TestAVerifierNamingNoSignerIsRefused() {
-	s.declare(checkGoalAccepting("tests", BasisAttested))
+	s.declare(checkPostconditionAccepting("tests", BasisAttested))
 	st := s.open(WithVerifier(func([]byte, []byte) (string, error) { return "", nil }))
 
 	_, err := st.Attest(s.T().Context(), s.statement(0, time.Now()), nil)
@@ -94,7 +94,7 @@ func (s *AttestSuite) TestAStoreWithNoVerifierRefuses() {
 }
 
 func (s *AttestSuite) TestAPayloadThatIsNotAStatementIsRefused() {
-	payload := []byte(`{"job":"j1","goal":"tests","by":"me"}`)
+	payload := []byte(`{"job":"j1","postcondition":"tests","by":"me"}`)
 
 	_, err := s.store.Attest(s.T().Context(), payload, ed25519.Sign(s.priv, payload))
 
@@ -103,7 +103,7 @@ func (s *AttestSuite) TestAPayloadThatIsNotAStatementIsRefused() {
 }
 
 func (s *AttestSuite) TestARunAttestedBeforeTheJobWasDeclaredIsAViolation() {
-	s.declare(checkGoalAccepting("tests", BasisAttested))
+	s.declare(checkPostconditionAccepting("tests", BasisAttested))
 	payload := s.statement(0, time.Now().Add(-time.Hour))
 
 	ref, err := s.store.Attest(s.T().Context(), payload, ed25519.Sign(s.priv, payload))

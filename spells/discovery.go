@@ -66,7 +66,7 @@ type DiscoveredProject struct {
 	// Name is the project's label; empty derives it from the path.
 	Name string `json:"name"`
 	// DependsOn names upstream project directories, relative to the workspace root.
-	DependsOn []string `json:"dependsOn"`
+	DependsOn []string `json:"depends_on"`
 	// Targets maps a name from [DiscoveryTargets] to this spell's op keys, run in order:
 	// {"test": ["go-test"]}. ci is absent by contract: core composes it from the others.
 	Targets map[string][]string `json:"targets"`
@@ -76,7 +76,7 @@ type DiscoveredProject struct {
 	Spans []string `json:"spans"`
 	// NotInferred is what the spell saw and could not turn into a target; each one is
 	// reported as a gap naming the file.
-	NotInferred []DiscoveryGap `json:"notInferred"`
+	NotInferred []DiscoveryGap `json:"not_inferred"`
 }
 
 // DiscoveryGap is one thing discovery saw and did not wire.

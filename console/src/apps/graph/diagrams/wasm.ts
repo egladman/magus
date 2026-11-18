@@ -44,13 +44,13 @@ export interface Figure {
   readonly desc: string;
   readonly direction: Direction;
   // Why the figure draws no directory; "" for one that draws some.
-  readonly unscopedWhy: string;
-  readonly graphEdges: boolean;
+  readonly unscoped_why: string;
+  readonly graph_edges: boolean;
   readonly boxes: readonly Box[];
   readonly scopes: readonly (readonly Dir[])[];
   readonly exclusions: readonly Exclusion[];
-  readonly hiddenEdges: readonly HiddenEdges[];
-  readonly edgeMarks: readonly EdgeMark[];
+  readonly hidden_edges: readonly HiddenEdges[];
+  readonly edge_marks: readonly EdgeMark[];
   readonly flows: readonly Flow[];
   readonly zones: readonly Zone[];
   readonly alignments: readonly Alignment[];
@@ -134,10 +134,10 @@ export interface Dir {
   readonly layer: string;
   readonly language: string;
   readonly imports: readonly string[];
-  readonly importedBy: readonly string[];
-  readonly importsIndexed: boolean;
+  readonly imported_by: readonly string[];
+  readonly imports_indexed: boolean;
   readonly calls: readonly DirCall[];
-  readonly calledBy: readonly DirCall[];
+  readonly called_by: readonly DirCall[];
   readonly children: readonly string[];
   readonly files: number;
 }
@@ -361,13 +361,13 @@ const EMPTY_FIGURE: Figure = {
   eyebrow: "",
   desc: "",
   direction: "across",
-  unscopedWhy: "",
-  graphEdges: false,
+  unscoped_why: "",
+  graph_edges: false,
   boxes: [],
   scopes: [],
   exclusions: [],
-  hiddenEdges: [],
-  edgeMarks: [],
+  hidden_edges: [],
+  edge_marks: [],
   flows: [],
   zones: [],
   alignments: [],
@@ -409,16 +409,16 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
           layer: "",
           language: "go",
           imports: imports.get(n.id) ?? [],
-          importedBy: [],
-          importsIndexed: true,
+          imported_by: [],
+          imports_indexed: true,
           calls: [],
-          calledBy: [],
+          called_by: [],
           children: [],
           files: 1,
         },
       }),
     );
-    return ok({ ...base, graphEdges: true, boxes });
+    return ok({ ...base, graph_edges: true, boxes });
   }
   const actors = new Map<string, Actor>();
   for (const { node: n, name } of nameActors(decl.nodes)) {
@@ -450,7 +450,7 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
   }
   return ok({
     ...base,
-    unscopedWhy: "served from the workspace graph: " + desc,
+    unscoped_why: "served from the workspace graph: " + desc,
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
     flows,
   });
@@ -506,7 +506,7 @@ export function figureForLink(linked: LinkedFigure): Result<Figure> {
     ...EMPTY_FIGURE,
     id: figureId("link"),
     title: linked.title,
-    unscopedWhy: "drawn from a shared link, which carries the graph and no directories",
+    unscoped_why: "drawn from a shared link, which carries the graph and no directories",
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
     flows,
   });

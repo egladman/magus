@@ -2,7 +2,6 @@ package types
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ import (
 type JobProblem struct {
 	Code DiagnosticCode `json:"code"`
 	// Field is a JSON path into the record (`paths.write[2]`, `check.project`,
-	// `goals[1].symbols[0]`), empty when the problem is the record as a whole.
+	// `postconditions[1].symbols[0]`), empty when the problem is the record as a whole.
 	Field string `json:"field,omitempty"`
 	// Subject is what a [job.Deviation] names to permit this problem: the write path, the
 	// `target project` pair, or the output path. Empty on a problem no deviation reaches.
@@ -26,11 +25,11 @@ type JobProblem struct {
 	Message string `json:"message"`
 	// Fix is the edit to the record that clears the problem.
 	Fix string `json:"fix"`
-	// Goal is the goal whose addition to the record's goals clears the problem, as data.
-	// Magus prints it and never applies it: a caller merges `problems[].goal` itself.
-	Goal *job.Goal `json:"goal,omitempty"`
+	// Postcondition is the postcondition whose addition to the record's postconditions clears the problem, as data.
+	// Magus prints it and never applies it: a caller merges `problems[].postcondition` itself.
+	Postcondition *Postcondition `json:"postcondition,omitempty"`
 	// Deviation is the deviation whose addition to the record's deviations permits the
-	// problem, as data, with the same rule as Goal. A problem whose fix is one or the other
+	// problem, as data, with the same rule as Postcondition. A problem whose fix is one or the other
 	// carries only the one that fix names.
 	Deviation *job.Deviation `json:"deviation,omitempty"`
 }
@@ -62,7 +61,7 @@ func (ps JobProblems) Error() error {
 
 // Permit splits ps into the problems a deviation in ds matches by code and subject and the
 // ones it does not. A deviation on a code that is not [Permissible] matches nothing;
-// [DeclarationProblems] reports it as JobRecordInvalid.
+// a declaration's problems report it as JobRecordInvalid.
 func (ps JobProblems) Permit(ds []job.Deviation) (kept, permitted JobProblems) {
 	for _, p := range ps {
 		if p.Permissible() && slices.ContainsFunc(ds, func(d job.Deviation) bool { return DeviationPermits(d, p) }) {
@@ -115,8 +114,8 @@ func (p JobProblem) Permissible() bool {
 // code, so the kind decides it here.
 func faultCode(k job.FaultKind) DiagnosticCode {
 	switch k {
-	case job.FaultGoal:
-		return JobGoalInvalid
+	case job.FaultPostcondition:
+		return JobPostconditionInvalid
 	case job.FaultRecord:
 		return JobRecordInvalid
 	}
@@ -134,34 +133,6 @@ func FaultProblems(fs []job.Fault) JobProblems {
 	}
 	return ps
 }
-
-// DeclarationProblems is every problem d shows on its own, without a workspace: its
-// faults under magus's codes, with a deviation allowed only a [Permissible] code.
-func DeclarationProblems(d job.Declaration) JobProblems {
-	codes := PermissibleCodes()
-	permissible := make([]job.Code, len(codes))
-	for i, c := range codes {
-		permissible[i] = job.Code(c)
-	}
-	// The module allows a deviation only a listed code, and a dropped field is permitted
-	// by its subject under JobRecordInvalid, so its fault is taken back here.
-	drops := map[string]bool{}
-	for i, w := range d.Deviations {
-		if !Permissible(DiagnosticCode(w.Code)) && (JobProblem{Code: DiagnosticCode(w.Code), Subject: w.Subject}).Permissible() {
-			drops[fmt.Sprintf("deviations[%d].code", i)] = true
-		}
-	}
-	fs := slices.DeleteFunc(d.Faults(permissible...), func(f job.Fault) bool { return drops[f.Field] })
-	return FaultProblems(fs)
-}
-
-// ValidateDeclaration reports what is wrong with a declared job, or nil: every problem
-// [DeclarationProblems] finds, joined.
-func ValidateDeclaration(d job.Declaration) error { return DeclarationProblems(d).Error() }
-
-// ValidateGoal reports whether g can be matched to an output record without interpreting
-// a shell command: every problem it shows on its own, joined.
-func ValidateGoal(g job.Goal) error { return FaultProblems(g.Faults()).Error() }
 
 // LegacySpellings are the members a declaration may still carry under a name the job
 // record no longer declares. A decoder reads them beside the record and folds them onto it.

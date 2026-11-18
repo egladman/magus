@@ -59,13 +59,12 @@ packages:
       Denial: {config: {name: JobDenial}}
       Entry: {config: {name: JobEntry}}
       ForkFacts: {config: {name: JobForkFacts}}
-      GateAttempt: {config: {name: JobGateAttempt}}
       Integration: {config: {name: JobIntegration}}
-      List: {config: {name: JobList}}
       Model: {config: {module: magus/agent}}
       Overlap: {config: {name: JobOverlap}}
       OverlapFootprint: {config: {name: JobOverlapFootprint}}
       Paths: {config: {name: JobPaths}}
+      PostconditionAttempt: {config: {name: JobPostconditionAttempt}}
       ReadOnly: {config: {name: JobReadOnly}}
       Rejection: {config: {name: JobRejection}}
       Release: {config: {name: JobRelease}}

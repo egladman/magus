@@ -551,6 +551,54 @@ decided.
 
 ## Amendments
 
+### 2026-11-18: a goal is a postcondition
+
+Eli ruled that "goal" names the purpose of a job in plain English, so the graded
+condition takes the technical word. The sections above say goal where the module now says
+postcondition; they stand as written.
+
+- `job.Goal` is `job.Postcondition`, with `PostconditionKind`, `PostconditionExpect`,
+  `PrimaryPostconditionID`, `EffectivePostconditions`, `PostconditionGrade`,
+  `PostconditionError` and `FaultPostcondition`. `GateAttempt` is `PostconditionAttempt`,
+  its `GateID` `PostconditionID`.
+- The stored keys `goals`, `gate_attempts` and `gate_id` of an attempt are
+  `postconditions`, `postcondition_attempts` and `postcondition_id`. Migration 10 respells
+  them, and an added migration renames the `signature-goals` feature to
+  `signature-postconditions`. grades.jsonl has no migration and refuses a line spelling
+  goal.
+- The proto's `CompletionGate` and `JobGateAttempt` are `Postcondition` and
+  `JobPostconditionAttempt`; field numbers hold and the JSON names change.
+- A brief's goal, what a worker is to achieve, keeps its name.
+
+### 2026-11-18: the job check is opaque JSON, read through magus's views (option B)
+
+The open question of the 2026-11-17 trim is settled as option B, Eli's ruling of
+2026-11-17. The module keeps a check as opaque JSON and never interprets one; magus
+reads it through views in `types/`, and the generators reflect those views, so Buzz
+keeps the typed `magus\LeaseCheck`.
+
+- `Job.Check`, `Goal.Check`, `Declaration.Check`, `Put.Check`, `Statement.Check` and
+  `Report.Check` are a `job.Check`, a struct whose bytes are unexported: `NewCheck`,
+  `Decode`, `IsZero` and `String` are the only ways in and out, so no caller aliases a
+  stored row or compares two checks by bytes. It holds the codec's canonical JSON, and
+  the line on disk is the one a `codec.RawMessage` wrote. `LeaseCheck`,
+  `ParseLeaseCheck`, `CheckError`, `SameLeaseCheck` and `HasCheck` leave the module.
+- The caller passes `job.WithCheckSpec(spec)`, one `CheckSpec` interface of `Validate`,
+  `Equal` and `Render`, and `safetyscissors.New` requires `WithCheckSpec`. Equal stays on
+  the host's interface: the module never compares validated bytes itself. Without a spec
+  the store refuses every row write and every grading call, naming the option. A check
+  the caller's `Validate` refuses fails the write with `*CheckRefusedError`.
+- `job.Schema` keeps the members a record does not declare unexported, as protobuf keeps
+  `unknownFields`. A record writes them back unchanged, and `Schema.Unknown()` names
+  them. `job.Rows` keeps the store header's the same way, with `Rows.Unknown()` and
+  `Rows.WithMember`.
+- `types.LeaseCheck` and the views `types.Job`, `types.Goal`, `types.JobList` and
+  `types.Declaration` embed the module type and override only the check members.
+  `internal/job` holds the spec, the parse and the check-content faults.
+- buzzgen and `jobschema` apply Go's field-visibility rule, so a view's field hides the
+  embedded one in place. The Buzz declarations, `job.schema.json` and the declaration
+  ledger are unchanged.
+
 ### 2026-11-17: the root package holds `New` and `SafetyScissors`
 
 Part 1 said the root package holds only the package doc. It now holds one constructor,
@@ -614,7 +662,8 @@ store's verbs are not mirrored on the root type.
   `CheckCommand` joins it.
 - The three logs beside the rows report a dropped unfinished line as a store notice.
 - LeaseCheck stays typed in the module until the binding generators learn a raw-JSON
-  member, an open question for Eli. Option A teaches the generators to carry
+  member, an open question for Eli, settled as option B on 2026-11-18 (see that
+  amendment). Option A teaches the generators to carry
   `codec.RawMessage` as `any?`, which costs Buzz callers the typed `LeaseCheck` object.
   Option B has the bindings reflect magus-side view types of `Goal` and `Job` that carry
   the typed check, which reshapes the boundary roots in `cmd/magus-utils`.

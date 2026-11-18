@@ -785,12 +785,12 @@ const WritePathConfigWholeFile DiagnosticCode = "MGS3036"
 // unknown member, or a deviation on a code that cannot be permitted or with no reason.
 const JobRecordInvalid DiagnosticCode = "MGS3037"
 
-// JobGoalInvalid is a goal no evidence could ever grade: a malformed shape, a duplicate
-// id, a depends_on naming no goal, a dependency cycle, two signatures for one symbol, or
+// JobPostconditionInvalid is a postcondition no evidence could ever grade: a malformed shape, a duplicate
+// id, a depends_on naming no postcondition, a dependency cycle, two signatures for one symbol, or
 // a symbol the index resolves to more than one declaration.
-const JobGoalInvalid DiagnosticCode = "MGS3038"
+const JobPostconditionInvalid DiagnosticCode = "MGS3038"
 
-// JobUngraded is a job nothing would grade: it writes and declares no check or goal, or
+// JobUngraded is a job nothing would grade: it writes and declares no check or postcondition, or
 // it declares no write paths and is not read-only.
 const JobUngraded DiagnosticCode = "MGS3039"
 
@@ -815,7 +815,7 @@ const WritePathTooBroad DiagnosticCode = "MGS3043"
 // paths, that the write paths do not cover. Permissible when the root regenerates it.
 const OutputOutsideWritePaths DiagnosticCode = "MGS3044"
 
-// GateNotRun is a ci target over the write paths that neither the check nor a goal runs.
+// GateNotRun is a ci target over the write paths that neither the check nor a postcondition runs.
 // Permissible when the root runs it.
 const GateNotRun DiagnosticCode = "MGS3045"
 
@@ -1222,7 +1222,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ToolUnprobeable,
 	WritePathConfigWholeFile,
 	JobRecordInvalid,
-	JobGoalInvalid,
+	JobPostconditionInvalid,
 	JobUngraded,
 	JobCheckUnrunnable,
 	JobCheckpointUnplaceable,
@@ -1320,7 +1320,7 @@ var retryTable = map[DiagnosticCode]job.RetryChange{
 	WritePathIsDirectory:     job.RetryAfterWidening,
 	PipeCycle:                job.RetryAfterConfig,
 	JobRecordInvalid:         job.RetryAfterConfig,
-	JobGoalInvalid:           job.RetryAfterConfig,
+	JobPostconditionInvalid:  job.RetryAfterConfig,
 	JobUngraded:              job.RetryAfterConfig,
 	JobCheckUnrunnable:       job.RetryAfterConfig,
 	JobCheckpointUnplaceable: job.RetryAfterConfig,

@@ -62,7 +62,7 @@ func (s *ReplacementCheckSuite) TestAGoRowIsOfferedTheCompilingCheck() {
 }
 
 func (s *ReplacementCheckSuite) TestAnUngradedCheckNamesTheNewerBinaryBeforeDoctor() {
-	got := ungradedCheckProblem("w", "check", *forkCheck(), "the guard denies").Fix
+	got := ungradedCheckProblem("w", "check", types.LeaseCheck{Target: "test", Project: "."}, "the guard denies").Fix
 	s.Contains(got, "built at this checkout's HEAD or later")
 	s.Contains(got, "doctor")
 }
@@ -102,7 +102,7 @@ func (s *NoGraderSuite) TestACheckIsOneUngradedProblem() {
 func (s *NoGraderSuite) TestAGateIsOfferedUngradedRatherThanPassed() {
 	row := job.Job{ID: "w", Check: forkCheck()}
 
-	verdict := gradeWith(nil, s.store.root, row)(*forkCheck())
+	verdict := gradeWith(nil, s.store.root, row)(types.LeaseCheck{Target: "test", Project: "."})
 
 	s.Equal(noGraderReason, verdict.NotGraded)
 	s.False(verdict.Denied)
@@ -116,11 +116,11 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus;\nask the main session"})
-	build := &job.LeaseCheck{Target: "go-build", Project: "."}
+	build := &types.LeaseCheck{Target: "go-build", Project: "."}
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, fixtureCheck(*build) }, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckUnrunnable)
-	ps := deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: build})
+	ps := deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: fixtureCheck(*build)})
 	require.Len(t, ps, 1)
 	assert.Equal(t, "check", ps[0].Field)
 	assert.NotContains(t, ps[0].Message, "\n", "a message is one line")
@@ -130,13 +130,13 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	assert.Contains(t, err.Error(), "--check 'go::go-vet .'")
 	require.Len(t, rec.graded, 2)
 	assert.Equal(t, "w", rec.graded[0].ID, "the grader is handed the row, its id the lease to grade under")
-	assert.Equal(t, build, rec.graded[0].Check)
+	assert.Equal(t, *build, checkIn(t, rec.graded[0].Check))
 
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 
-	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: build}}, config.Jobs{}, nil, nil, true)
+	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: fixtureCheck(*build)}}, config.Jobs{}, nil, nil, true)
 	require.ErrorContains(t, err, "would be denied to its worker", "job apply grades too")
 }
 
@@ -152,7 +152,7 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 1, "an update that leaves the check alone is not graded again")
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Check = &job.LeaseCheck{Target: "lint", Project: "."} }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Check = fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."}) }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a changed check is")
 
@@ -169,8 +169,8 @@ func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{NotGraded: "the guard denies this worker `magus run go::go-vet .` as well: the hook binary is older than the tree"})
-	row := job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Goals: []job.Goal{
-		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
+	row := job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Postconditions: []job.Postcondition{
+		{ID: "lint", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})},
 	}}
 
 	ps := deniedCheckProblems(t.Context(), s, row)
@@ -195,7 +195,7 @@ func humanOnlyGrader(t *testing.T) (*Store, *gradeRecorder) {
 	loc := tempLocation(t, testRoot(t).Root())
 	loc.Grader = func(ctx context.Context, root string, row job.Job) CheckVerdict {
 		rec.grade(ctx, root, row)
-		if row.Check.Target != "bench" {
+		if checkIn(t, row.Check).Target != "bench" {
 			return CheckVerdict{}
 		}
 		return CheckVerdict{Denied: true, Rule: "human-only", Reason: "`./magus run bench .` runs a target a person runs;\nlaunches paid sessions"}
@@ -207,7 +207,7 @@ func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 	t.Parallel()
 
 	s, _ := humanOnlyGrader(t)
-	ps := deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Check: &job.LeaseCheck{Target: "bench", Project: "."}})
+	ps := deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Check: fixtureCheck(types.LeaseCheck{Target: "bench", Project: "."})})
 	require.Len(t, ps, 1)
 	p := ps[0]
 	assert.NotContains(t, p.Message, "\n", "a message is one line")
@@ -221,32 +221,32 @@ func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 	}, p, "compiling is no stand-in for a run a person owns")
 }
 
-func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {
+func TestDeniedCheckProblemsGradeEveryPostconditionCheck(t *testing.T) {
 	t.Parallel()
 
 	s, rec := humanOnlyGrader(t)
-	lint := job.LeaseCheck{Target: "lint", Project: "."}
-	row := job.Job{ID: "w", Check: &lint, Goals: []job.Goal{
-		{ID: "again", Kind: job.GoalKindCheck, Check: lint},
-		{ID: "paid", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "."}},
+	lint := types.LeaseCheck{Target: "lint", Project: "."}
+	row := job.Job{ID: "w", Check: fixtureCheck(lint), Postconditions: []job.Postcondition{
+		{ID: "again", Kind: job.PostconditionKindCheck, Check: fixtureCheck(lint)},
+		{ID: "paid", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "bench", Project: "."})},
 	}}
 	ps := deniedCheckProblems(t.Context(), s, row)
 	require.Len(t, ps, 1)
-	assert.Equal(t, "goals[1].check", ps[0].Field)
-	assert.Contains(t, ps[0].Message, "w's goal paid's check `magus run bench .` is a target a person runs (human-only)")
-	require.Len(t, rec.graded, 2, "a check two goals share is graded once")
-	assert.Equal(t, &lint, rec.graded[0].Check)
-	assert.Equal(t, "bench", rec.graded[1].Check.Target, "a goal's check is graded as the row with that check")
-	assert.Equal(t, row.Goals, rec.graded[1].Goals)
+	assert.Equal(t, "postconditions[1].check", ps[0].Field)
+	assert.Contains(t, ps[0].Message, "w's postcondition paid's check `magus run bench .` is a target a person runs (human-only)")
+	require.Len(t, rec.graded, 2, "a check two postconditions share is graded once")
+	assert.Equal(t, lint, checkIn(t, rec.graded[0].Check))
+	assert.Equal(t, "bench", checkIn(t, rec.graded[1].Check).Target, "a postcondition's check is graded as the row with that check")
+	assert.Equal(t, row.Postconditions, rec.graded[1].Postconditions)
 
-	goalsOnly := job.Job{ID: "g", Goals: []job.Goal{{ID: "paid", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "."}}}}
-	require.ErrorContains(t, deniedCheckProblems(t.Context(), s, goalsOnly).Error(), "g's goal paid's check", "a row with no check of its own still has its goals graded")
+	postconditionsOnly := job.Job{ID: "g", Postconditions: []job.Postcondition{{ID: "paid", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "bench", Project: "."})}}}
+	require.ErrorContains(t, deniedCheckProblems(t.Context(), s, postconditionsOnly).Error(), "g's postcondition paid's check", "a row with no check of its own still has its postconditions graded")
 
-	assert.Empty(t, deniedCheckProblems(t.Context(), s, job.Job{ID: "ok", Check: &lint}), "an ordinary check passes")
+	assert.Empty(t, deniedCheckProblems(t.Context(), s, job.Job{ID: "ok", Check: fixtureCheck(lint)}), "an ordinary check passes")
 
-	both := job.Job{ID: "b", Goals: []job.Goal{
-		{ID: "paid", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "."}},
-		{ID: "paid-too", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "docs"}},
+	both := job.Job{ID: "b", Postconditions: []job.Postcondition{
+		{ID: "paid", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "bench", Project: "."})},
+		{ID: "paid-too", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "bench", Project: "docs"})},
 	}}
 	assert.Len(t, deniedCheckProblems(t.Context(), s, both), 2, "every denied check is found, not the first")
 }
@@ -257,8 +257,8 @@ func TestDeniedCheckProblemsDeferWhenTheRulesDidNotLoad(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{Deferred: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"})
-	row := job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Goals: []job.Goal{
-		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
+	row := job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Postconditions: []job.Postcondition{
+		{ID: "lint", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})},
 	}}
 
 	assert.Empty(t, deniedCheckProblems(t.Context(), s, row))

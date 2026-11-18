@@ -1864,97 +1864,6 @@ func decodeFunctionGap(v vm.Value, path string) (types.FunctionGap, error) {
 	return out, nil
 }
 
-// DecodeJobGoal decodes a Buzz Goal, an object instance or a map, into a job.Goal.
-func DecodeJobGoal(v vm.Value) (job.Goal, error) {
-	return decodeJobGoal(v, "goal")
-}
-
-func decodeJobGoal(v vm.Value, path string) (job.Goal, error) {
-	var out job.Goal
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "Goal", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "id":
-			sID, err := decodeString(item, path+".id")
-			if err != nil {
-				return out, err
-			}
-			out.ID = sID
-		case "description":
-			sDescription, err := decodeString(item, path+".description")
-			if err != nil {
-				return out, err
-			}
-			out.Description = sDescription
-		case "dependsOn":
-			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
-			if err != nil {
-				return out, err
-			}
-			out.DependsOn = strsDependsOn
-		case "kind":
-			sKind, err := decodeEnum(item, path+".kind", "GoalKind", enumGoalKindValues)
-			if err != nil {
-				return out, err
-			}
-			out.Kind = job.GoalKind(sKind)
-		case "expect":
-			sExpect, err := decodeEnum(item, path+".expect", "GoalExpect", enumGoalExpectValues)
-			if err != nil {
-				return out, err
-			}
-			out.Expect = job.GoalExpect(sExpect)
-		case "check":
-			xCheck, err := decodeJobLeaseCheck(item, path+".check")
-			if err != nil {
-				return out, err
-			}
-			out.Check = xCheck
-		case "paths":
-			strsPaths, err := decodeStringList(item, path+".paths")
-			if err != nil {
-				return out, err
-			}
-			out.Paths = strsPaths
-		case "symbols":
-			strsSymbols, err := decodeStringList(item, path+".symbols")
-			if err != nil {
-				return out, err
-			}
-			out.Symbols = strsSymbols
-		case "signature":
-			sSignature, err := decodeString(item, path+".signature")
-			if err != nil {
-				return out, err
-			}
-			out.Signature = sSignature
-		case "accept":
-			listAccept, err := decodeList(item, path+".accept", "[Basis]")
-			if err != nil {
-				return out, err
-			}
-			if len(listAccept) > 0 {
-				itemsAccept := make([]job.Basis, len(listAccept))
-				for indexAccept, itemAccept := range listAccept {
-					sAcceptItem, err := decodeEnum(itemAccept, fmt.Sprintf("%s[%d]", path+".accept", indexAccept), "Basis", enumBasisValues)
-					if err != nil {
-						return out, err
-					}
-					itemsAccept[indexAccept] = job.Basis(sAcceptItem)
-				}
-				out.Accept = itemsAccept
-			}
-		default:
-			return out, unknownMember(path, "Goal", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeSymbolIndexDigest decodes a Buzz Graph, an object instance or a map, into a types.SymbolIndexDigest.
 func DecodeSymbolIndexDigest(v vm.Value) (types.SymbolIndexDigest, error) {
 	return decodeSymbolIndexDigest(v, "graph")
@@ -2704,13 +2613,13 @@ func decodeInstall(v vm.Value, path string) (spells.Install, error) {
 	return out, nil
 }
 
-// DecodeJob decodes a Buzz Job, an object instance or a map, into a job.Job.
-func DecodeJob(v vm.Value) (job.Job, error) {
+// DecodeJob decodes a Buzz Job, an object instance or a map, into a types.Job.
+func DecodeJob(v vm.Value) (types.Job, error) {
 	return decodeJob(v, "job")
 }
 
-func decodeJob(v vm.Value, path string) (job.Job, error) {
-	var out job.Job
+func decodeJob(v vm.Value, path string) (types.Job, error) {
+	var out types.Job
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "Job", v)
@@ -2723,25 +2632,25 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 			if err != nil {
 				return out, err
 			}
-			out.Requires = strsRequires
+			out.Job.Requires = strsRequires
 		case "unknown":
 			strsUnknown, err := decodeStringList(item, path+".unknown")
 			if err != nil {
 				return out, err
 			}
-			out.Unknown = strsUnknown
+			out.Job.Unknown = strsUnknown
 		case "id":
 			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
-			out.ID = sID
+			out.Job.ID = sID
 		case "parent":
 			sParent, err := decodeString(item, path+".parent")
 			if err != nil {
 				return out, err
 			}
-			out.Parent = sParent
+			out.Job.Parent = sParent
 		case "agent":
 			if !item.IsNull() {
 				var optAgent job.Agent
@@ -2750,38 +2659,38 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optAgent = xAgent
-				out.Agent = &optAgent
+				out.Job.Agent = &optAgent
 			}
 		case "checkpoint":
 			sCheckpoint, err := decodeString(item, path+".checkpoint")
 			if err != nil {
 				return out, err
 			}
-			out.Checkpoint = sCheckpoint
+			out.Job.Checkpoint = sCheckpoint
 		case "paths":
 			xPaths, err := decodeJobPaths(item, path+".paths")
 			if err != nil {
 				return out, err
 			}
-			out.Paths = xPaths
+			out.Job.Paths = xPaths
 		case "dependsOn":
 			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
 			if err != nil {
 				return out, err
 			}
-			out.DependsOn = strsDependsOn
+			out.Job.DependsOn = strsDependsOn
 		case "integrates":
 			strsIntegrates, err := decodeStringList(item, path+".integrates")
 			if err != nil {
 				return out, err
 			}
-			out.Integrates = strsIntegrates
+			out.Job.Integrates = strsIntegrates
 		case "breaks":
 			strsBreaks, err := decodeStringList(item, path+".breaks")
 			if err != nil {
 				return out, err
 			}
-			out.Breaks = strsBreaks
+			out.Job.Breaks = strsBreaks
 		case "modelTier":
 			if !item.IsNull() {
 				var optModelTier tier.Assignment
@@ -2790,44 +2699,44 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optModelTier = xModelTier
-				out.ModelTier = &optModelTier
+				out.Job.ModelTier = &optModelTier
 			}
 		case "briefFormat":
 			sBriefFormat, err := decodeEnum(item, path+".briefFormat", "BriefFormat", enumBriefFormatValues)
 			if err != nil {
 				return out, err
 			}
-			out.BriefFormat = job.BriefFormat(sBriefFormat)
+			out.Job.BriefFormat = job.BriefFormat(sBriefFormat)
 		case "delivery":
 			sDelivery, err := decodeString(item, path+".delivery")
 			if err != nil {
 				return out, err
 			}
-			out.Delivery = sDelivery
+			out.Job.Delivery = sDelivery
 		case "parentHead":
 			sParentHead, err := decodeString(item, path+".parentHead")
 			if err != nil {
 				return out, err
 			}
-			out.ParentHead = sParentHead
+			out.Job.ParentHead = sParentHead
 		case "follows":
 			sFollows, err := decodeString(item, path+".follows")
 			if err != nil {
 				return out, err
 			}
-			out.Follows = sFollows
+			out.Job.Follows = sFollows
 		case "reworkRounds":
 			nReworkRounds, err := decodeInt(item, path+".reworkRounds")
 			if err != nil {
 				return out, err
 			}
-			out.ReworkRounds = int(nReworkRounds)
+			out.Job.ReworkRounds = int(nReworkRounds)
 		case "widenings":
 			nWidenings, err := decodeInt(item, path+".widenings")
 			if err != nil {
 				return out, err
 			}
-			out.Widenings = int(nWidenings)
+			out.Job.Widenings = int(nWidenings)
 		case "claims":
 			listClaims, err := decodeList(item, path+".claims", "[JobClaim]")
 			if err != nil {
@@ -2842,26 +2751,26 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					}
 					itemsClaims[indexClaims] = xClaimsItem
 				}
-				out.Claims = itemsClaims
+				out.Job.Claims = itemsClaims
 			}
 		case "generation":
 			nGeneration, err := decodeInt(item, path+".generation")
 			if err != nil {
 				return out, err
 			}
-			out.Generation = int(nGeneration)
+			out.Job.Generation = int(nGeneration)
 		case "maxAttempts":
 			nMaxAttempts, err := decodeInt(item, path+".maxAttempts")
 			if err != nil {
 				return out, err
 			}
-			out.MaxAttempts = int(nMaxAttempts)
+			out.Job.MaxAttempts = int(nMaxAttempts)
 		case "maxClaims":
 			nMaxClaims, err := decodeInt(item, path+".maxClaims")
 			if err != nil {
 				return out, err
 			}
-			out.MaxClaims = int(nMaxClaims)
+			out.Job.MaxClaims = int(nMaxClaims)
 		case "deferred":
 			listDeferred, err := decodeList(item, path+".deferred", "[JobDeferred]")
 			if err != nil {
@@ -2876,50 +2785,50 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					}
 					itemsDeferred[indexDeferred] = xDeferredItem
 				}
-				out.Deferred = itemsDeferred
+				out.Job.Deferred = itemsDeferred
 			}
 		case "leftUnmerged":
 			sLeftUnmerged, err := decodeString(item, path+".leftUnmerged")
 			if err != nil {
 				return out, err
 			}
-			out.LeftUnmerged = sLeftUnmerged
+			out.Job.LeftUnmerged = sLeftUnmerged
 		case "landed":
 			bLanded, err := decodeBool(item, path+".landed")
 			if err != nil {
 				return out, err
 			}
-			out.Landed = bLanded
+			out.Job.Landed = bLanded
 		case "weight":
 			nWeight, err := decodeFloat(item, path+".weight")
 			if err != nil {
 				return out, err
 			}
-			out.Weight = nWeight
+			out.Job.Weight = nWeight
 		case "paused":
 			nPaused, err := decodeInt(item, path+".paused")
 			if err != nil {
 				return out, err
 			}
-			out.Paused = nPaused
+			out.Job.Paused = nPaused
 		case "pausedBy":
 			xPausedBy, err := decodeJobOrigin(item, path+".pausedBy")
 			if err != nil {
 				return out, err
 			}
-			out.PausedBy = xPausedBy
+			out.Job.PausedBy = xPausedBy
 		case "pauseReason":
 			sPauseReason, err := decodeString(item, path+".pauseReason")
 			if err != nil {
 				return out, err
 			}
-			out.PauseReason = sPauseReason
+			out.Job.PauseReason = sPauseReason
 		case "pausedUntil":
 			nPausedUntil, err := decodeInt(item, path+".pausedUntil")
 			if err != nil {
 				return out, err
 			}
-			out.PausedUntil = nPausedUntil
+			out.Job.PausedUntil = nPausedUntil
 		case "rejection":
 			if !item.IsNull() {
 				var optRejection job.Rejection
@@ -2928,12 +2837,12 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optRejection = xRejection
-				out.Rejection = &optRejection
+				out.Job.Rejection = &optRejection
 			}
 		case "check":
 			if !item.IsNull() {
-				var optCheck job.LeaseCheck
-				xCheck, err := decodeJobLeaseCheck(item, path+".check")
+				var optCheck types.LeaseCheck
+				xCheck, err := decodeLeaseCheck(item, path+".check")
 				if err != nil {
 					return out, err
 				}
@@ -2945,35 +2854,35 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 			if err != nil {
 				return out, err
 			}
-			out.Validation = sValidation
-		case "goals":
-			listGoals, err := decodeList(item, path+".goals", "[Goal]")
+			out.Job.Validation = sValidation
+		case "postconditions":
+			listPostconditions, err := decodeList(item, path+".postconditions", "[Postcondition]")
 			if err != nil {
 				return out, err
 			}
-			if len(listGoals) > 0 {
-				itemsGoals := make([]job.Goal, len(listGoals))
-				for indexGoals, itemGoals := range listGoals {
-					xGoalsItem, err := decodeJobGoal(itemGoals, fmt.Sprintf("%s[%d]", path+".goals", indexGoals))
+			if len(listPostconditions) > 0 {
+				itemsPostconditions := make([]types.Postcondition, len(listPostconditions))
+				for indexPostconditions, itemPostconditions := range listPostconditions {
+					xPostconditionsItem, err := decodePostcondition(itemPostconditions, fmt.Sprintf("%s[%d]", path+".postconditions", indexPostconditions))
 					if err != nil {
 						return out, err
 					}
-					itemsGoals[indexGoals] = xGoalsItem
+					itemsPostconditions[indexPostconditions] = xPostconditionsItem
 				}
-				out.Goals = itemsGoals
+				out.Postconditions = itemsPostconditions
 			}
 		case "state":
 			sState, err := decodeEnum(item, path+".state", "JobState", enumJobStateValues)
 			if err != nil {
 				return out, err
 			}
-			out.State = job.State(sState)
+			out.Job.State = job.State(sState)
 		case "readOnly":
 			bReadOnly, err := decodeBool(item, path+".readOnly")
 			if err != nil {
 				return out, err
 			}
-			out.ReadOnly = bReadOnly
+			out.Job.ReadOnly = bReadOnly
 		case "releases":
 			listReleases, err := decodeList(item, path+".releases", "[JobRelease]")
 			if err != nil {
@@ -2988,7 +2897,7 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					}
 					itemsReleases[indexReleases] = xReleasesItem
 				}
-				out.Releases = itemsReleases
+				out.Job.Releases = itemsReleases
 			}
 		case "unattributed":
 			listUnattributed, err := decodeList(item, path+".unattributed", "[JobUnattributedWrite]")
@@ -3004,7 +2913,7 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					}
 					itemsUnattributed[indexUnattributed] = xUnattributedItem
 				}
-				out.Unattributed = itemsUnattributed
+				out.Job.Unattributed = itemsUnattributed
 			}
 		case "entries":
 			listEntries, err := decodeList(item, path+".entries", "[JobEntry]")
@@ -3020,14 +2929,14 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					}
 					itemsEntries[indexEntries] = xEntriesItem
 				}
-				out.Entries = itemsEntries
+				out.Job.Entries = itemsEntries
 			}
 		case "writeProof":
 			sWriteProof, err := decodeEnum(item, path+".writeProof", "JobWriteProof", enumJobWriteProofValues)
 			if err != nil {
 				return out, err
 			}
-			out.WriteProof = job.WriteProof(sWriteProof)
+			out.Job.WriteProof = job.WriteProof(sWriteProof)
 		case "deviations":
 			listDeviations, err := decodeList(item, path+".deviations", "[Deviation]")
 			if err != nil {
@@ -3042,56 +2951,56 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					}
 					itemsDeviations[indexDeviations] = xDeviationsItem
 				}
-				out.Deviations = itemsDeviations
+				out.Job.Deviations = itemsDeviations
 			}
 		case "validated":
 			nValidated, err := decodeInt(item, path+".validated")
 			if err != nil {
 				return out, err
 			}
-			out.Validated = nValidated
+			out.Job.Validated = nValidated
 		case "reportedBase":
 			sReportedBase, err := decodeString(item, path+".reportedBase")
 			if err != nil {
 				return out, err
 			}
-			out.ReportedBase = sReportedBase
+			out.Job.ReportedBase = sReportedBase
 		case "baseVerdict":
 			sBaseVerdict, err := decodeEnum(item, path+".baseVerdict", "JobBaseVerdict", enumJobBaseVerdictValues)
 			if err != nil {
 				return out, err
 			}
-			out.BaseVerdict = job.BaseVerdict(sBaseVerdict)
+			out.Job.BaseVerdict = job.BaseVerdict(sBaseVerdict)
 		case "registeredBy":
 			xRegisteredBy, err := decodeJobOrigin(item, path+".registeredBy")
 			if err != nil {
 				return out, err
 			}
-			out.RegisteredBy = xRegisteredBy
+			out.Job.RegisteredBy = xRegisteredBy
 		case "authority":
 			sAuthority, err := decodeString(item, path+".authority")
 			if err != nil {
 				return out, err
 			}
-			out.Authority = sAuthority
+			out.Job.Authority = sAuthority
 		case "registered":
 			nRegistered, err := decodeInt(item, path+".registered")
 			if err != nil {
 				return out, err
 			}
-			out.Registered = nRegistered
+			out.Job.Registered = nRegistered
 		case "holderStopped":
 			nHolderStopped, err := decodeInt(item, path+".holderStopped")
 			if err != nil {
 				return out, err
 			}
-			out.HolderStopped = nHolderStopped
+			out.Job.HolderStopped = nHolderStopped
 		case "checkoutRoot":
 			sCheckoutRoot, err := decodeString(item, path+".checkoutRoot")
 			if err != nil {
 				return out, err
 			}
-			out.CheckoutRoot = sCheckoutRoot
+			out.Job.CheckoutRoot = sCheckoutRoot
 		case "worktree":
 			if !item.IsNull() {
 				var optWorktree job.Worktree
@@ -3100,32 +3009,32 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optWorktree = xWorktree
-				out.Worktree = &optWorktree
+				out.Job.Worktree = &optWorktree
 			}
 		case "endReason":
 			sEndReason, err := decodeString(item, path+".endReason")
 			if err != nil {
 				return out, err
 			}
-			out.EndReason = sEndReason
+			out.Job.EndReason = sEndReason
 		case "created":
 			nCreated, err := decodeInt(item, path+".created")
 			if err != nil {
 				return out, err
 			}
-			out.Created = nCreated
+			out.Job.Created = nCreated
 		case "updated":
 			nUpdated, err := decodeInt(item, path+".updated")
 			if err != nil {
 				return out, err
 			}
-			out.Updated = nUpdated
+			out.Job.Updated = nUpdated
 		case "deadline":
 			nDeadline, err := decodeInt(item, path+".deadline")
 			if err != nil {
 				return out, err
 			}
-			out.Deadline = nDeadline
+			out.Job.Deadline = nDeadline
 		case "attempt":
 			if !item.IsNull() {
 				var optAttempt job.CapturedRun
@@ -3134,23 +3043,23 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optAttempt = xAttempt
-				out.Attempt = &optAttempt
+				out.Job.Attempt = &optAttempt
 			}
-		case "gateAttempts":
-			listGateAttempts, err := decodeList(item, path+".gateAttempts", "[JobGateAttempt]")
+		case "postconditionAttempts":
+			listPostconditionAttempts, err := decodeList(item, path+".postconditionAttempts", "[JobPostconditionAttempt]")
 			if err != nil {
 				return out, err
 			}
-			if len(listGateAttempts) > 0 {
-				itemsGateAttempts := make([]job.GateAttempt, len(listGateAttempts))
-				for indexGateAttempts, itemGateAttempts := range listGateAttempts {
-					xGateAttemptsItem, err := decodeJobGateAttempt(itemGateAttempts, fmt.Sprintf("%s[%d]", path+".gateAttempts", indexGateAttempts))
+			if len(listPostconditionAttempts) > 0 {
+				itemsPostconditionAttempts := make([]job.PostconditionAttempt, len(listPostconditionAttempts))
+				for indexPostconditionAttempts, itemPostconditionAttempts := range listPostconditionAttempts {
+					xPostconditionAttemptsItem, err := decodeJobPostconditionAttempt(itemPostconditionAttempts, fmt.Sprintf("%s[%d]", path+".postconditionAttempts", indexPostconditionAttempts))
 					if err != nil {
 						return out, err
 					}
-					itemsGateAttempts[indexGateAttempts] = xGateAttemptsItem
+					itemsPostconditionAttempts[indexPostconditionAttempts] = xPostconditionAttemptsItem
 				}
-				out.GateAttempts = itemsGateAttempts
+				out.Job.PostconditionAttempts = itemsPostconditionAttempts
 			}
 		case "lastRun":
 			if !item.IsNull() {
@@ -3160,7 +3069,7 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optLastRun = xLastRun
-				out.LastRun = &optLastRun
+				out.Job.LastRun = &optLastRun
 			}
 		case "integration":
 			if !item.IsNull() {
@@ -3170,7 +3079,7 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optIntegration = xIntegration
-				out.Integration = &optIntegration
+				out.Job.Integration = &optIntegration
 			}
 		case "waiterEvidence":
 			if !item.IsNull() {
@@ -3180,7 +3089,7 @@ func decodeJob(v vm.Value, path string) (job.Job, error) {
 					return out, err
 				}
 				optWaiterEvidence = xWaiterEvidence
-				out.WaiterEvidence = &optWaiterEvidence
+				out.Job.WaiterEvidence = &optWaiterEvidence
 			}
 		default:
 			return out, unknownMember(path, "Job", key)
@@ -3429,39 +3338,6 @@ func decodeJobEntry(v vm.Value, path string) (job.Entry, error) {
 	return out, nil
 }
 
-// DecodeJobGateAttempt decodes a Buzz JobGateAttempt, an object instance or a map, into a job.GateAttempt.
-func DecodeJobGateAttempt(v vm.Value) (job.GateAttempt, error) {
-	return decodeJobGateAttempt(v, "jobGateAttempt")
-}
-
-func decodeJobGateAttempt(v vm.Value, path string) (job.GateAttempt, error) {
-	var out job.GateAttempt
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "JobGateAttempt", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "gateID":
-			sGateID, err := decodeString(item, path+".gateID")
-			if err != nil {
-				return out, err
-			}
-			out.GateID = sGateID
-		case "attempt":
-			xAttempt, err := decodeJobCapturedRun(item, path+".attempt")
-			if err != nil {
-				return out, err
-			}
-			out.Attempt = xAttempt
-		default:
-			return out, unknownMember(path, "JobGateAttempt", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeJobIntegration decodes a Buzz JobIntegration, an object instance or a map, into a job.Integration.
 func DecodeJobIntegration(v vm.Value) (job.Integration, error) {
 	return decodeJobIntegration(v, "jobIntegration")
@@ -3563,6 +3439,39 @@ func decodeJobPaths(v vm.Value, path string) (job.Paths, error) {
 			out.Soft = strsSoft
 		default:
 			return out, unknownMember(path, "JobPaths", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeJobPostconditionAttempt decodes a Buzz JobPostconditionAttempt, an object instance or a map, into a job.PostconditionAttempt.
+func DecodeJobPostconditionAttempt(v vm.Value) (job.PostconditionAttempt, error) {
+	return decodeJobPostconditionAttempt(v, "jobPostconditionAttempt")
+}
+
+func decodeJobPostconditionAttempt(v vm.Value, path string) (job.PostconditionAttempt, error) {
+	var out job.PostconditionAttempt
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "JobPostconditionAttempt", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "postconditionID":
+			sPostconditionID, err := decodeString(item, path+".postconditionID")
+			if err != nil {
+				return out, err
+			}
+			out.PostconditionID = sPostconditionID
+		case "attempt":
+			xAttempt, err := decodeJobCapturedRun(item, path+".attempt")
+			if err != nil {
+				return out, err
+			}
+			out.Attempt = xAttempt
+		default:
+			return out, unknownMember(path, "JobPostconditionAttempt", key)
 		}
 	}
 	return out, nil
@@ -3963,13 +3872,13 @@ func decodeLanguage(v vm.Value, path string) (spells.Language, error) {
 	return out, nil
 }
 
-// DecodeJobLeaseCheck decodes a Buzz LeaseCheck, an object instance or a map, into a job.LeaseCheck.
-func DecodeJobLeaseCheck(v vm.Value) (job.LeaseCheck, error) {
-	return decodeJobLeaseCheck(v, "leaseCheck")
+// DecodeLeaseCheck decodes a Buzz LeaseCheck, an object instance or a map, into a types.LeaseCheck.
+func DecodeLeaseCheck(v vm.Value) (types.LeaseCheck, error) {
+	return decodeLeaseCheck(v, "leaseCheck")
 }
 
-func decodeJobLeaseCheck(v vm.Value, path string) (job.LeaseCheck, error) {
-	var out job.LeaseCheck
+func decodeLeaseCheck(v vm.Value, path string) (types.LeaseCheck, error) {
+	var out types.LeaseCheck
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "LeaseCheck", v)
@@ -4638,6 +4547,97 @@ func decodeImagePlatform(v vm.Value, path string) (imagetypes.Platform, error) {
 	}
 	if !hasArchitecture {
 		return out, missingMember(path, "Platform", "architecture")
+	}
+	return out, nil
+}
+
+// DecodePostcondition decodes a Buzz Postcondition, an object instance or a map, into a types.Postcondition.
+func DecodePostcondition(v vm.Value) (types.Postcondition, error) {
+	return decodePostcondition(v, "postcondition")
+}
+
+func decodePostcondition(v vm.Value, path string) (types.Postcondition, error) {
+	var out types.Postcondition
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Postcondition", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeString(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.ID = sID
+		case "description":
+			sDescription, err := decodeString(item, path+".description")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Description = sDescription
+		case "dependsOn":
+			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.DependsOn = strsDependsOn
+		case "kind":
+			sKind, err := decodeEnum(item, path+".kind", "PostconditionKind", enumPostconditionKindValues)
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Kind = job.PostconditionKind(sKind)
+		case "expect":
+			sExpect, err := decodeEnum(item, path+".expect", "PostconditionExpect", enumPostconditionExpectValues)
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Expect = job.PostconditionExpect(sExpect)
+		case "check":
+			xCheck, err := decodeLeaseCheck(item, path+".check")
+			if err != nil {
+				return out, err
+			}
+			out.Check = xCheck
+		case "paths":
+			strsPaths, err := decodeStringList(item, path+".paths")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Paths = strsPaths
+		case "symbols":
+			strsSymbols, err := decodeStringList(item, path+".symbols")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Symbols = strsSymbols
+		case "signature":
+			sSignature, err := decodeString(item, path+".signature")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Signature = sSignature
+		case "accept":
+			listAccept, err := decodeList(item, path+".accept", "[Basis]")
+			if err != nil {
+				return out, err
+			}
+			if len(listAccept) > 0 {
+				itemsAccept := make([]job.Basis, len(listAccept))
+				for indexAccept, itemAccept := range listAccept {
+					sAcceptItem, err := decodeEnum(itemAccept, fmt.Sprintf("%s[%d]", path+".accept", indexAccept), "Basis", enumBasisValues)
+					if err != nil {
+						return out, err
+					}
+					itemsAccept[indexAccept] = job.Basis(sAcceptItem)
+				}
+				out.Postcondition.Accept = itemsAccept
+			}
+		default:
+			return out, unknownMember(path, "Postcondition", key)
+		}
 	}
 	return out, nil
 }
@@ -9298,8 +9298,6 @@ var enumDiscoveryRoleValues = []string{"", "project", "member"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumEntryPointValues = []string{"", "cli", "hook", "mcp", "rpc", "server"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
-var enumGoalExpectValues = []string{"", "passed", "changed", "present", "absent", "unreferenced", "signature"}
-var enumGoalKindValues = []string{"", "check", "paths", "symbol"}
 var enumGuardDecisionValues = []string{"", "defer", "advise", "ask", "deny"}
 var enumHookPointValues = []string{"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"}
 var enumJobBaseVerdictValues = []string{"", "match", "revision-match", "diverged", "unknown"}
@@ -9310,6 +9308,8 @@ var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
 var enumModelTierSourceValues = []string{"job", "matrix", "user-matrix", "default"}
 var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
+var enumPostconditionExpectValues = []string{"", "passed", "changed", "present", "absent", "unreferenced", "signature"}
+var enumPostconditionKindValues = []string{"", "check", "paths", "symbol"}
 var enumRelationIDValues = []string{"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
 var enumSkillFormValues = []string{"", "both", "short", "full"}

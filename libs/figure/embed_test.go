@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -109,8 +110,9 @@ func (m mirror) record(obj *ast.ObjectDecl, got reflect.Type, at string, in decl
 	}
 	for _, f := range obj.Fields {
 		where := fmt.Sprintf("%s.%s", obj.Name, f.Name)
-		gf, ok := fields[f.Name]
-		delete(fields, f.Name)
+		key := snakeCase(f.Name)
+		gf, ok := fields[key]
+		delete(fields, key)
 		if _, skip := hostless[where]; skip {
 			assert.False(m.t, ok, "%s is hostless, so the Go mirror leaves it out", where)
 			continue
@@ -153,4 +155,18 @@ func (m mirror) typed(annot string, got reflect.Type, at string, in declarations
 	default:
 		m.record(in.objects[annot], got, fmt.Sprintf("%s (%s)", at, annot), in)
 	}
+}
+
+// snakeCase is a Buzz field name as the Go mirror's json tag spells it: the field is
+// lower camel, and the JSON keys magus owns are snake_case.
+func snakeCase(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if unicode.IsUpper(r) {
+			b.WriteByte('_')
+			r = unicode.ToLower(r)
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

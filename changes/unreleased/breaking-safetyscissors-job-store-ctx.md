@@ -1,6 +1,6 @@
 ### Changed
 
-- **Breaking: `Store.Witness` runs the check itself.** `(*Store).Witness(ctx, id, goal, cmd)`
+- **Breaking: `Store.Witness` runs the check itself.** `(*Store).Witness(ctx, id, postcondition, cmd)`
   starts and waits on `cmd` and returns the `RunRef`; the `Witness` type is gone. The exit
   status is the store's own wait, so no other process can forge a run.
 - **Breaking: a witnessed `cmd` is held to what it runs.** `cmd.Path` must be what
@@ -22,5 +22,5 @@
 - **`grants.jsonl` is written 0600.**
 - **The store's clock is `WithClock` throughout.** Row times, grants, archive names and the
   lock holder's time read it.
-- **`magus job fork` and `magus job apply` note a check goal's defaulted accept.** One
+- **`magus job fork` and `magus job apply` note a check postcondition's defaulted accept.** One
   naming no `accept` still accepts `[witnessed]`.

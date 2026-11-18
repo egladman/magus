@@ -9,11 +9,12 @@ import (
 // Kind names the type of record inside an API version, as `Job`.
 type Kind string
 
-// TypeMeta is the pair every record leads with, as metav1.TypeMeta.
+// TypeMeta is the pair every record leads with, as metav1.TypeMeta, but keyed
+// `api_version` and `kind` in snake_case.
 // A reader that finds any other pair than its own refuses the record.
 // A record embeds it, so the pair stays top-level.
 type TypeMeta struct {
-	APIVersion APIVersion `json:"apiVersion" yaml:"apiVersion" buzz:"apiVersion"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version" buzz:"apiVersion"`
 	Kind       Kind       `json:"kind" yaml:"kind" buzz:"kind"`
 }
 
@@ -168,7 +169,7 @@ type RefusedError struct {
 func (e *RefusedError) Error() string {
 	switch {
 	case e.Got.APIVersion == "":
-		return fmt.Sprintf("record carries no apiVersion, and this reader reads only %s", describe(e.Want))
+		return fmt.Sprintf("record carries no api_version, and this reader reads only %s", describe(e.Want))
 	case e.newer():
 		return fmt.Sprintf("record is %s, newer than the %s this reader reads", describe(e.Got), describe(e.Want))
 	default:

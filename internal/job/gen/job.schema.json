@@ -53,7 +53,7 @@
         },
         "instructions": {
           "type": "string",
-          "description": "Instructions say what the job is for and what done means, as prose a reader grades. The machine-checkable half is the job's goals."
+          "description": "Instructions say what the job is for and what done means, as prose a reader grades. The machine-checkable half is the job's postconditions."
         },
         "worker": {
           "type": "object",
@@ -234,7 +234,7 @@
       "type": "boolean",
       "description": "ReadOnly marks a lease that gathers evidence and writes nothing, so empty write paths are correct rather than missing."
     },
-    "goals": {
+    "postconditions": {
       "type": "array",
       "items": {
         "type": "object",
@@ -260,12 +260,12 @@
           "kind": {
             "type": "string",
             "enum": ["check", "paths", "symbol"],
-            "description": "Kind names WHAT this goal examines and Expect names what must be true of it. Two fields rather than one, because the alternative is a kind per pair: `paths` beside `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by multiplication and reads inconsistently the moment it has four members."
+            "description": "Kind names WHAT this postcondition examines and Expect names what must be true of it. Two fields rather than one, because the alternative is a kind per pair: `paths` beside `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by multiplication and reads inconsistently the moment it has four members."
           },
           "expect": {
             "type": "string",
             "enum": ["", "passed", "changed", "present", "absent", "unreferenced", "signature"],
-            "description": "Expect is optional and defaults to the kind's own: passed for check, changed for paths and symbol. The common goal names only its kind and its subject."
+            "description": "Expect is optional and defaults to the kind's own: passed for check, changed for paths and symbol. The common postcondition names only its kind and its subject."
           },
           "check": {
             "type": "object",
@@ -324,25 +324,25 @@
                 }
               }
             ],
-            "description": "Check is the run a GoalKindCheck goal examines. Zero on every other kind."
+            "description": "Check is the run a PostconditionKindCheck postcondition examines. Zero on every other kind."
           },
           "paths": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Paths are the globs a GoalKindPaths goal examines. Zero on every other kind."
+            "description": "Paths are the globs a PostconditionKindPaths postcondition examines. Zero on every other kind."
           },
           "symbols": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph resolves them. Zero on every other kind."
+            "description": "Symbols are the names a PostconditionKindSymbol postcondition examines, as the knowledge graph resolves them. Zero on every other kind."
           },
           "signature": {
             "type": "string",
-            "description": "Signature is the declaration an ExpectSignature goal holds its one symbol to, in the form the symbol index renders it. A fork that declares none records the indexed one, which is how a stub the root wrote becomes the contract. Zero on every other goal."
+            "description": "Signature is the declaration an ExpectSignature postcondition holds its one symbol to, in the form the symbol index renders it. A fork that declares none records the indexed one, which is how a stub the root wrote becomes the contract. Zero on every other postcondition."
           },
           "accept": {
             "type": "array",
@@ -350,11 +350,11 @@
               "type": "string",
               "enum": ["witnessed", "attested", "reported"]
             },
-            "description": "Accept are the bases a run of a GoalKindCheck goal's check may rest on (see [Store.Grade]). A check goal names at least one: [Goal.Resolve] fills none in, so one accepting nothing is a fault, never a goal that takes the strongest or the weakest. Zero on every other kind."
+            "description": "Accept are the bases a run of a PostconditionKindCheck postcondition's check may rest on (see [Store.Grade]). A check postcondition names at least one: [Postcondition.Resolve] fills none in, so one accepting nothing is a fault, never a postcondition that takes the strongest or the weakest. Zero on every other kind."
           }
         }
       },
-      "description": "Goals are what done means, graded by [Store.Grade]. See [Job.Goals]."
+      "description": "Postconditions are what done means, graded by [Store.Grade]. See [Job.Postconditions]."
     },
     "timeout": {
       "type": "string",

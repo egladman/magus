@@ -17,13 +17,12 @@ func (s *BasisSuite) TestTheBasesAreClosedAndStrongestFirst() {
 	s.Equal("unset", Basis("").String())
 }
 
-func (s *BasisSuite) TestAStoredBasisIsSpelledAndReadBack() {
+func (s *BasisSuite) TestAStoredBasisIsItsGoValue() {
 	var bad wireReads
 	wire := wireBasis()
 
-	s.Equal("Witnessed", wire.spell(BasisWitnessed))
-	s.Equal(BasisReported, wire.read("Reported", &bad))
+	s.Equal(BasisReported, wire.read("reported", &bad))
 	s.Require().NoError(bad.refusal())
-	wire.read("Trusted", &bad)
-	s.ErrorContains(bad.refusal(), `"Trusted" is not a stored Basis`)
+	wire.read("Reported", &bad)
+	s.ErrorContains(bad.refusal(), `"Reported" is not a stored Basis`)
 }

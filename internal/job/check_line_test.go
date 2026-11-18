@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types"
 )
 
 type CheckLineSuite struct{ suite.Suite }
@@ -15,7 +16,7 @@ func TestCheckLine(t *testing.T) { suite.Run(t, new(CheckLineSuite)) }
 // The rendered line is what the guard and the console still read, so it has to survive a
 // round trip through the record the store keeps.
 func (s *CheckLineSuite) TestATargetCheckRoundTripsThroughItsLine() {
-	want := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
+	want := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
 	s.Equal("magus run go::go-test . -- -run Ledger", CheckCommand(want))
 	got, err := ParseCheckCommand(CheckCommand(want))
 	s.Require().NoError(err)
@@ -23,16 +24,16 @@ func (s *CheckLineSuite) TestATargetCheckRoundTripsThroughItsLine() {
 }
 
 func (s *CheckLineSuite) TestAnEmptyProjectRendersAsTheRoot() {
-	s.Equal("magus run lint . --no-default-charms", CheckCommand(job.LeaseCheck{Target: "lint", NoDefaultCharms: true}))
+	s.Equal("magus run lint . --no-default-charms", CheckCommand(types.LeaseCheck{Target: "lint", NoDefaultCharms: true}))
 }
 
 func (s *CheckLineSuite) TestAScriptCheckRendersAsARecordedRun() {
-	want := job.LeaseCheck{Script: "probes/key.buzz", Args: []string{"--deep"}}
+	want := types.LeaseCheck{Script: "probes/key.buzz", Args: []string{"--deep"}}
 	s.Equal("magus buzz --record probes/key.buzz -- --deep", CheckCommand(want))
 	got, err := ParseCheckCommand(CheckCommand(want))
 	s.Require().NoError(err)
 	s.Equal(want, got)
-	s.Equal("magus buzz -t probes/key.buzz", CheckCommand(job.LeaseCheck{Script: "probes/key.buzz", Test: true}))
+	s.Equal("magus buzz -t probes/key.buzz", CheckCommand(types.LeaseCheck{Script: "probes/key.buzz", Test: true}))
 }
 
 func (s *CheckLineSuite) TestASetOfRunsIsNotOneCheck() {
@@ -52,6 +53,6 @@ func (s *CheckLineSuite) TestARecordedCommandQualifiesItsTargetWithTheSpell() {
 }
 
 func (s *CheckLineSuite) TestAStoreWriteRendersValidationFromCheck() {
-	s.Empty(validationLine(nil))
-	s.Equal("magus run test .", validationLine(&job.LeaseCheck{Target: "test"}))
+	s.Empty(validationLine(job.Job{}))
+	s.Equal("magus run test .", validationLine(job.Job{Check: fixtureCheck(types.LeaseCheck{Target: "test"})}))
 }

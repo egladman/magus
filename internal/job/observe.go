@@ -71,7 +71,7 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 			}
 		}
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
-		seen.readSymbols(ctx, row.EffectiveGoals(), symbols)
+		seen.readSymbols(ctx, row.EffectivePostconditions(), symbols)
 		// Workspace only, as for every rule that acts: a default in one person's global
 		// config must not loosen what a check accepts. An unreadable magus.yaml leaves no
 		// defaults, so a check binds only to the charms it names.
@@ -458,8 +458,8 @@ func presentIn(root string, row job.Job) ([]string, bool) {
 	}
 	tree := os.DirFS(root)
 	var out []string
-	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != job.GoalKindPaths {
+	for _, gate := range row.EffectivePostconditions() {
+		if gate.Kind != job.PostconditionKindPaths {
 			continue
 		}
 		for _, declared := range gate.Paths {
@@ -476,20 +476,20 @@ func presentIn(root string, row job.Job) ([]string, bool) {
 	return out, true
 }
 
-// readSymbols resolves every symbol goals name into o: a signature goal's against its
+// readSymbols resolves every symbol postconditions name into o: a signature postcondition's against its
 // declared signature, every other one's plainly. One miss from the reader leaves the whole
 // observation unknown: a graph that answered for three names and failed on the fourth cannot
 // be told apart from one that found the fourth absent, and those mean opposite things to a
 // gate.
-func (o *Observed) readSymbols(ctx context.Context, goals []job.Goal, read SymbolReader) {
+func (o *Observed) readSymbols(ctx context.Context, postconditions []job.Postcondition, read SymbolReader) {
 	o.Symbols, o.Signatures, o.conflicts, o.SymbolsKnown = nil, nil, nil, false
 	if read == nil {
 		return
 	}
 	symbols, signatures := map[string]SymbolFact{}, map[string]SymbolFact{}
 	declared, conflicts := map[string]string{}, map[string]bool{}
-	for _, gate := range goals {
-		if gate.Kind != job.GoalKindSymbol {
+	for _, gate := range postconditions {
+		if gate.Kind != job.PostconditionKindSymbol {
 			continue
 		}
 		for _, name := range gate.Symbols {

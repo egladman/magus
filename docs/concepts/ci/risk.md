@@ -25,7 +25,7 @@ block above goes to stderr before anything runs: every path with its tier, the
 class it started from and the fact that decided it, then the commands that run
 instead. The run records its verdict under `ci`, so the
 [redundancy check](../../reference/codes/sandbox/MGS3010.md) and a job's
-goal on `ci` read it like any other.
+postcondition on `ci` read it like any other.
 
 `--no-redundancy-check` runs the full gate: no deferral and no tier reduction.
 
@@ -105,7 +105,7 @@ replays it when its key did not move.
 - **CI verdict inheritance** skips the fan-out only when the change since the
   branch's last green run is `trivial` (`gate_inherit` in
   [workspace.md](../workspace.md)).
-- **A job's goal** on `ci` passes on the branch's newest green `ci` gate
+- **A job's postcondition** on `ci` passes on the branch's newest green `ci` gate
   when the change since it is `trivial`, even if that gate predates the job.
 
 ## Workers check their packages, the integration checks the tree
@@ -129,7 +129,7 @@ files the check as owed in its result, a normal result:
 {"validation": {"command": "magus run go::go-test . -- ./internal/job/...", "output_ref": "", "owed": "no seat"}}
 ```
 
-`magus job wait` passes it with the goal marked `[owed] check (no seat)`, and the
+`magus job wait` passes it with the postcondition marked `[owed] check (no seat)`, and the
 integration runs the check. An integration may not owe its own checks: it opts
 into waiting for a seat with `--budget-wait`, bounded by that and its own deadline,
 and a refusal at the bound names the runs holding the budget.

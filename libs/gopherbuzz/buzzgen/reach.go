@@ -116,25 +116,72 @@ func (r *Reach) walkStruct(t reflect.Type, dir Direction, root string) {
 	if mirrored {
 		return
 	}
-	for _, f := range mirroredFields(t) {
+	for _, f := range MirroredFields(t) {
 		r.Walk(f.Type, dir, root)
 	}
 }
 
-// mirroredFields are the fields renderFields declares: exported, not
-// `buzz:"-"`, with an untagged embedded struct's fields inline.
-func mirroredFields(t reflect.Type) []reflect.StructField {
-	var out []reflect.StructField
-	for i := range t.NumField() {
-		f := t.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
+// MirroredField is one field the Buzz object mirror of a Go struct carries.
+// Selector reaches it from the struct value: "Schema.Version" for a field of
+// an embedded struct.
+type MirroredField struct {
+	reflect.StructField
+	Selector string
+	// Owner is the struct that declares the field: t, or an embedded struct
+	// whose own Required list governs it.
+	Owner reflect.Type
+}
+
+// MirroredFields lists the fields renderFields declares for t, in declaration
+// order: exported, not `buzz:"-"`, with an untagged embedded struct's fields
+// inline. It applies Go's field-visibility rule, so a promoted field hidden by
+// a shallower field of the same name is dropped and the shallower field takes
+// the hidden one's position. Two fields of one name at the shallowest depth
+// are ambiguous in Go and neither is mirrored. t must be a struct.
+func MirroredFields(t reflect.Type) []MirroredField {
+	type candidate struct {
+		MirroredField
+		depth int
+	}
+	var all []candidate
+	var flatten func(t reflect.Type, prefix string, depth int)
+	flatten = func(t reflect.Type, prefix string, depth int) {
+		for i := range t.NumField() {
+			f := t.Field(i)
+			if !f.IsExported() || f.Tag.Get("buzz") == "-" {
+				continue
+			}
+			if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
+				flatten(f.Type, prefix+f.Name+".", depth+1)
+				continue
+			}
+			all = append(all, candidate{MirroredField{StructField: f, Selector: prefix + f.Name, Owner: t}, depth})
+		}
+	}
+	flatten(t, "", 0)
+
+	shallowest := map[string]int{}
+	for _, c := range all {
+		if d, ok := shallowest[c.Name]; !ok || c.depth < d {
+			shallowest[c.Name] = c.depth
+		}
+	}
+	winners := map[string][]MirroredField{}
+	for _, c := range all {
+		if c.depth == shallowest[c.Name] {
+			winners[c.Name] = append(winners[c.Name], c.MirroredField)
+		}
+	}
+	var out []MirroredField
+	placed := map[string]bool{}
+	for _, c := range all {
+		if placed[c.Name] {
 			continue
 		}
-		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
-			out = append(out, mirroredFields(f.Type)...)
-			continue
+		placed[c.Name] = true
+		if w := winners[c.Name]; len(w) == 1 {
+			out = append(out, w[0])
 		}
-		out = append(out, f)
 	}
 	return out
 }

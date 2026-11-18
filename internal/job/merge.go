@@ -67,10 +67,10 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	}
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
-	if goals, ok, e := decodeObjects[job.Goal](params, "goals", "goals"); e != nil {
+	if postconditions, ok, e := decodeObjects[job.Postcondition](params, "postconditions", "postconditions"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		put.Goals = &goals
+		put.Postconditions = &postconditions
 	}
 	if deviations, ok, e := decodeObjects[job.Deviation](params, "deviations", "deviations"); e != nil {
 		err = errors.Join(err, e)
@@ -80,21 +80,26 @@ func DecodePut(params map[string]any) (job.Put, error) {
 
 	// check and validation are two spellings of one field, so a put naming each of them is
 	// a caller that does not know which one it meant.
-	check := func(key string, parse func(string) (job.LeaseCheck, error)) {
+	check := func(key string, parse func(string) (types.LeaseCheck, error)) {
 		v, ok, e := mergeString(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case !ok:
 		case strings.TrimSpace(v) == "":
-			put.Check = &job.LeaseCheck{}
+			put.Check = &job.Check{}
 		default:
 			c, perr := parse(v)
 			if perr != nil {
 				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
 				return
 			}
-			put.Check = &c
+			stored, perr := rawCheck(c)
+			if perr != nil {
+				err = errors.Join(err, fmt.Errorf("encoding %s: %w", key, perr))
+				return
+			}
+			put.Check = &stored
 		}
 	}
 	_, hasCheck := params["check"]
@@ -103,7 +108,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	case hasCheck && hasLine:
 		err = errors.Join(err, errors.New("job: a put carries `check` or a rendered `validation` line, not both"))
 	case hasCheck:
-		check("check", job.ParseLeaseCheck)
+		check("check", parseLeaseCheck)
 	case hasLine:
 		// compat: see ParseCheckCommand.
 		check("validation", ParseCheckCommand)
@@ -160,7 +165,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 //
 // Every value is checked HERE rather than inside the returned merge, because Store.Update
 // runs it while holding the lock and has no way to report a failure. A state outside the
-// vocabulary, a timeout that does not parse, goals that do not validate, a negative
+// vocabulary, a timeout that does not parse, postconditions that do not validate, a negative
 // max_attempts, and an enter beside any other field are errors, joined.
 func PutMerge(p job.Put) (func(*job.Job), error) {
 	var (
@@ -215,29 +220,36 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 			set = append(set, func(u *job.Job) { apply(u, v) })
 		}
 	}
-	if p.Goals != nil {
-		goals, _ := resolveAccept(*p.Goals)
-		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Goals: goals})); e != nil {
+	if p.Postconditions != nil {
+		postconditions, _ := resolveAccept(*p.Postconditions)
+		if e := ValidateDeclaration((job.Declaration{ID: "merge", Postconditions: postconditions})); e != nil {
 			err = errors.Join(err, e)
 		} else {
-			set = append(set, func(u *job.Job) { u.Goals = goals })
+			set = append(set, func(u *job.Job) { u.Postconditions = postconditions })
 		}
 	}
 	if p.Deviations != nil {
 		deviations := slices.Clone(*p.Deviations)
-		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Deviations: deviations})); e != nil {
+		if e := ValidateDeclaration((job.Declaration{ID: "merge", Deviations: deviations})); e != nil {
 			err = errors.Join(err, e)
 		} else {
 			set = append(set, func(u *job.Job) { u.Deviations = deviations })
 		}
 	}
 	if p.Check != nil {
-		if p.Check.Target == "" && p.Check.Script == "" {
-			set = append(set, func(u *job.Job) { u.Check, u.Validation = nil, "" })
-		} else {
-			c := *p.Check
-			c.Args = slices.Clone(c.Args)
-			set = append(set, func(u *job.Job) { u.Check, u.Validation = &c, CheckCommand(c) })
+		switch c, e := types.DecodeLeaseCheck(*p.Check); {
+		case p.Check.IsZero():
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = job.Check{}, "" })
+		case e != nil:
+			err = errors.Join(err, fmt.Errorf("job: check: %w", e))
+		default:
+			stored, e := rawCheck(c)
+			if e != nil {
+				err = errors.Join(err, fmt.Errorf("encoding the check: %w", e))
+				break
+			}
+			line := CheckCommand(c)
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = stored, line })
 		}
 	}
 	if p.State != nil {
@@ -338,7 +350,7 @@ func declaredKeys(p job.Put) []string {
 		{"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"paths.write", p.Paths.Write != nil}, {"paths.deny", p.Paths.Deny != nil},
 		{"paths.read", p.Paths.Read != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
-		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
+		{"postconditions", p.Postconditions != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil},
 		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
 	} {
@@ -353,7 +365,7 @@ func declaredKeys(p job.Put) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "agent", "checkpoint", "paths",
-	"depends_on", "breaks", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
+	"depends_on", "breaks", "brief_format", "check", "validation", "postconditions", "deviations", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows",
 	"delivery", "parent_head",
 }

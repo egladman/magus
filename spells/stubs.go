@@ -16,7 +16,7 @@ type StubSyntax struct {
 	// BodyStyle is how the body is delimited in source: "brace" (the body is
 	// the final {...} of the declaration) or "indent" (the body is the block
 	// after the header's last top-level colon).
-	BodyStyle string `json:"bodyStyle,omitempty"`
+	BodyStyle string `json:"body_style,omitempty"`
 	// Body is a Mustache template (the template module) for the replacement
 	// body. For "brace" it includes the braces; for "indent" it is the block's
 	// statements at no indentation, which the splitter indents to the block's

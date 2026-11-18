@@ -2882,7 +2882,7 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
 // shellcheck, and the actionlint cantrip. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
 //
-// Files after `--` scope it to them, as a job's lint goal passes the files it writes: each
+// Files after `--` scope it to them, as a job's lint postcondition passes the files it writes: each
 // tool runs over those files or the packages holding them, and only a finding at one of
 // them fails. The scoped run needs no format or generate, whose drift elsewhere in the tree
 // is not the files' to meet; harness-drift and the wasm build judge the whole tree too, so

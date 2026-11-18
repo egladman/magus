@@ -1339,6 +1339,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
 		}
 		if v.Deny == "" {
+			v = stronger(v, deps.grade(judgeCopyWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
+		}
+		if v.Deny == "" {
 			if reason := denyAmbiguousCIWord(facts, assumesCIWord(input)); reason != "" {
 				v = ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleAmbiguousCIWord},
 					Why: "The bare word \"ci\" names both the magus target and the host's CI/CD; picking either before the person clarifies is the assumption this rule stops."}

@@ -45,7 +45,7 @@ func KickDiskTick(exe, dir string, every time.Duration) {
 	if err != nil {
 		return
 	}
-	info, err := os.Stat(filepath.Join(base, "magus", "disk", "samples.jsonl"))
+	info, err := os.Stat(filepath.Join(base, "magus", "disk", "space.jsonl"))
 	if err == nil && time.Since(info.ModTime()) < max(every, diskTickFloor) {
 		return
 	}

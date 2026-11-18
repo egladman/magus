@@ -431,7 +431,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 	m.MapSet("magus__Workspace__putJob", function("magus.Workspace.putJob", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(job.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(types.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("magus__Workspace__clearJobs", function("magus.job.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.IntValue(0), nil
@@ -580,7 +580,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return bindgen.ObjectHistory(types.History{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("job", function("magus.job", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(job.Job{ID: firstStr(args)}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(types.Job{Job: job.Job{ID: firstStr(args)}}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("session", function("magus.session", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectSession(types.Session{}, ffi.SessionEnums(ctx, sess, "magus")), nil
@@ -599,7 +599,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return historyMetric("models"), nil
 	}))
 	m.MapSet("magus__Job__exit", function("magus.Job.exit", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(job.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(types.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("magus__Job__wait", function("magus.Job.wait", retNull))
 	m.MapSet("magus__Job__register", function("magus.Job.register", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {

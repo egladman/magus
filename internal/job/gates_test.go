@@ -47,12 +47,12 @@ func gateTargets(gates []UnrunGate) []string {
 func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 	t.Parallel()
 
-	check := func(target string) *job.LeaseCheck { return &job.LeaseCheck{Target: target, Project: "."} }
-	goal := func(target string) job.Goal {
-		return job.Goal{ID: "g-" + target, Check: job.LeaseCheck{Target: target, Project: "."}}.Resolve()
+	check := func(target string) *types.LeaseCheck { return &types.LeaseCheck{Target: target, Project: "."} }
+	postcondition := func(target string) job.Postcondition {
+		return job.Postcondition{ID: "g-" + target, Check: fixtureCheck(types.LeaseCheck{Target: target, Project: "."})}.Resolve()
 	}
 	row := func(mutate func(*job.Job)) job.Job {
-		r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: check("go-test")}
+		r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: fixtureCheck(*check("go-test"))}
 		mutate(&r)
 		return r
 	}
@@ -69,18 +69,18 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 			want: []string{".:lint", ".:build", ".:gen"},
 		},
 		{
-			name: "a goal that runs a target covers it",
-			row:  row(func(r *job.Job) { r.Goals = []job.Goal{goal("lint")} }),
+			name: "a postcondition that runs a target covers it",
+			row:  row(func(r *job.Job) { r.Postconditions = []job.Postcondition{postcondition("lint")} }),
 			want: []string{".:build", ".:gen"},
 		},
 		{
 			name: "a check's chain members count as run",
-			row:  row(func(r *job.Job) { r.Check = check("build") }),
+			row:  row(func(r *job.Job) { r.Check = fixtureCheck(*check("build")) }),
 			want: []string{".:lint", ".:go-test", ".:gen"},
 		},
 		{
 			name: "a script check covers nothing",
-			row:  row(func(r *job.Job) { r.Check = &job.LeaseCheck{Script: "hack/check.buzz"} }),
+			row:  row(func(r *job.Job) { r.Check = fixtureCheck(types.LeaseCheck{Script: "hack/check.buzz"}) }),
 			want: []string{".:lint", ".:go-test", ".:build", ".:gen"},
 		},
 		{
@@ -105,7 +105,9 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 			got := UnrunGates(t.TempDir(), tc.row, gatesWorkspace(), tc.regenerated, nil)
 			assert.Equal(t, tc.want, gateTargets(got))
 			for _, g := range got {
-				require.NoError(t, types.ValidateGoal(g.Goal), "the goal to add must be declarable as printed")
+				postcondition, err := g.Postcondition.Module()
+				require.NoError(t, err)
+				require.NoError(t, validatePostcondition(postcondition), "the postcondition to add must be declarable as printed")
 			}
 		})
 	}
@@ -131,8 +133,11 @@ func (s *owningProjectGateSuite) workspace() []*types.Project {
 	}
 }
 
-func (s *owningProjectGateSuite) gates(check *job.LeaseCheck, write ...string) []string {
-	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: check}
+func (s *owningProjectGateSuite) gates(check *types.LeaseCheck, write ...string) []string {
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}}
+	if check != nil {
+		row.Check = fixtureCheck(*check)
+	}
 	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil, nil))
 }
 
@@ -141,13 +146,13 @@ func (s *owningProjectGateSuite) TestGateNamesTheOwningProject() {
 }
 
 func (s *owningProjectGateSuite) TestAnAncestorsCheckDoesNotSatisfyIt() {
-	got := s.gates(&job.LeaseCheck{Target: "test", Project: "."}, "libs/buzz/lexer.go")
+	got := s.gates(&types.LeaseCheck{Target: "test", Project: "."}, "libs/buzz/lexer.go")
 
 	s.Equal([]string{"libs/buzz:test"}, got)
 }
 
 func (s *owningProjectGateSuite) TestTheOwningProjectsCheckSatisfiesIt() {
-	s.Empty(s.gates(&job.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go"))
+	s.Empty(s.gates(&types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go"))
 }
 
 func (s *owningProjectGateSuite) TestARootFileStaysWithTheRoot() {
@@ -155,7 +160,7 @@ func (s *owningProjectGateSuite) TestARootFileStaysWithTheRoot() {
 }
 
 func (s *owningProjectGateSuite) TestFilesInBothGateBoth() {
-	got := s.gates(&job.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go", "internal/a.go")
+	got := s.gates(&types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go", "internal/a.go")
 
 	s.Equal([]string{".:test"}, got)
 }
@@ -190,7 +195,7 @@ func (s *owningProjectGateSuite) reachingWorkspace() []*types.Project {
 }
 
 func (s *owningProjectGateSuite) reaching(write ...string) []UnrunGate {
-	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil, nil)
 }
 
@@ -218,16 +223,16 @@ func (s *owningProjectGateSuite) unresolvedStore() *Store {
 	return NewStore(tempLocation(s.T(), root)).InWorkspace(Workspace{Projects: projects})
 }
 
-func (s *owningProjectGateSuite) validated(store *Store, check *job.LeaseCheck, write string) types.JobValidation {
+func (s *owningProjectGateSuite) validated(store *Store, check *types.LeaseCheck, write string) types.JobValidation {
 	v, err := validateDryFork(s.T().Context(), store, "j", func(u *job.Job) {
-		u.Paths.Write, u.Check, u.Agent = []string{write}, check, job.Instructed("c")
+		u.Paths.Write, u.Check, u.Agent = []string{write}, fixtureCheck(*check), job.Instructed("c")
 	})
 	s.Require().NoError(err)
 	return v
 }
 
 func (s *owningProjectGateSuite) TestAnOwnerWithUnresolvedSpellsIsNamedUnchecked() {
-	v := s.validated(s.unresolvedStore(), &job.LeaseCheck{Target: "test", Project: "."}, "libs/spelled/a.go")
+	v := s.validated(s.unresolvedStore(), &types.LeaseCheck{Target: "test", Project: "."}, "libs/spelled/a.go")
 
 	s.Contains(v.Unchecked, "whether project \"libs/spelled\" runs `test`: it binds spells it carries unresolved, so `test .` gates its files")
 }
@@ -240,7 +245,7 @@ func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
 	root := testkit.NewRepository(s.T(), map[string]string{"a.go": "package a\n"}).Root()
 	store := NewStore(tempLocation(s.T(), root)).InWorkspace(Workspace{Projects: projects})
 
-	v := s.validated(store, &job.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
+	v := s.validated(store, &types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
 
 	s.Empty(v.Unchecked)
 }
@@ -248,22 +253,22 @@ func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
 func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	t.Parallel()
 
-	r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	assert.Empty(t, UnrunGates(t.TempDir(), r, []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}, nil, nil))
 	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil, nil), "no root project")
 }
 
-func TestUnrunGoalNamesTheProject(t *testing.T) {
+func TestUnrunPostconditionNamesTheProject(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "lint", unrunGoal(".", "lint", map[string]bool{}).ID)
-	assert.Equal(t, "lint-libs-conventions", unrunGoal("libs/conventions", "lint", map[string]bool{}).ID)
-	assert.Equal(t, job.GoalKindCheck, unrunGoal(".", "lint", map[string]bool{}).Kind)
+	assert.Equal(t, "lint", unrunPostcondition(".", "lint", map[string]bool{}).ID)
+	assert.Equal(t, "lint-libs-conventions", unrunPostcondition("libs/conventions", "lint", map[string]bool{}).ID)
+	assert.Equal(t, job.PostconditionKindCheck, unrunPostcondition(".", "lint", map[string]bool{}).Kind)
 }
 
-// Two projects can fold to one id, and a ci target can share its name with a goal the row
-// already holds: each goal to add gets an id of its own.
-func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
+// Two projects can fold to one id, and a ci target can share its name with a postcondition the row
+// already holds: each postcondition to add gets an id of its own.
+func TestUnrunGatesGiveEachPostconditionItsOwnID(t *testing.T) {
 	t.Parallel()
 
 	projects := []*types.Project{
@@ -277,20 +282,20 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 		{Path: "a/b", Sources: types.MustParseGlobs("**/*.go")},
 		{Path: "a-b", Sources: types.MustParseGlobs("**/*.go")},
 	}
-	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 
 	got := UnrunGates(t.TempDir(), row, projects, nil, nil)
 
 	var ids []string
 	for _, g := range got {
-		ids = append(ids, g.Goal.ID)
+		ids = append(ids, g.Postcondition.ID)
 	}
 	assert.Equal(t, []string{"check-2", "lint-a-b", "lint-a-b-2"}, ids)
 }
 
 // workerGrade is the guard's answer for a worker: the build of magus is never its to run, and
 // a test only without default charms.
-func workerGrade(c job.LeaseCheck) CheckVerdict {
+func workerGrade(c types.LeaseCheck) CheckVerdict {
 	switch {
 	case c.Target == "build":
 		return CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
@@ -300,10 +305,10 @@ func workerGrade(c job.LeaseCheck) CheckVerdict {
 	return CheckVerdict{}
 }
 
-func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
+func TestUnrunGatesOfferOnlyPostconditionsAWorkerMayRun(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: &job.LeaseCheck{Target: "compile", Project: "."}}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "compile", Project: "."})}
 
 	got, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, workerGrade)
 
@@ -312,10 +317,10 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 		byTarget[g.Target] = g
 	}
 	assert.False(t, byTarget["lint"].IntegratorGates)
-	assert.True(t, byTarget["go-test"].Goal.Check.NoDefaultCharms, "a test the worker may run only without default charms is offered that way")
+	assert.True(t, byTarget["go-test"].Postcondition.Check.NoDefaultCharms, "a test the worker may run only without default charms is offered that way")
 	build := byTarget["build"]
 	assert.True(t, build.IntegratorGates, "no form of the build may run")
-	assert.Zero(t, build.Goal, "a goal no worker may run is not offered")
+	assert.Zero(t, build.Postcondition, "a postcondition no worker may run is not offered")
 
 	lines := unrunLines(got)
 	assert.Contains(t, lines, "build . (reads **/*.go): the integrator gates it; no worker may run it")
@@ -323,17 +328,17 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 
 	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, gradeWith(nil, "", row))
 	for _, g := range ungraded {
-		assert.False(t, g.IntegratorGates, "with no grader every goal is offered as it is")
+		assert.False(t, g.IntegratorGates, "with no grader every postcondition is offered as it is")
 	}
 }
 
-func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
+func TestRenderUnrunGatesCapsTheListAndPrintsThePostconditions(t *testing.T) {
 	t.Parallel()
 
 	var gates []UnrunGate
 	taken := map[string]bool{}
 	for i := range unrunGatesLimit + 2 {
-		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Goal: unrunGoal(".", fmt.Sprintf("t%d", i), taken)})
+		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Postcondition: unrunPostcondition(".", fmt.Sprintf("t%d", i), taken)})
 	}
 	var buf bytes.Buffer
 	renderUnrunGates(&buf, gates)
@@ -342,7 +347,7 @@ func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
 	assert.Contains(t, out, "t0 . (reads **/*.go)")
 	assert.NotContains(t, out, fmt.Sprintf("t%d . (reads", unrunGatesLimit))
 	assert.Contains(t, out, "and 2 more; -o json lists every one")
-	assert.Contains(t, out, `goals to add: [{"id":"t0","kind":"check"`)
+	assert.Contains(t, out, `postconditions to add: [{"id":"t0","kind":"check"`)
 
 	buf.Reset()
 	renderUnrunGates(&buf, nil)

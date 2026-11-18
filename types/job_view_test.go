@@ -1,0 +1,157 @@
+package types
+
+import (
+	"bytes"
+	"testing"
+
+	"github.com/stretchr/testify/suite"
+	"gopkg.in/yaml.v3"
+
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+)
+
+type JobViewSuite struct{ suite.Suite }
+
+func TestJobView(t *testing.T) { suite.Run(t, new(JobViewSuite)) }
+
+const (
+	viewCheck              = `{"target":"test","project":"."}`
+	viewPostconditionCheck = `{"target":"lint","project":"libs/x","no_default_charms":true}`
+)
+
+func (s *JobViewSuite) record() job.Job {
+	return job.Job{
+		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}},
+		Check: storedJSON(viewCheck),
+		Postconditions: []job.Postcondition{
+			{ID: "lint", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: storedJSON(viewPostconditionCheck), Accept: []job.Basis{job.BasisWitnessed}},
+			{ID: "names", Kind: job.PostconditionKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"X"}},
+		},
+	}
+}
+
+// The view's members hide the row's, so its JSON is the row's JSON exactly: a reader of
+// either sees one format.
+func (s *JobViewSuite) TestTheViewEncodesAsTheJobDoes() {
+	row := s.record()
+	view, err := NewJob(row)
+	s.Require().NoError(err)
+
+	want, err := codec.Marshal(row)
+	s.Require().NoError(err)
+	got, err := codec.Marshal(view)
+	s.Require().NoError(err)
+	s.JSONEq(string(want), string(got))
+}
+
+func (s *JobViewSuite) TestTheViewReadsEachCheck() {
+	view, err := NewJob(s.record())
+	s.Require().NoError(err)
+
+	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
+	s.Equal(LeaseCheck{Target: "lint", Project: "libs/x", NoDefaultCharms: true}, view.Postconditions[0].Check)
+	s.Equal(LeaseCheck{}, view.Postconditions[1].Check)
+	s.True(view.Job.Check.IsZero(), "the row's own member is hidden, never read twice")
+}
+
+func (s *JobViewSuite) TestModuleGivesTheJobBack() {
+	row := s.record()
+	view, err := NewJob(row)
+	s.Require().NoError(err)
+
+	back, err := view.Module()
+
+	s.Require().NoError(err)
+	s.JSONEq(viewCheck, back.Check.String())
+	s.JSONEq(viewPostconditionCheck, back.Postconditions[0].Check.String())
+	s.True(back.Postconditions[1].Check.IsZero(), "a postcondition with no check stays one")
+	back.Check, back.Postconditions[0].Check = row.Check, row.Postconditions[0].Check
+	s.Equal(row, back)
+}
+
+func (s *JobViewSuite) TestACheckThatDoesNotReadIsRefusedNamingWhereItSits() {
+	row := s.record()
+	row.Postconditions[0].Check = storedJSON(`{"target":"lint","noDefaultCharms":true}`)
+
+	_, err := NewJob(row)
+
+	var decode *CheckDecodeError
+	s.Require().ErrorAs(err, &decode)
+	s.Equal(&CheckDecodeError{Job: "w", Field: "postconditions[lint].check", Err: decode.Err}, decode)
+}
+
+func (s *JobViewSuite) TestAJobWithNoCheckHasANilOne() {
+	view, err := NewJob(job.Job{ID: "w"})
+	s.Require().NoError(err)
+	s.Nil(view.Check)
+	back, err := view.Module()
+	s.Require().NoError(err)
+	s.True(back.Check.IsZero())
+}
+
+func (s *JobViewSuite) TestAListReadsEveryJob() {
+	list, err := NewJobList(job.List{Jobs: []job.Job{s.record()}, Stale: []string{"w"}})
+	s.Require().NoError(err)
+
+	s.Require().Len(list.Jobs, 1)
+	s.Equal("test", list.Jobs[0].Check.Target)
+	s.Equal([]string{"w"}, list.Stale)
+	s.Nil(list.List.Jobs)
+}
+
+// yaml cannot inline the row beside the members that hide its own, so a row prints
+// through its JSON: the check is an object, never the bytes of one.
+func (s *JobViewSuite) TestYAMLPrintsTheCheckAsAnObject() {
+	view, err := NewJob(s.record())
+	s.Require().NoError(err)
+	var buf bytes.Buffer
+	s.Require().NoError(yaml.NewEncoder(&buf).Encode(view))
+
+	var back map[string]any
+	s.Require().NoError(yaml.Unmarshal(buf.Bytes(), &back))
+	s.Equal(map[string]any{"target": "test", "project": "."}, back["check"])
+	s.Equal("w", back["id"])
+}
+
+func (s *JobViewSuite) TestTheDeclarationReadsAndWritesAsTheModulesDoes() {
+	text := `{"api_version":"safetyscissors.job/v1alpha1","id":"w","check":{"target":"test","project":"."},` +
+		`"postconditions":[{"id":"lint","kind":"check","check":{"target":"lint"},"accept":["witnessed"]}],"later":true}`
+	var view Declaration
+	s.Require().NoError(codec.Unmarshal([]byte(text), &view))
+
+	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
+	s.Equal("lint", view.Postconditions[0].Check.Target)
+	s.Equal([]string{"later"}, view.Unknown(), "a member the declaration does not declare is kept")
+
+	var module job.Declaration
+	s.Require().NoError(codec.Unmarshal([]byte(text), &module))
+	want, err := codec.Marshal(module)
+	s.Require().NoError(err)
+	got, err := codec.Marshal(view)
+	s.Require().NoError(err)
+	s.JSONEq(string(want), string(got))
+}
+
+func (s *JobViewSuite) TestTheDeclarationRefusesACheckThatDoesNotRead() {
+	var view Declaration
+	err := codec.Unmarshal([]byte(`{"id":"w","check":{"target":"test","bogus":1}}`), &view)
+
+	var decode *CheckDecodeError
+	s.Require().ErrorAs(err, &decode)
+	s.Equal("check", decode.Field)
+}
+
+func (s *JobViewSuite) TestAPostconditionWithNoCheckIsAModulePostconditionWithNone() {
+	g, err := Postcondition{Postcondition: job.Postcondition{ID: "names", Kind: job.PostconditionKindSymbol}}.Module()
+	s.Require().NoError(err)
+	s.True(g.Check.IsZero())
+}
+
+// storedJSON is the check json spells, as a row stores it. Every json here is a literal
+// the test spells, so it reads.
+func storedJSON(json string) job.Check {
+	var c job.Check
+	_ = c.UnmarshalJSON([]byte(json))
+	return c
+}

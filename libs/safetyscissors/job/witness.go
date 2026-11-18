@@ -14,10 +14,10 @@ import (
 	"sync"
 )
 
-// CheckCommand is the command goal, a check goal of row, is run by: the argv a caller's
+// CheckCommand is the command postcondition, a check postcondition of row, is run by: the argv a caller's
 // exec.Cmd must carry exactly, run in dir. A narrowed run (`-run TestOne`) is another
-// command, so it never witnesses the goal. See [WithCheckCommand].
-type CheckCommand func(row Job, goal Goal) (argv []string, dir string, err error)
+// command, so it never witnesses the postcondition. See [WithCheckCommand].
+type CheckCommand func(row Job, postcondition Postcondition) (argv []string, dir string, err error)
 
 // WitnessRefusal names why [Store.Witness] refused a command.
 type WitnessRefusal string
@@ -28,7 +28,7 @@ const (
 	// RefusalStarted is a command that started before Witness ran it, or one carrying
 	// the Process or ProcessState of another command.
 	RefusalStarted WitnessRefusal = "started"
-	// RefusalOtherCheck is a command whose argv or directory is not the goal's check's.
+	// RefusalOtherCheck is a command whose argv or directory is not the postcondition's check's.
 	RefusalOtherCheck WitnessRefusal = "other-check"
 	// RefusalOtherProgram is a command whose Path is not the program its argv[0]
 	// resolves to, such as /bin/true carrying the check's argv.
@@ -51,10 +51,10 @@ const (
 // what the refusal compared, when it compared anything, and Err the failure behind a
 // [RefusalNotStarted] or [RefusalUnfinished].
 type WitnessRefusedError struct {
-	Job, Goal string
-	Refusal   WitnessRefusal
-	Detail    string
-	Err       error
+	Job, Postcondition string
+	Refusal            WitnessRefusal
+	Detail             string
+	Err                error
 }
 
 func (e *WitnessRefusedError) Error() string {
@@ -65,7 +65,7 @@ func (e *WitnessRefusedError) Error() string {
 	if e.Err != nil {
 		why += ": " + e.Err.Error()
 	}
-	return fmt.Sprintf("job: %s goal %q: %s", e.Job, e.Goal, why)
+	return fmt.Sprintf("job: %s postcondition %q: %s", e.Job, e.Postcondition, why)
 }
 
 func (e *WitnessRefusedError) Unwrap() error { return e.Err }
@@ -94,7 +94,7 @@ func witnessRefusalText(r WitnessRefusal) string {
 	return string(r)
 }
 
-// Witness runs one check of goal goal of job id and records it. The caller builds cmd and
+// Witness runs one check of postcondition postcondition of job id and records it. The caller builds cmd and
 // may set its Stdout, Stderr, Stdin, Cancel and WaitDelay; Witness starts it and waits on
 // it, so the exit status it records is the wait of the process it started and every byte
 // the process writes passes through the store's digest as well as wherever the caller
@@ -108,28 +108,36 @@ func witnessRefusalText(r WitnessRefusal) string {
 // another check. A run the tree moved under is recorded, and grades as not verified,
 // since no one tree is what it read.
 //
-// It needs [WithTree] and [WithCheckCommand]; each refusal is a
-// [*GradingUnconfiguredError], a [*GoalError], a [*WitnessRefusedError] or a [*TreeError].
-func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (RunRef, error) {
+// It needs [WithTree], [WithCheckSpec] and [WithCheckCommand]; each refusal is a
+// [*GradingUnconfiguredError], a [*PostconditionError], a [*CheckRefusedError], a
+// [*WitnessRefusedError] or a [*TreeError].
+func (s *Store) Witness(ctx context.Context, id, postcondition string, cmd *exec.Cmd) (RunRef, error) {
 	if err := s.needTree("Witness"); err != nil {
+		return "", err
+	}
+	if err := s.needChecks("Witness"); err != nil {
 		return "", err
 	}
 	if s.command == nil {
 		return "", s.wrap(&GradingUnconfiguredError{Op: "Witness", Option: "WithCheckCommand"})
 	}
 	refuse := func(r WitnessRefusal, detail string, err error) error {
-		return s.wrap(&WitnessRefusedError{Job: id, Goal: goal, Refusal: r, Detail: detail, Err: err})
+		return s.wrap(&WitnessRefusedError{Job: id, Postcondition: postcondition, Refusal: r, Detail: detail, Err: err})
 	}
 	if cmd == nil {
 		return "", refuse(RefusalNoCommand, "", nil)
 	}
-	row, g, err := s.checkGoal(ctx, id, goal)
+	row, g, err := s.checkPostcondition(ctx, id, postcondition)
 	if err != nil {
 		return "", err
 	}
+	check, err := s.checks.runCheck(row.ID, postconditionCheckField(g.ID), g.Check)
+	if err != nil {
+		return "", s.wrap(err)
+	}
 	argv, dir, err := s.command(row, g)
 	if err != nil {
-		return "", fmt.Errorf("job: %s goal %q: the check's command: %w", id, goal, err)
+		return "", fmt.Errorf("job: %s postcondition %q: the check's command: %w", id, postcondition, err)
 	}
 	if r, detail, err := foreignCommand(cmd, argv, dir); r != "" {
 		return "", refuse(r, detail, err)
@@ -154,7 +162,7 @@ func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (Ru
 		return "", err
 	}
 	return s.record(ctx, run{
-		job: row.ID, goal: g.ID, basis: BasisWitnessed, check: g.Check, argv: slices.Clone(argv), dir: dir,
+		job: row.ID, postcondition: g.ID, basis: BasisWitnessed, check: check, argv: slices.Clone(argv), dir: dir,
 		tree: tree, exit: exit, output: out.sum(), started: started, ended: ended, moved: after != tree,
 	})
 }

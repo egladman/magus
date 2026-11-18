@@ -117,3 +117,23 @@ func (s *UnjudgedHookSuite) TestAStopEndsAndSaysWhy() {
 	s.Contains(reason, "magus guard could not judge this stop, so it ends unjudged")
 	s.Contains(reason, "`magus self update`")
 }
+
+func (s *UnjudgedHookSuite) TestAFailedGlueRefusesItsHostsCall() {
+	answer, reason, isHook := FailedGlue("", strings.NewReader(unjudgedEvent("touch x")), false, s.cause)
+	s.True(isHook)
+	s.Equal(2, answer.ExitCode())
+	s.Contains(reason, "its hook glue stopped before it answered: config: magus.yaml: unknown key")
+	s.Contains(reason, "agent harness install")
+}
+
+func (s *UnjudgedHookSuite) TestAFailedGlueNamedByItsHostIsAHookWhateverItWasHanded() {
+	answer, _, isHook := FailedGlue("", strings.NewReader("touch x"), true, s.cause)
+	s.True(isHook)
+	s.Equal(unjudgedRefused, answer)
+}
+
+func (s *UnjudgedHookSuite) TestAFailedScriptNoHostCalledKeepsItsOwnFailure() {
+	_, reason, isHook := FailedGlue("", strings.NewReader("some lines"), false, s.cause)
+	s.False(isHook)
+	s.Empty(reason)
+}

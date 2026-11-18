@@ -37,7 +37,7 @@ type SpellCache struct {
 	Dir   string `json:"dir"`
 	// TrimMB is the size in MiB a reclaim trims it back to, never below 1: a cache declared
 	// with no budget is left out.
-	TrimMB int `json:"trimMb" buzz:"trimMb"`
+	TrimMB int `json:"trim_mb" buzz:"trimMb"`
 }
 
 // DiskReclaim is what a reclaim reads off the workspace: the caches it may trim, and the
@@ -45,7 +45,7 @@ type SpellCache struct {
 type DiskReclaim struct {
 	Caches []SpellCache `json:"caches"`
 	// ListCommand is the script serving event:disk-low here, "" when none does.
-	ListCommand string `json:"listCommand" buzz:"listCommand"`
+	ListCommand string `json:"list_command" buzz:"listCommand"`
 }
 
 // DiskSample is one line of the disk store the reclaim hook appends to: the free space it
@@ -54,8 +54,8 @@ type DiskReclaim struct {
 type DiskSample struct {
 	At         float64 `json:"at"`
 	Path       string  `json:"path"`
-	TotalBytes int64   `json:"totalBytes"`
-	FreeBytes  int64   `json:"freeBytes"`
+	TotalBytes int64   `json:"total_bytes"`
+	FreeBytes  int64   `json:"free_bytes"`
 	// Action is "sample" for a reading alone, "started" when the hook began a reclaim
 	// chunk, and "reclaimed" when a chunk finished; Detail says what that chunk did.
 	Action string `json:"action"`

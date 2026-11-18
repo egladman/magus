@@ -27,7 +27,7 @@ import (
 // reason (2026-10-14). Every no_return a write records now says which end it was.
 func TestEndedReasonSaysWhichEnd(t *testing.T) {
 	t.Parallel()
-	check := &job.LeaseCheck{Target: "test", Project: "."}
+	check := &types.LeaseCheck{Target: "test", Project: "."}
 	for _, tt := range []struct {
 		name     string
 		row      job.Job
@@ -36,16 +36,16 @@ func TestEndedReasonSaysWhichEnd(t *testing.T) {
 		want     string
 	}{
 		{"a read-only scout that filed nothing", job.Job{ID: "s", ReadOnly: true, Registered: 1}, false, true, "ended ungraded"},
-		{"a result nobody verified", job.Job{ID: "w", Check: check, Registered: 1}, true, false, "ended unverified"},
-		{"a row nobody took", job.Job{ID: "w", Check: check}, false, false, "before any holder ran"},
-		{"its holder giving it up", job.Job{ID: "w", Check: check, Registered: 1}, false, true, "abandoned by its holder"},
-		{"the root ending an isolated worker's row", job.Job{ID: "w", Check: check, Registered: 1}, false, false, "ended by someone other than its holder"},
+		{"a result nobody verified", job.Job{ID: "w", Check: fixtureCheck(*check), Registered: 1}, true, false, "ended unverified"},
+		{"a row nobody took", job.Job{ID: "w", Check: fixtureCheck(*check)}, false, false, "before any holder ran"},
+		{"its holder giving it up", job.Job{ID: "w", Check: fixtureCheck(*check), Registered: 1}, false, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", job.Job{ID: "w", Check: fixtureCheck(*check), Registered: 1}, false, false, "ended by someone other than its holder"},
 	} {
 		assert.Contains(t, endedReason(tt.row, tt.filed, tt.byHolder), tt.want, tt.name)
 	}
 }
 
-// A read-only scout declaring no check or goal used to end no_return "returned ungraded"
+// A read-only scout declaring no check or postcondition used to end no_return "returned ungraded"
 // even when its holder filed a result. Nothing but that result can grade it, so filing one
 // records pass; a scout with a script check still waits to be graded.
 func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
@@ -53,13 +53,13 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	seed(t, s, job.Job{ID: "notes", ReadOnly: true, State: job.StateRunning, Registered: 1})
-	seed(t, s, job.Job{ID: "probe", ReadOnly: true, State: job.StateRunning, Registered: 1, Check: &job.LeaseCheck{Script: "probe.buzz"}})
+	seed(t, s, job.Job{ID: "probe", ReadOnly: true, State: job.StateRunning, Registered: 1, Check: fixtureCheck(types.LeaseCheck{Script: "probe.buzz"})})
 	none := func(context.Context, string) (job.CapturedRun, error) { return job.CapturedRun{}, nil }
 
 	notes, err := Exit(t.Context(), s, "notes", &job.Result{}, none)
 	require.NoError(t, err)
 	notes.Generation, notes.RegisteredBy = 0, job.Origin{}
-	notes.Created, notes.Updated, notes.GateAttempts = 0, 0, nil
+	notes.Created, notes.Updated, notes.PostconditionAttempts = 0, 0, nil
 	assert.Equal(t, job.Job{ID: "notes", ReadOnly: true, State: job.StatePass, Registered: 1, EndReason: returnedReason}, notes,
 		"the store's own stamps aside, a read-only row passes and changes nothing else")
 
@@ -110,7 +110,7 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 		Job:                result.Job,
 		Verified:           true,
 		Command:            result.Validation.Command,
-		Gates:              []job.VerificationStatus{{ID: job.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		Gates:              []job.VerificationStatus{{ID: job.PrimaryPostconditionID, OutputRef: result.Validation.OutputRef, Verified: true}},
 		ObservedGeneration: 1,
 	}, status)
 
@@ -146,14 +146,14 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	assert.Empty(t, rows[0].Releases, "and the exit gave up no path it held")
 }
 
-func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
+func TestExitFilesEveryPostconditionForAWaitInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 
-	row := goalRow()
+	row := postconditionRow()
 	loc := declared(t, row)
-	result := goalResult()
+	result := postconditionResult()
 	attempts := map[string]job.CapturedRun{}
-	for _, snapshot := range goalAttempts() {
+	for _, snapshot := range postconditionAttempts() {
 		snapshot.Attempt.TimestampMs = 9_999_999_999_999
 		attempts[snapshot.Attempt.Ref] = snapshot.Attempt
 	}
@@ -161,7 +161,7 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 
 	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
 	require.NoError(t, err)
-	require.Len(t, exited.GateAttempts, 2)
+	require.Len(t, exited.PostconditionAttempts, 2)
 	assert.Nil(t, exited.Attempt, "a gate-only job has no synthetic primary attempt")
 
 	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
@@ -187,9 +187,9 @@ func TestExitEvidence(t *testing.T) { suite.Run(t, new(exitEvidenceSuite)) }
 
 func (s *exitEvidenceSuite) row() job.Job {
 	row := acceptRow()
-	row.Check = &job.LeaseCheck{Target: "go::go-test", Project: "."}
-	row.Validation = CheckCommand(*row.Check)
-	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	row.Check = fixtureCheck(types.LeaseCheck{Target: "go::go-test", Project: "."})
+	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
+	row.Postconditions = []job.Postcondition{job.Postcondition{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})}.Resolve()}
 	return row
 }
 
@@ -202,7 +202,7 @@ func (s *exitEvidenceSuite) exit(row job.Job, result job.Result, attempt job.Cap
 	return Exit(s.T().Context(), boundStore(declared(s.T(), row), row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
 }
 
-func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
+func (s *exitEvidenceSuite) TestOwedPostconditionNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
@@ -212,10 +212,10 @@ func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
 
 	s.Require().NoError(err)
 	s.Equal(job.StateExited, exited.State)
-	s.Empty(exited.GateAttempts)
+	s.Empty(exited.PostconditionAttempts)
 }
 
-func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
+func (s *exitEvidenceSuite) TestOwedPostconditionCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat}
@@ -223,7 +223,7 @@ func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "lint"})
 
-	s.ErrorContains(err, `goal "lint" is filed as owed and cites output ref "out9"`)
+	s.ErrorContains(err, `postcondition "lint" is filed as owed and cites output ref "out9"`)
 }
 
 func (s *exitEvidenceSuite) TestRefuseOwedReasonAcceptsRemoteCI() {
@@ -245,7 +245,7 @@ func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
 	s.ErrorContains(err, `files its check as owed and cites output ref "out9"`)
 }
 
-func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
+func (s *exitEvidenceSuite) TestPostconditionWithNeitherRefNorOwedIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
@@ -253,10 +253,10 @@ func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "lint" names none of output_ref, owed or unrun`)
+	s.ErrorContains(err, `postcondition "lint" names none of output_ref, owed or unrun`)
 }
 
-func (s *exitEvidenceSuite) TestUnrunGoalNeedsNoRef() {
+func (s *exitEvidenceSuite) TestUnrunPostconditionNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
@@ -266,10 +266,10 @@ func (s *exitEvidenceSuite) TestUnrunGoalNeedsNoRef() {
 
 	s.Require().NoError(err)
 	s.Equal(job.StateExited, exited.State)
-	s.Empty(exited.GateAttempts)
+	s.Empty(exited.PostconditionAttempts)
 }
 
-func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
+func (s *exitEvidenceSuite) TestUnrunPostconditionCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
@@ -277,7 +277,7 @@ func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "lint" is filed as unrun and cites output ref "out9"`)
+	s.ErrorContains(err, `postcondition "lint" is filed as unrun and cites output ref "out9"`)
 }
 
 func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
@@ -290,7 +290,7 @@ func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
 	s.ErrorContains(err, "files its check as both owed and unrun")
 }
 
-func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
+func (s *exitEvidenceSuite) TestPostconditionRefNamingAnotherCommandIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = job.ResultValidation{Command: row.Validation, Owed: OwedNoSeat}
@@ -298,7 +298,7 @@ func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "build"})
 
-	s.ErrorContains(err, `goal "lint" cites output ref "out9"`)
+	s.ErrorContains(err, `postcondition "lint" cites output ref "out9"`)
 	s.ErrorContains(err, "cite a run of that check, or file it as owed")
 }
 
@@ -309,7 +309,7 @@ func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "build"})
 
-	s.ErrorContains(err, `goal "check" cites output ref "out9"`)
+	s.ErrorContains(err, `postcondition "check" cites output ref "out9"`)
 }
 
 // exitUnderDefaults is exit in a workspace setting default_charms: [rw].
@@ -336,22 +336,26 @@ func (s *exitEvidenceSuite) TestRunUnderTheDefaultCharmsIsTheCheck() {
 func (s *exitEvidenceSuite) TestRunSkippingTheDefaultCharmsIsRefused() {
 	_, err := s.exitUnderDefaults(s.row(), job.CapturedRun{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+	s.ErrorContains(err, `postcondition "check" cites output ref "out1"`)
 	s.ErrorContains(err, "go-test:rw")
 }
 
 func (s *exitEvidenceSuite) TestRunUnderDefaultsOfACheckOptingOutIsRefused() {
 	row := s.row()
-	row.Check.NoDefaultCharms = true
+	check := checkIn(s.T(), row.Check)
+	check.NoDefaultCharms = true
+	row.Check = fixtureCheck(check)
 
 	_, err := s.exitUnderDefaults(row, job.CapturedRun{Target: "go-test:rw"})
 
-	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+	s.ErrorContains(err, `postcondition "check" cites output ref "out1"`)
 }
 
 func (s *exitEvidenceSuite) TestRunOfACheckOptingOutOfDefaultsIsTheCheck() {
 	row := s.row()
-	row.Check.NoDefaultCharms = true
+	check := checkIn(s.T(), row.Check)
+	check.NoDefaultCharms = true
+	row.Check = fixtureCheck(check)
 
 	_, err := s.exitUnderDefaults(row, job.CapturedRun{Target: "go-test"})
 
@@ -365,7 +369,7 @@ func (s *exitEvidenceSuite) TestACharmWithNoDefaultsIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test:rw"})
 
-	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+	s.ErrorContains(err, `postcondition "check" cites output ref "out1"`)
 }
 
 func (s *exitEvidenceSuite) TestTestFilterStaysTheSameCommand() {
@@ -985,17 +989,17 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 	assert.Equal(t, "a1b2c3d4", stored.Attempt.Ref)
 }
 
-// goalSymbol is one symbol the goalGraph holds.
-type goalSymbol struct {
+// postconditionSymbol is one symbol the postconditionGraph holds.
+type postconditionSymbol struct {
 	id, label, file, signature string
 	refs                       int
 }
 
-// goalGraph resolves the way the knowledge graph does: Refs takes the first symbol whose
+// postconditionGraph resolves the way the knowledge graph does: Refs takes the first symbol whose
 // id is ref or whose label CONTAINS it, so a bare name can land on a longer one.
-type goalGraph []goalSymbol
+type postconditionGraph []postconditionSymbol
 
-func (g goalGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
+func (g postconditionGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	for _, s := range g {
 		if s.id == ref || strings.Contains(s.label, ref) {
 			return types.KnowledgeRefsOutput{Symbol: s.id, Label: s.label, RefCount: s.refs,
@@ -1005,7 +1009,7 @@ func (g goalGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	return types.KnowledgeRefsOutput{}, false
 }
 
-func (g goalGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
+func (g postconditionGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 	var out []types.KnowledgeMatch
 	for _, s := range g {
 		if strings.Contains(s.label, input) {
@@ -1016,7 +1020,7 @@ func (g goalGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 }
 
 // SignatureMatches compares text: the shape comparison is the knowledge graph's, tested there.
-func (g goalGraph) SignatureMatches(id, declared string) (string, bool, bool) {
+func (g postconditionGraph) SignatureMatches(id, declared string) (string, bool, bool) {
 	for _, s := range g {
 		if s.id == id && s.signature != "" {
 			return s.signature, s.signature == declared, true
@@ -1025,13 +1029,13 @@ func (g goalGraph) SignatureMatches(id, declared string) (string, bool, bool) {
 	return "", false, false
 }
 
-// TestWaitGradesEveryGoal is the audit of every kind and expectation a goal can declare,
+// TestWaitGradesEveryPostcondition is the audit of every kind and expectation a postcondition can declare,
 // end to end: a real diff since the checkpoint, a real tree, and a graph that resolves
 // fuzzily. Each pair passes job wait when it holds and fails it when it does not.
 //
 // The work sits in the worker's own checkout while wait runs in a clean one, which is
 // how an orchestrator waits; grading the waiter's tree failed every writing job.
-func TestWaitGradesEveryGoal(t *testing.T) {
+func TestWaitGradesEveryPostcondition(t *testing.T) {
 	t.Parallel()
 
 	repo := testkit.NewRepository(t, map[string]string{
@@ -1047,92 +1051,92 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 	changed := []string{"api.go", "legacy.go", "new.go"}
 
 	// Legacy is gone and LegacyAdapter survives, which a fuzzy lookup of Legacy lands on.
-	graph := goalGraph{
+	graph := postconditionGraph{
 		{id: "symbol:go a/Api().", label: "Api", file: "api.go", signature: "func Api()"},
 		{id: "symbol:go a/Keep().", label: "Keep", file: "keep.go", refs: 2},
 		{id: "symbol:go a/Lonely().", label: "Lonely", file: "keep.go"},
 		{id: "symbol:go a/LegacyAdapter().", label: "LegacyAdapter", file: "keep.go"},
 	}
-	paths := func(expect job.GoalExpect, p string) job.Goal {
-		return job.Goal{ID: "goal", Kind: job.GoalKindPaths, Expect: expect, Paths: []string{p}}
+	paths := func(expect job.PostconditionExpect, p string) job.Postcondition {
+		return job.Postcondition{ID: "postcondition", Kind: job.PostconditionKindPaths, Expect: expect, Paths: []string{p}}
 	}
-	symbol := func(expect job.GoalExpect, name string) job.Goal {
-		return job.Goal{ID: "goal", Kind: job.GoalKindSymbol, Expect: expect, Symbols: []string{name}}
+	symbol := func(expect job.PostconditionExpect, name string) job.Postcondition {
+		return job.Postcondition{ID: "postcondition", Kind: job.PostconditionKindSymbol, Expect: expect, Symbols: []string{name}}
 	}
-	signature := func(name, declared string) job.Goal {
-		return job.Goal{ID: "goal", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: declared}
+	signature := func(name, declared string) job.Postcondition {
+		return job.Postcondition{ID: "postcondition", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: declared}
 	}
-	check := job.Goal{ID: "goal", Check: job.LeaseCheck{Target: "go-test", Project: "."}}
+	check := job.Postcondition{ID: "postcondition", Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	run := job.CapturedRun{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
 	failed := run
 	failed.Failed = true
 
 	for _, tc := range []struct {
-		name       string
-		goal       job.Goal
-		checkpoint string
-		checkout   string
-		blind      bool
-		run        job.CapturedRun
-		holds      bool
-		why        string
+		name          string
+		postcondition job.Postcondition
+		checkpoint    string
+		checkout      string
+		blind         bool
+		run           job.CapturedRun
+		holds         bool
+		why           string
 	}{
-		{name: "paths changed holds when the diff touches it", goal: paths("", "api.go"), holds: true},
-		{name: "paths changed fails when it is untouched", goal: paths("", "keep.go"), why: `nothing matching "keep.go" changed`},
-		{name: "paths changed fails when the diff is unreadable", goal: paths("", "api.go"), checkpoint: "0123456789abcdef0123456789abcdef01234567",
+		{name: "paths changed holds when the diff touches it", postcondition: paths("", "api.go"), holds: true},
+		{name: "paths changed fails when it is untouched", postcondition: paths("", "keep.go"), why: `nothing matching "keep.go" changed`},
+		{name: "paths changed fails when the diff is unreadable", postcondition: paths("", "api.go"), checkpoint: "0123456789abcdef0123456789abcdef01234567",
 			why: "could not read what this job changed"},
-		{name: "paths changed fails when the job's checkout is gone and the waiter's is clean", goal: paths("", "api.go"),
+		{name: "paths changed fails when the job's checkout is gone and the waiter's is clean", postcondition: paths("", "api.go"),
 			checkout: filepath.Join(t.TempDir(), "removed"), why: `nothing matching "api.go" changed`},
-		{name: "paths present holds when it is there", goal: paths(job.ExpectPresent, "new.go"), holds: true},
-		{name: "paths present fails when it is gone", goal: paths(job.ExpectPresent, "legacy.go"), why: `nothing matching "legacy.go" is in the tree`},
-		{name: "paths absent holds when it is gone", goal: paths(job.ExpectAbsent, "legacy.go"), holds: true},
-		{name: "paths absent fails while it is there", goal: paths(job.ExpectAbsent, "keep.go"), why: `"keep.go" is still in the tree`},
-		{name: "symbol changed holds when its definition changed", goal: symbol("", "Api"), holds: true},
-		{name: "symbol changed fails when its definition is untouched", goal: symbol("", "Keep"), why: "none of that changed"},
-		{name: "symbol changed fails when the graph is unreadable", goal: symbol("", "Api"), blind: true,
+		{name: "paths present holds when it is there", postcondition: paths(job.ExpectPresent, "new.go"), holds: true},
+		{name: "paths present fails when it is gone", postcondition: paths(job.ExpectPresent, "legacy.go"), why: `nothing matching "legacy.go" is in the tree`},
+		{name: "paths absent holds when it is gone", postcondition: paths(job.ExpectAbsent, "legacy.go"), holds: true},
+		{name: "paths absent fails while it is there", postcondition: paths(job.ExpectAbsent, "keep.go"), why: `"keep.go" is still in the tree`},
+		{name: "symbol changed holds when its definition changed", postcondition: symbol("", "Api"), holds: true},
+		{name: "symbol changed fails when its definition is untouched", postcondition: symbol("", "Keep"), why: "none of that changed"},
+		{name: "symbol changed fails when the graph is unreadable", postcondition: symbol("", "Api"), blind: true,
 			why: "could not read the symbol graph"},
-		{name: "symbol present holds while it resolves", goal: symbol(job.ExpectPresent, "Keep"), holds: true},
-		{name: "symbol present fails on a longer name that survives", goal: symbol(job.ExpectPresent, "Legacy"),
+		{name: "symbol present holds while it resolves", postcondition: symbol(job.ExpectPresent, "Keep"), holds: true},
+		{name: "symbol present fails on a longer name that survives", postcondition: symbol(job.ExpectPresent, "Legacy"),
 			why: `"Legacy" is defined nowhere`},
-		{name: "symbol absent holds once it resolves nowhere", goal: symbol(job.ExpectAbsent, "Legacy"), holds: true},
-		{name: "symbol absent fails while it still resolves", goal: symbol(job.ExpectAbsent, "Keep"), why: `"Keep" is still defined in keep.go`},
-		{name: "symbol unreferenced holds when nothing references it", goal: symbol(job.ExpectUnreferenced, "Lonely"), holds: true},
-		{name: "symbol unreferenced fails while a reference remains", goal: symbol(job.ExpectUnreferenced, "Keep"),
+		{name: "symbol absent holds once it resolves nowhere", postcondition: symbol(job.ExpectAbsent, "Legacy"), holds: true},
+		{name: "symbol absent fails while it still resolves", postcondition: symbol(job.ExpectAbsent, "Keep"), why: `"Keep" is still defined in keep.go`},
+		{name: "symbol unreferenced holds when nothing references it", postcondition: symbol(job.ExpectUnreferenced, "Lonely"), holds: true},
+		{name: "symbol unreferenced fails while a reference remains", postcondition: symbol(job.ExpectUnreferenced, "Keep"),
 			why: `2 place(s) still reference "Keep"`},
-		{name: "symbol signature holds when the indexed declaration matches", goal: signature("Api", "func Api()"), holds: true},
-		{name: "symbol signature fails when the declaration differs", goal: signature("Api", "func Api(n int)"),
-			why: "\"Api\" is declared `func Api()`, and this goal expects `func Api(n int)`"},
-		{name: "symbol signature fails when the index holds none", goal: signature("Keep", "func Keep()"),
+		{name: "symbol signature holds when the indexed declaration matches", postcondition: signature("Api", "func Api()"), holds: true},
+		{name: "symbol signature fails when the declaration differs", postcondition: signature("Api", "func Api(n int)"),
+			why: "\"Api\" is declared `func Api()`, and this postcondition expects `func Api(n int)`"},
+		{name: "symbol signature fails when the index holds none", postcondition: signature("Keep", "func Keep()"),
 			why: `the symbol index holds no signature for "Keep"`},
-		{name: "symbol signature fails on a symbol defined nowhere", goal: signature("Legacy", "func Legacy()"),
+		{name: "symbol signature fails on a symbol defined nowhere", postcondition: signature("Legacy", "func Legacy()"),
 			why: `"Legacy" is defined nowhere the graph can see`},
-		{name: "symbol signature fails when the graph is unreadable", goal: signature("Api", "func Api()"), blind: true,
+		{name: "symbol signature fails when the graph is unreadable", postcondition: signature("Api", "func Api()"), blind: true,
 			why: "could not read the symbol graph"},
-		{name: "symbol unreferenced fails once the definition is gone", goal: symbol(job.ExpectUnreferenced, "Legacy"),
+		{name: "symbol unreferenced fails once the definition is gone", postcondition: symbol(job.ExpectUnreferenced, "Legacy"),
 			why: "cannot count what still names it"},
-		{name: "check passed holds on a passing run", goal: check, run: run, holds: true},
-		{name: "check passed fails on a failed run", goal: check, run: failed, why: "did not pass"},
+		{name: "check passed holds on a passing run", postcondition: check, run: run, holds: true},
+		{name: "check passed fails on a failed run", postcondition: check, run: failed, why: "did not pass"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			row := job.Job{
-				ID: "goal", Agent: job.Instructed("the goal holds"), Paths: job.Paths{Write: []string{"."}}, State: job.StateRunning, Created: 1,
+				ID: "postcondition", Agent: job.Instructed("the postcondition holds"), Paths: job.Paths{Write: []string{"."}}, State: job.StateRunning, Created: 1,
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
-				Goals: []job.Goal{tc.goal.Resolve()},
+				Postconditions: []job.Postcondition{tc.postcondition.Resolve()},
 			}
 			loc := tempLocation(t, t.TempDir())
 			plant(t, NewStore(loc), row)
-			result := job.Result{Schema: job.Schema{Version: job.ResultAPIVersion}, Job: "goal", ChangedPaths: changed}
+			result := job.Result{Schema: job.Schema{Version: job.ResultAPIVersion}, Job: "postcondition", ChangedPaths: changed}
 			if tc.run.Found {
-				result.VerificationEvidence = []job.VerificationEvidence{{GateID: "goal", OutputRef: "ref"}}
+				result.VerificationEvidence = []job.VerificationEvidence{{GateID: "postcondition", OutputRef: "ref"}}
 			}
 			read := GraphSymbols(graph)
 			if tc.blind {
 				read = nil
 			}
 
-			status, err := Wait(t.Context(), NewStore(loc), "goal", &result,
+			status, err := Wait(t.Context(), NewStore(loc), "postcondition", &result,
 				func(context.Context, string) (job.CapturedRun, error) { return tc.run, nil },
 				CheckpointObserver(repo.Root(), read), nil)
 			require.NoError(t, err)
@@ -1147,7 +1151,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			assert.False(t, status.Gates[0].Verified)
 			assert.Contains(t, strings.Join(status.Gates[0].Violations, "\n"), tc.why)
 			// Not StateRunning: the sweep ends a job whose checkout is gone before wait grades it.
-			assert.NotEqual(t, job.StatePass, rows[0].State, "an unmet goal never passes the job")
+			assert.NotEqual(t, job.StatePass, rows[0].State, "an unmet postcondition never passes the job")
 		})
 	}
 }
@@ -1413,11 +1417,11 @@ func failedPrimary(t *testing.T) waiterEvidenceJob {
 	return exitedWithRuns(t, acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": failedRun})
 }
 
-func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
+func TestWaitTakesWaiterEvidenceForAPostconditionTheHolderFailed(t *testing.T) {
 	t.Parallel()
 
 	j := failedPrimary(t)
-	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"})
+	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryPostconditionID: "here"})
 	require.NoError(t, err)
 	require.True(t, status.Verified, status.Violations)
 
@@ -1432,21 +1436,21 @@ func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
 	assert.Equal(t, j.waiter, row.WaiterEvidence.Checkout)
 	assert.NotZero(t, row.WaiterEvidence.At)
 	assert.True(t, row.WaiterEvidence.Verified)
-	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryPostconditionID, Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates)
 }
 
-func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
+func TestWaitTakesWaiterEvidenceForOneNamedPostconditionOnly(t *testing.T) {
 	t.Parallel()
 
 	attempts := map[string]job.CapturedRun{}
-	for _, snapshot := range goalAttempts() {
+	for _, snapshot := range postconditionAttempts() {
 		attempts[snapshot.Attempt.Ref] = snapshot.Attempt
 	}
 	attempts["unit-ref"] = failedRun
 	docs := attempts["docs-ref"]
 	docs.TimestampMs = 9_999_999_999_999
 	attempts["docs-ref"] = docs
-	j := exitedWithRuns(t, goalRow(), goalResult(), attempts)
+	j := exitedWithRuns(t, postconditionRow(), postconditionResult(), attempts)
 
 	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{"unit": "here"})
 	require.NoError(t, err)
@@ -1456,7 +1460,7 @@ func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
 	require.NotNil(t, row.WaiterEvidence)
 	assert.Equal(t, []job.VerificationStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
 	assert.Equal(t, "unit-ref", j.filed(t).VerificationEvidence[0].OutputRef)
-	assert.True(t, row.GateAttempts[0].Attempt.Failed)
+	assert.True(t, row.PostconditionAttempts[0].Attempt.Failed)
 }
 
 func TestWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
@@ -1466,7 +1470,7 @@ func TestWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	j.loc.Outputs = func(root string) AttemptResolver {
 		return func(context.Context, string) (job.CapturedRun, error) { return passedHere, nil }
 	}
-	_, err := j.waitWithEvidence(t, nil, map[string]string{job.PrimaryGoalID: "here"})
+	_, err := j.waitWithEvidence(t, nil, map[string]string{job.PrimaryPostconditionID: "here"})
 	require.ErrorContains(t, err, `output ref "here" names no run this checkout recorded`)
 	j.requireUnmoved(t)
 }
@@ -1484,7 +1488,7 @@ func TestWaitEvidenceStillHasToVerify(t *testing.T) {
 			t.Parallel()
 
 			j := failedPrimary(t)
-			status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": run}, map[string]string{job.PrimaryGoalID: "here"})
+			status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": run}, map[string]string{job.PrimaryPostconditionID: "here"})
 			require.NoError(t, err)
 			assert.False(t, status.Verified)
 			j.requireReworked(t)
@@ -1492,7 +1496,7 @@ func TestWaitEvidenceStillHasToVerify(t *testing.T) {
 	}
 }
 
-func TestWaitEvidenceRefusesAGoalItCannotTake(t *testing.T) {
+func TestWaitEvidenceRefusesAPostconditionItCannotTake(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -1500,24 +1504,24 @@ func TestWaitEvidenceRefusesAGoalItCannotTake(t *testing.T) {
 		refs map[string]string
 		want string
 	}{
-		"a goal the job does not hold": {
-			job: failedPrimary, refs: map[string]string{"nope": "here"}, want: `holds no goal "nope"`,
+		"a postcondition the job does not hold": {
+			job: failedPrimary, refs: map[string]string{"nope": "here"}, want: `holds no postcondition "nope"`,
 		},
-		"a goal that is not a check": {
+		"a postcondition that is not a check": {
 			job: func(t *testing.T) waiterEvidenceJob {
 				row := acceptRow()
-				row.Goals = []job.Goal{{ID: "api", Kind: job.GoalKindPaths, Paths: []string{"internal/ledger"}}}
+				row.Postconditions = []job.Postcondition{{ID: "api", Kind: job.PostconditionKindPaths, Paths: []string{"internal/ledger"}}}
 				return exitedWithRuns(t, row, passingResult(), map[string]job.CapturedRun{"a1b2c3d4": failedRun})
 			},
-			refs: map[string]string{"api": "here"}, want: `goal "api" is a paths goal`,
+			refs: map[string]string{"api": "here"}, want: `postcondition "api" is a paths postcondition`,
 		},
-		"a goal the holder's evidence already passes": {
+		"a postcondition the holder's evidence already passes": {
 			job: func(t *testing.T) waiterEvidenceJob {
 				ok := passingRun
 				ok.TimestampMs = 9_999_999_999_999
 				return exitedWithRuns(t, acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": ok})
 			},
-			refs: map[string]string{job.PrimaryGoalID: "here"}, want: "already passes on the holder's own evidence",
+			refs: map[string]string{job.PrimaryPostconditionID: "here"}, want: "already passes on the holder's own evidence",
 		},
 	}
 	for name, tc := range tests {
@@ -1572,7 +1576,7 @@ func TestWaitEvidenceRefusesChangedPathsThatDiffer(t *testing.T) {
 
 			j := failedPrimary(t)
 			tc.alter(t, j)
-			_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"})
+			_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryPostconditionID: "here"})
 			require.ErrorContains(t, err, tc.want)
 			j.requireUnmoved(t)
 		})
@@ -1591,13 +1595,13 @@ func TestWaitEvidenceComparesTheObservedDiff(t *testing.T) {
 	observed := claimed(j.result)
 	observed.Changed = append(slices.Clone(observed.Changed), "unlisted.go")
 
-	_, err := j.waitObserving(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"},
+	_, err := j.waitObserving(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryPostconditionID: "here"},
 		func(context.Context, job.Job) (Observed, error) { return observed, nil })
 
 	require.ErrorContains(t, err, "unlisted.go")
 	j.requireUnmoved(t)
 
-	_, err = j.waitObserving(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"},
+	_, err = j.waitObserving(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryPostconditionID: "here"},
 		func(context.Context, job.Job) (Observed, error) { return Observed{}, nil })
 	require.ErrorContains(t, err, "the job's diff could not be read", "an unread diff names nothing to compare")
 	j.requireUnmoved(t)
@@ -1612,7 +1616,7 @@ func TestWaitEvidenceRefusesAFileChangedAfterTheRun(t *testing.T) {
 	before := passedHere
 	before.TimestampMs = time.Now().Add(-time.Hour).UnixMilli()
 
-	_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": before}, map[string]string{job.PrimaryGoalID: "here"})
+	_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": before}, map[string]string{job.PrimaryPostconditionID: "here"})
 
 	require.ErrorContains(t, err, "did not change after it")
 	assert.Contains(t, err.Error(), "cmd/magus/ledger.go")
@@ -1793,7 +1797,7 @@ func TestWaitEvidenceDatesARunByItsStart(t *testing.T) {
 				tc.alter(t, j)
 			}
 
-			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": spanning}, map[string]string{job.PrimaryGoalID: "here"},
+			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": spanning}, map[string]string{job.PrimaryPostconditionID: "here"},
 				func(context.Context, job.Job) (Observed, error) { return observed, nil })
 
 			if tc.want == "" {
@@ -1858,7 +1862,7 @@ func TestWaitEvidenceHoldsACleanRunToItsRevision(t *testing.T) {
 				tc.alter(t, j)
 			}
 
-			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": clean}, map[string]string{job.PrimaryGoalID: "here"},
+			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": clean}, map[string]string{job.PrimaryPostconditionID: "here"},
 				func(context.Context, job.Job) (Observed, error) { return observed, nil })
 
 			if tc.want == "" {
@@ -1881,13 +1885,13 @@ func TestWaitEvidenceRecordsTheAttemptTheRefResolvedTo(t *testing.T) {
 	j := failedPrimary(t)
 	run := passedHere
 	run.AttemptID = "1a2b3c4d5e6f"
-	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": run}, map[string]string{job.PrimaryGoalID: "here"})
+	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": run}, map[string]string{job.PrimaryPostconditionID: "here"})
 	require.NoError(t, err)
 	require.True(t, status.Verified, status.Violations)
 
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
-	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryPostconditionID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
 }
 
 func TestWaitEvidenceNeedsTheFiledResult(t *testing.T) {
@@ -1897,7 +1901,7 @@ func TestWaitEvidenceNeedsTheFiledResult(t *testing.T) {
 	supplied := j.result
 	_, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, &supplied, func(context.Context, string) (job.CapturedRun, error) {
 		return passedHere, nil
-	}, observeClaim(supplied), map[string]string{job.PrimaryGoalID: "here"})
+	}, observeClaim(supplied), map[string]string{job.PrimaryPostconditionID: "here"})
 	require.ErrorContains(t, err, "starts from the result filed with the job")
 }
 
@@ -1907,7 +1911,7 @@ func TestWaitEvidenceFollowsWhoMayVerify(t *testing.T) {
 	j := failedPrimary(t)
 	_, err := Wait(t.Context(), boundStore(j.loc, j.row.ID), j.row.ID, nil, func(context.Context, string) (job.CapturedRun, error) {
 		return passedHere, nil
-	}, observeClaim(j.result), map[string]string{job.PrimaryGoalID: "here"})
+	}, observeClaim(j.result), map[string]string{job.PrimaryPostconditionID: "here"})
 	require.ErrorContains(t, err, "a holder does not verify its own work")
 }
 

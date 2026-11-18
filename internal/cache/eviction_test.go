@@ -111,7 +111,7 @@ func TestEvictAndPruneReclaimOutputs(t *testing.T) {
 	const key = "abcdefabcdefabcdefabcdef"
 	require.NoError(t, os.MkdirAll(filepath.Join(cdir, "manifests", "p"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cdir, "manifests", "p", key+".json"),
-		[]byte(`{"projectPath":"p","hash":"`+key+`","outputs":[],"createdAt":"2020-01-01T00:00:00Z"}`), 0o644))
+		[]byte(`{"project_path":"p","hash":"`+key+`","outputs":[],"created_at":"2020-01-01T00:00:00Z"}`), 0o644))
 	_, err := c.outputs.Persist(context.Background(), key, bytes.Repeat([]byte("x"), 4096),
 		OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)

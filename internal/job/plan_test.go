@@ -95,7 +95,7 @@ func (s *applyCheckoutSuite) TestAnotherCheckoutIsRefusedNamingBoth() {
 func (s *applyCheckoutSuite) TestABoundWorktreeIsTheRowsCheckout() {
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
 	own := s.T().TempDir()
-	plant(s.T(), store, job.Job{ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: job.StateDeclared, Updated: time.Now().Unix(), Worktree: &job.Worktree{Root: own}})
+	plant(s.T(), store, job.Job{ID: "w", Agent: job.Instructed("postcondition"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: job.StateDeclared, Updated: time.Now().Unix(), Worktree: &job.Worktree{Root: own}})
 
 	_, err := Apply(s.T().Context(), store, s.record(own, "a.go"), config.Jobs{}, nil, nil, false)
 
@@ -121,9 +121,9 @@ func (s *resultShapeSuite) row() job.Job {
 	return job.Job{
 		ID:    "w",
 		Paths: job.Paths{Write: []string{"a.go"}},
-		Check: &job.LeaseCheck{Target: "go-vet", Project: "."},
-		Goals: []job.Goal{
-			{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
+		Check: fixtureCheck(types.LeaseCheck{Target: "go-vet", Project: "."}),
+		Postconditions: []job.Postcondition{
+			{ID: "lint", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})},
 		},
 	}
 }
@@ -140,16 +140,16 @@ func (s *resultShapeSuite) TestTheShapeNamesTheOwedForm() {
 	s.Contains(resultShape(s.row()), `"owed": "no seat"`)
 }
 
-func (s *resultShapeSuite) TestEveryGoalPrintsItsCommand() {
+func (s *resultShapeSuite) TestEveryPostconditionPrintsItsCommand() {
 	var out strings.Builder
-	RenderGoalCommands(&out, s.row())
+	RenderPostconditionCommands(&out, s.row())
 	s.Contains(out.String(), "lint: magus run lint .")
 }
 
 func (s *resultShapeSuite) TestFiledRunsNameTheirAttempt() {
 	row := s.row()
 	row.Attempt = &job.CapturedRun{Ref: "outa", AttemptID: "out1", Failed: true}
-	row.GateAttempts = []job.GateAttempt{{GateID: "lint", Attempt: job.CapturedRun{Ref: "outb", AttemptID: "out2"}}}
+	row.PostconditionAttempts = []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: job.CapturedRun{Ref: "outb", AttemptID: "out2"}}}
 	var out strings.Builder
 	RenderFiled(&out, row)
 	s.Equal("  check: outa is attempt out1, which failed\n  lint: outb is attempt out2, which passed\n", out.String())
@@ -193,7 +193,7 @@ func (s *ancestorDeviationSuite) store() *Store {
 	}
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T()))).InWorkspace(Workspace{Projects: projects})
 	plant(s.T(), store, job.Job{
-		ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"libs/buzz/a.go"}}, Check: forkCheck(), Deviations: s.deviation(),
+		ID: "w", Agent: job.Instructed("postcondition"), Paths: job.Paths{Write: []string{"libs/buzz/a.go"}}, Check: forkCheck(), Deviations: s.deviation(),
 		State: job.StateRunning, Updated: time.Now().Unix(),
 	})
 	return store
@@ -335,10 +335,10 @@ func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 		}
 		return SymbolFact{DefinedIn: []string{"internal/job/plan.go"}}, true
 	}
-	gate := func(names ...string) []job.Goal {
-		return []job.Goal{
-			{ID: "check", Check: job.LeaseCheck{Target: "test", Project: "."}},
-			{ID: "sym", Kind: job.GoalKindSymbol, Symbols: names},
+	gate := func(names ...string) []job.Postcondition {
+		return []job.Postcondition{
+			{ID: "check", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
+			{ID: "sym", Kind: job.PostconditionKindSymbol, Symbols: names},
 		}
 	}
 
@@ -348,7 +348,7 @@ func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 	assert.Contains(t, p.Message, `"Validate"`)
 	assert.Contains(t, p.Message, "internal/config/validate.go")
 	assert.Contains(t, p.Message, "types/job.go")
-	assert.Equal(t, types.JobProblem{Code: types.JobGoalInvalid, Field: "goals[1].symbols[1]", Message: p.Message,
+	assert.Equal(t, types.JobProblem{Code: types.JobPostconditionInvalid, Field: "postconditions[1].symbols[1]", Message: p.Message,
 		Fix: "name one by the symbol id `magus refs Validate` prints"}, p)
 
 	assert.Empty(t, ambiguousSymbolProblems(t.Context(), gate("Declare", "Cold"), read), "a name the graph cannot read fails open at declaration")
@@ -453,7 +453,7 @@ func TestRenderGatesShowsTheScopeOfARun(t *testing.T) {
 		{ID: "check", Verified: true, OutputRef: "out1", Scope: "-- ./internal/job -run Wait"},
 		{ID: "lint", Verified: true, OutputRef: "out2"},
 	}})
-	assert.Equal(t, "unit: 2 of 2 goal(s) met\n  [met] check, a run scoped with `-- ./internal/job -run Wait`\n  [met] lint\n", out.String())
+	assert.Equal(t, "unit: 2 of 2 postcondition(s) met\n  [met] check, a run scoped with `-- ./internal/job -run Wait`\n  [met] lint\n", out.String())
 }
 
 func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
@@ -465,11 +465,11 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 		Gates:        []job.VerificationStatus{{ID: "sym", Verified: true}},
 		StaleIndexes: []string{".", "console"},
 	})
-	assert.Contains(t, out.String(), "1 of 1 goal(s) met")
+	assert.Contains(t, out.String(), "1 of 1 postcondition(s) met")
 	assert.Contains(t, out.String(), "stale")
 	assert.Contains(t, out.String(), "., console")
 	assert.Contains(t, out.String(), "graph build")
-	assert.Contains(t, out.String(), "symbol goals were not graded", "describe grades nothing over a stale index")
+	assert.Contains(t, out.String(), "symbol postconditions were not graded", "describe grades nothing over a stale index")
 	assert.NotContains(t, out.String(), "graded against an index older")
 }
 
@@ -483,7 +483,7 @@ func TestRenderGatesLabelsEvidenceOfAnEarlierSpec(t *testing.T) {
 		ObservedGeneration: 3,
 		PriorGeneration:    2,
 	})
-	assert.Equal(t, "unit: 0 of 1 goal(s) met\n  [unmet] check\n"+
+	assert.Equal(t, "unit: 0 of 1 postcondition(s) met\n  [unmet] check\n"+
 		"prior evidence: taken at generation 2, the spec is now generation 3; run it again\n", out.String())
 
 	out.Reset()
@@ -502,20 +502,20 @@ func TestRenderGatesReportsTheDelta(t *testing.T) {
 	gates := []job.VerificationStatus{{ID: "check", Verified: true}}
 
 	measured := job.Status{Job: "unit", Gates: gates, FootprintKnown: true, LinesAdded: 4, LinesDeleted: 9,
-		SymbolDeltaKnown: true, UndeclaredExports: []string{"Alpha", "Goal#Extra"}}
-	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n"+
+		SymbolDeltaKnown: true, UndeclaredExports: []string{"Alpha", "Postcondition#Extra"}}
+	assert.Equal(t, "unit: 1 of 1 postcondition(s) met\n  [met] check\n"+
 		"net lines: +4 -9 (-5)\n"+
-		"exports no goal declares: 2\n  Alpha\n  Goal#Extra\n"+
+		"exports no postcondition declares: 2\n  Alpha\n  Postcondition#Extra\n"+
 		"left defined with no use: none\n", render(measured))
 	assert.Equal(t, render(measured), render(measured), "two renders of one status are one text")
 
 	unread := job.Status{Job: "unit", Gates: gates, FootprintReason: "the job was declared without a checkpoint"}
-	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n"+
+	assert.Equal(t, "unit: 1 of 1 postcondition(s) met\n  [met] check\n"+
 		"net lines: not measured, the job was declared without a checkpoint\n"+
-		"exports no goal declares: not measured, the symbol graph or the diff could not be read\n"+
+		"exports no postcondition declares: not measured, the symbol graph or the diff could not be read\n"+
 		"left defined with no use: not measured, the symbol graph or the diff could not be read\n", render(unread))
 
-	assert.Equal(t, "unit: 1 of 1 goal(s) met\n  [met] check\n", render(job.Status{Job: "unit", Gates: gates}),
+	assert.Equal(t, "unit: 1 of 1 postcondition(s) met\n  [met] check\n", render(job.Status{Job: "unit", Gates: gates}),
 		"a grade no diff was read for, such as an integration, measures nothing")
 }
 
@@ -527,7 +527,7 @@ func symbolReader(facts map[string]SymbolFact) SymbolReader {
 	}
 }
 
-func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
+func TestResolveSymbolPostconditionsFreezesSignatures(t *testing.T) {
 	t.Parallel()
 
 	read := symbolReader(map[string]SymbolFact{
@@ -536,22 +536,22 @@ func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
 		"Bare":  {DefinedIn: []string{"bare.go"}},
 		"Twice": {DefinedIn: []string{"a.go"}, Signature: "func Twice()", SameNameDefinitions: []string{"a.go", "b.go"}},
 	})
-	goal := func(name, signature string) job.Goal {
-		return job.Goal{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: signature}
+	postcondition := func(name, signature string) job.Postcondition {
+		return job.Postcondition{ID: "shape", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: signature}
 	}
-	row := func(g job.Goal) job.Job {
-		return job.Job{ID: "j", ReadOnly: true, Goals: []job.Goal{g}}
+	row := func(g job.Postcondition) job.Job {
+		return job.Job{ID: "j", ReadOnly: true, Postconditions: []job.Postcondition{g}}
 	}
 
-	frozen, claims, err := ResolveSymbolGoals(t.Context(), row(goal("Api", "")), read)
+	frozen, claims, err := ResolveSymbolPostconditions(t.Context(), row(postcondition("Api", "")), read)
 	require.NoError(t, err)
 	assert.Empty(t, claims)
-	assert.Equal(t, "func Api(ctx context.Context) error", frozen.Goals[0].Signature, "an empty signature records the indexed one")
+	assert.Equal(t, "func Api(ctx context.Context) error", frozen.Postconditions[0].Signature, "an empty signature records the indexed one")
 
-	declared, _, err := ResolveSymbolGoals(t.Context(), row(goal("Api", "func Api() error")), read)
+	declared, _, err := ResolveSymbolPostconditions(t.Context(), row(postcondition("Api", "func Api() error")), read)
 	require.NoError(t, err)
-	assert.Equal(t, "func Api() error", declared.Goals[0].Signature, "a declared signature is the contract as written")
-	_, _, err = ResolveSymbolGoals(t.Context(), row(goal("New", "func New()")), nil)
+	assert.Equal(t, "func Api() error", declared.Postconditions[0].Signature, "a declared signature is the contract as written")
+	_, _, err = ResolveSymbolPostconditions(t.Context(), row(postcondition("New", "func New()")), nil)
 	require.NoError(t, err, "a declared signature needs no graph, even for a symbol not written yet")
 
 	for _, tc := range []struct {
@@ -567,55 +567,55 @@ func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, err := ResolveSymbolGoals(t.Context(), row(goal(tc.symbol, "")), tc.read)
+			_, _, err := ResolveSymbolPostconditions(t.Context(), row(postcondition(tc.symbol, "")), tc.read)
 			require.Error(t, err, "a signature that cannot be frozen is refused, never skipped")
-			assert.Contains(t, err.Error(), `goal "shape"`)
+			assert.Contains(t, err.Error(), `postcondition "shape"`)
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
 }
 
-func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
+func TestResolveSymbolPostconditionsDerivesClaims(t *testing.T) {
 	t.Parallel()
 
 	read := symbolReader(map[string]SymbolFact{
-		"Api":       {DefinedIn: []string{"api.go"}, Signature: "func Api()"},
-		"Resolve":   {DefinedIn: []string{"types/job.go"}, Signature: "func (Goal).Resolve() Goal"},
-		"Update":    {DefinedIn: []string{"store.go"}, Signature: "func (s *Store) Update(id string) error"},
-		"Goal":      {DefinedIn: []string{"types/job.go"}, Signature: "type Goal struct"},
-		"Field":     {DefinedIn: []string{"types/job.go"}, Signature: "struct field Signature string"},
-		"Split":     {DefinedIn: []string{"a.go", "b.go"}, Signature: "func Split()"},
-		"Covered":   {DefinedIn: []string{"internal/job/plan.go"}, Signature: "func Covered()"},
-		"Whole":     {DefinedIn: []string{"whole.go"}, Signature: "func Whole()"},
-		"Unindexed": {DefinedIn: []string{"x.go"}},
+		"Api":           {DefinedIn: []string{"api.go"}, Signature: "func Api()"},
+		"Resolve":       {DefinedIn: []string{"types/job.go"}, Signature: "func (Postcondition).Resolve() Postcondition"},
+		"Update":        {DefinedIn: []string{"store.go"}, Signature: "func (s *Store) Update(id string) error"},
+		"Postcondition": {DefinedIn: []string{"types/job.go"}, Signature: "type Postcondition struct"},
+		"Field":         {DefinedIn: []string{"types/job.go"}, Signature: "struct field Signature string"},
+		"Split":         {DefinedIn: []string{"a.go", "b.go"}, Signature: "func Split()"},
+		"Covered":       {DefinedIn: []string{"internal/job/plan.go"}, Signature: "func Covered()"},
+		"Whole":         {DefinedIn: []string{"whole.go"}, Signature: "func Whole()"},
+		"Unindexed":     {DefinedIn: []string{"x.go"}},
 	})
-	symbol := func(id string, expect job.GoalExpect, names ...string) job.Goal {
-		return job.Goal{ID: id, Kind: job.GoalKindSymbol, Expect: expect, Symbols: names}
+	symbol := func(id string, expect job.PostconditionExpect, names ...string) job.Postcondition {
+		return job.Postcondition{ID: id, Kind: job.PostconditionKindSymbol, Expect: expect, Symbols: names}
 	}
-	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job", "api.go#func Other", "whole.go"}}, Goals: []job.Goal{
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job", "api.go#func Other", "whole.go"}}, Postconditions: []job.Postcondition{
 		symbol("moved", job.ExpectChanged, "Api", "Resolve", "Split", "Covered", "Whole", "Unindexed", "Field"),
 		symbol("gone", job.ExpectAbsent, "Update"),
-		{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Goal"}, Signature: "type Goal struct"},
+		{ID: "shape", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Postcondition"}, Signature: "type Postcondition struct"},
 		symbol("kept", job.ExpectPresent, "Api"),
 		symbol("unused", job.ExpectUnreferenced, "Update"),
-		{ID: "check", Check: job.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "check", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
 	}}
 
-	resolved, claims, err := ResolveSymbolGoals(t.Context(), row, read)
+	resolved, claims, err := ResolveSymbolPostconditions(t.Context(), row, read)
 	require.NoError(t, err)
-	want := []string{"api.go#func Api", "store.go#Store) Update", "types/job.go#Goal) Resolve", "types/job.go#type Goal", "whole.go#func Whole"}
+	want := []string{"api.go#func Api", "store.go#Store) Update", "types/job.go#Postcondition) Resolve", "types/job.go#type Postcondition", "whole.go#func Whole"}
 	assert.Equal(t, want, claims, "a literal whole-file entry is narrowed to the claim, a directory is not")
 	assert.Equal(t, append([]string{"internal/job", "api.go#func Other", "whole.go"}, want...), resolved.Paths.Write)
 	assert.Equal(t, []string{"internal/job", "api.go#func Other", "whole.go"}, row.Paths.Write, "the row handed in is not changed")
 
 	readOnly := row
 	readOnly.ReadOnly = true
-	_, claims, err = ResolveSymbolGoals(t.Context(), readOnly, read)
+	_, claims, err = ResolveSymbolPostconditions(t.Context(), readOnly, read)
 	require.NoError(t, err)
 	assert.Empty(t, claims, "a read-only row claims nothing")
 
-	_, claims, err = ResolveSymbolGoals(t.Context(), row, nil)
-	require.NoError(t, err, "only a signature goal needs a graph")
+	_, claims, err = ResolveSymbolPostconditions(t.Context(), row, nil)
+	require.NoError(t, err, "only a signature postcondition needs a graph")
 	assert.Empty(t, claims)
 }
 
@@ -630,8 +630,8 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 		"A":     {DefinedIn: []string{"run.go"}, Signature: "func A(ctx int)"},
 		"Notes": {DefinedIn: []string{"notes.txt"}, Signature: "func Notes()"},
 	})
-	goals := []job.Goal{{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"A", "Notes"}}}
-	record := job.Declaration{ID: "wave/job", Paths: job.Paths{Write: []string{"other.go"}}, Check: forkCheck(), Goals: goals}
+	postconditions := []job.Postcondition{{ID: "moved", Kind: job.PostconditionKindSymbol, Symbols: []string{"A", "Notes"}}}
+	record := job.Declaration{ID: "wave/job", Paths: job.Paths{Write: []string{"other.go"}}, Check: forkCheck(), Postconditions: postconditions}
 
 	s := NewStore(tempLocation(t, root))
 	plan, err := Apply(t.Context(), s, []job.Declaration{record}, config.Jobs{}, read, nil, true)
@@ -643,28 +643,28 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 	assert.Empty(t, rows, "a dry run writes nothing")
 
 	stored, err := ForkMerge(t.Context(), s, "wave/job", func(u *job.Job) {
-		u.Check, u.State, u.Paths.Write, u.Goals = forkCheck(), job.StateDeclared, []string{"other.go"}, goals
+		u.Check, u.State, u.Paths.Write, u.Postconditions = forkCheck(), job.StateDeclared, []string{"other.go"}, postconditions
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"other.go", "run.go#func A"}, stored.Paths.Write)
 	assert.Equal(t, []string{"claim-declarations"}, stored.Requires, "an older magus reads a claim wrongly, so it may not write this row")
 
 	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *job.Job) {
-		u.Paths.Write, u.Goals = []string{"other.go"}, nil
-		u.Deviations = []job.Deviation{{Code: job.Code(types.JobRecordInvalid), Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
+		u.Paths.Write, u.Postconditions = []string{"other.go"}, nil
+		u.Deviations = []job.Deviation{{Code: job.Code(types.JobRecordInvalid), Subject: types.DropsSubject + "postconditions", Reason: "the claim postcondition is dropped"}}
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Nil(t, unclaimed.Requires, "a row that drops its last claim is writable by an older magus again")
 }
 
-// A record applied again with its signature goal still undeclared keeps the signature the
+// A record applied again with its signature postcondition still undeclared keeps the signature the
 // first apply froze, so a holder's edit to the symbol never becomes the contract.
 func TestApplyKeepsAFrozenSignature(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	record := job.Declaration{ID: "wave/job", Paths: job.Paths{Write: []string{"*.go"}}, Check: forkCheck(), Goals: []job.Goal{
-		{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}},
+	record := job.Declaration{ID: "wave/job", Paths: job.Paths{Write: []string{"*.go"}}, Check: forkCheck(), Postconditions: []job.Postcondition{
+		{ID: "shape", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}},
 	}}
 	before := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api()"}})
 	after := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api(n int)"}})
@@ -673,8 +673,8 @@ func TestApplyKeepsAFrozenSignature(t *testing.T) {
 	require.NoError(t, err)
 	plan, err := Apply(t.Context(), s, []job.Declaration{record}, config.Jobs{}, after, nil, false)
 	require.NoError(t, err)
-	assert.Equal(t, "func Api()", plan[0].Next.Goals[0].Signature)
-	assert.Equal(t, []string{"signature-goals"}, plan[0].Next.Requires)
+	assert.Equal(t, "func Api()", plan[0].Next.Postconditions[0].Signature)
+	assert.Equal(t, []string{"signature-postconditions"}, plan[0].Next.Requires)
 }
 
 func TestWaitRefusesPassWhileADescendantIsLive(t *testing.T) {
@@ -700,14 +700,14 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 
 	parent := job.Job{
 		ID: "rename", State: job.StateRunning, Paths: job.Paths{Write: []string{"."}},
-		Goals: []job.Goal{
-			{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OldName"}},
-			{ID: "tests", Check: job.LeaseCheck{Target: "test", Project: "."}},
+		Postconditions: []job.Postcondition{
+			{ID: "gone", Kind: job.PostconditionKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OldName"}},
+			{ID: "tests", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
 		},
 	}
 	child := job.Job{
 		ID: "rename/api", Parent: "rename", State: job.StateRunning, Paths: job.Paths{Write: []string{"api"}},
-		Goals: []job.Goal{{ID: "moved", Kind: job.GoalKindPaths, Expect: job.ExpectPresent, Paths: []string{"api"}}},
+		Postconditions: []job.Postcondition{{ID: "moved", Kind: job.PostconditionKindPaths, Expect: job.ExpectPresent, Paths: []string{"api"}}},
 	}
 	loc := declared(t, parent, child)
 	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
@@ -723,8 +723,8 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 	for _, g := range status.Gates {
 		ids = append(ids, g.ID)
 	}
-	assert.Contains(t, ids, "rename/gone", "a child is graded against its ancestors' symbol goals")
-	assert.NotContains(t, ids, "rename/tests", "only symbol goals are inherited")
+	assert.Contains(t, ids, "rename/gone", "a child is graded against its ancestors' symbol postconditions")
+	assert.NotContains(t, ids, "rename/tests", "only symbol postconditions are inherited")
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `"OldName" is still defined in api/old.go`)
 }
 
@@ -886,20 +886,20 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 }
 
 // A job that writes is held to something wait can grade; one that writes nothing is not.
-func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
+func TestUngradedProblemsHoldAWritingJobToACheckOrAPostcondition(t *testing.T) {
 	t.Parallel()
 
-	check := job.LeaseCheck{Target: "test", Project: "."}
-	goal := job.Goal{ID: "done", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}
+	check := types.LeaseCheck{Target: "test", Project: "."}
+	postcondition := job.Postcondition{ID: "done", Kind: job.PostconditionKindPaths, Paths: []string{"a.go"}}
 	for name, tc := range map[string]struct {
 		row     job.Job
 		refused bool
 	}{
-		"a writing job with neither":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}}, refused: true},
-		"a writing job with a check":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: &check}},
-		"a writing job with a goal":     {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Goals: []job.Goal{goal}}},
-		"a read-only job":               {row: job.Job{ID: "r", ReadOnly: true}},
-		"a job declaring no write path": {row: job.Job{ID: "r"}},
+		"a writing job with neither":         {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}}, refused: true},
+		"a writing job with a check":         {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: fixtureCheck(check)}},
+		"a writing job with a postcondition": {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Postconditions: []job.Postcondition{postcondition}}},
+		"a read-only job":                    {row: job.Job{ID: "r", ReadOnly: true}},
+		"a job declaring no write path":      {row: job.Job{ID: "r"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -910,14 +910,14 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 				return
 			}
 			require.ErrorIs(t, err, types.JobUngraded)
-			assert.Contains(t, err.Error(), `declares neither a check nor a goal`)
-			assert.Contains(t, err.Error(), `"goals"`, "the refusal names what to add")
+			assert.Contains(t, err.Error(), `declares neither a check nor a postcondition`)
+			assert.Contains(t, err.Error(), `"postconditions"`, "the refusal names what to add")
 		})
 	}
 
 	_, err := ForkMerge(t.Context(), NewStore(tempLocation(t, t.TempDir())), "w",
 		func(u *job.Job) { u.Paths.Write = []string{"a.go"} }, config.Jobs{}, nil)
-	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job.put hold a new row to it")
+	require.ErrorContains(t, err, "declares neither a check nor a postcondition", "the tool's fork and job.put hold a new row to it")
 }
 
 // A forked row is read-only or handed write paths: an empty write set bounds nothing, and
@@ -925,17 +925,17 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 	t.Parallel()
 
-	check := job.LeaseCheck{Target: "test", Project: "."}
-	script := job.LeaseCheck{Script: "probes/callers.buzz"}
+	check := types.LeaseCheck{Target: "test", Project: "."}
+	script := types.LeaseCheck{Script: "probes/callers.buzz"}
 	for name, tc := range map[string]struct {
 		row     job.Job
 		refused bool
 	}{
 		"no write paths and not read-only": {row: job.Job{ID: "s"}, refused: true},
-		"a check and no write paths":       {row: job.Job{ID: "s", Check: &check}, refused: true},
+		"a check and no write paths":       {row: job.Job{ID: "s", Check: fixtureCheck(check)}, refused: true},
 		"a read-only job":                  {row: job.Job{ID: "s", ReadOnly: true}},
-		"a read-only job with a script":    {row: job.Job{ID: "s", ReadOnly: true, Check: &script}},
-		"a writing job":                    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: &check}},
+		"a read-only job with a script":    {row: job.Job{ID: "s", ReadOnly: true, Check: fixtureCheck(script)}},
+		"a writing job":                    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: fixtureCheck(check)}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -975,7 +975,7 @@ func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 }
 
 func spec(write ...string) job.Declaration {
-	return job.Declaration{ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: write}, Check: forkCheck()}
+	return job.Declaration{ID: "w", Agent: job.Instructed("postcondition"), Paths: job.Paths{Write: write}, Check: forkCheck()}
 }
 
 func storeBytes(t *testing.T, s *Store) string {
@@ -1097,14 +1097,14 @@ func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
 	_, err = Apply(t.Context(), worker, []job.Declaration{spec("a.go", "c.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorAs(t, err, &refused, "widening")
 	criteria := spec("a.go")
-	criteria.Agent = job.Instructed("another goal")
+	criteria.Agent = job.Instructed("another postcondition")
 	_, err = Apply(t.Context(), worker, []job.Declaration{criteria}, config.Jobs{}, nil, nil, true)
 	require.ErrorAs(t, err, &refused, "a dry run answers what the write would")
 
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	want := shrunk[0].Next.Clone()
-	want.Paths.Write, want.Agent = []string{"a.go"}, job.Instructed("goal")
+	want.Paths.Write, want.Agent = []string{"a.go"}, job.Instructed("postcondition")
 	assert.Equal(t, want, rows[0], "the refused writes left the shrunk row as it was")
 }
 
@@ -1204,7 +1204,7 @@ func TestApplyCreatesANewJob(t *testing.T) {
 		Checkpoint: "rev-1",
 		Paths:      job.Paths{Write: []string{"internal/job/store.go"}},
 		Check:      forkCheck(),
-		Validation: CheckCommand(*forkCheck()),
+		Validation: CheckCommand(checkIn(t, forkCheck())),
 		State:      job.StateDeclared,
 		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
 		Validated:  got[0].Next.Validated,
@@ -1212,37 +1212,37 @@ func TestApplyCreatesANewJob(t *testing.T) {
 	assert.NotZero(t, got[0].Next.Validated, "a written record is stamped validated")
 }
 
-func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
+func TestApplyGradesEveryPostconditionCheckItAdds(t *testing.T) {
 	t.Parallel()
 
 	s, rec := humanOnlyGrader(t)
-	lint := job.LeaseCheck{Target: "lint", Project: "."}
-	bench := job.LeaseCheck{Target: "bench", Project: "."}
-	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, &lint }, config.Jobs{}, nil)
+	lint := types.LeaseCheck{Target: "lint", Project: "."}
+	bench := types.LeaseCheck{Target: "bench", Project: "."}
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, fixtureCheck(lint) }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	graded := len(rec.graded)
 	before := storeBytes(t, s)
 
-	paid := job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: &lint, Goals: []job.Goal{
-		{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: bench},
+	paid := job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: fixtureCheck(lint), Postconditions: []job.Postcondition{
+		{ID: "paid", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(bench)},
 	}}
 	for _, dryRun := range []bool{true, false} {
 		_, err = Apply(t.Context(), s, []job.Declaration{paid}, config.Jobs{}, nil, nil, dryRun)
-		require.ErrorContains(t, err, "w's goal paid's check `magus run bench .` is a target a person runs", "dry run %v", dryRun)
+		require.ErrorContains(t, err, "w's postcondition paid's check `magus run bench .` is a target a person runs", "dry run %v", dryRun)
 		assert.Equal(t, before, storeBytes(t, s), "a refused apply writes nothing, dry run %v", dryRun)
 	}
 
 	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) {
-		u.Goals = append(u.Goals, job.Goal{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: bench})
+		u.Postconditions = append(u.Postconditions, job.Postcondition{ID: "paid", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(bench)})
 	}, config.Jobs{}, nil)
-	require.ErrorContains(t, err, "w's goal paid's check", "a merge that adds a goal check is graded too")
+	require.ErrorContains(t, err, "w's postcondition paid's check", "a merge that adds a postcondition check is graded too")
 
 	rec.graded = rec.graded[:graded]
 	again := paid
-	again.Goals = []job.Goal{{ID: "again", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: lint, Accept: []job.Basis{job.BasisWitnessed}}}
+	again.Postconditions = []job.Postcondition{{ID: "again", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(lint), Accept: []job.Basis{job.BasisWitnessed}}}
 	_, err = Apply(t.Context(), s, []job.Declaration{again}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
-	assert.Len(t, rec.graded, graded, "a goal naming a check the row already holds is not graded again")
+	assert.Len(t, rec.graded, graded, "a postcondition naming a check the row already holds is not graded again")
 }
 
 // Every door that forks by merge pins the rows it read for the guard's grading, creating a
@@ -1265,15 +1265,15 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 		return CheckVerdict{}
 	}
 	s := NewStore(loc)
-	lint := &job.LeaseCheck{Target: "lint", Project: "."}
+	lint := &types.LeaseCheck{Target: "lint", Project: "."}
 
 	_, err := ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/a.go"}, forkCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
-	_, err = ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Check = lint }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Check = fixtureCheck(*lint) }, config.Jobs{}, nil)
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: lint}}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: fixtureCheck(*lint)}}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, [][]string{{}, {"a"}, {"a", "b"}, {"a", "b"}}, pinned)
@@ -1333,7 +1333,7 @@ func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
 	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
 	s.Require().NoError(err)
 	want := exited
-	want.State, want.GateAttempts = job.StateRunning, nil
+	want.State, want.PostconditionAttempts = job.StateRunning, nil
 	want.Registered, want.Updated = retaken.Registered, retaken.Updated
 	s.Equal(want, retaken)
 }
@@ -1341,7 +1341,7 @@ func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
 func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 	store, loc := appliedRow(s.T(), "a.go")
 	want := s.exitApplied(loc)
-	want.Paths.Write, want.State, want.Widenings, want.GateAttempts = []string{"a.go", "b.go"}, job.StateDeclared, 1, nil
+	want.Paths.Write, want.State, want.Widenings, want.PostconditionAttempts = []string{"a.go", "b.go"}, job.StateDeclared, 1, nil
 
 	applied, err := Apply(s.T().Context(), store, []job.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
@@ -1356,7 +1356,7 @@ func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 func (s *reapplySuite) narrowedAt(state job.State) *Store {
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
 	plant(s.T(), store, job.Job{
-		ID: "w", Agent: job.Instructed("goal"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
+		ID: "w", Agent: job.Instructed("postcondition"), Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
 		Releases: []job.Release{{Path: "b.go", Digest: job.DigestAbsent, ReleasedAt: 1}},
 	})
 	rows, err := store.List(s.T().Context())
@@ -1397,7 +1397,9 @@ func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration"}
 	next := prev.Clone()
 	next.Integrates = []string{"worker"}
-	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
+	changed, err := job.SpecChanges(prev, next, leaseChecks{})
+	s.Require().NoError(err)
+	a := Applied{Prev: prev, Next: next, Changed: changed}
 	s.Equal([]string{"integrates"}, a.Changed)
 	s.Equal([]string{"integrates +worker"}, a.ChangeLines())
 }
@@ -1406,67 +1408,71 @@ func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration", Paths: job.Paths{Soft: []string{"old.go"}}}
 	next := prev.Clone()
 	next.Paths.Soft = []string{"new.go"}
-	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
+	changed, err := job.SpecChanges(prev, next, leaseChecks{})
+	s.Require().NoError(err)
+	a := Applied{Prev: prev, Next: next, Changed: changed}
 	s.Equal([]string{"paths.soft"}, a.Changed)
 	s.Equal([]string{"paths.soft +new.go -old.go"}, a.ChangeLines())
 }
 
-// resolveSymbolGoalsNarrowsSuite pins the claims derived on a file that a row
+// resolveSymbolPostconditionsNarrowsSuite pins the claims derived on a file that a row
 // holds whole by a literal entry, which the fork then narrows.
-type resolveSymbolGoalsNarrowsSuite struct {
+type resolveSymbolPostconditionsNarrowsSuite struct {
 	suite.Suite
 	read SymbolReader
 }
 
-func TestResolveSymbolGoalsNarrows(t *testing.T) { suite.Run(t, new(resolveSymbolGoalsNarrowsSuite)) }
+func TestResolveSymbolPostconditionsNarrows(t *testing.T) {
+	suite.Run(t, new(resolveSymbolPostconditionsNarrowsSuite))
+}
 
-func (s *resolveSymbolGoalsNarrowsSuite) SetupTest() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) SetupTest() {
 	s.read = symbolReader(map[string]SymbolFact{
 		"A": {DefinedIn: []string{"run.go"}, Signature: "func A(ctx int)"},
 	})
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) resolve(paths ...string) []string {
-	row := job.Job{ID: "j", Paths: job.Paths{Write: paths}, Goals: []job.Goal{
-		{ID: "moved", Kind: job.GoalKindSymbol, Expect: job.ExpectChanged, Symbols: []string{"A"}},
+func (s *resolveSymbolPostconditionsNarrowsSuite) resolve(paths ...string) []string {
+	row := job.Job{ID: "j", Paths: job.Paths{Write: paths}, Postconditions: []job.Postcondition{
+		{ID: "moved", Kind: job.PostconditionKindSymbol, Expect: job.ExpectChanged, Symbols: []string{"A"}},
 	}}
-	_, claims, err := ResolveSymbolGoals(s.T().Context(), row, s.read)
+	_, claims, err := ResolveSymbolPostconditions(s.T().Context(), row, s.read)
 	s.Require().NoError(err)
 	return claims
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) TestALiteralWholeFileEntryYieldsTheDeclarationClaim() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) TestALiteralWholeFileEntryYieldsTheDeclarationClaim() {
 	s.Equal([]string{"run.go#func A"}, s.resolve("run.go"))
 	s.Equal([]string{"run.go#func A"}, s.resolve("./run.go"), "a leading ./ names the same file")
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) TestAClaimAlreadyHeldIsNotDerivedAgain() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) TestAClaimAlreadyHeldIsNotDerivedAgain() {
 	s.Empty(s.resolve("run.go", "run.go#func A"))
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) TestAPatternEntryYieldsNoClaim() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) TestAPatternEntryYieldsNoClaim() {
 	s.Empty(s.resolve("*.go"))
 	s.Empty(s.resolve("**/*.go"))
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) TestAnEntryThatIsNotTheFileItselfYieldsNoClaim() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) TestAnEntryThatIsNotTheFileItselfYieldsNoClaim() {
 	s.Empty(s.resolve("."))
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) TestWithoutIndexEvidenceTheFileStaysWhole() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) TestWithoutIndexEvidenceTheFileStaysWhole() {
 	s.read = symbolReader(map[string]SymbolFact{})
 	s.Empty(s.resolve("run.go"), "a symbol the index cannot read claims nothing")
 	s.read = nil
 	s.Empty(s.resolve("run.go"), "a door with no symbol graph claims nothing")
 }
 
-func (s *resolveSymbolGoalsNarrowsSuite) TestAForkNarrowsTheWholeHoldToTheClaim() {
+func (s *resolveSymbolPostconditionsNarrowsSuite) TestAForkNarrowsTheWholeHoldToTheClaim() {
 	root := testkit.NewRepository(s.T(), map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo}).Root()
 	store := NewStore(tempLocation(s.T(), root))
-	goals := []job.Goal{{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"A"}}}
+	postconditions := []job.Postcondition{{ID: "moved", Kind: job.PostconditionKindSymbol, Symbols: []string{"A"}}}
 
 	stored, err := ForkMerge(s.T().Context(), store, "wave/job", func(u *job.Job) {
-		u.Check, u.State, u.Paths.Write, u.Goals = forkCheck(), job.StateDeclared, []string{"run.go"}, goals
+		u.Check, u.State, u.Paths.Write, u.Postconditions = forkCheck(), job.StateDeclared, []string{"run.go"}, postconditions
 	}, config.Jobs{}, s.read)
 	s.Require().NoError(err)
 	s.Equal([]string{"run.go", "run.go#func A"}, stored.Paths.Write)
@@ -1477,51 +1483,51 @@ func (s *resolveSymbolGoalsNarrowsSuite) TestAForkNarrowsTheWholeHoldToTheClaim(
 	s.True(job.Narrowed(narrowed, "run.go"))
 }
 
-type applyDroppedGoalsSuite struct {
+type applyDroppedPostconditionsSuite struct {
 	suite.Suite
 	store *Store
 }
 
-func TestApplyDroppedGoals(t *testing.T) { suite.Run(t, new(applyDroppedGoalsSuite)) }
+func TestApplyDroppedPostconditions(t *testing.T) { suite.Run(t, new(applyDroppedPostconditionsSuite)) }
 
-func (s *applyDroppedGoalsSuite) SetupTest() {
+func (s *applyDroppedPostconditionsSuite) SetupTest() {
 	s.store, _ = validateWorkspace(s.T())
 	_, err := Apply(s.T().Context(), s.store, []job.Declaration{s.record(
 		[]string{"notes/a.txt", "notes/b.txt"}, "keep-a", "keep-b")}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 }
 
-func (s *applyDroppedGoalsSuite) record(paths []string, goals ...string) job.Declaration {
+func (s *applyDroppedPostconditionsSuite) record(paths []string, postconditions ...string) job.Declaration {
 	rec := job.Declaration{ID: "w", Paths: job.Paths{Write: paths}, Check: forkCheck()}
-	for _, id := range goals {
-		rec.Goals = append(rec.Goals, job.Goal{ID: id, Kind: job.GoalKindPaths, Paths: []string{"notes/a.txt"}})
+	for _, id := range postconditions {
+		rec.Postconditions = append(rec.Postconditions, job.Postcondition{ID: id, Kind: job.PostconditionKindPaths, Paths: []string{"notes/a.txt"}})
 	}
 	return rec
 }
 
-func (s *applyDroppedGoalsSuite) apply(rec job.Declaration) error {
+func (s *applyDroppedPostconditionsSuite) apply(rec job.Declaration) error {
 	_, err := Apply(s.T().Context(), s.store, []job.Declaration{rec}, config.Jobs{}, nil, nil, true)
 	return err
 }
 
-func (s *applyDroppedGoalsSuite) TestANarrowingThatDropsGoalsIsRefused() {
+func (s *applyDroppedPostconditionsSuite) TestANarrowingThatDropsPostconditionsIsRefused() {
 	err := s.apply(s.record([]string{"notes/a.txt"}))
 
 	s.Require().ErrorIs(err, types.JobRecordInvalid)
 }
 
-func (s *applyDroppedGoalsSuite) TestTheRefusalNamesEachDroppedGoal() {
+func (s *applyDroppedPostconditionsSuite) TestTheRefusalNamesEachDroppedPostcondition() {
 	err := s.apply(s.record([]string{"notes/a.txt"}))
 
 	s.Require().Error(err)
-	s.Contains(err.Error(), `drops its goal "keep-a"`)
-	s.Contains(err.Error(), `drops its goal "keep-b"`)
+	s.Contains(err.Error(), `drops its postcondition "keep-a"`)
+	s.Contains(err.Error(), `drops its postcondition "keep-b"`)
 }
 
-func (s *applyDroppedGoalsSuite) TestDroppingGoalsWithoutReleasingAPathIsKept() {
+func (s *applyDroppedPostconditionsSuite) TestDroppingPostconditionsWithoutReleasingAPathIsKept() {
 	s.Require().NoError(s.apply(s.record([]string{"notes/a.txt", "notes/b.txt"}, "keep-a")))
 }
 
-func (s *applyDroppedGoalsSuite) TestNarrowingWithTheGoalsKeptIsAccepted() {
+func (s *applyDroppedPostconditionsSuite) TestNarrowingWithThePostconditionsKeptIsAccepted() {
 	s.Require().NoError(s.apply(s.record([]string{"notes/a.txt"}, "keep-a", "keep-b")))
 }
