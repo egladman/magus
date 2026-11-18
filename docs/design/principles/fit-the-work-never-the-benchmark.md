@@ -28,8 +28,8 @@ The work is still what the tool is for, so three habits follow.
   record what the cache saved and what an agent spent on real work. A change
   justified by a benchmark alone is labeled as that: better on the
   benchmark, not yet seen in use. When the benchmark keeps improving and the
-  journals do not move, stop: the remaining work is on the recipe, not the
-  dinner.
+  journals do not move, stop: the remaining work is on the benchmark, not
+  the tool.
 - **A benchmark tuned against is spent.** Once a change is shaped by a
   benchmark's number, that number has stopped measuring the tool. Keep one
   benchmark nobody tunes against, or count the gain only where real runs show
