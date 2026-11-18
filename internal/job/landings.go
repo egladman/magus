@@ -110,6 +110,9 @@ func (s *Store) landings(rows []job.Job, now int64) map[string]landing {
 		}
 	}
 	out := map[string]landing{}
+	defer s.phase("landing sweep", landingSweepBound, func() string {
+		return fmt.Sprintf("%d landing probes, each running VCS subprocesses (budget %d a round)", len(due), landingBudget)
+	})()
 	for _, row := range due {
 		reason := probe(context.Background(), row)
 		if reason == "" {

@@ -38,6 +38,7 @@ import "std";
 import "vcs";
 
 import "assert";
+import "./hack/magusfile/bootstrap-timing" as timing;
 
 final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --verify-ready | --recover | --onto <ref>] [--install <p,q|none>]";
 final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}\n\n--onto <ref> resumes work in a checkout made for something else: it fast-forwards the clean checkout onto <ref> (a dirty tree or a non-fast-forward refuses, and nothing is reset), places ./magus (built when it cannot load the tree), installs dependencies and every harness, ends running rows whose head is already in <ref>, then prunes rows nobody collected like `magus job prune`. It prints a line per thing done. It never fetches.\n--recover only places ./magus from a dirty tree: nothing moves and no row changes. --onto shares its daemon stop and build, and refuses a dirty tree.";
@@ -229,17 +230,6 @@ fun note(h: Host, did: mut [str], line: str) > void {
     h.say(line);
 }
 
-// timed says what a slow step will do before it runs, and its time after.
-fun timed(h: Host, start: str, run: fun () > str !> any) > str !> any {
-    h.say(start);
-    final began = h.clock();
-    final line = run();
-    final ms = std\toInt(h.clock() - began);
-    final took = if (ms < 1000) "{ms}ms" else "{ms / 1000}s";
-    h.say("{line} ({took})");
-    return line;
-}
-
 // stopDaemon stops the checkout's daemon when one runs, so a project lock it holds cannot fail
 // the build with exit 75. It raises when a running daemon will not stop.
 fun stopDaemon(h: Host, dir: str) > str !> any {
@@ -274,7 +264,9 @@ fun installDependencies(h: Host, dir: str) > str !> any {
 // storeOpens raises with the store's refusal when dir's ./magus would migrate
 // the job store every checkout shares from a live job's checkout.
 fun storeOpens(h: Host, dir: str) > void !> any {
-    _ = must(h.magus(dir, args: ["ls", "jobs", "-o", "name"]), what: "{dir}/magus cannot open the job store, so no step that writes it runs");
+    timing\watched(h.say, clock: h.clock, step: timing\STORE, run: fun () > void !> any {
+        _ = must(h.magus(dir, args: ["ls", "jobs", "-o", "name"]), what: "{dir}/magus cannot open the job store, so no step that writes it runs");
+    });
 }
 
 // mainWorktree is the first stanza of `git worktree list --porcelain`,
@@ -377,17 +369,19 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
     if (binaryAtHead(h, dir: dir)) {
         note(h, did: did, line: "kept {dir}/magus, already built at HEAD");
     } else {
-        note(h, did: did, line: stopDaemon(h, dir: dir));
-        did.append(timed(h, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", run: fun () > str !> any => h.build(dir)));
+        timing\watched(h.say, clock: h.clock, step: timing\STOP, run: fun () > void !> any {
+            note(h, did: did, line: stopDaemon(h, dir: dir));
+        });
+        did.append(timing\timed(h.say, clock: h.clock, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => h.build(dir)));
     }
     storeOpens(h, dir: dir);
-    did.append(timed(h, start: "seeding the symbol index of {dir}", run: fun () > str !> any => h.seed(dir)));
+    did.append(timing\timed(h.say, clock: h.clock, start: "seeding the symbol index of {dir}", step: timing\SEED, run: fun () > str !> any => h.seed(dir)));
     if (install == "") {
-        did.append(timed(h, start: "installing every project's dependencies with {dir}/magus", run: fun () > str !> any => installDependencies(h, dir: dir)));
+        did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any => installDependencies(h, dir: dir)));
     } else {
-        did.append(timed(h, start: "installing the dependencies of {install} with {dir}/magus", run: fun () > str !> any => installProjects(h, dir: dir, install: install)));
+        did.append(timing\timed(h.say, clock: h.clock, start: "installing the dependencies of {install} with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any => installProjects(h, dir: dir, install: install)));
     }
-    did.append(timed(h, start: "installing every declared harness", run: fun () > str !> any => installHarnesses(h, dir: dir)));
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any => installHarnesses(h, dir: dir)));
     if (restart) {
         note(h, did: did, line: startDaemon(h, dir: dir));
         final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
@@ -411,16 +405,21 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
     final version = h.magus(dir, args: ["version", "-o", "json"]);
     final built = version.code == 0 and (builtAt(version.stdout, head: head) catch false);
     if (restart or !built) {
-        note(h, did: did, line: stopDaemon(h, dir: dir));
+        timing\watched(h.say, clock: h.clock, step: timing\STOP, run: fun () > void !> any {
+            note(h, did: did, line: stopDaemon(h, dir: dir));
+        });
     }
     if (built) {
         note(h, did: did, line: "./magus is built at HEAD {head}");
     } else {
-        did.append(timed(h, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", run: fun () > str !> any => h.build(dir)));
+        did.append(timing\timed(h.say, clock: h.clock, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => h.build(dir)));
     }
     storeOpens(h, dir: dir);
-    _ = must(h.magus(dir, args: ["server", "stop", "--pools"]), what: "magus server stop --pools");
+    timing\watched(h.say, clock: h.clock, step: timing\STOP_POOLS, run: fun () > void !> any {
+        _ = must(h.magus(dir, args: ["server", "stop", "--pools"]), what: "magus server stop --pools");
+    });
     note(h, did: did, line: "stopped the pool parents of other builds");
+    final skillsBegan = h.clock();
     final others = lines(must(h.git(dir, args: ["ls-files", "--others", "--"] + SKILL_DIRS), what: "git ls-files --others"));
     var fresh = "";
     foreach (skill in skillInstalls(others)) {
@@ -437,17 +436,18 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
             note(h, did: did, line: "removed the stale untracked skill install {skill}");
         }
     }
-    did.append(timed(h, start: "installing every project's dependencies with {dir}/magus", run: fun () > str !> any => installDependencies(h, dir: dir)));
-    did.append(timed(h, start: "installing every declared harness", run: fun () > str !> any => installHarnesses(h, dir: dir)));
-    did.append(timed(h, start: "building the graph", run: fun () > str !> any {
+    timing\report(h.say, step: timing\SKILLS, ms: std\toInt(h.clock() - skillsBegan));
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any => installDependencies(h, dir: dir)));
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any => installHarnesses(h, dir: dir)));
+    did.append(timing\timed(h.say, clock: h.clock, start: "building the graph", step: timing\GRAPH, run: fun () > str !> any {
         _ = must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
         return "built the graph";
     }));
-    did.append(timed(h, start: "generating the symbol digest", run: fun () > str !> any {
+    did.append(timing\timed(h.say, clock: h.clock, start: "generating the symbol digest", step: timing\DIGEST, run: fun () > str !> any {
         _ = must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
         return "generated the symbol digest";
     }));
-    did.append(timed(h, start: "building the proofread binary", run: fun () > str !> any {
+    did.append(timing\timed(h.say, clock: h.clock, start: "building the proofread binary", step: timing\PROOFREAD, run: fun () > str !> any {
         _ = must(h.magus(dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
         return "built the proofread binary";
     }));
@@ -879,7 +879,7 @@ export fun main(args: [str]) > void !> any {
             throw "bootstrap-checkout: --recover cannot combine with --restart, --verify-ready or --install";
         }
         h.say(stopDaemon(h, dir: dir));
-        _ = timed(h, start: "building {dir}/magus from the working tree; a cold build cache takes a minute or more", run: fun () > str !> any => build(dir, recovery: true));
+        _ = timing\timed(h.say, clock: h.clock, start: "building {dir}/magus from the working tree; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => build(dir, recovery: true));
         return;
     }
     if (parsed.values["--verify-ready"] != null) {

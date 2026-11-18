@@ -429,6 +429,9 @@ func sharedCheckoutProblems(store *Store, rows []job.Job, row job.Job) types.Job
 		measured bool
 	)
 	holder := held[0]
+	defer store.phase("fork shared-checkout read", forkTreeBound, func() string {
+		return fmt.Sprintf("walking the checkout's load files for %d write paths while %s holds it", len(row.Paths.Write), holder.ID)
+	})()
 	// No caller passes a context here yet; the footprint read is the only thing that takes one.
 	ctx := context.Background()
 	reported := map[string]bool{}
@@ -482,6 +485,9 @@ func directoryWritePathProblems(store *Store, row job.Job) types.JobProblems {
 		return nil
 	}
 	var ps types.JobProblems
+	defer store.phase("fork write-path read", forkTreeBound, func() string {
+		return fmt.Sprintf("listing the directories %d write paths claim in the shared checkout", len(row.Paths.Write))
+	})()
 	for i, decl := range row.Paths.Write {
 		for _, dir := range claimedDirs(store.root, decl) {
 			stray, generated := nonOutputFile(store, dir)
@@ -659,6 +665,9 @@ func HardenWritten(ctx context.Context, store *Store, rows []job.Job) []job.Job 
 		return rows
 	}
 	ctx = withFootprintCache(ctx, store.footprintCache())
+	defer store.phase("fork footprint grading", forkFootprintBound, func() string {
+		return fmt.Sprintf("reading the diff of each of %d live rows with soft paths", len(rows))
+	})()
 	var driver types.VCSDriver
 	out := slices.Clone(rows)
 	for i, row := range rows {
