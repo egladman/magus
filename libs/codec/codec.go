@@ -92,7 +92,7 @@ func (e *MemberError) Error() string {
 
 func (e *MemberError) Unwrap() error { return e.Err }
 
-// StrictError is a refusal from [UnmarshalStrict] or a [StrictDecoder] at Offset, a byte
+// StrictError is a refusal from [UnmarshalStrict] at Offset, a byte
 // offset into the input. Err is the [*SyntaxError] or [*MemberError] behind it, or a
 // [*TypeError] or the decoder's own error, which Offset then places at the start of the
 // value it was reading.
@@ -191,7 +191,7 @@ func Unmarshal(data []byte, v any) error { return unmarshal(data, v) }
 // unknown field is right there; a field the reader never looks at reads to its author as
 // one that was taken into account.
 func UnmarshalStrict(data []byte, v any) error {
-	d := NewStrictDecoder(data)
+	d := newStrictDecoder(data)
 	if err := d.Decode(v); err != nil {
 		return err
 	}
@@ -476,23 +476,23 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// StrictDecoder reads one document a person composed, token by token, so a caller can
+// strictDecoder reads one document a person composed, token by token, so a caller can
 // say where each part of it starts. Like [UnmarshalStrict] it refuses what a typed input
 // must not carry: a name repeated within an object, and a member the target does not
 // declare. Each refusal is a [*StrictError] carrying the byte offset it names.
-type StrictDecoder struct{ s scanner }
+type strictDecoder struct{ s scanner }
 
-// NewStrictDecoder reads data.
-func NewStrictDecoder(data []byte) *StrictDecoder {
-	return &StrictDecoder{s: scanner{data: data, strict: true, likeV2: walkLikeV2}}
+// newStrictDecoder reads data.
+func newStrictDecoder(data []byte) *strictDecoder {
+	return &strictDecoder{s: scanner{data: data, strict: true, likeV2: walkLikeV2}}
 }
 
 // Offset is the byte offset just past the last token or value read; whitespace and a
 // separator may sit between it and the next one.
-func (d *StrictDecoder) Offset() int64 { return int64(d.s.pos) }
+func (d *strictDecoder) Offset() int64 { return int64(d.s.pos) }
 
 // More reports whether the object or array being read holds another member or element.
-func (d *StrictDecoder) More() bool {
+func (d *strictDecoder) More() bool {
 	d.s.skipSeparator()
 	if d.s.pos >= len(d.s.data) {
 		return false
@@ -502,7 +502,7 @@ func (d *StrictDecoder) More() bool {
 }
 
 // Delim reads the next token, which must be want: one of '{', '}', '[' or ']'.
-func (d *StrictDecoder) Delim(want byte) error {
+func (d *strictDecoder) Delim(want byte) error {
 	d.s.skipSeparator()
 	if d.s.pos >= len(d.s.data) {
 		return d.refuse(d.s.errorAt(d.s.pos, io.ErrUnexpectedEOF))
@@ -515,7 +515,7 @@ func (d *StrictDecoder) Delim(want byte) error {
 }
 
 // Name reads the next object member's name and the colon after it.
-func (d *StrictDecoder) Name() (string, error) {
+func (d *strictDecoder) Name() (string, error) {
 	d.s.skipSeparator()
 	if d.s.pos >= len(d.s.data) {
 		return "", d.refuse(d.s.errorAt(d.s.pos, io.ErrUnexpectedEOF))
@@ -536,7 +536,7 @@ func (d *StrictDecoder) Name() (string, error) {
 }
 
 // Decode reads the next value into v.
-func (d *StrictDecoder) Decode(v any) error {
+func (d *strictDecoder) Decode(v any) error {
 	d.s.skipSeparator()
 	start := d.s.pos
 	t, rv := pointee(v)
@@ -556,7 +556,7 @@ func (d *StrictDecoder) Decode(v any) error {
 }
 
 // End reports an error unless nothing but whitespace follows the document.
-func (d *StrictDecoder) End() error {
+func (d *strictDecoder) End() error {
 	d.s.skipSpace()
 	if d.s.pos < len(d.s.data) {
 		return d.refuse(d.s.errorAt(d.s.pos, ErrTrailingData))
@@ -565,7 +565,7 @@ func (d *StrictDecoder) End() error {
 }
 
 // refuse places one of the codec's own errors at the offset it carries.
-func (d *StrictDecoder) refuse(err error) error {
+func (d *strictDecoder) refuse(err error) error {
 	var syntax *SyntaxError
 	var member *MemberError
 	switch {
@@ -639,7 +639,7 @@ func (s *scanner) skipSpace() {
 	}
 }
 
-// skipSeparator steps over whitespace and one comma, where a [StrictDecoder] caller
+// skipSeparator steps over whitespace and one comma, where a strictDecoder caller
 // reading members token by token leaves one.
 func (s *scanner) skipSeparator() {
 	s.skipSpace()

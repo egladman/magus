@@ -254,7 +254,7 @@ func (s *ConformanceSuite) TestUnmarshalStrictReadsADeclaredDocument() {
 }
 
 func (s *ConformanceSuite) TestStrictDecoderReadsTokenByToken() {
-	d := NewStrictDecoder([]byte(`{"first": {"a": 1}, "second": {"a": 2, "z": 3}}`))
+	d := newStrictDecoder([]byte(`{"first": {"a": 1}, "second": {"a": 2, "z": 3}}`))
 	s.Require().NoError(d.Delim('{'))
 	var names []string
 	var failed *StrictError
