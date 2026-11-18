@@ -204,7 +204,9 @@ func (t storedTries) attempts() []job.Attempt {
 
 // moveTries writes the tries the rows of jobs.jsonl still carry to
 // attempts.jsonl, read from each row's last line. A run cut short runs
-// again and appends the same lines, which the log reads once.
+// again and appends the same lines, which the log reads once. It appends
+// without reading the file, whose older lines the later rewrites bring
+// forward in their turn.
 func (s *Store) moveTries(ctx context.Context) error {
 	read, err := codec.ReadLines(s.path)
 	if err != nil {
@@ -225,11 +227,26 @@ func (s *Store) moveTries(ctx context.Context) error {
 		}
 		byID[t.ID] = t
 	}
-	var moved []job.Attempt
+	var lines [][]byte
 	for _, id := range order {
-		moved = append(moved, byID[id].attempts()...)
+		for _, a := range byID[id].attempts() {
+			text, err := job.MarshalAttempt(a, false)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, text)
+		}
 	}
-	return s.AppendAttempts(ctx, moved...)
+	if len(lines) == 0 {
+		return nil
+	}
+	path, err := s.AttemptsPath()
+	if err != nil {
+		return err
+	}
+	return codec.WithLock(ctx, path+".lock", codec.LockWait, func() error {
+		return codec.AppendLines(path, lines, 0o600)
+	})
 }
 
 // triesMoved names the migration [Store.migrate] runs [Store.moveTries]

@@ -281,6 +281,27 @@ func (s *attemptStoreSuite) TestMovingTriesTwiceReadsThemOnce() {
 	s.Len(all, 3)
 }
 
+// A store whose rows still carry their tries can sit beside an attempts.jsonl a later magus
+// wrote in the camelCase spelling. Moving the tries appends without reading that file, and
+// the later rewrites bring its lines forward.
+func (s *attemptStoreSuite) TestMovingTriesBesideACamelCaseAttemptsFileReadsBoth() {
+	path := plantRaw(s.T(), s.store, triesMovedFrom)
+	attempts, err := s.store.AttemptsPath()
+	s.Require().NoError(err)
+	camel := `{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Attempt","spec":{"job":"b","n":1},` +
+		`"status":{"result":{"changedPaths":["b.go"],"validation":{"command":"magus run test .","outputRef":"out1"}}}}`
+	s.Require().NoError(os.WriteFile(attempts, []byte(camel+"\n"), 0o600))
+
+	_, err = s.store.List(s.T().Context())
+	s.Require().NoError(err)
+
+	tries := triesIn(s.T(), s.store)
+	s.Len(tries["a"], 3, "the row's tries moved")
+	s.Require().Len(tries["b"], 1, "the camelCase line reads")
+	s.Equal("out1", tries["b"][0].Status.Result.Validation.OutputRef)
+	s.InDelta(len(jobMigrations()), storedLines(s.T(), path)[0]["migration"], 0)
+}
+
 func (s *attemptStoreSuite) TestARowWithNoTriesMovesNothing() {
 	plantRaw(s.T(), s.store, `{"api_version":"safetyscissors.job/v1alpha1","migration":2}
 {"id":"a","state":"running","created":1,"updated":1}`)
