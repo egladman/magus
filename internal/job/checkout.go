@@ -309,16 +309,21 @@ type recordsPass struct {
 }
 
 // recordsSweptLog keys every pass alike, so the last one is the log's one entry.
-func (s *Store) recordsSweptLog() file.JSONL[recordsPass] {
-	return file.JSONL[recordsPass]{JSONL: codec.JSONL[recordsPass]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
-		Key: func(recordsPass) string { return "" }}}
+func (s *Store) recordsSweptLog() (file.JSONL[recordsPass], error) {
+	return file.NewJSONL(codec.JSONLConfig[recordsPass]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
+		Perm: 0o644, Key: func(recordsPass) string { return "" }})
 }
 
 // recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
 // are still in rows. A history that cannot be read reads as no pass, which costs one early
 // pass.
 func (s *Store) recordsSwept(now int64, rows []job.Job) bool {
-	passes, err := s.recordsSweptLog().Load()
+	log, err := s.recordsSweptLog()
+	if err != nil {
+		slog.With(attr.Component("magus")).Warn("records-swept history not opened", attr.Error(err))
+		return false
+	}
+	passes, err := log.Load()
 	if err != nil || len(passes) == 0 {
 		return false
 	}
@@ -338,7 +343,12 @@ func (s *Store) writeRecordsSwept(now int64, rows []job.Job) {
 	for i, r := range rows {
 		pass.Rows[i] = r.ID
 	}
-	_ = s.recordsSweptLog().Update(context.Background(), func([]recordsPass) []recordsPass { return []recordsPass{pass} })
+	log, err := s.recordsSweptLog()
+	if err != nil {
+		slog.With(attr.Component("magus")).Warn("records-swept history not opened", attr.Error(err))
+		return
+	}
+	_ = log.Update(context.Background(), func([]recordsPass) []recordsPass { return []recordsPass{pass} })
 }
 
 // dropRecord removes the record at path if it still holds b.

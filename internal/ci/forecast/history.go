@@ -963,18 +963,19 @@ func (l historyLine) key() string {
 	return ""
 }
 
-func historyLog(path string) file.JSONL[historyLine] {
+func historyLog(path string) (file.JSONL[historyLine], error) {
 	old := filepath.Join(filepath.Dir(path), oldHistoryFile)
 	if old == filepath.Clean(path) {
 		old = ""
 	}
-	return file.JSONL[historyLine]{JSONL: codec.JSONL[historyLine]{
-		Log:  slog.With(attr.Component("magus")),
+	return file.NewJSONL(codec.JSONLConfig[historyLine]{
 		Path: path,
+		Perm: 0o644,
 		Key:  historyLine.key,
 		Live: func(l historyLine) bool { return !l.Removed },
 		Old:  old,
-	}}
+		Log:  slog.With(attr.Component("magus")),
+	})
 }
 
 // UnsupportedVersionError is a history file a newer magus wrote. Load leaves the file
@@ -1001,7 +1002,11 @@ func (h *History) Load(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	lines, err := historyLog(path).Load()
+	log, err := historyLog(path)
+	if err != nil {
+		return fmt.Errorf("forecast: read history: %w", err)
+	}
+	lines, err := log.Load()
 	if err != nil {
 		return fmt.Errorf("forecast: read history: %w", file.StoreDiagnostic(err))
 	}
@@ -1090,8 +1095,12 @@ func (h *History) lines() []historyLine {
 // Such a writer keeps what IT learned and replays that here instead. ctx bounds only
 // the wait for the lock.
 func UpdateHistory(ctx context.Context, path string, fn func(*History) error) error {
+	log, err := historyLog(path)
+	if err != nil {
+		return fmt.Errorf("forecast: update history: %w", err)
+	}
 	var failed error
-	err := historyLog(path).Update(ctx, func(entries []historyLine) []historyLine {
+	err = log.Update(ctx, func(entries []historyLine) []historyLine {
 		var add []historyLine
 		add, failed = changedLines(path, entries, fn)
 		return add

@@ -19,7 +19,7 @@ func stampLines(t *testing.T, root string) int {
 	t.Helper()
 	store, err := heartbeatStore(root)
 	require.NoError(t, err)
-	read, err := codec.ReadLines(store.Path)
+	read, err := codec.ReadLines(store.Path())
 	require.NoError(t, err)
 	return len(read.Lines)
 }
@@ -213,7 +213,7 @@ func TestStampHeartbeatCompactsPastItsBound(t *testing.T) {
 		require.NoError(t, err)
 		lines = append(lines, line)
 	}
-	require.NoError(t, codec.RewriteLines(store.Path, lines, store.Perm))
+	require.NoError(t, codec.RewriteLines(store.Path(), lines, heartbeatPerm))
 
 	stampHeartbeat(ctx, root, heartbeat{Session: "s", Lease: "newest", At: now})
 	assert.Equal(t, heartbeatMaxEntries, stampLines(t, root), "the store holds its bound, one line per pair")

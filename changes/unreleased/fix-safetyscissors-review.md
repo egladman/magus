@@ -25,6 +25,10 @@
   A nil option value is a `*secrets.OptionError`. A read with no provider selected is a
   `*ReadError` wrapping `ErrNoFallback`, where it read the environment; set
   `Config.Fallback` to `secrets.EnvProvider{}` to keep that.
+- **Breaking for SDK callers: `codec.JSONL` is built by `codec.NewJSONL`.** It takes a
+  `JSONLConfig` and options, and its fields are unexported. An empty `Path`, a zero `Perm`
+  (it meant 0644) or a nil `Key` is a `*JSONLConfigError`, a nil option value an
+  `*OptionError`; the zero `JSONL` is refused by `Load` and `Update`, where it panicked.
 - **`safetyscissors.New` refuses any two stores in one directory.** Jobs, Sessions and
   Activity are compared pairwise after `filepath.Clean`, where only Jobs and Sessions
   were compared, as written.

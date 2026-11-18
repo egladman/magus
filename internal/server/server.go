@@ -938,7 +938,10 @@ func newPullsService(ctx context.Context, opts mcp.Options, svc *console.Service
 	if ref := strings.TrimPrefix(opts.Config.VCS.BaseRef, "origin/"); ref != "" {
 		base, note = ref, ""
 	}
-	store := pullshandler.OpenStore(filepath.Join(dir, "authors.jsonl"))
+	store, err := pullshandler.OpenStore(filepath.Join(dir, "authors.jsonl"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("server: %w", err)
+	}
 	poller := pullshandler.NewPoller(pullshandler.PollerOptions{
 		Config:   opts.Config.Console.Pulls,
 		Store:    store,

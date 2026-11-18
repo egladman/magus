@@ -186,13 +186,17 @@ func (m *Magus) planScope(ctx context.Context, target string, opts PlanOptions) 
 	return s, nil
 }
 
-// planHistory loads the runtime history opts names, or the configured one.
+// planHistory loads the runtime history opts names, or the configured one. With neither
+// there is no history to load, and the plan costs every unit alike.
 func (m *Magus) planHistory(ctx context.Context, opts PlanOptions) (forecast.History, error) {
 	histPath := opts.HistoryPath
 	if histPath == "" {
 		histPath = m.cfg.HistoryPath
 	}
 	var hist forecast.History
+	if histPath == "" {
+		return hist, nil
+	}
 	if err := hist.Load(ctx, histPath); err != nil {
 		return forecast.History{}, fmt.Errorf("affected plan: load history: %w", err)
 	}

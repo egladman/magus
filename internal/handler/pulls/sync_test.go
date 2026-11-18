@@ -89,7 +89,9 @@ func (s *PollerSuite) SetupTest() {
 	s.now = testNow
 	s.err = nil
 	s.calls = nil
-	s.store = OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
+	store, err := OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
+	s.Require().NoError(err)
+	s.store = store
 	s.list = types.PullList{
 		Repo:   "acme/acme",
 		Viewer: "ada",

@@ -14,12 +14,12 @@ func (s *Store) grantsLog() (codec.JSONL[grantRecord], error) {
 	if err != nil {
 		return codec.JSONL[grantRecord]{}, err
 	}
-	return codec.JSONL[grantRecord]{
+	return codec.NewJSONL(codec.JSONLConfig[grantRecord]{
 		Path:   filepath.Join(filepath.Dir(path), grantsFileName),
 		Perm:   0o600,
 		Key:    func(r grantRecord) string { return Grant{Job: r.Job, Rule: r.Rule}.Key() },
 		OnDrop: s.dropped,
-	}, nil
+	})
 }
 
 // grantRecord is a [Grant] as grants.jsonl stores it. It refuses a member this build does

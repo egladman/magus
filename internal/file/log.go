@@ -193,6 +193,12 @@ func StoreDiagnostic(err error) error {
 // caller maps the codes itself.
 type JSONL[T any] struct{ codec.JSONL[T] }
 
+// NewJSONL is [codec.NewJSONL], its store's errors given codes the same way.
+func NewJSONL[T any](cfg codec.JSONLConfig[T], opts ...codec.JSONLOption[T]) (JSONL[T], error) {
+	l, err := codec.NewJSONL(cfg, opts...)
+	return JSONL[T]{JSONL: l}, err
+}
+
 // Load is [codec.JSONL.Load], its error given a code by [StoreDiagnostic].
 func (l JSONL[T]) Load() ([]T, error) {
 	entries, err := l.JSONL.Load()

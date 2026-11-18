@@ -79,7 +79,7 @@ func (s *ledgerSuite) item(report report, key string) types.WorkItem {
 }
 
 func (s *ledgerSuite) lines() []string {
-	data, err := os.ReadFile(s.ledger.items.Path)
+	data, err := os.ReadFile(s.ledger.items.Path())
 	s.Require().NoError(err)
 	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 }

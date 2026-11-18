@@ -138,14 +138,15 @@ type settingLine struct {
 	Setting *builtin.Setting `json:"setting,omitempty"`
 }
 
-func settingsLog(cacheDir string) file.JSONL[settingLine] {
-	return file.JSONL[settingLine]{JSONL: codec.JSONL[settingLine]{
+func settingsLog(cacheDir string) (file.JSONL[settingLine], error) {
+	return file.NewJSONL(codec.JSONLConfig[settingLine]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(cacheDir, settingsFile),
+		Perm: 0o644,
 		Key:  func(l settingLine) string { return l.Rule },
 		Live: func(l settingLine) bool { return !l.Removed && l.Setting != nil },
 		Old:  filepath.Join(cacheDir, oldSettingsFile),
-	}}
+	})
 }
 
 // rememberSettings records settings as the cache dir's last applied ones, appending a line
@@ -162,7 +163,12 @@ func rememberSettings(cacheDir string, settings map[string]builtin.Setting) {
 	if info, err := os.Stat(cacheDir); err != nil || !info.IsDir() {
 		return
 	}
-	_ = settingsLog(cacheDir).Update(context.Background(), func(stored []settingLine) []settingLine {
+	log, err := settingsLog(cacheDir)
+	if err != nil {
+		reportGuardRecord(err)
+		return
+	}
+	_ = log.Update(context.Background(), func(stored []settingLine) []settingLine {
 		held := make(map[string]settingLine, len(stored))
 		for _, l := range stored {
 			held[l.Rule] = l
@@ -200,7 +206,10 @@ func recallSettings(cacheDir string) (map[string]builtin.Setting, error) {
 	var held []settingLine
 	var err error
 	if cacheDir != "" {
-		held, err = settingsLog(cacheDir).Load()
+		var log file.JSONL[settingLine]
+		if log, err = settingsLog(cacheDir); err == nil {
+			held, err = log.Load()
+		}
 	}
 	if err != nil || len(held) == 0 {
 		return nil, err

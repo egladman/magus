@@ -60,21 +60,26 @@ func open(repo string) (*ledger, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("work ledger: %w", err)
 	}
-	return &ledger{
-		repo: repo,
-		items: file.JSONL[types.WorkItem]{JSONL: codec.JSONL[types.WorkItem]{
-			Log:  slog.With(attr.Component("magus")),
-			Path: filepath.Join(dir, "work.jsonl"),
-			Key:  types.WorkItem.Key,
-			Live: func(w types.WorkItem) bool { return !w.Dropped },
-		}},
-		facts: file.JSONL[fact]{JSONL: codec.JSONL[fact]{
-			Log:  slog.With(attr.Component("magus")),
-			Path: filepath.Join(dir, "facts.jsonl"),
-			Key:  fact.key,
-		}},
-		now: time.Now,
-	}, nil
+	items, err := file.NewJSONL(codec.JSONLConfig[types.WorkItem]{
+		Log:  slog.With(attr.Component("magus")),
+		Path: filepath.Join(dir, "work.jsonl"),
+		Perm: 0o644,
+		Key:  types.WorkItem.Key,
+		Live: func(w types.WorkItem) bool { return !w.Dropped },
+	})
+	if err != nil {
+		return nil, fmt.Errorf("work ledger: %w", err)
+	}
+	facts, err := file.NewJSONL(codec.JSONLConfig[fact]{
+		Log:  slog.With(attr.Component("magus")),
+		Path: filepath.Join(dir, "facts.jsonl"),
+		Perm: 0o644,
+		Key:  fact.key,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("work ledger: %w", err)
+	}
+	return &ledger{repo: repo, items: items, facts: facts, now: time.Now}, nil
 }
 
 // Items is what the ledger says now, without asking the version control.
@@ -104,7 +109,7 @@ func (l *ledger) End(ctx context.Context, key, reason string) error {
 		return fmt.Errorf("work ledger: %w", err)
 	}
 	if !found {
-		return fmt.Errorf("work ledger: no item %s in %s", key, l.items.Path)
+		return fmt.Errorf("work ledger: no item %s in %s", key, l.items.Path())
 	}
 	return nil
 }

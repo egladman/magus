@@ -25,7 +25,9 @@ func TestServiceSuite(t *testing.T) { suite.Run(t, new(ServiceSuite)) }
 
 func (s *ServiceSuite) SetupTest() {
 	s.calls = 0
-	s.store = OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
+	store, err := OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
+	s.Require().NoError(err)
+	s.store = store
 	s.p = NewPoller(PollerOptions{
 		Config: testConfig(),
 		Store:  s.store,

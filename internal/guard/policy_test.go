@@ -69,7 +69,9 @@ func TestPolicyMarkerPreservesLegacyState(t *testing.T) {
 	old := filepath.Join(filepath.Dir(path), "guard-policy.json")
 	const held = "{\"digest\":\"older\"}\n"
 	require.NoError(t, os.WriteFile(old, []byte(held), 0o600))
-	_, err := policyMarkerLog(path).Load()
+	log, err := policyMarkerLog(path)
+	require.NoError(t, err)
+	_, err = log.Load()
 	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	_, ok := readPolicyMarker(path)
 	assert.False(t, ok)

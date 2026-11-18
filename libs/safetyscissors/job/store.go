@@ -1364,13 +1364,13 @@ func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
 	if s.err != nil {
 		return codec.JSONL[attemptRecord]{}, s.err
 	}
-	return codec.JSONL[attemptRecord]{
+	return codec.NewJSONL(codec.JSONLConfig[attemptRecord]{
 		Path:   filepath.Join(filepath.Dir(s.path), attemptsFileName),
 		Perm:   0o600,
 		Key:    attemptRecord.key,
 		Live:   func(r attemptRecord) bool { return !r.Status.Dropped },
 		OnDrop: s.dropped,
-	}, nil
+	})
 }
 
 // refuseAttemptVersion refuses a line another writer's version stored, which this one
@@ -1475,7 +1475,7 @@ func MarshalAttempt(a Attempt, dropped bool) ([]byte, error) {
 // AttemptsPath is the attempts file beside the store's rows.
 func (s *Store) AttemptsPath() (string, error) {
 	log, err := s.attemptsLog()
-	return log.Path, err
+	return log.Path(), err
 }
 
 // dropAttempts ends every try of the jobs gone names, whose rows a write dropped, so an

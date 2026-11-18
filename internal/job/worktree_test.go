@@ -1365,7 +1365,8 @@ func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
 }
 
 func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
-	cache := digestCache(filepath.Join(s.T().TempDir(), digestCacheName))
+	cache, err := digestCache(filepath.Join(s.T().TempDir(), digestCacheName))
+	s.Require().NoError(err)
 	for i := range 2 + codec.CompactSlack {
 		s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
 			return []binaryDigest{{Path: "/a", Size: int64(i), Digest: "sha256:old"}}
@@ -1377,7 +1378,7 @@ func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	got, err := cache.Load()
 	s.Require().NoError(err)
 	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, got)
-	read, err := codec.ReadLines(cache.Path)
+	read, err := codec.ReadLines(cache.Path())
 	s.Require().NoError(err)
 	s.Len(read.Lines, 1)
 }

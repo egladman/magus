@@ -60,7 +60,7 @@ func ReadLines(path string) (Lines, error) {
 
 // AppendLines adds lines to the end of the file at path in one write, so a reader sees each
 // of them whole or not at all, and syncs it. It creates the file with perm and its
-// directory with the mode [JSONL.Perm] documents.
+// directory with the mode [JSONLConfig.Perm] documents.
 func AppendLines(path string, lines [][]byte, perm os.FileMode, opts ...AppendOption) error {
 	var o appendOptions
 	for _, opt := range opts {
@@ -91,7 +91,7 @@ type appendOptions struct{ skipSync bool }
 func WithoutSync() AppendOption { return func(o *appendOptions) { o.skipSync = true } }
 
 // RewriteLines replaces the file at path with lines through a rename, so a reader sees the
-// old file or the new one. It creates the directory with the mode [JSONL.Perm] documents.
+// old file or the new one. It creates the directory with the mode [JSONLConfig.Perm] documents.
 func RewriteLines(path string, lines [][]byte, perm os.FileMode) error {
 	return writeAtomic(path, joinLines(lines), perm)
 }
@@ -226,16 +226,30 @@ func RefuseOld(old string) error {
 // JSONL is an append-only JSON Lines file of T. Key names an entry, and the last line for a
 // key is the entry; a line Live reports false for ends its key. A line is T's own JSON, so
 // the store never parses fields.
+//
+// Build one with [NewJSONL]. The zero JSONL was never built, and Load and Update refuse it
+// with a [*JSONLConfigError].
 type JSONL[T any] struct {
+	path   string
+	perm   os.FileMode
+	key    func(T) string
+	live   func(T) bool
+	old    string
+	log    *slog.Logger
+	onDrop func(context.Context, Dropped)
+}
+
+// JSONLConfig is what [NewJSONL] builds a [JSONL] from. Path, Perm and Key are required.
+type JSONLConfig[T any] struct {
 	Path string
-	// Perm is the file's mode, and zero means 0644. Its directory is created with
+	// Perm is the file's mode, and zero is refused. Its directory is created with
 	// read and search for whoever may read the file: 0600 files get a 0700 directory.
 	Perm os.FileMode
-	Key  func(T) string
-	// Live is nil when every line is an entry.
+	// Key names an entry.
+	Key func(T) string
+	// Live reports whether a line is an entry; see [WithLive].
 	Live func(T) bool
-	// Old is the file an older writer kept this store in, or "". While it exists, Load and
-	// Update fail with [RefuseOld]'s error.
+	// Old is the file an older writer kept this store in; see [WithOld].
 	Old string
 	// Log receives the warning an Update logs when it drops a line no writer finished.
 	Log *slog.Logger
@@ -243,6 +257,118 @@ type JSONL[T any] struct {
 	// it nor Log set, such an Update fails with an [*UnfinishedLineError] and writes
 	// nothing.
 	OnDrop func(context.Context, Dropped)
+
+	errs []error
+}
+
+// JSONLOption adjusts a [JSONLConfig] before [NewJSONL] validates it. An option given a nil
+// or empty value records an [*OptionError] on the config rather than ignoring it, so
+// NewJSONL refuses the construction.
+type JSONLOption[T any] func(*JSONLConfig[T])
+
+// OptionError is a [JSONLOption] given a value it cannot use.
+type OptionError struct {
+	Option  string
+	Problem string
+}
+
+func (e *OptionError) Error() string {
+	return fmt.Sprintf("codec: option %s: %s", e.Option, e.Problem)
+}
+
+// JSONLConfigError is a [JSONLConfig] field [NewJSONL] cannot build a store from.
+type JSONLConfigError struct {
+	Field   string
+	Problem string
+}
+
+func (e *JSONLConfigError) Error() string {
+	return fmt.Sprintf("codec: JSONL %s: %s", e.Field, e.Problem)
+}
+
+func (c *JSONLConfig[T]) fail(option, problem string) {
+	c.errs = append(c.errs, &OptionError{Option: option, Problem: problem})
+}
+
+// WithLive sets which lines are entries: a line live reports false for ends its key.
+// Without it every line is an entry. A nil function is an *[OptionError].
+func WithLive[T any](live func(T) bool) JSONLOption[T] {
+	return func(c *JSONLConfig[T]) {
+		if live == nil {
+			c.fail("WithLive", "nil function")
+			return
+		}
+		c.Live = live
+	}
+}
+
+// WithOld sets the file an older writer kept this store in. While it exists, Load and
+// Update fail with [RefuseOld]'s error. An empty path is an *[OptionError].
+func WithOld[T any](old string) JSONLOption[T] {
+	return func(c *JSONLConfig[T]) {
+		if old == "" {
+			c.fail("WithOld", "empty path")
+			return
+		}
+		c.Old = old
+	}
+}
+
+// WithLog sets the logger told of the line an Update drops. A nil logger is an
+// *[OptionError].
+func WithLog[T any](l *slog.Logger) JSONLOption[T] {
+	return func(c *JSONLConfig[T]) {
+		if l == nil {
+			c.fail("WithLog", "nil logger")
+			return
+		}
+		c.Log = l
+	}
+}
+
+// WithOnDrop sets the function told of each line an Update drops. A nil function is an
+// *[OptionError].
+func WithOnDrop[T any](fn func(context.Context, Dropped)) JSONLOption[T] {
+	return func(c *JSONLConfig[T]) {
+		if fn == nil {
+			c.fail("WithOnDrop", "nil function")
+			return
+		}
+		c.OnDrop = fn
+	}
+}
+
+// NewJSONL builds a store from cfg and opts. It fails with every problem found, joined: an
+// [*OptionError] for each refused option, and a [*JSONLConfigError] for an empty Path, a
+// Perm that is zero or holds bits outside [os.ModePerm], and a nil Key.
+func NewJSONL[T any](cfg JSONLConfig[T], opts ...JSONLOption[T]) (JSONL[T], error) {
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	errs := cfg.errs
+	if cfg.Path == "" {
+		errs = append(errs, &JSONLConfigError{Field: "Path", Problem: "empty"})
+	}
+	if cfg.Perm == 0 || cfg.Perm&^os.ModePerm != 0 {
+		errs = append(errs, &JSONLConfigError{Field: "Perm", Problem: fmt.Sprintf("%v is not a nonzero permission mode", cfg.Perm)})
+	}
+	if cfg.Key == nil {
+		errs = append(errs, &JSONLConfigError{Field: "Key", Problem: "nil function"})
+	}
+	if err := errors.Join(errs...); err != nil {
+		return JSONL[T]{}, err
+	}
+	return JSONL[T]{path: cfg.Path, perm: cfg.Perm, key: cfg.Key, live: cfg.Live, old: cfg.Old, log: cfg.Log, onDrop: cfg.OnDrop}, nil
+}
+
+// Path is the file the store keeps its lines in.
+func (l JSONL[T]) Path() string { return l.path }
+
+func (l JSONL[T]) built() error {
+	if l.key == nil {
+		return &JSONLConfigError{Field: "JSONL", Problem: "not built by NewJSONL"}
+	}
+	return nil
 }
 
 // Load returns the entries, in the order their last lines appear. An absent file has none.
@@ -263,12 +389,15 @@ func (l JSONL[T]) Load() ([]T, error) {
 // when it ends in a line no writer finished, which the rewrite drops and Log and OnDrop
 // are told of. ctx bounds only the wait for the lock.
 func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
+	if err := l.built(); err != nil {
+		return err
+	}
 	// The lock file sits beside the store, so its directory takes the store's mode before
 	// WithLock would create it world-searchable.
-	if err := os.MkdirAll(filepath.Dir(l.Path), dirMode(l.perm())); err != nil {
-		return fmt.Errorf("codec: %s: %w", l.Path, err)
+	if err := os.MkdirAll(filepath.Dir(l.path), dirMode(l.perm)); err != nil {
+		return fmt.Errorf("codec: %s: %w", l.path, err)
 	}
-	return WithLock(ctx, l.Path+".lock", LockWait, func() error {
+	return WithLock(ctx, l.path+".lock", LockWait, func() error {
 		all, partial, err := l.read()
 		if err != nil {
 			return err
@@ -287,18 +416,18 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 		if partial == 0 {
 			return l.write(RewriteLines, live)
 		}
-		if l.Log == nil && l.OnDrop == nil {
-			return &UnfinishedLineError{Path: l.Path, Line: partial}
+		if l.log == nil && l.onDrop == nil {
+			return &UnfinishedLineError{Path: l.path, Line: partial}
 		}
 		if err := l.write(RewriteLines, live); err != nil {
 			return err
 		}
-		if l.Log != nil {
-			l.Log.WarnContext(ctx, "store rewritten", slog.String("path", l.Path), slog.Int("line", partial),
-				slog.String("why", l.Path+" ended in a line no writer finished, so the rewrite dropped it"))
+		if l.log != nil {
+			l.log.WarnContext(ctx, "store rewritten", slog.String("path", l.path), slog.Int("line", partial),
+				slog.String("why", l.path+" ended in a line no writer finished, so the rewrite dropped it"))
 		}
-		if l.OnDrop != nil {
-			l.OnDrop(ctx, Dropped{Path: l.Path, Line: partial})
+		if l.onDrop != nil {
+			l.onDrop(ctx, Dropped{Path: l.path, Line: partial})
 		}
 		return nil
 	})
@@ -307,12 +436,15 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 // read returns the lines' entries and the number of the line no writer finished, 0 when
 // none.
 func (l JSONL[T]) read() ([]T, int, error) {
-	if l.Old != "" {
-		if err := RefuseOld(l.Old); err != nil {
+	if err := l.built(); err != nil {
+		return nil, 0, err
+	}
+	if l.old != "" {
+		if err := RefuseOld(l.old); err != nil {
 			return nil, 0, err
 		}
 	}
-	read, err := ReadLines(l.Path)
+	read, err := ReadLines(l.path)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -320,7 +452,7 @@ func (l JSONL[T]) read() ([]T, int, error) {
 	for _, line := range read.Lines {
 		var v T
 		if err := Unmarshal(line.Text, &v); err != nil {
-			return nil, 0, &LineError{Path: l.Path, Line: line.N, Err: err}
+			return nil, 0, &LineError{Path: l.path, Line: line.N, Err: err}
 		}
 		all = append(all, v)
 	}
@@ -332,11 +464,11 @@ func (l JSONL[T]) read() ([]T, int, error) {
 func (l JSONL[T]) fold(all []T) []T {
 	last := make(map[string]int, len(all))
 	for i, v := range all {
-		last[l.Key(v)] = i
+		last[l.key(v)] = i
 	}
 	var out []T
 	for i, v := range all {
-		if last[l.Key(v)] == i && (l.Live == nil || l.Live(v)) {
+		if last[l.key(v)] == i && (l.live == nil || l.live(v)) {
 			out = append(out, v)
 		}
 	}
@@ -352,13 +484,5 @@ func (l JSONL[T]) write(to func(string, [][]byte, os.FileMode) error, entries []
 		}
 		lines = append(lines, b)
 	}
-	return to(l.Path, lines, l.perm())
-}
-
-// perm is the mode the store's file is written with: Perm, or 0644 when it is unset.
-func (l JSONL[T]) perm() os.FileMode {
-	if l.Perm == 0 {
-		return 0o644
-	}
-	return l.Perm
+	return to(l.path, lines, l.perm)
 }

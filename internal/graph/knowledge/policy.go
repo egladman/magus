@@ -24,18 +24,23 @@ type PolicyRecord struct {
 }
 
 // policyRecords is the store of PolicyRecord: one entry, the last open's.
-func policyRecords(cacheDir string) file.JSONL[PolicyRecord] {
-	return file.JSONL[PolicyRecord]{JSONL: codec.JSONL[PolicyRecord]{
+func policyRecords(cacheDir string) (file.JSONL[PolicyRecord], error) {
+	return file.NewJSONL(codec.JSONLConfig[PolicyRecord]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(StoreDir(cacheDir), "target-policies.jsonl"),
+		Perm: 0o644,
 		Key:  func(PolicyRecord) string { return "workspace" },
-	}}
+	})
 }
 
 // RecordTargetPolicies appends r as the record under cacheDir. ctx bounds
 // only the wait for the store's lock.
 func RecordTargetPolicies(ctx context.Context, cacheDir string, r PolicyRecord) error {
-	return policyRecords(cacheDir).Update(ctx, func([]PolicyRecord) []PolicyRecord {
+	log, err := policyRecords(cacheDir)
+	if err != nil {
+		return err
+	}
+	return log.Update(ctx, func([]PolicyRecord) []PolicyRecord {
 		return []PolicyRecord{r}
 	})
 }
@@ -43,7 +48,11 @@ func RecordTargetPolicies(ctx context.Context, cacheDir string, r PolicyRecord) 
 // RecordedPolicies returns the last record under cacheDir, false when there
 // is none. The caller checks its FastDomain against the tree.
 func RecordedPolicies(cacheDir string) (PolicyRecord, bool, error) {
-	entries, err := policyRecords(cacheDir).Load()
+	log, err := policyRecords(cacheDir)
+	if err != nil {
+		return PolicyRecord{}, false, err
+	}
+	entries, err := log.Load()
 	if err != nil || len(entries) == 0 {
 		return PolicyRecord{}, false, err
 	}

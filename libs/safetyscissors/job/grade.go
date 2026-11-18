@@ -290,12 +290,12 @@ func (s *Store) gradesLog() (codec.JSONL[gradesEntry], error) {
 	if err != nil {
 		return codec.JSONL[gradesEntry]{}, err
 	}
-	return codec.JSONL[gradesEntry]{
+	return codec.NewJSONL(codec.JSONLConfig[gradesEntry]{
 		Path:   filepath.Join(filepath.Dir(path), gradesFileName),
 		Perm:   0o600,
 		Key:    gradesEntry.key,
 		OnDrop: s.dropped,
-	}, nil
+	})
 }
 
 // appendGrades appends entries holding the store's mutex and grades.jsonl's lock.
@@ -305,8 +305,8 @@ func (s *Store) appendGrades(ctx context.Context, entries ...gradesEntry) error 
 		return err
 	}
 	// Made here, before the lock creates it world-readable, as a row write makes it.
-	if err := os.MkdirAll(filepath.Dir(log.Path), 0o700); err != nil {
-		return fmt.Errorf("job: create store %s: %w", filepath.Dir(log.Path), err)
+	if err := os.MkdirAll(filepath.Dir(log.Path()), 0o700); err != nil {
+		return fmt.Errorf("job: create store %s: %w", filepath.Dir(log.Path()), err)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

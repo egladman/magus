@@ -126,12 +126,17 @@ type DirectiveStore struct {
 const directiveFile = "advisories.jsonl"
 
 // newDirectiveStore is the store in dir. It touches nothing until used.
-func newDirectiveStore(dir string) DirectiveStore {
-	return DirectiveStore{lines: file.JSONL[directiveEntry]{JSONL: codec.JSONL[directiveEntry]{
+func newDirectiveStore(dir string) (DirectiveStore, error) {
+	lines, err := file.NewJSONL(codec.JSONLConfig[directiveEntry]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(dir, directiveFile),
+		Perm: 0o644,
 		Key:  directiveEntry.key,
-	}}}
+	})
+	if err != nil {
+		return DirectiveStore{}, fmt.Errorf("advisories: %w", err)
+	}
+	return DirectiveStore{lines: lines}, nil
 }
 
 // OpenDirectiveStore is the store of the repository at root, in
@@ -148,11 +153,11 @@ func OpenDirectiveStore(root string) (DirectiveStore, error) {
 	if err != nil {
 		return DirectiveStore{}, fmt.Errorf("advisories: %w", err)
 	}
-	return newDirectiveStore(dir), nil
+	return newDirectiveStore(dir)
 }
 
 // Dir is the directory holding the store's file.
-func (s DirectiveStore) Dir() string { return filepath.Dir(s.lines.Path) }
+func (s DirectiveStore) Dir() string { return filepath.Dir(s.lines.Path()) }
 
 // Load folds the store into its advisories, oldest post first. An absent
 // store has none. A line that does not decode fails the read, so a caller
@@ -160,7 +165,7 @@ func (s DirectiveStore) Dir() string { return filepath.Dir(s.lines.Path) }
 func (s DirectiveStore) Load() ([]Directive, error) {
 	entries, err := s.lines.Load()
 	if err != nil {
-		return nil, fmt.Errorf("advisories: read %s: %w", s.lines.Path, err)
+		return nil, fmt.Errorf("advisories: read %s: %w", s.lines.Path(), err)
 	}
 	return foldDirectives(entries), nil
 }

@@ -67,10 +67,10 @@ func (s *Store) readingPath() string {
 
 // readingLog is the mark's file: each line is a mark, the last one is the mark, and a line
 // without a review (what clearing appends) is no mark.
-func (s *Store) readingLog() file.JSONL[ReadingMark] {
+func (s *Store) readingLog() (file.JSONL[ReadingMark], error) {
 	path := s.readingPath()
-	return file.JSONL[ReadingMark]{JSONL: codec.JSONL[ReadingMark]{Log: slog.With(attr.Component("magus")), Path: path, Old: oldFile(path, "reading.json"),
-		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active}}
+	return file.NewJSONL(codec.JSONLConfig[ReadingMark]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o644, Old: oldFile(path, "reading.json"),
+		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active})
 }
 
 // errorNoReadingDir is [ErrNoStateDir] with the consequence spelled out. Every other persisted mark
@@ -91,8 +91,12 @@ func (s *Store) SetReading(ctx context.Context, at diff.ReviewTarget, now time.T
 	if path == "" {
 		return ReadingMark{}, errorNoReadingDir()
 	}
+	rl, err := s.readingLog()
+	if err != nil {
+		return ReadingMark{}, err
+	}
 	var out ReadingMark
-	err := s.readingLog().Update(ctx, func(stored []ReadingMark) []ReadingMark {
+	err = rl.Update(ctx, func(stored []ReadingMark) []ReadingMark {
 		if len(stored) == 1 && stored[0].Matches(at) && !stored[0].Expired(now) {
 			out = stored[0]
 			return nil
@@ -123,8 +127,12 @@ func (s *Store) clearReading(ctx context.Context, want func(ReadingMark) bool) (
 	if path == "" {
 		return false, errorNoReadingDir()
 	}
+	rl, err := s.readingLog()
+	if err != nil {
+		return false, err
+	}
 	cleared := false
-	err := s.readingLog().Update(ctx, func(stored []ReadingMark) []ReadingMark {
+	err = rl.Update(ctx, func(stored []ReadingMark) []ReadingMark {
 		if len(stored) == 0 || !want(stored[0]) {
 			return nil
 		}
@@ -142,7 +150,11 @@ func (s *Store) LoadReading() (ReadingMark, error) {
 	if s.readingPath() == "" {
 		return ReadingMark{}, nil
 	}
-	held, err := s.readingLog().Load()
+	rl, err := s.readingLog()
+	if err != nil {
+		return ReadingMark{}, err
+	}
+	held, err := rl.Load()
 	if err != nil || len(held) == 0 {
 		return ReadingMark{}, err
 	}
