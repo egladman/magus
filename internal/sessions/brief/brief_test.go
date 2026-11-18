@@ -22,6 +22,7 @@ import (
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -86,7 +87,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		}},
 		GuardWiring: []string{".claude/settings.json"},
 		Rules:       []string{"AGENTS.md", "harnesses/example.json"},
-		PromptCache: briefClock(),
+		PromptCache: briefClock(t),
 		Attention: &briefAttention{
 			Open:    307,
 			Oldest:  &briefAttentionRow{ID: "att-old", Source: "guard/stall", OpenedMs: time.Now().Add(-9 * 24 * time.Hour).UnixMilli()},
@@ -464,9 +465,11 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 
 // briefClock is a session idle long enough that one window is behind it and the rest
 // are not, which is the only state where the two-group split says something.
-func briefClock() sessions.PromptCacheClock {
-	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	return sessions.PromptCacheAt("s1", last, last.Add(7*time.Minute))
+func briefClock(t *testing.T) sessions.PromptCacheClock {
+	t.Helper()
+	cacheDir := t.TempDir()
+	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
+	return sessions.PromptCacheForCheckout(cacheDir, time.Now().Add(7*time.Minute))
 }
 
 // Finished branches off the base are counted against the fork thresholds, and an unread

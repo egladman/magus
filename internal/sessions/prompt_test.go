@@ -42,7 +42,7 @@ func TestPromptCacheProvidersCiteASource(t *testing.T) {
 
 func TestPromptCacheResolvesEveryWindow(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	clock := PromptCacheAt("s1", last, last.Add(6*time.Minute))
+	clock := promptCacheAt("s1", last, last.Add(6*time.Minute))
 
 	require.Len(t, clock.Providers, len(PromptCacheProviders))
 	assert.Equal(t, "6m", clock.SinceText())
@@ -67,7 +67,7 @@ func TestPromptCacheResolvesEveryWindow(t *testing.T) {
 // A session nothing has observed has no age, and the clock says so by being empty
 // rather than by dating every window to the epoch.
 func TestPromptCacheWithoutActivity(t *testing.T) {
-	assert.Empty(t, PromptCacheAt("s1", time.Time{}, time.Now()).Providers)
+	assert.Empty(t, promptCacheAt("s1", time.Time{}, time.Now()).Providers)
 }
 
 func TestPromptCacheWindowDescribe(t *testing.T) {
@@ -100,7 +100,7 @@ func TestPromptCacheDescriptionsNeverSayExpired(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	for _, gap := range []time.Duration{0, time.Minute, 7 * time.Minute, 2 * time.Hour, 48 * time.Hour} {
 		now := last.Add(gap)
-		for _, p := range PromptCacheAt("s1", last, now).Providers {
+		for _, p := range promptCacheAt("s1", last, now).Providers {
 			for _, w := range p.Windows {
 				assert.NotContains(t, w.Describe(now), "expire", "%s/%s at %s", p.Provider, w.Window, gap)
 			}
@@ -129,7 +129,7 @@ func TestRenderPromptCacheShowsEveryProvider(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	now := last.Add(7 * time.Minute)
 	var out strings.Builder
-	renderPromptCache(&out, PromptCacheAt("s1", last, now), now)
+	renderPromptCache(&out, promptCacheAt("s1", last, now), now)
 	text := out.String()
 
 	assert.Contains(t, text, "last tool call here 7m ago, session s1")
