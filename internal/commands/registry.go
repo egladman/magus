@@ -390,7 +390,7 @@ a trivial change emits an empty matrix beside a risk block.
 --plan downstream of magus in a pipe waits for every magus stage before it to
 end, and prints no plan if one failed (MGS3030). CI gates its shards on drift
 that way: magus affected generate --no-default-charms | magus affected ci --plan.`,
-	Usage: "magus affected <target> [flags]",
+	Usage: "magus affected <target> [flags] [projects...]",
 	Flags: []command.Flag{
 		{Name: "impact", Kind: command.Bool, Effect: command.EffectRead, Default: false, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
 		{Name: "base", Kind: command.String, Modes: []string{"", "plan", "impact"}, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},
