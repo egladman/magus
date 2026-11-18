@@ -242,7 +242,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // Where no prompt can happen it renders as a deny, never a yes.
 // promptBlocker names those cells. systemMessage tells the person why
 // and what to type at their terminal.
-// magus-guard-template: 37
+// magus-guard-template: 38
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model defer=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model defer=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model defer=none ask=human
@@ -300,11 +300,13 @@ final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"h
 final DEFER_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "defer"}}`;
 
 // A block's reason sends the agent back to work and shows the person, so it carries the
-// first line and additionalContext the rest. An advise lets the stop through
-// and goes to additionalContext, which only the agent reads.
+// first line and additionalContext the rest. An advise lets the stop through, so it goes
+// to systemMessage, which the person reads: Claude Code delivers a stop's
+// additionalContext by continuing the turn, which counts toward its block cap and is a
+// refusal in all but name.
 // Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
 final STOP_EVENT_SLOT = "__MAGUS_STOP_EVENT__";
-final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .context}}}}{{end}}`;
+final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
 // Codex's Stop reply takes no hookSpecificOutput, so its block carries the
 // whole reason. Its only other text field, systemMessage, shows the person,
 // so an advise prints nothing there.
@@ -872,9 +874,11 @@ test "an unjudged read, handback or job exit is refused like any other call" {
     std\assert(exitSpec["permissionDecision"] == "deny", message: "{exits}");
 }
 
-test "a stop advise reaches the agent alone" {
-    std\assert(STOP_REPLY.indexOf("systemMessage") == null, message: STOP_REPLY);
-    std\assert(STOP_REPLY.indexOf("toJson .context") != null, message: STOP_REPLY);
+test "a stop advise reaches the person and never continues the turn" {
+    final advise = STOP_REPLY.split(`{{else if eq .decision "advise"}}`);
+    std\assert(advise.len() == 2, message: STOP_REPLY);
+    std\assert(advise[1].indexOf(`"systemMessage":{{toJson .context}}`) != null, message: advise[1]);
+    std\assert(advise[1].indexOf("hookSpecificOutput") == null and advise[1].indexOf("block") == null, message: advise[1]);
     std\assert(STOP_REPLY_CODEX.indexOf("systemMessage") == null and STOP_REPLY_CODEX.indexOf("advise") == null, message: STOP_REPLY_CODEX);
 }
 
@@ -969,7 +973,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 37
+// magus-guard-template: 38
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model defer=none ask=human
 
 import "io";
@@ -1227,7 +1231,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1350,7 +1354,7 @@ exits 0.
 // digest, and magus records the result as unobserved. HOST_AGENT_PATH names
 // the subagent, which tells a worker from its parent.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 import "std";
 import "io";
@@ -1563,7 +1567,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1717,7 +1721,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1865,7 +1869,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -2127,7 +2131,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 import "io";
 import "fs";
@@ -2867,7 +2871,7 @@ not a call.
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 import "io";
 import "flags";
@@ -3135,7 +3139,7 @@ exits 0, and declares no `magus-guard-coverage` line: it judges no call.
 //
 // NO magus-guard-coverage line: it carries no verdict on any input.
 //
-// magus-guard-template: 37
+// magus-guard-template: 38
 
 import "io";
 import "std";

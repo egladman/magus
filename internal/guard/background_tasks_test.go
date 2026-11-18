@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // Transcript lines shaped like Claude Code 2.1.295's, cut from a subagent log and a root
@@ -816,4 +817,32 @@ func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
 			assert.Equal(t, tc.stamped, rows[0].HolderStopped != 0)
 		})
 	}
+}
+
+// heldSubagentStopSuite pins background-left on a subagent's second stop: the host marks
+// it held, so the refusal passes as advice the way a workspace stop rule's does.
+type heldSubagentStopSuite struct{ suite.Suite }
+
+func TestHeldSubagentStop(t *testing.T) { suite.Run(t, new(heldSubagentStopSuite)) }
+
+func (s *heldSubagentStopSuite) TestPassesWithTheRefusalAsAdvice() {
+	t := s.T()
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	held := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "transcript_path": "/Users/dev/.claude/projects/p/8f2c6a1e.jsonl", "cwd": "/Users/dev/repo",
+		"permission_mode": "default", "hook_event_name": "SubagentStop", "stop_hook_active": true, "agent_id": "a05d44b006f8f68af", "agent_type": "general-purpose",
+		"agent_transcript_path": writeTranscript(t, bgSearchCall, bgSearchResult)})
+	v, ok := judgeStop(Dependencies{}, hint.Gate{}, held, "", started.Add(4*time.Hour))
+	s.Require().True(ok)
+	s.Equal(verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
+	s.Empty(v.Reason)
+	s.Contains(v.Context, "magus workspace: the host marks this as a second stop, so background-left lets it through.\nmagus workspace: this stop is refused while background tasks still run")
+	s.Contains(v.Context, "bc0m5o2bg")
+}
+
+func (s *heldSubagentStopSuite) TestAFirstStopStandsRefused() {
+	t := s.T()
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	v, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, bgSearchCall, bgSearchResult)), "", started.Add(4*time.Hour))
+	s.Require().True(ok)
+	s.Equal(verdict.Deny, v.Decision)
 }

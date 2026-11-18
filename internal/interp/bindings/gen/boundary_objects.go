@@ -5119,6 +5119,11 @@ func ObjectStopRequest(v types.StopRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("window", optWindow)
 	out.MapSet("event", vm.StringValue(v.Event))
 	out.MapSet("stopHookActive", vm.BoolValue(v.StopHookActive))
+	itemsBackground := make([]vm.Value, len(v.Background))
+	for indexBackground := range v.Background {
+		itemsBackground[indexBackground] = vm.StringValue(v.Background[indexBackground])
+	}
+	out.MapSet("background", vm.ListValue(itemsBackground))
 	out.MapSet("transcript", vm.StringValue(v.Transcript))
 	optCheckout := vm.Null
 	if v.Checkout != nil {

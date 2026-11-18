@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
@@ -40,7 +41,7 @@ func MaybeLaunchSandbox() { sandbox.MaybeLaunch() }
 // failing open with a warning, and the checkout reads as having no record.
 func (m *Magus) jobPlace() job.Location {
 	stateBase, _ := xdg.StateDir()
-	return job.Location{CacheDir: m.CacheDir(), StateBase: stateBase, Root: m.ws.Root}
+	return job.Location{CacheDir: m.CacheDir(), StateBase: stateBase, Root: m.ws.Root, Skew: contract.RefuseSkew}
 }
 
 // SandboxMode is the sandbox mode this workspace's runs are confined under.

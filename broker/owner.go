@@ -100,10 +100,55 @@ type Ended struct {
 	At     time.Time `json:"at"`
 }
 
-// WorkReport is what runs against a broker, and what it stopped lately.
+// WorkReport is what runs against a broker, the process groups it recorded, the
+// validation seats it gave out, and what it stopped lately.
 type WorkReport struct {
 	Running []Work  `json:"running,omitempty"`
+	Groups  []Group `json:"groups,omitempty"`
+	Seats   []Seat  `json:"seats,omitempty"`
 	Ended   []Ended `json:"ended,omitempty"`
+}
+
+// Group is a process group the broker recorded: one a step started under a claim, or a
+// command `magus job exec --timeout` runs. They are the only processes `magus job stop`
+// signals.
+type Group struct {
+	PGID    int       `json:"pgid"`
+	Lease   string    `json:"lease,omitempty"`
+	Command string    `json:"command,omitempty"`
+	Held    time.Time `json:"held"`
+	Alive   bool      `json:"alive"`
+}
+
+// Seat is a run seated in its job tree's validations: the job it runs for, its magus
+// process, when it took the seat, and the groups its connection recorded.
+type Seat struct {
+	Tree     string    `json:"tree"`
+	Lease    string    `json:"lease,omitempty"`
+	PID      int       `json:"pid"`
+	PIDAlive bool      `json:"pid_alive"`
+	Since    time.Time `json:"since"`
+	Groups   []Group   `json:"groups,omitempty"`
+}
+
+// Dead reports a seat nothing magus recorded for it still runs in: its magus process and
+// every group it recorded are gone, while the connection that keeps the seat is open.
+// `magus job stop` frees it. A seat with no recorded group is never dead here, since job
+// stop has nothing to answer for it.
+func (s Seat) Dead() bool {
+	if s.PIDAlive || len(s.Groups) == 0 {
+		return false
+	}
+	return !slices.ContainsFunc(s.Groups, func(g Group) bool { return g.Alive })
+}
+
+// JobStop is what `magus job stop` did to one job: the groups it signaled, the groups
+// already gone whose claims it released, and the validation seats it freed.
+type JobStop struct {
+	Lease   string  `json:"lease"`
+	Stopped []Group `json:"stopped,omitempty"`
+	Gone    []Group `json:"gone,omitempty"`
+	Seats   int     `json:"seats"`
 }
 
 // SeatWait is why a run waits: its job tree already has MaxValidations runs going.
@@ -428,7 +473,8 @@ func EndedMessage(h Hold, why string) string {
 		h.Command, h.PGID, Work{Lease: h.Lease, Spawner: h.Spawner}.Owner(), why)
 }
 
-// work is what every connection runs, and what this broker stopped lately.
+// work is what every connection runs, the groups and seats it holds, and what this
+// broker stopped lately.
 func (s *server) work() WorkReport {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -437,11 +483,21 @@ func (s *server) work() WorkReport {
 		if sess == nil {
 			continue
 		}
+		groups := make([]Group, 0, len(sess.holds))
 		for _, hw := range sess.holds {
+			groups = append(groups, hw.group())
 			// A group riding a claim is part of the run listed below.
 			if hw.hold.Claim == "" {
 				r.Running = append(r.Running, hw.work)
 			}
+		}
+		slices.SortFunc(groups, func(a, b Group) int { return cmp.Compare(a.PGID, b.PGID) })
+		r.Groups = append(r.Groups, groups...)
+		if sess.seat != "" {
+			r.Seats = append(r.Seats, Seat{
+				Tree: sess.hello.Tree, Lease: sess.hello.Lease, PID: sess.hello.PID,
+				PIDAlive: processAlive(sess.hello.PID), Since: sess.seated, Groups: groups,
+			})
 		}
 		if len(sess.claims) == 0 {
 			continue
@@ -453,8 +509,108 @@ func (s *server) work() WorkReport {
 		r.Running = append(r.Running, s.runLocked(sess, slots))
 	}
 	slices.SortFunc(r.Running, func(a, b Work) int { return a.Since.Compare(b.Since) })
+	slices.SortFunc(r.Seats, func(a, b Seat) int { return a.Since.Compare(b.Since) })
 	r.Ended = slices.Clone(s.ended)
 	return r
+}
+
+// group is hw as status reads it.
+func (hw *heldWork) group() Group {
+	return Group{PGID: hw.hold.PGID, Lease: hw.hold.Lease, Command: hw.hold.Command, Held: hw.hold.Held, Alive: groupAlive(hw.hold.PGID)}
+}
+
+// jobStopReason is why a group `magus job stop` signaled ended.
+const jobStopReason = "was stopped by `magus job stop`"
+
+// stopping is one recorded group of the job a stop names, and the connection holding it.
+type stopping struct {
+	sess *session
+	id   string
+	hw   *heldWork
+}
+
+// stopJob stops every process group recorded for lease and frees what they held: their
+// claims, and the validation seats of the connections that recorded them. It signals
+// nothing unless every group is still the one recorded, or provably gone: a reused id,
+// or a group whose leader exited while it runs on, refuses the whole stop.
+func (s *server) stopJob(ctx context.Context, lease string) (JobStop, *errorReply) {
+	var targets []stopping
+	s.mu.Lock()
+	for _, sess := range s.conns {
+		if sess == nil {
+			continue
+		}
+		for id, hw := range sess.holds {
+			if hw.hold.Lease == lease {
+				targets = append(targets, stopping{sess: sess, id: id, hw: hw})
+			}
+		}
+	}
+	s.mu.Unlock()
+	if len(targets) == 0 {
+		return JobStop{}, &errorReply{Code: CodeNoGroup, Message: fmt.Sprintf(
+			"broker: job %s holds no process group this broker recorded, and job stop signals only those", lease)}
+	}
+	slices.SortFunc(targets, func(a, b stopping) int { return cmp.Compare(a.hw.hold.PGID, b.hw.hold.PGID) })
+
+	stop := JobStop{Lease: lease}
+	var live []stopping
+	var refused []string
+	for _, t := range targets {
+		pgid := t.hw.hold.PGID
+		switch err := checkLeader(pgid, t.hw.hold.Held); {
+		case err == nil:
+			live = append(live, t)
+		case errors.Is(err, errLeaderGone) && !groupAlive(pgid):
+			stop.Gone = append(stop.Gone, t.hw.group())
+		default:
+			refused = append(refused, fmt.Sprintf("process group %d (`%s`): %v", pgid, t.hw.hold.Command, err))
+		}
+	}
+	if len(refused) > 0 {
+		return JobStop{}, &errorReply{Code: CodeGroupChanged, Message: fmt.Sprintf(
+			"broker: job %s: magus cannot tell %s is still the group it recorded, so it signaled nothing",
+			lease, strings.Join(refused, "; "))}
+	}
+	for _, t := range live {
+		s.mu.Lock()
+		already := t.hw.stopped
+		t.hw.stopped = true
+		s.mu.Unlock()
+		if !already {
+			s.stopGroup(ctx, t.hw, jobStopReason)
+		}
+		stop.Stopped = append(stop.Stopped, t.hw.group())
+	}
+
+	var claims []string
+	s.mu.Lock()
+	unseated := map[*session]bool{}
+	for _, t := range targets {
+		if t.sess.holds[t.id] != t.hw {
+			continue
+		}
+		delete(t.sess.holds, t.id)
+		switch {
+		case t.hw.claim != "":
+			t.hw.timer.Stop()
+			claims = append(claims, t.hw.claim)
+		case t.sess.claims[t.hw.hold.Claim] > 0:
+			delete(t.sess.claims, t.hw.hold.Claim)
+			claims = append(claims, t.hw.hold.Claim)
+		}
+		if t.sess.seat != "" && !unseated[t.sess] {
+			unseated[t.sess] = true
+			s.unseatLocked(t.sess)
+			stop.Seats++
+		}
+	}
+	s.mu.Unlock()
+	for _, id := range claims {
+		s.budget.Release(id)
+	}
+	s.noteRelease()
+	return stop, nil
 }
 
 // runLocked is sess as a run. Callers hold s.mu.
@@ -500,7 +656,7 @@ func (s *server) seatLocked(sess *session, c budget.Claim, force bool) *SeatWait
 		s.seats[h.Tree] = held
 	}
 	held[run]++
-	sess.seat = run
+	sess.seat, sess.seated = run, time.Now()
 	return nil
 }
 
@@ -518,7 +674,7 @@ func (s *server) unseatLocked(sess *session) {
 			delete(s.seats, tree)
 		}
 	}
-	sess.seat = ""
+	sess.seat, sess.seated = "", time.Time{}
 }
 
 // Hold hands the broker a command this process started under a deadline (see [Hold]),
@@ -620,6 +776,31 @@ func QueryWork(ctx context.Context, addr string) (WorkReport, error) {
 	}
 	defer func() { _ = c.Close() }()
 	return c.Work(ctx)
+}
+
+// StopJob asks the broker to stop the process groups it recorded for job lease and to
+// free what they held (see [JobStop]). The error is a [*Error] with CodeNoGroup when the
+// broker recorded none, and CodeGroupChanged when a group may no longer be the one it
+// recorded; it signaled nothing then.
+func (c *Client) StopJob(ctx context.Context, lease string) (JobStop, error) {
+	cn, err := c.connect(ctx)
+	if err != nil {
+		return JobStop{}, err
+	}
+	var r JobStop
+	err = cn.roundTrip(ctx, c.next(), typeJobStop, jobStopRequest{Lease: lease}, typeJobStopReply, &r, nil)
+	return r, err
+}
+
+// StopJob dials the broker at addr, runs [Client.StopJob] and hangs up. The error wraps
+// ErrUnavailable when none answers.
+func StopJob(ctx context.Context, addr, lease string) (JobStop, error) {
+	c, err := Dial(ctx, addr)
+	if err != nil {
+		return JobStop{}, err
+	}
+	defer func() { _ = c.Close() }() // the stop already answered; a failed hang-up loses nothing
+	return c.StopJob(ctx, lease)
 }
 
 // noteSeat says, once per wait, which runs hold the seat this client waits for.

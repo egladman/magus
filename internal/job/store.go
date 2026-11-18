@@ -23,12 +23,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
@@ -107,6 +109,10 @@ type storeConfig struct {
 	workspace *Workspace
 	// migrations is [jobMigrations] outside a test.
 	migrations []migrate.Migration
+	// skew is Location.Skew. unfenced says once per Store, views included, that no skew
+	// judged a write.
+	skew     func(root string) error
+	unfenced *sync.Once
 }
 
 // Location is where a Store lives: the repository whose rows these are, the state base
@@ -183,6 +189,12 @@ type Location struct {
 	// PriceContext prices a job's holder's context when the job ends. Nil leaves every
 	// outcome's tokens and cost unknown.
 	PriceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
+	// Skew refuses a write by this binary to the store of the checkout at root, before
+	// anything is written: contract.RefuseSkew, which answers MGS1021 for a binary built
+	// from another contract than root carries. It lives above this package, so each door
+	// that can reach it fills it in. Nil fences nothing, and the Store's first write says
+	// so on its notices.
+	Skew func(root string) error
 }
 
 // NewStore returns the ledger for loc's repository. The file itself is created by the
@@ -197,7 +209,7 @@ type Location struct {
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), clock: loc.Clock,
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, spawnCeiling: loc.SpawnCeiling, owners: loc.Owners, priceContext: loc.PriceContext,
-		migrations: jobMigrations()}}
+		migrations: jobMigrations(), skew: loc.Skew, unfenced: new(sync.Once)}}
 	s.path, s.err = jobsPath(loc)
 	return s.open()
 }
@@ -220,7 +232,7 @@ func (s *Store) open() *Store {
 		job.WithOrigin(func(ctx context.Context) job.Origin { return trail.StampOrigin(ctx, job.Origin{}) }),
 		job.WithDenials(s.holderDenials),
 		job.WithWriteHook(s.writeHook),
-		job.WithRetention(s.retainDue),
+		job.WithRetention(s.beforeWrite),
 		job.WithSweep(s.sweep),
 		job.WithNotices(func(n job.Notice) { fmt.Fprintf(s.noticeWriter(), "job: %s\n", n) }),
 		job.WithClock(s.now),
@@ -508,25 +520,46 @@ func (s *Store) pruneFootprints(rows []job.Job) {
 }
 
 // migrate brings the file at migration found to the last of s.migrations under the
-// module store's lock, refusing a job's checkout. A file past them is refused with MGS3051.
+// module store's lock. A file past them is refused with MGS3051, a headerless file whose
+// rows are enveloped as damaged, and a migration from a binary the base does not contain
+// as off the base; each refusal names the store's last writer. lines are the file's row
+// lines, and the header is read from the file itself.
 func (s *Store) migrate(ctx context.Context, storePath string, found int, lines []codec.Line) error {
-	if err := s.refuseCheckoutMigration(found, lines); err != nil {
-		return err
+	read, err := codec.ReadLines(storePath)
+	if err != nil {
+		return fmt.Errorf("job: %w", err)
 	}
+	header, headed := storeHeader(read.Lines)
+	last := headerWriter(header)
+	writer := runningWriter(ctx)
 	st := migrate.Store{
 		Name:       "job store",
 		Path:       storePath,
 		Header:     headerEntry,
 		Migrations: s.migrations,
+		Stamp:      func(e migrate.Entry) (migrate.Entry, error) { return stampHeader(e, writer) },
 	}
 	refuse := func(err error) error {
 		if newer, ok := errors.AsType[*migrate.NewerError](err); ok {
-			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s", newer.Error())
+			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s%s", newer.Error(), last.named())
 		}
 		return namePath(err, storePath)
 	}
 	if err := st.Check(found); err != nil {
 		return refuse(err)
+	}
+	if found < len(s.migrations) {
+		if err := s.fence(); err != nil {
+			return err
+		}
+	}
+	if !headed {
+		if err := refuseHeaderless(storePath, lines); err != nil {
+			return err
+		}
+	}
+	if err := s.refuseOffBase(ctx, storePath, found, last); err != nil {
+		return err
 	}
 	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
 		if err := s.moveTries(ctx); err != nil {
@@ -553,75 +586,246 @@ func (s *Store) migrate(ctx context.Context, storePath string, found int, lines 
 	return nil
 }
 
-// refuseCheckoutMigration refuses migrating a file at migration found from
-// a live job's own checkout. Every checkout shares the file. A row only
-// taken here does not count: the root's own checkout is one.
-func (s *Store) refuseCheckoutMigration(found int, lines []codec.Line) error {
-	if found >= len(s.migrations) {
-		return nil
+// writerMember is the header member naming the build that last wrote the job store.
+const writerMember = "writer"
+
+// storeWriter is a build that writes the job store, as the header's writer member
+// records it.
+type storeWriter struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+}
+
+func (w storeWriter) String() string {
+	return fmt.Sprintf("magus %s (commit %.12s)", cmp.Or(w.Version, buildinfo.UnknownVersion), cmp.Or(w.Commit, "unknown"))
+}
+
+// named is the clause a refusal appends to name w, the store's last writer: a header
+// with no writer member was last written by a magus that stamped none.
+func (w storeWriter) named() string {
+	if w == (storeWriter{}) {
+		return " (its header names no writer, so a magus from before writers were stamped wrote it last)"
 	}
-	checkout := s.root
-	if checkout == "" {
-		// jobsPath keyed a store with no root on the working directory.
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("job: job store %s is behind this magus, and with no root and no working directory nothing says this is not a job's checkout, so it was not migrated: %w", s.path, err)
-		}
-		checkout = wd
+	return fmt.Sprintf(" (%s wrote it last)", w)
+}
+
+// runningBuild is this binary's build identity: what the command stamped on ctx, its
+// commit read off the binary when ctx carries none.
+func runningBuild(ctx context.Context) types.MagusBuild {
+	b := types.MagusBuildFromContext(ctx)
+	if b.Commit == "" {
+		b.Commit, b.Date = buildinfo.Commit()
 	}
-	rows, err := s.unmigratedRows(found, lines)
+	b.Version = cmp.Or(b.Version, buildinfo.UnknownVersion)
+	return b
+}
+
+// runningWriter is this binary as the header records its writer.
+func runningWriter(ctx context.Context) storeWriter {
+	b := runningBuild(ctx)
+	return storeWriter{Version: b.Version, Commit: b.Commit}
+}
+
+// stampHeader is the header entry e naming w as its writer.
+func stampHeader(e migrate.Entry, w storeWriter) (migrate.Entry, error) {
+	raw, err := codec.Marshal(w)
 	if err != nil {
+		return nil, fmt.Errorf("job: stamping the writer: %w", err)
+	}
+	e[writerMember] = raw
+	return e, nil
+}
+
+// storeHeader is the header among lines, and whether there is one.
+func storeHeader(lines []codec.Line) (migrate.Entry, bool) {
+	for _, line := range lines {
+		if e, err := decodeEntry(line.Text); err == nil && headerEntry(e) {
+			return e, true
+		}
+	}
+	return nil, false
+}
+
+// headerWriter is the writer header names, zero when it names none or its writer member
+// does not decode.
+func headerWriter(header migrate.Entry) storeWriter {
+	var w storeWriter
+	if raw, ok := header[writerMember]; ok && codec.Unmarshal(raw, &w) == nil {
+		return w
+	}
+	return storeWriter{}
+}
+
+// beforeWrite runs inside every rewrite of the job store before it writes: it refuses a
+// binary stale against the checkout, stamps this binary as the store's writer, then runs
+// the retention pass.
+func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) error {
+	if err := s.fence(); err != nil {
 		return err
 	}
-	for _, row := range rows {
-		if !row.State.Live() || !row.Worktree.Standing() || !within(checkout, row.Worktree.Root) {
-			continue
+	raw, err := codec.Marshal(runningWriter(ctx))
+	if err != nil {
+		return fmt.Errorf("job: stamping the writer: %w", err)
+	}
+	f.Unknown = maps.Clone(f.Unknown)
+	if f.Unknown == nil {
+		f.Unknown = map[string]codec.RawMessage{}
+	}
+	f.Unknown[writerMember] = raw
+	return s.retainDue(ctx, f, now)
+}
+
+// fence refuses a write from a binary that Location.Skew judges stale against s's
+// checkout. With no Skew it lets the write through and says so once.
+func (s *Store) fence() error {
+	if s.skew == nil {
+		say := func() {
+			fmt.Fprintf(s.noticeWriter(), "job: this magus fills no contract check into its job store, so nothing judged it against the contract %s carries before it wrote %s\n", cmp.Or(s.root, "the working directory"), s.path)
 		}
-		return fmt.Errorf("job: job store %s is at migration %d, and this magus writes migration %d from %s, the checkout of live job %s:"+
-			" a job's checkout never migrates the store every checkout shares, so nothing was read or written,"+
-			" and the root integrates this change and migrates the store once, from its own checkout",
-			s.path, found, len(s.migrations), row.Worktree.Root, row.ID)
+		if s.unfenced == nil {
+			say()
+		} else {
+			s.unfenced.Do(say)
+		}
+		return nil
+	}
+	if err := s.skew(s.root); err != nil {
+		return &staleWriterError{Path: s.path, Root: s.root, Err: err}
 	}
 	return nil
 }
 
-// unmigratedRows reads the rows of a file at migration found as far as a
-// refusal needs them. Before [recordsEnveloped] a row's line was a
-// job.Job.
-func (s *Store) unmigratedRows(found int, lines []codec.Line) ([]job.Job, error) {
-	flat := found <= slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped })
-	var rows []job.Job
-	at := map[string]int{}
+// staleWriterError refuses a job store write from a binary built from another contract
+// than its checkout carries (MGS1021, which Err carries). Every checkout of the
+// repository shares the store, so a stale binary would write rows the current one reads
+// differently. Nothing was written.
+type staleWriterError struct {
+	Path, Root string
+	Err        error
+}
+
+func (e *staleWriterError) Error() string {
+	return fmt.Sprintf("job: job store %s was not written, because this magus is stale against %s: %v", e.Path, cmp.Or(e.Root, "the working directory"), e.Err)
+}
+
+func (e *staleWriterError) Unwrap() error { return e.Err }
+
+// headerlessStoreError is a job store with no header line whose rows are enveloped. Only
+// a store past [recordsEnveloped] holds such rows, and that store's header says so, so
+// the header was lost: replaying every migration from 0 would guess at what the rows
+// are. Nothing was read or written.
+type headerlessStoreError struct {
+	Path string
+	// Line is the first enveloped row's line.
+	Line int
+}
+
+func (e *headerlessStoreError) Error() string {
+	return fmt.Sprintf("job: job store %s has no header line, and line %d is an enveloped row, which only a store past migration %d holds:"+
+		" its header was lost, and replaying every migration from 0 over these rows would guess at what wrote them, so nothing was read or written:"+
+		" move it aside with `mv %s %s.damaged` and fork the jobs again",
+		e.Path, e.Line, envelopedAt(), shellQuote(e.Path), shellQuote(e.Path))
+}
+
+// envelopedAt is the migration a store's rows are enveloped from.
+func envelopedAt() int {
+	return slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == recordsEnveloped }) + 1
+}
+
+// refuseHeaderless refuses a file at path with no header whose row lines hold an
+// enveloped row; see [headerlessStoreError].
+func refuseHeaderless(path string, lines []codec.Line) error {
 	for _, line := range lines {
-		var row job.Job
-		if flat {
-			if err := codec.Unmarshal(line.Text, &row); err != nil {
-				return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-			}
-		} else {
-			// A record from before [groupsMoved] carries the batch.magus group, which
-			// ReadRecord refuses, so it is read as the migration will write it.
-			text, err := regroupedText(line.Text)
-			if err == nil {
-				row, _, err = job.ReadRecord(text, credentialKinds()...)
-			}
-			if refused, ok := errors.AsType[*apiversion.RefusedError](err); ok && refused.Got.APIVersion != refused.Want.APIVersion {
-				return nil, refuseRecordVersion(err, s.path, line.N, refused.Want.APIVersion, refused.Got.APIVersion)
-			}
-			if err != nil {
-				return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-			}
+		e, err := decodeEntry(line.Text)
+		if err != nil {
+			continue
 		}
-		switch i, seen := at[row.ID]; {
-		case row.ID == "":
-		case seen:
-			rows[i] = row
-		default:
-			at[row.ID] = len(rows)
-			rows = append(rows, row)
+		if _, ok := e["apiVersion"]; ok {
+			return &headerlessStoreError{Path: path, Line: line.N}
 		}
 	}
-	return rows, nil
+	return nil
+}
+
+// offBaseMigrationError refuses a forward migration of the job store from a binary not
+// built on a commit the workspace's base contains. Every checkout and branch of the
+// repository shares the store, so once a branch binary migrated it every binary built on
+// the base would refuse it as newer. Nothing was read or written.
+type offBaseMigrationError struct {
+	Path         string
+	Found, Known int
+	Build        types.MagusBuild
+	// Base is the base this build was judged against, "" when none resolved.
+	Base string
+	// Why says how the build fails to be on Base.
+	Why string
+	// Last is the store's last writer.
+	Last storeWriter
+}
+
+func (e *offBaseMigrationError) Error() string {
+	base := cmp.Or(e.Base, "the base")
+	return fmt.Sprintf("job: job store %s is at migration %d, and this magus (%s) writes migration %d, but %s:"+
+		" every checkout and branch shares the store, and once migrated every magus built on %s refuses it as newer, so nothing was read or written%s:"+
+		" rebuild magus from %s, or run this binary under its own XDG_STATE_HOME",
+		e.Path, e.Found, storeWriter{Version: e.Build.Version, Commit: e.Build.Commit}, e.Known, e.Why, base, e.Last.named(), base)
+}
+
+// refuseOffBase refuses migrating the file at path forward from migration found unless
+// this binary was built on a commit the base of s's repository contains. A root no
+// version control claims has no base: it migrates, and a notice says nothing judged it.
+func (s *Store) refuseOffBase(ctx context.Context, path string, found int, last storeWriter) error {
+	if found >= len(s.migrations) {
+		return nil
+	}
+	build := runningBuild(ctx)
+	refused := func(base, why string, args ...any) error {
+		return &offBaseMigrationError{Path: path, Found: found, Known: len(s.migrations), Build: build, Base: base, Why: fmt.Sprintf(why, args...), Last: last}
+	}
+	root := s.root
+	if root == "" {
+		// jobsPath keyed a store with no root on the working directory.
+		wd, err := os.Getwd()
+		if err != nil {
+			return refused("", "with no root and no working directory nothing names a base to judge it against (%v)", err)
+		}
+		root = wd
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil {
+		return refused("", "the version control of %s does not resolve (%v)", root, err)
+	}
+	if res.VCS == nil || (res.Source == types.VCSSourceDefault && !underVersionControl(ctx, res.VCS, root)) {
+		fmt.Fprintf(s.noticeWriter(), "job: no version control holds %s, so no base judged this magus before it migrated job store %s\n", root, path)
+		return nil
+	}
+	switch {
+	case res.Base == "":
+		return refused("", "%s names no base branch", res.Name)
+	case build.Commit == "" || build.Commit == buildinfo.UnknownVersion:
+		return refused(res.Base, "this binary carries no build commit, so nothing says %s contains it", res.Base)
+	case strings.HasSuffix(build.Version, "-dirty") || buildinfo.Modified():
+		return refused(res.Base, "this binary was built from a modified tree, and no commit holds what it was built from")
+	}
+	base, err := res.VCS.FindCommit(ctx, root, res.Base)
+	if err != nil {
+		return refused(res.Base, "%s does not resolve in %s (%v)", res.Base, root, err)
+	}
+	contained, err := res.VCS.IsAncestor(ctx, root, build.Commit, base.ID)
+	switch {
+	case err != nil:
+		return refused(res.Base, "%s cannot say whether %s at %s contains commit %.12s (%v)", res.Name, res.Base, shortRevision(base), build.Commit, err)
+	case !contained:
+		return refused(res.Base, "%s at %s does not contain commit %.12s, which built it", res.Base, shortRevision(base), build.Commit)
+	}
+	return nil
+}
+
+// underVersionControl reports whether driver finds a commit at root, for a root no
+// version control claimed, which driver only defaults to.
+func underVersionControl(ctx context.Context, driver types.VCSDriver, root string) bool {
+	_, err := driver.FindCommit(ctx, root, "")
+	return err == nil
 }
 
 // declarationDigest digests the lines one declaration of the file at p spans in body, as

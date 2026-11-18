@@ -2796,7 +2796,7 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 		}
 	}
 	if parsed && processSignalFires(work) {
-		if v, ok := held.ends(deps, processSignalVerdict); ok {
+		if v, ok := held.ends(deps, processSignalDenial(ctx, work)); ok {
 			return v
 		}
 	}

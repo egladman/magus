@@ -224,7 +224,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
-		if note := startNamedAttempt(ctx, at, facts, env, titled, time.Now()); note != "" {
+		if note := startNamedAttempt(ctx, at, facts, env, who.Agent, titled, time.Now()); note != "" {
 			judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
 			if judged.Decision == verdict.Defer {
 				judged.Decision = verdict.Advise
@@ -235,9 +235,10 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 }
 
 // startNamedAttempt records a try of the row a spawn's title or a
-// continuation's worker names starting at now. It returns what kept it
-// from being recorded, "" when it was or no row is named.
-func startNamedAttempt(ctx context.Context, at location, facts hint.Gate, env hookRequest, titled spawnTitle, now time.Time) string {
+// continuation's worker names starting at now, and files a spawn the host
+// runs in the background under spawner, the calling agent's id. It returns
+// what kept the try from being recorded, "" when it was or no row is named.
+func startNamedAttempt(ctx context.Context, at location, facts hint.Gate, env hookRequest, spawner string, titled spawnTitle, now time.Time) string {
 	if isDryRun(ctx) {
 		return ""
 	}
@@ -248,10 +249,58 @@ func startNamedAttempt(ctx context.Context, at location, facts hint.Gate, env ho
 	if !ok {
 		return ""
 	}
-	if _, err := job.NewStore(at.jobs()).StartAttempt(ctx, row.ID, now); err != nil {
+	try, err := job.NewStore(at.jobs()).StartAttempt(ctx, row.ID, now)
+	if err != nil {
 		return fmt.Sprintf("magus workspace: this worker's try of job %s was not recorded, so the stop rule cannot count it: %s", row.ID, err)
 	}
+	if env.IsSpawn && env.Spawn.Background {
+		recordBackgroundSpawn(facts, backgroundSpawn{Job: try.Job, N: try.N, Spawner: spawner})
+	}
 	return ""
+}
+
+// backgroundSpawnPrefix opens the marker kind a background spawn's try is filed under.
+const backgroundSpawnPrefix = "spawn-background-"
+
+// backgroundSpawn is one try a spawn started with the host's background mode. The host
+// tracks the child and wakes Spawner, "" for the session's main agent, when it ends.
+type backgroundSpawn struct {
+	Job     string `json:"job"`
+	N       int    `json:"n"`
+	Spawner string `json:"spawner,omitempty"`
+}
+
+func recordBackgroundSpawn(facts hint.Gate, b backgroundSpawn) {
+	body, err := codec.Marshal(b)
+	if err != nil {
+		return
+	}
+	writeAgentMarker(facts, hint.MarkerKind(fmt.Sprintf("%s%s-%d", backgroundSpawnPrefix, b.Job, b.N)), body)
+}
+
+// runningBackgroundSpawns lists, sorted, the jobs whose live try agent spawned in the
+// background and whose end nobody has observed. A store it cannot read lists none.
+func runningBackgroundSpawns(ctx context.Context, at location, facts hint.Gate, agent string) []string {
+	kinds := facts.Kinds(backgroundSpawnPrefix)
+	if len(kinds) == 0 {
+		return nil
+	}
+	tries, err := leaseAttempts(ctx, at)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, kind := range kinds {
+		b, ok := readMarker[backgroundSpawn](facts, kind)
+		if !ok || b.Spawner != agent {
+			continue
+		}
+		if live := tries.Live(b.Job); live.N == b.N && live.Running() && !slices.Contains(out, b.Job) {
+			out = append(out, b.Job)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // handbackTool is the tool a host's subagent files its report

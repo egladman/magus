@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/store/migrate"
@@ -39,8 +39,11 @@ import (
 // fixtures the same way CI does. The rules that turn on a bound actor pass their own.
 func tempLocation(t *testing.T, root string) Location {
 	t.Helper()
-	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: allowEveryCheck}
+	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: allowEveryCheck, Skew: sameContract}
 }
+
+// sameContract is a Location.Skew that judges every binary built from root's contract.
+func sameContract(string) error { return nil }
 
 // allowEveryCheck is a grader whose guard lets every check run.
 func allowEveryCheck(context.Context, string, job.Job) CheckVerdict { return CheckVerdict{} }
@@ -784,11 +787,12 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
+	commit, _ := buildinfo.Commit()
 
 	assert.Equal(t, []map[string]any{{
 		"apiVersion": string(job.APIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
-		"plan": "p1", "retained": float64(1_700_000_000),
-	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention stamp rides in it")
+		"plan": "p1", "retained": float64(1_700_000_000), "writer": map[string]any{"version": buildinfo.UnknownVersion, "commit": commit},
+	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention and writer stamps ride in it")
 }
 
 // An update appends the row's next line and leaves every other line as it was; the last
@@ -1485,7 +1489,8 @@ func unmigrated(name string) string {
 
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 	st, path, notices := s.migratingStore(unmigrated("goal"), renamed("goal", "parent"))
-	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
+	notice := fmt.Sprintf("job: no version control holds %s, so no base judged this magus before it migrated job store %s\n", st.root, path) +
+		fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
 	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
@@ -1550,7 +1555,7 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 	s.Equal(body+"\n", string(raw), "the first migration's work never reached the file")
-	s.Empty(notices.String())
+	s.NotContains(notices.String(), "job: migrated job store")
 }
 
 func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
@@ -1563,84 +1568,21 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
 }
 
-// checkoutStore is a store at root, behind its one migration, holding row a in
-// state with the members extra adds.
-func checkoutStore(t *testing.T, root, state string, extra map[string]any) (*Store, string, *bytes.Buffer) {
+// behindStore is a store at root, behind its one migration, holding row a running.
+func behindStore(t *testing.T, root string) (*Store, string, *bytes.Buffer) {
 	t.Helper()
 	st := tempStore(t, root)
-	line, err := job.MarshalRecord(job.Job{ID: "a", State: job.State(state), Created: 1, Updated: 1}, nil)
+	line, err := job.MarshalRecord(job.Job{ID: "a", State: job.StateRunning, Created: 1, Updated: 1}, nil)
 	require.NoError(t, err)
 	var row map[string]any
 	require.NoError(t, codec.Unmarshal(line, &row))
 	row["spec"].(map[string]any)["goal"] = "ship it"
-	maps.Copy(row["status"].(map[string]any), extra)
 	line, err = codec.Marshal(row)
 	require.NoError(t, err)
 	notices := &bytes.Buffer{}
 	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent")})
 	st.notices = notices
 	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion, line)), notices
-}
-
-// forkCheckout is the worktree member of a row whose fork made root.
-func forkCheckout(root string) map[string]any {
-	return map[string]any{"worktree": map[string]any{"root": root, "source": "/src", "base": "abc123", "created": 1, "made": true}}
-}
-
-func (s *jobSuite) TestAJobCheckoutNeverMigratesTheSharedStore() {
-	root := s.T().TempDir()
-	st, path, notices := checkoutStore(s.T(), root, "running", forkCheckout(root))
-	raw, err := os.ReadFile(path)
-	s.Require().NoError(err)
-
-	_, err = st.Read(s.T().Context())
-	s.Require().ErrorContains(err, fmt.Sprintf("job store %s is at migration 0, and this magus writes migration 1 from %s, the checkout of live job a", path, root))
-	s.ErrorContains(err, "the root integrates this change and migrates the store once, from its own checkout")
-	_, err = st.Update(s.T().Context(), "b", func(cur *job.Job) { *cur = lease("b") })
-	s.Require().ErrorContains(err, "a job's checkout never migrates the store", "a write refuses it too")
-	after, err := os.ReadFile(path)
-	s.Require().NoError(err)
-	s.Equal(string(raw), string(after), "nothing was written")
-	s.Empty(notices.String())
-}
-
-func (s *jobSuite) TestADirectoryInsideAJobCheckoutNeverMigratesTheSharedStore() {
-	root := s.T().TempDir()
-	nested := filepath.Join(root, "sub")
-	s.Require().NoError(os.Mkdir(nested, 0o755))
-	st, _, _ := checkoutStore(s.T(), nested, "declared", forkCheckout(root))
-
-	_, err := st.Read(s.T().Context())
-	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
-}
-
-func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
-	root := s.T().TempDir()
-	st, path, _ := checkoutStore(s.T(), root, "pass", forkCheckout(root))
-
-	f, err := st.Read(s.T().Context())
-	s.Require().NoError(err)
-	s.Equal("ship it", f.Jobs[0].Parent)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
-}
-
-func (s *jobSuite) TestTheRootMigratesWhileAJobHoldsAnotherCheckout() {
-	st, path, _ := checkoutStore(s.T(), s.T().TempDir(), "running", forkCheckout(s.T().TempDir()))
-
-	_, err := st.Read(s.T().Context())
-	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
-}
-
-// A job taken in the root's checkout without a fork's checkout leaves that
-// checkout the root's, which migrates as before.
-func (s *jobSuite) TestACheckoutAJobWasOnlyTakenInMigrates() {
-	root := s.T().TempDir()
-	st, path, _ := checkoutStore(s.T(), root, "running", map[string]any{"checkoutRoot": root})
-
-	_, err := st.Read(s.T().Context())
-	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
 
 // agentSectionSuite pins the migration that moves a row's flat model,
@@ -1894,4 +1836,51 @@ func (s *checkArgvSuite) TestAStoreWithNoCheckoutHasNoCommand() {
 	_, _, err := (&Store{}).checkCommand(job.Job{}, job.Goal{})
 
 	s.ErrorContains(err, "no checkout")
+}
+
+// fenceSuite pins the job store's write fence: Location.Skew refuses a stale binary's
+// write before anything is written, and a Store with no Skew writes and says so once.
+type fenceSuite struct {
+	suite.Suite
+	loc Location
+}
+
+func TestFence(t *testing.T) { suite.Run(t, new(fenceSuite)) }
+
+func (s *fenceSuite) SetupTest() { s.loc = tempLocation(s.T(), s.T().TempDir()) }
+
+func (s *fenceSuite) TestStaleBinaryWritesNothing() {
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "built from another contract")
+	var judged []string
+	s.loc.Skew = func(root string) error {
+		judged = append(judged, root)
+		return stale
+	}
+	st := NewStore(s.loc)
+	err := st.Rewrite(s.T().Context(), func(f *job.Rows) error {
+		f.Jobs = append(f.Jobs, lease("fenced"))
+		return nil
+	})
+	refused, ok := errors.AsType[*staleWriterError](err)
+	s.Require().True(ok, "got %v", err)
+	s.Equal(s.loc.Root, refused.Root)
+	diag, ok := errors.AsType[*types.DiagnosticError](err)
+	s.Require().True(ok)
+	s.Equal(types.WorkspaceNeedsNewerMagus, diag.Code)
+	s.Equal([]string{s.loc.Root}, judged)
+	path, err := st.Path()
+	s.Require().NoError(err)
+	s.NoFileExists(path)
+}
+
+func (s *fenceSuite) TestNoSkewSaysSoOnce() {
+	s.loc.Skew = nil
+	st := NewStore(s.loc)
+	var notices strings.Builder
+	st.notices = &notices
+	plant(s.T(), st, lease("first"))
+	plant(s.T(), st.As(job.Actor{}), lease("second"))
+	path, err := st.Path()
+	s.Require().NoError(err)
+	s.Equal(fmt.Sprintf("job: this magus fills no contract check into its job store, so nothing judged it against the contract %s carries before it wrote %s\n", s.loc.Root, path), notices.String())
 }

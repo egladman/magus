@@ -241,8 +241,10 @@ type session struct {
 	services map[string]int
 	// holds is the commands this connection runs under a deadline, by id.
 	holds map[string]*heldWork
-	// seat is the run this connection holds a validation seat for in hello.Tree, "" for none.
-	seat string
+	// seat is the run this connection holds a validation seat for in hello.Tree, "" for
+	// none, and seated when it took it.
+	seat   string
+	seated time.Time
 	// gateAsked is when a gate connection asked for its first claim, and gateRun the run
 	// those claims belong to; see [server.markGateLocked].
 	gateAsked time.Time
@@ -623,6 +625,19 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 
 	case typeWork:
 		_ = w.write(typeWorkReply, f.ID, s.work())
+
+	case typeJobStop:
+		var req jobStopRequest
+		if err := decodeBody(f, &req); err != nil || req.Lease == "" {
+			fail(CodeMalformed, "broker: a job stop needs a job id")
+			return
+		}
+		stop, refusal := s.stopJob(ctx, req.Lease)
+		if refusal != nil {
+			_ = w.write(typeError, f.ID, *refusal) // a client that hung up wants no reply
+			return
+		}
+		_ = w.write(typeJobStopReply, f.ID, stop) // a client that hung up wants no reply
 
 	case typeServiceAcquire:
 		var req serviceAcquireRequest

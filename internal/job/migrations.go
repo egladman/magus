@@ -53,18 +53,6 @@ func jobMigrations() []migrate.Migration {
 	}
 }
 
-// regroupedText is a stored line as [regroup] rewrites it.
-func regroupedText(text []byte) ([]byte, error) {
-	e, err := decodeEntry(text)
-	if err != nil {
-		return nil, err
-	}
-	if e, err = regroup(e); err != nil {
-		return nil, err
-	}
-	return codec.Marshal(e)
-}
-
 // groupsMoved names the migration [Store.migrate] rewrites attempts.jsonl before, with
 // [Store.regroupAttempts].
 const groupsMoved = "rows, the header and attempts move from batch.magus to the safetyscissors groups"

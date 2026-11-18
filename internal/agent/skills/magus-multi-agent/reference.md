@@ -59,6 +59,10 @@ The same checkpoint is what a later incremental re-review diffs from (see the
 every problem at once, each with its code and the edit that clears it, and exits 1 while any
 remains. Fix every listed problem, then fork the same record.
 
+A problem whose edit is one goal or deviation also carries it as `problems[].goal` or
+`problems[].deviation` in `-o json`; magus never applies them. Under `ci.remote_gate`, one glob
+deviation per target (`test *`) settles it; a goal the guard denies ({{mgslink "MGS3040"}}) takes it too.
+
 A glob write path past `jobs.max_claim_files` (default 50 files) or `jobs.max_claim_projects`
 (default 1 project) is refused as {{mgslink "MGS3043"}}. Name the files the job edits. A sweep
 that really needs the whole glob permits it in the record:

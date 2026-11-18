@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 )
 
@@ -59,6 +60,9 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, judged verdict.J
 		decided = decidedByBuiltin
 	}
 	judged, _ = applyWorkspaceAnswer(judged, decided, asked, workspaceStopRule)
+	if judged.Decision == verdict.Deny {
+		judged = passWaitingStop(judged, req)
+	}
 	if note := stopFailureNote(asked); note != "" && judged.Decision != verdict.Deny {
 		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
 		if judged.Decision == verdict.Defer {
@@ -66,6 +70,38 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, judged verdict.J
 		}
 	}
 	return judged
+}
+
+// passWaitingStop lets a refused stop through, the refusal kept as advice, when the
+// refusal can only hold the session open for nothing: the host reports a hook already
+// refused this stop, and overrides a stop refused too many times in a row; or the stopping
+// root waits on a background spawn the host wakes it for. A subagent's stop over its own
+// background spawn stands refused, since nothing says its host wakes it.
+func passWaitingStop(denied verdict.Judgment, req types.StopRequest) verdict.Judgment {
+	var why string
+	switch {
+	case req.StopHookActive:
+		why = heldStop
+	case req.Agent == "" && len(req.Background) > 0:
+		why = fmt.Sprintf("the host wakes this session when the %s it spawned in the background %s (%s)",
+			plural.Word(len(req.Background), "job", "jobs"), plural.Word(len(req.Background), "ends", "end"), strings.Join(req.Background, ", "))
+	default:
+		return denied
+	}
+	return passStop(denied, why, workspaceStopRule)
+}
+
+// heldStop is the reason a stop the host marks as following a refused one passes.
+const heldStop = "the host marks this as a second stop"
+
+// passStop is denied let through as advice, why saying what lets it through and rule
+// naming the refusing rule when denied names none.
+func passStop(denied verdict.Judgment, why, rule string) verdict.Judgment {
+	denied.Decision = verdict.Advise
+	passed := fmt.Sprintf("magus workspace: %s, so %s lets it through.\n%s", why, cmp.Or(denied.Rule, rule), denied.Reason)
+	denied.Context = strings.Join(slices.DeleteFunc([]string{denied.Context, passed}, func(s string) bool { return s == "" }), "\n\n")
+	denied.Reason = ""
+	return denied
 }
 
 // stopRequest is the request the stop rule is handed for env.
@@ -90,6 +126,7 @@ func stopRequest(ctx context.Context, deps Dependencies, env stopEnvelope, who h
 		Window:         window,
 		Event:          who.Event,
 		StopHookActive: env.StopHookActive != nil && *env.StopHookActive,
+		Background:     runningBackgroundSpawns(ctx, at, facts, who.Agent),
 		Transcript:     transcript,
 		Dir:            at.dir,
 		Workspace:      at.workspace,

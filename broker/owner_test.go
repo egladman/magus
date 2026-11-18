@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -476,4 +477,142 @@ func TestARunUnderAHeldCommandGetsNoSeatOnAFullBudget(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, v.Granted, "it would hold 1400 MB of a 1000 MB budget")
 	assert.True(t, v.Fits)
+}
+
+// JobStopSuite pins `magus job stop`: it signals only the groups the broker recorded for
+// the job, frees their claims and seats, and refuses what it cannot prove it recorded.
+type JobStopSuite struct {
+	suite.Suite
+	addr string
+}
+
+func TestJobStopSuite(t *testing.T) { suite.Run(t, new(JobStopSuite)) }
+
+func (s *JobStopSuite) SetupTest() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("process groups are a unix thing")
+	}
+	s.addr = testAddr(s.T())
+	serve(s.T(), s.addr, WithCapacity(1000, 4))
+}
+
+// seated is a client of job lease in a tree that seats one run, holding a claim and a
+// step group riding it.
+func (s *JobStopSuite) seated(lease, tree string) (int, <-chan struct{}) {
+	t := s.T()
+	c := leasedClient(t, s.addr, lease, tree, 1)
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1, Invocation: "1:" + lease})
+	s.Require().NoError(err)
+	s.Require().True(v.Granted)
+	pgid, done := stepGroup(t)
+	_, err = c.HoldGroup(t.Context(), v.ID, pgid, "sleep 30")
+	s.Require().NoError(err)
+	return pgid, done
+}
+
+func (s *JobStopSuite) TestWorkNamesEachSeatsHolderAndItsGroups() {
+	pgid, _ := s.seated("plan/a", "plan")
+	r, err := QueryWork(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Require().Len(r.Seats, 1)
+	seat := r.Seats[0]
+	s.False(seat.Since.IsZero())
+	s.Require().Len(seat.Groups, 1)
+	s.False(seat.Groups[0].Held.IsZero())
+	seat.Since, seat.Groups[0].Held = time.Time{}, time.Time{}
+	s.Equal(Seat{
+		Tree: "plan", Lease: "plan/a", PID: os.Getpid(), PIDAlive: true,
+		Groups: []Group{{PGID: pgid, Lease: "plan/a", Command: "sleep 30", Alive: true}},
+	}, seat)
+	s.False(seat.Dead())
+	s.Require().Len(r.Groups, 1)
+	s.Equal(pgid, r.Groups[0].PGID)
+}
+
+func (s *JobStopSuite) TestStopsTheJobsGroupAndFreesItsSeatAndClaim() {
+	pgid, done := s.seated("plan/a", "plan")
+	otherPGID, otherDone := s.seated("other", "other")
+	waiting := leasedClient(s.T(), s.addr, "plan/b", "plan", 1)
+	v, err := waiting.Request(s.T().Context(), budget.Claim{Target: "go-test", Invocation: "2:b"})
+	s.Require().NoError(err)
+	s.Require().False(v.Granted, "the tree's one seat is held")
+
+	stop, err := StopJob(s.T().Context(), s.addr, "plan/a")
+	s.Require().NoError(err)
+	s.Require().Len(stop.Stopped, 1)
+	stop.Stopped[0].Held, stop.Stopped[0].Alive = time.Time{}, false
+	s.Equal(JobStop{Lease: "plan/a", Stopped: []Group{{PGID: pgid, Lease: "plan/a", Command: "sleep 30"}}, Seats: 1}, stop)
+	s.True(exitsWithin(done, 5*time.Second), "the recorded group ends")
+	s.False(exitsWithin(otherDone, 200*time.Millisecond), "another job's group is never signaled")
+	s.True(groupAlive(otherPGID))
+
+	v, err = waiting.Request(s.T().Context(), budget.Claim{Target: "go-test", Invocation: "2:b"})
+	s.Require().NoError(err)
+	s.True(v.Granted, "the freed seat passes on")
+	r, err := QueryWork(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Require().Len(r.Ended, 1)
+	s.Equal(jobStopReason, r.Ended[0].Reason)
+	for _, g := range r.Groups {
+		s.NotEqual(pgid, g.PGID, "the stopped group is no longer recorded")
+	}
+}
+
+func (s *JobStopSuite) TestFreesTheSeatOfAGroupAlreadyGone() {
+	pgid, done := s.seated("plan/a", "plan")
+	s.Require().NoError(SignalGroup(pgid, true))
+	s.Require().True(exitsWithin(done, 5*time.Second))
+
+	stop, err := StopJob(s.T().Context(), s.addr, "plan/a")
+	s.Require().NoError(err)
+	s.Require().Len(stop.Gone, 1)
+	stop.Gone[0].Held = time.Time{}
+	s.Equal(JobStop{Lease: "plan/a", Gone: []Group{{PGID: pgid, Lease: "plan/a", Command: "sleep 30"}}, Seats: 1}, stop)
+	r, err := QueryWork(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Empty(r.Seats)
+	s.Empty(r.Ended, "a gone group is released, never signaled")
+}
+
+func (s *JobStopSuite) TestRefusesAJobWithNoRecordedGroup() {
+	c := leasedClient(s.T(), s.addr, "plan/a", "plan", 1)
+	_, err := c.Request(s.T().Context(), budget.Claim{Target: "go-test", Invocation: "1:a"})
+	s.Require().NoError(err)
+
+	_, err = StopJob(s.T().Context(), s.addr, "plan/a")
+	var refusal *Error
+	s.Require().ErrorAs(err, &refusal)
+	s.Equal(CodeNoGroup, refusal.Code)
+	s.Contains(refusal.Message, "job plan/a holds no process group")
+	r, err := QueryWork(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Len(r.Seats, 1, "a refused stop frees nothing")
+}
+
+func (s *JobStopSuite) TestRefusesAGroupThatTookTheRecordedId() {
+	c := leasedClient(s.T(), s.addr, "plan/a", "plan", 1)
+	v, err := c.Request(s.T().Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1, Invocation: "1:a"})
+	s.Require().NoError(err)
+	pgid, done := stepGroup(s.T())
+	_, err = c.Hold(s.T().Context(), Hold{Claim: v.ID, PGID: pgid, Command: "sleep 30", Held: time.Now().Add(-time.Hour)})
+	s.Require().NoError(err)
+
+	_, err = StopJob(s.T().Context(), s.addr, "plan/a")
+	var refusal *Error
+	s.Require().ErrorAs(err, &refusal)
+	s.Equal(CodeGroupChanged, refusal.Code)
+	s.Contains(refusal.Message, "another group took its id")
+	s.Contains(refusal.Message, "signaled nothing")
+	s.False(exitsWithin(done, 300*time.Millisecond), "the group that took the id runs on")
+	r, err := QueryWork(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Len(r.Seats, 1)
+}
+
+func (s *JobStopSuite) TestASeatIsDeadOnlyOnceEverythingItRecordedIsGone() {
+	gone := []Group{{PGID: 7}}
+	s.True(Seat{Groups: gone}.Dead())
+	s.False(Seat{Groups: gone, PIDAlive: true}.Dead(), "its magus still runs")
+	s.False(Seat{Groups: []Group{{PGID: 7}, {PGID: 8, Alive: true}}}.Dead())
+	s.False(Seat{}.Dead(), "a seat with no recorded group is nothing job stop answers for")
 }

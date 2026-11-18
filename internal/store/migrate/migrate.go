@@ -39,6 +39,10 @@ type Store struct {
 	Header func(Entry) bool
 	// Migrations are the store's migrations in order: the i-th takes version i to i+1.
 	Migrations []Migration
+	// Stamp rewrites the header of a rewrite once the migrations have run, as a writer
+	// records itself there; nil leaves the header as the migrations made it. The version
+	// member is set after it.
+	Stamp func(Entry) (Entry, error)
 }
 
 // Version is the version this build writes: one per migration it knows.
@@ -122,6 +126,14 @@ func (s Store) Apply() (result, error) {
 		}
 		if err := s.up(v, entries); err != nil {
 			return res, err
+		}
+	}
+	if s.Stamp != nil {
+		if header, err = s.Stamp(header); err == nil && header == nil {
+			err = errors.New("returned no header")
+		}
+		if err != nil {
+			return res, fmt.Errorf("%s: %s: stamping the header: %w", s.Name, s.Path, err)
 		}
 	}
 	header[versionMember] = codec.RawMessage(strconv.Itoa(res.To))

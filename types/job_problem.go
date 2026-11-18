@@ -26,6 +26,13 @@ type JobProblem struct {
 	Message string `json:"message"`
 	// Fix is the edit to the record that clears the problem.
 	Fix string `json:"fix"`
+	// Goal is the goal whose addition to the record's goals clears the problem, as data.
+	// Magus prints it and never applies it: a caller merges `problems[].goal` itself.
+	Goal *job.Goal `json:"goal,omitempty"`
+	// Deviation is the deviation whose addition to the record's deviations permits the
+	// problem, as data, with the same rule as Goal. A problem whose fix is one or the other
+	// carries only the one that fix names.
+	Deviation *job.Deviation `json:"deviation,omitempty"`
 }
 
 // Error renders p as a DiagnosticError, so errors.Is matches its code. The text is the

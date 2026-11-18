@@ -532,3 +532,46 @@ func TestServerRowsNameEveryListener(t *testing.T) {
 	assert.Contains(t, got, "listen  47001  http 127.0.0.1:7391")
 	assert.Contains(t, got, "watch   47001  graph+symbols  /repo")
 }
+
+// StatusSeatsSuite pins the validation seats status names: each holder's job, pid,
+// age and groups, and what frees a seat a dead group holds.
+type StatusSeatsSuite struct {
+	suite.Suite
+	now time.Time
+}
+
+func TestStatusSeatsSuite(t *testing.T) { suite.Run(t, new(StatusSeatsSuite)) }
+
+func (s *StatusSeatsSuite) SetupTest() { s.now = time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC) }
+
+func (s *StatusSeatsSuite) print(r broker.WorkReport) string {
+	var out bytes.Buffer
+	PrintWorkByOwner(&out, r, s.now)
+	return out.String()
+}
+
+func (s *StatusSeatsSuite) TestNamesEachSeatsHolder() {
+	text := s.print(broker.WorkReport{Seats: []broker.Seat{{
+		Tree: "plan", Lease: "plan/a", PID: 10, PIDAlive: true, Since: s.now.Add(-4 * time.Minute),
+		Groups: []broker.Group{{PGID: 20, Command: "go test ./...", Alive: true}, {PGID: 21, Command: "sleep 30"}},
+	}}})
+	s.Contains(text, "validation seats")
+	s.Regexp(`plan\s+job plan/a\s+pid 10 running\s+seated 4m0s\s+pgid 20 alive \(go test \./\.\.\.\), pgid 21 gone \(sleep 30\)`, text)
+	s.NotContains(text, "dead group", "a seat whose run still runs is live")
+}
+
+func (s *StatusSeatsSuite) TestSaysJobStopFreesASeatADeadGroupHolds() {
+	text := s.print(broker.WorkReport{Seats: []broker.Seat{{
+		Tree: "plan", Lease: "plan/b", PID: 11, Since: s.now.Add(-25 * time.Minute),
+		Groups: []broker.Group{{PGID: 30, Command: "go test ./..."}},
+	}}})
+	s.Regexp(`job plan/b\s+pid 11 exited\s+seated 25m0s\s+pgid 30 gone`, text)
+	s.Contains(text, "job plan/b's seat in tree plan is held by a dead group")
+	s.Contains(text, "job stop plan/b` frees it")
+}
+
+func (s *StatusSeatsSuite) TestASeatWithNoRecordedGroupSaysSo() {
+	text := s.print(broker.WorkReport{Seats: []broker.Seat{{Tree: "plan", Lease: "plan/c", PID: 12, Since: s.now}}})
+	s.Contains(text, "no recorded group")
+	s.NotContains(text, "dead group", "job stop answers only for a recorded group")
+}

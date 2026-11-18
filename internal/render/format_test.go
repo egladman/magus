@@ -698,6 +698,16 @@ func (s *hookAudienceSuite) TestAStopBlockShowsOneLineAndHandsTheAgentTheRest() 
 	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
 }
 
+func (s *hookAudienceSuite) TestAStopAdviseShowsThePersonAndNeverContinues() {
+	for _, event := range []string{
+		`{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`,
+		`{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":true}`,
+	} {
+		reply := s.render("claude-code", event, map[string]any{"decision": "advise", "context": "this stop stands"})
+		s.Equal(map[string]any{"systemMessage": "this stop stands"}, reply, event)
+	}
+}
+
 func (s *hookAudienceSuite) TestASubagentStopBlockNamesItsOwnEvent() {
 	reply := s.render("claude-code", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
 		map[string]any{"decision": "deny", "reason": audienceReason})

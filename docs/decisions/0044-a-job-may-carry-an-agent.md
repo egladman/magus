@@ -236,3 +236,22 @@ checkout never migrates the shared store.
 | The checkout is told from the store's rows, never from a path pattern. A checkout a row was only taken in, the root's own included, migrates as before, as does a person's or one no job owns                                                                                           | done  |
 | Reading is unchanged: no dual reader and no compatibility shim                                                                                                                                                                                                                          | done  |
 | `hack/dev/bootstrap-checkout.buzz` has the placed `./magus` open the job store before any step that writes it, so the store's own refusal stops the bootstrap                                                                                                                           | done  |
+
+### 2026-11-17: the base, not the checkout, decides who migrates; a stale binary never writes
+
+The 2026-11-12 refusal read the store's rows to tell a job's checkout, so a branch
+binary run anywhere else, a person's checkout included, still migrated the shared
+store. What makes a migration safe is the binary, not where it runs: once any
+binary past the base migrates the store, every binary built on the base refuses it
+as newer. Eli decided on 2026-11-17 that the base decides, and that a binary stale
+against its checkout writes nothing. This replaces the first two rows of the
+2026-11-12 table; its last two stand.
+
+#### Decision
+
+| Item                                                                                                                                                                                                                                                         | State |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| A store behind the migrations a magus writes is migrated only by a binary built on a clean commit the workspace's base contains. Any other binary is refused before anything is read or written, wherever it runs                                            | done  |
+| Every write and migration stamps the writing magus in the header, and each refusal names the store's last writer                                                                                                                                             | done  |
+| A headerless store whose rows are enveloped is refused as damaged, not replayed from migration 0                                                                                                                                                             | done  |
+| Every job store write by a binary built from another contract than its checkout carries is refused with MGS1021. `internal/job` cannot import `internal/contract`, so each door fills `Location.Skew`, and a store with no `Skew` says so on its first write | done  |
