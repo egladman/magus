@@ -273,12 +273,11 @@ format is snake_case, the job store records included.
 
 #### Decision
 
-| Item                                                                                                                                                       | State |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| Records keep the envelope: `api_version`, `kind`, `metadata`, `spec`, `status`, with `status.conditions[]` and `metadata.name`                             | done  |
-| Every record key is snake_case, and an enum value is stored as its Go value. `kind` values (`Job`, `JobList`, `Attempt`) stay, since a kind names a type    | done  |
-| `libs/apiversion` keys `api_version`, `observed_generation` and `last_transition_time`, which settles the open question                                    | done  |
-| A store migration respells jobs.jsonl and attempts.jsonl through an explicit key table and each enum's value list, and refuses a value no list spells      | done  |
-| grades.jsonl has no migration: an old file is refused by the strict reader                                                                                 | done  |
+| Item                                                                                                                                                           | State |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Records keep the envelope: `api_version`, `kind`, `metadata`, `spec`, `status`, with `status.conditions[]` and `metadata.name`                                 | done  |
+| Every record key is snake_case, and an enum value is stored as its Go value. `kind` values (`Job`, `JobList`, `Attempt`) stay, since a kind names a type       | done  |
+| `libs/apiversion` keys `api_version`, `observed_generation` and `last_transition_time`, which settles the open question                                        | done  |
+| A store migration respells jobs.jsonl and attempts.jsonl through an explicit key table and each enum's value list, and refuses a value no list spells          | done  |
+| grades.jsonl has no migration: an old file is refused by the strict reader                                                                                     | done  |
 | A record converter that only respelled keys or enum values is deleted; one that changes shape (the envelope, unix millisecond times, the condition fold) stays | done  |
-
