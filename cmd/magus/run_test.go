@@ -14,12 +14,14 @@ import (
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 )
 
@@ -408,4 +410,31 @@ func TestParseTarget(t *testing.T) {
 	assertTarget("go::test", "go", "test")
 	assertTarget("rust::build", "rust", "build")
 	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
+}
+
+type RunAllFlagSuite struct{ suite.Suite }
+
+func TestRunAllFlagSuite(t *testing.T) { suite.Run(t, new(RunAllFlagSuite)) }
+
+func (s *RunAllFlagSuite) run(args ...string) error {
+	return runTarget(context.Background(), s.T().TempDir(), runConfig{}, args)
+}
+
+func (s *RunAllFlagSuite) TestASlashOperandIsRefusedNamingAll() {
+	err := s.run("lint", "/")
+	var refusal *rootOperandError
+	s.Require().ErrorAs(err, &refusal)
+	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "run lint --all")
+}
+
+func (s *RunAllFlagSuite) TestASlashAmongProjectsIsRefused() {
+	var refusal *rootOperandError
+	s.ErrorAs(s.run("lint", "web", "/"), &refusal)
+}
+
+func (s *RunAllFlagSuite) TestAllWithProjectsIsRefused() {
+	err := s.run("lint", "--all", "web")
+	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "takes no project arguments")
 }

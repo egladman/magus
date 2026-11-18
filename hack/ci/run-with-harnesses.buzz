@@ -15,9 +15,9 @@ object Invocation {
     plan: str = "",
 }
 
-// Queue hooks insert project operands before their first --. Buzz forwards
-// those operands and the following flags together, so gate mode restores run's
-// delimiter before forwarding target arguments.
+// Queue hooks insert project operands, or --all, before their first --. Buzz
+// forwards those operands and the following flags together, so gate mode restores
+// run's delimiter before forwarding target arguments.
 export fun commandArgs(args: [str]) > result\Result::<Invocation> {
     try {
         final parsed = flags\parse(args, switches: [<str>], valued: ["--plan"]);
@@ -31,7 +31,8 @@ export fun commandArgs(args: [str]) > result\Result::<Invocation> {
         final command = mut ["run", "ci:gha", "--no-default-charms"];
         final forwarded = mut [<str>];
         foreach (arg in words.sub(1)) {
-            if (arg.startsWith("--")) { forwarded.append(arg); }
+            if (arg == "--all") { command.append(arg); }
+            else if (arg.startsWith("--")) { forwarded.append(arg); }
             else { command.append(arg); }
         }
         if (forwarded.len() > 0) { command.append("--"); }
@@ -54,6 +55,11 @@ fun main(args: [str]) > void !> any {
 test "queue projects remain run operands before forwarded target flags" {
     assert\equal(commandArgs(["gate", "libs/a", "docs", "--inherited=fatal"]).value!.words,
         want: ["run", "ci:gha", "--no-default-charms", "libs/a", "docs", "--", "--inherited=fatal"], message: "queue argv");
+}
+
+test "a queue's --all stays a run flag" {
+    assert\equal(commandArgs(["gate", "--all", "--inherited=fatal"]).value!.words,
+        want: ["run", "ci:gha", "--no-default-charms", "--all", "--", "--inherited=fatal"], message: "queue argv");
 }
 
 test "direct commands preserve every argument and delimiter" {

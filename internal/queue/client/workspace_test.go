@@ -40,7 +40,7 @@ func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
 
 	all, err := w.AllUnits(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"/"}, all, "magus run reads / as every project")
+	assert.Equal(t, []string{"--all"}, all, "magus run reads --all as every project")
 }
 
 // Generated means declared as an output. The generating project's own sources are code

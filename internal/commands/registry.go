@@ -206,7 +206,10 @@ var runCommand = command.Command{
 	Long: `Run a named target for the selected projects. With no project
 arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
-command line select exactly those projects.
+command line select exactly those projects, and --all selects every project
+wherever the current directory is. --all takes no project arguments, and a /
+argument is refused for it: / is the filesystem root to a shell, and completes
+as /usr and /etc.
 
 --skip subtracts from whatever that selection resolved to, so a CI step can gate
 every project except a named few without any shell filtering. It takes the same
@@ -228,8 +231,9 @@ plan's, or an --n-shards other than its count is refused before anything runs
 (MGS3029). Under the global --dry-run nothing runs: the plan is checked and
 printed, and -o json, yaml or template renders the document as read, so a saved
 plan renders more than once without being computed again.`,
-	Usage: "magus run <target> [flags] [project...] | magus run [<target>] --stdin [--shard <id>] < plan.json",
+	Usage: "magus run <target> [flags] [project... | --all] | magus run [<target>] --stdin [--shard <id>] < plan.json",
 	Flags: []command.Flag{
+		{Name: "all", Kind: command.Bool, Default: false, Doc: "Select every project in the workspace, wherever the current directory is; takes no project arguments"},
 		{Name: "graph", Kind: command.Bool, Effect: command.EffectRead, Default: false, Doc: "Render the dependency graph for the selected scope instead of executing"},
 		{Name: "upstream", Kind: command.Bool, Default: false, Doc: "With --graph: show dependents instead of dependencies"},
 		{Name: "depth", Kind: command.Int, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
@@ -256,6 +260,7 @@ plan renders more than once without being computed again.`,
 		{Comment: "Build everything", Command: "magus run build"},
 		{Comment: "Test one project", Command: "magus run test api/gateway"},
 		{Comment: "Build two specific projects", Command: "magus run build api/gateway web/studio"},
+		{Comment: "Lint every project, wherever the current directory is", Command: "magus run lint --all"},
 		{Comment: "Every project that declares generate except two", Command: "magus run generate --skip docs --skip console"},
 		{Comment: "Dry-run: show what would run", Command: "magus run build --dry-run"},
 		{Comment: "Force a fresh rebuild past a cache hit", Command: "magus run build --no-cache"},
@@ -367,6 +372,10 @@ short-circuits and falls back to the full project set with the source label
 A project is affected if any of its source files changed directly, or if a
 project it depends on is affected (transitive closure over the dependency graph).
 
+affected takes no project arguments, . and / included: the diff decides the set,
+and a named project would shrink the gate the diff sized. To pick the projects,
+run magus run <target> <projects>.
+
 Use --stdin to read changed paths from a pipe instead of running a VCS diff.
 This pairs with magus watch for continuous-build workflows:
 
@@ -390,7 +399,7 @@ a trivial change emits an empty matrix beside a risk block.
 --plan downstream of magus in a pipe waits for every magus stage before it to
 end, and prints no plan if one failed (MGS3030). CI gates its shards on drift
 that way: magus affected generate --no-default-charms | magus affected ci --plan.`,
-	Usage: "magus affected <target> [flags] [projects...]",
+	Usage: "magus affected <target> [flags]",
 	Flags: []command.Flag{
 		{Name: "impact", Kind: command.Bool, Effect: command.EffectRead, Default: false, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
 		{Name: "base", Kind: command.String, Modes: []string{"", "plan", "impact"}, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},

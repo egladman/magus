@@ -284,12 +284,14 @@ flag refs/rename
 flag refs/skip-lines
 flag refs/source
 flag refs/text
+flag run/all
 flag run/cache
 flag run/default-charms
 flag run/depth
 flag run/detach
 flag run/graph
 flag run/n-shards
+flag run/no-all
 flag run/no-cache
 flag run/no-default-charms
 flag run/no-detach

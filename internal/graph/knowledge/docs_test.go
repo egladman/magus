@@ -458,7 +458,8 @@ func TestRunCommands(t *testing.T) {
 		{"magus run build -o jsonl --tee build.jsonl", []runCommand{{target: "build"}}},
 		{"magus run test web/ api --broker off", []runCommand{{target: "test", projects: []string{"web", "api"}}}},
 		{"magus run generate:rw . | magus run test .", []runCommand{{target: "generate", projects: []string{"."}}, {target: "test", projects: []string{"."}}}},
-		{"magus run sync && magus run GoBuild /", []runCommand{{target: "sync"}, {target: "go-build", projects: []string{"/"}}}},
+		{"magus run sync && magus run GoBuild --all", []runCommand{{target: "sync"}, {target: "go-build", projects: []string{"/"}}}},
+		{"magus run lint -s --all", []runCommand{{target: "lint", projects: []string{"/"}}}},
 		{"magus run go::go-test .", nil},
 		{"magus run <target> [project...]", nil},
 		{"magus run generate:rw <project>", nil},
@@ -492,7 +493,7 @@ func TestAssembleDocsDocumentsTheTargetsARunNames(t *testing.T) {
 		{Path: "docs", Nodes: []types.TargetGraphNode{{Name: "lint"}}},
 	}
 	ws.Write("docs/guide.md", "---\ntitle: Guide\n---\n```sh\nmagus run go-build\n```\n\n## Checks\n\n"+
-		"```sh\nmagus run lint docs\nmagus run lint:rw ./docs\nmagus run nope docs\nmagus run build api\nmagus run nope\nmagus run ci:gha /\n```\n")
+		"```sh\nmagus run lint docs\nmagus run lint:rw ./docs\nmagus run nope docs\nmagus run build api\nmagus run nope\nmagus run ci:gha --all\n```\n")
 
 	s, _ := assembleDocs(root, nil, projects, "")
 	out := mergeAll([]Shard{s}).Output()
@@ -501,7 +502,7 @@ func TestAssembleDocsDocumentsTheTargetsARunNames(t *testing.T) {
 	require.True(t, ok, "a run before any heading documents from the page, resolved at the root project")
 	assert.Equal(t, types.ConfidenceExtracted, e.Confidence)
 	assert.True(t, hasEdge(out, "docsection:docs/guide.md#checks", "target:docs:lint", types.RelationDocuments), "a run under a heading documents from its section")
-	assert.True(t, hasEdge(out, "docsection:docs/guide.md#checks", "target:.:ci", types.RelationDocuments), "/ resolves to every project defining the target")
+	assert.True(t, hasEdge(out, "docsection:docs/guide.md#checks", "target:.:ci", types.RelationDocuments), "--all resolves to every project defining the target")
 
 	var documents int
 	for _, e := range s.Edges {

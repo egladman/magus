@@ -2,7 +2,12 @@
 // program imports with no magus binary, no magusfile, no workspace and no version
 // control: the tool still works, and whoever holds it cannot hurt themselves with it.
 //
-// This package holds only this doc. Each subpackage has one job:
+// [New] opens the harness on one directory and returns a [*SafetyScissors]: the job
+// store and this invocation's session writer laid out under it, a sandbox that confines
+// a child to a lease's write paths, and a spawn judged against its parent's model tier.
+// A part New was not given is absent, and its accessor names the option that supplies
+// it. The subpackages stay importable on their own; a program that needs only verdict
+// imports only verdict. Each has one job:
 //
 //   - budget: the slot limiter, machine-wide memory and slot claims, and their verdicts.
 //   - job: the job record a caller declares, the row a store keeps, and the store, which

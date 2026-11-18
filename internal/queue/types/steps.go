@@ -114,7 +114,7 @@ type BuildFacts interface {
 	// Generation reports what regenerating outputs runs, and which of changed it would
 	// run as code.
 	Generation(ctx context.Context, outputs, changed []string) (Generation, error)
-	// AllUnits is how the build tool names every unit (magus: "/"), which a hook is
+	// AllUnits is how the build tool names every unit (magus: "--all"), which a hook is
 	// handed in place of an affected set that is not a proof.
 	AllUnits(ctx context.Context) ([]string, error)
 	// AutoResolvable reports whether a conflicted source path a three-way merge settled

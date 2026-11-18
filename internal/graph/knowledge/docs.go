@@ -496,8 +496,8 @@ func newlineOffsets(b []byte) []int {
 }
 
 // runCommand is one `magus run <target> [project...]`: the target without its charms,
-// and the projects named before the first flag. Past a flag a token may be that flag's
-// value, so nothing after one is read as a project.
+// and the projects named before the first flag, or "/" for --all. Past a flag a token may
+// be that flag's value, so nothing after one is read as a project.
 type runCommand struct {
 	target   string
 	projects []string
@@ -538,17 +538,23 @@ func parseRunArgs(args []string) (runCommand, bool) {
 		return runCommand{}, false
 	}
 	c := runCommand{target: t.Name}
+	flagged := false
 	for _, a := range args[1:] {
-		if strings.HasPrefix(a, "-") {
-			break
-		}
-		if !shellLiteral(a) {
+		switch {
+		case a == "--":
+			return c, true
+		case a == "--all":
+			// "/" is every project to runTargets, the resolver's own spelling.
+			c.projects = []string{"/"}
+			return c, true
+		case strings.HasPrefix(a, "-"):
+			flagged = true
+		case flagged:
+		case !shellLiteral(a):
 			return runCommand{}, false
+		default:
+			c.projects = append(c.projects, path.Clean(a))
 		}
-		if a != "/" {
-			a = path.Clean(a)
-		}
-		c.projects = append(c.projects, a)
 	}
 	return c, true
 }

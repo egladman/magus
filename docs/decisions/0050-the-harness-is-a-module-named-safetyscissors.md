@@ -551,6 +551,41 @@ decided.
 
 ## Amendments
 
+### 2026-11-17: the root package holds `New` and `SafetyScissors`
+
+Part 1 said the root package holds only the package doc. It now holds one constructor,
+because every consumer stitched three things by hand: one directory for the job store,
+the session writer and the trail; a lease narrowing a child's sandbox; and a spawn judged
+against its parent's model tier. buzzed, the first consumer outside magus, imported
+`verdict` alone rather than write that wiring. Asked for by Eli on 11-17.
+
+- `safetyscissors.New(ctx, dir, opts...)` returns a `*SafetyScissors`. It lays out
+  `jobs/`, `sessions/` and the trail's `activity/` under `dir`; `WithDirs` moves any of
+  them, and refuses `Jobs` and `Sessions` in one directory.
+- `WithInvocation`, `WithActor` and `WithNotices` are required, and `New` names every
+  missing one at once as an `*OptionError`. `WithNotices` joins the two the proposal
+  named because a job store without it refuses every write, and the module never prints.
+- `WithSlots`, `WithMachine`, `WithTiers` and `WithSandbox` are optional. A part left
+  out is absent: its accessor (`Slots`, `Machine`, `Tiers`, `Sandbox`) and the calls that
+  need it (`Command`, `SpawnCeiling`) return an `*UnconfiguredError` naming the option.
+  A budget below 1 is refused rather than read as unlimited. Under `WithSandbox`, `New`
+  probes the host once, so a Required policy on a host that cannot confine fails there.
+- `Command(ctx, lease, name, args...)` is an unstarted child confined to the binds and
+  narrowed to the lease's write paths. It refuses a lease the store does not hold and one
+  whose row is not live, since an ended lease narrows nothing.
+- `SpawnCeiling(ctx, child)` applies `tier.Ceiling` to the child row and its stored
+  parent. Choosing a tier stays the caller's, as part 7 says.
+- `WithJobOptions` and `WithClock` carry the job store's other seams and one clock.
+  The job store's verbs stay on `Jobs()`, unmirrored, so call sites still read
+  `job.Covers` and `verdict.Deny`. Every subpackage stays importable on its own.
+- No `Judge` and no `Close`. A judge with no rule table would answer the default allow
+  part 7 refuses; it comes with step 10. Nothing here holds a descriptor to close.
+
+Principles checked: [No silent defaults](../design/judgment/no-silent-defaults.md) is why
+an absent part answers with the option to pass and never with `nil, nil` or an unlimited
+budget. [Delete before you add](../design/principles/delete-before-you-add.md) is why the
+store's verbs are not mirrored on the root type.
+
 ### 2026-11-17: job stores migrate to the module's groups
 
 - Every job store an earlier magus wrote is `batch.magus/v1alpha1`, so refusing that group

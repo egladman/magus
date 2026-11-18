@@ -478,7 +478,7 @@ func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 	row.Check = &jobtypes.LeaseCheck{Target: "go-test", Project: "."}
 	integrating := []string{
 		"./magus run go-build .",
-		"./magus run generate / -s",
+		"./magus run generate --all -s",
 		"./magus run content-generate docs",
 		"./magus run go::go-fmt .",
 		"./magus run lint .",
@@ -876,7 +876,7 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 		{"a target it needs", "./magus run format .", false},
 		{"a target it needs in another project", "./magus run proofread-build libs/conventions", false},
 		{"the install target", "./magus run install .", false},
-		{"the install target on every project", "./magus run install /", false},
+		{"the install target on every project", "./magus run install --all", false},
 		{"a spell's install op", fmt.Sprintf("./magus run %s docs", install), false},
 		{"an install that re-resolves", "./magus run install:update .", true},
 		{"a target it does not compose", "./magus run lint .", true},
@@ -1095,7 +1095,7 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 	everywhere := lease("docs/guides/jobs.md")
 	everywhere.Check.Project = "/"
 	ctx, _ := fleetFixture(t, everywhere)
-	reason := denyWorkerCheckOnly(ctx, deps, everywhere.ID, "./magus run format:rw /")
+	reason := denyWorkerCheckOnly(ctx, deps, everywhere.ID, "./magus run format:rw --all")
 	require.NotEmpty(t, reason, "a run over every project reads every project's declarations")
 	assert.Contains(t, reason.Why, "`docs/**/*.md`")
 	assert.Contains(t, reason.Say, " run format /`.")
@@ -4434,7 +4434,7 @@ func (s *workerCheckReadsSuite) TestAWritingRunOverAReadPathIsRefused() {
 func (s *workerCheckReadsSuite) TestACheckOverEveryProjectOwnsNone() {
 	row := testCheckLease()
 	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "/"}
-	s.True(s.judged(row, composingWorkspace(s.T()), "./magus run lint / --no-default-charms").refused())
+	s.True(s.judged(row, composingWorkspace(s.T()), "./magus run lint --all --no-default-charms").refused())
 }
 
 func (s *workerCheckReadsSuite) TestTheGateOverTheCheckProjectStaysRefused() {
@@ -4496,7 +4496,7 @@ func (s *workerCheckReadsSuite) TestABuildWithACharmStaysRefusedInAnOwnedCheckou
 }
 
 func (s *workerCheckReadsSuite) TestABuildOverEveryProjectStaysRefusedInAnOwnedCheckout() {
-	s.Contains(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build /").Say, workerBuildVerdict)
+	s.Contains(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build --all").Say, workerBuildVerdict)
 }
 
 func (s *workerCheckReadsSuite) TestAnotherProjectsGoBuildIsNotABuildOfTheBinary() {

@@ -107,7 +107,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			}
 		}
 		fs.Usage = func() {
-			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
+			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project... | --all] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "Run target %s for the selected projects.\n", targetName)
 			if spellFilter != "" {
@@ -128,6 +128,20 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// for while still exiting 0.
 	if shardEnvErr != nil {
 		return exit.Usagef("magus run: %v", shardEnvErr)
+	}
+	if slices.Contains(projectArgs, "/") {
+		return &rootOperandError{Target: rawTarget}
+	}
+	if rf.All {
+		if len(projectArgs) > 0 || parsedTarget.Path != "" {
+			return exit.Usagef("magus run: --all selects every project, so it takes no project arguments")
+		}
+		if saved != nil {
+			return exit.Usagef("magus run: the plan on --stdin names the projects; --all does not apply")
+		}
+		// "/" is how the selection resolver spells every project; the CLI refuses it as
+		// an operand above, so only this flag reaches it.
+		projectArgs = []string{"/"}
 	}
 	var planShards []internalci.PlanShard
 	if saved != nil {
@@ -602,8 +616,8 @@ func clientCurrentWorkingDirectory(ctx context.Context) string {
 }
 
 func targetUsage() error {
-	fmt.Fprintln(os.Stderr, "Usage: magus run <target> [flags] [project...]")
-	fmt.Fprintln(os.Stderr, "       magus run <spell>::<target> [flags] [project...]")
+	fmt.Fprintln(os.Stderr, "Usage: magus run <target> [flags] [project... | --all]")
+	fmt.Fprintln(os.Stderr, "       magus run <spell>::<target> [flags] [project... | --all]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
 	fmt.Fprintln(os.Stderr, "  <name>   any target exported by a project's magusfile")
@@ -619,15 +633,26 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Spell-qualified targets run only the named spell's op:")
 	fmt.Fprintln(os.Stderr, "  magus run typescript::eslint api   # eslint op of the typescript spell on api")
-	fmt.Fprintln(os.Stderr, "  magus run go::go-vet /             # go-vet op of the go spell across all projects")
+	fmt.Fprintln(os.Stderr, "  magus run go::go-vet --all         # go-vet op of the go spell across all projects")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Without project args, the cwd project (or all) is selected.")
 	fmt.Fprintln(os.Stderr, "With project args, exactly those projects are targeted:")
 	fmt.Fprintln(os.Stderr, "  magus run build api web/studio extensions/drape")
-	fmt.Fprintln(os.Stderr, "Use \"/\" to target all projects regardless of cwd:")
-	fmt.Fprintln(os.Stderr, "  magus run build /")
+	fmt.Fprintln(os.Stderr, "Use --all to target all projects regardless of cwd:")
+	fmt.Fprintln(os.Stderr, "  magus run build --all")
 	return flag.ErrHelp
 }
+
+// rootOperandError refuses "/" as a project argument. To a shell it is the filesystem
+// root: completion offers /usr and /etc after it, and it reads as an absolute path.
+// Every project is a selection rather than a path, so it is the --all flag.
+type rootOperandError struct{ Target string }
+
+func (e *rootOperandError) Error() string {
+	return fmt.Sprintf("magus run %s: / is not a project, and `%s` selects every project", e.Target, hint.Run.With(e.Target, "--all"))
+}
+
+func (*rootOperandError) ExitCode() int { return exit.Usage }
 
 // parseTarget splits on "::" into (spell, target); e.g. "ts::lint" → ("ts", "lint").
 func parseTarget(s string) (spell, target string) {

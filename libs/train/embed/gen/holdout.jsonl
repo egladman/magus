@@ -405,6 +405,7 @@
 {"group":"file:changes/unreleased/writing-rules.md","path":"changes/unreleased/writing-rules.md"}
 {"group":"dir:cmd/magus","path":"cmd/magus/admit.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/affected.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/affected_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/agent.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/agent_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/attention.go"}
