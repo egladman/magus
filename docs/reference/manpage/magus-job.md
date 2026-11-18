@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume\> [flags]
+**magus** job \<fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume|stop\> [flags]
 
 ## Description
 
@@ -257,6 +257,9 @@ them and magus describe job prints one job's terms.
 
 **resume**
 : Lift the pause on jobs
+
+**stop**
+: Stop the process groups the broker recorded for a job, and free their seats
 
 **pin**
 : Record the hash of the ./magus that judges a job's checkout

@@ -14,7 +14,7 @@ Kill, pkill or killall used to signal a process identified only by PID or name.
 
 ## Why
 
-A PID or process-name pattern cannot establish ownership: a pkill of a slow fork or MCP process can stop another session's work or the host's connection. Cancel the shell task through the host that started it, or have the person stop it. `magus server status` inspects the tracked work without signaling it. Signal-list requests pass; `kill -0` is a process-poll instead.
+A PID or process-name pattern cannot establish ownership: a pkill of a slow fork or MCP process can stop another session's work or the host's connection. Cancel the shell task through the host that started it, or have the person stop it. `magus server status` inspects the tracked work without signaling it. When the target is in a process group the broker recorded for a job, the remedy is `magus job stop <job>`, which signals only that job's recorded groups after checking each is still the one recorded. Signal-list requests pass; `kill -0` is a process-poll instead.
 
 ## Default and override
 

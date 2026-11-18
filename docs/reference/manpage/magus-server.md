@@ -52,7 +52,7 @@ Signals:
 ### server stop options
 
 **--[no-]pools** (default: off)
-: Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone
+: Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone; then name each validation seat a dead group holds and the magus job stop that frees it
 
 **--socket** *string*
 : Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
