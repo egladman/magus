@@ -76,12 +76,13 @@ type Spawn struct {
 	Spawner string
 }
 
-// traceparentNoteOnce and baggageNoteOnce hold each malformed-value note to one per process. The
-// environment does not change under a running worker, so the same bad value would otherwise be
-// reported once per event and drown the run in one repeated fact.
+// Each malformed-value note is said once per process: the environment does
+// not change under a running worker. One Once per note, so an oversized
+// BAGGAGE does not silence the note for a bad lease id.
 var (
-	traceparentNoteOnce sync.Once
-	baggageNoteOnce     sync.Once
+	traceparentNoteOnce   sync.Once
+	baggageLengthNoteOnce sync.Once
+	baggageLeaseNoteOnce  sync.Once
 )
 
 // SpawnFromEnv reads the propagation channels this process was launched with. Every field is
@@ -187,7 +188,7 @@ func parseBaggage(v string) (lease, spawner string) {
 		return "", ""
 	}
 	if len(v) > maxBaggageLen {
-		baggageNoteOnce.Do(func() {
+		baggageLengthNoteOnce.Do(func() {
 			slog.With(attr.Component("magus")).WarnContext(context.Background(),
 				"ignoring "+EnvBaggage+" and recording no lease for this process: a W3C baggage list is a bounded set of comma-separated key=value members",
 				slog.Int("length", len(v)),
@@ -225,7 +226,7 @@ func validLease(id string) string {
 		return ""
 	}
 	if !job.ValidID(id) {
-		baggageNoteOnce.Do(func() {
+		baggageLeaseNoteOnce.Do(func() {
 			slog.With(attr.Component("magus")).WarnContext(context.Background(),
 				"ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),

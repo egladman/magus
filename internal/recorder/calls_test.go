@@ -514,8 +514,8 @@ func TestLeaseFromEnv_ReadsAValidID(t *testing.T) {
 // attributed anything: the value is dropped either way, and only the note says why.
 func TestLeaseFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 	t.Setenv(EnvBaggage, BaggageLease+"=not a lease id")
-	baggageNoteOnce = sync.Once{} // another test in this binary may already have spent it
-	t.Cleanup(func() { baggageNoteOnce = sync.Once{} })
+	baggageLeaseNoteOnce = sync.Once{} // another test in this binary may already have spent it
+	t.Cleanup(func() { baggageLeaseNoteOnce = sync.Once{} })
 
 	logged := captureWarnings(t, func() {
 		require.Empty(t, LeaseFromEnv())

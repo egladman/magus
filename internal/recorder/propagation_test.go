@@ -86,14 +86,28 @@ func TestParseBaggage(t *testing.T) {
 		"an empty lease":            {"magus.lease=", "", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			baggageNoteOnce = sync.Once{}
-			t.Cleanup(func() { baggageNoteOnce = sync.Once{} })
+			baggageLeaseNoteOnce = sync.Once{}
+			t.Cleanup(func() { baggageLeaseNoteOnce = sync.Once{} })
 
 			lease, spawner := parseBaggage(tc.value)
 			assert.Equal(t, tc.wantLease, lease)
 			assert.Equal(t, tc.wantSpawner, spawner)
 		})
 	}
+}
+
+// Each malformed shape has its own note: an oversized list first must not
+// silence the note for a bad lease id after it.
+func TestParseBaggage_NotesEachShapeOnce(t *testing.T) {
+	baggageLengthNoteOnce, baggageLeaseNoteOnce = sync.Once{}, sync.Once{}
+	t.Cleanup(func() { baggageLengthNoteOnce, baggageLeaseNoteOnce = sync.Once{}, sync.Once{} })
+
+	logged := captureWarnings(t, func() {
+		parseBaggage(strings.Repeat("x", maxBaggageLen+1))
+		parseBaggage("magus.lease=two%20words")
+	})
+	assert.Contains(t, logged, "bounded set of comma-separated")
+	assert.Contains(t, logged, "letters, digits")
 }
 
 // The label rides every session record this process writes, so an unbounded one is a cost every
