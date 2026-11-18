@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -115,6 +116,23 @@ func (s *StoreGrantsSuite) TestAGrantsLogIsReadableByItsOwnerAlone() {
 
 	s.Require().NoError(err)
 	s.Equal(os.FileMode(0o600), info.Mode().Perm())
+}
+
+func (s *StoreGrantsSuite) TestAMemberANewerWriterStoredInAGrantIsRefused() {
+	ctx := s.T().Context()
+	path, err := s.store.Path()
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(filepath.Join(filepath.Dir(path), grantsFileName),
+		[]byte(`{"job":"a","rule":"hooks-off","by":{"user":"eli"},"at":1,"paths":["pkg/**"]}`+"\n"), 0o600))
+
+	_, err = s.store.Grants(ctx)
+
+	refused, ok := errors.AsType[*UnknownMemberError](err)
+	s.Require().True(ok, err)
+	s.Equal("grantRecord", refused.Record)
+	s.Equal([]string{"paths"}, refused.Members)
+	_, err = s.store.Grant(ctx, "a", "hooks-off", 0)
+	s.Error(err, "a grant whose write could compact the line away is refused too")
 }
 
 func (s *StoreGrantsSuite) TestAGrantLowersItsRuleWhileTheJobRuns() {

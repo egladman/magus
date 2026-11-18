@@ -240,6 +240,23 @@ func (s *GradeSuite) TestAGradeLineSpellingGoalsIsRefused() {
 	s.ErrorContains(err, "spells goal")
 }
 
+func (s *GradeSuite) TestAMemberANewerWriterStoredInAGradeOrARunIsRefused() {
+	for _, line := range []string{
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":1,"verified":false,"postconditions":[],"later":1}`,
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":1,"verified":false,` +
+			`"postconditions":[{"postcondition":"tests","passed":true,"verified":false,"later":1}]}`,
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","postcondition":"tests","basis":"reported",` +
+			`"check":{"target":"test","project":"."},"tree":"t","exit":0,"started":1,"ended":2,"later":1}`,
+	} {
+		var e gradesEntry
+		err := codec.Unmarshal([]byte(line), &e)
+
+		refused, ok := errors.AsType[*UnknownMemberError](err)
+		s.Require().True(ok, "%s: %v", line, err)
+		s.Equal([]string{"later"}, refused.Members, line)
+	}
+}
+
 func (s *GradeSuite) TestARunsAndAGradesLinesArePinned() {
 	rec := recordCheckRun(run{job: "j1", postcondition: "tests", basis: BasisWitnessed, check: checkJSON("test", "."),
 		argv: []string{"magus", "run"}, tree: "t1", exit: 1, started: time.UnixMilli(5), ended: time.UnixMilli(6), moved: true})

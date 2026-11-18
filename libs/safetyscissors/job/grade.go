@@ -408,6 +408,24 @@ type checkRunRecord struct {
 	By            string   `json:"by,omitempty"`
 }
 
+// A run or grade line refuses a member this build does not declare, as an attempt line
+// does: the compaction after an older build's read would drop it.
+
+func (r *checkRunRecord) UnmarshalJSON(data []byte) error {
+	type plain checkRunRecord
+	return readNested(data, (*plain)(r), "checkRunRecord")
+}
+
+func (r *gradeRecord) UnmarshalJSON(data []byte) error {
+	type plain gradeRecord
+	return readNested(data, (*plain)(r), "gradeRecord")
+}
+
+func (r *postconditionGradeRecord) UnmarshalJSON(data []byte) error {
+	type plain postconditionGradeRecord
+	return readNested(data, (*plain)(r), "postconditionGradeRecord")
+}
+
 func recordCheckRun(r run) checkRunRecord {
 	return checkRunRecord{
 		TypeMeta: runType(), Job: r.job, Postcondition: r.postcondition, Basis: string(r.basis),

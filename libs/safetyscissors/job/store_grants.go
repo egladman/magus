@@ -9,17 +9,48 @@ import (
 	"github.com/egladman/magus/libs/codec"
 )
 
-func (s *Store) grantsLog() (codec.JSONL[Grant], error) {
+func (s *Store) grantsLog() (codec.JSONL[grantRecord], error) {
 	path, err := s.Path()
 	if err != nil {
-		return codec.JSONL[Grant]{}, err
+		return codec.JSONL[grantRecord]{}, err
 	}
-	return codec.JSONL[Grant]{
+	return codec.JSONL[grantRecord]{
 		Path:   filepath.Join(filepath.Dir(path), grantsFileName),
 		Perm:   0o600,
-		Key:    Grant.Key,
+		Key:    func(r grantRecord) string { return Grant{Job: r.Job, Rule: r.Rule}.Key() },
 		OnDrop: s.dropped,
 	}, nil
+}
+
+// grantRecord is a [Grant] as grants.jsonl stores it. It refuses a member this build does
+// not declare, because the compaction after an older build's read would drop it, and a
+// dropped member of a grant can widen what the grant lowers.
+type grantRecord struct {
+	Job     string       `json:"job"`
+	Rule    string       `json:"rule"`
+	By      originRecord `json:"by"`
+	At      int64        `json:"at"`
+	Until   int64        `json:"until,omitzero"`
+	Attempt int          `json:"attempt,omitzero"`
+	Revoked bool         `json:"revoked,omitzero"`
+}
+
+func (r *grantRecord) UnmarshalJSON(data []byte) error {
+	type plain grantRecord
+	return readNested(data, (*plain)(r), "grantRecord")
+}
+
+func recordGrant(g Grant) grantRecord {
+	return grantRecord{Job: g.Job, Rule: g.Rule, By: recordOrigin(g.By), At: g.At, Until: g.Until, Attempt: g.Attempt, Revoked: g.Revoked}
+}
+
+func (r grantRecord) grant(creds wireEnum[CredentialKind]) (Grant, error) {
+	var bad wireReads
+	g := Grant{Job: r.Job, Rule: r.Rule, By: r.By.origin(&bad, creds), At: r.At, Until: r.Until, Attempt: r.Attempt, Revoked: r.Revoked}
+	if err := bad.refusal(); err != nil {
+		return Grant{}, fmt.Errorf("job: grant of %s for %s: %w", r.Rule, r.Job, err)
+	}
+	return g, nil
 }
 
 // Grant records a person's approval lowering rule to advice for job id's calls until the
@@ -82,7 +113,7 @@ func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(Job,
 	if err != nil {
 		return Grant{}, err
 	}
-	return g, s.wrap(log.Update(ctx, func([]Grant) []Grant { return []Grant{g} }))
+	return g, s.wrap(log.Update(ctx, func([]grantRecord) []grantRecord { return []grantRecord{recordGrant(g)} }))
 }
 
 // Grants is every job and rule's last line, revocations included, in the order they were
@@ -92,6 +123,17 @@ func (s *Store) Grants(ctx context.Context) ([]Grant, error) {
 	if err != nil {
 		return nil, err
 	}
-	grants, err := log.Load()
-	return grants, s.wrap(err)
+	records, err := log.Load()
+	if err != nil {
+		return nil, s.wrap(err)
+	}
+	grants := make([]Grant, 0, len(records))
+	for _, r := range records {
+		g, err := r.grant(s.creds)
+		if err != nil {
+			return nil, s.wrap(err)
+		}
+		grants = append(grants, g)
+	}
+	return grants, nil
 }
