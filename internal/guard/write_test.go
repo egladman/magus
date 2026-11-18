@@ -195,7 +195,7 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 		commit := strings.TrimSpace(string(head))
 		require.NoError(t, exec.Command("git", "-C", root, "update-ref", "refs/remotes/origin/main", commit).Run())
 		ctx = types.WithMagusBuild(ctx, types.MagusBuild{Version: "v0.0.0", Commit: commit, Source: types.BuildSourceStamp})
-		graded :=gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		graded := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		assert.Empty(t, graded.Decision, "%+v", graded)
 	})
 
