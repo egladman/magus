@@ -711,7 +711,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if row, err = job.FlagDeclaration(pos[0], *spec, store.ModelRequest); err != nil {
 			return err
 		}
-		if err := types.ValidateDeclaration(row); err != nil {
+		if err := job.ValidateDeclaration(row); err != nil {
 			return exit.Usagef("magus job fork: %s", err)
 		}
 	}

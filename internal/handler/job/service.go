@@ -490,12 +490,22 @@ func wireGoals(gates []job.Goal) []*jobv1.CompletionGate {
 			DependsOn:   g.DependsOn,
 			Signature:   g.Signature,
 		}
-		if g.Kind == job.GoalKindCheck && g.Check.Target != "" {
-			wire.Check = jobstore.CheckCommand(g.Check)
+		if g.Kind == job.GoalKindCheck && job.HasCheck(g.Check) {
+			wire.Check = renderGoalCheck(g)
 		}
 		out = append(out, wire)
 	}
 	return out
+}
+
+// renderGoalCheck is g's check as the command that runs it. A check that will not read
+// shows as that, since a blank would pass for a goal with no check.
+func renderGoalCheck(g job.Goal) string {
+	check, err := jobstore.GoalCheck(g)
+	if err != nil {
+		return fmt.Sprintf("(unreadable check: %v)", err)
+	}
+	return jobstore.CheckCommand(check)
 }
 
 // wireJobResult maps the stored result to its console-facing wire projection. nil until a

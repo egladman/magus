@@ -254,31 +254,59 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 		fmt.Fprintf(os.Stderr, "magus buzz: --record: the job store cannot be read (%v); the run is recorded without a lease\n", err)
 		return "", nil
 	}
-	return scriptCheckHolder(rows, here, script), nil
+	holder, err := scriptCheckHolder(rows, here, script)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: a job row's check cannot be read (%v); the run is recorded without a lease\n", err)
+		return "", nil
+	}
+	return holder, nil
 }
 
 // scriptCheckHolder names the one live row here whose goal checks script.
 // A CLI process cannot see the host session a hook bound its worker by.
 // Two such rows leave it empty: the run cannot say whose it was.
-func scriptCheckHolder(rows []jobtypes.Job, root, script string) string {
+// A goal whose check will not read is an error, since it could be the one.
+func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error) {
 	here, err := resolvedDir(root)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	holder := ""
 	for _, row := range rows {
 		there, err := resolvedDir(row.CheckoutRoot)
-		if err != nil || there != here || !job.Editing(row) || !slices.ContainsFunc(row.EffectiveGoals(), func(g jobtypes.Goal) bool {
-			return g.Check.Script != "" && path.Clean(g.Check.Script) == path.Clean(script)
-		}) {
+		if err != nil || there != here || !job.Editing(row) {
+			continue
+		}
+		checks, err := goalChecksScript(row, script)
+		if err != nil {
+			return "", err
+		}
+		if !checks {
 			continue
 		}
 		if holder != "" {
-			return ""
+			return "", nil
 		}
 		holder = row.ID
 	}
-	return holder
+	return holder, nil
+}
+
+// goalChecksScript reports whether one of row's goals is a check that runs script.
+func goalChecksScript(row jobtypes.Job, script string) (bool, error) {
+	for _, g := range row.EffectiveGoals() {
+		if !jobtypes.HasCheck(g.Check) {
+			continue
+		}
+		check, err := job.GoalCheck(g)
+		if err != nil {
+			return false, fmt.Errorf("job %s goal %s: %w", row.ID, g.ID, err)
+		}
+		if check.Script != "" && path.Clean(check.Script) == path.Clean(script) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // resolvedDir is dir absolute with symlinks followed: exec records the

@@ -257,7 +257,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 				ID:     "lint",
 				Kind:   job.GoalKindCheck,
 				Expect: job.ExpectPassed,
-				Check:  job.LeaseCheck{Target: "lint", Project: "."},
+				Check:  rawCheck(t, types.LeaseCheck{Target: "lint", Project: "."}),
 			},
 			{
 				ID:     "store-touched",
@@ -577,4 +577,12 @@ func (s *listJobsSuite) TestKeepsAGeneratedOutputHeldInOneCheckout() {
 
 func (s *listJobsSuite) TestKeepsThePairWhenTheWorkspaceListsNoProjects() {
 	s.Len(s.overlaps(false, nil), 1, "with no projects the scope check cannot run, so the hold stays")
+}
+
+// rawCheck is c as a row stores it.
+func rawCheck(t *testing.T, c types.LeaseCheck) codec.RawMessage {
+	t.Helper()
+	raw, err := jobstore.RawCheck(c)
+	require.NoError(t, err)
+	return raw
 }

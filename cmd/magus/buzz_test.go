@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -409,28 +410,36 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
 }
 
-func scriptCheckRow(id, root, script string) job.Job {
-	return job.Job{ID: id, State: job.StateRunning, CheckoutRoot: root, Check: &job.LeaseCheck{Script: script}}
+func (s *BuzzRecordSuite) scriptCheckRow(id, root, script string) job.Job {
+	raw, err := jobstore.RawCheck(types.LeaseCheck{Script: script})
+	s.Require().NoError(err)
+	return job.Job{ID: id, State: job.StateRunning, CheckoutRoot: root, Check: raw}
+}
+
+func (s *BuzzRecordSuite) holder(rows []job.Job, root, script string) string {
+	holder, err := scriptCheckHolder(rows, root, script)
+	s.Require().NoError(err)
+	return holder
 }
 
 func (s *BuzzRecordSuite) TestHolderIsTheOneRowCheckingTheScriptHere() {
-	rows := []job.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "other.buzz")}
-	s.Equal("a", scriptCheckHolder(rows, s.root, "./p.buzz"))
+	rows := []job.Job{s.scriptCheckRow("a", s.root, "p.buzz"), s.scriptCheckRow("b", s.root, "other.buzz")}
+	s.Equal("a", s.holder(rows, s.root, "./p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestTwoRowsCheckingTheScriptNameNoHolder() {
-	rows := []job.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "p.buzz")}
-	s.Empty(scriptCheckHolder(rows, s.root, "p.buzz"))
+	rows := []job.Job{s.scriptCheckRow("a", s.root, "p.buzz"), s.scriptCheckRow("b", s.root, "p.buzz")}
+	s.Empty(s.holder(rows, s.root, "p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestARowInAnotherCheckoutIsNoHolder() {
-	s.Empty(scriptCheckHolder([]job.Job{scriptCheckRow("a", s.T().TempDir(), "p.buzz")}, s.root, "p.buzz"))
+	s.Empty(s.holder([]job.Job{s.scriptCheckRow("a", s.T().TempDir(), "p.buzz")}, s.root, "p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestAnExitedRowIsNoHolder() {
-	row := scriptCheckRow("a", s.root, "p.buzz")
+	row := s.scriptCheckRow("a", s.root, "p.buzz")
 	row.State = job.StateExited
-	s.Empty(scriptCheckHolder([]job.Job{row}, s.root, "p.buzz"))
+	s.Empty(s.holder([]job.Job{row}, s.root, "p.buzz"))
 }
 
 func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {

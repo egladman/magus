@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/types"
 )
 
 // wantServerInstructions is the exact block every MCP client reads at session
@@ -269,12 +270,14 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	jobs := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.Root()})
+	check, err := job.RawCheck(types.LeaseCheck{Target: "test", Project: "."})
+	require.NoError(t, err)
 	for _, row := range []jobtypes.Job{
 		{ID: "root/worker", Paths: jobtypes.Paths{Write: []string{"internal/job"}}, State: jobtypes.StateRunning},
 		// A row that writes must name what grades it, or the store refuses the put before
 		// it reaches the lease check this test is about.
 		{ID: "root/other", Paths: jobtypes.Paths{Write: []string{"internal/guard", "internal/hint"}}, State: jobtypes.StateRunning,
-			Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}},
+			Check: check},
 	} {
 		_, err := jobs.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
