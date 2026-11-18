@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -117,7 +117,7 @@ type AgentCommand struct {
 	Binary        string
 	BinaryVersion string
 	Cwd           string
-	Phases        []trailtypes.Phase
+	Phases        []journal.Phase
 	// GuardMs is how long the guard took to judge the call. A pre-call
 	// hook never sees the run time, so this is not tool time.
 	GuardMs int64
@@ -244,7 +244,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Reason = secrets.RedactString(ctx, command.Reason)
 	command.Context = secrets.RedactString(ctx, command.Context)
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
-	request, _ := codec.Marshal(agentCommandRequest{
+	requestBody, _ := codec.Marshal(agentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
 		Host:       command.Host,
 		Session:    command.Session,
@@ -255,7 +255,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Path:       command.Path,
 		AgentFacts: command.AgentFacts,
 	})
-	response, _ := codec.Marshal(agentCommandResponse{
+	responseBody, _ := codec.Marshal(agentCommandResponse{
 		APIVersion:      agentCommandAPIVersion,
 		Decision:        command.Decision,
 		Reason:          command.Reason,
@@ -264,8 +264,8 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		PreauthorizedBy: command.PreauthorizedBy,
 		RuleFailures:    redactFailures(ctx, command.RuleFailures),
 	})
-	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
-	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
+	request := WriteBlob(ctx, base, "agent", requestBody)
+	response := WriteBlob(ctx, base, "agent", responseBody)
 
 	// The lease is the one the producer resolved through job.LeaseQuery, recorded as given:
 	// reading BAGGAGE here as well would be a second resolution order. One that fails
@@ -287,30 +287,47 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	if command.Decision != "" {
 		preview = "guard: " + string(command.Decision)
 	}
-	Append(ctx, base, trailtypes.Event{
-		Ts:            time.Now().UnixMilli(),
-		Kind:          trailtypes.KindAgentCommand,
-		Origin:        hookOrigin(job.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
-		Workspace:     command.Workspace,
-		Action:        action,
-		Lease:         lease,
-		LeaseFrom:     leaseFrom,
-		Outcome:       trailtypes.OutcomeOK,
-		DurationMs:    command.ToolMs,
-		GuardMs:       command.GuardMs,
-		RequestRef:    reqRef,
-		RequestBytes:  reqBytes,
-		ResponseRef:   respRef,
-		ResponseBytes: respBytes,
-		VerdictRef:    command.VerdictRef,
-		Preview:       preview,
-		PolicyDigest:  command.PolicyDigest,
-		DecidedBy:     command.DecidedBy,
-		Binary:        command.Binary,
-		BinaryVersion: command.BinaryVersion,
-		Cwd:           command.Cwd,
-		Phases:        command.Phases,
+	Append(ctx, base, journal.Call{
+		Time:      time.Now(),
+		Kind:      journal.CallKindAgentCommand,
+		Origin:    hookOrigin(job.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
+		Workspace: command.Workspace,
+		Name:      action,
+		Lease:     lease,
+		LeaseFrom: leaseFrom,
+		Outcome:   journal.OutcomeOK,
+		Duration:  time.Duration(command.ToolMs) * time.Millisecond,
+		Request:   request,
+		Response:  response,
+		Preview:   preview,
+		Guard: judged(journal.Guard{
+			Duration:      time.Duration(command.GuardMs) * time.Millisecond,
+			Verdict:       journal.Payload{Ref: command.VerdictRef},
+			PolicyDigest:  command.PolicyDigest,
+			DecidedBy:     command.DecidedBy,
+			Binary:        command.Binary,
+			BinaryVersion: command.BinaryVersion,
+			Cwd:           command.Cwd,
+			Phases:        command.Phases,
+		}),
 	})
+}
+
+// judged is g, or nil when g records nothing: no guard judged the call.
+func judged(g journal.Guard) *journal.Guard {
+	if g.Duration == 0 && g.Verdict.Ref == "" && g.PolicyDigest == "" && g.DecidedBy == "" &&
+		g.Binary == "" && g.BinaryVersion == "" && g.Cwd == "" && len(g.Phases) == 0 {
+		return nil
+	}
+	return &g
+}
+
+// verdictRef is the ref of the verdict that judged c, empty when none did.
+func verdictRef(c journal.Call) string {
+	if c.Guard == nil {
+		return ""
+	}
+	return c.Guard.Verdict.Ref
 }
 
 // AgentSpawn is the normalized, host-independent observation that an orchestrating agent handed
@@ -361,7 +378,7 @@ type AgentSpawn struct {
 	Binary        string
 	BinaryVersion string
 	Cwd           string
-	Phases        []trailtypes.Phase
+	Phases        []journal.Phase
 	// AgentFacts are the CALLER's, as on AgentCommand. Its ContextModel is the model the
 	// caller runs as, never the child's: that one is DeclaredModel.
 	types.AgentFacts
@@ -431,7 +448,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	spawn.ContextModel = clampRunes(spawn.ContextModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
-	request, _ := codec.Marshal(agentSpawnRequest{
+	body, _ := codec.Marshal(agentSpawnRequest{
 		APIVersion:    agentSpawnAPIVersion,
 		Host:          spawn.Host,
 		Session:       spawn.Session,
@@ -445,7 +462,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		RuleFailures:  failures,
 		AgentFacts:    spawn.AgentFacts,
 	})
-	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
+	request := WriteBlob(ctx, base, "spawn", body)
 
 	// The CHILD is the action, the way an MCP call's action is its tool name: it is the field a
 	// reader groups a page of leases by. A host that supplied no label leaves the generic
@@ -458,23 +475,24 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	case action == "":
 		action = ActionAgentSpawn
 	}
-	Append(ctx, base, trailtypes.Event{
-		Ts:            time.Now().UnixMilli(),
-		Kind:          trailtypes.KindAgentSpawn,
-		Origin:        hookOrigin(job.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
-		Workspace:     spawn.Workspace,
-		Action:        action,
-		Lease:         lease,
-		Outcome:       trailtypes.OutcomeOK,
-		RequestRef:    reqRef,
-		RequestBytes:  reqBytes,
-		VerdictRef:    spawn.VerdictRef,
-		PolicyDigest:  spawn.PolicyDigest,
-		DecidedBy:     spawn.DecidedBy,
-		Binary:        spawn.Binary,
-		BinaryVersion: spawn.BinaryVersion,
-		Cwd:           spawn.Cwd,
-		Phases:        spawn.Phases,
+	Append(ctx, base, journal.Call{
+		Time:      time.Now(),
+		Kind:      journal.CallKindAgentSpawn,
+		Origin:    hookOrigin(job.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
+		Workspace: spawn.Workspace,
+		Name:      action,
+		Lease:     lease,
+		Outcome:   journal.OutcomeOK,
+		Request:   request,
+		Guard: judged(journal.Guard{
+			Verdict:       journal.Payload{Ref: spawn.VerdictRef},
+			PolicyDigest:  spawn.PolicyDigest,
+			DecidedBy:     spawn.DecidedBy,
+			Binary:        spawn.Binary,
+			BinaryVersion: spawn.BinaryVersion,
+			Cwd:           spawn.Cwd,
+			Phases:        spawn.Phases,
+		}),
 	})
 }
 
@@ -537,6 +555,29 @@ func leaseFromContext(handed string) string {
 	return ""
 }
 
+// CallsDir is the directory under base that holds the activity log: what
+// journal.Calls and (journal.Payload).Read take.
+func CallsDir(base string) string { return filepath.Join(base, dir) }
+
+// recentCalls is up to limit calls from the end of the log under base, newest
+// first. A line that does not decode is passed over.
+func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
+	if base == "" {
+		return nil, errors.New("trail: read names no directory")
+	}
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, CallsDir(base), limit) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 func eventsPath(base string) string { return filepath.Join(base, dir, eventsFile) }
 func blobsPath(base string) string  { return filepath.Join(base, dir, blobsSubDir) }
 
@@ -548,13 +589,13 @@ func blobsPath(base string) string  { return filepath.Join(base, dir, blobsSubDi
 // trail is DURABLE and append-only, so a credential that lands here is on disk until someone
 // deletes the file, strictly worse than the same value reaching a terminal. It took a ctx
 // parameter for no other reason.
-func Append(ctx context.Context, base string, e trailtypes.Event) {
+func Append(ctx context.Context, base string, c journal.Call) {
 	if base == "" {
 		return
 	}
-	e = redactEvent(ctx, e)
-	e.Origin = StampOrigin(ctx, e.Origin)
-	line, err := codec.Marshal(e)
+	c = redactCall(ctx, c)
+	c.Origin = StampOrigin(ctx, c.Origin)
+	line, err := codec.Marshal(c)
 	if err != nil {
 		return
 	}
@@ -570,48 +611,48 @@ func Append(ctx context.Context, base string, e trailtypes.Event) {
 // size. An empty base, invalid prefix, empty data, or write failure yields an empty ref (the
 // caller omits it) while still reporting the size. Idempotent by content and replaced whole,
 // so a concurrent reader never observes a partial blob.
-func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref string, size int64) {
+func WriteBlob(ctx context.Context, base, prefix string, data []byte) journal.Payload {
 	// Redacted BEFORE the ref is computed, so the content address names what is actually
 	// stored. Blobs are the highest-risk data in this package: an MCP request/response pair
 	// is a whole tool payload, persisted verbatim, and nothing else on the path scrubs it.
 	data = secrets.Redact(ctx, data)
-	size = int64(len(data))
+	unkept := journal.Payload{Bytes: int64(len(data))}
 	if base == "" || len(data) == 0 || !validPrefix(prefix) {
-		return "", size
+		return unkept
 	}
-	ref = blobRef(prefix, data)
-	path := filepath.Join(blobsPath(base), ref)
+	kept := journal.Payload{Ref: blobRef(prefix, data), Bytes: unkept.Bytes}
+	path := filepath.Join(blobsPath(base), kept.Ref)
 	if _, err := os.Stat(path); err == nil {
 		// A dedup hit is a fresh reference to an old file, and gcBlobs decides by mtime: without
 		// this touch a rotate between here and the caller's Append sees a blob older than
 		// blobGraceWindow that no kept event names yet, and deletes a payload about to go live.
 		now := time.Now()
 		_ = os.Chtimes(path, now, now)
-		return ref, size
+		return kept
 	}
 	// 0600 because a blob is a whole tool payload, which redaction scrubs of what it
 	// recognizes and no more.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", size
+		return unkept
 	}
 	if err := file.ReplaceFile(path, data, 0o600); err != nil {
-		return "", size
+		return unkept
 	}
-	return ref, size
+	return kept
 }
 
 // LastRun returns the most recent KIND_JOB event whose Action equals action (the space-joined
 // worker argv recorded for a background job, e.g. "graph build") and whether one was found.
 // It is how a caller shows a job's last outcome. Scans the retained trail newest-first; a job
 // that has not run within it is (zero, false).
-func LastRun(ctx context.Context, base, action string) (trailtypes.Event, bool) {
-	events, _ := readRecent(ctx, base, maxEvents)
-	for _, e := range events { // newest-first
-		if e.Kind == trailtypes.KindJob && e.Action == action {
-			return e, true
+func LastRun(ctx context.Context, base, action string) (journal.Call, bool) {
+	calls, _ := recentCalls(ctx, base, maxEvents)
+	for _, c := range calls { // newest-first
+		if c.Kind == journal.CallKindJob && c.Name == action {
+			return c, true
 		}
 	}
-	return trailtypes.Event{}, false
+	return journal.Call{}, false
 }
 
 // Stat reports the trail's current on-disk footprint under base: total bytes (the events file
@@ -801,18 +842,18 @@ const blobGraceWindow = 30 * time.Second
 func gcBlobs(base string, keptLines []string) {
 	referenced := make(map[string]struct{})
 	for _, l := range keptLines {
-		var e trailtypes.Event
-		if codec.Unmarshal([]byte(l), &e) != nil {
+		var c journal.Call
+		if codec.Unmarshal([]byte(l), &c) != nil {
 			continue
 		}
-		if e.RequestRef != "" {
-			referenced[e.RequestRef] = struct{}{}
+		refs := []string{c.Request.Ref, c.Response.Ref}
+		if c.Guard != nil {
+			refs = append(refs, c.Guard.Verdict.Ref)
 		}
-		if e.ResponseRef != "" {
-			referenced[e.ResponseRef] = struct{}{}
-		}
-		if e.VerdictRef != "" {
-			referenced[e.VerdictRef] = struct{}{}
+		for _, ref := range refs {
+			if ref != "" {
+				referenced[ref] = struct{}{}
+			}
 		}
 	}
 	entries, err := os.ReadDir(blobsPath(base))
@@ -822,7 +863,7 @@ func gcBlobs(base string, keptLines []string) {
 	cutoff := time.Now().Add(-blobGraceWindow)
 	for _, ent := range entries {
 		name := ent.Name()
-		if ent.IsDir() || !trailtypes.ValidRef(name) {
+		if ent.IsDir() || !journal.ValidPayloadRef(name) {
 			continue
 		}
 		if _, ok := referenced[name]; ok {
@@ -856,21 +897,14 @@ func validPrefix(prefix string) bool {
 	return true
 }
 
-// redactEvent masks every free-text field on an event.
-//
-// The structural fields are deliberately left alone: Kind, Outcome, the Origin, Workspace,
-// Lease and the blob refs are enumerated values, identities and content addresses, none
-// of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
-// them would break the activity view to protect nothing, the same reasoning that leaves slog
-// attribute KEYS alone in libs/secrets. Lease is the one of those derived from free text (a
-// lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
-// which is why every channel that can stamp one runs it through [job.ValidID]'s bare-identifier
-// rule before it can reach this exemption.
-func redactEvent(ctx context.Context, e trailtypes.Event) trailtypes.Event {
-	e.Action = secrets.RedactString(ctx, e.Action)
-	e.Error = secrets.RedactString(ctx, e.Error)
-	e.Preview = secrets.RedactString(ctx, e.Preview)
-	return e
+// redactCall masks every free-text field on a call. The structural fields stay
+// as written, since a reader matches them exactly. A lease comes from free
+// text, so every channel that stamps one checks it with [job.ValidID] first.
+func redactCall(ctx context.Context, c journal.Call) journal.Call {
+	c.Name = secrets.RedactString(ctx, c.Name)
+	c.Error = secrets.RedactString(ctx, c.Error)
+	c.Preview = secrets.RedactString(ctx, c.Preview)
+	return c
 }
 
 type baseKey struct{}

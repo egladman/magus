@@ -15,11 +15,22 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+// loggedCalls is the newest calls in the log under base.
+func loggedCalls(t *testing.T, base string) []journal.Call {
+	t.Helper()
+	var out []journal.Call
+	for c, err := range journal.Calls(t.Context(), trail.CallsDir(base), 10) {
+		require.NoError(t, err)
+		out = append(out, c)
+	}
+	return out
+}
 
 // A console link's code is traded once for its token, and every other presentation of it is
 // refused as a wrong bearer would be: used, unknown, malformed, or sent by GET.
@@ -73,11 +84,10 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 
 	// The redeem is audited, naming the code it spent and the token it minted, never either
 	// secret.
-	events, err := trailtypes.ReadRecent(t.Context(), trailDir, 10)
-	require.NoError(t, err)
+	events := loggedCalls(t, trailDir)
 	require.Len(t, events, 1)
-	assert.Equal(t, "link.redeem", events[0].Action)
-	blob, err := trailtypes.ReadBlob(trailDir, events[0].RequestRef)
+	assert.Equal(t, "link.redeem", events[0].Name)
+	blob, err := events[0].Request.Read(trail.CallsDir(trailDir))
 	require.NoError(t, err)
 	for _, s := range []string{code, got.Token} {
 		assert.NotContains(t, string(blob), s)

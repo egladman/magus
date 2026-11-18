@@ -2,7 +2,6 @@ package trail
 
 import (
 	"bufio"
-	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	trailrecord "github.com/egladman/magus/types/trail"
 )
 
@@ -67,7 +66,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 	out := trailrecord.Trail{Start: since, End: until, Session: w.Session}
 	type sourced struct {
 		base string
-		e    trailtypes.Event
+		e    journal.Call
 	}
 	var events []sourced
 	var newest int64
@@ -77,19 +76,19 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 			return out, err
 		}
 		for _, e := range read {
-			if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn {
+			if e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindAgentSpawn {
 				continue
 			}
 			events = append(events, sourced{base, e})
-			if w.Session == "" && e.Session != "" && e.Ts >= newest {
-				newest, out.Session = e.Ts, e.Session
+			if w.Session == "" && e.Session != "" && e.Time.UnixMilli() >= newest {
+				newest, out.Session = e.Time.UnixMilli(), e.Session
 			}
 		}
 	}
 	if out.Session == "" {
 		return out, nil
 	}
-	slices.SortStableFunc(events, func(a, b sourced) int { return cmp.Compare(a.e.Ts, b.e.Ts) })
+	slices.SortStableFunc(events, func(a, b sourced) int { return a.e.Time.Compare(b.e.Time) })
 
 	for _, s := range events {
 		e := s.e
@@ -103,7 +102,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 			out.Checkouts = append(out.Checkouts, filepath.Dir(s.base))
 		}
 		switch e.Kind {
-		case trailtypes.KindAgentCommand:
+		case journal.CallKindAgentCommand:
 			obs, ok, err := feedbackObservation(s.base, e)
 			if err != nil {
 				return out, err
@@ -111,12 +110,12 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 			if ok {
 				out.Observations = append(out.Observations, obs)
 			}
-		case trailtypes.KindAgentSpawn:
-			if e.Action == ActionAgentContinue {
+		case journal.CallKindAgentSpawn:
+			if e.Name == ActionAgentContinue {
 				continue
 			}
-			sp := trailrecord.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
-			if raw, err := trailtypes.ReadBlob(s.base, e.RequestRef); err == nil {
+			sp := trailrecord.Spawn{At: e.Time.UnixMilli(), Agent: e.Agent, Child: e.Name, Lease: e.Lease}
+			if raw, err := e.Request.Read(CallsDir(s.base)); err == nil {
 				var req agentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.Model = req.DeclaredModel
@@ -133,33 +132,33 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 // that recorded no request blob or whose blob is gone. A request blob that cannot be read or decoded is its error: a
 // [*blobUndecodableError], or a [*retiredDecisionError] for one holding a retired guard
 // decision.
-func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool, error) {
+func feedbackObservation(base string, e journal.Call) (trailrecord.Observation, bool, error) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
 	var retired *retiredDecisionError
-	if e.RequestRef == "" {
+	if e.Request.Ref == "" {
 		return trailrecord.Observation{}, false, nil
 	}
-	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
+	raw, err := e.Request.Read(CallsDir(base))
 	if errors.Is(err, fs.ErrNotExist) {
 		return trailrecord.Observation{}, false, nil
 	}
 	if err != nil {
 		return trailrecord.Observation{}, false, err
 	}
-	if err := decodeAgentBlob(base, e.RequestRef, raw, &req); err != nil {
+	if err := decodeAgentBlob(base, e.Request.Ref, raw, &req); err != nil {
 		return trailrecord.Observation{}, false, err
 	}
 	// A read carries no response blob: no rule judges it.
-	if e.ResponseRef != "" {
-		if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
-			if err := decodeAgentBlob(base, e.ResponseRef, raw, &resp); errors.As(err, &retired) {
+	if e.Response.Ref != "" {
+		if raw, err := e.Response.Read(CallsDir(base)); err == nil {
+			if err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); errors.As(err, &retired) {
 				return trailrecord.Observation{}, false, err
 			}
 		}
 	}
 	obs := trailrecord.Observation{
-		At: e.Ts, Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
+		At: e.Time.UnixMilli(), Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
 		Decision: string(resp.Decision), Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,
 		Nexts: servedNexts(fmt.Sprintf("%s\n%s", resp.Reason, resp.Context)),
@@ -173,7 +172,7 @@ func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observati
 
 // eventsInWindow decodes the events of the trail at base whose Ts falls in [since, until],
 // oldest first. A missing trail is no events.
-func eventsInWindow(base string, since, until int64) ([]trailtypes.Event, error) {
+func eventsInWindow(base string, since, until int64) ([]journal.Call, error) {
 	f, err := os.Open(eventsPath(base))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -182,7 +181,7 @@ func eventsInWindow(base string, since, until int64) ([]trailtypes.Event, error)
 		return nil, err
 	}
 	defer f.Close()
-	var out []trailtypes.Event
+	var out []journal.Call
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -190,8 +189,8 @@ func eventsInWindow(base string, since, until int64) ([]trailtypes.Event, error)
 		if len(line) == 0 {
 			continue
 		}
-		var e trailtypes.Event
-		if codec.Unmarshal(line, &e) != nil || e.Ts < since || e.Ts > until {
+		var e journal.Call
+		if codec.Unmarshal(line, &e) != nil || e.Time.UnixMilli() < since || e.Time.UnixMilli() > until {
 			continue
 		}
 		out = append(out, e)

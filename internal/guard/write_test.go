@@ -20,8 +20,8 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
@@ -1116,8 +1116,8 @@ func entryFleet(root string) []jobtypes.Job {
 // holderCalled plants a tool call the guard graded under lease, ago before now.
 func holderCalled(t *testing.T, ctx context.Context, lease string, ago time.Duration) {
 	t.Helper()
-	trail.Append(ctx, hookLocation(ctx, Dependencies{}).cacheDir, trailtypes.Event{
-		Ts: time.Now().Add(-ago).UnixMilli(), Kind: trailtypes.KindAgentCommand, Action: "Edit", Lease: lease, Outcome: trailtypes.OutcomeOK,
+	trail.Append(ctx, hookLocation(ctx, Dependencies{}).cacheDir, journal.Call{
+		Time: time.Now().Add(-ago), Kind: journal.CallKindAgentCommand, Name: "Edit", Lease: lease, Outcome: journal.OutcomeOK,
 	})
 }
 

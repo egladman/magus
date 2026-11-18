@@ -30,7 +30,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -431,25 +431,23 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		// Capture both sides the agent exchanged with the tool as content-addressed blobs
 		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
 		// trail line. Request = the tool arguments, response = the result text.
-		reqRef, reqBytes := trail.WriteBlob(ctx, trailDir, "mcp", argsJSON(req.GetArguments()))
+		request := trail.WriteBlob(ctx, trailDir, "mcp", argsJSON(req.GetArguments()))
 		respText := allText(result)
-		respRef, respBytes := trail.WriteBlob(ctx, trailDir, "mcp", []byte(respText))
+		response := trail.WriteBlob(ctx, trailDir, "mcp", []byte(respText))
 
 		dur := time.Since(start)
-		ev := trailtypes.Event{
-			Ts:   start.UnixMilli(),
-			Kind: trailtypes.KindMCPToolCall,
+		ev := journal.Call{
+			Time: start,
+			Kind: journal.CallKindMCPTool,
 			// Append stamps the origin from ctx: the entry point, the client's name as Host,
 			// and the credential authorize checks.
-			UserAgent:     o.UserAgent,
-			Action:        toolName,
-			Outcome:       trailtypes.OutcomeOK,
-			DurationMs:    dur.Milliseconds(),
-			RequestRef:    reqRef,
-			RequestBytes:  reqBytes,
-			ResponseRef:   respRef,
-			ResponseBytes: respBytes,
-			Preview:       preview(respText, respPreviewLen),
+			UserAgent: o.UserAgent,
+			Name:      toolName,
+			Outcome:   journal.OutcomeOK,
+			Duration:  dur,
+			Request:   request,
+			Response:  response,
+			Preview:   preview(respText, respPreviewLen),
 		}
 		// adapt() turns every validation/soft failure into an IsError result with a nil err, so
 		// result.IsError is the reachable failure signal; the err != nil arm is defensive against
@@ -457,11 +455,11 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		// the metric (which takes ev.Outcome), or the view shows green for calls that failed.
 		switch {
 		case err != nil:
-			ev.Outcome = trailtypes.OutcomeError
+			ev.Outcome = journal.OutcomeError
 			ev.Error = err.Error()
 			reqLog.ErrorContext(ctx, "toolerror", slog.Duration("duration", dur), attr.Error(err))
 		case result != nil && result.IsError:
-			ev.Outcome = trailtypes.OutcomeError // the error text is the response body, captured above
+			ev.Outcome = journal.OutcomeError // the error text is the response body, captured above
 			reqLog.WarnContext(ctx, "toolfailed", slog.Duration("duration", dur))
 		default:
 			reqLog.InfoContext(ctx, "tooldone", slog.Duration("duration", dur))
@@ -472,14 +470,14 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 			// sent, the structured copy of the payload included. Attribute by tool +
 			// outcome only to keep metric cardinality bounded.
 			outcome := observability.OutcomeOK
-			if ev.Outcome == trailtypes.OutcomeError {
+			if ev.Outcome == journal.OutcomeError {
 				outcome = observability.OutcomeError
 			}
 			tel.RecordMCPCall(ctx, observability.MCPCall{
 				Tool:        toolName,
 				Outcome:     outcome,
-				InputBytes:  reqBytes,
-				OutputBytes: respBytes + structuredBytes(result),
+				InputBytes:  request.Bytes,
+				OutputBytes: response.Bytes + structuredBytes(result),
 				Duration:    dur.Seconds(),
 			})
 		}

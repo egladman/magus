@@ -296,7 +296,7 @@ func TestOutputLookupsReadASiblingWorktree(t *testing.T) {
 	require.NoError(t, err)
 	idleCache, err := ResolveCacheDir(idle)
 	require.NoError(t, err)
-	verdict, _ := trail.WriteBlob(t.Context(), judgeCache, "grd", []byte("the full verdict"))
+	verdict := trail.WriteBlob(t.Context(), judgeCache, "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, verdict)
 
 	opened, err := Inspect(t.Context(), worker, WithSpawnRule(tier.Ceiling))

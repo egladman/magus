@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -106,7 +106,7 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 // in the joined error, which is a [*blobUndecodableError] or a [*retiredDecisionError] per
 // blob.
 func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
-	events, err := trailtypes.ReadRecent(ctx, base, limit)
+	events, err := recentCalls(ctx, base, limit)
 	if err != nil {
 		return map[string][]diff.Touch{}, err
 	}
@@ -125,15 +125,15 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 	obs := make([]observation, 0, len(events))
 	var errs []error
 	for _, e := range events {
-		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
+		raw, rerr := e.Request.Read(CallsDir(base))
 		if rerr != nil {
 			continue
 		}
 		var req agentCommandRequest
-		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -149,7 +149,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		obs = append(obs, observation{
 			Host: req.Host, Session: req.Session, Transcript: req.Transcript,
 			Tool: req.Tool, Path: relativize(root, req.Path), Program: CommandProgram(req.Command),
-			At: time.UnixMilli(e.Ts),
+			At: e.Time,
 		})
 	}
 	return touchesRead(obs, paths), errors.Join(errs...)
@@ -387,7 +387,7 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 	if session == "" {
 		return out, nil
 	}
-	events, err := readRecent(ctx, base, limit)
+	events, err := recentCalls(ctx, base, limit)
 	if err != nil {
 		return out, err
 	}
@@ -398,12 +398,12 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 			continue
 		}
 		switch e.Kind {
-		case trailtypes.KindAgentCommand:
+		case journal.CallKindAgentCommand:
 			out.Commands++
-			call := SessionCall{At: time.UnixMilli(e.Ts), Action: e.Action, Worker: e.Agent, ToolMs: e.DurationMs, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
-			if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
+			call := SessionCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
+			if raw, err := e.Response.Read(CallsDir(base)); err == nil {
 				var resp agentCommandResponse
-				switch err := decodeAgentBlob(base, e.ResponseRef, raw, &resp); {
+				switch err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); {
 				case errors.As(err, &retired):
 					return SessionTrail{}, err
 				case err == nil:
@@ -413,9 +413,9 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 					}
 				}
 			}
-			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
+			if raw, err := e.Request.Read(CallsDir(base)); err == nil {
 				var req agentCommandRequest
-				switch err := decodeAgentBlob(base, e.RequestRef, raw, &req); {
+				switch err := decodeAgentBlob(base, e.Request.Ref, raw, &req); {
 				case errors.As(err, &retired):
 					return SessionTrail{}, err
 				case err == nil:
@@ -424,12 +424,12 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 				}
 			}
 			out.Calls = append(out.Calls, call)
-		case trailtypes.KindAgentSpawn:
-			if e.Action == ActionAgentContinue {
+		case journal.CallKindAgentSpawn:
+			if e.Name == ActionAgentContinue {
 				continue
 			}
-			sp := SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)}
-			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
+			sp := SessionSpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
+			if raw, err := e.Request.Read(CallsDir(base)); err == nil {
 				var req agentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
@@ -493,17 +493,17 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 	if sc.Err() != nil || newest == "" {
 		return AgentActivity{}, false
 	}
-	var e trailtypes.Event
+	var e journal.Call
 	if codec.Unmarshal([]byte(newest), &e) != nil {
 		return AgentActivity{}, false
 	}
-	if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn || e.Ts <= 0 {
+	if e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindAgentSpawn || e.Time.IsZero() || e.Time.UnixMilli() <= 0 {
 		// A missing timestamp would clock to 1970, which is not time.Time's zero, so
 		// the prompt-cache clock would print an age of half a century with every
 		// window closed instead of taking its documented empty branch.
 		return AgentActivity{}, false
 	}
-	return AgentActivity{Session: e.Session, Host: e.Host, At: time.UnixMilli(e.Ts)}, true
+	return AgentActivity{Session: e.Session, Host: e.Host, At: e.Time}, true
 }
 
 // agentKindTag is the encoded prefix both agent kinds share, which is what makes the
@@ -537,21 +537,21 @@ func relativize(root, p string) string {
 // of the counts and returned in the joined error, a [*blobUndecodableError] or a
 // [*retiredDecisionError] per blob.
 func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
-	events, err := trailtypes.ReadRecent(ctx, base, limit)
+	events, err := recentCalls(ctx, base, limit)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 	var errs []error
 	for _, e := range events {
-		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
+		raw, rerr := e.Request.Read(CallsDir(base))
 		if rerr != nil {
 			continue
 		}
 		var req agentCommandRequest
-		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}

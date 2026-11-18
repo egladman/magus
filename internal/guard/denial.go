@@ -154,12 +154,12 @@ details: %s`, lead, note, command, next.Run), ref, remedy
 // session's checkout, and `magus query output` run from a worker's own checkout reads only
 // that checkout's store and the primary's.
 func storeVerdict(ctx context.Context, cacheDir, verdict string) string {
-	ref, _ := trail.WriteBlob(ctx, cacheDir, verdictRefPrefix, []byte(verdict))
+	ref := trail.WriteBlob(ctx, cacheDir, verdictRefPrefix, []byte(verdict)).Ref
 	if ref == "" {
 		return ""
 	}
 	if primary, ok := primaryCacheDir(cacheDir); ok {
-		_, _ = trail.WriteBlob(ctx, primary, verdictRefPrefix, []byte(verdict))
+		_ = trail.WriteBlob(ctx, primary, verdictRefPrefix, []byte(verdict))
 	}
 	return ref
 }

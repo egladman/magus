@@ -22,8 +22,9 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -157,9 +158,9 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	assert.Equal(t, http.StatusOK, get(t, base+"/api/v1/status", secret))
 
 	// The first use is recorded, and the record holds no secret.
-	var events []trail.Event
+	var events []journal.Call
 	require.Eventually(t, func() bool {
-		events, _ = trail.ReadRecent(t.Context(), trailDir, 10)
+		events, _ = loggedCalls(t.Context(), trailDir)
 		return len(events) > 0
 	}, 5*time.Second, 20*time.Millisecond)
 	require.NoError(t, filepath.WalkDir(trailDir, func(path string, d os.DirEntry, err error) error {
@@ -556,12 +557,12 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	if ev.Preview == "" {
 		t.Fatalf("event preview should carry the remote IP, got empty")
 	}
-	require.Equal(t, trail.Event{
-		Ts:        ev.Ts,
-		Kind:      trail.KindTokenLifecycle,
+	require.Equal(t, journal.Call{
+		Time:      ev.Time,
+		Kind:      journal.CallKindTokenLifecycle,
 		Origin:    ev.Origin,
-		Action:    "share.open",
-		Outcome:   trail.OutcomeOK,
+		Name:      "share.open",
+		Outcome:   journal.OutcomeOK,
 		UserAgent: ua,
 		Preview:   ev.Preview, // the remote IP, checked non-empty above
 	}, ev)
@@ -580,15 +581,15 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 // waitTrailCount polls the trail until it holds exactly want events or a short deadline
 // passes, returning the events. The "share link opened" append runs asynchronously, so a
 // test must wait for it to land rather than read the trail the instant the request returns.
-func waitTrailCount(t *testing.T, dir string, want int) []trail.Event {
+func waitTrailCount(t *testing.T, dir string, want int) []journal.Call {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
-	var events []trail.Event
+	var events []journal.Call
 	for time.Now().Before(deadline) {
 		var err error
-		events, err = trail.ReadRecent(t.Context(), dir, 10)
+		events, err = loggedCalls(t.Context(), dir)
 		if err != nil {
-			t.Fatalf("ReadRecent: %v", err)
+			t.Fatalf("loggedCalls: %v", err)
 		}
 		if len(events) == want {
 			return events
@@ -597,6 +598,18 @@ func waitTrailCount(t *testing.T, dir string, want int) []trail.Event {
 	}
 	t.Fatalf("trail never reached %d events; last saw %d", want, len(events))
 	return nil
+}
+
+// loggedCalls is the newest calls in the log under dir.
+func loggedCalls(ctx context.Context, dir string) ([]journal.Call, error) {
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, trail.CallsDir(dir), 10) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // hostOfURL extracts host:port from "http://host:port/console/#...".

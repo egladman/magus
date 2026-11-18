@@ -25,8 +25,8 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -254,13 +254,13 @@ export fun review_threads(target: Target, req: ReviewRef) > any !> any {
 }
 
 // mergedReviewEvents returns the review.merged events the job left on the trail.
-func mergedReviewEvents(t *testing.T, cacheDir string) []trail.Event {
+func mergedReviewEvents(t *testing.T, cacheDir string) []journal.Call {
 	t.Helper()
-	events, err := trail.ReadRecent(t.Context(), cacheDir, 20)
+	events, err := loggedCalls(t.Context(), cacheDir, 20)
 	require.NoError(t, err)
-	var out []trail.Event
+	var out []journal.Call
 	for _, e := range events {
-		if e.Action == "review.merged" {
+		if e.Name == "review.merged" {
 			out = append(out, e)
 		}
 	}

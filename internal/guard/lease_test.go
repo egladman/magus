@@ -26,7 +26,6 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -2888,7 +2887,7 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	ref := verdictRef.FindString(reason)
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
 	assert.Equal(t, fmt.Sprintf("magus workspace: your binding to job held-job ended when its row or its checkout was removed; `magus job exec <job>` binds you again.%smagus query output %s", verdictRefLine, ref), reason)
-	stored, err := trailtypes.ReadBlob(at.cacheDir, ref)
+	stored, err := loggedPayload(at.cacheDir, ref)
 	require.NoError(t, err)
 	assert.Contains(t, string(stored), "A caller whose binding ended is refused rather than read as unbound", "the rationale is in the stored verdict")
 	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/"), "with the rule's page")

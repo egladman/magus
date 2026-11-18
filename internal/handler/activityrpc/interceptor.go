@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/trail"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // mutatingVerbs and readVerbs are the leading-word buckets every Connect method name falls into. They are
@@ -89,7 +89,7 @@ func WithAuditReads() Option {
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC (trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract), and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.
-func Interceptor(trailDir string, kind trailtypes.Kind, opts ...Option) connect.Interceptor { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
+func Interceptor(trailDir string, kind journal.CallKind, opts ...Option) connect.Interceptor { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	var cfg options
 	for _, o := range opts {
 		o(&cfg)
@@ -100,20 +100,20 @@ func Interceptor(trailDir string, kind trailtypes.Kind, opts ...Option) connect.
 			resp, err := next(ctx, req)
 			method := methodName(req.Spec().Procedure)
 			if mutating, _ := classify(method); mutating || cfg.auditReads {
-				ev := trailtypes.Event{
-					Ts:         start.UnixMilli(),
-					Kind:       kind,
-					Action:     method,
-					Outcome:    trailtypes.OutcomeOK,
-					DurationMs: time.Since(start).Milliseconds(),
+				ev := journal.Call{
+					Time:     start,
+					Kind:     kind,
+					Name:     method,
+					Outcome:  journal.OutcomeOK,
+					Duration: time.Since(start),
 				}
 				if err != nil {
-					ev.Outcome = trailtypes.OutcomeError
+					ev.Outcome = journal.OutcomeError
 					ev.Error = err.Error()
 				}
 				if cfg.subject != nil && err == nil && resp != nil {
 					if blob, preview := cfg.subject(resp); len(blob) > 0 {
-						ev.RequestRef, ev.RequestBytes = trail.WriteBlob(ctx, trailDir, "tok", blob)
+						ev.Request = trail.WriteBlob(ctx, trailDir, "tok", blob)
 						ev.Preview = preview
 					}
 				}

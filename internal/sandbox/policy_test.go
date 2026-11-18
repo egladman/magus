@@ -13,8 +13,8 @@ import (
 
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 )
 
@@ -260,16 +260,15 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	require.Error(t, policy.CheckWrite(ctx, "/definitely/not/allowed/f"))
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(allowed, "f")), "an allow leaves no event")
 
-	events, err := trailtypes.ReadRecent(t.Context(), base, 10)
-	require.NoError(t, err)
+	events := loggedCalls(t, base)
 	require.Len(t, events, 1)
 	assert.NotEmpty(t, events[0].Error)
-	assert.Equal(t, trailtypes.Event{
-		Ts:      events[0].Ts,
-		Kind:    trailtypes.KindSandboxDenial,
+	assert.Equal(t, journal.Call{
+		Time:    events[0].Time,
+		Kind:    journal.CallKindSandboxDenial,
 		Origin:  events[0].Origin,
-		Action:  "write of /definitely/not/allowed/f",
-		Outcome: trailtypes.OutcomeError,
+		Name:    "write of /definitely/not/allowed/f",
+		Outcome: journal.OutcomeError,
 		Error:   events[0].Error,
 	}, events[0], "a workspace-default denial claims no lease")
 }
@@ -283,19 +282,29 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 
 	require.Error(t, policy.CheckExec(ctx, "/definitely/not/allowed/f"))
 
-	events, err := trailtypes.ReadRecent(t.Context(), base, 10)
-	require.NoError(t, err)
+	events := loggedCalls(t, base)
 	require.Len(t, events, 1)
-	assert.Equal(t, trailtypes.Event{
-		Ts:        events[0].Ts,
-		Kind:      trailtypes.KindSandboxDenial,
+	assert.Equal(t, journal.Call{
+		Time:      events[0].Time,
+		Kind:      journal.CallKindSandboxDenial,
 		Origin:    events[0].Origin,
 		Lease:     "fleet/worker-3",
 		LeaseFrom: job.LeaseSourceMarker,
-		Action:    "exec of /definitely/not/allowed/f",
-		Outcome:   trailtypes.OutcomeError,
+		Name:      "exec of /definitely/not/allowed/f",
+		Outcome:   journal.OutcomeError,
 		Error:     events[0].Error,
 	}, events[0])
+}
+
+// loggedCalls is every call in the log under base, newest first.
+func loggedCalls(t *testing.T, base string) []journal.Call {
+	t.Helper()
+	var out []journal.Call
+	for c, err := range journal.Calls(t.Context(), trail.CallsDir(base), 10) {
+		require.NoError(t, err)
+		out = append(out, c)
+	}
+	return out
 }
 
 // A provider spell's declaration is the remote cache's credential, so it reaches the

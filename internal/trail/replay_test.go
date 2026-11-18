@@ -8,8 +8,8 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -36,9 +36,9 @@ func replayed(t *testing.T, root, base string, paths []string, limit int) map[st
 // recordUndecodable writes an agent command whose request blob is not JSON.
 func recordUndecodable(t *testing.T, base string) string {
 	t.Helper()
-	ref, _ := WriteBlob(t.Context(), base, "agent", []byte("not json"))
-	Append(t.Context(), base, trailtypes.Event{Ts: 1, Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Action: toolShell, RequestRef: ref})
-	return ref
+	request := WriteBlob(t.Context(), base, "agent", []byte("not json"))
+	Append(t.Context(), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: toolShell, Request: request})
+	return request.Ref
 }
 
 // A blob that does not decode is named, and the touches the rest give are still returned.
@@ -330,8 +330,9 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 // with the store to clear rather than count the call as undecided.
 func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	base := t.TempDir()
-	ref, _ := WriteBlob(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
-	Append(t.Context(), base, trailtypes.Event{Ts: 1, Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}, Action: toolShell, ResponseRef: ref})
+	response := WriteBlob(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
+	ref := response.Ref
+	Append(t.Context(), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: toolShell, Response: response})
 
 	_, err := ForSession(t.Context(), base, "s1", 100)
 	var retired *retiredDecisionError
@@ -472,7 +473,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
 	for range 200 {
-		Append(t.Context(), base, trailtypes.Event{Kind: trailtypes.KindJob, Ts: time.Now().UnixMilli()})
+		Append(t.Context(), base, journal.Call{Kind: journal.CallKindJob, Time: time.Now()})
 	}
 
 	got, ok := LastAgentActivity(base)
@@ -480,7 +481,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
-	Append(t.Context(), stamped, trailtypes.Event{Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}})
+	Append(t.Context(), stamped, journal.Call{Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}})
 	_, ok = LastAgentActivity(stamped)
 	assert.False(t, ok, "an observation with no timestamp has no age to report")
 }

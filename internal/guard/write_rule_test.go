@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -119,9 +119,9 @@ func TestWriteRuleStrengthensOnly(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code"})
 	assert.Equal(t, verdictWithRule("deny", workspaceWriteRule), unworded(v))
 	assert.Contains(t, v.Reason, "Add a fragment instead.")
-	writes := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	writes := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.NotEmpty(t, writes)
-	assert.Equal(t, decidedByWorktree, writes[0].DecidedBy)
+	assert.Equal(t, decidedByWorktree, callDecidedBy(writes[0]))
 
 	Judge(ctx, deps, Request{Input: filepath.Join(root, "CHANGELOG.md"), Observe: true, Host: "claude-code"})
 	assert.Len(t, probe.asked, 1, "an observed read is not a write")
@@ -155,7 +155,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 	approved := func(context.Context) (workspace.WriteRule, error) { return (&writeRuleProbe{}).rule(), nil }
 	lapsedLoad := Dependencies{
 		LoadFailure:       errors.New("magusfile: context deadline exceeded"),
-		RuleLoad:          trail.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
+		RuleLoad:          journal.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
 		ApprovedWriteRule: approved,
 	}
 	const spared = "lets it through, because the guard loads this file itself"

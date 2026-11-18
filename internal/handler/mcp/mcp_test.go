@@ -22,8 +22,8 @@ import (
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -76,6 +76,18 @@ func mcpCallTelemetry(t *testing.T) (*observabilitytest.MockProvider, *[]observa
 		Run(func(_ context.Context, c observability.MCPCall) { calls = append(calls, c) }).
 		Once()
 	return tel, &calls
+}
+
+// loggedCalls is the newest limit calls in the log under base.
+func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, trail.CallsDir(base), limit) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func quietLogger() *slog.Logger {
@@ -163,36 +175,34 @@ func TestWrapCapturesExchange(t *testing.T) {
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
+	events, err := loggedCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
 
 	// The clock, the OS account, the content-addressed refs and the request size are copied
 	// across; the refs are required and resolved below.
-	require.NotEmpty(t, ev.ResponseRef)
-	require.NotEmpty(t, ev.RequestRef) // the request arguments were captured too
-	assert.Equal(t, trailtypes.Event{
-		Ts:   ev.Ts,
-		Kind: trailtypes.KindMCPToolCall,
+	require.NotEmpty(t, ev.Response.Ref)
+	require.NotEmpty(t, ev.Request.Ref) // the request arguments were captured too
+	assert.Equal(t, journal.Call{
+		Time: ev.Time,
+		Kind: journal.CallKindMCPTool,
 		// The MCP client's own name is its host label.
-		Origin:        job.Origin{User: ev.User, UID: ev.UID, EntryPoint: job.EntryPointMCP, Host: "test-agent"},
-		UserAgent:     "claude-code/1.2.3", // the session User-Agent is recorded on the event
-		Action:        "client",
-		Outcome:       trailtypes.OutcomeOK,
-		DurationMs:    ev.DurationMs,
-		RequestRef:    ev.RequestRef,
-		ResponseRef:   ev.ResponseRef,
-		Preview:       out, // a short response: the preview is the whole body
-		RequestBytes:  ev.RequestBytes,
-		ResponseBytes: int64(len(out)),
+		Origin:    job.Origin{User: ev.User, UID: ev.UID, EntryPoint: job.EntryPointMCP, Host: "test-agent"},
+		UserAgent: "claude-code/1.2.3", // the session User-Agent is recorded on the event
+		Name:      "client",
+		Outcome:   journal.OutcomeOK,
+		Duration:  ev.Duration,
+		Request:   ev.Request,
+		Response:  journal.Payload{Ref: ev.Response.Ref, Bytes: int64(len(out))},
+		Preview:   out, // a short response: the preview is the whole body
 	}, ev)
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
-	resp, err := trailtypes.ReadBlob(dir, ev.ResponseRef)
+	resp, err := ev.Response.Read(trail.CallsDir(dir))
 	require.NoError(t, err)
 	assert.Equal(t, out, string(resp))
-	reqBody, err := trailtypes.ReadBlob(dir, ev.RequestRef)
+	reqBody, err := ev.Request.Read(trail.CallsDir(dir))
 	require.NoError(t, err)
 	assert.Contains(t, string(reqBody), "query")
 }
@@ -212,10 +222,10 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	_, err := h(context.Background(), callRequest("client", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
+	events, err := loggedCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, trailtypes.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
+	assert.Equal(t, journal.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
 	require.Len(t, *calls, 1)
 	assert.Equal(t, observability.OutcomeError, (*calls)[0].Outcome, "the metric must also see error")
 }

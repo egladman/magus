@@ -2,12 +2,13 @@ package job
 
 import (
 	"context"
+	"errors"
 	"math"
 	"slices"
 
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -33,12 +34,18 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 	if err != nil || !known {
 		return nil, nil
 	}
-	events, err := trailtypes.ReadRecent(ctx, base, workReadWindow)
-	if err != nil {
-		return nil, nil
+	var events []journal.Call
+	for c, err := range journal.Calls(ctx, trail.CallsDir(base), workReadWindow) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return nil, nil
+		}
+		events = append(events, c)
 	}
 	from := since * 1000
-	if len(events) == workReadWindow && events[len(events)-1].Ts > from {
+	if len(events) == workReadWindow && events[len(events)-1].Time.UnixMilli() > from {
 		return nil, nil
 	}
 	slices.Reverse(events)
@@ -48,7 +55,7 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 	var facts []types.AgentFacts
 	everyReported := true
 	for _, e := range events {
-		if e.Kind != trailtypes.KindAgentCommand || e.Lease != lease || e.Ts < from {
+		if e.Kind != journal.CallKindAgentCommand || e.Lease != lease || e.Time.UnixMilli() < from {
 			continue
 		}
 		f, reported := callFacts(base, e)
@@ -58,7 +65,7 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 		sum += tokens
 		peak = max(peak, tokens)
 		work.Calls++
-		if e.Action != writeTool {
+		if e.Name != writeTool {
 			if work.Writes == 0 {
 				work.SetupCalls++
 				setup += tokens
@@ -66,7 +73,7 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 			continue
 		}
 		if work.Writes == 0 {
-			ms := e.Ts - from
+			ms := e.Time.UnixMilli() - from
 			work.SetupMs = &ms
 			if reported {
 				work.SetupTokens = &tokens
@@ -88,11 +95,11 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 
 // callFacts is the cost facts the host reported beside one call, from the call's request
 // record; false when it reported no context size or the record rotated away.
-func callFacts(base string, e trailtypes.Event) (types.AgentFacts, bool) {
-	if e.RequestRef == "" {
+func callFacts(base string, e journal.Call) (types.AgentFacts, bool) {
+	if e.Request.Ref == "" {
 		return types.AgentFacts{}, false
 	}
-	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
+	raw, err := e.Request.Read(trail.CallsDir(base))
 	if err != nil {
 		return types.AgentFacts{}, false
 	}

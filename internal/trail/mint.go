@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // MintRecord is what the trail keeps about a minted token: which token, until when, and the
@@ -33,18 +33,17 @@ func AppendMint(ctx context.Context, base, action string, rec MintRecord) {
 	if err != nil {
 		return
 	}
-	ref, size := WriteBlob(ctx, base, "tok", blob)
+	request := WriteBlob(ctx, base, "tok", blob)
 	preview := fmt.Sprintf("%s %s", rec.Minted.Phrase(), rec.Minted.Grant.String())
 	if !rec.Expires.IsZero() {
 		preview += " until " + rec.Expires.UTC().Format("2006-01-02 15:04")
 	}
-	Append(ctx, base, trailtypes.Event{
-		Ts:           time.Now().UnixMilli(),
-		Kind:         trailtypes.KindTokenLifecycle,
-		Action:       action,
-		Outcome:      trailtypes.OutcomeOK,
-		RequestRef:   ref,
-		RequestBytes: size,
-		Preview:      preview,
+	Append(ctx, base, journal.Call{
+		Time:    time.Now(),
+		Kind:    journal.CallKindTokenLifecycle,
+		Name:    action,
+		Outcome: journal.OutcomeOK,
+		Request: request,
+		Preview: preview,
 	})
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -60,7 +61,7 @@ func shortDeny(t *testing.T, cacheDir string, v verdict.Judgment, rule denyRuleN
 	verdict, note, _ := strings.Cut(shown, "\n")
 	assert.Equal(t, say, verdict)
 	assert.NotContains(t, note, "\n", "only the nothing-ran line sits between the verdict and the ref")
-	stored, err := trail.ReadBlob(cacheDir, ref)
+	stored, err := loggedPayload(cacheDir, ref)
 	require.NoError(t, err)
 	return string(stored)
 }
@@ -83,7 +84,7 @@ func servedDeny(t *testing.T, cacheDir string, v verdict.Judgment, rule denyRule
 	verdict, note, _ := strings.Cut(before, "\n")
 	assert.Equal(t, say, verdict)
 	assert.NotContains(t, note, "\n", "only the nothing-ran line sits between the verdict and the command")
-	stored, err := trail.ReadBlob(cacheDir, ref)
+	stored, err := loggedPayload(cacheDir, ref)
 	require.NoError(t, err)
 	return string(stored)
 }
@@ -430,28 +431,32 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 	})})
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
-	assert.Equal(t, trail.Event{
-		Kind:          trail.KindAgentCommand,
-		Action:        "shell.command",
-		Outcome:       trail.OutcomeOK,
-		Binary:        "/work/tree/magus",
-		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
-		Cwd:           cwd,
-		Phases:        []trail.Phase{{Name: phaseBuiltinRules}, {Name: phaseNotices}, {Name: phaseJudge}},
+	assert.Equal(t, journal.Call{
+		Kind:    journal.CallKindAgentCommand,
+		Name:    "shell.command",
+		Outcome: journal.OutcomeOK,
+		Guard: &journal.Guard{
+			Binary:        "/work/tree/magus",
+			BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+			Cwd:           cwd,
+			Phases:        []journal.Phase{{Name: phaseBuiltinRules}, {Name: phaseNotices}, {Name: phaseJudge}},
+		},
 	}, clearVolatile(commands[0]))
 
-	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	spawns := trailEvents(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, trail.Event{
-		Kind:          trail.KindAgentSpawn,
-		Action:        "general-purpose",
-		Outcome:       trail.OutcomeOK,
-		Binary:        "/work/tree/magus",
-		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
-		Cwd:           "/Users/dev/repo", // the spawn envelope's reported directory
-		Phases:        []trail.Phase{{Name: phaseJudge}},
+	assert.Equal(t, journal.Call{
+		Kind:    journal.CallKindAgentSpawn,
+		Name:    "general-purpose",
+		Outcome: journal.OutcomeOK,
+		Guard: &journal.Guard{
+			Binary:        "/work/tree/magus",
+			BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+			Cwd:           "/Users/dev/repo", // the spawn envelope's reported directory
+			Phases:        []journal.Phase{{Name: phaseJudge}},
+		},
 	}, clearVolatile(spawns[0]))
 }
 
@@ -466,11 +471,12 @@ func TestBareHookRowsRecordTheDirectoryTheJudgeRanIn(t *testing.T) {
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "notes.txt", IsPath: true})
 
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 2)
 	byTool := map[string]string{}
 	for _, e := range commands {
-		byTool[e.Action] = e.Cwd
+		require.NotNil(t, e.Guard)
+		byTool[e.Name] = e.Guard.Cwd
 	}
 	assert.Equal(t, map[string]string{
 		"shell.command": cmp.Or(hookLocation(ctx, deps).dir, wd),
@@ -485,16 +491,17 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 	probe := &commandRuleProbe{}
 	deps := Dependencies{
 		CommandRule: probe.rule(),
-		RuleLoad:    trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500},
+		RuleLoad:    journal.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500},
 	}
 
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
 
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
-	phases := commands[0].Phases
+	require.NotNil(t, commands[0].Guard)
+	phases := commands[0].Guard.Phases
 	require.Len(t, phases, 5)
-	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500}, phases[0])
+	assert.Equal(t, journal.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500}, phases[0])
 	assert.Equal(t, phaseWorktreeRule, phases[1].Name)
 	assert.Positive(t, phases[1].BudgetMs)
 	assert.False(t, phases[1].Lapsed)
@@ -506,15 +513,20 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 // clearVolatile zeroes what the clock, the OS account and the content-addressed blobs decide,
 // so a recorded event compares whole and a field added to it cannot be dropped unseen. A
 // phase keeps its name and whether it lapsed.
-func clearVolatile(e trail.Event) trail.Event {
-	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, jobtypes.Origin{}, "", 0
-	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
-	e.Preview, e.VerdictRef = "", ""
-	phases := make([]trail.Phase, len(e.Phases))
-	for i, p := range e.Phases {
-		phases[i] = trail.Phase{Name: p.Name, Lapsed: p.Lapsed}
+func clearVolatile(e journal.Call) journal.Call {
+	e.Time, e.Origin, e.Workspace = time.Time{}, jobtypes.Origin{}, ""
+	e.Request, e.Response, e.Preview = journal.Payload{}, journal.Payload{}, ""
+	if e.Guard == nil {
+		return e
 	}
-	e.Phases = phases
+	g := *e.Guard
+	g.Duration, g.Verdict = 0, journal.Payload{}
+	phases := make([]journal.Phase, len(g.Phases))
+	for i, p := range g.Phases {
+		phases[i] = journal.Phase{Name: p.Name, Lapsed: p.Lapsed}
+	}
+	g.Phases = phases
+	e.Guard = &g
 	return e
 }
 

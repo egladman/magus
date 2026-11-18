@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -22,8 +23,9 @@ import (
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -830,17 +832,19 @@ func holderLastCall(ctx context.Context, deps Dependencies, at location, owner j
 	if realPath(owner.CheckoutRoot) != realPath(at.workspace) {
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
-	events, err := trailtypes.ReadRecent(ctx, cacheDir, holderTrailWindow)
-	if err != nil {
-		return time.Time{}, false
-	}
-	var last int64
-	for _, e := range events {
-		if e.Kind == trailtypes.KindAgentCommand && e.Lease == owner.ID {
-			last = max(last, e.Ts)
+	var last time.Time
+	for e, err := range journal.Calls(ctx, trail.CallsDir(cacheDir), holderTrailWindow) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return time.Time{}, false
+		}
+		if e.Kind == journal.CallKindAgentCommand && e.Lease == owner.ID && e.Time.After(last) {
+			last = e.Time
 		}
 	}
-	return time.UnixMilli(last), last != 0
+	return last, !last.IsZero()
 }
 
 // enteredBefore is the newest entry on me covering rel, consumed or not.

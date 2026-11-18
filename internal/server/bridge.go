@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -577,17 +577,17 @@ func (h *Host) recordJobActivity(ctx context.Context, args []string, dur time.Du
 		}
 		root = resolved
 	}
-	ev := trailtypes.Event{
-		Ts:         time.Now().Add(-dur).UnixMilli(),
-		Kind:       trailtypes.KindJob,
-		Origin:     jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
-		Workspace:  root,
-		Action:     job.ActionString(args),
-		Outcome:    trailtypes.OutcomeOK,
-		DurationMs: dur.Milliseconds(),
+	ev := journal.Call{
+		Time:      time.Now().Add(-dur),
+		Kind:      journal.CallKindJob,
+		Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
+		Workspace: root,
+		Name:      job.ActionString(args),
+		Outcome:   journal.OutcomeOK,
+		Duration:  dur,
 	}
 	if err != nil {
-		ev.Outcome = trailtypes.OutcomeError
+		ev.Outcome = journal.OutcomeError
 		ev.Error = err.Error()
 	}
 	trail.Append(ctx, base, ev)

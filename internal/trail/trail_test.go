@@ -2,7 +2,7 @@ package trail
 
 import (
 	"bytes"
-	"errors"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -39,24 +39,34 @@ func captureWarnings(t *testing.T, fn func()) string {
 // stamped fills what the trail decides rather than the producer: the OS account and entry point
 // Append stamps (see origin_test.go), and the clock and content-addressed refs of the one event
 // read back.
-func stamped(t *testing.T, got, want trailtypes.Event) trailtypes.Event {
+func stamped(t *testing.T, got, want journal.Call) journal.Call {
 	t.Helper()
-	want.Ts = got.Ts
+	want.Time = got.Time
 	want.Origin = StampOrigin(t.Context(), want.Origin)
-	want.RequestRef, want.RequestBytes = got.RequestRef, got.RequestBytes
-	want.ResponseRef, want.ResponseBytes = got.ResponseRef, got.ResponseBytes
+	want.Request, want.Response = got.Request, got.Response
 	return want
 }
 
-// seedEvents writes n events (Ts 1..n) straight into the trail file, bypassing Append so a
-// large fixture is one write, not n opens. Returns the events in append order (oldest first).
-func seedEvents(t *testing.T, base string, n int) []trailtypes.Event {
+func writeBlobRef(ctx context.Context, base, prefix string, data []byte) string {
+	return WriteBlob(ctx, base, prefix, data).Ref
+}
+
+// readBlob is the payload ref names in the log under base.
+func readBlob(base, ref string) ([]byte, error) {
+	return journal.Payload{Ref: ref}.Read(CallsDir(base))
+}
+
+func atMs(ms int64) time.Time { return time.UnixMilli(ms) }
+
+// seedEvents writes n calls straight into the log in one write, not n
+// opens. It returns them oldest first.
+func seedEvents(t *testing.T, base string, n int) []journal.Call {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
-	events := make([]trailtypes.Event, 0, n)
+	events := make([]journal.Call, 0, n)
 	var buf []byte
 	for i := 1; i <= n; i++ {
-		e := trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK}
+		e := journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}
 		events = append(events, e)
 		line, err := codec.Marshal(e)
 		require.NoError(t, err)
@@ -68,21 +78,21 @@ func seedEvents(t *testing.T, base string, n int) []trailtypes.Event {
 
 func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	dir := t.TempDir()
-	Append(t.Context(), dir, trailtypes.Event{Ts: 1, Kind: trailtypes.KindMCPToolCall, Action: "query", Outcome: trailtypes.OutcomeOK})
-	Append(t.Context(), dir, trailtypes.Event{Ts: 2, Kind: trailtypes.KindTokenLifecycle, Action: "connector.create", Outcome: trailtypes.OutcomeOK})
-	Append(t.Context(), dir, trailtypes.Event{Ts: 3, Kind: trailtypes.KindJob, Workspace: "/ws", Action: "graph build", Outcome: trailtypes.OutcomeError, Error: "boom"})
+	Append(t.Context(), dir, journal.Call{Time: atMs(1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+	Append(t.Context(), dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
+	Append(t.Context(), dir, journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
+	events, err := recentCalls(t.Context(), dir, 10)
 	if err != nil {
-		t.Fatalf("ReadRecent: %v", err)
+		t.Fatalf("recentCalls: %v", err)
 	}
 	if len(events) != 3 {
 		t.Fatalf("got %d events, want 3", len(events))
 	}
-	if events[0].Action != "graph build" || events[2].Action != "query" { // newest first
-		t.Errorf("order = %q..%q, want graph build..query", events[0].Action, events[2].Action)
+	if events[0].Name != "graph build" || events[2].Name != "query" { // newest first
+		t.Errorf("order = %q..%q, want graph build..query", events[0].Name, events[2].Name)
 	}
-	want := stamped(t, events[0], trailtypes.Event{Ts: 3, Kind: trailtypes.KindJob, Workspace: "/ws", Action: "graph build", Outcome: trailtypes.OutcomeError, Error: "boom"})
+	want := stamped(t, events[0], journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
 	assert.Equal(t, want, events[0], "event not round-tripped")
 }
 
@@ -91,9 +101,9 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 func TestTrailIsPrivateToItsOwner(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	for i := range 3 {
-		Append(t.Context(), dir, trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: "query", Outcome: trailtypes.OutcomeOK})
+		Append(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
 	}
-	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("a payload"))
+	ref := WriteBlob(t.Context(), dir, "mcp", []byte("a payload")).Ref
 	require.NotEmpty(t, ref)
 
 	perm := func(p string) os.FileMode {
@@ -107,35 +117,8 @@ func TestTrailIsPrivateToItsOwner(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), perm(filepath.Join(blobsPath(dir), ref)))
 }
 
-func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
-	dir := t.TempDir()
-	for i := 1; i <= 5; i++ {
-		Append(t.Context(), dir, trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: string(rune('a' + i - 1))})
-	}
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 2)
-	if err != nil {
-		t.Fatalf("ReadRecent: %v", err)
-	}
-	if len(events) != 2 || events[0].Action != "e" || events[1].Action != "d" {
-		t.Fatalf("tail = %+v, want [e d]", events)
-	}
-}
-
-func TestReadRecent_MissingTrailIsEmptyAndNoBaseIsRefused(t *testing.T) {
-	if evs, err := trailtypes.ReadRecent(t.Context(), t.TempDir(), 10); err != nil || len(evs) != 0 {
-		t.Errorf("missing trail: got %d events, err %v; want 0, nil", len(evs), err)
-	}
-	var invalid *trailtypes.InvalidReadError
-	if _, err := trailtypes.ReadRecent(t.Context(), "", 10); !errors.As(err, &invalid) {
-		t.Errorf("empty base: got %v; want an InvalidReadError", err)
-	}
-	if _, err := trailtypes.ReadRecent(t.Context(), t.TempDir(), 0); !errors.As(err, &invalid) {
-		t.Errorf("zero limit: got %v; want an InvalidReadError", err)
-	}
-}
-
 func TestAppend_EmptyBaseIsNoop(t *testing.T) {
-	Append(t.Context(), "", trailtypes.Event{Action: "x"}) // must not panic or create anything
+	Append(t.Context(), "", journal.Call{Name: "x"}) // must not panic or create anything
 }
 
 func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
@@ -150,23 +133,23 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 		Decision:  verdict.Defer,
 	})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
 	// Host and session ride the event LINE as well as the request blob, so a reader can group a
 	// page of observations by host without a blob fetch per row. An observation naming no entry
 	// point came through the hook.
-	require.Equal(t, stamped(t, event, trailtypes.Event{
-		Kind:      trailtypes.KindAgentCommand,
+	require.Equal(t, stamped(t, event, journal.Call{
+		Kind:      journal.CallKindAgentCommand,
 		Origin:    job.Origin{EntryPoint: job.EntryPointHook, Host: "codex", Session: "abc123"},
 		Workspace: "/repo/magus",
-		Action:    "Bash",
-		Outcome:   trailtypes.OutcomeOK,
+		Name:      "Bash",
+		Outcome:   journal.OutcomeOK,
 		Preview:   "guard: defer",
 	}), event)
 
-	request, err := trailtypes.ReadBlob(dir, event.RequestRef)
+	request, err := readBlob(dir, event.Request.Ref)
 	require.NoError(t, err)
 	var gotRequest agentCommandRequest
 	require.NoError(t, codec.Unmarshal(request, &gotRequest))
@@ -179,7 +162,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 		Command:    "magus run test .",
 	}, gotRequest)
 
-	response, err := trailtypes.ReadBlob(dir, event.ResponseRef)
+	response, err := readBlob(dir, event.Response.Ref)
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
 	require.NoError(t, codec.Unmarshal(response, &gotResponse))
@@ -189,7 +172,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: verdict.Defer})
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events)
 }
@@ -198,24 +181,25 @@ func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: verdict.Defer, GuardMs: 278})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, int64(278), events[0].GuardMs)
-	assert.Zero(t, events[0].DurationMs, "guard time is not tool time")
+	require.NotNil(t, events[0].Guard)
+	assert.Equal(t, 278*time.Millisecond, events[0].Guard.Duration)
+	assert.Zero(t, events[0].Duration, "guard time is not tool time")
 }
 
 func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	event.Ts, event.Origin, event.Workspace = 0, job.Origin{}, ""
-	event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = "", "", 0, 0
-	assert.Equal(t, trailtypes.Event{Kind: trailtypes.KindAgentCommand, Action: "Bash", Outcome: trailtypes.OutcomeOK, DurationMs: 1500, Preview: "observed"}, event)
+	event.Time, event.Origin, event.Workspace = time.Time{}, job.Origin{}, ""
+	event.Request, event.Response = journal.Payload{}, journal.Payload{}
+	assert.Equal(t, journal.Call{Kind: journal.CallKindAgentCommand, Name: "Bash", Outcome: journal.OutcomeOK, Duration: 1500 * time.Millisecond, Preview: "observed"}, event)
 }
 
 // A hook row names the magus that judged the call and the directory the host reported, and
@@ -225,7 +209,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
 		Tool: "Bash", Command: "ls", Decision: verdict.Defer,
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2", Cwd: "/work/tree/console",
-		Phases: []trailtypes.Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
+		Phases: []journal.Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
 	})
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: verdict.Defer})
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
@@ -233,46 +217,48 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0", Cwd: "/work/tree",
 	})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
+	events, err := recentCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
-	var commands, spawns []trailtypes.Event
+	var commands, spawns []journal.Call
 	for _, e := range events {
 		switch e.Kind {
-		case trailtypes.KindAgentCommand:
+		case journal.CallKindAgentCommand:
 			commands = append(commands, e)
-		case trailtypes.KindAgentSpawn:
+		case journal.CallKindAgentSpawn:
 			spawns = append(spawns, e)
 		}
 	}
 	require.Len(t, commands, 2)
 	require.Len(t, spawns, 1)
 	judged, unknown := commands[0], commands[1]
-	if judged.Binary == "" {
+	if judged.Guard == nil {
 		judged, unknown = unknown, judged
 	}
-	require.Equal(t, stamped(t, judged, trailtypes.Event{
-		Kind:          trailtypes.KindAgentCommand,
-		Origin:        job.Origin{EntryPoint: job.EntryPointHook},
-		Action:        "Bash",
-		Outcome:       trailtypes.OutcomeOK,
-		Preview:       "guard: defer",
-		Binary:        "/work/tree/magus",
-		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
-		Cwd:           "/work/tree/console",
-		Phases:        []trailtypes.Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
+	require.Equal(t, stamped(t, judged, journal.Call{
+		Kind:    journal.CallKindAgentCommand,
+		Origin:  job.Origin{EntryPoint: job.EntryPointHook},
+		Name:    "Bash",
+		Outcome: journal.OutcomeOK,
+		Preview: "guard: defer",
+		Guard: &journal.Guard{
+			Binary:        "/work/tree/magus",
+			BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+			Cwd:           "/work/tree/console",
+			Phases:        []journal.Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
+		},
 	}), judged)
-	require.Empty(t, unknown.Binary)
-	require.Empty(t, unknown.Cwd)
-	require.Empty(t, unknown.Phases)
-	require.Equal(t, stamped(t, spawns[0], trailtypes.Event{
-		Kind:          trailtypes.KindAgentSpawn,
-		Origin:        job.Origin{EntryPoint: job.EntryPointHook},
-		Action:        "Explore",
-		Outcome:       trailtypes.OutcomeOK,
-		Binary:        "/work/tree/magus",
-		BinaryVersion: "v0.5.0",
-		Cwd:           "/work/tree",
+	require.Nil(t, unknown.Guard)
+	require.Equal(t, stamped(t, spawns[0], journal.Call{
+		Kind:    journal.CallKindAgentSpawn,
+		Origin:  job.Origin{EntryPoint: job.EntryPointHook},
+		Name:    "Explore",
+		Outcome: journal.OutcomeOK,
+		Guard: &journal.Guard{
+			Binary:        "/work/tree/magus",
+			BinaryVersion: "v0.5.0",
+			Cwd:           "/work/tree",
+		},
 	}), spawns[0])
 }
 
@@ -280,26 +266,26 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: verdict.Advise, Context: "record the decision"})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
 	// No host session means unattributed, never a default party.
-	require.Equal(t, stamped(t, event, trailtypes.Event{
-		Kind:    trailtypes.KindAgentCommand,
+	require.Equal(t, stamped(t, event, journal.Call{
+		Kind:    journal.CallKindAgentCommand,
 		Origin:  job.Origin{EntryPoint: job.EntryPointHook},
-		Action:  "command",
-		Outcome: trailtypes.OutcomeOK,
+		Name:    "command",
+		Outcome: journal.OutcomeOK,
 		Preview: "guard: advise",
 	}), event)
 
-	request, err := trailtypes.ReadBlob(dir, event.RequestRef)
+	request, err := readBlob(dir, event.Request.Ref)
 	require.NoError(t, err)
 	var gotRequest agentCommandRequest
 	require.NoError(t, codec.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentCommandRequest{APIVersion: agentCommandAPIVersion, Path: "AGENTS.md"}, gotRequest)
 
-	response, err := trailtypes.ReadBlob(dir, event.ResponseRef)
+	response, err := readBlob(dir, event.Response.Ref)
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
 	require.NoError(t, codec.Unmarshal(response, &gotResponse))
@@ -325,10 +311,10 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	}
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: verdict.Defer, AgentFacts: want})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
+	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
 	var got agentCommandRequest
 	require.NoError(t, codec.Unmarshal(raw, &got))
@@ -342,9 +328,9 @@ func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls"})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
-	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
+	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
 	for _, key := range []string{"thread", "thread_from", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
 		assert.NotContains(t, string(raw), fmt.Sprintf(`"%s"`, key))
@@ -357,9 +343,9 @@ func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
 	empty := 0
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
-	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
+	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
 	var got agentCommandRequest
 	require.NoError(t, codec.Unmarshal(raw, &got))
@@ -377,9 +363,9 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5", AgentFacts: want,
 	})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
-	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
+	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
 	var got agentSpawnRequest
 	require.NoError(t, codec.Unmarshal(raw, &got))
@@ -404,25 +390,25 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 		Context:   handed,
 	})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
 
 	// Whole-struct assertion with the content-addressed and clock-dependent fields lifted out
 	// first, so a new field on Event cannot be silently dropped by this producer.
-	requestRef := event.RequestRef
-	event.Ts, event.RequestRef, event.RequestBytes = 0, "", 0
-	require.Equal(t, trailtypes.Event{
-		Kind:      trailtypes.KindAgentSpawn,
+	requestRef := event.Request.Ref
+	event.Time, event.Request = time.Time{}, journal.Payload{}
+	require.Equal(t, journal.Call{
+		Kind:      journal.CallKindAgentSpawn,
 		Origin:    StampOrigin(t.Context(), job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
-		Action:    "Explore",
+		Name:      "Explore",
 		Lease:     "notes-store-6b",
-		Outcome:   trailtypes.OutcomeOK,
+		Outcome:   journal.OutcomeOK,
 	}, event) // Preview included: the handed context belongs in the blob, never on the line.
 
-	request, err := trailtypes.ReadBlob(dir, requestRef)
+	request, err := readBlob(dir, requestRef)
 	require.NoError(t, err)
 	var gotRequest agentSpawnRequest
 	require.NoError(t, codec.Unmarshal(request, &gotRequest))
@@ -441,20 +427,20 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events, "a spawn with no handed context has nothing to audit")
 
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Context: "go and do the thing"})
-	events, err = trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err = recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// An unlabelled callee still says a spawn happened, and names no lease.
-	require.Equal(t, stamped(t, events[0], trailtypes.Event{
-		Kind:    trailtypes.KindAgentSpawn,
+	require.Equal(t, stamped(t, events[0], journal.Call{
+		Kind:    journal.CallKindAgentSpawn,
 		Origin:  job.Origin{EntryPoint: job.EntryPointHook},
-		Action:  "agent.spawn",
-		Outcome: trailtypes.OutcomeOK,
+		Name:    "agent.spawn",
+		Outcome: journal.OutcomeOK,
 	}), events[0])
 }
 
@@ -473,10 +459,10 @@ func TestAppendAgentSpawn_ContinueIsExplicit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			AppendAgentSpawn(t.Context(), dir, tc.spawn)
-			events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+			events, err := recentCalls(t.Context(), dir, 1)
 			require.NoError(t, err)
 			require.Len(t, events, 1)
-			assert.Equal(t, tc.want, events[0].Action)
+			assert.Equal(t, tc.want, events[0].Name)
 		})
 	}
 }
@@ -548,19 +534,19 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: verdict.Defer})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 3)
+	events, err := recentCalls(t.Context(), dir, 3)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	assert.Empty(t, events[0].Lease, "newest first: an unresolved call is uncorrelated, never the environment's")
 	assert.Empty(t, events[1].Lease)
 	assert.Empty(t, events[1].LeaseFrom, "a dropped lease drops its source")
-	assert.Equal(t, stamped(t, events[2], trailtypes.Event{
-		Kind:      trailtypes.KindAgentCommand,
+	assert.Equal(t, stamped(t, events[2], journal.Call{
+		Kind:      journal.CallKindAgentCommand,
 		Origin:    job.Origin{EntryPoint: job.EntryPointHook},
-		Action:    "Bash",
+		Name:      "Bash",
 		Lease:     "fleet/supplied",
 		LeaseFrom: job.LeaseSourceMarker,
-		Outcome:   trailtypes.OutcomeOK,
+		Outcome:   journal.OutcomeOK,
 		Preview:   "observed",
 	}), events[2])
 }
@@ -570,7 +556,7 @@ func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 1)
+	events, err := recentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Empty(t, events[0].Lease, "a missing join is the designed outcome, never an invented one")
@@ -578,15 +564,16 @@ func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {
 
 func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 	dir := t.TempDir()
-	ref, size := WriteBlob(t.Context(), dir, "mcp", []byte("payload one"))
+	p := WriteBlob(t.Context(), dir, "mcp", []byte("payload one"))
+	ref, size := p.Ref, p.Bytes
 	if ref == "" || size != int64(len("payload one")) || ref[:3] != "mcp" {
 		t.Fatalf("WriteBlob = %q,%d", ref, size)
 	}
-	body, err := trailtypes.ReadBlob(dir, ref)
+	body, err := readBlob(dir, ref)
 	if err != nil || string(body) != "payload one" {
-		t.Fatalf("ReadBlob = %q, %v", body, err)
+		t.Fatalf("readBlob = %q, %v", body, err)
 	}
-	if again, _ := WriteBlob(t.Context(), dir, "mcp", []byte("payload one")); again != ref { // content-addressed dedup
+	if again := WriteBlob(t.Context(), dir, "mcp", []byte("payload one")).Ref; again != ref { // content-addressed dedup
 		t.Errorf("dedup failed: %q != %q", again, ref)
 	}
 }
@@ -594,14 +581,14 @@ func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 func TestWriteBlob_RejectsBadPrefixOrEmpty(t *testing.T) {
 	dir := t.TempDir()
 	for _, bad := range []string{"", "m", "MCP", "toolong99", "a1"} {
-		if ref, _ := WriteBlob(t.Context(), dir, bad, []byte("x")); ref != "" {
+		if ref := WriteBlob(t.Context(), dir, bad, []byte("x")).Ref; ref != "" {
 			t.Errorf("WriteBlob(prefix=%q) = %q, want empty", bad, ref)
 		}
 	}
-	if ref, size := WriteBlob(t.Context(), dir, "mcp", nil); ref != "" || size != 0 {
-		t.Errorf("empty data = %q,%d; want \"\",0", ref, size)
+	if p := WriteBlob(t.Context(), dir, "mcp", nil); p.Ref != "" || p.Bytes != 0 {
+		t.Errorf("empty data = %q,%d; want \"\",0", p.Ref, p.Bytes)
 	}
-	if ref, _ := WriteBlob(t.Context(), "", "mcp", []byte("x")); ref != "" {
+	if ref := WriteBlob(t.Context(), "", "mcp", []byte("x")).Ref; ref != "" {
 		t.Errorf("empty base = %q, want empty", ref)
 	}
 }
@@ -618,9 +605,10 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	dir := t.TempDir()
 	refs := make([]string, 0, 5)
 	for i := 1; i <= 5; i++ {
-		ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
+		response := WriteBlob(t.Context(), dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
+		ref := response.Ref
 		refs = append(refs, ref)
-		Append(t.Context(), dir, trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: string(rune('a' + i - 1)), ResponseRef: ref})
+		Append(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: string(rune('a' + i - 1)), Response: response})
 		// Past blobGraceWindow, so this test exercises real orphan collection rather
 		// than the grace-window protection covered by TestGCBlobs_ProtectsPendingBlob.
 		backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
@@ -628,14 +616,14 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 
 	rotate(dir, 2) // keep the last 2 events
 
-	events, _ := trailtypes.ReadRecent(t.Context(), dir, 10)
+	events, _ := recentCalls(t.Context(), dir, 10)
 	if len(events) != 2 {
 		t.Fatalf("after rotate got %d events, want 2", len(events))
 	}
-	if _, err := trailtypes.ReadBlob(dir, refs[4]); err != nil { // newest kept event's blob survives
+	if _, err := readBlob(dir, refs[4]); err != nil { // newest kept event's blob survives
 		t.Errorf("kept event's blob was GC'd: %v", err)
 	}
-	if _, err := trailtypes.ReadBlob(dir, refs[0]); err == nil { // oldest, now orphaned, is GC'd
+	if _, err := readBlob(dir, refs[0]); err == nil { // oldest, now orphaned, is GC'd
 		t.Errorf("orphaned blob not garbage-collected")
 	}
 
@@ -656,11 +644,11 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 // deterministic: no sleep, the blob's real age (just-created) is what protects it.
 func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 	dir := t.TempDir()
-	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("pending payload"))
+	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("pending payload"))
 
 	gcBlobs(dir, nil) // simulate rotate's events snapshot: taken before Append landed
 
-	if _, err := trailtypes.ReadBlob(dir, ref); err != nil {
+	if _, err := readBlob(dir, ref); err != nil {
 		t.Fatalf("gcBlobs collected a blob still within its grace window: %v", err)
 	}
 }
@@ -671,15 +659,15 @@ func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 // names yet and deletes the payload the caller is about to Append a reference to.
 func TestWriteBlob_DedupHitReopensTheGraceWindow(t *testing.T) {
 	dir := t.TempDir()
-	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("shared payload"))
+	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("shared payload"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 
-	again, _ := WriteBlob(t.Context(), dir, "mcp", []byte("shared payload"))
+	again := writeBlobRef(t.Context(), dir, "mcp", []byte("shared payload"))
 	require.Equal(t, ref, again, "identical content must dedup onto the stored blob")
 
 	gcBlobs(dir, nil) // rotate's snapshot, taken before the pending Append lands
 
-	_, err := trailtypes.ReadBlob(dir, ref)
+	_, err := readBlob(dir, ref)
 	require.NoError(t, err, "a deduped blob must survive the rotate its fresh reference races")
 }
 
@@ -687,12 +675,12 @@ func TestWriteBlob_DedupHitReopensTheGraceWindow(t *testing.T) {
 // window only delays collection, it must not disable it, or gcBlobs stops doing its job.
 func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 	dir := t.TempDir()
-	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("truly orphaned"))
+	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("truly orphaned"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 
 	gcBlobs(dir, nil)
 
-	if _, err := trailtypes.ReadBlob(dir, ref); err == nil {
+	if _, err := readBlob(dir, ref); err == nil {
 		t.Fatalf("gcBlobs kept an orphaned blob past its grace window")
 	}
 }
@@ -702,24 +690,24 @@ func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 // nothing while the event that printed it is still kept.
 func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 	dir := t.TempDir()
-	ref, _ := WriteBlob(t.Context(), dir, "grd", []byte("the full verdict"))
+	ref := writeBlobRef(t.Context(), dir, "grd", []byte("the full verdict"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
-	line, err := codec.Marshal(trailtypes.Event{Kind: trailtypes.KindAgentCommand, Action: "shell.command", VerdictRef: ref})
+	line, err := codec.Marshal(journal.Call{Kind: journal.CallKindAgentCommand, Name: "shell.command", Guard: &journal.Guard{Verdict: journal.Payload{Ref: ref}}})
 	require.NoError(t, err)
 
 	gcBlobs(dir, []string{string(line)})
 
-	got, err := trailtypes.ReadBlob(dir, ref)
+	got, err := readBlob(dir, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "the full verdict", string(got))
-	assert.True(t, trailtypes.ValidRef(ref))
+	assert.True(t, journal.ValidPayloadRef(ref))
 }
 
 func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
-	Append(t.Context(), dir, trailtypes.Event{Ts: 1, Action: "a"})
+	Append(t.Context(), dir, journal.Call{Time: atMs(1),Name: "a"})
 	rotate(dir, 10) // under cap: no rewrite
-	if evs, _ := trailtypes.ReadRecent(t.Context(), dir, 10); len(evs) != 1 {
+	if evs, _ := recentCalls(t.Context(), dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
 	}
 	rotate("", 2) // must not panic
@@ -728,10 +716,10 @@ func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 3; i++ {
-		Append(t.Context(), dir, trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindJob, Action: "x"})
+		Append(t.Context(), dir, journal.Call{Time: atMs(int64(i)),Kind: journal.CallKindJob, Name: "x"})
 	}
 	Rotate(dir) // maxEvents is 10000, so this is a no-op that must not lose events
-	if evs, _ := trailtypes.ReadRecent(t.Context(), dir, 10); len(evs) != 3 {
+	if evs, _ := recentCalls(t.Context(), dir, 10); len(evs) != 3 {
 		t.Errorf("Rotate under cap changed the trail: got %d events, want 3", len(evs))
 	}
 }
@@ -745,12 +733,12 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
 	Rotate(dir)
-	got, err := trailtypes.ReadRecent(t.Context(), dir, maxEvents+100)
+	got, err := recentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
 	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
-	require.Equal(t, trailtypes.Event{Ts: int64(maxEvents + 5), Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK}, got[0])
-	require.Equal(t, trailtypes.Event{Ts: 6, Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK}, got[len(got)-1])
+	require.Equal(t, journal.Call{Time: atMs(int64(maxEvents + 5)),Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[0])
+	require.Equal(t, journal.Call{Time: atMs(6),Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[len(got)-1])
 }
 
 // A blob is a whole tool payload, so it stays private to its owner.
@@ -759,7 +747,7 @@ func TestWriteBlob_IsOwnerOnly(t *testing.T) {
 		t.Skip("no POSIX modes")
 	}
 	dir := t.TempDir()
-	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("payload"))
+	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("payload"))
 	require.NotEmpty(t, ref)
 
 	fi, err := os.Stat(filepath.Join(blobsPath(dir), ref))
@@ -778,7 +766,7 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 	require.NoError(t, os.Chmod(eventsPath(dir), 0o644))
 
 	Rotate(dir)
-	got, err := trailtypes.ReadRecent(t.Context(), dir, maxEvents+100)
+	got, err := recentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents, "the rotate ran")
 	fi, err := os.Stat(eventsPath(dir))
@@ -795,21 +783,21 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 // ever skipped while over cap.
 func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	dir := t.TempDir()
-	Append(t.Context(), dir, trailtypes.Event{Ts: 1, Action: "a"})
+	Append(t.Context(), dir, journal.Call{Time: atMs(1),Name: "a"})
 
 	info, err := os.Stat(eventsPath(dir))
 	require.NoError(t, err)
 	require.Less(t, info.Size(), int64(maxEvents)*minEventBytes, "a one-event trail is below the skip threshold")
 
 	Rotate(dir)
-	got, err := trailtypes.ReadRecent(t.Context(), dir, 10)
+	got, err := recentCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
 
 	// The floor is not a guess: the smallest event that can reach the file (every
 	// no-omitempty field empty) must still be at least minEventBytes, or the skip could
 	// fire on a trail that genuinely needed trimming.
-	line, err := codec.Marshal(trailtypes.Event{})
+	line, err := codec.Marshal(journal.Call{})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(line)+1, minEventBytes, "minEventBytes must not exceed the smallest serializable event line")
 }
@@ -824,17 +812,17 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 // their payloads, which is not recoverable.
 func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	var lines []string
-	line := func(kind trailtypes.Kind, ts int) string {
-		b, err := codec.Marshal(trailtypes.Event{Ts: int64(ts), Kind: kind, Action: "x", Outcome: trailtypes.OutcomeOK})
+	line := func(kind journal.CallKind, ts int) string {
+		b, err := codec.Marshal(journal.Call{Time: atMs(int64(ts)),Kind: kind, Name: "x", Outcome: journal.OutcomeOK})
 		require.NoError(t, err)
 		return string(b)
 	}
 	// Three rare governance events, then a flood that would bury them under plain recency.
 	for i := 1; i <= 3; i++ {
-		lines = append(lines, line(trailtypes.KindSandboxDenial, i))
+		lines = append(lines, line(journal.CallKindSandboxDenial, i))
 	}
 	for i := 4; i <= 103; i++ {
-		lines = append(lines, line(trailtypes.KindAgentCommand, i))
+		lines = append(lines, line(journal.CallKindAgentCommand, i))
 	}
 
 	kept := selectKept(lines, 50)
@@ -842,14 +830,14 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 
 	var denials int
 	for _, l := range kept {
-		if strings.Contains(l, string(trailtypes.KindSandboxDenial)) {
+		if strings.Contains(l, string(journal.CallKindSandboxDenial)) {
 			denials++
 		}
 	}
 	assert.Equal(t, 3, denials, "every sandbox_denial survives: there are fewer of them than the floor")
 
 	// Order is preserved: the file is append-ordered and ReadRecent/LastRun depend on it.
-	assert.True(t, strings.Contains(kept[0], string(trailtypes.KindSandboxDenial)), "kept output stays oldest-first")
+	assert.True(t, strings.Contains(kept[0], string(journal.CallKindSandboxDenial)), "kept output stays oldest-first")
 }
 
 // TestSelectKept_SingleKindIsPlainTruncation pins that the floor changes nothing for a trail with
@@ -857,7 +845,7 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 	var lines []string
 	for i := 1; i <= 100; i++ {
-		b, err := codec.Marshal(trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK})
+		b, err := codec.Marshal(journal.Call{Time: atMs(int64(i)),Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK})
 		require.NoError(t, err)
 		lines = append(lines, string(b))
 	}
@@ -867,36 +855,13 @@ func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 	assert.Contains(t, kept[9], `"ts":100`)
 }
 
-func TestReadRecent_SkipsCorruptLines(t *testing.T) {
-	dir := t.TempDir()
-	Append(t.Context(), dir, trailtypes.Event{Ts: 1, Kind: trailtypes.KindJob, Action: "good-one"})
-	// Splice a non-JSON line into the middle of the trail; ReadRecent must skip it, not fail.
-	f, err := os.OpenFile(eventsPath(dir), os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		t.Fatalf("open trail: %v", err)
-	}
-	if _, err := f.WriteString("this is not json\n"); err != nil {
-		t.Fatalf("write corrupt line: %v", err)
-	}
-	f.Close()
-	Append(t.Context(), dir, trailtypes.Event{Ts: 2, Kind: trailtypes.KindJob, Action: "good-two"})
-
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
-	if err != nil {
-		t.Fatalf("ReadRecent: %v", err)
-	}
-	if len(events) != 2 || events[0].Action != "good-two" || events[1].Action != "good-one" {
-		t.Fatalf("corrupt line not skipped cleanly: %+v", events)
-	}
-}
-
 // TestTrailRedactsThroughContext is the reason these functions grew a ctx parameter.
 // The trail is DURABLE and append-only, so a credential landing here sits on disk until
 // someone deletes the file, strictly worse than the same value reaching a terminal.
 // Blobs are the sharpest edge: an MCP request/response pair is a whole tool payload,
 // persisted verbatim, and nothing else on that path scrubs it.
 //
-// Delete the secrets.Redact call in WriteBlob (or redactEvent in Append) and this fails.
+// Delete secrets.Redact in WriteBlob, or redactCall in Append, and this fails.
 func TestTrailRedactsThroughContext(t *testing.T) {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
@@ -909,14 +874,14 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, credential, got.Reveal())
 
-	ref, _ := WriteBlob(ctx, base, "mcp", []byte(`{"headers":{"Authorization":"Bearer `+credential+`"}}`))
+	ref := writeBlobRef(ctx, base, "mcp", []byte(`{"headers":{"Authorization":"Bearer `+credential+`"}}`))
 	require.NotEmpty(t, ref)
 
-	Append(ctx, base, trailtypes.Event{
-		Ts:      time.Now().UnixMilli(),
-		Kind:    trailtypes.KindAgentCommand,
-		Action:  "curl -H 'Authorization: Bearer " + credential + "'",
-		Outcome: trailtypes.OutcomeOK,
+	Append(ctx, base, journal.Call{
+		Time:    time.Now(),
+		Kind:    journal.CallKindAgentCommand,
+		Name:    "curl -H 'Authorization: Bearer " + credential + "'",
+		Outcome: journal.OutcomeOK,
 		Preview: "sent " + credential,
 		Error:   "failed with " + credential,
 	})
@@ -957,13 +922,13 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
 
-	Append(ctx, base, trailtypes.Event{
-		Ts:        time.Now().UnixMilli(),
-		Kind:      trailtypes.KindAgentCommand,
+	Append(ctx, base, journal.Call{
+		Time:      time.Now(),
+		Kind:      journal.CallKindAgentCommand,
 		Origin:    job.Origin{Host: "agent-7"},
 		Workspace: "/repos/magus",
-		Action:    "Bash",
-		Outcome:   trailtypes.OutcomeOK,
+		Name:      "Bash",
+		Outcome:   journal.OutcomeOK,
 	})
 
 	b, err := os.ReadFile(filepath.Join(base, dir, eventsFile))
@@ -971,5 +936,5 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	line := string(b)
 	assert.Contains(t, line, "agent-7")
 	assert.Contains(t, line, "/repos/magus")
-	assert.Contains(t, line, string(trailtypes.KindAgentCommand))
+	assert.Contains(t, line, string(journal.CallKindAgentCommand))
 }

@@ -19,7 +19,7 @@ import (
 	"time"
 
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 
@@ -50,6 +50,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -1722,12 +1723,18 @@ func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() 
 // recentTrail is what this checkout's activity trail still holds, newest first. An
 // unreadable trail reads as empty: a watcher that refused to start because nothing had been
 // recorded yet would refuse exactly when a job has only just begun.
-func recentTrail(ctx context.Context, cacheDir string) []trailtypes.Event {
-	events, err := trailtypes.ReadRecent(ctx, cacheDir, jobWatchWindow)
-	if err != nil {
-		return nil
+func recentTrail(ctx context.Context, cacheDir string) []journal.Call {
+	var calls []journal.Call
+	for c, err := range journal.Calls(ctx, trail.CallsDir(cacheDir), jobWatchWindow) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return nil
+		}
+		calls = append(calls, c)
 	}
-	return events
+	return calls
 }
 
 // jobWatchWindow bounds one read of the trail. It is a follower's window, not a history:

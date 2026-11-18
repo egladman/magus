@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // Consultation is one question an agent asked magus while producing a change: a read verb, what
@@ -117,7 +117,7 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 	for _, p := range paths {
 		want[p] = true
 	}
-	events, err := trailtypes.ReadRecent(ctx, base, limit)
+	events, err := recentCalls(ctx, base, limit)
 	if err != nil {
 		return nil, ConsultGapUnobserved, err
 	}
@@ -129,7 +129,7 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 	var errs []error
 
 	for _, e := range events {
-		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
 		observed++
@@ -139,12 +139,12 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 			continue
 		}
 		leased++
-		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
+		raw, rerr := e.Request.Read(CallsDir(base))
 		if rerr != nil {
 			continue
 		}
 		var req agentCommandRequest
-		if err := decodeRequestBlob(base, e.RequestRef, raw, &req); err != nil {
+		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}

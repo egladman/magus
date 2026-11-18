@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -352,12 +351,12 @@ func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) 
 	if o, ok := origin.FromContext(ctx); ok {
 		userAgent = o.UserAgent
 	}
-	trail.Append(ctx, base, trailtypes.Event{
-		Ts:        time.Now().UnixMilli(),
-		Kind:      trailtypes.KindGrantIssued,
+	trail.Append(ctx, base, journal.Call{
+		Time:      time.Now(),
+		Kind:      journal.CallKindCredentialGrant,
 		UserAgent: userAgent,
-		Action:    action,
-		Outcome:   trailtypes.OutcomeOK,
+		Name:      action,
+		Outcome:   journal.OutcomeOK,
 		Preview:   fmt.Sprintf("%s -> %s (%s)", g.Ref, g.Host, g.Header),
 	})
 }

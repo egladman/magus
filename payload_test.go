@@ -22,7 +22,7 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 
 	primaryCache, err := ResolveCacheDir(primary)
 	require.NoError(t, err)
-	ref, _ := trail.WriteBlob(context.Background(), primaryCache, "grd", []byte("the full verdict"))
+	ref := trail.WriteBlob(context.Background(), primaryCache, "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, ref)
 
 	opened, err := Inspect(context.Background(), worktree, WithSpawnRule(tier.Ceiling))

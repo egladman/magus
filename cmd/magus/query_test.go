@@ -250,7 +250,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	global = globalFlags{}
 	m := newQueryTestWorkspace(t)
 	ctx := withMagus(context.Background(), m)
-	ref, _ := trail.WriteBlob(ctx, m.CacheDir(), "grd", []byte("the full verdict"))
+	ref := trail.WriteBlob(ctx, m.CacheDir(), "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, ref)
 
 	out := captureStdout(t, func() {

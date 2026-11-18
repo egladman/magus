@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // wantServerInstructions is the exact block every MCP client reads at session
@@ -177,28 +177,26 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		t.Errorf("stdout carried a line nobody asked for: %q", lines.Text())
 	}
 
-	events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
+	events, err := loggedCalls(t.Context(), m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
 	// The clock, the OS account, the response preview, the content-addressed refs and the sizes
 	// are copied across; this test pins who called and what.
-	assert.Equal(t, trailtypes.Event{
-		Ts:   ev.Ts,
-		Kind: trailtypes.KindMCPToolCall,
+	assert.Equal(t, journal.Call{
+		Time: ev.Time,
+		Kind: journal.CallKindMCPTool,
 		Origin: jobtypes.Origin{
 			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: auth.CredentialStdio().Recorded(),
 		},
-		Workspace:     ev.Workspace,
-		UserAgent:     ev.UserAgent,
-		Action:        hint.ToolConfig.String(),
-		Outcome:       trailtypes.OutcomeOK,
-		DurationMs:    ev.DurationMs,
-		RequestRef:    ev.RequestRef,
-		ResponseRef:   ev.ResponseRef,
-		Preview:       ev.Preview,
-		RequestBytes:  ev.RequestBytes,
-		ResponseBytes: ev.ResponseBytes,
+		Workspace: ev.Workspace,
+		UserAgent: ev.UserAgent,
+		Name:      hint.ToolConfig.String(),
+		Outcome:   journal.OutcomeOK,
+		Duration:  ev.Duration,
+		Request:   ev.Request,
+		Response:  ev.Response,
+		Preview:   ev.Preview,
 	}, ev)
 }
 

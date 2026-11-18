@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
@@ -143,7 +143,7 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
-	line, err := codec.Marshal(trailtypes.Event{Ts: 5_000_000, Kind: trailtypes.KindJob, Action: "graph build", Outcome: trailtypes.OutcomeOK})
+	line, err := codec.Marshal(journal.Call{Time: atMs(5_000_000), Kind: journal.CallKindJob, Name: "graph build", Outcome: journal.OutcomeOK})
 	require.NoError(t, err)
 	body := strings.Repeat(string(line)+"\n", maxEvents)
 	require.NoError(t, os.WriteFile(eventsPath(base), []byte(body), 0o644))

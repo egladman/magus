@@ -7,7 +7,8 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // PayloadByRef returns the payload the activity trail stored under ref: a guard verdict
@@ -21,14 +22,18 @@ import (
 // fs.ErrNotExist that names every cache dir searched. A malformed ref is an error before
 // any store is read.
 func (m *Magus) PayloadByRef(ctx context.Context, ref string) ([]byte, error) {
+	if !journal.ValidPayloadRef(ref) {
+		return nil, fmt.Errorf("%q is not a payload ref: expected a 2-8 letter provenance prefix (e.g. %q) followed by 16 hex chars", ref, "mcp")
+	}
+	payload := journal.Payload{Ref: ref}
 	searched := []string{m.CacheDir()}
-	data, err := trail.ReadBlob(m.CacheDir(), ref)
+	data, err := payload.Read(trail.CallsDir(m.CacheDir()))
 	if errors.Is(err, fs.ErrNotExist) {
 		// The session store records output refs only, so the primary checkout is the one
 		// other store searched.
 		_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) (err error) {
 			searched = append(searched, dir)
-			data, err = trail.ReadBlob(dir, ref)
+			data, err = payload.Read(trail.CallsDir(dir))
 			return err
 		})
 	}

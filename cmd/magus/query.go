@@ -42,7 +42,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -853,7 +852,7 @@ func queryOutputCommand(ctx context.Context, root string, qf *flaggen.QueryFlags
 	}
 	ref := pos[1]
 	if !cache.LooksLikeRef(ref) {
-		if !trailtypes.ValidRef(ref) {
+		if !journal.ValidPayloadRef(ref) {
 			msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
 			slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg)))
 			return exit.Reported(exit.Usage)

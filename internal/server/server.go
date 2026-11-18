@@ -55,7 +55,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
@@ -548,7 +548,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// activityrpc records each mutating RPC here by its leading
 			// verb, so a browser-reachable mint or revoke is always audited.
 			// The record names the credential the bearer guard verified.
-			tokenAudit := connect.WithInterceptors(activityrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle,
+			tokenAudit := connect.WithInterceptors(activityrpc.Interceptor(opts.Magus.CacheDir(), journal.CallKindTokenLifecycle,
 				activityrpc.WithSubject(tokenhandler.AuditSubject)))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
 			f.service(tokenPath, tokenHandler)
@@ -567,7 +567,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// listener behind the standard bearer guard like the memory service beside it.
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
-			notesAudit := connect.WithInterceptors(activityrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, activityrpc.WithAuditReads()))
+			notesAudit := connect.WithInterceptors(activityrpc.Interceptor(opts.Magus.CacheDir(), journal.CallKindNotes, activityrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(viewInternals(opts.Magus), opts.Config), notesAudit, connectReadMax)
 			f.service(notesPath, notesHandler)
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))

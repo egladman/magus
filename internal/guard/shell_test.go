@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -2646,11 +2646,11 @@ func TestEditDryRunRecordsNothing(t *testing.T) {
 	}
 	for i, rel := range []string{"internal/ledger/store.go", "cmd/magus/main.go"} {
 		preview := edit(rel, true)
-		assert.Len(t, trailEvents(t, cacheDir, trailtypes.KindAgentCommand), i, rel)
+		assert.Len(t, trailEvents(t, cacheDir, journal.CallKindAgentCommand), i, rel)
 		assert.NotContains(t, preview.Reason, verdictRefLine, rel)
 		assert.Equal(t, withoutAge(withoutVerdictRef(edit(rel, false))), withoutAge(preview), rel)
 	}
-	assert.Len(t, trailEvents(t, cacheDir, trailtypes.KindAgentCommand), 2, "the rename itself is recorded")
+	assert.Len(t, trailEvents(t, cacheDir, journal.CallKindAgentCommand), 2, "the rename itself is recorded")
 }
 
 type GradeEditSuite struct {

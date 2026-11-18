@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
@@ -42,7 +42,7 @@ func (f GuardFeedback) NeedsReview() bool {
 // and a derived view avoids divergence between what the guard saw and what a
 // later report reads.
 func RecentGuardFeedback(ctx context.Context, base, session string, limit int) ([]GuardFeedback, error) {
-	events, err := trailtypes.ReadRecent(ctx, base, limit)
+	events, err := recentCalls(ctx, base, limit)
 	if err != nil || len(events) == 0 {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func RecentGuardFeedback(ctx context.Context, base, session string, limit int) (
 		}
 		c.Denied++
 		c.perSession[key]++
-		if at := time.UnixMilli(event.Ts); c.Latest.Before(at) {
+		if at := event.Time; c.Latest.Before(at) {
 			c.Latest = at
 		}
 	}
@@ -135,7 +135,7 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 	if base == "" || lease == "" || limit <= 0 {
 		return nil, false, nil
 	}
-	events, err := trailtypes.ReadRecent(ctx, base, maxEvents)
+	events, err := recentCalls(ctx, base, maxEvents)
 	if err != nil {
 		return nil, false, err
 	}
@@ -143,10 +143,10 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 	from := since * 1000
 	// Rotation keeps a floor of every kind, so only an agent command dates how far back the
 	// agent commands reach.
-	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e trailtypes.Event) bool {
-		return e.Kind == trailtypes.KindAgentCommand && e.Ts <= from
+	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e journal.Call) bool {
+		return e.Kind == journal.CallKindAgentCommand && e.Time.UnixMilli() <= from
 	})
-	held := slices.DeleteFunc(events, func(e trailtypes.Event) bool { return e.Lease != lease || e.Ts < from })
+	held := slices.DeleteFunc(events, func(e journal.Call) bool { return e.Lease != lease || e.Time.UnixMilli() < from })
 	var out []job.Denial
 	for command, err := range agentCommands(base, held) {
 		if err != nil {
@@ -158,9 +158,9 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 		out = append(out, job.Denial{
 			Rule:       command.response.Rule,
 			Reason:     command.response.Reason,
-			Action:     command.event.Action,
-			VerdictRef: command.event.VerdictRef,
-			Ts:         command.event.Ts / 1000,
+			Action:     command.event.Name,
+			VerdictRef: verdictRef(command.event),
+			Ts:         command.event.Time.Unix(),
 		})
 	}
 	if len(out) > limit {
@@ -171,7 +171,7 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 
 // agentCommand is one agent-command event with its request and response blobs decoded.
 type agentCommand struct {
-	event    trailtypes.Event
+	event    journal.Call
 	request  agentCommandRequest
 	response agentCommandResponse
 }
@@ -180,29 +180,29 @@ type agentCommand struct {
 // request and response blobs both read and decode. An event whose blobs rotated away is
 // skipped; a blob holding a retired guard decision is yielded as a
 // [*retiredDecisionError], and nothing after it.
-func agentCommands(base string, events []trailtypes.Event) iter.Seq2[agentCommand, error] {
+func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, error] {
 	return func(yield func(agentCommand, error) bool) {
 		var retired *retiredDecisionError
 		for _, event := range events {
-			if event.Kind != trailtypes.KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
+			if event.Kind != journal.CallKindAgentCommand || event.Request.Ref == "" || event.Response.Ref == "" {
 				continue
 			}
 			command := agentCommand{event: event}
-			raw, err := trailtypes.ReadBlob(base, event.RequestRef)
+			raw, err := event.Request.Read(CallsDir(base))
 			if err != nil {
 				continue
 			}
-			if err := decodeAgentBlob(base, event.RequestRef, raw, &command.request); errors.As(err, &retired) {
+			if err := decodeAgentBlob(base, event.Request.Ref, raw, &command.request); errors.As(err, &retired) {
 				yield(agentCommand{}, err)
 				return
 			} else if err != nil {
 				continue
 			}
-			raw, err = trailtypes.ReadBlob(base, event.ResponseRef)
+			raw, err = event.Response.Read(CallsDir(base))
 			if err != nil {
 				continue
 			}
-			if err := decodeAgentBlob(base, event.ResponseRef, raw, &command.response); errors.As(err, &retired) {
+			if err := decodeAgentBlob(base, event.Response.Ref, raw, &command.response); errors.As(err, &retired) {
 				yield(agentCommand{}, err)
 				return
 			} else if err != nil {

@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // Every event carries the OS account that wrote it, whatever the producer said, so a row
@@ -23,10 +23,10 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	dir := t.TempDir()
 	ctx := ContextWithEntryPoint(t.Context(), job.EntryPointCLI)
 
-	Append(ctx, dir, trailtypes.Event{Kind: trailtypes.KindJob, Action: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
-	Append(ctx, dir, trailtypes.Event{Kind: trailtypes.KindJob, Action: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
+	Append(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
+	Append(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 2)
+	events, err := recentCalls(t.Context(), dir, 2)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	local := LocalOrigin(ctx)
@@ -36,7 +36,7 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	}
 	byAction := map[string]job.Origin{}
 	for _, e := range events {
-		byAction[e.Action] = e.Origin
+		byAction[e.Name] = e.Origin
 	}
 	assert.Equal(t, job.Origin{User: local.User, UID: local.UID, EntryPoint: job.EntryPointCLI}, byAction["a"],
 		"the account is the OS's answer, never the producer's, and the entry point comes from ctx")
