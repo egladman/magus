@@ -1025,18 +1025,18 @@ func (s *CallsSuite) TestRelativizeCutsTheRootAtASeparator() {
 func (s *CallsSuite) TestLastAgentActivityReadsTheNewestObservation() {
 	t := s.T()
 	base := t.TempDir()
-	_, ok := LastAgentActivity(t.Context(),base)
+	_, ok := LastAgentActivity(t.Context(), base)
 	assert.False(t, ok, "an empty log has no activity to report")
 
 	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
 	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s2", Host: "opencode", Tool: ToolFileRead, Path: "magus.go"})
 
-	got, ok := LastAgentActivity(t.Context(),base)
+	got, ok := LastAgentActivity(t.Context(), base)
 	require.True(t, ok)
 	assert.Equal(t, AgentActivity{Session: "s2", Host: "opencode", At: got.At}, got)
 	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
 
-	_, ok = LastAgentActivity(t.Context(),t.TempDir())
+	_, ok = LastAgentActivity(t.Context(), t.TempDir())
 	assert.False(t, ok, "an absent log is no activity, not an error")
 }
 
@@ -1050,12 +1050,12 @@ func (s *CallsSuite) TestLastAgentActivityIsNotBoundedByAWindow() {
 		AppendCall(t.Context(), base, journal.Call{Kind: journal.CallKindJob, Time: time.Now()})
 	}
 
-	got, ok := LastAgentActivity(t.Context(),base)
+	got, ok := LastAgentActivity(t.Context(), base)
 	require.True(t, ok, "an observation does not age out because other calls were recorded after it")
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
 	AppendCall(t.Context(), stamped, journal.Call{Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}})
-	_, ok = LastAgentActivity(t.Context(),stamped)
+	_, ok = LastAgentActivity(t.Context(), stamped)
 	assert.False(t, ok, "an observation with no time has no age to report")
 }
