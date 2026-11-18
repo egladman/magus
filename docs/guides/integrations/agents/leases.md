@@ -824,12 +824,12 @@ that has filed no result at all.
 Below the postconditions it reports what the diff did beside them, and `wait` returns
 the same fields. None of them is a violation, and none decides `pass`:
 
-| field                          | what it says                                                                           |
-| ------------------------------ | -------------------------------------------------------------------------------------- |
-| `lines_added`, `lines_deleted` | the lines on each side of the footprint, when `footprint_known`                        |
+| field                          | what it says                                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `lines_added`, `lines_deleted` | the lines on each side of the footprint, when `footprint_known`                                 |
 | `undeclared_exports`           | exported Go symbols the diff added that no symbol postcondition of the job or an ancestor names |
-| `left_unreferenced`            | symbols that lost their last use in the diff and are still defined                     |
-| `symbol_delta_known`           | whether the two lists above were read; false reads as "not measured"                   |
+| `left_unreferenced`            | symbols that lost their last use in the diff and are still defined                              |
+| `symbol_delta_known`           | whether the two lists above were read; false reads as "not measured"                            |
 
 ```text
 net lines: +12 -40 (-28)
