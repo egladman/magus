@@ -1,7 +1,6 @@
 package types
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -29,7 +29,7 @@ func TestJobProblemErrWithoutAFixIsTheMessage(t *testing.T) {
 }
 
 func TestJobProblemRemediesEncodeAsDataOnlyWhenSet(t *testing.T) {
-	bare, err := json.Marshal(JobProblem{Code: JobRecordInvalid, Message: "bad", Fix: "fix it"})
+	bare, err := codec.Marshal(JobProblem{Code: JobRecordInvalid, Message: "bad", Fix: "fix it"})
 	require.NoError(t, err)
 	assert.NotContains(t, string(bare), "goal")
 	assert.NotContains(t, string(bare), "deviation")
@@ -38,12 +38,12 @@ func TestJobProblemRemediesEncodeAsDataOnlyWhenSet(t *testing.T) {
 		Code: GateNotRun, Message: "m", Fix: "f",
 		Deviation: &job.Deviation{Code: job.Code(GateNotRun), Subject: "test .", Reason: "github-actions runs it"},
 	}
-	enc, err := json.Marshal(p)
+	enc, err := codec.Marshal(p)
 	require.NoError(t, err)
 	assert.Contains(t, string(enc), `"deviation":{"code":"MGS3045","subject":"test .","reason":"github-actions runs it"}`)
 
 	var back JobProblem
-	require.NoError(t, json.Unmarshal(enc, &back))
+	require.NoError(t, codec.Unmarshal(enc, &back))
 	assert.Equal(t, p, back)
 }
 
