@@ -89,6 +89,16 @@ func (s *LeaseBoundarySuite) TestALiteralPathToCreateGrantsItsDirectory() {
 	s.Error(s.writes(p, "pkg/nowhere/x.txt"))
 }
 
+func (s *LeaseBoundarySuite) TestALiteralPathUnderAMissingDirectoryGrantsNoAncestor() {
+	b, ok := LeaseBoundary(s.worker([]string{"pkg/a/missing/deeper/new.go"}, nil), job.LeaseSourceMarker, s.root)
+	s.Require().True(ok)
+	p := b.Apply(s.base)
+
+	s.Zero(b.Granted())
+	s.Error(s.writes(p, "pkg/a/missing/deeper/new.go"))
+	s.Error(s.writes(p, "pkg/a/x.txt"), "pkg/a is two missing levels up, not the file's directory")
+}
+
 func (s *LeaseBoundarySuite) TestNothingOutsideTheCheckoutIsGranted() {
 	s.Require().NoError(os.Symlink(s.outside, filepath.Join(s.root, "link")))
 	p := s.narrowed(s.worker([]string{fmt.Sprintf("../%s/x.txt", filepath.Base(s.outside)), "link/x.txt", "nowhere/deeper/new.go", "."}, nil))
