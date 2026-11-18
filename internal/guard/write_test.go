@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -186,6 +188,13 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, body, 0o644))
+		// Only a binary built on the base migrates the store, so this one is built at
+		// the commit origin/main names.
+		head, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+		require.NoError(t, err)
+		commit := strings.TrimSpace(string(head))
+		require.NoError(t, exec.Command("git", "-C", root, "update-ref", "refs/remotes/origin/main", commit).Run())
+		ctx = types.WithMagusBuild(ctx, types.MagusBuild{Version: "v0.0.0", Commit: commit})
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
