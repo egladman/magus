@@ -188,7 +188,7 @@ func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, e
 				continue
 			}
 			command := agentCommand{event: event}
-			raw, err := event.Request.Read(CallsDir(base))
+			raw, err := event.Request.Read(callsDir(base))
 			if err != nil {
 				continue
 			}
@@ -198,7 +198,7 @@ func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, e
 			} else if err != nil {
 				continue
 			}
-			raw, err = event.Response.Read(CallsDir(base))
+			raw, err = event.Response.Read(callsDir(base))
 			if err != nil {
 				continue
 			}

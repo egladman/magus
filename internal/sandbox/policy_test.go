@@ -300,7 +300,7 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 func loggedCalls(t *testing.T, base string) []journal.Call {
 	t.Helper()
 	var out []journal.Call
-	for c, err := range journal.Calls(t.Context(), recorder.CallsDir(base), 10) {
+	for c, err := range recorder.Calls(t.Context(), base, 10) {
 		require.NoError(t, err)
 		out = append(out, c)
 	}

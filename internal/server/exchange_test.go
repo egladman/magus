@@ -25,7 +25,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 func loggedCalls(t *testing.T, base string) []journal.Call {
 	t.Helper()
 	var out []journal.Call
-	for c, err := range journal.Calls(t.Context(), recorder.CallsDir(base), 10) {
+	for c, err := range recorder.Calls(t.Context(), base, 10) {
 		require.NoError(t, err)
 		out = append(out, c)
 	}
@@ -87,7 +87,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	events := loggedCalls(t, trailDir)
 	require.Len(t, events, 1)
 	assert.Equal(t, "link.redeem", events[0].Name)
-	blob, err := events[0].Request.Read(recorder.CallsDir(trailDir))
+	blob, err := recorder.ReadPayload(trailDir, events[0].Request)
 	require.NoError(t, err)
 	for _, s := range []string{code, got.Token} {
 		assert.NotContains(t, string(blob), s)

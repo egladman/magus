@@ -603,7 +603,7 @@ func waitTrailCount(t *testing.T, dir string, want int) []journal.Call {
 // loggedCalls is the newest calls in the log under dir.
 func loggedCalls(ctx context.Context, dir string) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, recorder.CallsDir(dir), 10) {
+	for c, err := range recorder.Calls(ctx, dir, 10) {
 		if err != nil {
 			return nil, err
 		}

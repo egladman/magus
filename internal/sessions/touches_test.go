@@ -307,7 +307,7 @@ func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	_, err := ReadActivity(t.Context(), base, "s1", 100)
 	var retired *retiredDecisionError
 	require.ErrorAs(t, err, &retired)
-	assert.Equal(t, retiredDecisionError{Store: recorder.CallsDir(base), Ref: ref, Decision: "pass"}, *retired)
+	assert.Equal(t, retiredDecisionError{Store: base, Ref: ref, Decision: "pass"}, *retired)
 }
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {

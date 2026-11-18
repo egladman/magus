@@ -139,7 +139,7 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 			continue
 		}
 		leased++
-		raw, rerr := e.Request.Read(CallsDir(base))
+		raw, rerr := e.Request.Read(callsDir(base))
 		if rerr != nil {
 			continue
 		}

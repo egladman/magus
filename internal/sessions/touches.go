@@ -119,7 +119,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := e.Request.Read(recorder.CallsDir(base))
+		raw, rerr := recorder.ReadPayload(base, e.Request)
 		if rerr != nil {
 			continue
 		}
@@ -388,7 +388,7 @@ func ReadActivity(ctx context.Context, base, session string, limit int) (Activit
 		case journal.CallKindAgentCommand:
 			out.Commands++
 			call := ActivityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
-			if raw, err := e.Response.Read(recorder.CallsDir(base)); err == nil {
+			if raw, err := recorder.ReadPayload(base, e.Response); err == nil {
 				var resp recorder.AgentCommandResponse
 				switch err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); {
 				case errors.As(err, &retired):
@@ -400,7 +400,7 @@ func ReadActivity(ctx context.Context, base, session string, limit int) (Activit
 					}
 				}
 			}
-			if raw, err := e.Request.Read(recorder.CallsDir(base)); err == nil {
+			if raw, err := recorder.ReadPayload(base, e.Request); err == nil {
 				var req recorder.AgentCommandRequest
 				switch err := decodeAgentBlob(base, e.Request.Ref, raw, &req); {
 				case errors.As(err, &retired):
@@ -416,7 +416,7 @@ func ReadActivity(ctx context.Context, base, session string, limit int) (Activit
 				continue
 			}
 			sp := ActivitySpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
-			if raw, err := e.Request.Read(recorder.CallsDir(base)); err == nil {
+			if raw, err := recorder.ReadPayload(base, e.Request); err == nil {
 				var req recorder.AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
@@ -451,7 +451,7 @@ func readCalls(ctx context.Context, base string, limit int) ([]journal.Call, err
 		return nil, errors.New("sessions: read names no directory")
 	}
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), limit) {
+	for c, err := range recorder.Calls(ctx, base, limit) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}
@@ -500,7 +500,7 @@ func decodeRequestBlob(base, ref string, raw []byte, req *recorder.AgentCommandR
 	if err == nil || errors.As(err, &retired) {
 		return err
 	}
-	return &blobUndecodableError{Store: recorder.CallsDir(base), Ref: ref, Err: err}
+	return &blobUndecodableError{Store: base, Ref: ref, Err: err}
 }
 
 // decodeAgentBlob decodes an agent payload into v. A retired decision is a
@@ -509,7 +509,7 @@ func decodeAgentBlob(base, ref string, raw []byte, v any) error {
 	err := codec.Unmarshal(raw, v)
 	var unknown *verdict.UnknownDecisionError
 	if errors.As(err, &unknown) && slices.Contains([]string{"pass", "allow"}, unknown.Decision) {
-		return &retiredDecisionError{Store: recorder.CallsDir(base), Ref: ref, Decision: unknown.Decision}
+		return &retiredDecisionError{Store: base, Ref: ref, Decision: unknown.Decision}
 	}
 	return err
 }

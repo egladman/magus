@@ -833,7 +833,7 @@ func holderLastCall(ctx context.Context, deps Dependencies, at location, owner j
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
 	var last time.Time
-	for e, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), holderTrailWindow) {
+	for e, err := range recorder.Calls(ctx, cacheDir, holderTrailWindow) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}

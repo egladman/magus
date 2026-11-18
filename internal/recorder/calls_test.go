@@ -56,7 +56,7 @@ func writeBlobRef(ctx context.Context, base, prefix string, data []byte) string 
 
 // readBlob is the payload ref names in the log under base.
 func readBlob(base, ref string) ([]byte, error) {
-	return journal.Payload{Ref: ref}.Read(CallsDir(base))
+	return journal.Payload{Ref: ref}.Read(callsDir(base))
 }
 
 func atMs(ms int64) time.Time { return time.UnixMilli(ms) }

@@ -246,7 +246,7 @@ func hookCommandEvent(ctx context.Context, got journal.Call, origin jobtypes.Ori
 // loggedCalls is the newest limit calls in the log under base.
 func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), limit) {
+	for c, err := range recorder.Calls(ctx, base, limit) {
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +257,7 @@ func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 
 // loggedPayload is the payload ref names in the log under base.
 func loggedPayload(base, ref string) ([]byte, error) {
-	return journal.Payload{Ref: ref}.Read(recorder.CallsDir(base))
+	return recorder.ReadPayload(base, journal.Payload{Ref: ref})
 }
 
 // A hook row times the rule load against the hook's deadline, which starts before it, and

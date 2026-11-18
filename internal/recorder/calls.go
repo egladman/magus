@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -546,9 +547,21 @@ func leaseFromContext(handed string) string {
 	return ""
 }
 
-// CallsDir is the directory under base that holds the activity log: what
+// callsDir is the directory under base that holds the activity log: what
 // journal.Calls and (journal.Payload).Read take.
-func CallsDir(base string) string { return filepath.Join(base, dir) }
+func callsDir(base string) string { return filepath.Join(base, dir) }
+
+// Calls returns up to limit calls from the end of the activity log under
+// base, newest first, by the error rule journal.Calls states.
+func Calls(ctx context.Context, base string, limit int) iter.Seq2[journal.Call, error] {
+	return journal.Calls(ctx, callsDir(base), limit)
+}
+
+// ReadPayload returns the body p names in the activity log under base. A
+// ref journal.ValidPayloadRef refuses wraps fs.ErrNotExist.
+func ReadPayload(base string, p journal.Payload) ([]byte, error) {
+	return p.Read(callsDir(base))
+}
 
 // The tool labels an agent command's request names; see cmd/magus/agent.go.
 // They are magus's own, never a host's tool names.
@@ -630,7 +643,7 @@ func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes,
 		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := e.Request.Read(CallsDir(base))
+		raw, rerr := e.Request.Read(callsDir(base))
 		if rerr != nil {
 			continue
 		}
@@ -703,7 +716,7 @@ func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 		return nil, errors.New("recorder: read names no directory")
 	}
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, CallsDir(base), limit) {
+	for c, err := range Calls(ctx, base, limit) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}

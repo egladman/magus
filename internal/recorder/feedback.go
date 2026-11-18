@@ -115,7 +115,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (feedback.Report, error) {
 				continue
 			}
 			sp := feedback.Spawn{At: e.Time.UnixMilli(), Agent: e.Agent, Child: e.Name, Lease: e.Lease}
-			if raw, err := e.Request.Read(CallsDir(s.base)); err == nil {
+			if raw, err := e.Request.Read(callsDir(s.base)); err == nil {
 				var req AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.Model = req.DeclaredModel
@@ -139,7 +139,7 @@ func feedbackObservation(base string, e journal.Call) (feedback.Observation, boo
 	if e.Request.Ref == "" {
 		return feedback.Observation{}, false, nil
 	}
-	raw, err := e.Request.Read(CallsDir(base))
+	raw, err := e.Request.Read(callsDir(base))
 	if errors.Is(err, fs.ErrNotExist) {
 		return feedback.Observation{}, false, nil
 	}
@@ -151,7 +151,7 @@ func feedbackObservation(base string, e journal.Call) (feedback.Observation, boo
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.Response.Ref != "" {
-		if raw, err := e.Response.Read(CallsDir(base)); err == nil {
+		if raw, err := e.Response.Read(callsDir(base)); err == nil {
 			if err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); errors.As(err, &retired) {
 				return feedback.Observation{}, false, err
 			}
