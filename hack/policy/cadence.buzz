@@ -20,12 +20,25 @@ final gateDenial = "a worker mid-change does not run the gate; finish with the n
 // Caller is who runs a command: role is root, worker (a lease binds it) or integrator, and title is
 // the description it was itself spawned with, empty for a person or the orchestrator. holdsCheckout
 // is true for the holder of a live `job fork --checkout` row whose gate calls all run in that
-// row's own checkout (gatesInHeldCheckout).
+// row's own checkout (gatesInHeldCheckout). dir is the host's directory and workspace the root
+// holding it, "" when the host names none.
 export object Caller {
     role: magus\AgentRole,
     title: str,
     holdsCheckout: bool = false,
+    dir: str = "",
+    workspace: str = "",
 }
+
+final ciUnderDenial = "this ci run skips projects the change reaches; run `magus affected ci` instead.\n"
+    + "`magus run ci .`, and `magus run ci` with no project from the workspace root, run the root project alone, though `.` reads as everything; "
+    + "a project after `magus affected ci` narrows the gate below what the diff reaches. "
+    + "`magus affected ci` runs ci on every project the diff reaches, the set pull request CI runs, "
+    + "and `magus run ci <project>` stays open for a project you name.";
+
+final ciOverAdvice = "this ci run spends time on projects the change cannot reach: "
+    + "`magus run ci /` runs every project, and `/` after `magus affected ci` adds nothing to the set the diff reaches. "
+    + "`magus affected ci` runs ci on every project the diff reaches, the set pull request CI runs.";
 
 // Checkout is the git state a push leaves from, handed over only for a line that pushes.
 export object Checkout {
@@ -39,11 +52,18 @@ export fun decideCadence(programs: [helpers\Program], caller: Caller, checkout: 
     if (runsGate(programs) and !mayGate(caller)) {
         return magus\guard.deny(gateDenial);
     }
+    final scope = ciScope(programs, dir: caller.dir, workspace: caller.workspace);
+    if (scope == "under") {
+        return magus\guard.deny(ciUnderDenial);
+    }
     if (checkout != null) {
         final denial = unqualifiedPush(programs, checkout: checkout!);
         if (denial != "") {
             return magus\guard.deny(denial);
         }
+    }
+    if (scope == "over") {
+        return magus\guard.advise(ciOverAdvice);
     }
     return magus\guard.defer();
 }
@@ -165,6 +185,74 @@ fun runsGate(programs: [helpers\Program]) > bool {
     return false;
 }
 
+// ciScope says how a line's ci runs miss the set the diff reaches: "under" when one skips
+// projects the diff reaches, "over" when one only adds projects it cannot reach, "" when none
+// does. Under is `magus run ci` with `.` among its projects and no `/`, or with none from the
+// workspace root, where the root is the cwd project; and `magus affected ci` with any project
+// but `/`, `--plan` included, since a project there narrows the set. Over is `magus run ci`
+// with `/` among its projects, and `magus affected ci /`. A charm counts as ci. A ci run with
+// no project whose directory is unknown is under, since nothing says it is not the root. Each
+// call is placed where it runs: a cd earlier on the line, then its -C or --root.
+fun ciScope(programs: [helpers\Program], dir: str, workspace: str) > str {
+    var cwd = dir;
+    if (cwd == "") {
+        cwd = workspace;
+    }
+    var scope = "";
+    foreach (p in programs) {
+        if (p.name == "cd" or p.name == "pushd") {
+            final ops = helpers\stripFlags(p.args, valueFlags: [<str>]);
+            if (ops.len() == 1) {
+                cwd = moved(cwd, to: ops[0]);
+            } else {
+                cwd = "";
+            }
+        } else if (p.name == "popd") {
+            cwd = "";
+        } else if (p.name == "magus") {
+            final ops = helpers\magusOperands(withoutDirFlag(beforeDashDash(p.args)));
+            if (ops.len() > 1 and (ops[1] == "ci" or ops[1].startsWith("ci:"))) {
+                final projects = ops.sub(2);
+                final all = projects.indexOf("/") != null;
+                if (ops[0] == "affected") {
+                    foreach (project in projects) {
+                        if (project != "/") {
+                            return "under";
+                        }
+                    }
+                    if (all) {
+                        scope = "over";
+                    }
+                } else if (ops[0] == "run") {
+                    if (all) {
+                        scope = "over";
+                    } else if (projects.indexOf(".") != null) {
+                        return "under";
+                    } else if (projects.len() == 0) {
+                        final at = relocated(cwd, args: p.args);
+                        if (at == "" or workspace == "" or at == workspace) {
+                            return "under";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return scope;
+}
+
+// beforeDashDash is args up to a `--`, whose rest the target receives, never magus.
+fun beforeDashDash(args: [str]) > [str] {
+    final kept = mut [<str>];
+    foreach (a in args) {
+        if (a == "--") {
+            return kept;
+        }
+        kept.append(a);
+    }
+    return kept;
+}
+
 // withoutDirFlag is args with each -C and its value left out, which magusOperands does not know.
 fun withoutDirFlag(args: [str]) > [str] {
     final kept = mut [<str>];
@@ -224,6 +312,95 @@ fun judged(programs: [helpers\Program], caller: Caller, checkout: Checkout?) > G
 // person is an unattributed caller: no lease binds it and no spawn titled it.
 fun person() > Caller {
     return Caller{ role = magus\AgentRole.root, title = "" };
+}
+
+// personAt is a person whose host runs in dir, inside the workspace at /w.
+fun personAt(dir: str) > Caller {
+    return Caller{ role = magus\AgentRole.root, title = "", dir = dir, workspace = "/w" };
+}
+
+// offTheDiff is the decision on argvs run by a person in dir.
+fun offTheDiff(argvs: [[str]], dir: str) > magus\GuardDecision {
+    return judged(helpers\request(argvs), caller: personAt(dir), checkout: null).decision;
+}
+
+test "magus run ci . is denied, naming magus affected ci" {
+    foreach (argv in [
+        ["magus", "run", "ci", "."],
+        ["magus", "run", "ci:rw", "."],
+        ["magus", "run", "ci", "web", "."],
+        ["magus", "-j", "4", "run", "ci", "."],
+    ]) {
+        final v = judged(helpers\request([argv]), caller: personAt("/w/web"), checkout: null);
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
+        std\assert(v.reason.indexOf("run `magus affected ci` instead") != null, message: v.reason);
+    }
+}
+
+test "a bare magus run ci is denied where it selects the root" {
+    std\assert(offTheDiff([["magus", "run", "ci"]], dir: "/w") == magus\GuardDecision.deny, message: "from the workspace root");
+    std\assert(offTheDiff([["magus", "run", "ci:rw"]], dir: "/w") == magus\GuardDecision.deny, message: "a charm, from the root");
+    std\assert(offTheDiff([["cd", "/w"], ["magus", "run", "ci"]], dir: "/w/web") == magus\GuardDecision.deny, message: "a cd to the root");
+    std\assert(offTheDiff([["magus", "-C", "/w", "run", "ci"]], dir: "/w/web") == magus\GuardDecision.deny, message: "a -C to the root");
+    std\assert(judged(helpers\request([["magus", "run", "ci"]]), caller: person(), checkout: null).decision == magus\GuardDecision.deny,
+        message: "nothing places the call");
+    std\assert(offTheDiff([["magus", "run", "ci"]], dir: "/w/web") == magus\GuardDecision.defer, message: "from a project's directory");
+    std\assert(offTheDiff([["magus", "-C", "/w/web", "run", "ci"]], dir: "/w") == magus\GuardDecision.defer, message: "a -C into a project");
+}
+
+test "magus affected ci . is denied, the plan form included" {
+    foreach (argv in [
+        ["magus", "affected", "ci", "."],
+        ["magus", "affected", "ci:rw", "."],
+        ["magus", "affected", "ci", ".", "--plan"],
+    ]) {
+        final v = judged(helpers\request([argv]), caller: personAt("/w"), checkout: null);
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
+        std\assert(v.reason.indexOf("narrows the gate") != null, message: v.reason);
+    }
+}
+
+test "magus affected ci with a named project is denied" {
+    foreach (argv in [
+        ["magus", "affected", "ci", "libs/codec"],
+        ["magus", "affected", "ci", "web", "/"],
+    ]) {
+        std\assert(offTheDiff([argv], dir: "/w") == magus\GuardDecision.deny, message: argv.join(" "));
+    }
+}
+
+test "magus run ci / is advised, naming magus affected ci" {
+    foreach (argv in [
+        ["magus", "run", "ci", "/"],
+        ["magus", "run", "ci:rw", "/"],
+        ["magus", "run", "ci", "web", "/"],
+    ]) {
+        final v = judged(helpers\request([argv]), caller: personAt("/w"), checkout: null);
+        std\assert(v.decision == magus\GuardDecision.advise, message: argv.join(" "));
+        std\assert(v.reason.indexOf("`magus affected ci` runs ci on every project the diff reaches") != null, message: v.reason);
+    }
+}
+
+test "magus affected ci / is advised" {
+    final v = judged(helpers\request([["magus", "affected", "ci", "/"]]), caller: personAt("/w"), checkout: null);
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.reason);
+    std\assert(v.reason.indexOf("adds nothing") != null, message: v.reason);
+}
+
+test "named projects, the bare gate and every other target keep their projects" {
+    foreach (argv in [
+        ["magus", "run", "ci", "web"],
+        ["magus", "run", "ci", "web", "libs/codec"],
+        ["magus", "affected", "ci"],
+        ["magus", "affected", "ci", "--plan"],
+        ["magus", "affected", "ci", "--", "."],
+        ["magus", "run", "test", "."],
+        ["magus", "run", "lint", "/"],
+        ["magus", "run", "test"],
+        ["magus", "affected", "test", "."],
+    ]) {
+        std\assert(offTheDiff([argv], dir: "/w") == magus\GuardDecision.defer, message: argv.join(" "));
+    }
 }
 
 test "a worker whose role is not integrate may not run the gate" {

@@ -240,7 +240,7 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
         return branchTopic(req.dir, source: source);
     };
     final texts = withHeredocs(programs, line: req.command);
-    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\gatesInHeldCheckout(req.lease, programs: programs, dir: req.dir, workspace: req.workspace) }, checkout: checkout,
+    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\gatesInHeldCheckout(req.lease, programs: programs, dir: req.dir, workspace: req.workspace), dir = req.dir, workspace = req.workspace }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic,
@@ -608,7 +608,7 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
         return authority;
     }
     final cadenceVerdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
-    if (cadenceVerdict.decision != magus\GuardDecision.defer) {
+    if (cadenceVerdict.decision == magus\GuardDecision.deny) {
         return cadenceVerdict;
     }
     final verified = publishing.verified();
@@ -622,9 +622,9 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     }
     final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
     if (rest.decision != magus\GuardDecision.defer) {
-        return withNote(rest, note: verified);
+        return withNote(withNote(rest, note: verified), note: cadenceVerdict);
     }
-    return withNote(names, note: verified);
+    return withNote(withNote(names, note: verified), note: cadenceVerdict);
 }
 
 // withNote is v with note's advice added: note alone when v allows, both texts under v's rule
