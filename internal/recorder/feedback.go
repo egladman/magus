@@ -194,7 +194,7 @@ func eventsInWindow(base string, since, until int64) ([]journal.Call, error) {
 			continue
 		}
 		var e journal.Call
-		if codec.Unmarshal(line, &e) != nil || e.Time.UnixMilli() < since || e.Time.UnixMilli() > until {
+		if e.UnmarshalJSON(line) != nil || e.Time.UnixMilli() < since || e.Time.UnixMilli() > until {
 			continue
 		}
 		out = append(out, e)

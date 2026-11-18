@@ -10,7 +10,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +41,7 @@ func TestEventToProtoMapsEnums(t *testing.T) {
 	assert.Equal(t, viewerv1.Stream_STREAM_STDERR, out.GetStream())
 
 	var bogus journal.Record
-	require.NoError(t, codec.Unmarshal([]byte(`{"ts":1,"kind":"bogus"}`), &bogus))
+	require.NoError(t, bogus.UnmarshalJSON([]byte(`{"ts":1,"kind":"bogus"}`)))
 	assert.Equal(t, viewerv1.Kind_KIND_UNSPECIFIED, eventToProto(bogus).GetKind())
 }
 

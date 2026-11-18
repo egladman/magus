@@ -607,7 +607,7 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 		return AgentActivity{}, false
 	}
 	var e journal.Call
-	if codec.Unmarshal([]byte(newest), &e) != nil {
+	if e.UnmarshalJSON([]byte(newest)) != nil {
 		return AgentActivity{}, false
 	}
 	if e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindAgentSpawn || e.Time.IsZero() || e.Time.UnixMilli() <= 0 {
@@ -741,7 +741,7 @@ func AppendCall(ctx context.Context, base string, c journal.Call) {
 	}
 	c = redactCall(ctx, c)
 	c.Origin = StampOrigin(ctx, c.Origin)
-	line, err := codec.Marshal(c)
+	line, err := c.MarshalJSON()
 	if err != nil {
 		return
 	}
@@ -981,7 +981,7 @@ func gcBlobs(base string, keptLines []string) {
 	referenced := make(map[string]struct{})
 	for _, l := range keptLines {
 		var c journal.Call
-		if codec.Unmarshal([]byte(l), &c) != nil {
+		if c.UnmarshalJSON([]byte(l)) != nil {
 			continue
 		}
 		refs := []string{c.Request.Ref, c.Response.Ref}

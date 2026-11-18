@@ -16,7 +16,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
@@ -72,7 +71,7 @@ func appendRecords(t *testing.T, dir string, records ...journal.Record) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, f.Close()) }()
 	for _, r := range records {
-		line, err := codec.Marshal(r)
+		line, err := r.MarshalJSON()
 		require.NoError(t, err)
 		_, err = f.Write(append(line, '\n'))
 		require.NoError(t, err)

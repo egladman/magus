@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
@@ -143,7 +142,7 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
-	line, err := codec.Marshal(journal.Call{Time: atMs(5_000_000), Kind: journal.CallKindJob, Name: "graph build", Outcome: journal.OutcomeOK})
+	line, err := journal.Call{Time: atMs(5_000_000), Kind: journal.CallKindJob, Name: "graph build", Outcome: journal.OutcomeOK}.MarshalJSON()
 	require.NoError(t, err)
 	body := strings.Repeat(string(line)+"\n", maxEvents)
 	require.NoError(t, os.WriteFile(eventsPath(base), []byte(body), 0o644))

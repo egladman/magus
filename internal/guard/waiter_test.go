@@ -17,7 +17,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -359,7 +358,7 @@ func writeCodedLog(t *testing.T, runsDir, inv string, at time.Time, code types.D
 		journal.NewRecord(at, inv, result),
 		journal.NewRecord(at, inv, journal.Finished{Status: result.Status}),
 	} {
-		line, err := codec.Marshal(ev)
+		line, err := ev.MarshalJSON()
 		require.NoError(t, err)
 		body = append(append(body, line...), '\n')
 	}

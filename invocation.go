@@ -167,7 +167,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 // newEvent reads r's journal line into the projection, so the two cannot
 // disagree on a key.
 func newEvent(r journal.Record) (Event, error) {
-	line, err := codec.Marshal(r)
+	line, err := r.MarshalJSON()
 	if err != nil {
 		return Event{}, err
 	}

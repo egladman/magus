@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -49,7 +49,7 @@ func (s *EmitSuite) TestFileSinkAppendsJSONL() {
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	s.Require().Len(lines, 2)
 	var first journal.Record
-	s.Require().NoError(codec.Unmarshal([]byte(lines[0]), &first))
+	s.Require().NoError(first.UnmarshalJSON([]byte(lines[0])))
 	s.False(first.Time.IsZero(), "Emit stamps a time")
 	out, ok := first.Output()
 	s.Require().True(ok)
@@ -206,7 +206,7 @@ func stringFields(t reflect.Type, prefix string) []string {
 	var out []string
 	for i := range t.NumField() {
 		f := t.Field(i)
-		path := prefix + "." + f.Name
+		path := fmt.Sprintf("%s.%s", prefix, f.Name)
 		ft := f.Type
 		if ft.Kind() == reflect.Slice {
 			ft = ft.Elem()

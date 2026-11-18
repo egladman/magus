@@ -71,7 +71,7 @@ func seedEvents(t *testing.T, base string, n int) []journal.Call {
 	for i := 1; i <= n; i++ {
 		e := journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}
 		events = append(events, e)
-		line, err := codec.Marshal(e)
+		line, err := e.MarshalJSON()
 		require.NoError(t, err)
 		buf = append(append(buf, line...), '\n')
 	}
@@ -588,8 +588,8 @@ func TestWriteBlob_RejectsBadPrefixOrEmpty(t *testing.T) {
 			t.Errorf("WritePayload(prefix=%q) = %q, want empty", bad, ref)
 		}
 	}
-	if p := WritePayload(t.Context(), dir, "mcp", nil); p.Ref != "" || p.Bytes != 0 {
-		t.Errorf("empty data = %q,%d; want \"\",0", p.Ref, p.Bytes)
+	if p := WritePayload(t.Context(), dir, "mcp", nil); p != (journal.Payload{}) {
+		t.Errorf("empty data = %+v; want the zero payload", p)
 	}
 	if ref := WritePayload(t.Context(), "", "mcp", []byte("x")).Ref; ref != "" {
 		t.Errorf("empty base = %q, want empty", ref)
@@ -695,7 +695,7 @@ func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 	dir := t.TempDir()
 	ref := writeBlobRef(t.Context(), dir, "grd", []byte("the full verdict"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
-	line, err := codec.Marshal(journal.Call{Kind: journal.CallKindAgentCommand, Name: "shell.command", Guard: &journal.Guard{Verdict: journal.Payload{Ref: ref}}})
+	line, err := journal.Call{Kind: journal.CallKindAgentCommand, Name: "shell.command", Guard: &journal.Guard{Verdict: journal.Payload{Ref: ref}}}.MarshalJSON()
 	require.NoError(t, err)
 
 	gcBlobs(dir, []string{string(line)})
@@ -800,7 +800,7 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	// The floor is not a guess: the smallest event that can reach the file (every
 	// no-omitempty field empty) must still be at least minEventBytes, or the skip could
 	// fire on a trail that genuinely needed trimming.
-	line, err := codec.Marshal(journal.Call{})
+	line, err := journal.Call{}.MarshalJSON()
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(line)+1, minEventBytes, "minEventBytes must not exceed the smallest serializable event line")
 }
@@ -816,7 +816,7 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	var lines []string
 	line := func(kind journal.CallKind, ts int) string {
-		b, err := codec.Marshal(journal.Call{Time: atMs(int64(ts)), Kind: kind, Name: "x", Outcome: journal.OutcomeOK})
+		b, err := journal.Call{Time: atMs(int64(ts)), Kind: kind, Name: "x", Outcome: journal.OutcomeOK}.MarshalJSON()
 		require.NoError(t, err)
 		return string(b)
 	}
@@ -848,7 +848,7 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 	var lines []string
 	for i := 1; i <= 100; i++ {
-		b, err := codec.Marshal(journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK})
+		b, err := journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}.MarshalJSON()
 		require.NoError(t, err)
 		lines = append(lines, string(b))
 	}

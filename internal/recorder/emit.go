@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -131,7 +131,7 @@ func NewFileSink(w io.Writer) *FileSink {
 
 // Handle writes r; it is a [Sink].
 func (s *FileSink) Handle(ctx context.Context, r journal.Record) {
-	line, err := codec.Marshal(r)
+	line, err := r.MarshalJSON()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failed {
@@ -141,7 +141,10 @@ func (s *FileSink) Handle(ctx context.Context, r journal.Record) {
 		s.fail(ctx, err)
 		return
 	}
-	_, _ = s.w.Write(line)
+	if _, err := s.w.Write(line); err != nil {
+		s.fail(ctx, err)
+		return
+	}
 	if err := s.w.WriteByte('\n'); err != nil {
 		s.fail(ctx, err)
 		return
@@ -165,7 +168,7 @@ func (s *FileSink) Handle(ctx context.Context, r journal.Record) {
 // fail says once that the journal stopped recording. Callers hold mu.
 func (s *FileSink) fail(ctx context.Context, err error) {
 	s.failed = true
-	slog.WarnContext(ctx, "journal.write", slog.String("error", err.Error()),
+	slog.WarnContext(ctx, "journal.write", attr.Error(err),
 		slog.String("msg", "the journal stopped recording; later records are not on disk"))
 }
 
