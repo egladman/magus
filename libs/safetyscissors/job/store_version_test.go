@@ -2,6 +2,8 @@ package job
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -32,6 +34,64 @@ func (s *StoreVersionSuite) TestARecordOfAnotherVersionNamesBoth() {
 	err := &RecordVersionError{Path: "/s/jobs.jsonl", Line: 2, Want: APIVersion, Got: apiversion.APIVersion("batch.magus/v1alpha1")}
 
 	s.Equal("job: /s/jobs.jsonl:2 is batch.magus/v1alpha1, and this build reads safetyscissors.job/v1alpha1", err.Error())
+}
+
+func (s *StoreVersionSuite) TestARetiredNameNamesTheRowAndTheRespelling() {
+	err := &RetiredNameError{Record: "a", Retired: "spec.goals", Now: "spec.postconditions"}
+
+	s.Equal("job a spells spec.goals, a name this build retired for spec.postconditions: migrate the store, respelling spec.goals as spec.postconditions, before reading it", err.Error())
+}
+
+// A row spelling its postconditions goals would keep them as an unknown member, and every
+// reader would see a row with none.
+func (s *StoreVersionSuite) TestARowSpellingGoalsIsRefused() {
+	_, _, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
+		`"spec":{"goals":[{"id":"tests","kind":"check","expect":"passed","check":{"target":"test","project":"."}}]},"status":{"created":1,"updated":1}}`))
+
+	retired, ok := errors.AsType[*RetiredNameError](err)
+	s.Require().True(ok, err)
+	s.Equal(RetiredNameError{Record: "a", Retired: "spec.goals", Now: "spec.postconditions"}, *retired)
+}
+
+func (s *StoreVersionSuite) TestARowRequiringSignatureGoalsIsRefused() {
+	_, _, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job",` +
+		`"metadata":{"name":"a","annotations":{"safetyscissors.job/requires":"signature-goals"}},"spec":{},"status":{"created":1,"updated":1}}`))
+
+	retired, ok := errors.AsType[*RetiredNameError](err)
+	s.Require().True(ok, err)
+	s.Equal(RetiredNameError{Record: "a", Retired: "signature-goals", Now: "signature-postconditions"}, *retired)
+}
+
+// The store refuses the file rather than read it as rows with no postconditions.
+func (s *StoreSuite) TestAStoreHoldingARetiredNameIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","metadata":{"annotations":{"safetyscissors.job/requires":"signature-goals"}}}`+"\n"), 0o600))
+
+	_, err := s.open().List(s.T().Context())
+
+	var retired *RetiredNameError
+	s.Require().ErrorAs(err, &retired)
+	s.Equal(RetiredNameError{Retired: "signature-goals", Now: "signature-postconditions"}, *retired)
+}
+
+func (s *StoreSuite) TestAStoredRowSpellingGoalsIsRefused() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName), []byte(
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"+
+			`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"goals":[]},"status":{"created":1,"updated":1}}`+"\n"), 0o600))
+
+	_, err := s.open().List(s.T().Context())
+
+	var retired *RetiredNameError
+	s.Require().ErrorAs(err, &retired)
+	s.Equal("spec.goals", retired.Retired)
+}
+
+func (s *StoreVersionSuite) TestARowSpellingPostconditionsReads() {
+	row, ok, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{},"status":{"created":1,"updated":1}}`))
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal("a", row.ID)
 }
 
 func (s *StoreVersionSuite) TestAShellWordIsQuotedOnlyWhenItMustBe() {

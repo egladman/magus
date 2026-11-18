@@ -245,6 +245,9 @@ func (r jobRecord) job(creds wireEnum[CredentialKind]) (Job, error) {
 	if r.TypeMeta != jobType() {
 		return Job{}, &apiversion.RefusedError{Want: jobType(), Got: r.TypeMeta}
 	}
+	if err := refuseRetired(r.Metadata.Name, r.Spec.Unknown, r.Metadata.Requires(recordGroup)); err != nil {
+		return Job{}, err
+	}
 	state, err := lifecycleState(r.Status.Conditions)
 	if err != nil {
 		return Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)

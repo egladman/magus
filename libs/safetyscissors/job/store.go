@@ -1064,8 +1064,11 @@ func (s *Store) decodeRows(texts []codec.Line, f *Rows, log *jobsLog) error {
 	return nil
 }
 
-// refuseUnmetFeatures refuses a file requiring a feature this build lacks.
+// refuseUnmetFeatures refuses a file requiring a feature this build lacks or retired.
 func (s *Store) refuseUnmetFeatures(f Rows) error {
+	if err := refuseRetired("", nil, f.Metadata.Requires(recordGroup)); err != nil {
+		return s.wrap(err)
+	}
 	known := make([]apiversion.Feature, len(features()))
 	for i, k := range features() {
 		known[i] = apiversion.Feature(k)

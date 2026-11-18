@@ -34,6 +34,49 @@ func (e *NewerWriterError) Error() string {
 	return fmt.Sprintf("job store %s is at migration %d, past this build's %d", e.Path, e.Found, e.Known)
 }
 
+// RetiredNameError is a store line spelling a member or a required feature by a name this
+// build retired. Read as it stands, the member would be kept as unknown and what it holds
+// would reach no reader, so the line is refused until the caller's migration respells it.
+type RetiredNameError struct {
+	// Record names the row, "" for the header.
+	Record string
+	// Retired is the name the line spells, and Now the name this build reads.
+	Retired, Now string
+}
+
+func (e *RetiredNameError) Error() string {
+	at := "the header"
+	if e.Record != "" {
+		at = "job " + e.Record
+	}
+	return fmt.Sprintf("%s spells %s, a name this build retired for %s: migrate the store, respelling %s as %s, before reading it",
+		at, e.Retired, e.Now, e.Retired, e.Now)
+}
+
+// retiredNames pairs each spec member and required feature a store spelled before the
+// postcondition rename with its name after it.
+func retiredNames() map[string]string {
+	return map[string]string{"spec.goals": "spec.postconditions", "signature-goals": "signature-postconditions"}
+}
+
+// refuseRetired is a [*RetiredNameError] for the first spec member in specUnknown or
+// feature in requires that [retiredNames] lists, nil when there is none. record is the
+// row's id, "" for the header.
+func refuseRetired(record string, specUnknown map[string]codec.RawMessage, requires []apiversion.Feature) error {
+	renamed := retiredNames()
+	for member := range specUnknown {
+		if now, ok := renamed["spec."+member]; ok {
+			return &RetiredNameError{Record: record, Retired: "spec." + member, Now: now}
+		}
+	}
+	for _, f := range requires {
+		if now, ok := renamed[string(f)]; ok {
+			return &RetiredNameError{Record: record, Retired: string(f), Now: now}
+		}
+	}
+	return nil
+}
+
 // NewerRecordsError is a record a newer writer stored that this build may read but not
 // write: a row requiring features this build lacks, or an attempt of another version or
 // kind.
