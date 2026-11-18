@@ -4,9 +4,10 @@
   `Declaration`, `Statement` and `Report` carry `Check` as `job.Check`, and `Put` as
   `*job.Check`. A `Check` hides its bytes: `NewCheck` makes one, `Decode` reads it,
   `IsZero` says it declares none, and `String` is its JSON. `LeaseCheck`,
-  `ParseLeaseCheck`, `CheckError`, `SameLeaseCheck` and `HasCheck` are gone. `job.Open`
-  takes `WithCheckSpec(spec)`, a `CheckSpec` with `Validate`, `Equal` and `Render`, and
-  without it every row write and grading call refuses.
+  `ParseLeaseCheck`, `CheckError`, `SameLeaseCheck` and `HasCheck` are gone.
+- **Breaking for SDK callers: `job.Open` takes `WithCheckSpec(spec)`.** A `CheckSpec`
+  has `Validate`, `Equal` and `Render`, and without it every row write and grading call
+  refuses.
 - **Breaking for SDK callers: `job.Schema` hides the members it keeps.** The bytes a
   record does not declare still round-trip on write, and `Schema.Unknown()` names them.
 - **Breaking for SDK callers: `safetyscissors.New` requires `WithCheckSpec`.** It passes
