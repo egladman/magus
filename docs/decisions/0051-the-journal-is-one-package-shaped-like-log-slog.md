@@ -85,16 +85,16 @@ readers for both kinds of line, `journal/stream` holds the subscriber view, and 
 decision's reasoning are in the fold's spec; the parts below are what a later reader
 would be tempted to reverse.
 
-| Part | What                                                                | State                                     |
-| ---- | ------------------------------------------------------------------- | ----------------------------------------- |
-| 1    | `journal.Record` and `journal.Call`, kept as two types              | done                                      |
-| 2    | readers return `iter.Seq2[T, error]`                                | done                                      |
-| 3    | the invocation id is a plain string                                 | done                                      |
-| 4    | `recorder.Sink` replaces the slog capture bridge                    | done                                      |
-| 5    | `journal/stream` replaces `internal/eventstream` and `types/events` | done                                      |
-| 6    | `internal/sessions` sits above the journal                          | done                                      |
-| 7    | nothing on disk changes; the `dur_ms` readers go                    | done                                      |
-| 8    | the word trail leaves code, docs and UI                             | in progress (prose owed)                  |
+| Part | What                                                                | State                    |
+| ---- | ------------------------------------------------------------------- | ------------------------ |
+| 1    | `journal.Record` and `journal.Call`, kept as two types              | done                     |
+| 2    | readers return `iter.Seq2[T, error]`                                | done                     |
+| 3    | the invocation id is a plain string                                 | done                     |
+| 4    | `recorder.Sink` replaces the slog capture bridge                    | done                     |
+| 5    | `journal/stream` replaces `internal/eventstream` and `types/events` | done                     |
+| 6    | `internal/sessions` sits above the journal                          | done                     |
+| 7    | nothing on disk changes; the `dur_ms` readers go                    | done                     |
+| 8    | the word trail leaves code, docs and UI                             | in progress (prose owed) |
 
 ### 1. Two line types, the first shaped like `slog.Record`
 
