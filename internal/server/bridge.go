@@ -36,16 +36,11 @@ import (
 	"github.com/egladman/magus/types/daemon"
 )
 
-// publishTrailBase resolves the server-wide activity-trail base and publishes it, so
-// background-job recording and the maintenance scheduler land in the same trail the MCP
-// handler writes and the ActivityService reads.
-//
-// ResolveCacheDir is the narrow path: it reads config without discovering projects or
-// evaluating magusfiles, so the value is the bridge Magus's CacheDir without paying a
-// workspace load to learn it, which is what lets this run ahead of the MCP gate. A root
-// that will not resolve leaves the base empty, and every writer already treats an empty
-// base as "drop the record, best-effort".
-func (h *Host) publishTrailBase(ctx context.Context) {
+// publishActivityBase publishes the server-wide activity log's base. It reads
+// config without a workspace load, so it runs ahead of the MCP gate. A root
+// that will not resolve leaves the base empty, and every writer drops its
+// record.
+func (h *Host) publishActivityBase(ctx context.Context) {
 	root, err := workspace.FindRoot("")
 	if err != nil {
 		slog.WarnContext(ctx, "no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
@@ -75,7 +70,7 @@ func (h *Host) StartBridge(ctx context.Context, cancel context.CancelFunc) {
 	// nothing to do with MCP, but it used to be published below the MCP gate, so
 	// mcp.enabled: false left it empty, the maintenance scheduler bailed at every tick,
 	// and no background job was ever recorded.
-	h.publishTrailBase(ctx)
+	h.publishActivityBase(ctx)
 	mcpOn := h.Config.MCP.Enabled == nil || *h.Config.MCP.Enabled
 	addr, err := netip.ParseAddrPort(MCPAddress(h.Config.MCP))
 	if mcpOn && err != nil {
@@ -323,13 +318,9 @@ type Host struct {
 	procSrv  *proc.Server
 	runs     *console.RunRegistry
 	started  time.Time
-	// trailBase is the ONE server-wide activity-trail location: the bridge Magus's cache
-	// dir, the same base the MCP handler writes to and the ActivityService reads from.
-	// publishTrailBase sets it before anything MCP-gated, since the location is a cache
-	// dir rather than anything MCP owns; the proc OnJobDone callback reads it so every
-	// producer (MCP calls, background jobs) appends to a single trail, disambiguated by
-	// Event.Workspace. Empty only until startup reaches that call, or where the root does
-	// not resolve, so a job completing in that window is dropped best-effort.
+	// trailBase is the activity log base every producer appends to.
+	// publishActivityBase sets it; until then it is empty and a finished
+	// job goes unrecorded.
 	trailBase string
 	// jobStore is the server's ONE job store, published beside trailBase and for the same
 	// reason: the OnJobDone callback needs it, and a second Store over one file would hold
