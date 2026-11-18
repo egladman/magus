@@ -205,7 +205,7 @@ func (s *ConsultSuite) TestConsultedReturnsAnUndecodableBlob() {
 
 	_, _, err := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
 
-	var undecodable *BlobUndecodableError
+	var undecodable *blobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
 	assert.Equal(t, ref, undecodable.Ref)
 }

@@ -153,32 +153,32 @@ func (e *RetiredDecisionError) Error() string {
 	return fmt.Sprintf("recorder: %s holds the retired guard decision %q in payload %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
 }
 
-// BlobUndecodableError is an agent-command blob that is there and does not
+// blobUndecodableError is an agent-command blob that is there and does not
 // decode. A reader returns it beside what the other blobs held, rather than
 // count around it.
-type BlobUndecodableError struct {
+type blobUndecodableError struct {
 	// Store is the activity directory the blob was read from; Ref the blob.
 	Store string
 	Ref   string
 	Err   error
 }
 
-func (e *BlobUndecodableError) Error() string {
+func (e *blobUndecodableError) Error() string {
 	return fmt.Sprintf("recorder: payload %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
 }
 
-func (e *BlobUndecodableError) Unwrap() error { return e.Err }
+func (e *blobUndecodableError) Unwrap() error { return e.Err }
 
 // DecodeRequestBlob decodes the request blob ref, read from the activity log
 // under base, into req. A retired decision is a [*RetiredDecisionError] and
-// any other failure a [*BlobUndecodableError].
+// any other failure a [*blobUndecodableError].
 func DecodeRequestBlob(base, ref string, raw []byte, req *AgentCommandRequest) error {
 	err := DecodeAgentBlob(base, ref, raw, req)
 	var retired *RetiredDecisionError
 	if err == nil || errors.As(err, &retired) {
 		return err
 	}
-	return &BlobUndecodableError{Store: callsDir(base), Ref: ref, Err: err}
+	return &blobUndecodableError{Store: callsDir(base), Ref: ref, Err: err}
 }
 
 // retiredDecisions are the decision names no build after the defer rename writes.

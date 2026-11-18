@@ -54,9 +54,8 @@ func (s *TouchesSuite) TestReplayReturnsAnUndecodableBlobBesideTheTouches() {
 
 	got, err := replayTrail(t.Context(), "", base, []string{"magus.go"}, 100)
 
-	var undecodable *recorder.BlobUndecodableError
-	require.ErrorAs(t, err, &undecodable)
-	assert.Equal(t, ref, undecodable.Ref)
+	require.ErrorContains(t, err, ref)
+	assert.ErrorContains(t, err, "does not decode")
 	assert.Len(t, got["magus.go"], 1)
 }
 

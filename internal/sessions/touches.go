@@ -93,8 +93,8 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 // replayTrail reconstructs, for each of paths, which agent sessions the store at base saw
 // write it and what they had read first, reading at most limit recent events. A store that
 // cannot be read is its error. A request blob that does not decode is skipped and returned
-// in the joined error, which is a [*recorder.BlobUndecodableError] or a
-// [*recorder.RetiredDecisionError] per blob.
+// in the joined error, naming the blob. A retired decision is a
+// [*recorder.RetiredDecisionError].
 func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
 	events, err := recorder.RecentCalls(ctx, base, limit)
 	if err != nil {

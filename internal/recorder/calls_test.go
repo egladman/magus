@@ -973,7 +973,7 @@ func (s *CallsSuite) TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts()
 
 	reads, writes, shell, err := ObservedCounts(t.Context(), base, 100)
 
-	var undecodable *BlobUndecodableError
+	var undecodable *blobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
 	assert.Equal(t, request.Ref, undecodable.Ref)
 	assert.Equal(t, [3]int{1, 0, 0}, [3]int{reads, writes, shell})

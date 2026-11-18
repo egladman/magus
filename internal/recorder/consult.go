@@ -109,7 +109,7 @@ const (
 // A missing store, a missing blob, or an agent whose host wires no hook all contribute less;
 // a store that cannot be read is [ConsultGapUnobserved] and its error.
 // A request blob that does not decode is skipped and returned in the joined
-// error, a [*BlobUndecodableError] or a [*RetiredDecisionError] per blob,
+// error, a [*blobUndecodableError] or a [*RetiredDecisionError] per blob,
 // beside what the rest gave.
 func Consulted(ctx context.Context, root, base string, paths []string, limit int) ([]Consultation, ConsultGap, error) {
 	want := make(map[string]bool, len(paths))
