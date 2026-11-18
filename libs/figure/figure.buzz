@@ -5225,17 +5225,18 @@ fun serverHttpTwin(observed: Observed = Observed{}) > mut Sketch {
 // It is declared the way docs/engine/page.buzz importFlow declares it.
 fun observedServerScope() > mut Sketch {
     final pkgs = [
-        "internal/handler/activity", "internal/handler/attention", "internal/handler/diff",
-        "internal/handler/graph", "internal/handler/historymetrics", "internal/handler/job",
-        "internal/handler/mcp", "internal/handler/memory", "internal/handler/metrics",
-        "internal/handler/notes", "internal/handler/plan", "internal/handler/status",
-        "internal/handler/token", "internal/handler/tool", "internal/handler/trailrpc",
+        "internal/handler/activity", "internal/handler/activityrpc", "internal/handler/attention",
+        "internal/handler/diff", "internal/handler/graph", "internal/handler/historymetrics",
+        "internal/handler/job", "internal/handler/mcp", "internal/handler/memory",
+        "internal/handler/metrics", "internal/handler/notes", "internal/handler/plan",
+        "internal/handler/status", "internal/handler/token", "internal/handler/tool",
         "internal/handler/viewer", "internal/httpx", "internal/server",
     ];
     final imports = [
         ["internal/handler/graph", "internal/httpx"],
         ["internal/handler/viewer", "internal/httpx"],
         ["internal/server", "internal/handler/activity"],
+        ["internal/server", "internal/handler/activityrpc"],
         ["internal/server", "internal/handler/attention"],
         ["internal/server", "internal/handler/diff"],
         ["internal/server", "internal/handler/graph"],
@@ -5249,7 +5250,6 @@ fun observedServerScope() > mut Sketch {
         ["internal/server", "internal/handler/status"],
         ["internal/server", "internal/handler/token"],
         ["internal/server", "internal/handler/tool"],
-        ["internal/server", "internal/handler/trailrpc"],
         ["internal/server", "internal/handler/viewer"],
         ["internal/server", "internal/httpx"],
     ];
@@ -5838,6 +5838,7 @@ fun serverHttpObserved() > Observed {
     return Observed{
         nodes = [
             ObservedNode{ id = "pkg-internal-handler-activity", label = "internal/handler/activity", anchor = "internal/handler/activity" },
+            ObservedNode{ id = "pkg-internal-handler-activityrpc", label = "internal/handler/activityrpc", anchor = "internal/handler/activityrpc" },
             ObservedNode{ id = "pkg-internal-handler-attention", label = "internal/handler/attention", anchor = "internal/handler/attention" },
             ObservedNode{ id = "pkg-internal-handler-diff", label = "internal/handler/diff", anchor = "internal/handler/diff" },
             ObservedNode{ id = "pkg-internal-handler-graph", label = "internal/handler/graph", anchor = "internal/handler/graph" },
@@ -5851,7 +5852,6 @@ fun serverHttpObserved() > Observed {
             ObservedNode{ id = "pkg-internal-handler-status", label = "internal/handler/status", anchor = "internal/handler/status" },
             ObservedNode{ id = "pkg-internal-handler-token", label = "internal/handler/token", anchor = "internal/handler/token" },
             ObservedNode{ id = "pkg-internal-handler-tool", label = "internal/handler/tool", anchor = "internal/handler/tool" },
-            ObservedNode{ id = "pkg-internal-handler-trailrpc", label = "internal/handler/trailrpc", anchor = "internal/handler/trailrpc" },
             ObservedNode{ id = "pkg-internal-handler-viewer", label = "internal/handler/viewer", anchor = "internal/handler/viewer" },
             ObservedNode{ id = "pkg-internal-httpx", label = "internal/httpx", anchor = "internal/httpx" },
             ObservedNode{ id = "pkg-internal-server", label = "internal/server", anchor = "internal/server" },
@@ -5860,6 +5860,7 @@ fun serverHttpObserved() > Observed {
             ObservedEdge{ src = "pkg-internal-handler-graph", dst = "pkg-internal-httpx" },
             ObservedEdge{ src = "pkg-internal-handler-viewer", dst = "pkg-internal-httpx" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-activity" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-activityrpc" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-attention" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-diff" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-graph" },
@@ -5873,7 +5874,6 @@ fun serverHttpObserved() > Observed {
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-status" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-token" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-tool" },
-            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-trailrpc" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-viewer" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-httpx" },
         ],
@@ -5895,6 +5895,7 @@ fun serverHttpOmitting() > mut Sketch {
         .omitEdge("health", dst: "connect", why: mounts)
         .omitEdge("health", dst: "review", why: mounts)
         .omit("internal/handler/activity", why: connect)
+        .omit("internal/handler/activityrpc", why: "the audit interceptor around Connect services, not a route")
         .omit("internal/handler/attention", why: "a read route, inside the /api/v1 read views box")
         .omit("internal/handler/diff", why: "the diff and session routes, inside the review + plans box")
         .omit("internal/handler/historymetrics", why: "a read route and Connect service, inside the read views box")
@@ -5904,7 +5905,6 @@ fun serverHttpOmitting() > mut Sketch {
         .omit("internal/handler/plan", why: "the plan route, inside the review + plans box")
         .omit("internal/handler/token", why: connect)
         .omit("internal/handler/tool", why: connect)
-        .omit("internal/handler/trailrpc", why: "the audit interceptor around Connect services, not a route")
         .omit("internal/handler/viewer", why: "read routes and a Connect service, inside the read views box");
 }
 
