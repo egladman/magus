@@ -81,15 +81,24 @@ func passWaitingStop(denied verdict.Judgment, req types.StopRequest) verdict.Jud
 	var why string
 	switch {
 	case req.StopHookActive:
-		why = "the host marks this as a second stop"
+		why = heldStop
 	case req.Agent == "" && len(req.Background) > 0:
 		why = fmt.Sprintf("the host wakes this session when the %s it spawned in the background %s (%s)",
 			plural.Word(len(req.Background), "job", "jobs"), plural.Word(len(req.Background), "ends", "end"), strings.Join(req.Background, ", "))
 	default:
 		return denied
 	}
+	return passStop(denied, why, workspaceStopRule)
+}
+
+// heldStop is the reason a stop the host marks as following a refused one passes.
+const heldStop = "the host marks this as a second stop"
+
+// passStop is denied let through as advice, why saying what lets it through and rule
+// naming the refusing rule when denied names none.
+func passStop(denied verdict.Judgment, why, rule string) verdict.Judgment {
 	denied.Decision = verdict.Advise
-	passed := fmt.Sprintf("magus workspace: %s, so %s lets it through.\n%s", why, cmp.Or(denied.Rule, workspaceStopRule), denied.Reason)
+	passed := fmt.Sprintf("magus workspace: %s, so %s lets it through.\n%s", why, cmp.Or(denied.Rule, rule), denied.Reason)
 	denied.Context = strings.Join(slices.DeleteFunc([]string{denied.Context, passed}, func(s string) bool { return s == "" }), "\n\n")
 	denied.Reason = ""
 	return denied

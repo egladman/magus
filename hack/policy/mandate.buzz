@@ -615,6 +615,9 @@ export object StopFacts {
     // running are the tries the guard saw start whose end nobody has
     // observed, read under each job's deadline.
     running: [Try] = [],
+    // background are the jobs, sorted, whose running try the stopping agent spawned in the
+    // host's background mode, which the host wakes it for when each ends.
+    background: [str] = [],
 }
 
 // Try is one try of a job: started at a unix millisecond, end unobserved. started is 0 when
@@ -638,13 +641,17 @@ export fun runningTries(attempts: [magus\Attempt]) > [Try] {
     return found;
 }
 
-// runningLine names each try still counted as running. A root can only be stopping over a
-// running try while that try runs in the background, which the host tracks and wakes the root
-// for when it ends. active is the host's word that a stop rule already held this stop, so it
-// passes with the note.
-fun runningLine(running: [Try], now: int, active: bool) > str {
+// runningLine names each try still counted as running. The host wakes the root when a try in
+// background, one it spawned in the host's background mode, ends; for any other try nothing
+// says so. active is the host's word that a stop rule already held this stop, so it passes
+// with the note.
+fun runningLine(running: [Try], now: int, active: bool, background: [str] = []) > str {
     final named = mut [<str>];
+    final untracked = mut [<str>];
     foreach (t in running) {
+        if (background.indexOf(t.job) == null) {
+            untracked.append(t.job);
+        }
         if (t.started == 0) {
             named.append("{t.job} attempt {t.n}, no start recorded, end unobserved");
         } else {
@@ -655,8 +662,12 @@ fun runningLine(running: [Try], now: int, active: bool) > str {
             named.append("{t.job} attempt {t.n}, started {age / 60000}m ago, end unobserved");
         }
     }
+    var wakes = "The host wakes this session when each background spawn it tracks ends. ";
+    if (untracked.len() > 0) {
+        wakes = "The host spawned no background subagent it tracks for {untracked.join(", ")}, so nothing says it wakes this session when that ends. ";
+    }
     var line = "this stop stands: {named.join("; ")}. "
-        + "The host wakes this session when a background subagent it tracks ends. "
+        + wakes
         + "A handback, `magus job exit` or the job's deadline ends each.";
     if (active) {
         line = line + " The host marks this as a second stop, so it passes with this note.";
@@ -784,7 +795,7 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
         return magus\guard.defer();
     }
     if (facts.running.len() > 0) {
-        return magus\guard.advise(runningLine(facts.running, now: now, active: facts.stopHookActive), opts: {"rule": "idle-stop"});
+        return magus\guard.advise(runningLine(facts.running, now: now, active: facts.stopHookActive, background: facts.background), opts: {"rule": "idle-stop"});
     }
     final stopped = mut [<str>];
     foreach (r in q.jobs) {
@@ -1073,6 +1084,18 @@ test "a running try's age is read against its recorded start, and a missing star
     std\assert(unstarted.reason.indexOf("m ago") == null, message: "no age is computed");
 }
 
+test "a running try the host tracks in the background is told from one it does not" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }] };
+    final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
+    final tracked = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries, background = ["naming-lint"] }, q: q, m: null, now: 2000000, count: none, file: skip);
+    std\assert(tracked.decision == magus\GuardDecision.advise, message: "the stop stands");
+    std\assert(tracked.reason.indexOf("wakes this session when each background spawn it tracks ends") != null, message: tracked.reason);
+    final untracked = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries }, q: q, m: null, now: 2000000, count: none, file: skip);
+    std\assert(untracked.reason.indexOf("spawned no background subagent it tracks for naming-lint") != null, message: untracked.reason);
+}
+
 test "a stop the host marks as held already passes over a running try with the note kept as advice" {
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
@@ -1090,9 +1113,9 @@ test "work the host tracks and wakes the root for never refuses its stop" {
     final skip = fun (rows: [str]) > void {};
     final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.running }, JobFacts{ id = "go-indexer", state = magus\JobState.declared }], unmerged = offBranch };
     final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
-    final v = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries }, q: q, m: issued, now: 2000000, count: none, file: skip);
+    final v = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries, background = ["naming-lint"] }, q: q, m: issued, now: 2000000, count: none, file: skip);
     std\assert(v.decision == magus\GuardDecision.advise, message: "waiting rows and unmerged work do not turn the wait into a refusal");
-    std\assert(v.reason.indexOf("The host wakes this session when a background subagent it tracks ends") != null, message: v.reason);
+    std\assert(v.reason.indexOf("The host wakes this session when each background spawn it tracks ends") != null, message: v.reason);
 }
 
 final offBranch = JobUnmergedReport{ branch = "feat/x", jobs = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };

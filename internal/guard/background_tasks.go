@@ -157,8 +157,14 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		return verdict.Judgment{}, false, false
 	}
 	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
+	// A second stop passes with the refusal as advice, as a workspace stop rule's does: the
+	// host overrides a stop refused too often, and the refusal would hold it open for that.
 	if subagent && setting.Decision == builtin.Deny {
-		return refuseLeftStop(tasks, why, now), true, false
+		refused := refuseLeftStop(tasks, why, now)
+		if env.StopHookActive != nil && *env.StopHookActive {
+			return passStop(refused, heldStop, string(denyRuleBackgroundLeft)), true, false
+		}
+		return refused, true, false
 	}
 	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,

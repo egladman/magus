@@ -2242,6 +2242,7 @@ export object StopRequest {
     window: ContextWindow? = null,
     event: str = "",
     stopHookActive: bool = false,
+    background: [str] = [],
     transcript: str = "",
     checkout: CheckoutState? = null,
     dir: str = "",

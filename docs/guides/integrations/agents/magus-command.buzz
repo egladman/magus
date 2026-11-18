@@ -121,7 +121,7 @@
 // Where no prompt can happen it renders as a deny, never a yes.
 // promptBlocker names those cells. systemMessage tells the person why
 // and what to type at their terminal.
-// magus-guard-template: 37
+// magus-guard-template: 38
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model defer=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model defer=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model defer=none ask=human
