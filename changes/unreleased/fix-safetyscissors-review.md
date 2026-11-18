@@ -16,3 +16,5 @@
   Every acquire on it is a `*CapacityError`; `budget.NewUnlimitedLimiter` bounds nothing.
   `AcquireN` and `Seat` refuse fewer than one slot with a `*SlotCountError`, where they
   took one.
+- **Breaking for SDK callers: `verdict.Decision("").Valid()` is false.** An unset
+  decision is not a declared one; `UnmarshalText` still reads `""` as unset.

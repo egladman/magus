@@ -459,7 +459,8 @@ func gradeStepDeny(deps Dependencies, judged verdict.Judgment, rule denyRuleName
 // stepRuleJudgment is a Go rule's verdict as a judgment, reported under
 // step:<rule>, or step:<kind> when the rule names none.
 func stepRuleJudgment(st step.Step, v verdict.Verdict) (verdict.Judgment, error) {
-	if !v.Decision.Valid() {
+	// An unset decision is a rule with nothing to say, which defers.
+	if v.Decision != "" && !v.Decision.Valid() {
 		return verdict.Judgment{}, fmt.Errorf("step rule on %s returned decision %q (want one of %v)", st.Kind, v.Decision, v.Decision.Values())
 	}
 	if v.Rule != "" {
