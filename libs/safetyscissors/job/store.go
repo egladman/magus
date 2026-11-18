@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -356,21 +357,38 @@ type Rows struct {
 	// A file past this build's is refused.
 	Migration int `json:"migration,omitzero"`
 	// Retained is when the last retention pass ran, in unix seconds; see [WithRetention].
-	Retained int64                       `json:"retained"`
-	Unknown  map[string]codec.RawMessage `json:"-" codec:"unknown"`
-	Jobs     []Job                       `json:"-"`
+	Retained int64 `json:"retained"`
+	Jobs     []Job `json:"-"`
+	// unknown holds every header member Rows does not declare, written back unchanged;
+	// [Rows.Unknown] names them and [Rows.WithMember] adds one.
+	unknown map[string]codec.RawMessage `codec:"unknown"`
 	// stored are the rows' records as read, by id, so a rewrite keeps
 	// what this build does not declare.
 	stored map[string]jobRecord
 }
 
-// MarshalJSON writes the header with the members it kept in Unknown.
-func (f Rows) MarshalJSON() ([]byte, error) {
-	type plain Rows
-	return codec.MarshalWithUnknown(plain(f), f.Unknown)
+// Unknown names the header members Rows does not declare, sorted: what a newer writer or
+// a host stored, which a rewrite carries back out unchanged. Nil when there are none.
+func (f Rows) Unknown() []string { return slices.Sorted(maps.Keys(f.unknown)) }
+
+// WithMember is f with the header member name set to raw, a member Rows does not
+// declare, such as a host's stamp of the build that wrote the store.
+func (f Rows) WithMember(name string, raw codec.RawMessage) Rows {
+	f.unknown = maps.Clone(f.unknown)
+	if f.unknown == nil {
+		f.unknown = map[string]codec.RawMessage{}
+	}
+	f.unknown[name] = raw
+	return f
 }
 
-// UnmarshalJSON reads the header, keeping the members it does not declare in Unknown.
+// MarshalJSON writes the header with the members it does not declare that it kept.
+func (f Rows) MarshalJSON() ([]byte, error) {
+	type plain Rows
+	return codec.MarshalWithUnknown(plain(f), f.unknown)
+}
+
+// UnmarshalJSON reads the header, keeping the members it does not declare.
 func (f *Rows) UnmarshalJSON(data []byte) error {
 	type plain Rows
 	var p plain
@@ -379,13 +397,13 @@ func (f *Rows) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*f = Rows(p)
-	f.Unknown = unknown
+	f.unknown = unknown
 	return nil
 }
 
 // Header is f without its rows.
 func (f Rows) Header() Rows {
-	return Rows{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Migration: f.Migration, Retained: f.Retained, Unknown: f.Unknown, stored: f.stored}
+	return Rows{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Migration: f.Migration, Retained: f.Retained, unknown: f.unknown, stored: f.stored}
 }
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.

@@ -8,8 +8,10 @@
 - **Breaking for SDK callers: `job.Open` takes `WithCheckSpec(spec)`.** A `CheckSpec`
   has `Validate`, `Equal` and `Render`, and without it every row write and grading call
   refuses.
-- **Breaking for SDK callers: `job.Schema` hides the members it keeps.** The bytes a
-  record does not declare still round-trip on write, and `Schema.Unknown()` names them.
+- **Breaking for SDK callers: `job.Schema` and `job.Rows` hide the members they keep.**
+  The bytes a record or the store header does not declare still round-trip on write.
+  `Schema.Unknown()` and `Rows.Unknown()` name them, and `Rows.WithMember` adds one to a
+  copy.
 - **Breaking for SDK callers: `safetyscissors.New` requires `WithCheckSpec`.** It passes
   the spec to the job store and names the option when it is missing or nil.
 - **Breaking for SDK callers: the store judges only a check's shape.** `Faults` keeps

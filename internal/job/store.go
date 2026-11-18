@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -673,11 +672,7 @@ func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) err
 	if err != nil {
 		return fmt.Errorf("job: stamping the writer: %w", err)
 	}
-	f.Unknown = maps.Clone(f.Unknown)
-	if f.Unknown == nil {
-		f.Unknown = map[string]codec.RawMessage{}
-	}
-	f.Unknown[writerMember] = raw
+	*f = f.WithMember(writerMember, raw)
 	return s.retainDue(ctx, f, now)
 }
 

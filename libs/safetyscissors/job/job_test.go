@@ -248,6 +248,21 @@ func (s *jobSuite) TestAResultKeepsUnknownMembersToo() {
 	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(`{"api_version":"v","confidence":"high"}`), &r), codec.ErrUnknownField)
 }
 
+func (s *jobSuite) TestAStoreHeaderKeepsUnknownMembersAndAddsOneOnACopy() {
+	var h Rows
+	s.Require().NoError(json.Unmarshal([]byte(`{"api_version":"v","retained":3,"later":{"x":[1]}}`), &h))
+	s.Equal([]string{"later"}, h.Unknown())
+	stamped := h.WithMember("writer", codec.RawMessage(`"w"`))
+	s.Equal([]string{"later", "writer"}, stamped.Unknown())
+	s.Equal([]string{"later"}, h.Unknown(), "WithMember derives a copy")
+	s.Equal([]string{"later", "writer"}, stamped.Header().Unknown())
+	out, err := codec.Marshal(stamped)
+	s.Require().NoError(err)
+	s.Contains(string(out), `"later":{"x":[1]}`)
+	s.Contains(string(out), `"writer":"w"`)
+	s.Nil(Rows{}.Unknown())
+}
+
 func (s *jobSuite) faultsAccepted(g Goal) []string {
 	var out []string
 	for _, f := range g.Faults() {
