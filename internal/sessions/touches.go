@@ -385,7 +385,11 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 		}
 		switch e.Kind {
 		case journal.CallKindAgentCommand:
-			out.Commands++
+			// A tool-time row is the post-call half of a call already
+			// counted; only it carries a duration.
+			if e.Duration == 0 {
+				out.Commands++
+			}
 			call := activityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := recorder.ReadCallPayload(base, e.Response); err == nil {
 				var resp recorder.AgentCommandResponse

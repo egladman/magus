@@ -297,6 +297,18 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 	assert.Zero(t, absent.Commands, "an absent store is empty, not an error")
 }
 
+// The post-call tool-time row is the same call as the pre-call row before it.
+func TestForSessionCountsACallOnceWithItsToolTime(t *testing.T) {
+	base := t.TempDir()
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: "Bash", ToolMs: 40})
+
+	got, err := readActivity(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
+	assert.Equal(t, 1, got.Commands)
+	assert.Len(t, got.Calls, 2, "both rows still feed the cost and repeat folds")
+}
+
 // A response blob written before the defer rename holds "pass", and the read refuses it
 // with the store to clear rather than count the call as undecided.
 func TestForSessionRefusesARetiredDecision(t *testing.T) {
