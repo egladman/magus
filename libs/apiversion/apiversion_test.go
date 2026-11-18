@@ -11,41 +11,28 @@ type VersionSuite struct{ suite.Suite }
 
 func TestVersionSuite(t *testing.T) { suite.Run(t, new(VersionSuite)) }
 
-func (s *VersionSuite) TestParseAcceptsDottedGroup() {
-	v, err := Parse("example.widget/v1alpha1")
-	s.Require().NoError(err)
-	s.Equal(APIVersion("example.widget/v1alpha1"), v)
+func (s *VersionSuite) TestADottedGroupIsValid() {
+	s.True(APIVersion("example.widget/v1alpha1").Valid())
 }
 
-func (s *VersionSuite) TestParseRejectsUndottedGroup() {
-	_, err := Parse("widget/v1alpha1")
-	s.Error(err)
+func (s *VersionSuite) TestAnUndottedGroupIsInvalid() {
+	s.False(APIVersion("widget/v1alpha1").Valid())
 }
 
-func (s *VersionSuite) TestParseRejectsUppercaseGroup() {
-	_, err := Parse("Example.widget/v1")
-	s.Error(err)
+func (s *VersionSuite) TestAnUppercaseGroupIsInvalid() {
+	s.False(APIVersion("Example.widget/v1").Valid())
 }
 
-func (s *VersionSuite) TestParseRejectsLeadingHyphenLabel() {
-	_, err := Parse("-example.widget/v1")
-	s.Error(err)
+func (s *VersionSuite) TestALeadingHyphenLabelIsInvalid() {
+	s.False(APIVersion("-example.widget/v1").Valid())
 }
 
-func (s *VersionSuite) TestParseRejectsBareAlpha() {
-	_, err := Parse("example.widget/v1alpha")
-	s.Error(err)
+func (s *VersionSuite) TestABareAlphaIsInvalid() {
+	s.False(APIVersion("example.widget/v1alpha").Valid())
 }
 
-func (s *VersionSuite) TestParseRejectsOverlongGroup() {
-	_, err := Parse(strings.Repeat("abcdefghij.", 24) + "widget/v1")
-	s.Error(err)
-}
-
-func (s *VersionSuite) TestParseErrorNamesNeutralExample() {
-	_, err := Parse("nope")
-	s.Require().Error(err)
-	s.Contains(err.Error(), "example.widget/v1")
+func (s *VersionSuite) TestAnOverlongGroupIsInvalid() {
+	s.False(APIVersion(strings.Repeat("abcdefghij.", 24) + "widget/v1").Valid())
 }
 
 func (s *VersionSuite) TestGroupVersionStability() {

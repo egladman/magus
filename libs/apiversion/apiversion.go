@@ -4,7 +4,6 @@ package apiversion
 import (
 	"cmp"
 	"errors"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,16 +32,6 @@ const maxGroupLength = 253
 
 var apiVersionRe = regexp.MustCompile(
 	`^([a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)+)/v([1-9][0-9]*)(?:(alpha|beta)([1-9][0-9]*))?$`)
-
-// Parse returns s as an APIVersion, or an error naming the
-// shape s breaks.
-func Parse(s string) (APIVersion, error) {
-	if !APIVersion(s).Valid() {
-		return "", fmt.Errorf("api version %q is not <group>/v<major>[alpha<n>|beta<n>] with a dotted DNS-1123 group, as in %q",
-			s, "example.widget/v1")
-	}
-	return APIVersion(s), nil
-}
 
 // Valid reports whether v parses.
 func (v APIVersion) Valid() bool {
