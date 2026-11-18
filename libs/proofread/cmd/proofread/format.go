@@ -22,7 +22,7 @@ const (
 	sarifSchema = "https://json.schemastore.org/sarif-2.1.0.json"
 	// fingerprintKey names the stable hash a SARIF result carries, which lets
 	// a code scanning service tell a finding that moved from a new one.
-	fingerprintKey = "proofread/v1"
+	fingerprintKey = "proofread.fingerprint/v1alpha1"
 )
 
 // writeFindings writes out to w in format: json, the array of findings

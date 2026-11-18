@@ -13,14 +13,15 @@ import (
 
 // VoiceSchema names the shape of a voice file, so a file written by another
 // version of proofread is refused rather than misread.
-const VoiceSchema = "proofread-voice/4"
+const VoiceSchema = "proofread.voice/v1alpha1"
 
 // olderVoiceSchemas are the schemas earlier proofread versions wrote. A file
 // in one is refused with the command that rebuilds it.
 //
-// compat(until: no voice file in proofread-voice/1, /2 or /3 is still read):
-// naming the rebuild beats the bare "not proofread-voice/4" refusal.
-var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2", "proofread-voice/3"}
+// compat(until: no voice file in a proofread-voice/N schema is still read):
+// naming the rebuild beats the bare "not proofread.voice/v1alpha1" refusal.
+// libs/proofread cannot import libs/apiversion, so the list is explicit.
+var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2", "proofread-voice/3", "proofread-voice/4"}
 
 // MinVoiceTexts is the fewest change descriptions a [Voice] relaxes the tense
 // rule from.

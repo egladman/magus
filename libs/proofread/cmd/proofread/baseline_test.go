@@ -39,7 +39,7 @@ func TestApplyBaselineReportsTheFindingsPastTheCounts(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := writeFile(t, t.TempDir(), "baseline.json", `{"version":1,"counts":`+tc.counts+`}`)
+			path := writeFile(t, t.TempDir(), "baseline.json", `{"api_version":"proofread.baseline/v1alpha1","counts":`+tc.counts+`}`)
 
 			got, err := applyBaseline(path, false, tc.in)
 			if err != nil {
@@ -56,7 +56,7 @@ func TestApplyBaselineReportsTheFindingsPastTheCounts(t *testing.T) {
 func TestApplyBaselineCountsPerFileFromTheSourcePath(t *testing.T) {
 	symbol := finding{Node: "go:pkg.Run", Source: "pkg/run.go:12:3", Rule: "filler"}
 	other := finding{Node: "go:pkg.Stop", Source: "pkg/run.go:40", Rule: "filler"}
-	path := writeFile(t, t.TempDir(), "baseline.json", `{"version":1,"counts":{"pkg/run.go":{"filler":1}}}`)
+	path := writeFile(t, t.TempDir(), "baseline.json", `{"api_version":"proofread.baseline/v1alpha1","counts":{"pkg/run.go":{"filler":1}}}`)
 
 	got, err := applyBaseline(path, false, []finding{symbol, other})
 	if err != nil {
@@ -85,7 +85,7 @@ func TestApplyBaselinePruneWritesThisRunsCounts(t *testing.T) {
 	}
 
 	const want = `{
-  "version": 1,
+  "api_version": "proofread.baseline/v1alpha1",
   "counts": {
     "a.md": {
       "filler": 2,
@@ -109,7 +109,7 @@ func TestApplyBaselinePruneWritesThisRunsCounts(t *testing.T) {
 }
 
 func TestApplyBaselinePruneLowersACeiling(t *testing.T) {
-	path := writeFile(t, t.TempDir(), "baseline.json", `{"version":1,"counts":{"a.md":{"filler":5},"gone.md":{"filler":2}}}`)
+	path := writeFile(t, t.TempDir(), "baseline.json", `{"api_version":"proofread.baseline/v1alpha1","counts":{"a.md":{"filler":5},"gone.md":{"filler":2}}}`)
 
 	if _, err := applyBaseline(path, true, []finding{found("a.md", "filler", "Simply", 1)}); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestApplyBaselinePruneWritesAnEmptyBaselineForNoFindings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if body, _ := os.ReadFile(path); string(body) != "{\n  \"version\": 1,\n  \"counts\": {}\n}\n" {
+	if body, _ := os.ReadFile(path); string(body) != "{\n  \"api_version\": \"proofread.baseline/v1alpha1\",\n  \"counts\": {}\n}\n" {
 		t.Errorf("baseline = %q", body)
 	}
 }
@@ -148,10 +148,11 @@ func TestApplyBaselineErrors(t *testing.T) {
 		{"prune without a baseline", "", true, "--prune needs --baseline"},
 		{"a missing file", filepath.Join(dir, "missing.json"), false, "missing.json does not exist: run with --prune to create it"},
 		{"not JSON", writeFile(t, dir, "bad.json", "nope"), false, "read baseline"},
-		{"an unknown field", writeFile(t, dir, "field.json", `{"version":1,"counts":{},"extra":1}`), false, "unknown field"},
-		{"another version", writeFile(t, dir, "version.json", `{"version":2,"counts":{}}`), false, "is version 2, want 1"},
-		{"no version", writeFile(t, dir, "none.json", `{"counts":{}}`), false, "is version 0, want 1"},
-		{"data after the object", writeFile(t, dir, "tail.json", `{"version":1,"counts":{}} {}`), false, "data after the object"},
+		{"an unknown field", writeFile(t, dir, "field.json", `{"api_version":"proofread.baseline/v1alpha1","counts":{},"extra":1}`), false, "unknown field"},
+		{"another version", writeFile(t, dir, "version.json", `{"api_version":"proofread.baseline/v9","counts":{}}`), false, `is api_version "proofread.baseline/v9"`},
+		{"the numeric form", writeFile(t, dir, "numeric.json", `{"version":1,"counts":{}}`), false, "numeric version form: rewrite it with --baseline"},
+		{"no version", writeFile(t, dir, "none.json", `{"counts":{}}`), false, `is api_version "", want`},
+		{"data after the object", writeFile(t, dir, "tail.json", `{"api_version":"proofread.baseline/v1alpha1","counts":{}} {}`), false, "data after the object"},
 		{"a directory for the file", dir, false, "read baseline"},
 		{"an unwritable path", filepath.Join(dir, "no", "such", "dir", "b.json"), true, "write baseline"},
 	}

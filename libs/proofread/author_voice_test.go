@@ -248,7 +248,9 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 		t.Fatalf("ReadVoice = %+v, %v, want the voice back", v, err)
 	}
 
-	issue := func(body string) string { return `{"schema":"proofread-voice/4","kinds":{"issue":` + body + `}}` }
+	issue := func(body string) string {
+		return `{"schema":"proofread.voice/v1alpha1","kinds":{"issue":` + body + `}}`
+	}
 	rebuild := "is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file"
 
 	cases := map[string]struct{ body, want string }{
@@ -258,9 +260,10 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 			`{"schema":"proofread-voice/2","kinds":{"issue":{"windows":{"count":1,"values":{},"cut":1}}}}`,
 			`schema "proofread-voice/2" ` + rebuild,
 		},
-		"windows without ranges": {`{"schema":"proofread-voice/3","kinds":{}}`, `schema "proofread-voice/3" ` + rebuild},
-		"another schema":         {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread-voice/4`},
-		"an unknown kind": {`{"schema":"proofread-voice/4","kinds":{"guide":{}}}`,
+		"windows without ranges":   {`{"schema":"proofread-voice/3","kinds":{}}`, `schema "proofread-voice/3" ` + rebuild},
+		"the last numbered schema": {`{"schema":"proofread-voice/4","kinds":{}}`, `schema "proofread-voice/4" ` + rebuild},
+		"another schema":           {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread.voice/v1alpha1`},
+		"an unknown kind": {`{"schema":"proofread.voice/v1alpha1","kinds":{"guide":{}}}`,
 			"a voice measures change-description, review-reply, commit-message and issue, not guide"},
 		"an unknown feature": {issue(`{"windows":[{"punctuation.comma":1,"typos":1}]}`),
 			`issue: unknown feature "typos"`},
@@ -270,9 +273,9 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 			"issue: window 1 has 1 features, want 2 or more"},
 		"a subject length off commits": {issue(`{"subject_chars_p95":40}`),
 			"issue: only commit messages keep a subject length"},
-		"windows on commits": {`{"schema":"proofread-voice/4","kinds":{"commit-message":{"windows":[{}]}}}`,
+		"windows on commits": {`{"schema":"proofread.voice/v1alpha1","kinds":{"commit-message":{"windows":[{}]}}}`,
 			"commit-message: commit messages keep no windows"},
-		"an unknown field": {`{"schema":"proofread-voice/4","text":"hi"}`, `voice file: json: unknown field "text"`},
+		"an unknown field": {`{"schema":"proofread.voice/v1alpha1","text":"hi"}`, `voice file: json: unknown field "text"`},
 		"a range of an unknown feature": {issue(`{"ranges":{"typos":{"p5":0,"p95":1,"windows":9}}}`),
 			`issue: no range is kept of feature "typos"`},
 		"a range from too few windows": {issue(`{"ranges":{"triads_per_1000":{"p5":0,"p95":1,"windows":4}}}`),

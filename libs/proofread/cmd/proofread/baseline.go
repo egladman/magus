@@ -10,13 +10,13 @@ import (
 	"os"
 )
 
-// baselineVersion is the only baseline file version proofread reads and writes.
-const baselineVersion = 1
+// baselineAPIVersion is the only baseline file version proofread reads and writes.
+const baselineAPIVersion = "proofread.baseline/v1alpha1"
 
 // baseline is the file -baseline names: how many findings of each rule each
 // file already has, which a run tolerates.
 type baseline struct {
-	Version int `json:"version"`
+	APIVersion string `json:"api_version"`
 	// Counts maps a file's path, then a rule's name, to the findings of that
 	// rule in that file.
 	Counts map[string]map[string]int `json:"counts"`
@@ -45,7 +45,7 @@ func applyBaseline(path string, prune bool, out []finding) ([]finding, error) {
 	}
 
 	if prune {
-		if err := writeBaseline(path, baseline{Version: baselineVersion, Counts: countFindings(out)}); err != nil {
+		if err := writeBaseline(path, baseline{APIVersion: baselineAPIVersion, Counts: countFindings(out)}); err != nil {
 			return nil, err
 		}
 
@@ -102,6 +102,19 @@ func readBaseline(path string) (baseline, error) {
 		return baseline{}, fmt.Errorf("read baseline: %w", err)
 	}
 
+	var head struct {
+		APIVersion string `json:"api_version"`
+		Version    *int   `json:"version"`
+	}
+
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&head); err != nil {
+		return baseline{}, fmt.Errorf("read baseline %s: %w", path, err)
+	}
+
+	if head.Version != nil && head.APIVersion == "" {
+		return baseline{}, fmt.Errorf("baseline %s is in the numeric version form: rewrite it with --baseline %s --prune", path, path)
+	}
+
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 
@@ -114,8 +127,8 @@ func readBaseline(path string) (baseline, error) {
 		return baseline{}, fmt.Errorf("read baseline %s: data after the object", path)
 	}
 
-	if b.Version != baselineVersion {
-		return baseline{}, fmt.Errorf("baseline %s is version %d, want %d", path, b.Version, baselineVersion)
+	if b.APIVersion != baselineAPIVersion {
+		return baseline{}, fmt.Errorf("baseline %s is api_version %q, want %q", path, b.APIVersion, baselineAPIVersion)
 	}
 
 	return b, nil

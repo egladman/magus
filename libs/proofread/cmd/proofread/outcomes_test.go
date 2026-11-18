@@ -38,13 +38,14 @@ func TestLoadOutcomesRefusesWhatItCannotRead(t *testing.T) {
 	dir := t.TempDir()
 
 	missing, err := loadOutcomes(filepath.Join(dir, "none.json"))
-	if err != nil || missing.Version != outcomesVersion || len(missing.Pending) != 0 || len(missing.Tally) != 0 {
+	if err != nil || missing.APIVersion != outcomesAPIVersion || len(missing.Pending) != 0 || len(missing.Tally) != 0 {
 		t.Errorf("a missing file: %+v, %v, want an empty state", missing, err)
 	}
 
 	cases := []struct{ name, body, want string }{
 		{"not JSON", "{", "unexpected end of JSON input"},
-		{"another version", `{"version":2}`, "is version 2, want 1"},
+		{"another version", `{"api_version":"proofread.outcomes/v9"}`, `is api_version "proofread.outcomes/v9"`},
+		{"the numeric form", `{"version":1}`, "numeric version form: delete it"},
 	}
 
 	for _, tc := range cases {
@@ -59,9 +60,9 @@ func TestLoadOutcomesRefusesWhatItCannotRead(t *testing.T) {
 func TestSaveOutcomesRoundTripsAndKeepsTheFilePrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state", "proofread", "outcomes.json")
 	in := outcomeState{
-		Version: outcomesVersion,
-		Pending: map[string]map[string]map[string]string{"/a.md": {"filler": {"abc": statusOpen}}},
-		Tally:   map[string]outcomeTally{"filler": {Fixed: 2, Suppressed: 1}},
+		APIVersion: outcomesAPIVersion,
+		Pending:    map[string]map[string]map[string]string{"/a.md": {"filler": {"abc": statusOpen}}},
+		Tally:      map[string]outcomeTally{"filler": {Fixed: 2, Suppressed: 1}},
 	}
 
 	if err := saveOutcomes(path, in); err != nil {
