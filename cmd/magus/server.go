@@ -206,13 +206,12 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	// into.
 	serverHost.StartBridge(ctx, cancel)
 
-	// Background maintenance: rotate the trail/run-logs and reconcile the graph on their
-	// configured intervals, idle-gated. Socket and trail base are late-bound (set during
-	// startup), so the scheduler reads them per tick.
+	// Socket and the activity base are set later in startup, so the
+	// scheduler reads them per tick.
 	maintenance.Start(ctx, maintenance.Options{
 		Schedule: globalCfg.Server.Maintenance,
 		Socket:   func() string { return os.Getenv(proc.SocketEnv) },
-		Trail:    serverHost.TrailBase,
+		Activity: serverHost.ActivityBase,
 		Version:  version,
 	})
 }

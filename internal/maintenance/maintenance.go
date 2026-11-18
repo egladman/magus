@@ -30,13 +30,13 @@ const checkInterval = 15 * time.Minute
 // process. Package-level because one server runs one scheduler.
 var unusable sync.Once
 
-// Options are the runtime handles the scheduler needs from the server wiring. Socket and Trail are
-// funcs because both are set during server startup and may not be ready when Start is called; the
-// scheduler reads them at each tick.
+// Options are the runtime handles the scheduler needs from the server
+// wiring. Socket and Activity are funcs: server startup sets both, maybe
+// after Start, so the scheduler reads them at each tick.
 type Options struct {
 	Schedule config.Maintenance // per-job intervals; the only config the scheduler reads
 	Socket   func() string      // server proc socket address to submit to and query
-	Trail    func() string      // activity-trail base dir (where KIND_JOB runs are recorded)
+	Activity func() string      // activity log base, where KIND_JOB runs are recorded
 	Version  string             // adoption identity for submitted jobs
 }
 
@@ -96,7 +96,7 @@ func buildSchedule(m config.Maintenance) []scheduledJob {
 // tick. Submits are best-effort (a job's own success is observed via the trail / Dashboard);
 // coalescing means a job already running or freshly submitted is never duplicated.
 func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
-	base, addr := opts.Trail(), opts.Socket()
+	base, addr := opts.Activity(), opts.Socket()
 	if base == "" || addr == "" {
 		// Not "not up yet". Both are published during startup, so a tick that still finds
 		// one empty is a scheduler that will never run a job for the server's whole life,

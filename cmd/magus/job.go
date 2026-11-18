@@ -235,7 +235,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	}
 	loc.Outputs, loc.DryRun = outputsIn, o.DryRun
 	loc.Grader = guard.NewCheckGrader(loadGuardDependencies)
-	loc.TrailBase = func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }
+	loc.ActivityBase = func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }
 	if root != "" {
 		// Read once, and only when a job ends with a priceable trail, since it loads the
 		// workspace's harness spells.

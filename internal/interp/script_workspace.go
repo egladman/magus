@@ -51,7 +51,7 @@ type lazyWorkspaceContext struct {
 
 	once      sync.Once
 	workspace types.WorkspaceRepository
-	trailBase string
+	activityBase string
 	// judge is the one ApplySandbox installs, set once attached.
 	judge    std.EditJudge
 	judgeErr error
@@ -59,7 +59,7 @@ type lazyWorkspaceContext struct {
 
 var (
 	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
-	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { recorder.BaseFromContext(ctx) })
+	activityContextKey     = contextKeyReadBy(func(ctx context.Context) { recorder.BaseFromContext(ctx) })
 	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 
@@ -75,12 +75,12 @@ func (c *lazyWorkspaceContext) Value(key any) any {
 			return nil
 		}
 		return c.workspace
-	case trailContextKey:
+	case activityContextKey:
 		c.once.Do(c.attach)
-		if c.trailBase == "" {
+		if c.activityBase == "" {
 			return nil
 		}
-		return c.trailBase
+		return c.activityBase
 	case editJudgeContextKey:
 		return c.editJudge()
 	}
@@ -134,7 +134,7 @@ func (c *lazyWorkspaceContext) attach() {
 		return
 	}
 	c.workspace = ws.Repo
-	c.trailBase = ws.CacheDir
+	c.activityBase = ws.CacheDir
 	// The judge the eager door gets, the sandbox being off here.
 	sctx, err := ws.ApplySandbox(c.Context)
 	if err != nil {

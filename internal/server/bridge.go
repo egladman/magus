@@ -51,7 +51,7 @@ func (h *Host) publishActivityBase(ctx context.Context) {
 		slog.WarnContext(ctx, "cache or state dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	h.trailBase = loc.CacheDir
+	h.activityBase = loc.CacheDir
 	h.jobStore = job.NewStore(loc)
 }
 
@@ -318,13 +318,13 @@ type Host struct {
 	procSrv  *proc.Server
 	runs     *console.RunRegistry
 	started  time.Time
-	// trailBase is the activity log base every producer appends to.
+	// activityBase is the activity log base every producer appends to.
 	// publishActivityBase sets it; until then it is empty and a finished
 	// job goes unrecorded.
-	trailBase string
-	// jobStore is the server's ONE job store, published beside trailBase and for the same
-	// reason: the OnJobDone callback needs it, and a second Store over one file would hold
-	// its own mutex and serialize against nothing.
+	activityBase string
+	// jobStore is the server's ONE job store, published with activityBase.
+	// OnJobDone needs it. A second Store over one file would hold its own
+	// mutex and serialize against nothing.
 	jobStore *job.Store
 	httpAddr atomic.Value // string; the HTTP listener, empty while the server serves none
 	watch    struct {
@@ -338,8 +338,9 @@ type Host struct {
 // NewHost is a Host that has not started.
 func NewHost(deps HostDeps) *Host { return &Host{HostDeps: deps, stop: func() {}} }
 
-// TrailBase is the server-wide activity-trail location, "" until the bridge publishes it.
-func (h *Host) TrailBase() string { return h.trailBase }
+// ActivityBase is the server-wide activity log base, "" until the
+// bridge publishes it.
+func (h *Host) ActivityBase() string { return h.activityBase }
 
 // Done is closed when the proc listener is gone, nil before Start has one. An RPC-driven
 // `server stop` closes it, and a command that waited only on its signals would keep running
@@ -556,7 +557,7 @@ func graphReads(reg *wsRegistry, serve func(ctx context.Context, m *magus.Magus,
 // disambiguated. Best-effort: an unresolvable root or an unset trail base (bridge not up) drops
 // the record. Ts is the job's start, completion minus its measured duration.
 func (h *Host) recordJobActivity(ctx context.Context, args []string, dur time.Duration, err error) {
-	base := h.trailBase
+	base := h.activityBase
 	if base == "" {
 		return
 	}

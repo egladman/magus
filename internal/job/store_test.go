@@ -1294,7 +1294,7 @@ func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			loc := tempLocation(t, t.TempDir())
-			loc.TrailBase = tc.resolve
+			loc.ActivityBase = tc.resolve
 			deny(loc.CacheDir, "raw-tool")
 			s := NewStore(loc)
 			plant(t, s, ended)

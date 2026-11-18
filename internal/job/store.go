@@ -84,9 +84,9 @@ type storeConfig struct {
 	notices    io.Writer
 	// retain is the retention window's seam; nil means the workspace's jobs.retain.
 	retain *time.Duration
-	// outputs is Location.Outputs, and trailBase Location.TrailBase.
-	outputs   func(root string) AttemptResolver
-	trailBase func(checkoutRoot string) (string, error)
+	// outputs is Location.Outputs, and activityBase Location.ActivityBase.
+	outputs      func(root string) AttemptResolver
+	activityBase func(checkoutRoot string) (string, error)
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
 	landed func(context.Context, job.Job) string
 	// grader is Location.Grader.
@@ -146,10 +146,10 @@ type Location struct {
 	// checkouts the job and its descendants were taken in. Nil tries the caller's
 	// resolver alone.
 	Outputs func(root string) AttemptResolver
-	// TrailBase resolves the activity trail base of the checkout at checkoutRoot, the cache
-	// dir the guard records a holder's denials in. Nil reads only this Store's own
-	// CacheDir, and the denials of a holder in another checkout are unknown.
-	TrailBase func(checkoutRoot string) (string, error)
+	// ActivityBase resolves where the guard records the denials of a holder
+	// in the checkout at checkoutRoot. Nil reads only CacheDir, so a holder
+	// in another checkout has unknown denials.
+	ActivityBase func(checkoutRoot string) (string, error)
 	// Grader judges a declared check the way the guard will judge the row's holder running
 	// it, for the fork doors, against the rules of the workspace at Root. Nil grades
 	// nothing: the guard lives above this package, so only a door that can reach it
@@ -207,7 +207,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), clock: loc.Clock,
+	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, activityBase: loc.ActivityBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), clock: loc.Clock,
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, spawnCeiling: loc.SpawnCeiling, owners: loc.Owners, priceContext: loc.PriceContext,
 		migrations: jobMigrations(), skew: loc.Skew, unfenced: new(sync.Once)}}
 	s.path, s.err = jobsPath(loc)
@@ -417,13 +417,13 @@ func (s *Store) holderTrail(checkoutRoot string) (string, error) {
 			return s.cacheDir, nil
 		}
 	}
-	if s.trailBase == nil {
-		return "", fmt.Errorf("job: nothing resolves the trail of the checkout at %s", checkoutRoot)
+	if s.activityBase == nil {
+		return "", fmt.Errorf("job: nothing resolves the activity log of the checkout at %s", checkoutRoot)
 	}
 	if _, err := os.Stat(checkoutRoot); err != nil {
-		return "", fmt.Errorf("job: the checkout holding the trail is gone: %w", err)
+		return "", fmt.Errorf("job: the checkout holding the activity log is gone: %w", err)
 	}
-	return s.trailBase(checkoutRoot)
+	return s.activityBase(checkoutRoot)
 }
 
 // endsOwnRow reports whether this store's caller holds row, so ending it is its holder's.
