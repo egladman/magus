@@ -299,11 +299,11 @@ The declared half of a job row: what the parent wrote and the store validated (c
 
 ### Console
 
-The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves; the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs. [Console in full](glossary/console.md).
+The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity log. It is a separate static app, not something the daemon serves; the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs. [Console in full](glossary/console.md).
 
 ### Console app
 
-One of the console applications (Runs, Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings), mounted into a tab or a pane. Each is single-instance. [Console app in full](glossary/console-app.md).
+One of the console applications (Runs, Log Viewer, Graph Explorer, Dashboard, Activity, Settings), mounted into a tab or a pane. Each is single-instance. [Console app in full](glossary/console-app.md).
 
 ### Pane
 

@@ -78,35 +78,35 @@ magus graph export -o json  # the whole graph
 | marker     |        4 | `magus query kind=marker`     | `magus:diagram server-share`, `magus:diagram server-http`, `magus:skills`                                                                                                       |
 | figure     |      50+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `One VCS interface answers git, Mercurial, Sapling and Jujutsu` |
 
-| Project                                                                     | Targets | Scope a query                                         | Key targets                                      |
-| --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------ |
-| [.](MAGUS.md)                                                               |      72 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`               |
-| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                       |
-| [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint` |
-| [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `lint`, `format`                     |
-| [libs/apiversion](libs/apiversion/MAGUS.md)                                 |       8 | `magus query project=libs/apiversion`                 | `lint`, `format`, `ci`                           |
-| [libs/clikit](libs/clikit/MAGUS.md)                                         |       8 | `magus query project=libs/clikit`                     | `format`, `lint`, `ci`                           |
-| [libs/codec](libs/codec/MAGUS.md)                                           |       9 | `magus query project=libs/codec`                      | `format`, `ci`, `lint`                           |
-| [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `lint`, `ci`                           |
-| [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `lint`, `ci`                           |
-| libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `lint`, `build`, `ci`                            |
-| libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `lint`, `ci`, `test`                             |
-| [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `buzzbench-test`              |
-| [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                             |
-| [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `lint`              |
-| libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `lint`, `ci`                             |
-| [libs/safetyscissors](libs/safetyscissors/MAGUS.md)                         |      13 | `magus query project=libs/safetyscissors`             | `ci`, `format`, `lint`                           |
-| [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `lint`, `ci`                           |
-| [libs/secrets](libs/secrets/MAGUS.md)                                       |       8 | `magus query project=libs/secrets`                    | `format`, `lint`, `ci`                           |
-| libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                           |
-| [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `lint`, `ci`                           |
-| [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `lint`, `ci`                           |
-| [libs/text](libs/text/MAGUS.md)                                             |       8 | `magus query project=libs/text`                       | `format`, `lint`, `ci`                           |
-| [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `install`, `test`                        |
-| libs/train                                                                  |      28 | `magus query project=libs/train`                      | `format`, `lint`, `build`                        |
-| [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `lint`, `build`                        |
-| [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `lint`, `format`                     |
-| testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `lint`, `build`, `format`                        |
+| Project                                                                     | Targets | Scope a query                                         | Key targets                                       |
+| --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------- |
+| [.](MAGUS.md)                                                               |      72 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                |
+| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                        |
+| [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint`  |
+| [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `lint`, `format`                      |
+| [libs/apiversion](libs/apiversion/MAGUS.md)                                 |       8 | `magus query project=libs/apiversion`                 | `format`, `ci`, `lint`                            |
+| [libs/clikit](libs/clikit/MAGUS.md)                                         |       8 | `magus query project=libs/clikit`                     | `format`, `ci`, `lint`                            |
+| [libs/codec](libs/codec/MAGUS.md)                                           |       9 | `magus query project=libs/codec`                      | `format`, `ci`, `lint`                            |
+| [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `lint`                            |
+| [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `lint`                            |
+| libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `lint`, `build`, `ci`                             |
+| libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `lint`, `ci`, `test`                              |
+| [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `buzzbench-test`               |
+| [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
+| [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
+| libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                            |
+| [libs/safetyscissors](libs/safetyscissors/MAGUS.md)                         |      13 | `magus query project=libs/safetyscissors`             | `ci`, `format`, `landlock-test`                   |
+| [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `lint`                            |
+| [libs/secrets](libs/secrets/MAGUS.md)                                       |       8 | `magus query project=libs/secrets`                    | `format`, `ci`, `lint`                            |
+| libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                            |
+| [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `lint`                            |
+| [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `lint`                            |
+| [libs/text](libs/text/MAGUS.md)                                             |       8 | `magus query project=libs/text`                       | `format`, `ci`, `lint`                            |
+| [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                         |
+| libs/train                                                                  |      28 | `magus query project=libs/train`                      | `format`, `lint`, `build`                         |
+| [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                         |
+| [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `format`, `lint`                      |
+| testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `build`, `format`, `lint`                         |
 
 ## Project: magus
 
