@@ -151,8 +151,9 @@ type Target struct {
 	Project string `json:"project"`
 	// Target is the target name as the CLI spells it, charms included.
 	Target string `json:"target"`
-	// Status is "ok" or "failed". It does NOT distinguish a replay from a run;
-	// CacheHit does.
+	// Status is "ok", "failed" or "permitted": green only because a deviation
+	// ledger permitted the findings. It does NOT distinguish a replay from a
+	// run; CacheHit does.
 	Status string `json:"status"`
 	// CacheHit reports that the result was replayed from cache rather than
 	// executed.
