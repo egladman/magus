@@ -1,31 +1,4 @@
-// Package trailrpc is the audit interceptor for the server's Connect services: a connect.Interceptor
-// that records MUTATING unary RPCs to the activity trail by construction, so auditing a state change is a
-// structural default of the mount rather than a per-handler line a developer must remember to add.
-//
-// WHY AN INTERCEPTOR. The trail's other producers are hand-placed trail.Append calls at scattered
-// callsites; a new mutating handler that forgets the call is silently unaudited (the gap this closes for
-// the token service, whose RevokeToken recorded nothing). Wrapping the SERVICE means every method on it
-// (including one added later) passes through here. Two properties matter for an audit boundary a hostile
-// contributor cannot quietly sidestep:
-//   - The actor is SERVER-STAMPED at the mount (the tier the guard already enforces), never read from a
-//     caller-supplied field, so a handler cannot forge who acted.
-//   - Classification is fail-CLOSED: a method whose verb this package does not recognize is treated as
-//     mutating and recorded, so a novel RPC is over-audited, never silently skipped. TestKnownVerbs
-//     (the arch test) additionally fails CI if any mounted service grows a method with an unclassified
-//     verb, forcing the author to place it in one bucket or the other.
-//
-// It is deliberately NARROW today: mounted only on TokenService (whose RevokeToken mutation lacked any
-// producer). The audit-trail assessment (session plans) tracks extending it to the other mutating
-// services and the reconciliation that needs (jobs already record on completion), kept out of
-// this doc so it does not rot against current method names.
-//
-// KNOWN LIMIT of verb classification: a method's leading word is matched EXACTLY, so "Listen" is not
-// mistaken for the read verb "List" (it falls to unclassified -> recorded -> flagged by the arch test).
-// What exact-word matching still cannot catch is a COMPOUND verb whose first word is a read verb
-// but whose action mutates (a hypothetical "ExportAndReset"): it would classify read and skip. The
-// convention this codebase follows (one leading verb per method) keeps that out of reach, and the arch
-// test surfaces any novel verb; but a reviewer adding a compound method must place it deliberately.
-package trailrpc
+package activityrpc
 
 import (
 	"context"

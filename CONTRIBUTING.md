@@ -527,7 +527,7 @@ proto/magus/viewer/v1    <->  internal/handler/viewer
 Adding `proto/magus/foo/v1` means adding `internal/handler/foo`, same name, no
 exceptions for the wire packages. Two subpackages there are deliberately not
 proto-backed and so are not part of the mapping: `mcp` is a protocol adapter and
-`trailrpc` is a transport concern.
+`activityrpc` is a transport concern.
 
 [`internal/handler/README.md`](https://github.com/egladman/magus/blob/main/internal/handler/README.md) is the authority and
 carries the full table plus what does and does not belong in the layer; keep the

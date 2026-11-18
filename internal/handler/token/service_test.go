@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/handler/trailrpc"
+	"github.com/egladman/magus/internal/handler/activityrpc"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
@@ -417,7 +417,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	dir := t.TempDir()
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s,
-		connect.WithInterceptors(trailrpc.Interceptor(dir, trailtypes.KindTokenLifecycle, trailrpc.WithSubject(AuditSubject))))
+		connect.WithInterceptors(activityrpc.Interceptor(dir, trailtypes.KindTokenLifecycle, activityrpc.WithSubject(AuditSubject))))
 	op := auth.Credential{Kind: auth.KindOperator, ID: "0badf00d", Grant: auth.AccessOperator()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))

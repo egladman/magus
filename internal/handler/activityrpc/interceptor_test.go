@@ -1,4 +1,4 @@
-package trailrpc
+package activityrpc
 
 import (
 	"context"
@@ -93,7 +93,7 @@ func TestKnownVerbs(t *testing.T) {
 		return true
 	})
 	if len(unknown) > 0 {
-		t.Fatalf("unclassified RPC verbs (add each verb to trailrpc's mutating or read set and decide auditing): %v", unknown)
+		t.Fatalf("unclassified RPC verbs (add each verb to activityrpc's mutating or read set and decide auditing): %v", unknown)
 	}
 }
 
