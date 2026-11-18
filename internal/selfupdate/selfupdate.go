@@ -158,11 +158,14 @@ func (o Options) discoveryURL() string {
 	return DefaultDiscoveryURL
 }
 
+// ReleaseIndexAPIVersion is the one schema_version a client reads from the signed
+// index. cmd/magus-utils writes the same string, and its test pins the pair.
+const ReleaseIndexAPIVersion = "magus.release-index/v1alpha1"
+
 // ReleaseIndex is the JSON shape of gen/public/release/index.json, at
-// schema_version 1 until the next release renames it. Additive changes
-// only.
+// ReleaseIndexAPIVersion. Additive changes only.
 type ReleaseIndex struct {
-	SchemaVersion int `json:"schema_version"`
+	SchemaVersion string `json:"schema_version"`
 	// KeyID names the key that signed this file. It is a cross-check, never the thing
 	// that selects a key: an attacker controls it exactly as much as the rest of the
 	// payload, so it is compared against the key that actually verified.
@@ -236,8 +239,8 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	if err := codec.Unmarshal(indexBytes, &idx); err != nil {
 		return nil, fmt.Errorf("parse release index: %w", err)
 	}
-	if idx.SchemaVersion != 1 {
-		return nil, fmt.Errorf("unsupported release index schema_version %d (want 1)", idx.SchemaVersion)
+	if idx.SchemaVersion != ReleaseIndexAPIVersion {
+		return nil, fmt.Errorf("unsupported release index schema_version %q (want %q)", idx.SchemaVersion, ReleaseIndexAPIVersion)
 	}
 	if idx.KeyID != "" && idx.KeyID != signer.ID {
 		return nil, fmt.Errorf("release index says it was signed by key %s but key %s is what verified it", idx.KeyID, signer.ID)

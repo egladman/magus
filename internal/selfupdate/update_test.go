@@ -47,7 +47,7 @@ type testFixture struct {
 func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFixture {
 	t.Helper()
 	return newIndexFixture(t, tag, func(served IndexRelease) ReleaseIndex {
-		return ReleaseIndex{SchemaVersion: 1, ExpiresAt: testIndexExpiry, Releases: []IndexRelease{served}}
+		return ReleaseIndex{SchemaVersion: ReleaseIndexAPIVersion, ExpiresAt: testIndexExpiry, Releases: []IndexRelease{served}}
 	}, manifestVersion...)
 }
 
@@ -300,10 +300,10 @@ func newCandidateFixture(t *testing.T, underReleases bool) *testFixture {
 	return newIndexFixture(t, "v0.5.0-rc.1", func(rc IndexRelease) ReleaseIndex {
 		stable := IndexRelease{Version: "v0.4.3"}
 		if underReleases {
-			return ReleaseIndex{SchemaVersion: 1, ExpiresAt: testIndexExpiry, Releases: []IndexRelease{rc, stable}}
+			return ReleaseIndex{SchemaVersion: ReleaseIndexAPIVersion, ExpiresAt: testIndexExpiry, Releases: []IndexRelease{rc, stable}}
 		}
 		return ReleaseIndex{
-			SchemaVersion: 1,
+			SchemaVersion: ReleaseIndexAPIVersion,
 			ExpiresAt:     testIndexExpiry,
 			Releases:      []IndexRelease{stable},
 			Prereleases:   []IndexRelease{rc},

@@ -332,7 +332,7 @@ func foreignScriptsIndex(t *testing.T, root string) string {
 	cacheDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Dir(ScriptsIndexPath(cacheDir)), 0o755))
 	require.NoError(t, os.WriteFile(ScriptsIndexPath(cacheDir),
-		[]byte(fmt.Sprintf(`{"format":999,"root":"%s","serves":{}}`, root)), 0o600))
+		[]byte(fmt.Sprintf(`{"format":"magus.scripts-index/v999","root":"%s","serves":{}}`, root)), 0o600))
 	return cacheDir
 }
 

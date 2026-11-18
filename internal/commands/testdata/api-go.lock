@@ -3430,7 +3430,7 @@ github.com/egladman/magus/types.PipeRecord.Error field string
 github.com/egladman/magus/types.PipeRecord.Project field string
 github.com/egladman/magus/types.PipeRecord.Projects field []string
 github.com/egladman/magus/types.PipeRecord.Ref field string
-github.com/egladman/magus/types.PipeRecord.Schema field int
+github.com/egladman/magus/types.PipeRecord.Schema field string
 github.com/egladman/magus/types.PipeRecord.Status field string
 github.com/egladman/magus/types.PipeRecord.Target field string
 github.com/egladman/magus/types.PipeRecord.Type field string

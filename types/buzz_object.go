@@ -150,7 +150,7 @@ type YAMLPositions struct {
 // record, with the fields a script filters on lifted out of its body. A field the record
 // does not carry is empty; Body is the whole record, for everything else.
 type PipeRecord struct {
-	Schema int
+	Schema string
 	// Type is the record's event type: run.scope, run.target.result, run.step, ...
 	Type    string
 	Project string

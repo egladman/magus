@@ -14,9 +14,9 @@ import (
 func TestScopeProjects(t *testing.T) {
 	var lines []report.Line
 	for _, raw := range []string{
-		`{"schema":5,"type":"run.scope","label":"2 projects","projects":["libs/x","."]}`,
-		`{"schema":5,"type":"run.target.result","project":"libs/y","target":"build","status":"ok","cache_hit":false}`,
-		`{"schema":5,"type":"run.scope","label":"libs/x","projects":["libs/x","libs/z"]}`,
+		`{"schema":"magus.report/v1alpha1","type":"run.scope","label":"2 projects","projects":["libs/x","."]}`,
+		`{"schema":"magus.report/v1alpha1","type":"run.target.result","project":"libs/y","target":"build","status":"ok","cache_hit":false}`,
+		`{"schema":"magus.report/v1alpha1","type":"run.scope","label":"libs/x","projects":["libs/x","libs/z"]}`,
 	} {
 		line, err := report.ParseLine([]byte(raw))
 		if err != nil {

@@ -443,7 +443,7 @@ func parsePipeRecord(line report.Line) (types.PipeRecord, error) {
 		return types.PipeRecord{}, fmt.Errorf("%s record: %w", line.Type, err)
 	}
 	return types.PipeRecord{
-		Schema: line.Schema, Type: line.Type,
+		Schema: line.Schema.String(), Type: line.Type,
 		Project: f.Project, Target: f.Target, Status: f.Status, Error: f.Error, Ref: f.Ref,
 		Projects: f.Projects, Body: string(line.Raw),
 	}, nil
@@ -474,7 +474,7 @@ func encodePipeLine(record map[string]any) (report.Line, error) {
 	if err != nil {
 		return report.Line{}, err
 	}
-	head := fmt.Sprintf(`{"schema":%d,"type":%q`, report.Schema, typ)
+	head := fmt.Sprintf(`{"schema":%q,"type":%q`, report.Schema, typ)
 	if len(body) > 2 {
 		head += "," + string(body[1:len(body)-1])
 	}

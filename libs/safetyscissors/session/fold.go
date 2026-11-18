@@ -25,12 +25,12 @@ func foldCachePath(dir, kind string) string {
 	return filepath.Join(dir, fmt.Sprintf(".fold-%s.json", kind))
 }
 
-// foldCacheFormat changes whenever the cached shape or what decides an entry's validity
+// foldCacheFormat moves to a new version whenever the cached shape or what decides an entry's validity
 // does, so an older cache is refolded rather than read under a new meaning.
-const foldCacheFormat = 3
+const foldCacheFormat apiversion.APIVersion = "safetyscissors.fold-cache/v1alpha1"
 
 type foldCache struct {
-	Format int                   `json:"format"`
+	Format apiversion.APIVersion `json:"format"`
 	Schema apiversion.APIVersion `json:"schema"`
 	Kind   string                `json:"kind"`
 	Files  map[string]foldEntry  `json:"files"`

@@ -71,13 +71,13 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 		line := sc.Bytes()
 		var head envelopeHead
 		require.NoError(t, codec.Unmarshal(line, &head), "unmarshal %q", line)
-		assert.Equal(t, envelopeHead{Schema: Schema, Type: TypeTargetResult}, head, "line %q", line)
+		assert.Equal(t, envelopeHead{Schema: string(Schema), Type: TypeTargetResult}, head, "line %q", line)
 	}
 }
 
 // envelopeHead is the schema and type every line of a report carries.
 type envelopeHead struct {
-	Schema int    `json:"schema"`
+	Schema string `json:"schema"`
 	Type   string `json:"type"`
 }
 
@@ -126,7 +126,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		require.Less(t, i, len(wantTypes), "got more lines than expected")
 		var head envelopeHead
 		require.NoError(t, codec.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
-		assert.Equal(t, envelopeHead{Schema: Schema, Type: wantTypes[i]}, head, "line %d", i)
+		assert.Equal(t, envelopeHead{Schema: string(Schema), Type: wantTypes[i]}, head, "line %d", i)
 	}
 }
 
@@ -560,7 +560,7 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			var head envelopeHead
 			line := bytes.TrimSpace(buf.Bytes())
 			require.NoError(t, codec.Unmarshal(line, &head), "unmarshal %q", line)
-			assert.Equal(t, envelopeHead{Schema: Schema, Type: tc.wantType}, head)
+			assert.Equal(t, envelopeHead{Schema: string(Schema), Type: tc.wantType}, head)
 
 			// Whole-struct: decode the SAME line back into the event's own type
 			// (the envelope's extra "schema"/"type" keys are ignored by the

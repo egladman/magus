@@ -29,14 +29,14 @@ const (
 	ScriptEffectWrite = "write"
 )
 
-// scriptsIndexFormat is bumped whenever ScriptsIndex changes shape. An index in any
+// scriptsIndexFormat moves to a new version whenever ScriptsIndex changes shape. An index in any
 // other format serves nothing until the next graph build rewrites it.
-const scriptsIndexFormat = 2
+const scriptsIndexFormat = "magus.scripts-index/v1alpha1"
 
 // ScriptsIndex is the content of scripts.idx: which scripts serve which situation,
 // stamped so a reader can tell when an entry no longer describes its file.
 type ScriptsIndex struct {
-	Format int `json:"format"`
+	Format string `json:"format"`
 	// Root is the absolute workspace root every Path is relative to.
 	Root string `json:"root"`
 	// Serves maps a situation (see ValidateSituation) to the scripts serving it, in

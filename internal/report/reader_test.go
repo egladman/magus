@@ -15,9 +15,9 @@ import (
 // The reader hands back each record once and in order, keeps what it cannot parse for a
 // person instead of failing on it, and reports the end of the stream.
 func TestReaderReadsRecordsInOrder(t *testing.T) {
-	src := `{"schema":5,"type":"run.scope","label":"api","projects":["api"]}
+	src := `{"schema":"magus.report/v1alpha1","type":"run.scope","label":"api","projects":["api"]}
 not a record
-{"schema":5,"type":"run.target.result","project":"api","target":"build","status":"ok","cache_hit":false}
+{"schema":"magus.report/v1alpha1","type":"run.target.result","project":"api","target":"build","status":"ok","cache_hit":false}
 `
 	var stray bytes.Buffer
 	r := NewReader(strings.NewReader(src), &stray)
@@ -25,7 +25,7 @@ not a record
 	first, ok, err := r.Next(t.Context())
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, Line{Schema: 5, Type: TypeRunScope, Raw: []byte(`{"schema":5,"type":"run.scope","label":"api","projects":["api"]}`)}, first)
+	assert.Equal(t, Line{Schema: Schema, Type: TypeRunScope, Raw: []byte(`{"schema":"magus.report/v1alpha1","type":"run.scope","label":"api","projects":["api"]}`)}, first)
 	var scope RunScope
 	require.NoError(t, first.Decode(&scope))
 	assert.Equal(t, RunScope{Label: "api", Projects: []string{"api"}}, scope)
@@ -51,7 +51,7 @@ func TestReaderNextBlocksUntilARecordOrCancel(t *testing.T) {
 	r := NewReader(pr, nil)
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		_, _ = pw.Write([]byte(`{"schema":5,"type":"run.scope","label":"x"}` + "\n"))
+		_, _ = pw.Write([]byte(`{"schema":"magus.report/v1alpha1","type":"run.scope","label":"x"}` + "\n"))
 	}()
 	line, ok, err := r.Next(t.Context())
 	require.NoError(t, err)
@@ -67,14 +67,14 @@ func TestReaderNextBlocksUntilARecordOrCancel(t *testing.T) {
 
 // A line passed through a stage reaches the next one byte for byte.
 func TestEncodeLinePassesARecordThrough(t *testing.T) {
-	raw := `{"schema":5,"type":"run.notice","level":"info","msg":"x"}`
+	raw := `{"schema":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"x"}`
 	line, err := ParseLine([]byte(raw + "\n"))
 	require.NoError(t, err)
 	var out bytes.Buffer
 	require.NoError(t, NewLineEncoder(&out).EncodeLine(line))
 	assert.Equal(t, raw+"\n", out.String())
 
-	_, err = ParseLine([]byte(`{"schema":5}`))
+	_, err = ParseLine([]byte(`{"schema":"magus.report/v1alpha1"}`))
 	assert.ErrorContains(t, err, "no type")
 	_, err = ParseLine([]byte(`[1]`))
 	assert.Error(t, err)

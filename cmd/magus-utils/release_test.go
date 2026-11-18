@@ -74,7 +74,7 @@ func TestBuildIndexEmitsOnlyTheServedSchema(t *testing.T) {
 	}
 	data, err := codec.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", []string{"deadbeefdeadbeef"}))
 	require.NoError(t, err)
-	require.Equal(t, `{"schema_version":1,"key_id":"testkeyid","revoked":["deadbeefdeadbeef"],"expires_at":"2099-01-01T00:00:00Z","releases":[`+
+	require.Equal(t, `{"schema_version":"magus.release-index/v1alpha1","key_id":"testkeyid","revoked":["deadbeefdeadbeef"],"expires_at":"2099-01-01T00:00:00Z","releases":[`+
 		`{"version":"v0.2.0","artifacts":[{"name":"magus_v0.2.0_linux_amd64_static.tar.gz","platform":"linux/amd64","size":"12","sha256":"ab"}]},`+
 		`{"version":"v0.1.0","yanked":true,"artifacts":[]}`+
 		`]}`, string(data))
@@ -97,7 +97,7 @@ func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
 
 	var idx selfupdate.ReleaseIndex
 	require.NoError(t, codec.Unmarshal(data, &idx))
-	require.Equal(t, 1, idx.SchemaVersion)
+	require.Equal(t, selfupdate.ReleaseIndexAPIVersion, idx.SchemaVersion)
 
 	rel, err := selfupdate.SelectRelease(&idx, "")
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestBuildIndexKeepsPrereleasesOutOfReleases(t *testing.T) {
 	idx := buildIndexForTest(manifests)
 	data, err := codec.Marshal(idx)
 	require.NoError(t, err)
-	require.Equal(t, `{"schema_version":1,"key_id":"testkeyid","expires_at":"2099-01-01T00:00:00Z",`+
+	require.Equal(t, `{"schema_version":"magus.release-index/v1alpha1","key_id":"testkeyid","expires_at":"2099-01-01T00:00:00Z",`+
 		`"releases":[{"version":"v0.4.3+build-1","artifacts":[{"name":"stable.tar.gz","platform":"","size":"","sha256":""}]}],`+
 		`"prereleases":[{"version":"v0.5.0-rc.1","artifacts":[{"name":"rc.tar.gz","platform":"","size":"","sha256":""}]}]}`,
 		string(data))
@@ -133,6 +133,16 @@ func TestBuildIndexKeepsPrereleasesOutOfReleases(t *testing.T) {
 // servedIndexDir is the tracked docs/gen/public/release, the one directory under
 // docs/gen/ that a render never writes.
 const servedIndexDir = "../../docs/gen/public/release"
+
+// servedHead is the part of the served index these tests read. It keeps schema_version
+// raw so the signed file stays checkable while that member is still the previous
+// release's.
+type servedHead struct {
+	SchemaVersion codec.RawMessage `json:"schema_version"`
+	Revoked       []string         `json:"revoked"`
+	KeyID         string           `json:"key_id"`
+	ExpiresAt     string           `json:"expires_at"`
+}
 
 // mustLoadShippedManifests reads this repository's own releases/, newest-first.
 func mustLoadShippedManifests(t *testing.T) []ReleaseManifest {
@@ -155,12 +165,15 @@ func mustLoadShippedManifests(t *testing.T) []ReleaseManifest {
 func TestServedIndexMatchesTheManifests(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
 	require.NoError(t, err)
-	var served ReleaseIndex
+	var served servedHead
 	require.NoError(t, codec.Unmarshal(got, &served))
 
 	want, err := codec.Marshal(buildIndex(mustLoadShippedManifests(t), served.KeyID, served.ExpiresAt, served.Revoked))
 	require.NoError(t, err)
-	require.Equal(t, string(want)+"\n", string(got),
+	// schema_version is the one member the served file may still carry from the previous
+	// release: only a tag build can re-sign it, and it is not a function of the manifests.
+	wantText := strings.Replace(string(want), `"schema_version":"`+releaseIndexAPIVersion+`"`, `"schema_version":`+string(served.SchemaVersion), 1)
+	require.Equal(t, wantText+"\n", string(got),
 		"docs/gen/public/release/index.json is stale: re-run `magus-utils release-index` and re-sign it")
 }
 
@@ -180,7 +193,7 @@ func TestServedIndexIsSignedByTheRing(t *testing.T) {
 
 	signer, err := selfupdate.ReleaseKeys().Verify(data, sig)
 	require.NoError(t, err)
-	var served ReleaseIndex
+	var served servedHead
 	require.NoError(t, codec.Unmarshal(data, &served))
 	require.Equal(t, signer.ID, served.KeyID, "the index must name the key that signed it")
 }
@@ -191,7 +204,7 @@ func TestServedIndexIsSignedByTheRing(t *testing.T) {
 func TestServedIndexHasNotExpired(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
 	require.NoError(t, err)
-	var served ReleaseIndex
+	var served servedHead
 	require.NoError(t, codec.Unmarshal(data, &served))
 	require.NotEmpty(t, served.ExpiresAt, "an index with no expires_at can be replayed forever")
 

@@ -26,7 +26,7 @@ mid-edit, which is exactly when someone wants it.
 Envelope fields and the event's own fields sit at one level:
 
 ```json
-{"schema":1,"type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
+{"schema":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
 ```
 
 | field       | meaning                                                           |
@@ -116,9 +116,9 @@ the next run starts.
 what lets magus add an event type without breaking clients built against an
 earlier release, and it is the only thing asked of an integration.
 
-`schema` is bumped when a field is renamed or removed, or when an existing field
+`schema` moves to a new version string (`v1alpha1` to `v1alpha2`) when a field is renamed or removed, or when an existing field
 changes meaning. Adding a type, or adding an optional field to an existing type,
-is additive and does not bump it.
+is additive and keeps it.
 
 ## What the stream is not
 

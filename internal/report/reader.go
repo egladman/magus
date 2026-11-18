@@ -11,11 +11,12 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/types"
 )
 
 // Line is one record as another magus stage wrote it.
 type Line struct {
-	Schema int
+	Schema types.APIVersion
 	Type   string
 	// Raw is the record's JSON object, without its newline.
 	Raw []byte
@@ -36,8 +37,8 @@ func ParseLine(b []byte) (Line, error) {
 		return Line{}, fmt.Errorf("report: not a record: no leading %s", recordPrefix)
 	}
 	var head struct {
-		Schema int    `json:"schema"`
-		Type   string `json:"type"`
+		Schema types.APIVersion `json:"schema"`
+		Type   string           `json:"type"`
 	}
 	if err := codec.Unmarshal(b, &head); err != nil {
 		return Line{}, fmt.Errorf("report: not a record: %w", err)
