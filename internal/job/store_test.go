@@ -39,8 +39,11 @@ import (
 // fixtures the same way CI does. The rules that turn on a bound actor pass their own.
 func tempLocation(t *testing.T, root string) Location {
 	t.Helper()
-	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: allowEveryCheck}
+	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: allowEveryCheck, Skew: sameContract}
 }
+
+// sameContract is a Location.Skew that judges every binary built from root's contract.
+func sameContract(string) error { return nil }
 
 // allowEveryCheck is a grader whose guard lets every check run.
 func allowEveryCheck(context.Context, string, job.Job) CheckVerdict { return CheckVerdict{} }
@@ -1833,4 +1836,51 @@ func (s *checkArgvSuite) TestAStoreWithNoCheckoutHasNoCommand() {
 	_, _, err := (&Store{}).checkCommand(job.Job{}, job.Goal{})
 
 	s.ErrorContains(err, "no checkout")
+}
+
+// fenceSuite pins the job store's write fence: Location.Skew refuses a stale binary's
+// write before anything is written, and a Store with no Skew writes and says so once.
+type fenceSuite struct {
+	suite.Suite
+	loc Location
+}
+
+func TestFence(t *testing.T) { suite.Run(t, new(fenceSuite)) }
+
+func (s *fenceSuite) SetupTest() { s.loc = tempLocation(s.T(), s.T().TempDir()) }
+
+func (s *fenceSuite) TestStaleBinaryWritesNothing() {
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "built from another contract")
+	var judged []string
+	s.loc.Skew = func(root string) error {
+		judged = append(judged, root)
+		return stale
+	}
+	st := NewStore(s.loc)
+	err := st.Rewrite(s.T().Context(), func(f *job.Rows) error {
+		f.Jobs = append(f.Jobs, lease("fenced"))
+		return nil
+	})
+	refused, ok := errors.AsType[*staleWriterError](err)
+	s.Require().True(ok, "got %v", err)
+	s.Equal(s.loc.Root, refused.Root)
+	diag, ok := errors.AsType[*types.DiagnosticError](err)
+	s.Require().True(ok)
+	s.Equal(types.WorkspaceNeedsNewerMagus, diag.Code)
+	s.Equal([]string{s.loc.Root}, judged)
+	path, err := st.Path()
+	s.Require().NoError(err)
+	s.NoFileExists(path)
+}
+
+func (s *fenceSuite) TestNoSkewSaysSoOnce() {
+	s.loc.Skew = nil
+	st := NewStore(s.loc)
+	var notices strings.Builder
+	st.notices = &notices
+	plant(s.T(), st, lease("first"))
+	plant(s.T(), st.As(job.Actor{}), lease("second"))
+	path, err := st.Path()
+	s.Require().NoError(err)
+	s.Equal(fmt.Sprintf("job: this magus fills no contract check into its job store, so nothing judged it against the contract %s carries before it wrote %s\n", s.loc.Root, path), notices.String())
 }

@@ -30,6 +30,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
@@ -108,6 +109,10 @@ type storeConfig struct {
 	workspace *Workspace
 	// migrations is [jobMigrations] outside a test.
 	migrations []migrate.Migration
+	// skew is Location.Skew. unfenced says once per Store, views included, that no skew
+	// judged a write.
+	skew     func(root string) error
+	unfenced *sync.Once
 }
 
 // Location is where a Store lives: the repository whose rows these are, the state base
@@ -184,6 +189,12 @@ type Location struct {
 	// PriceContext prices a job's holder's context when the job ends. Nil leaves every
 	// outcome's tokens and cost unknown.
 	PriceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
+	// Skew refuses a write by this binary to the store of the checkout at root, before
+	// anything is written: contract.RefuseSkew, which answers MGS1021 for a binary built
+	// from another contract than root carries. It lives above this package, so each door
+	// that can reach it fills it in. Nil fences nothing, and the Store's first write says
+	// so on its notices.
+	Skew func(root string) error
 }
 
 // NewStore returns the ledger for loc's repository. The file itself is created by the
@@ -198,7 +209,7 @@ type Location struct {
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), clock: loc.Clock,
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, spawnCeiling: loc.SpawnCeiling, owners: loc.Owners, priceContext: loc.PriceContext,
-		migrations: jobMigrations()}}
+		migrations: jobMigrations(), skew: loc.Skew, unfenced: new(sync.Once)}}
 	s.path, s.err = jobsPath(loc)
 	return s.open()
 }
@@ -537,6 +548,11 @@ func (s *Store) migrate(ctx context.Context, storePath string, found int, lines 
 	if err := st.Check(found); err != nil {
 		return refuse(err)
 	}
+	if found < len(s.migrations) {
+		if err := s.fence(); err != nil {
+			return err
+		}
+	}
 	if !headed {
 		if err := refuseHeaderless(storePath, lines); err != nil {
 			return err
@@ -640,9 +656,13 @@ func headerWriter(header migrate.Entry) storeWriter {
 	return storeWriter{}
 }
 
-// beforeWrite runs inside every rewrite of the job store before it writes: it stamps
-// this binary as the store's writer, then runs the retention pass.
+// beforeWrite runs inside every rewrite of the job store before it writes: it refuses a
+// binary stale against the checkout, stamps this binary as the store's writer, then runs
+// the retention pass.
 func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) error {
+	if err := s.fence(); err != nil {
+		return err
+	}
 	raw, err := codec.Marshal(runningWriter(ctx))
 	if err != nil {
 		return fmt.Errorf("job: stamping the writer: %w", err)
@@ -654,6 +674,41 @@ func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) err
 	f.Unknown[writerMember] = raw
 	return s.retainDue(ctx, f, now)
 }
+
+// fence refuses a write from a binary that Location.Skew judges stale against s's
+// checkout. With no Skew it lets the write through and says so once.
+func (s *Store) fence() error {
+	if s.skew == nil {
+		say := func() {
+			fmt.Fprintf(s.noticeWriter(), "job: this magus fills no contract check into its job store, so nothing judged it against the contract %s carries before it wrote %s\n", cmp.Or(s.root, "the working directory"), s.path)
+		}
+		if s.unfenced == nil {
+			say()
+		} else {
+			s.unfenced.Do(say)
+		}
+		return nil
+	}
+	if err := s.skew(s.root); err != nil {
+		return &staleWriterError{Path: s.path, Root: s.root, Err: err}
+	}
+	return nil
+}
+
+// staleWriterError refuses a job store write from a binary built from another contract
+// than its checkout carries (MGS1021, which Err carries). Every checkout of the
+// repository shares the store, so a stale binary would write rows the current one reads
+// differently. Nothing was written.
+type staleWriterError struct {
+	Path, Root string
+	Err        error
+}
+
+func (e *staleWriterError) Error() string {
+	return fmt.Sprintf("job: job store %s was not written, because this magus is stale against %s: %v", e.Path, cmp.Or(e.Root, "the working directory"), e.Err)
+}
+
+func (e *staleWriterError) Unwrap() error { return e.Err }
 
 // headerlessStoreError is a job store with no header line whose rows are enveloped. Only
 // a store past [recordsEnveloped] holds such rows, and that store's header says so, so

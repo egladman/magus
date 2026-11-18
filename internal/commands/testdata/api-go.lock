@@ -3970,6 +3970,7 @@ github.com/egladman/magus/types.StepLog.Units method(ptr) func() []Unit
 github.com/egladman/magus/types.StepLogFromContext func(ctx context.Context) *StepLog
 github.com/egladman/magus/types.StopRequest type struct
 github.com/egladman/magus/types.StopRequest.Agent field string
+github.com/egladman/magus/types.StopRequest.Background field []string
 github.com/egladman/magus/types.StopRequest.Checkout field *CheckoutState
 github.com/egladman/magus/types.StopRequest.Dir field string
 github.com/egladman/magus/types.StopRequest.Event field string

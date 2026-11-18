@@ -46,12 +46,13 @@ When magus opens a store:
   Each store migrates once. The next magus to open it finds it current, and
   no reader keeps the old shape.
 
-- **Older, in a job's checkout**, the job store is refused, and nothing is
-  read or written. A job's checkout is one a live job's fork made or adopted,
-  and the store's own rows say which. Every checkout shares the file, so a
-  worker's binary built from its branch would move it past every other magus.
-  The root integrates the change and migrates the store once, from its own
-  checkout.
+- **Older, from a binary off the base**, the job store is refused, and nothing
+  is read or written. Only a magus built on a clean commit the workspace's base
+  contains migrates it. Every checkout and branch shares the file, so a binary
+  built from a branch would move it past every magus built on the base. Rebuild
+  magus from the base, or run the branch binary under its own `XDG_STATE_HOME`.
+  The header names the magus that wrote the store last, and each refusal names
+  it.
 
 - **Newer** than this magus knows, the store is refused, naming both versions,
   and nothing is read or written:
@@ -62,6 +63,9 @@ When magus opens a store:
   ```
 
 Migrations only go up. To go back, run the magus that wrote the store.
+
+A magus built from another contract than its checkout carries never writes the
+job store at all: every write is refused with MGS1021, naming the relink.
 
 `migration` is separate from `api_version`. `api_version` records the
 newest row shape any writer used, and an older magus still reads those rows,

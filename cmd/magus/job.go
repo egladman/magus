@@ -220,7 +220,7 @@ func jobPlace(root string) (job.Location, error) {
 	if err != nil {
 		return job.Location{}, fmt.Errorf("resolve the user state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
-	return job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root}, nil
+	return job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root, Skew: contract.RefuseSkew}, nil
 }
 
 // openJobs opens the job store of the workspace at root. With o.ModelTiers a workspace

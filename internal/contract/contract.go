@@ -245,6 +245,21 @@ func (s Skew) Diagnostic() *types.DiagnosticError {
 		s.TreeName(), s.Binary, s.Tree, ward.RelinkAt(s.Root))
 }
 
+// RefuseSkew is the job store's write fence ([job.Location.Skew]): MGS1021 when this
+// binary was built from another contract than the checkout at root carries, and the
+// check's own error when the contracts cannot be compared, so an unreadable tree never
+// reads as agreement.
+func RefuseSkew(root string) error {
+	s, err := Check(root)
+	if err != nil {
+		return err
+	}
+	if d := s.Diagnostic(); d != nil {
+		return d
+	}
+	return nil
+}
+
 // ReadsFormat reports whether a binary built from the checkout at root reads
 // rows of format, as its api.lock says. It fails with ErrNotCarried when root
 // holds no api.lock.

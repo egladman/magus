@@ -24,6 +24,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
@@ -2497,7 +2498,7 @@ type location struct {
 // no record.
 func (at location) jobs() job.Location {
 	stateBase, _ := xdg.StateDir()
-	return job.Location{CacheDir: at.cacheDir, StateBase: stateBase, Root: at.workspace}
+	return job.Location{CacheDir: at.cacheDir, StateBase: stateBase, Root: at.workspace, Skew: contract.RefuseSkew}
 }
 
 type locationKey struct{}
