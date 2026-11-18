@@ -55,7 +55,7 @@ does; an empty `dir` is an error, not the working directory.
 | `(*Magus).Run(ctx, targets, magus.WithSession(id))` | judges each target first; a deny is a `*types.GuardDeniedError` and nothing runs |
 | `WithEnv`, `WithStderr`, `WithCommandLine` | the process state a workspace reads; without each it reads no environment, discards notices, records an empty command line |
 | `WithVCSDriver`, `WithCacheBackend` (Open), `WithObserver` (Run) | the three swappable parts, one option each |
-| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
+| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusFeedbackRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
 The lease a call acts under rides `ctx` (`job.WithLease`). The SDK never retries,
 re-grades or routes around a refusal.{{if .Full}} It has no agent loop: it answers what a loop asks

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,7 +72,7 @@ func TestPermits(t *testing.T) {
 }
 
 func permitOne(ctx context.Context) error {
-	journal.RecordPermits(ctx, 1)
+	recorder.RecordPermits(ctx, 1)
 	return nil
 }
 

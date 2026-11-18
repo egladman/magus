@@ -8,8 +8,7 @@ export fun sandboxFigure() > figure\Figure !> any {
     final env = magus\graph().dir("internal/sandbox/env");
     final fs = magus\graph().dir("libs/safetyscissors/sandbox/filesystem");
     final jobs = magus\graph().dir("internal/job");
-    final journal = magus\graph().dir("internal/journal");
-    final trail = magus\graph().dir("internal/trail");
+    final recorder = magus\graph().dir("internal/recorder");
     final interp = magus\graph().dir("internal/interp");
     final spawn = magus\graph().dir("internal/proc/spawn");
     final spell = magus\graph().dir("internal/spell");
@@ -21,21 +20,20 @@ export fun sandboxFigure() > figure\Figure !> any {
                 + "filesystem half names the readable and writable paths and applies them with "
                 + "landlock where the kernel has it. The environment half rebuilds the child's "
                 + "variables from an allowlist. A job's write paths narrow the writes, a refusal "
-                + "lands in the trail, and the journal keeps the denial.")
+                + "lands in the activity log, and the journal keeps the denial.")
         .box(sandbox, label: "Sandbox", sub: "one grant per run", focal: true)
         .box(fs, label: "Filesystem grant", sub: "landlock where the kernel has it")
         .box(env, label: "Environment", sub: "allowlist, no secrets")
         .box(jobs, label: "Job store", sub: "write paths narrow the grant", look: figure\Look.store)
-        .box(journal, label: "Journal", sub: "the denial kept", look: figure\Look.store)
-        .box(trail, label: "Trail", sub: "the refusal", look: figure\Look.store)
+        .box(recorder, label: "Recorder", sub: "the refusal and the denial kept", look: figure\Look.store)
         .box(interp, label: "Interpreter", sub: "Buzz, in process")
         .box(spawn, label: "Spawner", sub: "the tool's process")
         .box(spell, label: "Spells", sub: "ops that run")
         .edgesFromGraph()
         .hideEdges([interp, spell], dst: [sandbox, spawn, fs],
             why: "both reach the sandbox through the interpreter's host bindings; one arrow per entry is enough")
-        .hideEdges([spawn], dst: [journal],
-            why: "the spawner records its own exit there; the denial this figure follows reaches the journal through the sandbox")
+        .hideEdges([spawn], dst: [recorder],
+            why: "the spawner records its own exit there; the denial this figure follows reaches the recorder through the sandbox")
         .markEdge(sandbox, dst: fs, label: "paths")
         .markEdge(sandbox, dst: env, label: "variables")
         .markEdge(sandbox, dst: jobs, label: "job")

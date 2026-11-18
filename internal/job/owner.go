@@ -6,8 +6,8 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
@@ -54,7 +54,7 @@ func noteAttention(ctx context.Context, root, source, lease, message string) {
 		Source:   source,
 		Lease:    lease,
 		Message:  message,
-	}, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root})
+	}, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: root})
 }
 
 // noteEnded is [NoteEnded] for a row this store ended.

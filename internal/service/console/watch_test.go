@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // A change under a job's declared write paths is attributed to that job with nothing asked
@@ -53,7 +53,7 @@ func TestJobFeedAttributesAChangeToTheWritePathThatCoversIt(t *testing.T) {
 				Job:       "pwa/job-watch",
 				WritePath: "internal/trail", // the reader is told WHICH declaration answered
 				Action:    "internal/trail/trail.go",
-				Outcome:   trail.OutcomeOK,
+				Outcome:   journal.OutcomeOK,
 			}, e)
 			return
 		case <-retick.C:

@@ -22,10 +22,11 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -1309,8 +1310,8 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := &eventSink{}
-	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
-	ctx = journal.WithInvocationID(ctx, "invrefused")
+	ctx := recorder.WithSinks(t.Context(), sink.Handle)
+	ctx = recorder.WithInvocationID(ctx, "invrefused")
 
 	var observed []error
 	_, err = c.RunAll(ctx, []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
@@ -1338,28 +1339,30 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 
 	// The session store and `magus session --brief` read failures off result events, so a
 	// refusal that emitted none left them showing a run that never happened.
-	events := sink.snapshot()
-	require.Len(t, events, 1)
-	assert.Equal(t, refusalEvent("invrefused"), normalizeRefusal(t, events[0]),
+	require.Len(t, sink.records, 1)
+	assert.Equal(t, "invrefused", sink.records[0].Invocation)
+	runs := sink.runs()
+	require.Len(t, runs, 1)
+	assert.Equal(t, refusalEvent(), normalizeRefusal(t, runs[0]),
 		"nothing ran, so nothing was captured and there is no ref")
 }
 
-// refusalEvent is the result event a machine refusal of `.`'s test journals, with the
+// refusalEvent is the result a machine refusal of `.`'s test journals, with the
 // volatile fields normalizeRefusal clears.
-func refusalEvent(inv string) journal.Event {
-	return journal.Event{
-		Inv: inv, Project: ".", Target: "test", Kind: journal.KindResult, Level: "error",
+func refusalEvent() journal.Run {
+	return journal.Run{
+		Project: ".", Target: "test", Level: "error",
 		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
 	}
 }
 
-// normalizeRefusal clears a refusal event's timestamp and its cause text, which names the
-// holder's figures, once the text is checked to give the cause.
-func normalizeRefusal(t *testing.T, e journal.Event) journal.Event {
+// normalizeRefusal clears a refusal's cause text, which names the holder's
+// figures, once the text is checked to give the cause.
+func normalizeRefusal(t *testing.T, run journal.Run) journal.Run {
 	t.Helper()
-	assert.Contains(t, e.Text, "no seat is free")
-	e.Ts, e.Text = 0, ""
-	return e
+	assert.Contains(t, run.Error, "no seat is free")
+	run.Error = ""
+	return run
 }
 
 // RunAside has no batch to report the refusal to, so its caller sees only the returned
@@ -1376,7 +1379,7 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := &eventSink{}
-	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	ctx := recorder.WithSinks(t.Context(), sink.Handle)
 	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
 		func(context.Context) error {
 			t.Error("a refused step must not run")
@@ -1384,9 +1387,9 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 		})
 
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
-	events := sink.snapshot()
-	require.Len(t, events, 1)
-	assert.Equal(t, refusalEvent(events[0].Inv), normalizeRefusal(t, events[0]))
+	runs := sink.runs()
+	require.Len(t, runs, 1)
+	assert.Equal(t, refusalEvent(), normalizeRefusal(t, runs[0]))
 
 	// A claim that ends because the run was cancelled is not a refusal to put on record.
 	cancelled, cancel := context.WithCancel(ctx)
@@ -1397,7 +1400,7 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 			return nil
 		})
 	require.Error(t, err)
-	assert.Len(t, sink.snapshot(), 1, "a cancelled claim journals nothing")
+	assert.Len(t, sink.runs(), 1, "a cancelled claim journals nothing")
 }
 
 // cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the

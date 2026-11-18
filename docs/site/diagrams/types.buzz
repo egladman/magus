@@ -8,8 +8,7 @@ export fun typesFigure() > figure\Figure !> any {
     final enums = magus\graph().dir("types/enum");
     final daemon = magus\graph().dir("types/daemon");
     final diff = magus\graph().dir("types/diff");
-    final events = magus\graph().dir("types/events");
-    final activity = magus\graph().dir("types/trail");
+    final feedback = magus\graph().dir("types/feedback");
     final image = magus\graph().dir("types/image");
     final json = magus\graph().dir("libs/codec");
     final diagnostics = magus\graph().dir("libs/diagnostics");
@@ -18,7 +17,7 @@ export fun typesFigure() > figure\Figure !> any {
             eyebrow: "types",
             desc: "types holds the records every other package passes around: targets, runs, "
                 + "findings, jobs. Its enums sit in types/enum, and the diagnostic codes come "
-                + "from libs/diagnostics. The daemon, diff, event, activity and image groups split "
+                + "from libs/diagnostics. The daemon, diff, feedback and image groups split "
                 + "off the records that only some callers need, and each imports the base and "
                 + "the enums, never the other way. Encoding lives on the type through the shared "
                 + "JSON package, so no reader splits lines itself.")
@@ -28,13 +27,11 @@ export fun typesFigure() > figure\Figure !> any {
         .box(json, label: "JSON encoding", sub: "on the type")
         .box(daemon, label: "Daemon records", sub: "server wire types")
         .box(diff, label: "Diff records", sub: "changes between revisions")
-        .box(events, label: "Events", sub: "the stream")
-        .box(activity, label: "Activity records", sub: "audit entries")
+        .box(feedback, label: "Feedback records", sub: "guard reports and marks")
         .box(image, label: "Image records", sub: "OCI specs")
         .edgesFromGraph()
         .hideEdges([daemon, diff], dst: [enums],
             why: "each group imports the enums as well as the base; the figure draws that once, from the base")
-        .hideEdges([events], dst: [json], why: "the base already draws the shared encoding edge")
         .legend(figure\Look.focal, label: "the base every package imports")
-        .scope([types, enums, daemon, diff, events, activity, image, diagnostics, json]);
+        .scope([types, enums, daemon, diff, feedback, image, diagnostics, json]);
 }

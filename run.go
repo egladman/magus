@@ -32,21 +32,21 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/race"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/sys/mem"
-	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -260,7 +260,7 @@ func (m *Magus) runTargets(ctx context.Context, targets []types.Target, o run) e
 // MGS1028 hint gives: the fact is about the SCOPE, and a per-project frame would
 // have a reader dismissing the same finding once per project. Splitting the files
 // into Inputs is what lets a consumer tell a stale verdict from a wasted rerun.
-func undeclaredScopeEvent(targets []types.Target) (journal.Event, bool) {
+func undeclaredScopeEvent(targets []types.Target) (journal.Scope, bool) {
 	var seeds []journal.UndeclaredSeed
 	seen := make(map[string]bool, len(targets))
 	for _, t := range targets {
@@ -277,12 +277,12 @@ func undeclaredScopeEvent(targets []types.Target) (journal.Event, bool) {
 		seeds = append(seeds, s)
 	}
 	if len(seeds) == 0 {
-		return journal.Event{}, false
+		return journal.Scope{}, false
 	}
 	slices.SortFunc(seeds, func(a, b journal.UndeclaredSeed) int {
 		return strings.Compare(a.Project, b.Project)
 	})
-	return journal.Event{Kind: journal.KindScope, Undeclared: seeds}, true
+	return journal.Scope{Undeclared: seeds}, true
 }
 
 // redactError masks any resolved secret in err's MESSAGE while leaving the error chain
@@ -320,7 +320,7 @@ func (e redactedError) Unwrap() error { return e.err }
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
 	ctx = attributeRun(ctx)
 	if scope, ok := undeclaredScopeEvent(targets); ok {
-		journal.Emit(ctx, scope)
+		recorder.Emit(ctx, scope)
 	}
 	type targetGroup struct {
 		name    string
@@ -2863,7 +2863,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = m.ContextWithSecrets(ctx)
 	// So a magusfile binding can record a governance event (a credential granted, an
 	// endpoint opened) without the trail path being threaded through the VM.
-	ctx = trail.ContextWithBase(ctx, m.CacheDir())
+	ctx = recorder.ContextWithBase(ctx, m.CacheDir())
 	ctx = types.WithWorkspace(ctx, m.internals())
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run
@@ -4020,7 +4020,7 @@ func charmedTarget(target string, charms []string) string {
 // reader who follows one there finds nothing, and the id is still doing its job, which is
 // to let a descendant recognize this run's claims.
 func attributeRun(ctx context.Context) context.Context {
-	if journal.InvocationIDFromContext(ctx) != "" {
+	if recorder.InvocationIDFromContext(ctx) != "" {
 		return ctx
 	}
 	// Adopt the ancestry a parent magus passed down BEFORE appending self, the way
@@ -4032,6 +4032,6 @@ func attributeRun(ctx context.Context) context.Context {
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
-	id := journal.NewInvocationID()
-	return types.AppendInvocationAncestor(journal.WithInvocationID(ctx, id), os.Getpid(), id)
+	id := recorder.NewInvocationID()
+	return types.AppendInvocationAncestor(recorder.WithInvocationID(ctx, id), os.Getpid(), id)
 }

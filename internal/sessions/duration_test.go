@@ -62,7 +62,12 @@ func (s *RunDurationWithSuite) TestOtherArgumentsHaveNoRecord() {
 	s.False(ok)
 }
 
-func TestLastRunDurationIsTheNewestRun(t *testing.T) {
+type DurationSuite struct{ suite.Suite }
+
+func TestDuration(t *testing.T) { suite.Run(t, new(DurationSuite)) }
+
+func (s *DurationSuite) TestLastRunDurationIsTheNewestRun() {
+	t := s.T()
 	dir := t.TempDir()
 	recordResults(t, dir,
 		session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: 400_000},
@@ -89,7 +94,8 @@ func TestLastRunDurationIsTheNewestRun(t *testing.T) {
 	assert.False(t, ok, "a missing store")
 }
 
-func TestLastRunDurationReadsOnlyTheNewestFiles(t *testing.T) {
+func (s *DurationSuite) TestLastRunDurationReadsOnlyTheNewestFiles() {
+	t := s.T()
 	dir := t.TempDir()
 	results := make([]session.TargetResult, maxInvocationFiles+1)
 	results[0] = session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: 60_000}

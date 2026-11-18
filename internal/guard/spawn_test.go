@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -438,7 +438,7 @@ func TestAForegroundChildsFirstCallJoinsItToItsSpawn(t *testing.T) {
 	f := newForegroundFleet(t, "guard-facts")
 	f.spawn(t, "guard-facts")
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=guard-facts")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=guard-facts")
 	write := f.write(t, "a1b2c3", "guard-facts")
 	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
 }
@@ -450,9 +450,9 @@ func TestParallelForegroundChildrenEachJoinTheirOwnSpawn(t *testing.T) {
 	f.spawn(t, "job-a")
 	f.spawn(t, "job-b")
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=job-b")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=job-b")
 	assert.Equal(t, "job-b", f.write(t, "agent-b", "job-b").Lease)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=job-a")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=job-a")
 	assert.Equal(t, "job-a", f.write(t, "agent-a", "job-a").Lease)
 }
 
@@ -476,9 +476,9 @@ func TestAForegroundChildThatCannotBePlacedIsAdvisedNotRefused(t *testing.T) {
 				f.spawn(t, id)
 			}
 			if tc.claim == "" {
-				t.Setenv(trail.EnvBaggage, "")
+				t.Setenv(recorder.EnvBaggage, "")
 			} else {
-				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+				t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, tc.claim))
 			}
 			// A read-only command, which no lease or path rule has an opinion on.
 			list := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "agent-x",
@@ -497,7 +497,7 @@ func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
 	f := newForegroundFleet(t, "job-a", "job-b", "job-c")
 	f.spawn(t, "job-a")
 	f.spawn(t, "job-b")
-	t.Setenv(trail.EnvBaggage, "sentry-environment=production")
+	t.Setenv(recorder.EnvBaggage, "sentry-environment=production")
 	transcript := filepath.Join(t.TempDir(), "claude-s.jsonl")
 	file := func(agentID, title string) {
 		dir := filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")
@@ -517,7 +517,7 @@ func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
 	assert.Equal(t, "job-a", write("agent-a", "job-a").Lease)
 
 	f.spawn(t, "job-c")
-	t.Setenv(trail.EnvBaggage, "sentry-environment=production")
+	t.Setenv(recorder.EnvBaggage, "sentry-environment=production")
 	file("scout", "explore the cache layer")
 	scout := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "scout",
 		"agent_type": "Explore", "transcript_path": transcript, "tool_input": map[string]any{"command": "ls"}})
@@ -580,7 +580,7 @@ func (f foregroundFleet) call(t *testing.T, env map[string]any) verdict.Judgment
 
 func (f foregroundFleet) spawn(t *testing.T, job string) {
 	t.Helper()
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	spawn := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent",
 		"tool_input": map[string]any{"prompt": "implement it", "subagent_type": "general-purpose", "run_in_background": false, "description": "orchestrator/impl " + job}})
 	require.NotEqual(t, verdict.Deny, spawn.Decision, spawn.Reason)

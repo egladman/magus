@@ -276,7 +276,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 2    | `verdict` and `step` types out of `types/guard.go`, types/guard_judgment.go, types/agent/step.go                                                | ~700 lines                    | yes: breaks the Go API lock                                                                                                            | done                       |
 | 3    | `tier`: types/agent/model.go, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                     | ~650 lines                    | no                                                                                                                                     | done                       |
 | 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done (now `libs/codec`)    |
-| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | in progress (writer owed)  |
+| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | done (now `journal`)       |
 | 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | done                       |
 | 7    | secrets into their own module, `libs/secrets`, from `internal/secret` and types/secret.go                                                       | ~1,300 lines                  | no                                                                                                                                     | done                       |
 | 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | in progress (mirrors owed) |
@@ -581,8 +581,9 @@ against its parent's model tier. buzzed, the first consumer outside magus, impor
 `verdict` alone rather than write that wiring. Asked for by Eli on 11-17.
 
 - `safetyscissors.New(ctx, dir, opts...)` returns a `*SafetyScissors`. It lays out
-  `jobs/`, `sessions/` and the trail's `activity/` under `dir`; `WithDirs` moves any of
-  them, and refuses `Jobs` and `Sessions` in one directory.
+  `jobs/`, `sessions/` and `activity/` under `dir`; `WithDirs` moves any of them, and
+  refuses `Jobs` and `Sessions` in one directory. `Calls` reads the activity log through
+  `journal.Calls` ([ADR 0051](0051-the-journal-is-one-package-shaped-like-log-slog.md)).
 - `WithInvocation`, `WithActor` and `WithNotices` are required, and `New` names every
   missing one at once as an `*OptionError`. `WithNotices` joins the two the proposal
   named because a job store without it refuses every write, and the module never prints.

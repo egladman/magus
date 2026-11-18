@@ -470,30 +470,30 @@ var magusObjects = []Object{
 				Name: "trail",
 				Doc: "The session's guard record inside its window: {session, host, since, until, checkouts, " +
 					"observations, spawns}. An empty session is the one with the newest observation in the window. " +
-					"Reads the trail of every checkout of this repository that changed inside the window, because a " +
+					"Reads the activity log of every checkout of this repository that changed inside the window, because a " +
 					"session's hooks record into the checkout they ran from. An unreadable time raises.",
-				Returns: []Ret{{Object: `magus\trail\Trail`}},
+				Returns: []Ret{{Object: `magus\feedback\Report`}},
 				Raises:  true,
 				Impl:    MagusSessionTrail,
 			},
 			{
 				Name: "marks",
-				Doc: "Every verdict a person recorded on a trail row in this repository, oldest first; a later mark " +
+				Doc: "Every verdict a person recorded on a feedback row in this repository, oldest first; a later mark " +
 					"on an id supersedes an earlier one. Kept per repository identity, so every checkout and every " +
 					"session reads the same marks. Raises on a store line that does not decode.",
-				Returns: []Ret{{Object: `[magus\trail\Mark]`}},
+				Returns: []Ret{{Object: `[magus\feedback\Mark]`}},
 				Raises:  true,
 				Impl:    MagusSessionMarks,
 			},
 			{
 				Name: "mark",
-				Doc: "Record a person's verdict on one trail row and return it as stored, its time stamped. id is the " +
+				Doc: "Record a person's verdict on one feedback row and return it as stored, its time stamped. id is the " +
 					"row's stable id (fb and 12 hex digits), section one of refused, advised, unguarded, " +
 					"next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule " +
 					"or shape the row groups by. Appends to the per-repository store and rewrites nothing. Raises on " +
 					"a malformed mark or an unwritable store.",
-				Args:    []Arg{{Name: "mark", Object: `magus\trail\Mark`}},
-				Returns: []Ret{{Object: `magus\trail\Mark`}},
+				Args:    []Arg{{Name: "mark", Object: `magus\feedback\Mark`}},
+				Returns: []Ret{{Object: `magus\feedback\Mark`}},
 				Raises:  true,
 				Impl:    MagusSessionMark,
 			},

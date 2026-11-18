@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -345,17 +345,17 @@ func PrintAffectedExplainText(w io.Writer, out AffectedExplainOutput) bool {
 // its project and target, and the first line of its cause. The excerpt of each log was
 // printed when the target failed; the ref is what reaches the rest of it. A refusal has no
 // ref, since nothing ran, and names its MGS code instead.
-func PrintFailedResults(w io.Writer, events []journal.Event) {
-	if len(events) == 0 {
+func PrintFailedResults(w io.Writer, runs []journal.Run) {
+	if len(runs) == 0 {
 		return
 	}
-	fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", plural.Count(len(events), "target", "targets"))
-	for _, e := range events {
+	fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", plural.Count(len(runs), "target", "targets"))
+	for _, e := range runs {
 		ref := e.Ref
 		if ref == "" {
 			ref = cmp.Or(e.DiagnosticCode, "no-ref")
 		}
-		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
+		cause, _, _ := strings.Cut(strings.TrimSpace(e.Error), "\n")
 		fprintf(w, "  %s %s:%s", ref, e.Project, e.Target)
 		if cause != "" {
 			fprintf(w, "  %s", cause)

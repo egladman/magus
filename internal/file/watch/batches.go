@@ -173,7 +173,7 @@ func RunBatches(ctx context.Context, batches <-chan []string, run func([]string)
 func runRecovered(run func([]string) error, paths []string, errFn func(error)) {
 	defer func() {
 		if r := recover(); r != nil {
-			errFn(fmt.Errorf("stream: panic: %v", r))
+			errFn(fmt.Errorf("watch: panic: %v", r))
 		}
 	}()
 	if err := run(paths); err != nil {

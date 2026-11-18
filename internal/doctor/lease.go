@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
@@ -91,7 +91,7 @@ func (r *runner) checkBoundLease(ctx context.Context) check.Check {
 func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) check.Check {
 	const name = "bound-lease"
 
-	claimed := trail.LeaseFromEnv()
+	claimed := recorder.LeaseFromEnv()
 	id, from := job.ActingLease(loc, claimed)
 	if id == "" {
 		return check.Check{Name: name, Status: check.OK, Message: "no lease bound; the guard advises only"}
@@ -103,7 +103,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) che
 			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", id, claimed),
 			Details: []string{
 				fmt.Sprintf("the guard wrote the marker when a caller whose host names no session ran `%s` here, so magus grades every write under %s and ignores the claim: a record of where the work is beats an assertion a shell can rewrite", hint.JobExec.String(), id),
-				fmt.Sprintf("unset %s, or take the lease you mean here with `%s`", trail.EnvBaggage, hint.JobExec.With(claimed)),
+				fmt.Sprintf("unset %s, or take the lease you mean here with `%s`", recorder.EnvBaggage, hint.JobExec.With(claimed)),
 			},
 		}
 	}

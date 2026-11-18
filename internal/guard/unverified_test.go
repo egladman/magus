@@ -15,7 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -104,7 +104,7 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 	}
 	ctx, cancel := context.WithTimeout(s.T().Context(), judgeReserve+100*time.Millisecond)
 	defer cancel()
-	ctx = withPhaseLog(ctx, trailtypes.Phase{})
+	ctx = withPhaseLog(ctx, journal.Phase{})
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
 	s.Require().NoError(err)
@@ -116,7 +116,7 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 
 func (s *UnverifiedReaderSuite) TestAnEarlierRulesLapsedOpenIsNamedAsThatAndNotAsThisRead() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
-	ctx := withPhaseLog(s.T().Context(), trailtypes.Phase{})
+	ctx := withPhaseLog(s.T().Context(), journal.Phase{})
 	judgmentPhases(ctx).record(timedPhase(phaseInspect, 2*time.Second, 2*time.Second, true))
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)

@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
@@ -22,7 +22,7 @@ import (
 func attentionRoot(t *testing.T) (root string, loc Location) {
 	t.Helper()
 	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	return t.TempDir(), Location{StateBase: t.TempDir(), CacheDir: t.TempDir()}
 }
 
@@ -129,12 +129,12 @@ func TestFileAttentionKeepsTheIDWhenTheFilesChange(t *testing.T) {
 // Re-raising the same block under a new lease re-uses the id, and the queue still holds one row.
 func TestFileAttentionKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
 	root, loc := attentionRoot(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=fleet/f3")
 	require.NoError(t, fileBlock(t, root, loc, blockedEvent("needs a decision")))
 	first := openRequestIDs(t, root)
 	require.Len(t, first, 1)
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f9")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=fleet/f9")
 	require.NoError(t, fileBlock(t, root, loc, blockedEvent("needs a decision")))
 
 	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
@@ -145,7 +145,7 @@ func TestFileAttentionKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
 // does for every lease magus resolves.
 func TestFileAttentionStoresTheClaimAlone(t *testing.T) {
 	root, loc := attentionRoot(t)
-	t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, "fleet/f3"))
+	t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, "fleet/f3"))
 	require.NoError(t, fileBlock(t, root, loc, blockedEvent("needs a decision")))
 
 	open := openRequests(t, root)
@@ -166,7 +166,7 @@ func TestFileAttentionStoresTheBindingAlone(t *testing.T) {
 func TestFileAttentionStoresTheBindingOverADifferentClaim(t *testing.T) {
 	root, loc := attentionRoot(t)
 	require.NoError(t, NewStore(loc).Bind(Caller{}, "fleet/bound"))
-	t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, "fleet/f3"))
+	t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, "fleet/f3"))
 	require.NoError(t, fileBlock(t, root, loc, blockedEvent("needs a decision")))
 
 	open := openRequests(t, root)
@@ -178,7 +178,7 @@ func TestFileAttentionStoresTheBindingOverADifferentClaim(t *testing.T) {
 // trail carries unredacted. internal/trail asserts the note that explains the drop.
 func TestFileAttentionDropsAnInvalidLease(t *testing.T) {
 	root, loc := attentionRoot(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=not a lease id")
 	require.NoError(t, fileBlock(t, root, loc, blockedEvent("needs a decision")))
 
 	open := openRequests(t, root)

@@ -3,8 +3,9 @@ package console
 import (
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,9 +15,9 @@ import (
 // transmits, so nothing about the run, not even its ref, leaves the machine.
 func TestLogViewerURL(t *testing.T) {
 	const base = "https://eli.gladman.cc/magus/logs/"
-	events := []journal.Event{
-		{Ts: 1, Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "build failed: boom"},
-		{Ts: 2, Kind: journal.KindResult, Status: journal.StatusFail, Ref: "outdeadbeef"},
+	events := []journal.Record{
+		journal.NewRecord(time.UnixMilli(1), "", journal.Output{Stream: journal.Stdout, Text: "build failed: boom"}),
+		journal.NewRecord(time.UnixMilli(2), "", journal.Run{Status: journal.StatusFail, Ref: "outdeadbeef"}),
 	}
 	url, err := LogViewerURL(base, "outdeadbeef", events,
 		journal.Invocation{ID: "inv1", Command: journal.Command{Arguments: []string{"run", "build"}}}, "")

@@ -43,28 +43,27 @@ type config struct {
 	withSandbox bool
 }
 
-// Dirs is where each store lives. [New] places them under its dir as jobs/, sessions/
-// and the dir itself, whose activity/ the trail is read from; a field set here replaces
-// that one place.
+// Dirs is where each store lives. [New] places them under its dir as
+// jobs/, sessions/ and activity/; a field set here replaces that one place.
 type Dirs struct {
 	// Jobs holds jobs.jsonl and the logs beside it (see [job.Open]).
 	Jobs string
 	// Sessions holds one JSON Lines file per invocation (see [session.Open]).
 	Sessions string
-	// Trail is the directory whose activity/ holds the trail (see [trail.ReadRecent]).
-	Trail string
+	// Activity holds the activity log and its payloads (see [journal.Calls]).
+	Activity string
 }
 
 func layout(dir string, over Dirs) Dirs {
-	d := Dirs{Jobs: filepath.Join(dir, "jobs"), Sessions: filepath.Join(dir, "sessions"), Trail: dir}
+	d := Dirs{Jobs: filepath.Join(dir, "jobs"), Sessions: filepath.Join(dir, "sessions"), Activity: filepath.Join(dir, "activity")}
 	if over.Jobs != "" {
 		d.Jobs = over.Jobs
 	}
 	if over.Sessions != "" {
 		d.Sessions = over.Sessions
 	}
-	if over.Trail != "" {
-		d.Trail = over.Trail
+	if over.Activity != "" {
+		d.Activity = over.Activity
 	}
 	return d
 }

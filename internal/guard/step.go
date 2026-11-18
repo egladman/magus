@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -332,7 +332,7 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 
 // noStepRuleReason is the deny for a step only a workspace rule judges when
 // none answered, naming each side that failed.
-func noStepRuleReason(st step.Step, failures []trail.RuleFailure) string {
+func noStepRuleReason(st step.Step, failures []recorder.RuleFailure) string {
 	reason := fmt.Sprintf("magus workspace: no rule judged the %s step; only the %s rule for its kind judges it.", st.Kind, seamStep.member())
 	for _, f := range failures {
 		reason += fmt.Sprintf("\n  %s: %s", sideName(seamStep, f.Side), f.Error)

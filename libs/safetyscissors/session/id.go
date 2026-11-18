@@ -20,6 +20,9 @@ func (e *InvalidIDError) Error() string {
 // followed by letters, digits, hyphens and underscores.
 //
 // Minting an id is the caller's: the package keeps no process state to make one unique.
+//
+// journal.ValidInvocationID is a copy of this loop: it judges only invocation
+// ids, and this one also judges host session ids and fold kinds.
 func ValidFileID(id string) bool {
 	if id == "" || !isAlnum(id[0]) {
 		return false

@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -76,7 +76,7 @@ func PeerGuard(format rpcerr.Format, uid int, cred auth.Credential, next http.Ha
 			format.Write(w, r, peerRefused(fmt.Sprintf("this socket admits only processes running as uid %d; this connection's peer runs as uid %d", uid, p.uid)))
 			return
 		}
-		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), cred), job.EntryPointRPC)
+		ctx := recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), cred), job.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -98,7 +98,7 @@ func GrantGuard(format rpcerr.Format, needs map[string]auth.Need, next http.Hand
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		need := needOf(r)
-		if held := trail.CredentialFromContext(r.Context()).Grant; !held.Allows(need) {
+		if held := recorder.CredentialFromContext(r.Context()).Grant; !held.Allows(need) {
 			format.Write(w, r, grantBelow(need, held))
 			return
 		}

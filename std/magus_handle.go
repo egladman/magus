@@ -20,7 +20,7 @@ import (
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/trail"
+	"github.com/egladman/magus/types/feedback"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
@@ -55,9 +55,9 @@ func MagusHistoryOpen(ctx context.Context, opts types.HistoryMetricsOptions) (ty
 	return types.History(opts), nil
 }
 
-// MagusSessionOpen backs magus\session(opts): which session's trail a read
-// covers. The window is checked when it is read.
-func MagusSessionOpen(ctx context.Context, opts trail.ReadOptions) (types.Session, error) {
+// MagusSessionOpen backs magus\session(opts): which session's feedback a
+// read covers. The window is checked when it is read.
+func MagusSessionOpen(ctx context.Context, opts feedback.ReadOptions) (types.Session, error) {
 	if types.WorkspaceFromContext(ctx) == nil {
 		return types.Session{}, errorNoWorkspace("session")
 	}
@@ -432,20 +432,20 @@ func MagusHistoryTrend(ctx context.Context, h types.History) (types.Trend, error
 }
 
 // MagusSessionTrail answers Session.trail.
-// It reads this repository's trail store.
-func MagusSessionTrail(ctx context.Context, s types.Session) (trail.Trail, error) {
-	return MagusTrailRead(ctx, trail.ReadOptions(s))
+// It reads this repository's activity logs.
+func MagusSessionTrail(ctx context.Context, s types.Session) (feedback.Report, error) {
+	return MagusFeedbackRead(ctx, feedback.ReadOptions(s))
 }
 
 // MagusSessionMarks is Session.marks: every mark in the repository.
-func MagusSessionMarks(ctx context.Context, _ types.Session) ([]trail.Mark, error) {
-	return MagusTrailMarks(ctx)
+func MagusSessionMarks(ctx context.Context, _ types.Session) ([]feedback.Mark, error) {
+	return MagusFeedbackMarks(ctx)
 }
 
 // MagusSessionMark answers Session.mark.
-// It reads this repository's trail store.
-func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any) (trail.Mark, error) {
-	return MagusTrailMark(ctx, mark)
+// It writes this repository's mark store.
+func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any) (feedback.Mark, error) {
+	return MagusFeedbackMark(ctx, mark)
 }
 
 // MagusWorkspaceJobs answers Workspace.jobs.

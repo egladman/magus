@@ -20,13 +20,13 @@ integration per host.
 magus does not lack an integration mechanism. It has five partial ones that do
 not compose, and no integrator can be pointed at a single thing.
 
-| producer           | schema                                              | transport                                       | consumer today  |
-| ------------------ | --------------------------------------------------- | ----------------------------------------------- | --------------- |
-| `internal/report`  | `{"schema":5,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`                  | CI post-process |
-| `internal/journal` | `{ts,inv,kind,stream,text,ref}` JSONL               | per-invocation file; loopback SSE with `--open` | browser viewer  |
-| `types.Event`      | `{api_version,outcome,severity,source,where}`       | `session notify`, attention store               | humans          |
-| `internal/trail`   | Kind + JSONL + blob refs                            | `/api/v1/activity` Connect                      | governance      |
-| daemon SSE         | graph seq, base64 proto Status, base64 OTLP         | `/api/v1/events`, bearer-gated                  | console PWA     |
+| producer          | schema                                              | transport                                       | consumer today  |
+| ----------------- | --------------------------------------------------- | ----------------------------------------------- | --------------- |
+| `internal/report` | `{"schema":5,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`                  | CI post-process |
+| the journal       | `{ts,inv,kind,stream,text,ref}` JSONL               | per-invocation file; loopback SSE with `--open` | browser viewer  |
+| `types.Event`     | `{api_version,outcome,severity,source,where}`       | `session notify`, attention store               | humans          |
+| the activity log  | Kind + JSONL + blob refs                            | `/api/v1/activity` Connect                      | governance      |
+| daemon SSE        | graph seq, base64 proto Status, base64 OTLP         | `/api/v1/events`, bearer-gated                  | console PWA     |
 
 An editor plugin can already reach targets (`-o json`), Buzz completion
 (`magus buzz lsp`), file changes (`magus watch`), and per-target results
@@ -77,8 +77,8 @@ above.
 | audience  | one agent host                  | any number of subscribers |
 
 The unification that is free and correct is at the VOCABULARY, not the
-mechanism: the guard already writes `KindAgentCommand` / `KindAgentSpawn` into
-the trail, and those become `guard.verdict` events on the stream. `session
+mechanism: the guard already writes `CallKindAgentCommand` / `CallKindAgentSpawn` into
+the activity log, and those become `guard.verdict` events on the stream. `session
 notify` becomes `attention.raised`. The inbound mechanism keeps its sealed reply
 channel and additionally broadcasts what it decided, so a status bar can show a
 denial live without anything being able to influence one.
@@ -86,7 +86,7 @@ denial live without anything being able to influence one.
 ## Transport: one contract, two transports, one front door
 
 ```text
-    types.StreamEvent  (one envelope, one taxonomy)
+    stream.Event  (one envelope, one taxonomy)
              |
        stdout JSONL
     magus events --follow
@@ -123,13 +123,13 @@ leaf with no dependency on the engine.
 | --------------- | ---------------------- | -------------------------------------- |
 | `run.started`   | journal `KindStarted`  | show a spinner, record lineage         |
 | `run.finished`  | journal `KindFinished` | clear the spinner, report the outcome  |
-| `target.result` | journal `KindResult`   | pass/fail/cached, with a fetchable ref |
+| `target.result` | journal `KindRun`      | pass/fail/cached, with a fetchable ref |
 | `target.output` | journal `KindOutput`   | live log tailing (opt-in; high volume) |
 
 `target.output` is the one high-volume type and is off unless asked for. An
 editor that subscribes to everything by default drowns.
 
-NOT SHIPPED, and deliberately absent from `StreamEventTypes()` rather than
+NOT SHIPPED, and deliberately absent from `stream.EventTypes()` rather than
 present and silent. Each has a store; none has an adapter. The cost column is
 what the review of this branch measured, not an estimate made while designing.
 
@@ -148,10 +148,11 @@ document went wrong.
 
 ## What a first implementation covers
 
-1. `types/events/events.go`: the envelope, the taxonomy, the per-type bodies.
-   This is the contract, and it is the deliverable that has to be right.
-2. `internal/eventstream`: the adapter mapping journal records onto
-   `StreamEvent`, plus the cross-process follower over the run-log directory.
+1. `libs/safetyscissors/journal/stream/event.go`: the envelope, the taxonomy,
+   the per-type bodies. This is the contract, and it is the deliverable that
+   has to be right.
+2. `libs/safetyscissors/journal/stream`: the mapping of journal records onto
+   `stream.Event`, plus the cross-process follower over the run-log directory.
    Journal is the ONLY producer adapted; the table above says what the others
    cost. The existing producers keep their on-disk schemas; nothing is rewritten.
 3. `magus events`: replay plus `--follow`, `--type`, `--limit`.

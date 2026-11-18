@@ -19,7 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -73,7 +73,7 @@ func TestForwardCarriesTheLease(t *testing.T) {
 	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=fleet/f3")
 
 	code, err := Forward(context.Background(), []string{"run", "build"}, "test", "")
 	require.NoError(t, err)
@@ -670,7 +670,7 @@ func TestSocketRoutes(t *testing.T) {
 		return
 	}
 	unmount, err := srv.Mount(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if trail.CredentialFromContext(r.Context()) != auth.CredentialSocketPeer() {
+		if recorder.CredentialFromContext(r.Context()) != auth.CredentialSocketPeer() {
 			w.WriteHeader(http.StatusTeapot)
 		}
 	}))

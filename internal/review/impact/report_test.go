@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,7 +60,7 @@ func fixture() Report {
 			Unreferenced:      []string{"signEd25519 (internal/cache/signing.go:40)"},
 			UnreferencedKnown: true,
 		},
-		Evidence: []trail.Consultation{
+		Evidence: []recorder.Consultation{
 			{Verb: "explain", Subject: "internal/cache", Count: 2},
 			{Verb: "refs", Subject: "m types/Secret#", Count: 1},
 		},

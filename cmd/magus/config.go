@@ -19,10 +19,10 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/scaffold"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -447,17 +447,17 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 		return "", auth.Token{}, err
 	}
 	operator := auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}
-	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
+	auditMint(action, recorder.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
 	// Revealed here because every caller prints it to stdout: that is the hand-out.
 	return secret.Reveal(), rec, nil
 }
 
 // auditMint records a CLI mint to the activity trail of the workspace the command runs in, and
 // says on stderr when there is no workspace to record it in.
-func auditMint(action string, rec trail.MintRecord) {
+func auditMint(action string, rec recorder.MintRecord) {
 	if root := resolveRootOrEmpty(""); root != "" {
 		if base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
-			trail.AppendMint(context.Background(), base, action, rec)
+			recorder.AppendMint(context.Background(), base, action, rec)
 			return
 		}
 	}
@@ -824,7 +824,7 @@ func configTokenGenerate(args []string) error {
 		return err
 	}
 	operator := auth.Credential{Kind: auth.KindOperator, ID: auth.SecretID(tok), Grant: auth.AccessOperator()}
-	auditMint("cli.generate", trail.MintRecord{Minted: operator, Minter: operator})
+	auditMint("cli.generate", recorder.MintRecord{Minted: operator, Minter: operator})
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
 	// terminal log that captures both.

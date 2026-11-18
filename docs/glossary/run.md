@@ -41,8 +41,8 @@ In the code (`magus refs <name>` lists every site):
 - `forecast.Run` (Go)
 - `queue.run` (Go)
 - `daemon.Run` (Go)
-- `events.Run` (Go)
 - `magus.run` (Go)
+- `rankeval.Run` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

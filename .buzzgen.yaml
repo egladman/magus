@@ -93,9 +93,6 @@ packages:
       Bounds: {config: {name: ModelTierBounds}}
       SkillVariant: {config: {zeroCase: ""}}
       Source: {config: {name: ModelTierSource, zeroCase: ""}}
-  github.com/egladman/magus/libs/safetyscissors/trail:
-    # Buzz keeps the namespace the types had in types/trail.
-    config: {module: magus/trail}
   github.com/egladman/magus/libs/safetyscissors/verdict:
     # Buzz keeps the names the types had in types.
     config: {module: ""}

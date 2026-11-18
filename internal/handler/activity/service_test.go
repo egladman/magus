@@ -17,9 +17,9 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
@@ -57,33 +57,33 @@ var consoleCred = jobtypes.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Nam
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
 	dir = t.TempDir()
-	respRef, _ = trail.WriteBlob(t.Context(), dir, "mcp", []byte("the result body"))
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 1, Kind: trailtypes.KindMCPToolCall, UserAgent: "claude-code/1.2.3",
+	response := recorder.WritePayload(t.Context(), dir, "mcp", []byte("the result body"))
+	respRef = response.Ref
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(1), Kind: journal.CallKindMCPTool, UserAgent: "claude-code/1.2.3",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointMCP, Host: "claude"},
-		Action: "client", Outcome: trailtypes.OutcomeOK,
-		ResponseRef: respRef, Preview: "the result body", DurationMs: 12,
+		Name:   "client", Outcome: journal.OutcomeOK,
+		Response: response, Preview: "the result body", Duration: 12 * time.Millisecond,
 	})
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 2, Kind: trailtypes.KindTokenLifecycle,
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(2), Kind: journal.CallKindTokenLifecycle,
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointRPC, Credential: consoleCred},
-		Action: "connector.create", Outcome: trailtypes.OutcomeOK,
+		Name:   "connector.create", Outcome: journal.OutcomeOK,
 	})
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 3, Kind: trailtypes.KindJob, Workspace: "/ws/a",
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(3), Kind: journal.CallKindJob, Workspace: "/ws/a",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
-		Action: "graph build", Outcome: trailtypes.OutcomeError, Error: "boom", DurationMs: 40,
+		Name:   "graph build", Outcome: journal.OutcomeError, Error: "boom", Duration: 40 * time.Millisecond,
 	})
 	agentReqBody := []byte(`{"api_version":"magus.agent-command/v1alpha1","tool":"Bash","command":"go test ./..."}`)
 	agentRespBody := []byte(`{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"use magus"}`)
-	agentReq, _ := trail.WriteBlob(t.Context(), dir, "agent", agentReqBody)
-	agentResp, _ := trail.WriteBlob(t.Context(), dir, "agent", agentRespBody)
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 4, Kind: trailtypes.KindAgentCommand, Workspace: "/ws/a",
+	request := recorder.WritePayload(t.Context(), dir, "agent", agentReqBody)
+	verdict := recorder.WritePayload(t.Context(), dir, "agent", agentRespBody)
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(4), Kind: journal.CallKindAgentCommand, Workspace: "/ws/a",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
 		Lease:  "fleet/a", LeaseFrom: jobtypes.LeaseSourceMarker,
-		Action: "Bash", Outcome: trailtypes.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
-		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
+		Name: "Bash", Outcome: journal.OutcomeOK, Request: request, Response: verdict, Preview: "guard: deny",
 	})
 	return dir, respRef
 }
@@ -99,7 +99,7 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	// newest first: an agent observation preserves its payload references and workspace.
 	assert.Equal(t, "Bash", events[0].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, events[0].GetKind())
-	user := trail.LocalOrigin(t.Context()).User
+	user := recorder.LocalOrigin(t.Context()).User
 	assert.Equal(t, jobtypes.Origin{User: user, Host: "codex", Agent: "a1"}.Label(), events[0].GetActor())
 	assert.Equal(t, user, events[0].GetUser(), "the OS account rides the wire on its own field")
 	assert.Equal(t, "hook", events[0].GetEntryPoint())
@@ -136,13 +136,13 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 }
 
 func TestEncodeHost_RecordedHostWinsAndMCPFallsBackToUserAgent(t *testing.T) {
-	assert.Equal(t, "codex", encodeHost(trailtypes.Event{Kind: trailtypes.KindAgentCommand, Origin: jobtypes.Origin{Host: "codex"}}))
-	assert.Equal(t, "claude-code/1.2.3", encodeHost(trailtypes.Event{Kind: trailtypes.KindMCPToolCall, UserAgent: "claude-code/1.2.3"}))
+	assert.Equal(t, "codex", encodeHost(journal.Call{Kind: journal.CallKindAgentCommand, Origin: jobtypes.Origin{Host: "codex"}}))
+	assert.Equal(t, "claude-code/1.2.3", encodeHost(journal.Call{Kind: journal.CallKindMCPTool, UserAgent: "claude-code/1.2.3"}))
 	// A recorded host is what its producer observed, so it wins over the header reading.
-	assert.Equal(t, "codex", encodeHost(trailtypes.Event{Kind: trailtypes.KindMCPToolCall, Origin: jobtypes.Origin{Host: "codex"}, UserAgent: "curl/8"}))
+	assert.Equal(t, "codex", encodeHost(journal.Call{Kind: journal.CallKindMCPTool, Origin: jobtypes.Origin{Host: "codex"}, UserAgent: "curl/8"}))
 	// Only an MCP call's User-Agent stands in for a host; no other kind borrows one.
-	assert.Empty(t, encodeHost(trailtypes.Event{Kind: trailtypes.KindJob, UserAgent: "curl/8"}))
-	assert.Empty(t, encodeHost(trailtypes.Event{Kind: trailtypes.KindAgentCommand}))
+	assert.Empty(t, encodeHost(journal.Call{Kind: journal.CallKindJob, UserAgent: "curl/8"}))
+	assert.Empty(t, encodeHost(journal.Call{Kind: journal.CallKindAgentCommand}))
 }
 
 func TestListActivityEvents_FilterByKind(t *testing.T) {
@@ -170,7 +170,7 @@ func TestListActivityEvents_FilterAgentCommand(t *testing.T) {
 // ledger without a GetPayload per row, and the handed context reachable only by its ref.
 func TestListActivityEvents_CarriesAgentSpawn(t *testing.T) {
 	dir := t.TempDir()
-	trail.AppendAgentSpawn(t.Context(), dir, trail.AgentSpawn{
+	recorder.AppendAgentSpawn(t.Context(), dir, recorder.AgentSpawn{
 		Workspace: "/ws/a", Host: "claude-code", Session: "abc", Tool: "Task", Child: "Explore",
 		Context: "lease: notes-store-6b\naudit the store",
 	})
@@ -232,7 +232,7 @@ func TestMatchFilter_ActorsActions(t *testing.T) {
 		assert.Equal(t, []string{"connector.create"},
 			actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{actor}})), actor)
 	}
-	user := trail.LocalOrigin(t.Context()).User
+	user := recorder.LocalOrigin(t.Context()).User
 	label := jobtypes.Origin{User: user, Credential: consoleCred}.Label()
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{label}}),
 		"a filter never matches the label's wording")
@@ -301,9 +301,9 @@ func seedAt(t *testing.T, ts ...int64) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, at := range ts {
-		trail.Append(t.Context(), dir, trailtypes.Event{
-			Ts: at, Kind: trailtypes.KindJob, Workspace: "/ws" + dir,
-			Action: fmt.Sprintf("job-%d", at), Outcome: trailtypes.OutcomeOK,
+		recorder.AppendCall(t.Context(), dir, journal.Call{
+			Time: time.UnixMilli(at), Kind: journal.CallKindJob, Workspace: "/ws" + dir,
+			Name: fmt.Sprintf("job-%d", at), Outcome: journal.OutcomeOK,
 		})
 	}
 	return dir
@@ -413,16 +413,16 @@ func TestGetPayload_FindsTheHoldingWorkspace(t *testing.T) {
 
 func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 	// Every known Kind maps to its wire value; an unknown string is UNSPECIFIED, not a panic.
-	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, encodeKind(trailtypes.KindMCPToolCall))
-	assert.Equal(t, activityv1.Kind_KIND_JOB, encodeKind(trailtypes.KindJob))
-	assert.Equal(t, activityv1.Kind_KIND_CONFIG_CHANGE, encodeKind(trailtypes.KindConfigChange))
-	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, encodeKind(trailtypes.KindTokenLifecycle))
-	assert.Equal(t, activityv1.Kind_KIND_SANDBOX_DENIAL, encodeKind(trailtypes.KindSandboxDenial))
-	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, encodeKind(trailtypes.KindAgentCommand))
+	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, encodeKind(journal.CallKindMCPTool))
+	assert.Equal(t, activityv1.Kind_KIND_JOB, encodeKind(journal.CallKindJob))
+	assert.Equal(t, activityv1.Kind_KIND_CONFIG_CHANGE, encodeKind(journal.CallKindConfigChange))
+	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, encodeKind(journal.CallKindTokenLifecycle))
+	assert.Equal(t, activityv1.Kind_KIND_SANDBOX_DENIAL, encodeKind(journal.CallKindSandboxDenial))
+	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, encodeKind(journal.CallKindAgentCommand))
 	assert.Equal(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind("who-knows"))
 
-	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, encodeOutcome(trailtypes.OutcomeOK))
-	assert.Equal(t, activityv1.Outcome_OUTCOME_ERROR, encodeOutcome(trailtypes.OutcomeError))
+	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, encodeOutcome(journal.OutcomeOK))
+	assert.Equal(t, activityv1.Outcome_OUTCOME_ERROR, encodeOutcome(journal.OutcomeError))
 	assert.Equal(t, activityv1.Outcome_OUTCOME_UNSPECIFIED, encodeOutcome(""))
 }
 
@@ -434,17 +434,17 @@ func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 //
 // Guards every kind, not just that one, so the next producer cannot repeat it.
 func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
-	for _, k := range []trailtypes.Kind{
-		trailtypes.KindMCPToolCall,
-		trailtypes.KindJob,
-		trailtypes.KindConfigChange,
-		trailtypes.KindTokenLifecycle,
-		trailtypes.KindSandboxDenial,
-		trailtypes.KindAgentCommand,
-		trailtypes.KindGrantIssued,
-		trailtypes.KindAgentSpawn,
-		trailtypes.KindNotes,
-		trailtypes.KindGuardPolicy,
+	for _, k := range []journal.CallKind{
+		journal.CallKindMCPTool,
+		journal.CallKindJob,
+		journal.CallKindConfigChange,
+		journal.CallKindTokenLifecycle,
+		journal.CallKindSandboxDenial,
+		journal.CallKindAgentCommand,
+		journal.CallKindCredentialGrant,
+		journal.CallKindAgentSpawn,
+		journal.CallKindNotes,
+		journal.CallKindGuardPolicy,
 	} {
 		assert.NotEqual(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind(k),
 			"trail kind %q has no proto value, so the activity view cannot show or filter it", k)
@@ -458,12 +458,12 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 func TestListActivityEvents_FiltersBeforeTruncating(t *testing.T) {
 	dir := t.TempDir()
 	// One matching event, then enough noise to bury it past any page.
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 1, Kind: trailtypes.KindSandboxDenial, Action: "the-denial", Outcome: trailtypes.OutcomeError,
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(1), Kind: journal.CallKindSandboxDenial, Name: "the-denial", Outcome: journal.OutcomeError,
 	})
 	for i := range 50 {
-		trail.Append(t.Context(), dir, trailtypes.Event{
-			Ts: int64(i + 2), Kind: trailtypes.KindJob, Action: "noise", Outcome: trailtypes.OutcomeOK,
+		recorder.AppendCall(t.Context(), dir, journal.Call{
+			Time: time.UnixMilli(int64(i + 2)), Kind: journal.CallKindJob, Name: "noise", Outcome: journal.OutcomeOK,
 		})
 	}
 
@@ -510,12 +510,12 @@ func TestListActivityEvents_PageTokenWalksTheTrail(t *testing.T) {
 func TestListActivityEvents_PageTokenOffsetsMatchesNotRows(t *testing.T) {
 	dir := t.TempDir()
 	for i := range 6 {
-		kind, action := trailtypes.KindJob, fmt.Sprintf("noise-%d", i)
+		kind, action := journal.CallKindJob, fmt.Sprintf("noise-%d", i)
 		if i%2 == 0 {
-			kind, action = trailtypes.KindSandboxDenial, fmt.Sprintf("denial-%d", i)
+			kind, action = journal.CallKindSandboxDenial, fmt.Sprintf("denial-%d", i)
 		}
-		trail.Append(t.Context(), dir, trailtypes.Event{
-			Ts: int64(i + 1), Kind: kind, Action: action, Outcome: trailtypes.OutcomeOK,
+		recorder.AppendCall(t.Context(), dir, journal.Call{
+			Time: time.UnixMilli(int64(i + 1)), Kind: kind, Name: action, Outcome: journal.OutcomeOK,
 		})
 	}
 	s := svc(dir)
@@ -572,14 +572,14 @@ func watchClient(t *testing.T, dir string, rows []jobtypes.Job, files chan job.F
 // as "nothing happened"), then what lands next as it lands.
 func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 	dir := t.TempDir()
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 10, Kind: trailtypes.KindAgentCommand, Action: "edit",
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(10), Kind: journal.CallKindAgentCommand, Name: "edit",
 		Lease: "pwa/job-watch", Origin: jobtypes.Origin{Session: "s1", Host: "claude-code"},
-		Outcome: trailtypes.OutcomeOK, Preview: "guard: deny",
+		Outcome: journal.OutcomeOK, Preview: "guard: deny",
 	})
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 11, Kind: trailtypes.KindAgentCommand, Action: "edit",
-		Lease: "pwa/elsewhere", Origin: jobtypes.Origin{Session: "s2"}, Outcome: trailtypes.OutcomeOK, Preview: "guard: pass",
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(11), Kind: journal.CallKindAgentCommand, Name: "edit",
+		Lease: "pwa/elsewhere", Origin: jobtypes.Origin{Session: "s2"}, Outcome: journal.OutcomeOK, Preview: "guard: pass",
 	})
 	rows := []jobtypes.Job{{
 		ID: "pwa/job-watch", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/trail"}},
@@ -608,7 +608,7 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 
 	// The file watcher's half: nothing here asked the worker anything, and the path alone
 	// named it.
-	files <- job.FeedEvent{Ts: 20, Kind: job.FeedFile, Job: "pwa/job-watch", WritePath: "internal/trail", Action: "internal/trail/trail.go", Outcome: trailtypes.OutcomeOK}
+	files <- job.FeedEvent{Ts: 20, Kind: job.FeedFile, Job: "pwa/job-watch", WritePath: "internal/trail", Action: "internal/trail/trail.go", Outcome: journal.OutcomeOK}
 	require.True(t, stream.Receive())
 	assert.Equal(t, activityv1.Kind_KIND_FILE_CHANGE, stream.Msg().GetKind())
 	assert.Equal(t, "internal/trail/trail.go", stream.Msg().GetAction())
@@ -626,9 +626,9 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 // terminal that asked for its backfill.
 func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	dir := t.TempDir()
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 1, Kind: trailtypes.KindAgentCommand,
-		Action: "already-here", Origin: jobtypes.Origin{Session: "s1"}, Outcome: trailtypes.OutcomeOK, Preview: "guard: pass",
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand,
+		Name: "already-here", Origin: jobtypes.Origin{Session: "s1"}, Outcome: journal.OutcomeOK, Preview: "guard: pass",
 	})
 	files := make(chan job.FeedEvent)
 	client := watchClient(t, dir, nil, files)
@@ -643,9 +643,9 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	require.True(t, stream.Receive())
 	assert.Equal(t, "already-here", stream.Msg().GetAction())
 
-	trail.Append(t.Context(), dir, trailtypes.Event{
-		Ts: 2, Kind: trailtypes.KindAgentCommand,
-		Action: "landed-while-watching", Origin: jobtypes.Origin{Session: "s1"}, Outcome: trailtypes.OutcomeOK, Preview: "guard: pass",
+	recorder.AppendCall(t.Context(), dir, journal.Call{
+		Time: time.UnixMilli(2), Kind: journal.CallKindAgentCommand,
+		Name: "landed-while-watching", Origin: jobtypes.Origin{Session: "s1"}, Outcome: journal.OutcomeOK, Preview: "guard: pass",
 	})
 	require.True(t, stream.Receive())
 	assert.Equal(t, "landed-while-watching", stream.Msg().GetAction())

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -22,7 +22,7 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 
 	primaryCache, err := ResolveCacheDir(primary)
 	require.NoError(t, err)
-	ref, _ := trail.WriteBlob(context.Background(), primaryCache, "grd", []byte("the full verdict"))
+	ref := recorder.WritePayload(context.Background(), primaryCache, "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, ref)
 
 	opened, err := Inspect(context.Background(), worktree, WithSpawnRule(tier.Ceiling))

@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -335,7 +335,7 @@ func TestTimeRuleLoadLapsesOnlyAFailurePastTheDeadline(t *testing.T) {
 	assert.False(t, phase.Lapsed)
 
 	_, unbounded, _ := TimeRuleLoad(t.Context(), load(failed))
-	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: unbounded.ElapsedMs}, unbounded)
+	assert.Equal(t, journal.Phase{Name: phaseLoadRules, ElapsedMs: unbounded.ElapsedMs}, unbounded)
 }
 
 // A phase that runs out answers the deadline's error and is recorded lapsed, and every
@@ -343,7 +343,7 @@ func TestTimeRuleLoadLapsesOnlyAFailurePastTheDeadline(t *testing.T) {
 // sees ctx's cancel, so a computed-once answer cannot be cached as cancelled.
 func TestBoundedPhaseLapsesOncePerJudgment(t *testing.T) {
 	waitForLapsedWork(t)
-	ctx, cancel := context.WithTimeout(withPhaseLog(t.Context(), trail.Phase{}), judgeReserve+50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(withPhaseLog(t.Context(), journal.Phase{}), judgeReserve+50*time.Millisecond)
 	defer cancel()
 	release := make(chan struct{})
 	defer close(release)
@@ -373,7 +373,7 @@ func TestBoundedPhaseLapsesOncePerJudgment(t *testing.T) {
 // A phase that answers in time is not lapsed, an error included: only a wait that ran out
 // lapses it.
 func TestBoundedPhaseAnswersInTime(t *testing.T) {
-	ctx := withPhaseLog(t.Context(), trail.Phase{})
+	ctx := withPhaseLog(t.Context(), journal.Phase{})
 	failed := errors.New("magusfile.buzz does not load")
 
 	got, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
@@ -429,14 +429,15 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 				assert.Equal(t, unjudgedNote(), v.Context)
 			}
 
-			rows := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			rows := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 			require.Len(t, rows, 1)
-			assert.Equal(t, c.tool, rows[0].Action)
-			require.NotEmpty(t, rows[0].Phases)
-			wantPhase := rows[0].Phases[0]
+			assert.Equal(t, c.tool, rows[0].Name)
+			require.NotNil(t, rows[0].Guard)
+			require.NotEmpty(t, rows[0].Guard.Phases)
+			wantPhase := rows[0].Guard.Phases[0]
 			wantPhase.Name, wantPhase.BudgetMs = phaseAnswer, hookBudget.Milliseconds()
-			assert.Equal(t, wantPhase, rows[0].Phases[0])
-			assert.True(t, rows[0].Phases[0].Lapsed)
+			assert.Equal(t, wantPhase, rows[0].Guard.Phases[0])
+			assert.True(t, rows[0].Guard.Phases[0].Lapsed)
 
 			entries, err := os.ReadDir(filepath.Join(cacheDir, unfinishedDir))
 			require.NoError(t, err)
@@ -479,7 +480,7 @@ func TestLapseWordingNamesTheBudget(t *testing.T) {
 func TestLapsedRuleLoadDeniesAWriteAndAdvisesARead(t *testing.T) {
 	deps := Dependencies{
 		LoadFailure: errors.New("magusfile: context deadline exceeded"),
-		RuleLoad:    trail.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
+		RuleLoad:    journal.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
 	}
 
 	ctx, _ := spawnFixture(t)
@@ -571,14 +572,14 @@ func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	assert.Equal(t, verdict.Defer, onTime.Decision)
 	assert.Equal(t, verdict.Deny, lapse().Decision, "an answer in time starts the count over")
 
-	rows := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	rows := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.NotEmpty(t, rows)
-	names := make([]string, len(rows[0].Phases))
-	for i, p := range rows[0].Phases {
+	names := make([]string, len(rows[0].Guard.Phases))
+	for i, p := range rows[0].Guard.Phases {
 		names[i] = p.Name
 	}
 	assert.Equal(t, []string{phaseLoadRules, phaseAnswer, phaseJudge}, names, "the lapse row names the phase underway")
-	assert.True(t, rows[0].Phases[0].Lapsed)
+	assert.True(t, rows[0].Guard.Phases[0].Lapsed)
 }
 
 // An uncounted lapse denies, as do the first lapsesBeforeDegrade; the next names the cause
@@ -803,7 +804,7 @@ func TestJudgeBudgetSuite(t *testing.T) {
 }
 
 func (s *JudgeBudgetSuite) inspectBudgetUnder(ctx context.Context) int64 {
-	ctx = withPhaseLog(ctx, trail.Phase{})
+	ctx = withPhaseLog(ctx, journal.Phase{})
 	_, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
 	s.Require().NoError(err)
 	phases := judgmentPhases(ctx).finished()
@@ -896,10 +897,10 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedReportsNoLapseOnAPass() {
 func (s *JudgeBudgetSuite) TestTrailNamesBuiltinRulesAndNotices() {
 	ctx, cacheDir := spawnFixture(s.T())
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-	rows := trailEvents(s.T(), cacheDir, trail.KindAgentCommand)
+	rows := callsOfKind(s.T(), cacheDir, journal.CallKindAgentCommand)
 	s.Require().NotEmpty(rows)
-	names := make([]string, len(rows[0].Phases))
-	for i, p := range rows[0].Phases {
+	names := make([]string, len(rows[0].Guard.Phases))
+	for i, p := range rows[0].Guard.Phases {
 		names[i] = p.Name
 	}
 	s.Contains(names, phaseBuiltinRules)
@@ -926,7 +927,7 @@ func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
 	v := lapseNow(ctx, s.T(), Dependencies{}, req, func(context.Context) {})
 
 	s.Equal(row.ID, v.Lease)
-	rows := trailEvents(s.T(), hookLocation(ctx, Dependencies{}).cacheDir, trail.KindAgentCommand)
+	rows := callsOfKind(s.T(), hookLocation(ctx, Dependencies{}).cacheDir, journal.CallKindAgentCommand)
 	s.Require().NotEmpty(rows)
 	s.Equal(row.ID, rows[len(rows)-1].Lease)
 }

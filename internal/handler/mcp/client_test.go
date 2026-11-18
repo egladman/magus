@@ -20,11 +20,10 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,7 +53,7 @@ func TestClientStandInProcess(t *testing.T) {
 		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling)); err != nil {
 			return ctx, err
 		}
-		return job.WithLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
+		return job.WithLease(types.WithWorkspace(ctx, ws), recorder.LeaseFromEnv()), nil
 	})
 	if ws != nil {
 		_ = ws.Close()
@@ -147,7 +146,7 @@ func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) 
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	srv := buildServer(Options{Magus: m, Logger: quietLogger(), Version: "test"}, quietLogger(), &mcpserver.Hooks{}, func(context.Context) origin.Client { return origin.Client{Name: "task-test"} })
-	ctx := trail.ContextWithCredential(context.Background(), auth.CredentialStdio())
+	ctx := recorder.ContextWithCredential(context.Background(), auth.CredentialStdio())
 	send := func(frame string) codec.RawMessage {
 		t.Helper()
 		raw, err := codec.Marshal(srv.HandleMessage(ctx, []byte(frame)))
@@ -197,10 +196,10 @@ func TestClientTaskIsCancellable(t *testing.T) {
 	send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"%s\"}}", id))
 
 	require.Eventually(t, func() bool {
-		events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
+		events, err := loggedCalls(t.Context(), m.CacheDir(), 10)
 		return err == nil && len(events) == 1
 	}, 20*time.Second, 50*time.Millisecond, "the cancelled call never returned")
-	events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
+	events, err := loggedCalls(t.Context(), m.CacheDir(), 10)
 	require.NoError(t, err)
 	assert.Contains(t, events[0].Preview, "client: script cancelled")
 }

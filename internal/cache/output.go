@@ -1,14 +1,11 @@
 package cache
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,9 +19,9 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -707,25 +704,6 @@ func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
 	return out, nil
 }
 
-// readEvents parses every JSONL line of path into events.
-func readEvents(path string) ([]journal.Event, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var events []journal.Event
-	for _, line := range bytes.Split(data, []byte{'\n'}) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var r journal.Event
-		if codec.Unmarshal(line, &r) == nil {
-			events = append(events, r)
-		}
-	}
-	return events, nil
-}
-
 // pruneKey keeps the keepLast newest executions in a cache-key directory and removes the
 // rest: each blob together with its .json descriptor. Newest is the order the step ref
 // resolves by (attemptBlobsNewestFirst), never file modtime, so the attempt a bare ref
@@ -924,109 +902,12 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 	return raw, meta, nil
 }
 
-// InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
-// id and rebuilds its header: the command lineage (subcommand/args/trigger), timing, and outcome.
-// It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it;
-// `magus query output <ref> --identity` and the viewer show this lineage. Reads off the cache
-// ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
-func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
-	_, events, err := s.InvocationEventsByID(inv)
-	if err != nil {
-		return journal.Invocation{}, err
-	}
-	return journal.InvocationFromEvents(inv, events), nil
-}
-
-// InvocationEventsByID reads one invocation's run log and returns its header alongside the
-// EVENTS it was reconstructed from. [OutputStore.InvocationByID] keeps only the header, which
-// is all a `--identity` line needs; this is for a caller that wants the stream itself.
-//
-// It exists because the events were being read and discarded: journal.KindSecret records
-// every credential a run reached for, and the docs offer that as the answer to "what did this
-// run touch", but nothing could read it back. Anything answering a question FROM the journal
-// starts here.
-//
-// inv must be a FULL invocation id: unlike an output ref there is no prefix resolution,
-// because a run log is addressed by exact filename. An id failing [LooksLikeInvocationID] is
-// refused before it is joined onto the runs dir: this is reachable from the server's Connect
-// API, where an unvalidated id reads any .jsonl on the machine. Returns fs.ErrNotExist when
-// the log has aged out under the RotateLogs cap.
-func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error) {
-	path, err := s.runLogPath(inv)
-	if err != nil {
-		return journal.Invocation{}, nil, err
-	}
-	events, err := readEvents(path)
-	if err != nil {
-		return journal.Invocation{}, nil, err
-	}
-	return journal.InvocationFromEvents(inv, events), events, nil
-}
-
-// InvocationEventsSince reads one invocation's journal starting at byte offset from and returns the
-// events on COMPLETE lines plus the offset just past the last one. It is the tailing counterpart to
-// [OutputStore.InvocationEventsByID], which reads the file whole.
-//
-// A journal is appended while its run is still going (journal.FileHandler flushes every kind but
-// output), so a follower resumes from where it stopped instead of re-reading megabytes it has
-// already delivered, which is what keeps watching a long build proportional to what arrived.
-// Stopping at the last newline is what makes a concurrent writer safe to read: a half-written line
-// is left for the next call rather than parsed as corruption.
-//
-// A file shorter than from means the id was reused after a cache clean, so the read restarts at
-// zero rather than seeking past the end and reporting nothing forever. Returns fs.ErrNotExist when
-// the log never existed, has aged out, or inv is not shaped like an invocation id.
-func (s *OutputStore) InvocationEventsSince(inv string, from int64) ([]journal.Event, int64, error) {
-	path, err := s.runLogPath(inv)
-	if err != nil {
-		return nil, from, err
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, from, err
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, from, err
-	}
-	if info.Size() < from {
-		from = 0
-	}
-	if info.Size() == from {
-		return nil, from, nil
-	}
-	chunk := make([]byte, info.Size()-from)
-	n, err := f.ReadAt(chunk, from)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, from, err
-	}
-	end := bytes.LastIndexByte(chunk[:n], '\n')
-	if end < 0 {
-		return nil, from, nil
-	}
-	var events []journal.Event
-	for _, line := range bytes.Split(chunk[:end], []byte{'\n'}) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var e journal.Event
-		if codec.Unmarshal(line, &e) == nil {
-			events = append(events, e)
-		}
-	}
-	return events, from + int64(end) + 1, nil
-}
-
 // RunLog summarizes one retained invocation journal: the row the console's run browser lists
 // so a reader can find a past run by the COMMAND that produced it rather than by a ref id
 // somebody printed on a terminal.
 //
-// It is deliberately not [journal.Invocation]: rebuilding one of those means reading a whole
-// stream, and a journal holds every output line the run captured, so listing 500 of them would
-// read hundreds of megabytes to show a list. Every field here comes off the two lifecycle
-// events that bracket the file (the first line and the last), which [OutputStore.ListRunLogs]
-// reads with bounded seeks.
+// Every field comes off journal.ReadInvocation, which reads the first line and
+// the last, so listing 500 journals reads no output lines.
 type RunLog struct {
 	Inv          string   `json:"inv"`
 	Arguments    []string `json:"arguments,omitempty"` // full argv, subcommand included
@@ -1038,23 +919,17 @@ type RunLog struct {
 	SizeBytes    int64    `json:"size_bytes,omitempty"`
 }
 
-// runTailWindow bounds the tail read ListRunLogs does per journal looking for the finished
-// event. The finished event is the last line, so any window past one line is slack for the
-// interrupted case; 64 KiB covers a long final output line without reading a large stream.
-const runTailWindow = 64 << 10
-
 // ListRunLogs returns the newest retained invocation journals, newest first by modtime, capped
 // at limit (limit <= 0 returns every retained one). It is the run browser's feed and the
 // invocation-addressed counterpart to [OutputStore.ListDescriptors], which lists stored OUTPUTS.
 //
 // Cost is bounded per journal, not per event: a head read for the started event and a tail read
 // for the finished one. A run killed before it finished has no finished event, so its Status is
-// empty and FinishedMs falls back to the last event the tail window holds: the same honest
-// degradation [journal.InvocationFromEvents] makes.
+// empty and FinishedMs falls back to its last record.
 //
 // Best-effort throughout: an unreadable dir, an unparsable line, or a journal whose head is not
 // a started event yields fewer rows, never an error.
-func (s *OutputStore) ListRunLogs(limit int) []RunLog {
+func (s *OutputStore) ListRunLogs(ctx context.Context, limit int) []RunLog {
 	files, err := os.ReadDir(s.runsDir())
 	if err != nil {
 		return nil
@@ -1082,98 +957,25 @@ func (s *OutputStore) ListRunLogs(limit int) []RunLog {
 	out := make([]RunLog, 0, len(entries))
 	for _, e := range entries {
 		r := RunLog{Inv: strings.TrimSuffix(e.name, runExt), SizeBytes: e.size}
-		path := filepath.Join(s.runsDir(), e.name)
-		if head, ok := readRunHead(path); ok {
-			r.StartedMs = head.Ts
-			r.MagusVersion = head.MagusVersion
-			if head.Command != nil {
-				r.Arguments = head.Command.Arguments
-				r.Trigger = head.Command.Trigger
-			}
-		}
-		if tail, ok := readRunTail(path, e.size); ok {
-			r.FinishedMs = tail.Ts
-			if tail.Kind == journal.KindFinished {
-				r.Status = tail.Status
-			}
+		inv, err := journal.ReadInvocation(ctx, s.runsDir(), r.Inv)
+		if err == nil {
+			r.StartedMs = unixMilli(inv.Started)
+			r.MagusVersion = inv.Version
+			r.Arguments = inv.Command.Arguments
+			r.Trigger = string(inv.Command.Trigger)
+			r.FinishedMs = unixMilli(inv.Finished)
+			r.Status = string(inv.Status)
 		}
 		out = append(out, r)
 	}
 	return out
 }
 
-// readRunHead reads a journal's first line and returns it when it is the started event: the
-// only event carrying the run's command lineage and magus version.
-func readRunHead(path string) (journal.Event, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return journal.Event{}, false
+func unixMilli(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
 	}
-	defer f.Close()
-	line, err := bufio.NewReader(io.LimitReader(f, runTailWindow)).ReadBytes('\n')
-	if err != nil && len(line) == 0 {
-		return journal.Event{}, false
-	}
-	var ev journal.Event
-	if codec.Unmarshal(bytes.TrimSpace(line), &ev) != nil || ev.Kind != journal.KindStarted {
-		return journal.Event{}, false
-	}
-	return ev, true
-}
-
-// readRunTail reads the last complete event in a journal's final runTailWindow bytes. It is the
-// finished event on a run that ended; on an interrupted one it is whatever the run got to, which
-// still dates the run even though its outcome is unknown.
-func readRunTail(path string, size int64) (journal.Event, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return journal.Event{}, false
-	}
-	defer f.Close()
-	off := max(size-runTailWindow, 0)
-	if _, err := f.Seek(off, io.SeekStart); err != nil {
-		return journal.Event{}, false
-	}
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return journal.Event{}, false
-	}
-	lines := bytes.Split(data, []byte{'\n'})
-	// A window that starts mid-file almost certainly opens mid-line; that partial first line is
-	// never the one wanted, and scanning backwards reaches the wanted line before it anyway.
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := bytes.TrimSpace(lines[i])
-		if len(line) == 0 {
-			continue
-		}
-		var ev journal.Event
-		if codec.Unmarshal(line, &ev) == nil && ev.Kind != "" {
-			return ev, true
-		}
-	}
-	return journal.Event{}, false
-}
-
-// invPattern matches a full invocation id: the literal "inv" then the base-36 timestamp and
-// sequence NewInvocationID mints. Used only to recognize one a user pasted, so `magus query`
-// can route it instead of handing it to the graph grammar, which finds nothing and says so in
-// a way that reads like the run does not exist.
-var invPattern = regexp.MustCompile("^inv[0-9a-z]+$")
-
-// LooksLikeInvocationID reports whether s is shaped like an invocation id. The counterpart to
-// [LooksLikeRef], and deliberately only a recognizer: retrieval stays an explicit subcommand.
-func LooksLikeInvocationID(s string) bool { return invPattern.MatchString(s) }
-
-// runLogPath resolves one invocation's journal path, refusing an id that is not shaped like one.
-// The shape check is what keeps the join inside RunsDir: the id reaches here straight off a
-// Connect request, so anything else would let "inv/../../../etc/hosts" name any file on disk.
-// A rejected id wraps fs.ErrNotExist, so a caller that already treats an aged-out log as absent
-// needs no new branch.
-func (s *OutputStore) runLogPath(inv string) (string, error) {
-	if !LooksLikeInvocationID(inv) {
-		return "", fmt.Errorf("magus/cache: %q is not an invocation id: %w", inv, fs.ErrNotExist)
-	}
-	return filepath.Join(s.cacheDir, RunsDir, inv+runExt), nil
+	return t.UnixMilli()
 }
 
 // refPattern matches a full ref id or a hex prefix of one: the literal "out" then

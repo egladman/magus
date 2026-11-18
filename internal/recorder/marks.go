@@ -1,0 +1,121 @@
+package recorder
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/types/feedback"
+	"github.com/egladman/magus/vcs"
+)
+
+const marksFile = "marks.jsonl"
+
+// maxMarkExamples bounds the commands a mark keeps; the backlog shows a few, and a mark is
+// a person's verdict rather than a copy of the trail.
+const maxMarkExamples = 3
+
+// feedbackID is the shape of a row id: "fb" and twelve hex digits of the digest the
+// report computes over a row's section and key.
+var feedbackID = regexp.MustCompile(`^fb[0-9a-f]{12}$`)
+
+// marksDir is root's mark store, <XDG state>/magus/feedback/<repo>-<hash12>.
+// It keys on repository identity, so every worktree reads one store.
+func marksDir(root string) (string, error) {
+	base, err := xdg.StateDir()
+	if err == nil {
+		return vcs.StateDir(base, "feedback", root)
+	}
+	return "", fmt.Errorf("recorder: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
+}
+
+// AppendFeedbackMark validates m, stamps its time, and appends it to the
+// mark store of root's repository. It returns its error: a person who asked
+// to record a verdict must learn that it was not recorded.
+func AppendFeedbackMark(root string, m feedback.Mark, now time.Time) (feedback.Mark, error) {
+	dir, err := marksDir(root)
+	if err != nil {
+		return m, err
+	}
+	return appendMark(dir, m, now)
+}
+
+// ReadFeedbackMarks returns every mark in the store of root's repository,
+// oldest first, by readMarks' rules.
+func ReadFeedbackMarks(ctx context.Context, root string) ([]feedback.Mark, error) {
+	dir, err := marksDir(root)
+	if err != nil {
+		return nil, err
+	}
+	return readMarks(ctx, dir)
+}
+
+// appendMark appends m to the store at dir. Marks are never rewritten: a
+// later mark on an id supersedes an earlier one, and the cross-session fold
+// counts the history.
+func appendMark(dir string, m feedback.Mark, now time.Time) (feedback.Mark, error) {
+	if !feedbackID.MatchString(m.ID) {
+		return m, fmt.Errorf("feedback mark id %q is not a row id (fb and 12 hex digits)", m.ID)
+	}
+	if err := m.Section.Validate(); err != nil {
+		return m, err
+	}
+	if err := m.Verdict.Validate(); err != nil {
+		return m, err
+	}
+	if strings.TrimSpace(m.Key) == "" {
+		return m, errors.New("feedback mark has no key: name the rule or shape the row groups by")
+	}
+	if len(m.Examples) > maxMarkExamples {
+		m.Examples = m.Examples[:maxMarkExamples]
+	}
+	m.At = now.UnixMilli()
+	line, err := codec.Marshal(m)
+	if err != nil {
+		return m, err
+	}
+	if err := codec.AppendLines(filepath.Join(dir, marksFile), [][]byte{line}, 0o644, codec.WithoutSync()); err != nil {
+		return m, fmt.Errorf("recorder: %w", err)
+	}
+	return m, nil
+}
+
+// readMarks returns every mark in the store at dir, oldest first. A store
+// nobody wrote holds none. A line that does not decode is an error: a
+// dropped verdict reads as one the person never gave.
+func readMarks(ctx context.Context, dir string) ([]feedback.Mark, error) {
+	path := filepath.Join(dir, marksFile)
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	var out []feedback.Mark
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for n := 1; sc.Scan(); n++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if len(sc.Bytes()) == 0 {
+			continue
+		}
+		var m feedback.Mark
+		if err := codec.Unmarshal(sc.Bytes(), &m); err != nil {
+			return nil, fmt.Errorf("recorder: %s:%d: %w", path, n, err)
+		}
+		out = append(out, m)
+	}
+	return out, sc.Err()
+}

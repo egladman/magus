@@ -3,7 +3,7 @@ package broker
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/stretchr/testify/suite"
 )
@@ -38,7 +38,7 @@ func (s *AttributionSuite) grant(c *Client, claim budget.Claim) string {
 }
 
 func (s *AttributionSuite) TestWithLeaseOutranksBaggage() {
-	s.T().Setenv(trail.EnvBaggage, "magus.lease=from-baggage")
+	s.T().Setenv(recorder.EnvBaggage, "magus.lease=from-baggage")
 	s.Equal("from-baggage", NewClient(s.addr).hello.Lease)
 	s.Equal("from-marker", NewClient(s.addr, WithLease("from-marker")).hello.Lease)
 }

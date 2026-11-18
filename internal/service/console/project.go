@@ -2,9 +2,10 @@ package console
 
 import (
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // StitchDisplayEvents assembles a display journal for the viewer: the verbatim output blob split
@@ -14,37 +15,32 @@ import (
 // the run's timestamp and the result shares it: a render aid, never a source of truth. The
 // verbatim blob (cache.OutputStore.ByRef) stays the source of truth; these events exist only so
 // the handler can map them onto the wire proto the viewer renders.
-func StitchDisplayEvents(output []byte, d cache.OutputDescriptor) []journal.Event {
-	events := splitOutputLines(output)
-	for i := range events {
-		events[i].Project = d.Project
-		events[i].Target = d.Target
-		events[i].Inv = d.Inv
-		events[i].Ts = d.TimestampMs
+func StitchDisplayEvents(output []byte, d cache.OutputDescriptor) []journal.Record {
+	var at time.Time
+	if d.TimestampMs != 0 {
+		at = time.UnixMilli(d.TimestampMs)
+	}
+	var records []journal.Record
+	for _, line := range splitOutputLines(output) {
+		records = append(records, journal.NewRecord(at, d.Inv, journal.Output{
+			Project: d.Project, Target: d.Target, Stream: journal.Stdout, Text: line,
+		}))
 	}
 	status := journal.StatusPass
 	if d.Failed {
 		status = journal.StatusFail
 	}
-	return append(events, journal.Event{
-		Kind: journal.KindResult, Project: d.Project, Target: d.Target,
-		Status: status, Ref: d.Ref, Inv: d.Inv, DurationMs: d.DurationMs,
-		Ts: d.TimestampMs, Text: d.ErrMsg,
-	})
+	return append(records, journal.NewRecord(at, d.Inv, journal.Run{
+		Project: d.Project, Target: d.Target, Status: status, Ref: d.Ref,
+		Duration: time.Duration(d.DurationMs) * time.Millisecond, Error: d.ErrMsg,
+	}))
 }
 
-// splitOutputLines splits a verbatim output blob into one stdout event per line (newline
-// stripped). It is the display-only inverse of the store's verbatim write: the per-line
-// stdout/stderr split and timestamps the live capture had are gone, so this is a rendering aid,
-// never a source of truth. Empty input yields no events.
-func splitOutputLines(output []byte) []journal.Event {
+// splitOutputLines splits a verbatim output blob into its lines, newline
+// stripped: a rendering aid, never a source of truth. Empty input yields none.
+func splitOutputLines(output []byte) []string {
 	if len(output) == 0 {
 		return nil
 	}
-	text := strings.TrimSuffix(string(output), "\n")
-	var evs []journal.Event
-	for _, line := range strings.Split(text, "\n") {
-		evs = append(evs, journal.Event{Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: line})
-	}
-	return evs
+	return strings.Split(strings.TrimSuffix(string(output), "\n"), "\n")
 }

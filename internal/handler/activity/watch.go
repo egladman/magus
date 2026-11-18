@@ -10,7 +10,7 @@ import (
 
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 )
 
@@ -125,7 +125,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 // runs recorded against every job, time-ordered together. File changes contribute nothing
 // here on purpose, because nothing records them: the watcher reports a change as it
 // happens and keeps no log, so a backfilled file event would have to be invented.
-func (s *Service) history(past []trail.Event, filter *activityv1.ActivityQuery) []*activityv1.ActivityEvent {
+func (s *Service) history(past []journal.Call, filter *activityv1.ActivityQuery) []*activityv1.ActivityEvent {
 	out := make([]*activityv1.ActivityEvent, 0, len(past))
 	for _, e := range past {
 		if matchFilter(e, filter) {
@@ -231,9 +231,9 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 // fromWire is the narrow slice of a wire event matchFilter reads, so one filter serves both
 // the recorded events and the synthesized ones. Only the fields the filter looks at are
 // carried: this exists to answer a predicate, not to round-trip an event.
-func fromWire(e *activityv1.ActivityEvent) trail.Event {
-	return trail.Event{
-		Ts: e.GetTime().AsTime().UnixMilli(),
+func fromWire(e *activityv1.ActivityEvent) journal.Call {
+	return journal.Call{
+		Time: e.GetTime().AsTime(),
 		Origin: job.Origin{
 			User: e.GetUser(), EntryPoint: job.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
 			Session: e.GetSession(), Agent: e.GetAgent(),
@@ -244,28 +244,28 @@ func fromWire(e *activityv1.ActivityEvent) trail.Event {
 				Name: e.GetCredential().GetName(),
 			},
 		},
-		Action: e.GetAction(),
-		Lease:  e.GetUnit(),
-		Kind:   decodeKind(e.GetKind()),
+		Name:  e.GetAction(),
+		Lease: e.GetUnit(),
+		Kind:  decodeKind(e.GetKind()),
 	}
 }
 
 // decodeKind maps back the two kinds this package synthesizes. The rest never round-trip:
-// a recorded event is filtered as the trail.Event it already is.
-func decodeKind(k activityv1.Kind) trail.Kind {
+// a recorded call is filtered as the journal.Call it already is.
+func decodeKind(k activityv1.Kind) journal.CallKind {
 	switch k {
 	case activityv1.Kind_KIND_FILE_CHANGE:
-		return trail.Kind(kindFileChange)
+		return journal.CallKind(kindFileChange)
 	case activityv1.Kind_KIND_RUN:
-		return trail.Kind(kindRun)
+		return journal.CallKind(kindRun)
 	default:
 		return ""
 	}
 }
 
-// The two synthesized kinds' store spellings. They are NOT trail.Kind constants: nothing
-// writes either of them to a trail, and adding them there would claim the store records
-// something it does not.
+// The two synthesized kinds' store spellings. They are not CallKind
+// constants: nothing writes either to the log, and a constant there would
+// claim the store records something it does not.
 const (
 	kindFileChange = "file_change"
 	kindRun        = "run"

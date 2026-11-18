@@ -26,8 +26,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 )
 
 const defaultIdleTTL = 6 * time.Hour
@@ -474,11 +474,11 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, args []string) e
 	defer r.release(e) // hold the lease for the whole build
 	ctx = interactive.WithHints(r.run.WithMagus(ctx, e.m))
 	if proc.IsJob(ctx) {
-		return r.run.Job(trail.ContextWithEntryPoint(ctx, job.EntryPointServer), root, args)
+		return r.run.Job(recorder.ContextWithEntryPoint(ctx, job.EntryPointServer), root, args)
 	}
 	noticeRunLease(ctx, e.lease, job.LeaseFromContext(ctx))
 	// An adopted run is a CLI invocation the server executes on the client's behalf.
-	return r.run.Adopted(trail.ContextWithEntryPoint(ctx, job.EntryPointCLI), root, args)
+	return r.run.Adopted(recorder.ContextWithEntryPoint(ctx, job.EntryPointCLI), root, args)
 }
 
 // rebind drops root's idle workspace when the lease its checkout binds moved since it

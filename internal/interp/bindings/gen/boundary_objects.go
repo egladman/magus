@@ -15,10 +15,10 @@ import (
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
+	"github.com/egladman/magus/types/feedback"
 	imagetypes "github.com/egladman/magus/types/image"
 	impacttypes "github.com/egladman/magus/types/impact"
 	releasetypes "github.com/egladman/magus/types/release"
-	"github.com/egladman/magus/types/trail"
 	vcstypes "github.com/egladman/magus/types/vcs"
 	"time"
 )
@@ -3104,7 +3104,7 @@ func ObjectJobRegistration(v types.JobRegistration, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectTrailObservation(v trail.Observation) vm.Value {
+func ObjectFeedbackObservation(v feedback.Observation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StringValue(v.Agent))
@@ -3129,7 +3129,7 @@ func ObjectTrailObservation(v trail.Observation) vm.Value {
 	return out
 }
 
-func ObjectTrailSpawn(v trail.Spawn) vm.Value {
+func ObjectFeedbackSpawn(v feedback.Spawn) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StringValue(v.Agent))
@@ -3139,7 +3139,7 @@ func ObjectTrailSpawn(v trail.Spawn) vm.Value {
 	return out
 }
 
-func ObjectTrail(v trail.Trail) vm.Value {
+func ObjectFeedbackReport(v feedback.Report) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("host", vm.StringValue(v.Host))
@@ -3152,24 +3152,24 @@ func ObjectTrail(v trail.Trail) vm.Value {
 	out.MapSet("checkouts", vm.ListValue(itemsCheckouts))
 	itemsObservations := make([]vm.Value, len(v.Observations))
 	for indexObservations := range v.Observations {
-		itemsObservations[indexObservations] = ObjectTrailObservation(v.Observations[indexObservations])
+		itemsObservations[indexObservations] = ObjectFeedbackObservation(v.Observations[indexObservations])
 	}
 	out.MapSet("observations", vm.ListValue(itemsObservations))
 	itemsSpawns := make([]vm.Value, len(v.Spawns))
 	for indexSpawns := range v.Spawns {
-		itemsSpawns[indexSpawns] = ObjectTrailSpawn(v.Spawns[indexSpawns])
+		itemsSpawns[indexSpawns] = ObjectFeedbackSpawn(v.Spawns[indexSpawns])
 	}
 	out.MapSet("spawns", vm.ListValue(itemsSpawns))
 	return out
 }
 
-func ObjectTrailMark(v trail.Mark, enums ffi.EnumCases) vm.Value {
+func ObjectFeedbackMark(v feedback.Mark, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
-	out.MapSet("section", enums.Case("magus\\trail\\Section", string(v.Section)))
+	out.MapSet("section", enums.Case("magus\\feedback\\Section", string(v.Section)))
 	out.MapSet("key", vm.StringValue(v.Key))
 	out.MapSet("rule", vm.StringValue(v.Rule))
-	out.MapSet("verdict", enums.Case("magus\\trail\\Verdict", string(v.Verdict)))
+	out.MapSet("verdict", enums.Case("magus\\feedback\\Verdict", string(v.Verdict)))
 	out.MapSet("note", vm.StringValue(v.Note))
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("at", vm.IntValue(int64(v.At)))
@@ -6631,7 +6631,7 @@ func ObjectMagusSubcommand(v types.MagusSubcommand) vm.Value {
 	return out
 }
 
-func ObjectTrailReadOptions(v trail.ReadOptions) vm.Value {
+func ObjectFeedbackReadOptions(v feedback.ReadOptions) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("since", vm.StringValue(v.Since))

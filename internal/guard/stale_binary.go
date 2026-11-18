@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -528,7 +528,7 @@ func withoutLeaseExport(command string, d Dialect) string {
 // onlyBaggageAssigns reports assignments setting nothing but the lease claim.
 func onlyBaggageAssigns(assigns []*syntax.Assign) bool {
 	return !slices.ContainsFunc(assigns, func(a *syntax.Assign) bool {
-		return a.Name == nil || a.Name.Value != trail.EnvBaggage
+		return a.Name == nil || a.Name.Value != recorder.EnvBaggage
 	})
 }
 

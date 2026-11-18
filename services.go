@@ -12,10 +12,10 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -45,7 +45,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 		return nil, nil
 	}
 	if m.broker == nil {
-		lease, _ := job.ActingLease(m.jobPlace(), trail.LeaseFromEnv())
+		lease, _ := job.ActingLease(m.jobPlace(), recorder.LeaseFromEnv())
 		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(m.commandLine, m.version), broker.WithLease(lease))
 		m.ownsBroker = true
 	}

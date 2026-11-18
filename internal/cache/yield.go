@@ -2,7 +2,6 @@ package cache
 
 import (
 	"bufio"
-	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -216,10 +215,6 @@ func scanJournal(path string, only map[string]bool, fn func(journalRecord)) erro
 			Text       string `json:"text"`
 			CacheKey   string `json:"cache_key"`
 			DurationMs int64  `json:"duration_ms"`
-			// compat: see journal.Event.UnmarshalJSON. This scan decodes into a struct
-			// of its own rather than journal.Event, so it repeats the fallback rather
-			// than inheriting it.
-			LegacyDurationMs int64 `json:"dur_ms"`
 		}
 		if err := codec.Unmarshal(sc.Bytes(), &rec); err != nil || rec.Target == "" {
 			continue
@@ -233,7 +228,7 @@ func scanJournal(path string, only map[string]bool, fn func(journalRecord)) erro
 		fn(journalRecord{
 			project: rec.Project, target: rec.Target, kind: rec.Kind,
 			status: rec.Status, text: rec.Text, cacheKey: rec.CacheKey,
-			durationMs: cmp.Or(rec.DurationMs, rec.LegacyDurationMs),
+			durationMs: rec.DurationMs,
 		})
 	}
 	// A line over the buffer cap aborts the scan mid-file and otherwise looks like EOF.

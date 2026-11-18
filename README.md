@@ -220,7 +220,7 @@ Alongside the CLI, the daemon can drive a set of read-only browser apps. The [li
     <td align="center" width="33%"><img src="./assets/screenshots/console-logs.png" alt="Log Viewer"><br><b>Log Viewer</b><br><sub>Any run's captured output, streamed or replayed</sub></td>
   </tr>
   <tr>
-    <td align="center" width="33%"><img src="./assets/screenshots/console-activity.png" alt="Activity Trail"><br><b>Activity Trail</b><br><sub>What agents did, and when</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-activity.png" alt="Activity"><br><b>Activity</b><br><sub>What agents did, and when</sub></td>
     <td align="center" width="33%"><img src="./assets/screenshots/console-diff.png" alt="Diff"><br><b>Diff</b><br><sub>Review the working tree, paired with an agent</sub></td>
     <td align="center" width="33%"><img src="./assets/screenshots/console-dashboard-plan.png" alt="The dashboard's work plan"><br><b>Work plan</b><br><sub>Who holds which lease, and where two of them overlap (press <code>p</code>)</sub></td>
   </tr>
@@ -237,7 +237,7 @@ Alongside the CLI, the daemon can drive a set of read-only browser apps. The [li
 - [Dashboard](https://eli.gladman.cc/magus/console/dashboard/) shows live daemon health, the concurrency pool, running targets, cache activity, and the live lease plan.[^app-dashboard]
 - [Graph Explorer](https://eli.gladman.cc/magus/console/graph/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
 - [Log Viewer](https://eli.gladman.cc/magus/console/logs/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
-- [Activity Trail](https://eli.gladman.cc/magus/console/activity/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
+- [Activity](https://eli.gladman.cc/magus/console/activity/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
 - [Diff](https://eli.gladman.cc/magus/console/diff/) annotates the working tree's uncommitted changes (generated vs source, blast radius, coverage) and hosts the human half of a paired review.
 
 The hosted page talks only to the daemon on `127.0.0.1`/`[::1]`, or receives your graph inline through a URL fragment, and uploads nothing; the [Console reference](docs/reference/console.md#where-the-pages-come-from) covers where the pages come from and how to turn them off.

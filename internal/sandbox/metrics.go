@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
@@ -63,7 +63,7 @@ func recordCheck(ctx context.Context, access filesystem.Access, err error) {
 	if err != nil {
 		decision = "deny"
 	}
-	project, _, _ := journal.StepFromContext(ctx)
+	project, _, _ := recorder.StepFromContext(ctx)
 	rec.RecordSandboxCheck(ctx, access.String(), decision, project)
 }
 
@@ -76,7 +76,7 @@ func RecordEnvDropped(ctx context.Context, p *Policy, cmd string) {
 	if p == nil || len(p.EnvDropped) == 0 {
 		return
 	}
-	project, target, _ := journal.StepFromContext(ctx)
+	project, target, _ := recorder.StepFromContext(ctx)
 	if rec := metricsFromContext(ctx); rec != nil {
 		rec.RecordSandboxEnvDropped(ctx, project, int64(len(p.EnvDropped)))
 	}
@@ -126,7 +126,7 @@ func (w *withheldReads) firstReport(key string) bool {
 // to make, where a stripped child environment is a fact about every child. Once per
 // target and variable.
 func RecordEnvWithheld(ctx context.Context, p *Policy, name string) {
-	project, target, _ := journal.StepFromContext(ctx)
+	project, target, _ := recorder.StepFromContext(ctx)
 	if !p.withheld.firstReport(fmt.Sprintf("%s\x00%s\x00%s", project, target, name)) {
 		return
 	}

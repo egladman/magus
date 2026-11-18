@@ -21,15 +21,16 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/race"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -39,7 +40,7 @@ import (
 // failedResults wraps internalci.FailedResults so run.go keeps its unexported accessor.
 type failedResults struct{ internalci.FailedResults }
 
-func (c *failedResults) list() []journal.Event { return c.List() }
+func (c *failedResults) list() []journal.Run { return c.List() }
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
@@ -357,18 +358,18 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	defer stopLive()
 	// An adopted affected run (dispatched by the server) also feeds the server's live-run
 	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
-	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
+	sinks := append(liveSinks(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable session facts ride the same fan-out here as on the run path: one fact per
 	// target result, into the store every worktree of this repo shares. Without it
 	// `magus session` would show a repository where only `magus run` ever happened,
 	// and CI runs through this path.
-	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
+	sinks = withInvocationJournal(ctx, sinks, m.Root(), "affected", args)
 	failed := &failedResults{}
 	statuses := report.NewResultStatuses(target)
-	captureHandlers = append(captureHandlers, failed, statuses)
+	sinks = append(sinks, failed.Handle, statuses.Handle)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
-		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
-	}, version, captureHandlers...)
+		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: string(trigger),
+	}, version, sinkFuncs(sinks)...)
 	defer func() { endInvocation(err) }()
 
 	invCtx, readReturns := types.WithReturnCapture(invCtx)
@@ -388,7 +389,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		internalci.PrintFailedResults(os.Stdout, failed.list())
 	}
 	if opts.Format == outputText {
-		internalci.PrintRunRef(os.Stdout, journal.InvocationIDFromContext(invCtx))
+		internalci.PrintRunRef(os.Stdout, recorder.InvocationIDFromContext(invCtx))
 	}
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)

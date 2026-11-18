@@ -9,44 +9,81 @@ package viewer
 
 import (
 	"encoding/base64"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 )
 
-// eventToProto maps a captured journal.Event onto the wire message. The domain's string
-// enum values become their proto enum constants; the domain's `inv` is dropped here
-// because a Journal/stream is already scoped to one invocation. The started event's
-// command + version are carried through so a live stream (which has no Journal header)
-// still learns the run's identity from its first frame.
-func eventToProto(e journal.Event) *viewerv1.Event {
+// flat is a record's fields as the wire and the filter name them, whatever its
+// kind.
+type flat struct {
+	project, target, level, ref, text string
+	stream                            journal.OutputStream
+	status                            journal.Status
+	duration                          time.Duration
+}
+
+func flatten(r journal.Record) flat {
+	if b, ok := r.Finished(); ok {
+		return flat{status: b.Status}
+	}
+	if b, ok := r.Exec(); ok {
+		return flat{project: b.Project, target: b.Target, text: b.Command}
+	}
+	if b, ok := r.Output(); ok {
+		return flat{project: b.Project, target: b.Target, stream: b.Stream, text: b.Text}
+	}
+	if b, ok := r.Run(); ok {
+		return flat{project: b.Project, target: b.Target, level: b.Level, status: b.Status, ref: b.Ref, duration: b.Duration, text: b.Error}
+	}
+	if b, ok := r.Secret(); ok {
+		return flat{project: b.Project, target: b.Target, text: b.Text}
+	}
+	return flat{}
+}
+
+// eventToProto maps a record onto the wire message. inv is dropped: a Journal
+// or stream is scoped to one invocation. A started record carries its command
+// so a live stream learns the run's identity from its first frame.
+func eventToProto(r journal.Record) *viewerv1.Event {
+	f := flatten(r)
 	out := &viewerv1.Event{
-		Time:     tsFromMs(e.Ts),
-		Project:  e.Project,
-		Target:   e.Target,
-		Kind:     kindToProto(e.Kind),
-		Stream:   streamToProto(e.Stream),
-		Level:    e.Level,
-		Status:   statusToProto(e.Status),
-		Ref:      e.Ref,
-		Duration: durFromMs(e.DurationMs),
-		Text:     e.Text,
+		Time:     tsFromMs(unixMilli(r.Time)),
+		Project:  f.project,
+		Target:   f.target,
+		Kind:     kindToProto(r.Kind()),
+		Stream:   streamToProto(f.stream),
+		Level:    f.level,
+		Status:   statusToProto(f.status),
+		Ref:      f.ref,
+		Duration: durFromMs(f.duration.Milliseconds()),
+		Text:     f.text,
 	}
-	if e.Command != nil {
-		out.Command = commandToProto(*e.Command)
-		out.MagusVersion = e.MagusVersion
+	if started, ok := r.Started(); ok {
+		out.Command = commandToProto(started.Command)
+		out.MagusVersion = started.Version
 	}
-	for _, s := range e.Undeclared {
-		out.Undeclared = append(out.Undeclared, &viewerv1.UndeclaredSeed{
-			Project: s.Project,
-			Files:   s.Files,
-			Inputs:  s.Inputs,
-		})
+	if scope, ok := r.Scope(); ok {
+		for _, s := range scope.Undeclared {
+			out.Undeclared = append(out.Undeclared, &viewerv1.UndeclaredSeed{
+				Project: s.Project,
+				Files:   s.Files,
+				Inputs:  s.Inputs,
+			})
+		}
 	}
 	return out
+}
+
+func unixMilli(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 // invocationToProto maps the domain invocation metadata (command/lineage/timing) onto
@@ -59,9 +96,9 @@ func invocationToProto(inv journal.Invocation) *viewerv1.Invocation {
 		// and the shared Journal envelope reported every run as STATUS_UNSPECIFIED: a reader could
 		// not tell a passing run from one whose outcome was never recorded.
 		Status:       statusToProto(inv.Status),
-		StartTime:    tsFromMs(inv.StartedMs),
-		EndTime:      tsFromMs(inv.FinishedMs),
-		MagusVersion: inv.MagusVersion,
+		StartTime:    tsFromMs(unixMilli(inv.Started)),
+		EndTime:      tsFromMs(unixMilli(inv.Finished)),
+		MagusVersion: inv.Version,
 	}
 }
 
@@ -73,11 +110,11 @@ func commandToProto(c journal.Command) *viewerv1.Command {
 	}
 }
 
-// journalToProto builds a Journal from an invocation's header and its events.
-func journalToProto(inv journal.Invocation, events []journal.Event) *viewerv1.Journal {
-	out := &viewerv1.Journal{Invocation: invocationToProto(inv), Events: make([]*viewerv1.Event, 0, len(events))}
-	for _, e := range events {
-		out.Events = append(out.Events, eventToProto(e))
+// journalToProto builds a Journal from an invocation's header and its records.
+func journalToProto(inv journal.Invocation, records []journal.Record) *viewerv1.Journal {
+	out := &viewerv1.Journal{Invocation: invocationToProto(inv), Events: make([]*viewerv1.Event, 0, len(records))}
+	for _, r := range records {
+		out.Events = append(out.Events, eventToProto(r))
 	}
 	return out
 }
@@ -86,8 +123,8 @@ func journalToProto(inv journal.Invocation, events []journal.Event) *viewerv1.Jo
 // for a `#data=` URL fragment, the static delivery path. The generated JS client
 // reverses it (base64url -> gunzip -> Journal.fromBinary). Reuses the same fragment
 // encoder graph open uses, so the tool pages share one wire envelope.
-func EncodeJournalFragment(inv journal.Invocation, events []journal.Event) (string, error) {
-	raw, err := proto.Marshal(journalToProto(inv, events))
+func EncodeJournalFragment(inv journal.Invocation, records []journal.Record) (string, error) {
+	raw, err := proto.Marshal(journalToProto(inv, records))
 	if err != nil {
 		return "", err
 	}
@@ -97,15 +134,17 @@ func EncodeJournalFragment(inv journal.Invocation, events []journal.Event) (stri
 // EncodeEvent marshals one event to base64(protobuf) for an SSE `data:` line (SSE payloads
 // must be UTF-8 text, so the binary message is base64-wrapped). The JS client base64-
 // decodes then Event.fromBinary.
-func EncodeEvent(e journal.Event) (string, error) {
-	raw, err := proto.Marshal(eventToProto(e))
+func EncodeEvent(r journal.Record) (string, error) {
+	raw, err := proto.Marshal(eventToProto(r))
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
-func kindToProto(k string) viewerv1.Kind {
+// kindToProto is the one place that knows both vocabularies: KindRun is
+// KIND_RESULT on the wire. KIND_WARN has no producer and no case.
+func kindToProto(k journal.Kind) viewerv1.Kind {
 	switch k {
 	case journal.KindStarted:
 		return viewerv1.Kind_KIND_STARTED
@@ -115,12 +154,10 @@ func kindToProto(k string) viewerv1.Kind {
 		return viewerv1.Kind_KIND_EXEC
 	case journal.KindOutput:
 		return viewerv1.Kind_KIND_OUTPUT
-	case journal.KindResult:
+	case journal.KindRun:
 		return viewerv1.Kind_KIND_RESULT
 	case journal.KindScope:
 		return viewerv1.Kind_KIND_SCOPE
-	case journal.KindWarn:
-		return viewerv1.Kind_KIND_WARN
 	case journal.KindSecret:
 		return viewerv1.Kind_KIND_SECRET
 	default:
@@ -128,18 +165,18 @@ func kindToProto(k string) viewerv1.Kind {
 	}
 }
 
-func streamToProto(s string) viewerv1.Stream {
+func streamToProto(s journal.OutputStream) viewerv1.Stream {
 	switch s {
-	case journal.StreamStdout:
+	case journal.Stdout:
 		return viewerv1.Stream_STREAM_STDOUT
-	case journal.StreamStderr:
+	case journal.Stderr:
 		return viewerv1.Stream_STREAM_STDERR
 	default:
 		return viewerv1.Stream_STREAM_UNSPECIFIED
 	}
 }
 
-func statusToProto(s string) viewerv1.Status {
+func statusToProto(s journal.Status) viewerv1.Status {
 	switch s {
 	case journal.StatusPass:
 		return viewerv1.Status_STATUS_PASS
@@ -154,7 +191,7 @@ func statusToProto(s string) viewerv1.Status {
 	}
 }
 
-func triggerToProto(t string) viewerv1.Trigger {
+func triggerToProto(t journal.Trigger) viewerv1.Trigger {
 	switch t {
 	case journal.TriggerRun:
 		return viewerv1.Trigger_TRIGGER_RUN

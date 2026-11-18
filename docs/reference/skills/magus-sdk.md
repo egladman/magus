@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 14072
-skill_short_bytes: 10167
+skill_full_bytes: 14075
+skill_short_bytes: 10170
 ---
 
 # magus-sdk
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `138a5068510b` |
+| `skill-content` | `a651dd34fd8c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -95,7 +95,7 @@ does; an empty `dir` is an error, not the working directory.
 | `(*Magus).Run(ctx, targets, magus.WithSession(id))` | judges each target first; a deny is a `*types.GuardDeniedError` and nothing runs |
 | `WithEnv`, `WithStderr`, `WithCommandLine` | the process state a workspace reads; without each it reads no environment, discards notices, records an empty command line |
 | `WithVCSDriver`, `WithCacheBackend` (Open), `WithObserver` (Run) | the three swappable parts, one option each |
-| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
+| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusFeedbackRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
 The lease a call acts under rides `ctx` (`job.WithLease`). The SDK never retries,
 re-grades or routes around a refusal.
@@ -322,7 +322,7 @@ does; an empty `dir` is an error, not the working directory.
 | `(*Magus).Run(ctx, targets, magus.WithSession(id))` | judges each target first; a deny is a `*types.GuardDeniedError` and nothing runs |
 | `WithEnv`, `WithStderr`, `WithCommandLine` | the process state a workspace reads; without each it reads no environment, discards notices, records an empty command line |
 | `WithVCSDriver`, `WithCacheBackend` (Open), `WithObserver` (Run) | the three swappable parts, one option each |
-| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
+| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusFeedbackRead`, ... | the Buzz host modules' Go doors, with typed options (`job.Put`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
 
 The lease a call acts under rides `ctx` (`job.WithLease`). The SDK never retries,
 re-grades or routes around a refusal. It has no agent loop: it answers what a loop asks

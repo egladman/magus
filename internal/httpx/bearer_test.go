@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -191,14 +191,14 @@ func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 	named := func(presented string) (auth.Credential, bool) { return cred, presented == "good" }
 	var seen job.Origin
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = trail.StampOrigin(r.Context(), job.Origin{})
+		seen = recorder.StampOrigin(r.Context(), job.Origin{})
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
 	req.Header.Set("Authorization", "Bearer good")
 	built(BearerGuard(rpcerr.FormatJSON, named, anyNeed, next)).ServeHTTP(httptest.NewRecorder(), req)
 	assert.Equal(t, cred.Recorded(), seen.Credential)
 	assert.Equal(t, job.EntryPointRPC, seen.EntryPoint)
-	assert.Zero(t, trail.CredentialFromContext(t.Context()), "no guard, no credential")
+	assert.Zero(t, recorder.CredentialFromContext(t.Context()), "no guard, no credential")
 }
 
 // A guard built on a zero or invalid need would hold its route to nothing, so every

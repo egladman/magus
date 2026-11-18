@@ -22,8 +22,8 @@ import (
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/store/migrate"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -192,7 +192,7 @@ func TestStoreRoundTrip(t *testing.T) {
 			for i, w := range tt.want {
 				// Timestamps are the store's, not the fixture's;
 				// assert them separately and compare the declared facts here.
-				assert.Equal(t, trail.LocalOrigin(t.Context()), got[i].RegisteredBy, "the store records the OS account that created the row")
+				assert.Equal(t, recorder.LocalOrigin(t.Context()), got[i].RegisteredBy, "the store records the OS account that created the row")
 				w.Created, w.Updated, w.RegisteredBy = got[i].Created, got[i].Updated, got[i].RegisteredBy
 				require.Len(t, got[i].Releases, len(w.Releases))
 				for j := range w.Releases {
@@ -1270,7 +1270,7 @@ func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
 
 	holder, holderTrail := t.TempDir(), t.TempDir()
 	deny := func(base, rule string) {
-		trail.AppendAgentCommand(t.Context(), base, trail.AgentCommand{
+		recorder.AppendAgentCommand(t.Context(), base, recorder.AgentCommand{
 			Host: "claude-code", Session: "s1", Tool: "file.write", Path: "docs/x.md",
 			Decision: "deny", Reason: "docs/x.md is no lease's", Rule: rule, Lease: "a",
 		})
@@ -1294,7 +1294,7 @@ func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			loc := tempLocation(t, t.TempDir())
-			loc.TrailBase = tc.resolve
+			loc.ActivityBase = tc.resolve
 			deny(loc.CacheDir, "raw-tool")
 			s := NewStore(loc)
 			plant(t, s, ended)

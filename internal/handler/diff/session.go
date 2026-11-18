@@ -21,10 +21,10 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -605,7 +605,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		sess = h.Sessions.AddComment(h.Root, difftypes.Comment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
 			Anchor: h.Sessions.Anchor(h.Root, req.Path, req.Line),
-			Origin: trail.StampOrigin(r.Context(), job.Origin{}),
+			Origin: recorder.StampOrigin(r.Context(), job.Origin{}),
 		}, difftypes.AuthorUnattributed)
 		if h.Telemetry != nil {
 			h.Telemetry.RecordReviewRemark(r.Context(), string(difftypes.AuthorUnattributed))

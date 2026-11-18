@@ -69,8 +69,8 @@ Two subpackages mirror neither a proto package nor a route:
   runner or stores. The `buzz` tool forks a JSON transform worker, while other MCP
   tools own workspace access. See the
   [MCP boundary](../../docs/guides/integrations/mcp.md#the-boundary-and-the-fallback).
-- `internal/handler/trailrpc`: the audit interceptor for the Connect services, which
-  records mutating unary RPCs to the activity trail by construction.
+- `internal/handler/activityrpc`: the audit interceptor for the Connect services, which
+  records mutating unary RPCs to the activity log by construction.
 
 ## Naming a handler package against its domain twin
 

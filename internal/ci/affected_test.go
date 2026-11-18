@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/impact"
@@ -39,9 +39,9 @@ func TestPrintFailedResultsNamesEachFailureByRefOrCode(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	PrintFailedResults(&out, []journal.Event{
-		{Project: "libs/x", Target: "test", Ref: "out1a2b3c", Text: "go exited 1\n--- FAIL: TestX"},
-		{Project: ".", Target: "lint", DiagnosticCode: "MGS3009", Text: "not starting . lint"},
+	PrintFailedResults(&out, []journal.Run{
+		{Project: "libs/x", Target: "test", Ref: "out1a2b3c", Error: "go exited 1\n--- FAIL: TestX"},
+		{Project: ".", Target: "lint", DiagnosticCode: "MGS3009", Error: "not starting . lint"},
 	})
 	assert.Equal(t, "\nfailed: 2 targets; `magus query output <ref>` prints a whole log\n"+
 		"  out1a2b3c libs/x:test  go exited 1\n"+

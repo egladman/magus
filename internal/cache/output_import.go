@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // Output records read from stdin are untrusted: anyone can forge an artifact or a paste.
@@ -98,7 +99,7 @@ func checkImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	if d.Attempt != "" && !attemptIDPattern.MatchString(d.Attempt) {
 		return fmt.Errorf("attempt %q is not an attempt id", d.Attempt)
 	}
-	if d.Inv != "" && !LooksLikeInvocationID(d.Inv) {
+	if d.Inv != "" && !journal.ValidInvocationID(d.Inv) {
 		return fmt.Errorf("inv %q is not an invocation id", d.Inv)
 	}
 	if d.Revision != "" && !revisionPattern.MatchString(d.Revision) {

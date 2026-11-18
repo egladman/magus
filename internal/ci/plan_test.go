@@ -1,16 +1,18 @@
 package ci
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -25,41 +27,46 @@ func TestFailedResultsSuite(t *testing.T) { suite.Run(t, new(FailedResultsSuite)
 // verify passes of a ci run under rw.
 type FailedResultsSuite struct{ suite.Suite }
 
-func resultEvent(project, target, status string) journal.Event {
-	return journal.Event{Kind: journal.KindResult, Project: project, Target: target, Status: status}
+func resultEvent(project, target string, status journal.Status) journal.Run {
+	return journal.Run{Project: project, Target: target, Status: status}
+}
+
+// add hands c one result, as a run's sinks would.
+func add(c *FailedResults, run journal.Run) {
+	c.Handle(context.Background(), journal.NewRecord(time.Now(), "inv1", run))
 }
 
 func (s *FailedResultsSuite) TestClearedFailureIsNotPrinted() {
 	c := &FailedResults{}
-	c.add(resultEvent(".", "tidy", journal.StatusFail))
-	c.add(resultEvent("docs", "lint", journal.StatusFail))
-	c.add(resultEvent(".", "tidy", journal.StatusPass))
+	add(c, resultEvent(".", "tidy", journal.StatusFail))
+	add(c, resultEvent("docs", "lint", journal.StatusFail))
+	add(c, resultEvent(".", "tidy", journal.StatusPass))
 
-	s.Equal([]journal.Event{resultEvent("docs", "lint", journal.StatusFail)}, c.List())
+	s.Equal([]journal.Run{resultEvent("docs", "lint", journal.StatusFail)}, c.List())
 }
 
 func (s *FailedResultsSuite) TestCachedPassClearsAFailure() {
 	c := &FailedResults{}
-	c.add(resultEvent(".", "tidy", journal.StatusFail))
-	c.add(resultEvent(".", "tidy", journal.StatusCached))
+	add(c, resultEvent(".", "tidy", journal.StatusFail))
+	add(c, resultEvent(".", "tidy", journal.StatusCached))
 
 	s.Empty(c.List())
 }
 
 func (s *FailedResultsSuite) TestAFailureInEveryPassIsPrintedOnce() {
 	c := &FailedResults{}
-	c.add(resultEvent(".", "broken", journal.StatusFail))
-	c.add(resultEvent(".", "broken", journal.StatusFail))
+	add(c, resultEvent(".", "broken", journal.StatusFail))
+	add(c, resultEvent(".", "broken", journal.StatusFail))
 
-	s.Equal([]journal.Event{resultEvent(".", "broken", journal.StatusFail)}, c.List())
+	s.Equal([]journal.Run{resultEvent(".", "broken", journal.StatusFail)}, c.List())
 }
 
 func (s *FailedResultsSuite) TestFailureAfterAPassIsKept() {
 	c := &FailedResults{}
-	c.add(resultEvent(".", "tidy", journal.StatusPass))
-	c.add(resultEvent(".", "tidy", journal.StatusFail))
+	add(c, resultEvent(".", "tidy", journal.StatusPass))
+	add(c, resultEvent(".", "tidy", journal.StatusFail))
 
-	s.Equal([]journal.Event{resultEvent(".", "tidy", journal.StatusFail)}, c.List())
+	s.Equal([]journal.Run{resultEvent(".", "tidy", journal.StatusFail)}, c.List())
 }
 
 func TestReadAffectedPlanPaths(t *testing.T) {
@@ -238,9 +245,9 @@ func TestGateOutcomeSuite(t *testing.T) { suite.Run(t, new(GateOutcomeSuite)) }
 // was a capability this host lacks is unrun, naming each target, and still not a pass.
 type GateOutcomeSuite struct{ suite.Suite }
 
-func absent(project, target string) journal.Event {
-	return journal.Event{Project: project, Target: target, DiagnosticCode: string(types.ToolNotReady),
-		Text: "MGS3004 docker is installed but not ready\nCannot connect to the Docker daemon"}
+func absent(project, target string) journal.Run {
+	return journal.Run{Project: project, Target: target, DiagnosticCode: string(types.ToolNotReady),
+		Error: "MGS3004 docker is installed but not ready\nCannot connect to the Docker daemon"}
 }
 
 var errGate = errors.New("1 target failed")
@@ -252,7 +259,7 @@ func (s *GateOutcomeSuite) TestARunWithNoErrorPasses() {
 }
 
 func (s *GateOutcomeSuite) TestEveryFailureAnAbsentCapabilityNamesEachTarget() {
-	outcome, unrun := gateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), absent("images/web", "image-build")})
+	outcome, unrun := gateOutcome(errGate, []journal.Run{absent("images/magus", "image-build"), absent("images/web", "image-build")})
 	s.Equal(sessions.OutcomeUnrun, outcome)
 	s.Equal([]string{
 		"images/magus:image-build: MGS3004 docker is installed but not ready",
@@ -261,7 +268,7 @@ func (s *GateOutcomeSuite) TestEveryFailureAnAbsentCapabilityNamesEachTarget() {
 }
 
 func (s *GateOutcomeSuite) TestOneFailureOfTheCodeMakesTheGateFail() {
-	outcome, unrun := gateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), {Project: ".", Target: "go-test", Text: "FAIL"}})
+	outcome, unrun := gateOutcome(errGate, []journal.Run{absent("images/magus", "image-build"), {Project: ".", Target: "go-test", Error: "FAIL"}})
 	s.Equal(session.OutcomeFail, outcome)
 	s.Nil(unrun)
 }
@@ -277,8 +284,8 @@ func (s *GateOutcomeSuite) TestNoFailedTargetFails() {
 func (s *GateOutcomeSuite) TestFailedResultsKeepTheCodeTheOutcomeReads() {
 	c := &FailedResults{}
 	failure := absent(".", "ci")
-	failure.Kind, failure.Status = journal.KindResult, journal.StatusFail
-	journal.Emit(journal.WithLogger(s.T().Context(), journal.NewLogger(c)), failure)
+	failure.Status = journal.StatusFail
+	add(c, failure)
 
 	outcome, unrun := gateOutcome(errGate, c.List())
 	s.Equal(sessions.OutcomeUnrun, outcome)

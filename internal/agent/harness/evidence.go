@@ -10,9 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -32,7 +33,7 @@ type hookResponse struct {
 // record is one hook observation from the workspace's activity trail with both of its
 // blobs decoded.
 type record struct {
-	trail.Event
+	journal.Call
 	Request  hookRequest
 	Response hookResponse
 }
@@ -47,17 +48,20 @@ func (r record) subject() string {
 // events `magus agent harness verify` sends under the host's name) predate w.ready.
 func (w *workspace) records(t *testing.T) []record {
 	t.Helper()
-	events, err := trail.ReadRecent(w.cacheDir(), 100000)
-	if err != nil {
-		t.Fatalf("read the activity trail: %v", err)
+	var events []journal.Call
+	for c, err := range journal.Calls(t.Context(), recorder.CallsDir(w.cacheDir()), 100000) {
+		if err != nil {
+			t.Fatalf("read the activity log: %v", err)
+		}
+		events = append(events, c)
 	}
 	var out []record
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
-		if e.Host != w.host || e.Ts < w.ready || (e.Kind != trail.KindAgentCommand && e.Kind != trail.KindAgentSpawn) {
+		if e.Host != w.host || e.Time.UnixMilli() < w.ready || (e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindAgentSpawn) {
 			continue
 		}
-		out = append(out, record{Event: e, Request: readBlob[hookRequest](t, w, e.RequestRef), Response: readBlob[hookResponse](t, w, e.ResponseRef)})
+		out = append(out, record{Call: e, Request: readBlob[hookRequest](t, w, e.Request.Ref), Response: readBlob[hookResponse](t, w, e.Response.Ref)})
 	}
 	return out
 }
@@ -70,7 +74,7 @@ func readBlob[T any](t *testing.T, w *workspace, ref string) T {
 	if ref == "" {
 		return v
 	}
-	body, err := trail.ReadBlob(w.cacheDir(), ref)
+	body, err := journal.Payload{Ref: ref}.Read(recorder.CallsDir(w.cacheDir()))
 	if err != nil {
 		t.Logf("trail blob %s: %v", ref, err)
 		return v
@@ -94,7 +98,7 @@ func (w *workspace) dumpRecords(t *testing.T) {
 	t.Helper()
 	for _, r := range w.records(t) {
 		t.Logf("  %d %s %s tool=%q cmd=%q path=%q decision=%q lease=%q decided_by=%q",
-			r.Ts, r.Kind, r.Session, r.Request.Tool, clip(r.Request.Command), filepath.Base(r.Request.Path), r.Response.Decision, r.Lease, r.DecidedBy)
+			r.Time.UnixMilli(), r.Kind, r.Session, r.Request.Tool, clip(r.Request.Command), filepath.Base(r.Request.Path), r.Response.Decision, r.Lease, decidedBy(r.Call))
 	}
 }
 
@@ -198,6 +202,13 @@ func (w *workspace) askProbeRan(t *testing.T) bool {
 		}
 	}
 	return false
+}
+
+func decidedBy(c journal.Call) string {
+	if c.Guard == nil {
+		return ""
+	}
+	return c.Guard.DecidedBy
 }
 
 func clip(s string) string {

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/egladman/magus/types/daemon"
-	"log/slog"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // defaultRunRetention is how long a finished run lingers in the registry after its last
@@ -23,16 +23,11 @@ const defaultRunRetention = 10 * time.Second
 // been silent longer than this bound it is evicted regardless.
 const maxRunAge = 5 * time.Minute
 
-// RunRegistry is the server's live-run tap: a slog.Handler folded into every adopted run's
-// capture logger. It decodes the journal events a run emits (started/scope/exec/result/
-// finished) and maintains, per invocation, the per-target execution state a dashboard
-// renders, so the SAME status service that reports the pool also reports what each run's
-// targets are doing. Finished runs are pruned after a short retention window.
-//
-// It is server-held (one per server process, attached to each adopted dispatch), so it must
-// not accumulate unbounded state: it keeps only in-flight and recently-finished runs, never
-// a full event backlog. All methods are safe for concurrent use: events arrive on the run
-// goroutines while Snapshot is read on the status/SSE handler goroutines.
+// RunRegistry is the server's live-run tap, a sink on every adopted run. It
+// keeps each invocation's per-target state from the records a run emits, so
+// the status service that reports the pool also reports each run's targets.
+// It is one per server process, so it keeps only in-flight and recently
+// finished runs. All methods are safe for concurrent use.
 type RunRegistry struct {
 	mu     sync.Mutex
 	runs   map[string]*runState // keyed by invocation id
@@ -56,73 +51,58 @@ func NewRunRegistry() *RunRegistry {
 	return &RunRegistry{runs: make(map[string]*runState), retain: defaultRunRetention, nowFn: time.Now}
 }
 
-// Enabled always accepts records: capture never filters, and the fold is cheap.
-func (r *RunRegistry) Enabled(context.Context, slog.Level) bool { return true }
-
-// Handle folds one capture record into the run state. A record that carries no journal event
-// (or no invocation id to attribute it to) is ignored. Capture must never slow or fail a run,
-// so this never returns an error.
-func (r *RunRegistry) Handle(_ context.Context, rec slog.Record) error {
-	e, ok := journal.EventFromRecord(rec)
-	if !ok || e.Inv == "" {
-		return nil
+// Handle folds one record into the run state; it is a recorder.Sink. A record
+// with no invocation id to attribute it to is ignored.
+func (r *RunRegistry) Handle(_ context.Context, rec journal.Record) {
+	if rec.Invocation == "" {
+		return
 	}
-	r.fold(e)
-	return nil
+	r.fold(rec)
 }
 
-func (r *RunRegistry) WithAttrs([]slog.Attr) slog.Handler { return r }
-func (r *RunRegistry) WithGroup(string) slog.Handler      { return r }
-
-// fold advances the registry state for one event.
-func (r *RunRegistry) fold(e journal.Event) {
+// fold advances the registry state for one record.
+func (r *RunRegistry) fold(rec journal.Record) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	rs := r.runs[e.Inv]
+	rs := r.runs[rec.Invocation]
 	if rs == nil {
-		rs = &runState{inv: e.Inv, targets: make(map[string]*daemon.TargetRun)}
-		r.runs[e.Inv] = rs
+		rs = &runState{inv: rec.Invocation, targets: make(map[string]*daemon.TargetRun)}
+		r.runs[rec.Invocation] = rs
 	}
 
-	switch e.Kind {
-	case journal.KindStarted:
-		rs.startedAt = time.UnixMilli(e.Ts)
-		if e.Command != nil {
-			rs.trigger = e.Command.Trigger
-		}
-	case journal.KindScope:
-		// A scope header that names a target seeds it as QUEUED before it runs. Scope
-		// headers without a target carry no per-target state, so they are ignored.
-		if e.Target != "" {
-			r.targetLocked(rs, e).State = daemon.TargetRunQueued
-		}
-	case journal.KindExec:
+	if started, ok := rec.Started(); ok {
+		rs.startedAt = rec.Time
+		rs.trigger = string(started.Command.Trigger)
+	}
+	if exec, ok := rec.Exec(); ok {
 		// First subprocess for a target flips it to RUNNING; later exec events (a target
 		// may run several subprocesses) and events after a terminal result do not regress it.
-		if e.Target == "" {
+		if exec.Target == "" {
 			return
 		}
-		t := r.targetLocked(rs, e)
+		t := r.targetLocked(rs, exec.Project, exec.Target)
 		if t.State == "" || t.State == daemon.TargetRunQueued {
 			t.State = daemon.TargetRunRunning
-			t.StartedAt = time.UnixMilli(e.Ts)
+			t.StartedAt = rec.Time
 		}
-	case journal.KindResult:
-		if e.Target == "" {
+	}
+	if run, ok := rec.Run(); ok {
+		if run.Target == "" {
 			return
 		}
-		t := r.targetLocked(rs, e)
-		t.State = resultState(e.Status)
-		t.EndedAt = time.UnixMilli(e.Ts)
-		t.OutputRef = e.Ref
-		t.DurationMs = e.DurationMs
+		t := r.targetLocked(rs, run.Project, run.Target)
+		t.State = resultState(run.Status)
+		t.EndedAt = rec.Time
+		t.OutputRef = run.Ref
+		t.DurationMs = run.Duration.Milliseconds()
 		if t.StartedAt.IsZero() {
 			// A cache hit produces a result with no preceding exec; anchor its start so the
 			// dashboard has a sensible start time.
-			t.StartedAt = time.UnixMilli(e.Ts)
+			t.StartedAt = rec.Time
 		}
-	case journal.KindFinished:
+	}
+	if _, ok := rec.Finished(); ok {
 		rs.finished = true
 		rs.finishedAt = r.nowFn()
 	}
@@ -131,13 +111,13 @@ func (r *RunRegistry) fold(e journal.Event) {
 	r.pruneLocked(r.nowFn())
 }
 
-// targetLocked returns the mutable target state for an event's project/target, creating it
-// (and recording first-seen order) on first reference. Caller holds r.mu.
-func (r *RunRegistry) targetLocked(rs *runState, e journal.Event) *daemon.TargetRun {
-	key := targetKey(e.Project, e.Target)
+// targetLocked returns the mutable state for project/target, creating it (and
+// recording first-seen order) on first reference. Caller holds r.mu.
+func (r *RunRegistry) targetLocked(rs *runState, project, target string) *daemon.TargetRun {
+	key := targetKey(project, target)
 	t := rs.targets[key]
 	if t == nil {
-		t = &daemon.TargetRun{Project: e.Project, Target: e.Target}
+		t = &daemon.TargetRun{Project: project, Target: target}
 		rs.targets[key] = t
 		rs.order = append(rs.order, key)
 	}
@@ -188,7 +168,7 @@ func targetKey(project, target string) string { return fmt.Sprintf("%s\x00%s", p
 // resultState maps a journal result status onto a target run state. An unrecognized status
 // (e.g. a future journal status this build does not know) maps to the zero/unspecified state
 // rather than being silently shown as PASSED.
-func resultState(status string) daemon.TargetRunState {
+func resultState(status journal.Status) daemon.TargetRunState {
 	switch status {
 	case journal.StatusPass:
 		return daemon.TargetRunPassed
@@ -207,20 +187,20 @@ func resultState(status string) daemon.TargetRunState {
 // dispatch can fold it into BeginInvocation without a package-global read.
 type runSinkKey struct{}
 
-// WithRunSink threads the server's live-run capture handler onto ctx. A nil handler leaves
+// WithRunSink threads the server's live-run sink onto ctx. A nil sink leaves
 // ctx unchanged, so callers can pass an unconfigured registry unconditionally.
-func WithRunSink(ctx context.Context, h slog.Handler) context.Context {
-	if h == nil {
+func WithRunSink(ctx context.Context, sink recorder.Sink) context.Context {
+	if sink == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, runSinkKey{}, h)
+	return context.WithValue(ctx, runSinkKey{}, sink)
 }
 
-// RunSinkHandlers lifts the handler threaded by WithRunSink into the variadic capture-handler
-// list BeginInvocation accepts (empty when none is set: the non-server path).
-func RunSinkHandlers(ctx context.Context) []slog.Handler {
-	if h, ok := ctx.Value(runSinkKey{}).(slog.Handler); ok && h != nil {
-		return []slog.Handler{h}
+// RunSinkHandlers lifts the sink threaded by WithRunSink into the sinks
+// BeginInvocation accepts, empty when none is set: the non-server path.
+func RunSinkHandlers(ctx context.Context) []recorder.Sink {
+	if sink, ok := ctx.Value(runSinkKey{}).(recorder.Sink); ok && sink != nil {
+		return []recorder.Sink{sink}
 	}
 	return nil
 }

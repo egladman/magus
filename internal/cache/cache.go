@@ -33,11 +33,12 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -363,7 +364,7 @@ type Result struct {
 }
 
 // sizing names where c's memory came from, as a journal result spells it.
-func (c stepClaim) sizing() string {
+func (c stepClaim) sizing() journal.Sizing {
 	switch {
 	case c.MemoryMB == 0:
 		return journal.SizingNone
@@ -953,13 +954,13 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	}
 
 	lp := c.logPath(s.ProjectPath, hash)
-	ctx = journal.WithPermits(types.WithExecCost(ctx))
+	ctx = recorder.WithPermits(types.WithExecCost(ctx))
 	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, logged, runErr := c.captureRun(withWriteWindow(NewContext(ctx, c), win), lp, s.ProjectPath, reproTarget(s), fn)
 	c.writers.finish(win)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
-	result.Permitted = journal.Permits(ctx)
+	result.Permitted = recorder.Permits(ctx)
 
 	// fail is every way this step can end badly after fn was invoked: the run itself, a
 	// source the run mutated, a snapshot that would not write. All three record the same
@@ -1179,7 +1180,7 @@ func (c *Cache) actingLease(ctx context.Context) string {
 func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, r Result, runErr error, cacheHit bool) string {
 	nowMs := time.Now().UnixMilli()
 	dur := r.Duration
-	inv := journal.InvocationIDFromContext(ctx)
+	inv := recorder.InvocationIDFromContext(ctx)
 	target := reproTarget(s)
 
 	// The descriptor: identity + outcome of this execution, stored beside the verbatim output
@@ -1242,15 +1243,13 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 
 	// Stream the result event to the capture logger (invocation log / live viewer), carrying
 	// the freshly minted ref. Per-line output events already reached the journal during capture.
-	result := journal.Event{
-		Ts: nowMs, Project: s.ProjectPath, Target: target, Kind: journal.KindResult,
-		Level: "info", Status: journal.StatusPass, DurationMs: dur.Milliseconds(), Inv: inv, Ref: ref,
+	result := journal.Run{
+		Project: s.ProjectPath, Target: target,
+		Level: "info", Status: journal.StatusPass, Duration: dur, Ref: ref,
 		CacheKey: hash,
+		Started:  r.Claim.Started,
 		Slots:    r.Claim.Slots, MemoryMB: r.Claim.MemoryMB, Sizing: r.Claim.sizing(),
-		WaitedMs: r.Claim.Waited.Milliseconds(), MaxRSSBytes: r.MaxRSSBytes, CPUMs: r.CPUMs,
-	}
-	if !r.Claim.Started.IsZero() {
-		result.StartedMs = r.Claim.Started.UnixMilli()
+		Waited: r.Claim.Waited, MaxRSSBytes: r.MaxRSSBytes, CPU: time.Duration(r.CPUMs) * time.Millisecond,
 	}
 	if cacheHit {
 		result.Status = journal.StatusCached
@@ -1261,7 +1260,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	if runErr != nil {
 		result.Status = journal.StatusFail
 		result.Level = "error"
-		result.Text = runErr.Error()
+		result.Error = runErr.Error()
 		// A gate reads the code to tell a host that could not run the target
 		// from a target that failed.
 		var coded *types.DiagnosticError
@@ -1269,7 +1268,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 			result.DiagnosticCode = string(coded.Code)
 		}
 	}
-	journal.Emit(ctx, result)
+	recorder.Emit(ctx, result)
 	return ref
 }
 
@@ -1366,9 +1365,9 @@ func emitRefusal(ctx context.Context, s *Step, err error) {
 	if errors.As(err, &coded) {
 		code = string(coded.Code)
 	}
-	journal.Emit(ctx, journal.Event{
-		Project: s.ProjectPath, Target: reproTarget(*s), Kind: journal.KindResult,
-		Level: "error", Status: journal.StatusFail, Text: types.CauseText(err), DiagnosticCode: code,
+	recorder.Emit(ctx, journal.Run{
+		Project: s.ProjectPath, Target: reproTarget(*s),
+		Level: "error", Status: journal.StatusFail, Error: types.CauseText(err), DiagnosticCode: code,
 	})
 }
 
@@ -2310,8 +2309,8 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	safeLogF := &syncWriter{w: io.MultiWriter(logF, &rawBuf)}
 	var stdoutTap, stderrTap *lineTap
 	if withhold {
-		stdoutTap = col.newLineTap(safeLogF, journal.StreamStdout)
-		stderrTap = col.newLineTap(safeLogF, journal.StreamStderr)
+		stdoutTap = col.newLineTap(safeLogF, journal.Stdout)
+		stderrTap = col.newLineTap(safeLogF, journal.Stderr)
 	} else {
 		// Both live copies go to STDERR, including the target's stdout. Stdout
 		// belongs to the structured answer (-o json|yaml|jsonl|template) and to
@@ -2323,8 +2322,8 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		// on emitted a stdout that no parser would accept. The log file still
 		// receives the verbatim bytes on the original stream, so the journal and
 		// `magus query output <ref>` are unchanged.
-		stdoutTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStdout)
-		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
+		stdoutTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.Stdout)
+		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.Stderr)
 	}
 	// The log file and journal only: the console shows a log record through the
 	// process logger, which filters it by level.
@@ -2333,7 +2332,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		format = "json" // one JSON object per line, as a -o jsonl reader expects
 	}
 	records := &stepLog{sink: &recordSink{log: safeLogF, raw: &rawBuf}}
-	logTap := col.newLineTap(records.sink, journal.StreamStderr)
+	logTap := col.newLineTap(records.sink, journal.Stderr)
 	records.tap = logTap
 	records.h = NewLogHandler(&records.buf, format, &slog.HandlerOptions{
 		Level:       slog.Level(math.MinInt),
@@ -2346,7 +2345,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	captureCtx = spawn.WithActivity(captureCtx, ProgressFromContext(ctx).Beat)
 	// Tag the step so subprocesses run under fn emit exec events labeled with this
 	// project/target (the run primitive reads this from ctx; see internal/proc/spawn).
-	captureCtx = journal.WithStep(captureCtx, projectPath, target)
+	captureCtx = recorder.WithStep(captureCtx, projectPath, target)
 	// So an error raised below can name the log a reader should open. Nothing in the
 	// engine can construct this path: it is the store's own layout.
 	captureCtx = types.WithCaptureLog(captureCtx, logPath)

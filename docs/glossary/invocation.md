@@ -38,8 +38,8 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `hint.Invocation` (Go)
-- `journal.Invocation` (Go)
 - `magus.Invocation` (Go)
+- `journal.Invocation` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

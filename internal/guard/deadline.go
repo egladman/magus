@@ -20,7 +20,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
@@ -186,14 +186,14 @@ func untilReserve(ctx context.Context) (budget time.Duration, bounded bool) {
 // A load that does not stop at the deadline is waited for, so a late answer still spares
 // what only a loaded policy can tell apart; a hook bounds the whole judgment, the load
 // included, with JudgeWithin.
-func TimeRuleLoad[T any](ctx context.Context, load func() (T, error)) (T, trail.Phase, error) {
+func TimeRuleLoad[T any](ctx context.Context, load func() (T, error)) (T, journal.Phase, error) {
 	log := judgmentPhases(ctx)
 	log.begin(phaseLoadRules)
 	budget, _ := untilReserve(ctx)
 	start := time.Now()
 	got, err := load()
 	log.idle()
-	return got, trail.Phase{
+	return got, journal.Phase{
 		Name:      phaseLoadRules,
 		ElapsedMs: time.Since(start).Milliseconds(),
 		BudgetMs:  budget.Milliseconds(),
@@ -582,7 +582,7 @@ func lineReach(line string, d Dialect, start string) []string {
 
 // stallSite words where a lapsed judgment stopped: in the phase underway, else after the
 // last one it finished.
-func stallSite(stalled trail.Phase, isStalled bool, finished []trail.Phase) string {
+func stallSite(stalled journal.Phase, isStalled bool, finished []journal.Phase) string {
 	switch {
 	case isStalled:
 		return fmt.Sprintf("in its %s phase, %s in", stalled.Name, roundBudget(time.Duration(stalled.ElapsedMs)*time.Millisecond))
@@ -613,7 +613,7 @@ type phaseLog struct {
 	start time.Time
 
 	mu      sync.Mutex
-	done    []trail.Phase
+	done    []journal.Phase
 	running string
 	since   time.Time
 	// span is the open enclosing phase, named by a lapse between shorter ones.
@@ -630,7 +630,7 @@ type phaseLogKey struct{}
 // withPhaseLog starts timing a judgment, with the rule load its caller timed, if any, as
 // the first phase. A log JudgeWithin already put on ctx is the one used, so a lapse can
 // name what the judgment had reached.
-func withPhaseLog(ctx context.Context, load trail.Phase) context.Context {
+func withPhaseLog(ctx context.Context, load journal.Phase) context.Context {
 	l := judgmentPhases(ctx)
 	if l == nil {
 		l = &phaseLog{start: time.Now()}
@@ -682,7 +682,7 @@ func (l *phaseLog) idle() {
 }
 
 // record adds one finished phase, ending it as the one underway.
-func (l *phaseLog) record(p trail.Phase) {
+func (l *phaseLog) record(p journal.Phase) {
 	if l == nil {
 		return
 	}
@@ -695,7 +695,7 @@ func (l *phaseLog) record(p trail.Phase) {
 }
 
 // finished is a copy of the recorded phases.
-func (l *phaseLog) finished() []trail.Phase {
+func (l *phaseLog) finished() []journal.Phase {
 	if l == nil {
 		return nil
 	}
@@ -711,15 +711,15 @@ func (l *phaseLog) lapsed(name string) bool {
 }
 
 // lapsedPhase is the first recorded phase named name that ran out of time.
-func (l *phaseLog) lapsedPhase(name string) (trail.Phase, bool) {
+func (l *phaseLog) lapsedPhase(name string) (journal.Phase, bool) {
 	if l == nil {
-		return trail.Phase{}, false
+		return journal.Phase{}, false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	i := slices.IndexFunc(l.done, func(p trail.Phase) bool { return p.Name == name && p.Lapsed })
+	i := slices.IndexFunc(l.done, func(p journal.Phase) bool { return p.Name == name && p.Lapsed })
 	if i < 0 {
-		return trail.Phase{}, false
+		return journal.Phase{}, false
 	}
 	return l.done[i], true
 }
@@ -768,32 +768,32 @@ func (l *phaseLog) settled() (Dependencies, bool) {
 }
 
 // stalled is the phase underway, lapsed and timed from its start; false when none is.
-func (l *phaseLog) stalled() (trail.Phase, bool) {
+func (l *phaseLog) stalled() (journal.Phase, bool) {
 	if l == nil {
-		return trail.Phase{}, false
+		return journal.Phase{}, false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	switch {
 	case l.running != "":
-		return trail.Phase{Name: l.running, ElapsedMs: time.Since(l.since).Milliseconds(), Lapsed: true}, true
+		return journal.Phase{Name: l.running, ElapsedMs: time.Since(l.since).Milliseconds(), Lapsed: true}, true
 	case l.span != "":
-		return trail.Phase{Name: l.span, ElapsedMs: time.Since(l.spanSince).Milliseconds(), Lapsed: true}, true
+		return journal.Phase{Name: l.span, ElapsedMs: time.Since(l.spanSince).Milliseconds(), Lapsed: true}, true
 	}
-	return trail.Phase{}, false
+	return journal.Phase{}, false
 }
 
 // phases is every recorded phase, then the whole judgment so far.
-func (l *phaseLog) phases() []trail.Phase {
+func (l *phaseLog) phases() []journal.Phase {
 	if l == nil {
 		return nil
 	}
-	return append(l.finished(), trail.Phase{Name: phaseJudge, ElapsedMs: time.Since(l.start).Milliseconds()})
+	return append(l.finished(), journal.Phase{Name: phaseJudge, ElapsedMs: time.Since(l.start).Milliseconds()})
 }
 
 // timedPhase is one phase's trail entry.
-func timedPhase(name string, elapsed, budget time.Duration, lapsed bool) trail.Phase {
-	return trail.Phase{Name: name, ElapsedMs: elapsed.Milliseconds(), BudgetMs: budget.Milliseconds(), Lapsed: lapsed}
+func timedPhase(name string, elapsed, budget time.Duration, lapsed bool) journal.Phase {
+	return journal.Phase{Name: name, ElapsedMs: elapsed.Milliseconds(), BudgetMs: budget.Milliseconds(), Lapsed: lapsed}
 }
 
 // ruleLapse is a phase of a judgment that ran out of its share of the deadline.

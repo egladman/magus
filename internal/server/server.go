@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
+	"github.com/egladman/magus/internal/handler/activityrpc"
 	attentionhandler "github.com/egladman/magus/internal/handler/attention"
 	diagramhandler "github.com/egladman/magus/internal/handler/diagram"
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
@@ -44,7 +45,6 @@ import (
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
-	"github.com/egladman/magus/internal/handler/trailrpc"
 	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interp/bindings"
@@ -56,7 +56,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
@@ -477,7 +477,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			if opts.Magus != nil {
 				viewerOpts = append(viewerOpts, viewer.WithSessionRoot(opts.Magus.Root()))
 			}
-			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, viewerOpts...), connectReadMax)
+			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, filepath.Join(opts.Magus.CacheDir(), cache.RunsDir), viewerOpts...), connectReadMax)
 			f.service(viewerPath, viewerConnectHandler)
 			shareGuarded[viewerPath] = serviceRoute(viewerPath, viewerConnectHandler)
 			bridgeLog.InfoContext(ctx, "viewer service mounted", slog.String("path", viewerPath))
@@ -546,15 +546,11 @@ func (s *Server) Serve(ctx context.Context) error {
 			// file the handler never opens, so it can be neither listed nor revoked here, and the
 			// Settings UI cannot lock the operator out. Not in shareGuarded: a share link never
 			// reaches token management.
-			// The audit interceptor classifies every RPC on this service by its leading verb
-			// (internal/handler/trailrpc) and records the mutating ones (CreateToken and
-			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
-			// audited. The record names the credential the bearer guard verified, never a
-			// caller-supplied field. Reads (ListTokens) are not recorded. See
-			// internal/handler/trailrpc for the pattern and the arch test that keeps it
-			// honest.
-			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle,
-				trailrpc.WithSubject(tokenhandler.AuditSubject)))
+			// activityrpc records each mutating RPC here by its leading
+			// verb, so a browser-reachable mint or revoke is always audited.
+			// The record names the credential the bearer guard verified.
+			tokenAudit := connect.WithInterceptors(activityrpc.Interceptor(opts.Magus.CacheDir(), journal.CallKindTokenLifecycle,
+				activityrpc.WithSubject(tokenhandler.AuditSubject)))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
 			f.service(tokenPath, tokenHandler)
 			bridgeLog.InfoContext(ctx, "token service mounted", slog.String("path", tokenPath))
@@ -572,7 +568,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// listener behind the standard bearer guard like the memory service beside it.
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
-			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
+			notesAudit := connect.WithInterceptors(activityrpc.Interceptor(opts.Magus.CacheDir(), journal.CallKindNotes, activityrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(viewInternals(opts.Magus), opts.Config), notesAudit, connectReadMax)
 			f.service(notesPath, notesHandler)
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))

@@ -26,26 +26,21 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
 
-// publishTrailBase resolves the server-wide activity-trail base and publishes it, so
-// background-job recording and the maintenance scheduler land in the same trail the MCP
-// handler writes and the ActivityService reads.
-//
-// ResolveCacheDir is the narrow path: it reads config without discovering projects or
-// evaluating magusfiles, so the value is the bridge Magus's CacheDir without paying a
-// workspace load to learn it, which is what lets this run ahead of the MCP gate. A root
-// that will not resolve leaves the base empty, and every writer already treats an empty
-// base as "drop the record, best-effort".
-func (h *Host) publishTrailBase(ctx context.Context) {
+// publishActivityBase publishes the server-wide activity log's base. It reads
+// config without a workspace load, so it runs ahead of the MCP gate. A root
+// that will not resolve leaves the base empty, and every writer drops its
+// record.
+func (h *Host) publishActivityBase(ctx context.Context) {
 	root, err := workspace.FindRoot("")
 	if err != nil {
 		slog.WarnContext(ctx, "no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
@@ -56,7 +51,7 @@ func (h *Host) publishTrailBase(ctx context.Context) {
 		slog.WarnContext(ctx, "cache or state dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	h.trailBase = loc.CacheDir
+	h.activityBase = loc.CacheDir
 	h.jobStore = job.NewStore(loc)
 }
 
@@ -75,7 +70,7 @@ func (h *Host) StartBridge(ctx context.Context, cancel context.CancelFunc) {
 	// nothing to do with MCP, but it used to be published below the MCP gate, so
 	// mcp.enabled: false left it empty, the maintenance scheduler bailed at every tick,
 	// and no background job was ever recorded.
-	h.publishTrailBase(ctx)
+	h.publishActivityBase(ctx)
 	mcpOn := h.Config.MCP.Enabled == nil || *h.Config.MCP.Enabled
 	addr, err := netip.ParseAddrPort(MCPAddress(h.Config.MCP))
 	if mcpOn && err != nil {
@@ -323,17 +318,13 @@ type Host struct {
 	procSrv  *proc.Server
 	runs     *console.RunRegistry
 	started  time.Time
-	// trailBase is the ONE server-wide activity-trail location: the bridge Magus's cache
-	// dir, the same base the MCP handler writes to and the ActivityService reads from.
-	// publishTrailBase sets it before anything MCP-gated, since the location is a cache
-	// dir rather than anything MCP owns; the proc OnJobDone callback reads it so every
-	// producer (MCP calls, background jobs) appends to a single trail, disambiguated by
-	// Event.Workspace. Empty only until startup reaches that call, or where the root does
-	// not resolve, so a job completing in that window is dropped best-effort.
-	trailBase string
-	// jobStore is the server's ONE job store, published beside trailBase and for the same
-	// reason: the OnJobDone callback needs it, and a second Store over one file would hold
-	// its own mutex and serialize against nothing.
+	// activityBase is the activity log base every producer appends to.
+	// publishActivityBase sets it; until then it is empty and a finished
+	// job goes unrecorded.
+	activityBase string
+	// jobStore is the server's ONE job store, published with activityBase.
+	// OnJobDone needs it. A second Store over one file would hold its own
+	// mutex and serialize against nothing.
 	jobStore *job.Store
 	httpAddr atomic.Value // string; the HTTP listener, empty while the server serves none
 	watch    struct {
@@ -347,8 +338,9 @@ type Host struct {
 // NewHost is a Host that has not started.
 func NewHost(deps HostDeps) *Host { return &Host{HostDeps: deps, stop: func() {}} }
 
-// TrailBase is the server-wide activity-trail location, "" until the bridge publishes it.
-func (h *Host) TrailBase() string { return h.trailBase }
+// ActivityBase is the server-wide activity log base, "" until the
+// bridge publishes it.
+func (h *Host) ActivityBase() string { return h.activityBase }
 
 // Done is closed when the proc listener is gone, nil before Start has one. An RPC-driven
 // `server stop` closes it, and a command that waited only on its signals would keep running
@@ -481,8 +473,10 @@ func (h *Host) Start(ctx context.Context) {
 			}
 			// Fold this adopted run's journal into the live-run registry so the dashboard
 			// sees its per-target execution state. BeginInvocation (in run/affected) reads
-			// the sink off the context and attaches it as an extra capture handler.
-			hctx = console.WithRunSink(hctx, h.runs)
+			// the sink off the context and attaches it as an extra sink.
+			if h.runs != nil {
+				hctx = console.WithRunSink(hctx, h.runs.Handle)
+			}
 			return reg.dispatch(hctx, root, args)
 		},
 		Read:            graphReads(reg, h.ServeRead),
@@ -563,7 +557,7 @@ func graphReads(reg *wsRegistry, serve func(ctx context.Context, m *magus.Magus,
 // disambiguated. Best-effort: an unresolvable root or an unset trail base (bridge not up) drops
 // the record. Ts is the job's start, completion minus its measured duration.
 func (h *Host) recordJobActivity(ctx context.Context, args []string, dur time.Duration, err error) {
-	base := h.trailBase
+	base := h.activityBase
 	if base == "" {
 		return
 	}
@@ -575,20 +569,20 @@ func (h *Host) recordJobActivity(ctx context.Context, args []string, dur time.Du
 		}
 		root = resolved
 	}
-	ev := trailtypes.Event{
-		Ts:         time.Now().Add(-dur).UnixMilli(),
-		Kind:       trailtypes.KindJob,
-		Origin:     jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
-		Workspace:  root,
-		Action:     job.ActionString(args),
-		Outcome:    trailtypes.OutcomeOK,
-		DurationMs: dur.Milliseconds(),
+	ev := journal.Call{
+		Time:      time.Now().Add(-dur),
+		Kind:      journal.CallKindJob,
+		Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
+		Workspace: root,
+		Name:      job.ActionString(args),
+		Outcome:   journal.OutcomeOK,
+		Duration:  dur,
 	}
 	if err != nil {
-		ev.Outcome = trailtypes.OutcomeError
+		ev.Outcome = journal.OutcomeError
 		ev.Error = err.Error()
 	}
-	trail.Append(ctx, base, ev)
+	recorder.AppendCall(ctx, base, ev)
 	completeJobRow(ctx, h.jobStore, args, dur, err)
 }
 
@@ -607,7 +601,7 @@ func completeJobRow(ctx context.Context, store *job.Store, args []string, dur ti
 		return // an adopted run rather than one of the server's own, so there is no row
 	}
 	catalog := job.All()[i]
-	ctx = trail.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
+	ctx = recorder.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
 	if _, err := store.Update(ctx, catalog.Name, func(row *jobtypes.Job) {
 		row.State = jobtypes.StatePass
 		if jobErr != nil {

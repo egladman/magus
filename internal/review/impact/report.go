@@ -3,8 +3,8 @@ package impact
 import (
 	"fmt"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/trail"
 )
 
 // Report is what a disposer should know before landing: the consequences a file list
@@ -29,10 +29,10 @@ type Report struct {
 	// Evidence is what this changeset's authors asked magus before writing it. It is the
 	// reasoning half of the record diff.Touch carries: that one names the files an agent
 	// had READ, this one the questions it put to the graph.
-	Evidence []trail.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
+	Evidence []recorder.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
 	// tell an unresearched change from a record kept in another checkout.
-	EvidenceGap trail.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
+	EvidenceGap recorder.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
 	// EvidenceNotes names each trail record Evidence skipped because it did not decode, so a
 	// short list reads as complete only when it is.
 	EvidenceNotes []string       `json:"evidence_notes,omitempty" yaml:"evidence_notes,omitempty"`

@@ -21,8 +21,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/share"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -106,7 +106,7 @@ func (s *Service) CreateToken(ctx context.Context, req *connect.Request[tokenv1.
 	if err != nil {
 		return nil, connectError(err)
 	}
-	minter := trail.CredentialFromContext(ctx).Grant
+	minter := recorder.CredentialFromContext(ctx).Grant
 	secret, rec, err := store.Mint(minter, auth.MintRequest{Name: req.Msg.GetName(), Grant: grant, TTL: ttl})
 	if err != nil {
 		return nil, connectError(err)
@@ -121,7 +121,7 @@ func (s *Service) CreateToken(ctx context.Context, req *connect.Request[tokenv1.
 // here.
 func (s *Service) RevokeToken(ctx context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	id := req.Msg.GetName()
-	caller := trail.CredentialFromContext(ctx).Grant
+	caller := recorder.CredentialFromContext(ctx).Grant
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok && shareMatches(info, id) {
 			if !auth.AccessViewer().Within(caller) {

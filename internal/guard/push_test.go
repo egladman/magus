@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -890,7 +890,7 @@ func (s *NarrowPushSuite) TestAPushOfManyChangedFilesIsWeighedInAFewGitProcesses
 	head = s.repo.Commit("again", map[string]string{"f000.go": files["f000.go"]})
 	s.passed(strings.Repeat("g", 64), "go-test", head)
 	s.deps.Revision = func(context.Context, string, string) string { return head[:12] }
-	ctx := withPhaseLog(s.T().Context(), trail.Phase{})
+	ctx := withPhaseLog(s.T().Context(), journal.Phase{})
 	calls := s.gitCalls()
 
 	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())

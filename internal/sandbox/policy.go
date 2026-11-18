@@ -23,12 +23,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -376,38 +376,27 @@ func relUnder(abs, root string) (string, bool) {
 	return strings.TrimPrefix(abs[len(root):], string(filepath.Separator)), true
 }
 
-// recordDenial records a refused access on the run's trail, the producer
-// trailtypes.KindSandboxDenial was declared for.
-//
-// It sits in check rather than at each deny site because this is where the decision is
-// MADE: fs, archive, crypto, the http bindings and the exec pre-check all reach the
-// policy through it, so one producer covers every Go-side denial and a new binding
-// inherits it.
-//
-// It is not a syscall audit. The kernel landlock layer denies without reporting anything
-// back to Go, so an event here means "magus's own check refused", which is the only
-// denial anything in this process can witness.
-//
-// Allows are dropped. A read check fires once per glob match, and a durable append-only
-// file is the wrong place for a hot loop's happy path.
+// recordDenial records a refused access in the activity log. One producer at
+// the decision covers every Go-side denial; landlock tells Go nothing. Allows
+// are dropped, since a read check fires once per glob match.
 func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path string, err error) {
 	if err == nil {
 		return
 	}
-	base := trail.BaseFromContext(ctx)
+	base := recorder.BaseFromContext(ctx)
 	if base == "" {
 		return
 	}
-	trail.Append(ctx, base, trailtypes.Event{
-		Ts:   time.Now().UnixMilli(),
-		Kind: trailtypes.KindSandboxDenial,
+	recorder.AppendCall(ctx, base, journal.Call{
+		Time: time.Now(),
+		Kind: journal.CallKindSandboxDenial,
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
 		// declared for itself from the workspace default every run already has.
 		Lease:     p.Lease,
 		LeaseFrom: p.LeaseFrom,
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
-		Action:  fmt.Sprintf("%s of %s", access.String(), path),
-		Outcome: trailtypes.OutcomeError,
+		Name:    fmt.Sprintf("%s of %s", access.String(), path),
+		Outcome: journal.OutcomeError,
 		Error:   err.Error(),
 	})
 }

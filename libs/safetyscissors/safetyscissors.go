@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"os/exec"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // SafetyScissors is the harness opened on one directory: the job store, this
@@ -159,9 +160,10 @@ func (s *SafetyScissors) Sessions(ctx context.Context) (session.Fold, error) {
 	return session.ReadAll(ctx, s.dirs.Sessions)
 }
 
-// Trail returns up to limit trail events, newest first (see [trail.ReadRecent]).
-func (s *SafetyScissors) Trail(ctx context.Context, limit int) ([]trail.Event, error) {
-	return trail.ReadRecent(ctx, s.dirs.Trail, limit)
+// Calls returns up to limit calls from the end of the activity log, newest
+// first (see [journal.Calls]).
+func (s *SafetyScissors) Calls(ctx context.Context, limit int) iter.Seq2[journal.Call, error] {
+	return journal.Calls(ctx, s.dirs.Activity, limit)
 }
 
 // Slots is the slot limiter [WithSlots] configured.

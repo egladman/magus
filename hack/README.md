@@ -167,6 +167,8 @@ Targets import these; each runs through its target rather than by hand.
 | --- | --- |
 | `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
 | `hack/magusfile/badges.buzz` | the coverage badge SVG, in the GitHub Actions badge's palette |
+| `hack/magusfile/bootstrap-slow-steps_test.buzz` | that bootstrap-checkout names every step past its bound and still finishes, checked by `buzz-test` |
+| `hack/magusfile/bootstrap-timing.buzz` | the warm-cache bound of each bootstrap step and the line a slow one prints; it reports, never refuses |
 | `hack/magusfile/buzz-coverage.buzz` | the `magus buzz -t` runs `buzz-test` makes, one per module, and the LCOV tracefile their fragments join into |
 | `hack/magusfile/bootstrap-slow-steps_test.buzz` | that bootstrap-checkout names each step past its bound and still finishes, checked by `buzz-test` on a ticking clock |
 | `hack/magusfile/bootstrap-timing.buzz` | the warm-cache bound of each bootstrap step, and the one line a slow step prints; pure |

@@ -1,0 +1,169 @@
+//go:build !wasm
+
+package std
+
+import (
+	"context"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/feedback"
+	"github.com/egladman/magus/vcs"
+)
+
+// feedbackDefaultSince is the window a read covers when the caller names
+// none: a working day's session, and few activity logs to stat.
+const feedbackDefaultSince = 24 * time.Hour
+
+// cacheDirer is the one capability of the loaded workspace the feedback
+// read needs beyond its root: where its cache, and so its activity log, is.
+type cacheDirer interface {
+	CacheDir() string
+}
+
+// MagusFeedbackRead backs magus\session().trail(): one session's guard
+// record from every checkout's activity log.
+func MagusFeedbackRead(ctx context.Context, opts feedback.ReadOptions) (feedback.Report, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return feedback.Report{}, errorNoWorkspace("Session.trail")
+	}
+	w, err := feedbackWindow(opts, time.Now())
+	if err != nil {
+		return feedback.Report{}, err
+	}
+	root := ws.Root()
+	cacheDir := filepath.Join(root, ".magus")
+	if c, ok := ws.(cacheDirer); ok {
+		cacheDir = c.CacheDir()
+	}
+	cacheRel := cacheDir
+	if rel, err := filepath.Rel(root, cacheDir); err == nil && filepath.IsLocal(rel) {
+		cacheRel = rel
+	}
+	return recorder.ReadFeedback(ctx, recorder.FeedbackBases(listCheckouts(ctx, root), cacheRel, w.Since), w)
+}
+
+// listCheckouts is root and every other checkout of its repository. A repository whose
+// version control cannot list checkouts is root alone.
+func listCheckouts(ctx context.Context, root string) []string {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return []string{root}
+	}
+	lister, ok := res.VCS.(types.CheckoutLister)
+	if !ok {
+		return []string{root}
+	}
+	others, err := lister.OtherCheckouts(root)
+	if err != nil {
+		return []string{root}
+	}
+	return append([]string{root}, others...)
+}
+
+// feedbackWindow reads the call's window. A value that does not parse
+// raises: its default would report on the wrong window.
+func feedbackWindow(opts feedback.ReadOptions, now time.Time) (recorder.FeedbackWindow, error) {
+	w := recorder.FeedbackWindow{Until: now, Session: strings.TrimSpace(opts.Session)}
+	var err error
+	if until := strings.TrimSpace(opts.Until); until != "" {
+		if w.Until, err = time.Parse(time.RFC3339, until); err != nil {
+			return w, fmt.Errorf("session.trail: opts.until %q is not an RFC3339 time", until)
+		}
+	}
+	switch since := strings.TrimSpace(opts.Since); since {
+	case "":
+		w.Since = w.Until.Add(-feedbackDefaultSince)
+	default:
+		if d, derr := time.ParseDuration(since); derr == nil && d > 0 {
+			w.Since = w.Until.Add(-d)
+		} else if t, terr := time.Parse(time.RFC3339, since); terr == nil {
+			w.Since = t
+		} else {
+			return w, fmt.Errorf("session.trail: opts.since %q is neither a positive duration (6h) nor an RFC3339 time", since)
+		}
+	}
+	if !w.Since.Before(w.Until) {
+		return w, fmt.Errorf("session.trail: the window starts at %s, not before its end %s", w.Since.Format(time.RFC3339), w.Until.Format(time.RFC3339))
+	}
+	return w, nil
+}
+
+// MagusFeedbackMarks backs magus\session().marks(): repo marks, oldest first.
+func MagusFeedbackMarks(ctx context.Context) ([]feedback.Mark, error) {
+	root, err := feedbackRoot(ctx, "Session.marks")
+	if err != nil {
+		return nil, err
+	}
+	return recorder.ReadFeedbackMarks(ctx, root)
+}
+
+// MagusFeedbackMark backs magus\session().mark: one mark in the repo's store.
+func MagusFeedbackMark(ctx context.Context, mark map[string]any) (feedback.Mark, error) {
+	root, err := feedbackRoot(ctx, "Session.mark")
+	if err != nil {
+		return feedback.Mark{}, err
+	}
+	m, err := decodeFeedbackMark(mark)
+	if err != nil {
+		return feedback.Mark{}, err
+	}
+	return recorder.AppendFeedbackMark(root, m, time.Now())
+}
+
+func feedbackRoot(ctx context.Context, member string) (string, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return "", errorNoWorkspace(member)
+	}
+	return ws.Root(), nil
+}
+
+// decodeFeedbackMark reads a magus\feedback\Mark object, raising on a
+// field of the wrong type rather than storing its zero value.
+func decodeFeedbackMark(in map[string]any) (feedback.Mark, error) {
+	var m feedback.Mark
+	str := func(k string) (string, error) {
+		v, ok := in[k]
+		if !ok || v == nil {
+			return "", nil
+		}
+		s, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("session.mark: %s is %T, want a string", k, v)
+		}
+		return s, nil
+	}
+	var section, verdict string
+	var err error
+	for k, dst := range map[string]*string{
+		"id": &m.ID, "section": &section, "key": &m.Key, "rule": &m.Rule,
+		"verdict": &verdict, "note": &m.Note, "session": &m.Session,
+	} {
+		if *dst, err = str(k); err != nil {
+			return m, err
+		}
+	}
+	m.Section, m.Verdict = feedback.Section(section), feedback.Verdict(verdict)
+	switch ex := in["examples"].(type) {
+	case nil:
+	case []any:
+		for _, e := range ex {
+			s, ok := e.(string)
+			if !ok {
+				return m, fmt.Errorf("session.mark: examples holds a %T, want strings", e)
+			}
+			m.Examples = append(m.Examples, s)
+		}
+	case []string:
+		m.Examples = ex
+	default:
+		return m, fmt.Errorf("session.mark: examples is %T, want a list of strings", ex)
+	}
+	return m, nil
+}
