@@ -272,12 +272,12 @@ func (l JobList) MarshalYAML() (any, error) { return yamlOfJSON(l) }
 
 // NewDeclaration is d with its checks read as lease checks.
 func NewDeclaration(d job.Declaration) (Declaration, error) {
-	check, goals, err := viewChecks(d.ID, d.Check, d.Goals)
-	if err != nil {
+	view := Declaration{Declaration: d}
+	view.Declaration.Check, view.Declaration.Goals = nil, nil
+	var err error
+	if view.Check, view.Goals, err = viewChecks(d.ID, d.Check, d.Goals); err != nil {
 		return Declaration{}, err
 	}
-	view := Declaration{Declaration: d, Check: check, Goals: goals}
-	view.Declaration.Check, view.Declaration.Goals = nil, nil
 	return view, nil
 }
 
