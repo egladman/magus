@@ -91,9 +91,10 @@ func HasInvocationAncestor(ctx context.Context, pid int, id string) bool {
 // invocationRef is the identity two invocations are compared by: the pid that minted the
 // id, plus the id.
 //
-// The pid is not decoration. journal.NewInvocationID is documented as PROCESS-unique (it
-// is a millisecond stamp plus a per-process counter), so two magus processes that mint
-// their first id in the same millisecond mint the same string. On the id alone, a CI
+// The pid is not decoration. recorder.NewInvocationID is unique only
+// within a process: a millisecond stamp plus a per-process counter. Two
+// processes that mint in the same millisecond mint one string.
+// On the id alone, a CI
 // fan-out that starts several runs at once would have one refuse another as its own
 // ancestor. A pid is unique among live processes, so the pair is unique among live
 // invocations, which is all this comparison spans. Under the server the pid is shared by

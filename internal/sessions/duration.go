@@ -18,8 +18,9 @@ import (
 // a hook's path with a deadline, each file is read whole, and a store holds thousands.
 const maxInvocationFiles = 100
 
-// invocationPrefix starts every id journal.NewInvocationID mints, the only ids a target
-// result is filed under. Its base36 millisecond stamp sorts by name in time order.
+// invocationPrefix starts every id recorder.NewInvocationID mints, the
+// only ids a target result is filed under. Its base36 millisecond stamp
+// sorts by name in time order.
 const invocationPrefix = "inv"
 
 // LastRunDuration is how long target last ran on project, read from the newest
