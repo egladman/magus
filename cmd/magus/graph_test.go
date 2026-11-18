@@ -116,7 +116,7 @@ func TestGraphTablePushRefusesATableOffThePin(t *testing.T) {
 
 	var err error
 	withStdin(t, "token", func() {
-		err = graphPush(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
+		err = graphPush(withSecrets(t.Context()), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
 	})
 	require.ErrorContains(t, err, "never published under another tag")
 	assert.Zero(t, reg.uploads)
@@ -127,7 +127,7 @@ func TestGraphTablePushWithoutATableNamesTheCommand(t *testing.T) {
 	reg := newSpellRegistry(t)
 	var err error
 	withStdin(t, "token", func() {
-		err = graphPush(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
+		err = graphPush(withSecrets(t.Context()), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
 	})
 	require.ErrorContains(t, err, "no embedding table in the cache")
 	assert.Contains(t, err.Error(), "magus run table libs/train")

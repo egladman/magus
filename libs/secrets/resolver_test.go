@@ -98,11 +98,11 @@ func (s *ResolverSuite) TestNilResolverDegradesSafely() {
 	var r *Resolver
 	s.Empty(r.ProviderName())
 	s.Nil(r.WithProvider("x"))
-	s.NotPanics(func() { r.Register(New("ignored-by-nil")) })
+	var nr *NoResolverError
+	s.ErrorAs(r.Register(New("refused-by-nil")), &nr)
 	s.Equal(DefaultTimeouts(), r.Timeouts())
 
 	_, err := ResolverFromContext(context.Background()).Read(context.Background(), "ANY")
-	var nr *NoResolverError
 	s.Require().ErrorAs(err, &nr)
 	s.Equal("secrets: no resolver on this context", err.Error())
 }
@@ -119,6 +119,7 @@ func (s *ResolverSuite) TestRedactMasksLongestValueFirst() {
 
 func (s *ResolverSuite) TestReadDoesNotRegisterValuesTooShortToMask() {
 	s.T().Setenv("SECRETS_TEST_TINY", "ab")
+	s.r = NewResolver(WithShortSecret(func(context.Context, string) {}))
 	s.Equal("ab", s.read("SECRETS_TEST_TINY").Reveal(), "the value is returned; only its protection is declined")
 	s.Equal("grab a table", string(s.r.redact([]byte("grab a table"))))
 
@@ -246,7 +247,7 @@ func (s *ResolverSuite) TestWithProviderDerivesWithoutChangingTheOriginal() {
 	s.Equal("onepassword", vault.ProviderName())
 
 	// The derived resolver shares the redaction set: a value one registers, both mask.
-	vault.Register(New("shared-redaction-token"))
+	s.Require().NoError(vault.Register(New("shared-redaction-token")))
 	s.Equal(mask, s.r.redactString("shared-redaction-token"))
 }
 
@@ -331,19 +332,29 @@ func (s *ResolverSuite) TestPackageLevelRedactorsFollowTheContext() {
 
 // A credential held without a provider read is masked like a resolved one.
 func (s *ResolverSuite) TestRegisterMasksAHeldCredential() {
-	s.r.Register(New("stdin-registry-token"))
+	s.Require().NoError(s.r.Register(New("stdin-registry-token")))
 	s.Equal("push with "+mask, s.r.redactString("push with stdin-registry-token"))
 	s.Empty(s.r.resolved, "a registered value is not a resolved reference")
 }
 
-func (s *ResolverSuite) TestRegisterIgnoresAValueTooShortToMask() {
-	s.r.Register(New("ab"))
+func (s *ResolverSuite) TestRegisterRefusesAValueTooShortToMask() {
+	var short *ShortSecretError
+	s.Require().ErrorAs(s.r.Register(New("ab")), &short)
+	s.Equal(2, short.Len)
 	s.Equal("grab", s.r.redactString("grab"))
 }
 
+func (s *ResolverSuite) TestReadRefusesAShortValueNoNoticeHears() {
+	s.T().Setenv("SECRETS_TEST_TINY", "ab")
+	_, err := NewResolver().Read(s.T().Context(), "SECRETS_TEST_TINY")
+
+	var short *ShortSecretError
+	s.Require().ErrorAs(err, &short)
+}
+
 func (s *ResolverSuite) TestUnregisterKeepsOtherValues() {
-	s.r.Register(New("keep-this-token"))
-	s.r.Register(New("drop-this-token"))
+	s.Require().NoError(s.r.Register(New("keep-this-token")))
+	s.Require().NoError(s.r.Register(New("drop-this-token")))
 	s.r.unregisterRedactable(New("drop-this-token"))
 	s.Equal("drop-this-token "+mask, s.r.redactString("drop-this-token keep-this-token"))
 }

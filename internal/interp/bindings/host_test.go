@@ -46,7 +46,7 @@ func (s *emitMagusLogSuite) SetupTest() {
 		},
 	}))))
 	s.resolver = secrets.NewResolver()
-	s.resolver.Register(secrets.New(testSecret))
+	s.Require().NoError(s.resolver.Register(secrets.New(testSecret)))
 }
 
 func (s *emitMagusLogSuite) TearDownTest() { slog.SetDefault(s.previous) }

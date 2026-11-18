@@ -213,8 +213,10 @@ var (
 // through [Resolver.Redact] masks the value. Every failure is a *[ReadError], or a
 // *[NoResolverError] for a nil Resolver.
 //
-// A value shorter than [MinMaskLen] is returned but NOT registered; the [WithShortSecret]
-// notice is told about it.
+// A value shorter than [MinMaskLen] is returned but NOT registered, and the
+// [WithShortSecret] notice is told about it; with no notice it is a *[ReadError] wrapping
+// a *[ShortSecretError], because the caller would have no other way to learn that the
+// value is unprotected.
 //
 // Concurrent reads of one reference share a single provider invocation, and a reference
 // is fetched once per provider for the Resolver's life. The shared fetch runs under the
@@ -283,7 +285,10 @@ func (r *Resolver) fetch(callerCtx context.Context, key resolvedKey) (Secret, er
 	if val.IsZero() {
 		return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: errEmptyValue}
 	}
-	if val.Len() < MinMaskLen && r.short != nil {
+	if val.Len() < MinMaskLen {
+		if r.short == nil {
+			return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: &ShortSecretError{Len: val.Len()}}
+		}
 		r.short(ctx, key.ref)
 	}
 	r.record(key, val)
@@ -340,17 +345,33 @@ func (r *Resolver) record(key resolvedKey, v Secret) {
 
 // Register adds v and its encoded forms to the redaction set without keeping it as a
 // resolved reference: for a credential the caller mints or receives outside a provider (a
-// token read from stdin). A value shorter than [MinMaskLen] and a nil Resolver are
-// ignored.
-func (r *Resolver) Register(v Secret) {
-	if r == nil || v.Len() < MinMaskLen {
-		return
+// token read from stdin). A value shorter than [MinMaskLen] cannot be masked and is a
+// *[ShortSecretError], whatever [WithShortSecret] says, since the caller is handed nothing
+// to warn about; a nil Resolver is a *[NoResolverError].
+func (r *Resolver) Register(v Secret) error {
+	if r == nil {
+		return &NoResolverError{}
+	}
+	if v.Len() < MinMaskLen {
+		return &ShortSecretError{Len: v.Len()}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, form := range encodedForms(v) {
 		r.addRedactable(form)
 	}
+	return nil
+}
+
+// ShortSecretError is a value shorter than [MinMaskLen], which no redaction masks: from
+// [Resolver.Register] always, and from [Resolver.Read] when no [WithShortSecret] notice
+// hears it.
+type ShortSecretError struct {
+	Len int
+}
+
+func (e *ShortSecretError) Error() string {
+	return fmt.Sprintf("the value is %d characters, below the %d redaction masks, so it would print in the clear", e.Len, MinMaskLen)
 }
 
 // unregisterRedactable removes v and its encoded forms from the redaction set.
