@@ -319,7 +319,8 @@ func TestScriptsForSkipsWhatItCannotServe(t *testing.T) {
 	for name, cacheDir := range map[string]string{
 		"no cache dir":   "",
 		"no index":       t.TempDir(),
-		"foreign format": foreignScriptsIndex(t, root),
+		"foreign format": foreignScriptsIndex(t, root, `"magus.scripts-index/v999"`),
+		"numeric format": foreignScriptsIndex(t, root, `2`),
 	} {
 		next, err := MatchScripts(cacheDir, "rule:spawn-without-job-row", nil)
 		require.NoError(t, err, name)
@@ -327,12 +328,12 @@ func TestScriptsForSkipsWhatItCannotServe(t *testing.T) {
 	}
 }
 
-func foreignScriptsIndex(t *testing.T, root string) string {
+func foreignScriptsIndex(t *testing.T, root, format string) string {
 	t.Helper()
 	cacheDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Dir(ScriptsIndexPath(cacheDir)), 0o755))
 	require.NoError(t, os.WriteFile(ScriptsIndexPath(cacheDir),
-		[]byte(fmt.Sprintf(`{"format":"magus.scripts-index/v999","root":"%s","serves":{}}`, root)), 0o600))
+		[]byte(fmt.Sprintf(`{"format":%s,"root":"%s","serves":{}}`, format, root)), 0o600))
 	return cacheDir
 }
 
