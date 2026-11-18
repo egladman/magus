@@ -327,7 +327,7 @@ func (s *narrowSuite) SetupTest() {
 	row.Paths.Write = []string{"a.go", "b.go", "c.go#Run"}
 	row.Check = fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
 	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
-	row.Goals = []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}}
+	row.Postconditions = []job.Postcondition{{ID: "g", Kind: job.PostconditionKindPaths, Paths: []string{"a.go"}}}
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
 }
@@ -344,7 +344,7 @@ func (s *narrowSuite) TestAReleasedPathLeavesTheRestOfTheSpec() {
 	rec := s.release("b.go")
 
 	s.Equal([]string{"a.go", "c.go#Run"}, rec.Paths.Write)
-	s.Len(rec.Goals, 1)
+	s.Len(rec.Postconditions, 1)
 	s.False(rec.Check.IsZero())
 }
 
@@ -403,36 +403,36 @@ type resolveAcceptSuite struct{ suite.Suite }
 
 func TestResolveAccept(t *testing.T) { suite.Run(t, new(resolveAcceptSuite)) }
 
-func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
-	in := []job.Goal{
+func (s *resolveAcceptSuite) TestACheckPostconditionNamingNoBasisAcceptsWitnessed() {
+	in := []job.Postcondition{
 		{ID: "unit", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
-		{ID: "lint", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."}), Accept: []job.Basis{job.BasisReported}},
-		{ID: "docs", Kind: job.GoalKindPaths, Paths: []string{"docs"}},
+		{ID: "lint", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."}), Accept: []job.Basis{job.BasisReported}},
+		{ID: "docs", Kind: job.PostconditionKindPaths, Paths: []string{"docs"}},
 	}
 
 	got, defaulted := resolveAccept(in)
 
-	s.Equal([]string{"unit"}, defaulted, "only the goal naming no basis defaulted")
+	s.Equal([]string{"unit"}, defaulted, "only the postcondition naming no basis defaulted")
 	s.Equal([]job.Basis{job.BasisWitnessed}, got[0].Accept, "an unnamed kind is a check")
-	s.Equal([]job.Basis{job.BasisReported}, got[1].Accept, "a goal naming its bases keeps them")
-	s.Empty(got[2].Accept, "only a check goal accepts a basis")
-	s.Empty(in[0].Accept, "the caller's goals are not written through")
+	s.Equal([]job.Basis{job.BasisReported}, got[1].Accept, "a postcondition naming its bases keeps them")
+	s.Empty(got[2].Accept, "only a check postcondition accepts a basis")
+	s.Empty(in[0].Accept, "the caller's postconditions are not written through")
 }
 
-func (s *resolveAcceptSuite) TestADecodedRecordNamesTheCheckGoalThatDefaulted() {
+func (s *resolveAcceptSuite) TestADecodedRecordNamesTheCheckPostconditionThatDefaulted() {
 	_, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"api_version":"` + string(job.APIVersion) + `","id":"w",` +
-		`"paths":{"write":["a.go"]},"goals":[{"id":"unit","kind":"check","check":{"target":"test","project":"."}},` +
+		`"paths":{"write":["a.go"]},"postconditions":[{"id":"unit","kind":"check","check":{"target":"test","project":"."}},` +
 		`{"id":"lint","kind":"check","check":{"target":"lint","project":"."},"accept":["reported"]}]}`))
 
 	s.Require().NoError(err)
-	s.Equal([]DefaultedAccept{{Job: "w", Goal: "unit"}}, defaulted)
-	s.Equal(`w: check goal "unit" names no accept, so it defaulted to accept [witnessed]`, defaulted[0].String())
+	s.Equal([]DefaultedAccept{{Job: "w", Postcondition: "unit"}}, defaulted)
+	s.Equal(`w: check postcondition "unit" names no accept, so it defaulted to accept [witnessed]`, defaulted[0].String())
 }
 
-func (s *resolveAcceptSuite) TestADecodedRecordValidatesWithItsCheckGoalResolved() {
+func (s *resolveAcceptSuite) TestADecodedRecordValidatesWithItsCheckPostconditionResolved() {
 	row, _, err := decodeDeclaration(strings.NewReader(`{"api_version":"` + string(job.APIVersion) + `","id":"w",` +
-		`"goals":[{"id":"unit","check":{"target":"test","project":"."}}]}`))
+		`"postconditions":[{"id":"unit","check":{"target":"test","project":"."}}]}`))
 
 	s.Require().NoError(err)
-	s.Equal([]job.Basis{job.BasisWitnessed}, row.Goals[0].Accept)
+	s.Equal([]job.Basis{job.BasisWitnessed}, row.Postconditions[0].Accept)
 }

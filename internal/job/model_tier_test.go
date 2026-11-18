@@ -109,17 +109,17 @@ func TestNewModelTierRequestDerivesKindFromTheRow(t *testing.T) {
 
 	target := &types.LeaseCheck{Target: "test", Project: "."}
 	script := &types.LeaseCheck{Script: "probe.buzz"}
-	symbol := job.Goal{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"A"}}
-	paths := job.Goal{ID: "touched", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}
+	symbol := job.Postcondition{ID: "moved", Kind: job.PostconditionKindSymbol, Symbols: []string{"A"}}
+	paths := job.Postcondition{ID: "touched", Kind: job.PostconditionKindPaths, Paths: []string{"a.go"}}
 	tests := []struct {
 		name string
 		row  job.Job
 		want types.JobKind
 	}{
-		{"a script check outranks everything", job.Job{Check: fixtureCheck(*script), Goals: []job.Goal{symbol, paths}}, types.JobKindScript},
-		{"a script check inside a goal counts", job.Job{Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: fixtureCheck(*script)}, symbol}}, types.JobKindScript},
-		{"symbol goals outrank paths and a target check", job.Job{Check: fixtureCheck(*target), Goals: []job.Goal{paths, symbol}}, types.JobKindSymbol},
-		{"path goals outrank a target check", job.Job{Check: fixtureCheck(*target), Goals: []job.Goal{paths}}, types.JobKindPaths},
+		{"a script check outranks everything", job.Job{Check: fixtureCheck(*script), Postconditions: []job.Postcondition{symbol, paths}}, types.JobKindScript},
+		{"a script check inside a postcondition counts", job.Job{Postconditions: []job.Postcondition{{ID: "g", Kind: job.PostconditionKindCheck, Check: fixtureCheck(*script)}, symbol}}, types.JobKindScript},
+		{"symbol postconditions outrank paths and a target check", job.Job{Check: fixtureCheck(*target), Postconditions: []job.Postcondition{paths, symbol}}, types.JobKindSymbol},
+		{"path postconditions outrank a target check", job.Job{Check: fixtureCheck(*target), Postconditions: []job.Postcondition{paths}}, types.JobKindPaths},
 		{"a target check alone", job.Job{Check: fixtureCheck(*target)}, types.JobKindCheck},
 		{"nothing graded is prose", job.Job{Agent: job.Instructed("tidy the docs")}, types.JobKindProse},
 	}
@@ -157,8 +157,8 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	row := job.Job{
 		ID: "wave/a", Parent: "wave", Agent: &job.Agent{Instructions: "do it", Model: job.Model{Tier: "routine"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, ReadOnly: false,
 		Paths: job.Paths{Write: []string{"a.go"}, Read: []string{"b"}}, DependsOn: []string{"wave/b"},
-		Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}}),
-		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}},
+		Check:          fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}}),
+		Postconditions: []job.Postcondition{{ID: "g", Kind: job.PostconditionKindPaths, Paths: []string{"a.go"}}},
 	}
 	history := []types.ModelTierRecord{{Rank: 0, ModelTier: "routine", Jobs: 12}}
 
@@ -171,7 +171,7 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	wantReq := req
 	view, err := types.NewJob(row)
 	require.NoError(t, err)
-	wantReq.Model, wantReq.History, wantReq.Goals = job.Model{Tier: "routine"}, history, view.Goals
+	wantReq.Model, wantReq.History, wantReq.Postconditions = job.Model{Tier: "routine"}, history, view.Postconditions
 	wantReq.WritePaths, wantReq.ReadPaths, wantReq.DependsOn = []string{"a.go"}, []string{"b"}, []string{"wave/b"}
 	assert.Equal(t, wantReq, req)
 	assert.Empty(t, req.WriteProjects, "a project is a graph fact the store does not hold")

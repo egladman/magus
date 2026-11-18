@@ -16,17 +16,17 @@ type JobViewSuite struct{ suite.Suite }
 func TestJobView(t *testing.T) { suite.Run(t, new(JobViewSuite)) }
 
 const (
-	viewCheck     = `{"target":"test","project":"."}`
-	viewGoalCheck = `{"target":"lint","project":"libs/x","no_default_charms":true}`
+	viewCheck              = `{"target":"test","project":"."}`
+	viewPostconditionCheck = `{"target":"lint","project":"libs/x","no_default_charms":true}`
 )
 
 func (s *JobViewSuite) record() job.Job {
 	return job.Job{
 		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}},
 		Check: storedJSON(viewCheck),
-		Goals: []job.Goal{
-			{ID: "lint", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: storedJSON(viewGoalCheck), Accept: []job.Basis{job.BasisWitnessed}},
-			{ID: "names", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"X"}},
+		Postconditions: []job.Postcondition{
+			{ID: "lint", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: storedJSON(viewPostconditionCheck), Accept: []job.Basis{job.BasisWitnessed}},
+			{ID: "names", Kind: job.PostconditionKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"X"}},
 		},
 	}
 }
@@ -50,8 +50,8 @@ func (s *JobViewSuite) TestTheViewReadsEachCheck() {
 	s.Require().NoError(err)
 
 	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
-	s.Equal(LeaseCheck{Target: "lint", Project: "libs/x", NoDefaultCharms: true}, view.Goals[0].Check)
-	s.Equal(LeaseCheck{}, view.Goals[1].Check)
+	s.Equal(LeaseCheck{Target: "lint", Project: "libs/x", NoDefaultCharms: true}, view.Postconditions[0].Check)
+	s.Equal(LeaseCheck{}, view.Postconditions[1].Check)
 	s.True(view.Job.Check.IsZero(), "the row's own member is hidden, never read twice")
 }
 
@@ -64,21 +64,21 @@ func (s *JobViewSuite) TestModuleGivesTheJobBack() {
 
 	s.Require().NoError(err)
 	s.JSONEq(viewCheck, back.Check.String())
-	s.JSONEq(viewGoalCheck, back.Goals[0].Check.String())
-	s.True(back.Goals[1].Check.IsZero(), "a goal with no check stays one")
-	back.Check, back.Goals[0].Check = row.Check, row.Goals[0].Check
+	s.JSONEq(viewPostconditionCheck, back.Postconditions[0].Check.String())
+	s.True(back.Postconditions[1].Check.IsZero(), "a postcondition with no check stays one")
+	back.Check, back.Postconditions[0].Check = row.Check, row.Postconditions[0].Check
 	s.Equal(row, back)
 }
 
 func (s *JobViewSuite) TestACheckThatDoesNotReadIsRefusedNamingWhereItSits() {
 	row := s.record()
-	row.Goals[0].Check = storedJSON(`{"target":"lint","noDefaultCharms":true}`)
+	row.Postconditions[0].Check = storedJSON(`{"target":"lint","noDefaultCharms":true}`)
 
 	_, err := NewJob(row)
 
 	var decode *CheckDecodeError
 	s.Require().ErrorAs(err, &decode)
-	s.Equal(&CheckDecodeError{Job: "w", Field: "goals[lint].check", Err: decode.Err}, decode)
+	s.Equal(&CheckDecodeError{Job: "w", Field: "postconditions[lint].check", Err: decode.Err}, decode)
 }
 
 func (s *JobViewSuite) TestAJobWithNoCheckHasANilOne() {
@@ -116,12 +116,12 @@ func (s *JobViewSuite) TestYAMLPrintsTheCheckAsAnObject() {
 
 func (s *JobViewSuite) TestTheDeclarationReadsAndWritesAsTheModulesDoes() {
 	text := `{"api_version":"safetyscissors.job/v1alpha1","id":"w","check":{"target":"test","project":"."},` +
-		`"goals":[{"id":"lint","kind":"check","check":{"target":"lint"},"accept":["witnessed"]}],"later":true}`
+		`"postconditions":[{"id":"lint","kind":"check","check":{"target":"lint"},"accept":["witnessed"]}],"later":true}`
 	var view Declaration
 	s.Require().NoError(codec.Unmarshal([]byte(text), &view))
 
 	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
-	s.Equal("lint", view.Goals[0].Check.Target)
+	s.Equal("lint", view.Postconditions[0].Check.Target)
 	s.Equal([]string{"later"}, view.Unknown(), "a member the declaration does not declare is kept")
 
 	var module job.Declaration
@@ -142,8 +142,8 @@ func (s *JobViewSuite) TestTheDeclarationRefusesACheckThatDoesNotRead() {
 	s.Equal("check", decode.Field)
 }
 
-func (s *JobViewSuite) TestAGoalWithNoCheckIsAModuleGoalWithNone() {
-	g, err := Goal{Goal: job.Goal{ID: "names", Kind: job.GoalKindSymbol}}.Module()
+func (s *JobViewSuite) TestAPostconditionWithNoCheckIsAModulePostconditionWithNone() {
+	g, err := Postcondition{Postcondition: job.Postcondition{ID: "names", Kind: job.PostconditionKindSymbol}}.Module()
 	s.Require().NoError(err)
 	s.True(g.Check.IsZero())
 }

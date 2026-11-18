@@ -48,8 +48,8 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 	t.Parallel()
 
 	check := func(target string) *types.LeaseCheck { return &types.LeaseCheck{Target: target, Project: "."} }
-	goal := func(target string) job.Goal {
-		return job.Goal{ID: "g-" + target, Check: fixtureCheck(types.LeaseCheck{Target: target, Project: "."})}.Resolve()
+	postcondition := func(target string) job.Postcondition {
+		return job.Postcondition{ID: "g-" + target, Check: fixtureCheck(types.LeaseCheck{Target: target, Project: "."})}.Resolve()
 	}
 	row := func(mutate func(*job.Job)) job.Job {
 		r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: fixtureCheck(*check("go-test"))}
@@ -69,8 +69,8 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 			want: []string{".:lint", ".:build", ".:gen"},
 		},
 		{
-			name: "a goal that runs a target covers it",
-			row:  row(func(r *job.Job) { r.Goals = []job.Goal{goal("lint")} }),
+			name: "a postcondition that runs a target covers it",
+			row:  row(func(r *job.Job) { r.Postconditions = []job.Postcondition{postcondition("lint")} }),
 			want: []string{".:build", ".:gen"},
 		},
 		{
@@ -105,9 +105,9 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 			got := UnrunGates(t.TempDir(), tc.row, gatesWorkspace(), tc.regenerated, nil)
 			assert.Equal(t, tc.want, gateTargets(got))
 			for _, g := range got {
-				goal, err := g.Goal.Module()
+				postcondition, err := g.Postcondition.Module()
 				require.NoError(t, err)
-				require.NoError(t, validateGoal(goal), "the goal to add must be declarable as printed")
+				require.NoError(t, validatePostcondition(postcondition), "the postcondition to add must be declarable as printed")
 			}
 		})
 	}
@@ -258,17 +258,17 @@ func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil, nil), "no root project")
 }
 
-func TestUnrunGoalNamesTheProject(t *testing.T) {
+func TestUnrunPostconditionNamesTheProject(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "lint", unrunGoal(".", "lint", map[string]bool{}).ID)
-	assert.Equal(t, "lint-libs-conventions", unrunGoal("libs/conventions", "lint", map[string]bool{}).ID)
-	assert.Equal(t, job.GoalKindCheck, unrunGoal(".", "lint", map[string]bool{}).Kind)
+	assert.Equal(t, "lint", unrunPostcondition(".", "lint", map[string]bool{}).ID)
+	assert.Equal(t, "lint-libs-conventions", unrunPostcondition("libs/conventions", "lint", map[string]bool{}).ID)
+	assert.Equal(t, job.PostconditionKindCheck, unrunPostcondition(".", "lint", map[string]bool{}).Kind)
 }
 
-// Two projects can fold to one id, and a ci target can share its name with a goal the row
-// already holds: each goal to add gets an id of its own.
-func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
+// Two projects can fold to one id, and a ci target can share its name with a postcondition the row
+// already holds: each postcondition to add gets an id of its own.
+func TestUnrunGatesGiveEachPostconditionItsOwnID(t *testing.T) {
 	t.Parallel()
 
 	projects := []*types.Project{
@@ -288,7 +288,7 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 
 	var ids []string
 	for _, g := range got {
-		ids = append(ids, g.Goal.ID)
+		ids = append(ids, g.Postcondition.ID)
 	}
 	assert.Equal(t, []string{"check-2", "lint-a-b", "lint-a-b-2"}, ids)
 }
@@ -305,7 +305,7 @@ func workerGrade(c types.LeaseCheck) CheckVerdict {
 	return CheckVerdict{}
 }
 
-func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
+func TestUnrunGatesOfferOnlyPostconditionsAWorkerMayRun(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "compile", Project: "."})}
@@ -317,10 +317,10 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 		byTarget[g.Target] = g
 	}
 	assert.False(t, byTarget["lint"].IntegratorGates)
-	assert.True(t, byTarget["go-test"].Goal.Check.NoDefaultCharms, "a test the worker may run only without default charms is offered that way")
+	assert.True(t, byTarget["go-test"].Postcondition.Check.NoDefaultCharms, "a test the worker may run only without default charms is offered that way")
 	build := byTarget["build"]
 	assert.True(t, build.IntegratorGates, "no form of the build may run")
-	assert.Zero(t, build.Goal, "a goal no worker may run is not offered")
+	assert.Zero(t, build.Postcondition, "a postcondition no worker may run is not offered")
 
 	lines := unrunLines(got)
 	assert.Contains(t, lines, "build . (reads **/*.go): the integrator gates it; no worker may run it")
@@ -328,17 +328,17 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 
 	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, gradeWith(nil, "", row))
 	for _, g := range ungraded {
-		assert.False(t, g.IntegratorGates, "with no grader every goal is offered as it is")
+		assert.False(t, g.IntegratorGates, "with no grader every postcondition is offered as it is")
 	}
 }
 
-func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
+func TestRenderUnrunGatesCapsTheListAndPrintsThePostconditions(t *testing.T) {
 	t.Parallel()
 
 	var gates []UnrunGate
 	taken := map[string]bool{}
 	for i := range unrunGatesLimit + 2 {
-		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Goal: unrunGoal(".", fmt.Sprintf("t%d", i), taken)})
+		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Postcondition: unrunPostcondition(".", fmt.Sprintf("t%d", i), taken)})
 	}
 	var buf bytes.Buffer
 	renderUnrunGates(&buf, gates)
@@ -347,7 +347,7 @@ func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
 	assert.Contains(t, out, "t0 . (reads **/*.go)")
 	assert.NotContains(t, out, fmt.Sprintf("t%d . (reads", unrunGatesLimit))
 	assert.Contains(t, out, "and 2 more; -o json lists every one")
-	assert.Contains(t, out, `goals to add: [{"id":"t0","kind":"check"`)
+	assert.Contains(t, out, `postconditions to add: [{"id":"t0","kind":"check"`)
 
 	buf.Reset()
 	renderUnrunGates(&buf, nil)

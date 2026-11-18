@@ -1,4 +1,4 @@
-# A read-only job declaring no check or goal passes on the result its holder files, unless
+# A read-only job declaring no check or postcondition passes on the result its holder files, unless
 # that result names an unresolved risk: then the row stays exited for the root to read.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state

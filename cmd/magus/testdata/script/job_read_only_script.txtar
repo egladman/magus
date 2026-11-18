@@ -30,7 +30,7 @@ stdout '^exited scout/pricing, recorded exited'
 
 exec magus job wait scout/pricing
 stdout '^verified scout/pricing, recorded pass$'
-stdout 'goal check: verified \(out[0-9a-f]{12}\)'
+stdout 'postcondition check: verified \(out[0-9a-f]{12}\)'
 
 # A check-less scout has nothing a wait could grade, so the result its holder files is the
 # grade: `magus job exit --stdin` records it pass and ends it. One ending with no result is
@@ -50,7 +50,7 @@ stderr 'scout/notes already ended pass'
 exec magus job fork scout/prose --read-only --instructions 'summarize the tests'
 exec magus job exec scout/prose
 exec magus job exit scout/prose
-stdout '^ended scout/prose, recorded no_return: ended ungraded: a read-only row declaring no check or goal'
+stdout '^ended scout/prose, recorded no_return: ended ungraded: a read-only row declaring no check or postcondition'
 ! stdout 'abandoned'
 
 # A scout that forgets --read-only names no write paths, which bounds nothing, so fork

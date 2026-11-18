@@ -20,15 +20,15 @@ type Job struct {
 	job.Job
 	// Check is the one check this lease runs; nil is none.
 	Check *LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
-	// Goals are the job's definition of done that the store grades, each check goal's
+	// Postconditions are the job's definition of done that the store grades, each check postcondition's
 	// check read as a lease check.
-	Goals []Goal `json:"goals,omitempty" yaml:"goals,omitempty"`
+	Postconditions []Postcondition `json:"postconditions,omitempty" yaml:"postconditions,omitempty"`
 }
 
-// Goal is a job goal with its check read as a lease check.
-type Goal struct {
-	job.Goal
-	// Check is the run a GoalKindCheck goal examines. Zero on every other kind.
+// Postcondition is a job postcondition with its check read as a lease check.
+type Postcondition struct {
+	job.Postcondition
+	// Check is the run a PostconditionKindCheck postcondition examines. Zero on every other kind.
 	Check LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
 }
 
@@ -43,13 +43,13 @@ type JobList struct {
 //
 // It is the module's [job.Declaration] with its checks read as lease checks, so the
 // published schema spells a check out. It has its own JSON methods because the module
-// record's would otherwise be promoted and drop Check and Goals.
+// record's would otherwise be promoted and drop Check and Postconditions.
 type Declaration struct {
 	job.Declaration
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence to it.
 	Check *LeaseCheck `json:"check,omitzero"`
-	// Goals are what done means, graded by [Store.Grade]. See [Job.Goals].
-	Goals []Goal `json:"goals,omitempty"`
+	// Postconditions are what done means, graded by [Store.Grade]. See [Job.Postconditions].
+	Postconditions []Postcondition `json:"postconditions,omitempty"`
 }
 
 // ErrNoLeaseCheck is a stored check that declares none: the zero [job.Check].
@@ -58,7 +58,7 @@ var ErrNoLeaseCheck = errors.New("declares no check")
 // CheckDecodeError is a stored check that does not read as a [LeaseCheck].
 type CheckDecodeError struct {
 	// Job is the row the check belongs to and Field where it sits: "check" or
-	// "goals[<id>].check". Either is empty when the check was read on its own.
+	// "postconditions[<id>].check". Either is empty when the check was read on its own.
 	Job, Field string
 	Err        error
 }
@@ -98,7 +98,7 @@ func EncodeLeaseCheck(c LeaseCheck) (job.Check, error) {
 	return stored, nil
 }
 
-// declaresCheck reports whether c names anything. A zero LeaseCheck is a goal with no
+// declaresCheck reports whether c names anything. A zero LeaseCheck is a postcondition with no
 // check, which the module records as the zero [job.Check].
 func declaresCheck(c LeaseCheck) bool {
 	return c.Target != "" || c.Script != "" || c.Project != "" || len(c.Args) > 0 || c.NoDefaultCharms || c.Test
@@ -117,14 +117,14 @@ func decodeAt(stored job.Check, id, field string) (LeaseCheck, error) {
 	return c, nil
 }
 
-// NewGoal is g with its check read as a lease check.
-func NewGoal(g job.Goal) (Goal, error) {
-	view := Goal{Goal: g}
-	view.Goal.Check = job.Check{}
+// NewPostcondition is g with its check read as a lease check.
+func NewPostcondition(g job.Postcondition) (Postcondition, error) {
+	view := Postcondition{Postcondition: g}
+	view.Postcondition.Check = job.Check{}
 	if !g.Check.IsZero() {
-		c, err := decodeAt(g.Check, "", goalField(g.ID))
+		c, err := decodeAt(g.Check, "", postconditionField(g.ID))
 		if err != nil {
-			return Goal{}, err
+			return Postcondition{}, err
 		}
 		view.Check = c
 	}
@@ -132,37 +132,37 @@ func NewGoal(g job.Goal) (Goal, error) {
 }
 
 // Module is g as the job module records it.
-func (g Goal) Module() (job.Goal, error) {
-	out := g.Goal
+func (g Postcondition) Module() (job.Postcondition, error) {
+	out := g.Postcondition
 	out.Check = job.Check{}
 	if !declaresCheck(g.Check) {
 		return out, nil
 	}
 	stored, err := EncodeLeaseCheck(g.Check)
 	if err != nil {
-		return job.Goal{}, err
+		return job.Postcondition{}, err
 	}
 	out.Check = stored
 	return out, nil
 }
 
 // MarshalYAML prints g as its JSON reads. See [Job.MarshalYAML].
-func (g Goal) MarshalYAML() (any, error) { return yamlOfJSON(g) }
+func (g Postcondition) MarshalYAML() (any, error) { return yamlOfJSON(g) }
 
-func goalField(id string) string {
-	if id == job.PrimaryGoalID {
+func postconditionField(id string) string {
+	if id == job.PrimaryPostconditionID {
 		return "check"
 	}
-	return fmt.Sprintf("goals[%s].check", id)
+	return fmt.Sprintf("postconditions[%s].check", id)
 }
 
-func newGoals(id string, in []job.Goal) ([]Goal, error) {
+func newPostconditions(id string, in []job.Postcondition) ([]Postcondition, error) {
 	if in == nil {
 		return nil, nil
 	}
-	out := make([]Goal, len(in))
+	out := make([]Postcondition, len(in))
 	for i, g := range in {
-		view, err := NewGoal(g)
+		view, err := NewPostcondition(g)
 		if err != nil {
 			var decode *CheckDecodeError
 			if errors.As(err, &decode) {
@@ -175,11 +175,11 @@ func newGoals(id string, in []job.Goal) ([]Goal, error) {
 	return out, nil
 }
 
-func moduleGoals(in []Goal) ([]job.Goal, error) {
+func modulePostconditions(in []Postcondition) ([]job.Postcondition, error) {
 	if in == nil {
 		return nil, nil
 	}
-	out := make([]job.Goal, len(in))
+	out := make([]job.Postcondition, len(in))
 	for i, g := range in {
 		m, err := g.Module()
 		if err != nil {
@@ -190,9 +190,9 @@ func moduleGoals(in []Goal) ([]job.Goal, error) {
 	return out, nil
 }
 
-// viewChecks is a record's own check and its goals', the record named id, read as lease
+// viewChecks is a record's own check and its postconditions', the record named id, read as lease
 // checks.
-func viewChecks(id string, check job.Check, goals []job.Goal) (*LeaseCheck, []Goal, error) {
+func viewChecks(id string, check job.Check, postconditions []job.Postcondition) (*LeaseCheck, []Postcondition, error) {
 	var own *LeaseCheck
 	if !check.IsZero() {
 		c, err := decodeAt(check, id, "check")
@@ -201,15 +201,15 @@ func viewChecks(id string, check job.Check, goals []job.Goal) (*LeaseCheck, []Go
 		}
 		own = &c
 	}
-	read, err := newGoals(id, goals)
+	read, err := newPostconditions(id, postconditions)
 	if err != nil {
 		return nil, nil, err
 	}
 	return own, read, nil
 }
 
-// moduleChecks is a view's own check and its goals as the job module stores them.
-func moduleChecks(check *LeaseCheck, goals []Goal) (job.Check, []job.Goal, error) {
+// moduleChecks is a view's own check and its postconditions as the job module stores them.
+func moduleChecks(check *LeaseCheck, postconditions []Postcondition) (job.Check, []job.Postcondition, error) {
 	var own job.Check
 	if check != nil {
 		encoded, err := EncodeLeaseCheck(*check)
@@ -218,7 +218,7 @@ func moduleChecks(check *LeaseCheck, goals []Goal) (job.Check, []job.Goal, error
 		}
 		own = encoded
 	}
-	stored, err := moduleGoals(goals)
+	stored, err := modulePostconditions(postconditions)
 	if err != nil {
 		return job.Check{}, nil, err
 	}
@@ -227,12 +227,12 @@ func moduleChecks(check *LeaseCheck, goals []Goal) (job.Check, []job.Goal, error
 
 // NewJob is row with its checks read as lease checks.
 func NewJob(row job.Job) (Job, error) {
-	check, goals, err := viewChecks(row.ID, row.Check, row.Goals)
+	check, postconditions, err := viewChecks(row.ID, row.Check, row.Postconditions)
 	if err != nil {
 		return Job{}, err
 	}
-	view := Job{Job: row, Check: check, Goals: goals}
-	view.Job.Check, view.Job.Goals = job.Check{}, nil
+	view := Job{Job: row, Check: check, Postconditions: postconditions}
+	view.Job.Check, view.Job.Postconditions = job.Check{}, nil
 	return view, nil
 }
 
@@ -240,7 +240,7 @@ func NewJob(row job.Job) (Job, error) {
 func (j Job) Module() (job.Job, error) {
 	row := j.Job
 	var err error
-	if row.Check, row.Goals, err = moduleChecks(j.Check, j.Goals); err != nil {
+	if row.Check, row.Postconditions, err = moduleChecks(j.Check, j.Postconditions); err != nil {
 		return job.Job{}, err
 	}
 	return row, nil
@@ -273,9 +273,9 @@ func (l JobList) MarshalYAML() (any, error) { return yamlOfJSON(l) }
 // NewDeclaration is d with its checks read as lease checks.
 func NewDeclaration(d job.Declaration) (Declaration, error) {
 	view := Declaration{Declaration: d}
-	view.Declaration.Check, view.Declaration.Goals = job.Check{}, nil
+	view.Declaration.Check, view.Declaration.Postconditions = job.Check{}, nil
 	var err error
-	if view.Check, view.Goals, err = viewChecks(d.ID, d.Check, d.Goals); err != nil {
+	if view.Check, view.Postconditions, err = viewChecks(d.ID, d.Check, d.Postconditions); err != nil {
 		return Declaration{}, err
 	}
 	return view, nil
@@ -285,7 +285,7 @@ func NewDeclaration(d job.Declaration) (Declaration, error) {
 func (d Declaration) Module() (job.Declaration, error) {
 	out := d.Declaration
 	var err error
-	if out.Check, out.Goals, err = moduleChecks(d.Check, d.Goals); err != nil {
+	if out.Check, out.Postconditions, err = moduleChecks(d.Check, d.Postconditions); err != nil {
 		return job.Declaration{}, err
 	}
 	return out, nil

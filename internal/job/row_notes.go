@@ -43,9 +43,9 @@ func InflightScope(changes []InflightChange, all bool) []InflightChange {
 }
 
 // UnfinishedIntegration is the write paths a re-fork of integration row id holds when its
-// branches have nothing left to merge: the stored row's, while some goal of it is unmet, so
+// branches have nothing left to merge: the stored row's, while some postcondition of it is unmet, so
 // a follow-up fixing what the merge left red keeps the row. nil when there is no such row or
-// every goal is met.
+// every postcondition is met.
 func UnfinishedIntegration(ctx context.Context, store *Store, row job.Declaration, observe Observer) ([]string, error) {
 	rows, err := store.List(ctx)
 	if err != nil {
@@ -57,7 +57,7 @@ func UnfinishedIntegration(ctx context.Context, store *Store, row job.Declaratio
 	}
 	status, err := GradeGates(ctx, store, row.ID, observe)
 	if err != nil {
-		return nil, exit.Usagef("magus job fork: %s's goals cannot be graded, so whether it is finished is unknown: %s", row.ID, err)
+		return nil, exit.Usagef("magus job fork: %s's postconditions cannot be graded, so whether it is finished is unknown: %s", row.ID, err)
 	}
 	if !slices.ContainsFunc(status.Gates, func(g job.VerificationStatus) bool { return !g.Verified }) {
 		return nil, nil
@@ -203,7 +203,7 @@ func CheckOverrun(ctx context.Context, root string, row job.Job, foregroundMax f
 type ForkOutput struct {
 	job.Job `yaml:",inline"`
 	// DeletionCandidates are the unreferenced symbols the write paths cover: findings to
-	// finish or delete, never goals.
+	// finish or delete, never postconditions.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
 	// ReferencedOutside are the files outside the write paths that use what they define.
 	ReferencedOutside []ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`

@@ -51,12 +51,12 @@ func TestDeclarationRefusesAWeightOutOfRange(t *testing.T) {
 	assert.Equal(t, int64(42), row.Paused, "apply keeps a pause")
 }
 
-func TestDeclarationRejectsCyclicGoals(t *testing.T) {
+func TestDeclarationRejectsCyclicPostconditions(t *testing.T) {
 	t.Parallel()
 
 	err := ValidateDeclaration((job.Declaration{
 		ID: "gated",
-		Goals: []job.Goal{
+		Postconditions: []job.Postcondition{
 			{ID: "unit", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), DependsOn: []string{"publish"}},
 			{ID: "publish", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), DependsOn: []string{"unit"}},
 		},
@@ -85,29 +85,29 @@ func TestDeclarationRefusesAPathOutsideTheWorkspace(t *testing.T) {
 	assert.NoError(t, ValidateDeclaration(job.Declaration{ID: "j", ReadOnly: true, Paths: job.Paths{Read: []string{"docs/../api/**"}}}), "a path that cleans to one inside the workspace stands")
 }
 
-func TestDeclarationValidatesSignatureGoals(t *testing.T) {
+func TestDeclarationValidatesSignaturePostconditions(t *testing.T) {
 	t.Parallel()
 
-	shape := func(id string, symbols ...string) job.Goal {
-		return job.Goal{ID: id, Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: symbols}
+	shape := func(id string, symbols ...string) job.Postcondition {
+		return job.Postcondition{ID: id, Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: symbols}
 	}
 	for _, tc := range []struct {
-		name  string
-		goals []job.Goal
-		want  string
+		name           string
+		postconditions []job.Postcondition
+		want           string
 	}{
-		{"one symbol, signature left for the fork to record", []job.Goal{shape("a", "Api")}, ""},
-		{"one symbol with its signature", []job.Goal{{ID: "a", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"}}, ""},
-		{"two symbols", []job.Goal{shape("a", "Api", "Old")}, "expects the signature of 2 symbols"},
-		{"no symbol", []job.Goal{shape("a", " ")}, "names nothing to examine"},
-		{"a signature on another expectation", []job.Goal{{ID: "a", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Api"}, Signature: "func Api()"}},
+		{"one symbol, signature left for the fork to record", []job.Postcondition{shape("a", "Api")}, ""},
+		{"one symbol with its signature", []job.Postcondition{{ID: "a", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"}}, ""},
+		{"two symbols", []job.Postcondition{shape("a", "Api", "Old")}, "expects the signature of 2 symbols"},
+		{"no symbol", []job.Postcondition{shape("a", " ")}, "names nothing to examine"},
+		{"a signature on another expectation", []job.Postcondition{{ID: "a", Kind: job.PostconditionKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Api"}, Signature: "func Api()"}},
 			`expects "present" and carries a signature`},
-		{"two signatures for one symbol", []job.Goal{shape("a", "Api"), shape("b", "Api")}, `goals "a" and "b" both expect a signature of "Api"`},
-		{"signatures for two symbols", []job.Goal{shape("a", "Api"), shape("b", "Old")}, ""},
+		{"two signatures for one symbol", []job.Postcondition{shape("a", "Api"), shape("b", "Api")}, `postconditions "a" and "b" both expect a signature of "Api"`},
+		{"signatures for two symbols", []job.Postcondition{shape("a", "Api"), shape("b", "Old")}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := ValidateDeclaration(job.Declaration{ID: "shaped", Goals: tc.goals})
+			err := ValidateDeclaration(job.Declaration{ID: "shaped", Postconditions: tc.postconditions})
 			if tc.want == "" {
 				require.NoError(t, err)
 				return
@@ -167,29 +167,29 @@ func TestScriptCheckNamesOneSubject(t *testing.T) {
 	t.Parallel()
 
 	script := types.LeaseCheck{Script: "probes/key.buzz"}
-	gate := func(c types.LeaseCheck) job.Goal {
-		return job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: fixtureCheck(c), Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
+	gate := func(c types.LeaseCheck) job.Postcondition {
+		return job.Postcondition{ID: "probe", Kind: job.PostconditionKindCheck, Check: fixtureCheck(c), Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
 	}
-	require.NoError(t, validateGoal(gate(script)))
+	require.NoError(t, validatePostcondition(gate(script)))
 
 	both := script
 	both.Target = "test"
-	require.ErrorContains(t, validateGoal(gate(both)), "a check names one")
+	require.ErrorContains(t, validatePostcondition(gate(both)), "a check names one")
 
 	scoped := script
 	scoped.Project = "cmd/magus"
-	require.ErrorContains(t, validateGoal(gate(scoped)), "belongs to the workspace")
+	require.ErrorContains(t, validatePostcondition(gate(scoped)), "belongs to the workspace")
 
 	tested := script
 	tested.Test = true
-	require.NoError(t, validateGoal(gate(tested)))
+	require.NoError(t, validatePostcondition(gate(tested)))
 }
 
 func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
 	t.Parallel()
 
-	target := job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Test: true})}.Resolve()
-	require.ErrorContains(t, validateGoal(target), `check target "test" sets test`)
+	target := job.Postcondition{ID: "unit", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Test: true})}.Resolve()
+	require.ErrorContains(t, validatePostcondition(target), `check target "test" sets test`)
 
 	rec := job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "fix-parser", Check: fixtureCheck(types.LeaseCheck{Target: "test", Test: true})}
 	ps := declarationProblems(rec)
@@ -221,9 +221,9 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 			{Code: job.Code(types.JobRecordInvalid), Subject: "x", Reason: "r"},
 			{Code: job.Code(types.GateNotRun)},
 		},
-		Goals: []job.Goal{
-			{ID: "a", Kind: job.GoalKindPaths},
-			{ID: "a", Kind: job.GoalKindPaths, Paths: []string{"x"}, DependsOn: []string{"missing"}},
+		Postconditions: []job.Postcondition{
+			{ID: "a", Kind: job.PostconditionKindPaths},
+			{ID: "a", Kind: job.PostconditionKindPaths, Paths: []string{"x"}, DependsOn: []string{"missing"}},
 		},
 	}
 
@@ -248,43 +248,43 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		"MGS3037 deviations[0].code",
 		"MGS3037 deviations[1].subject",
 		"MGS3037 deviations[1].reason",
-		"MGS3038 goals[0].paths",
-		"MGS3038 goals[1].id",
-		"MGS3038 goals[1].depends_on[0]",
+		"MGS3038 postconditions[0].paths",
+		"MGS3038 postconditions[1].id",
+		"MGS3038 postconditions[1].depends_on[0]",
 	}, fields)
 	err := ValidateDeclaration(d)
 	require.ErrorIs(t, err, types.JobRecordInvalid)
-	require.ErrorIs(t, err, types.JobGoalInvalid)
+	require.ErrorIs(t, err, types.JobPostconditionInvalid)
 }
 
 func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 	t.Parallel()
 	d := job.Declaration{
-		ID:         "wave/a",
-		Paths:      job.Paths{Write: []string{"types/job.go"}},
-		Check:      fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."}),
-		Deviations: []job.Deviation{{Code: job.Code(types.GateNotRun), Subject: "lint .", Reason: "the root runs it"}},
-		Goals:      []job.Goal{{ID: "names", Kind: job.GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{job.PrimaryGoalID}}},
+		ID:             "wave/a",
+		Paths:          job.Paths{Write: []string{"types/job.go"}},
+		Check:          fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."}),
+		Deviations:     []job.Deviation{{Code: job.Code(types.GateNotRun), Subject: "lint .", Reason: "the root runs it"}},
+		Postconditions: []job.Postcondition{{ID: "names", Kind: job.PostconditionKindSymbol, Symbols: []string{"X"}, DependsOn: []string{job.PrimaryPostconditionID}}},
 	}
 
 	assert.Empty(t, declarationProblems(d))
 	require.NoError(t, ValidateDeclaration(d))
 }
 
-func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
+func TestDeclarationProblemsReportsEachPostconditionCycleOnce(t *testing.T) {
 	t.Parallel()
-	d := job.Declaration{ID: "a", Goals: []job.Goal{
-		{ID: "x", Kind: job.GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"y"}},
-		{ID: "y", Kind: job.GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"x"}},
-		{ID: "z", Kind: job.GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"z"}},
+	d := job.Declaration{ID: "a", Postconditions: []job.Postcondition{
+		{ID: "x", Kind: job.PostconditionKindPaths, Paths: []string{"p"}, DependsOn: []string{"y"}},
+		{ID: "y", Kind: job.PostconditionKindPaths, Paths: []string{"p"}, DependsOn: []string{"x"}},
+		{ID: "z", Kind: job.PostconditionKindPaths, Paths: []string{"p"}, DependsOn: []string{"z"}},
 	}}
 
 	ps := declarationProblems(d)
 
 	require.Len(t, ps, 2)
-	assert.Equal(t, "goals[0].depends_on", ps[1].Field)
+	assert.Equal(t, "postconditions[0].depends_on", ps[1].Field)
 	assert.Contains(t, ps[1].Message, `cycle at "x"`)
-	assert.Equal(t, "goals[2].depends_on[0]", ps[0].Field)
+	assert.Equal(t, "postconditions[2].depends_on[0]", ps[0].Field)
 	assert.Contains(t, ps[0].Message, "cannot depend on itself")
 }
 
@@ -299,9 +299,9 @@ func TestDeclarationApplyCopiesDeviations(t *testing.T) {
 	assert.Equal(t, "the root runs it", row.Deviations[0].Reason)
 }
 
-func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {
+func TestPostconditionProblemsNameTheFieldUnderThePostcondition(t *testing.T) {
 	t.Parallel()
-	g := job.Goal{ID: "g", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"A", "B"}, Paths: []string{"x"}}
+	g := job.Postcondition{ID: "g", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"A", "B"}, Paths: []string{"x"}}
 
 	ps := types.FaultProblems(g.Faults())
 
@@ -309,9 +309,9 @@ func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {
 	assert.Equal(t, "paths", ps[0].Field)
 	assert.Equal(t, "symbols", ps[1].Field)
 	for _, p := range ps {
-		assert.Equal(t, types.JobGoalInvalid, p.Code)
+		assert.Equal(t, types.JobPostconditionInvalid, p.Code)
 	}
-	require.ErrorIs(t, validateGoal(g), types.JobGoalInvalid)
+	require.ErrorIs(t, validatePostcondition(g), types.JobPostconditionInvalid)
 }
 
 func TestAClaimRecordDeclaresNothingElse(t *testing.T) {

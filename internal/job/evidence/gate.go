@@ -119,11 +119,11 @@ func gateWalk(name string, deps map[string][]string, seen map[string]bool) []str
 }
 
 func gatesOnCI(row jobtypes.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(g jobtypes.Goal) bool {
-		if g.Kind != jobtypes.GoalKindCheck {
+	return slices.ContainsFunc(row.EffectivePostconditions(), func(g jobtypes.Postcondition) bool {
+		if g.Kind != jobtypes.PostconditionKindCheck {
 			return false
 		}
-		c, err := job.GoalCheck(g)
+		c, err := job.PostconditionCheck(g)
 		return err == nil && c.Target == types.TargetCI
 	})
 }
@@ -177,7 +177,7 @@ func GradesSymbols(rows []jobtypes.Job, id string) bool {
 		return false
 	}
 	for _, r := range append([]jobtypes.Job{rows[i]}, jobtypes.Ancestors(rows, id)...) {
-		if slices.ContainsFunc(r.Goals, func(g jobtypes.Goal) bool { return g.Resolve().Kind == jobtypes.GoalKindSymbol }) {
+		if slices.ContainsFunc(r.Postconditions, func(g jobtypes.Postcondition) bool { return g.Resolve().Kind == jobtypes.PostconditionKindSymbol }) {
 			return true
 		}
 	}

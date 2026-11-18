@@ -110,16 +110,16 @@ func shellQuote(p string) string {
 
 // AcceptWitnessedMigration names the migration [AcceptWitnessed] makes, for the caller's
 // [WithMigrations] list. A caller adds it after every migration it already applies.
-const AcceptWitnessedMigration = "check goals accept witnessed runs"
+const AcceptWitnessedMigration = "check postconditions accept witnessed runs"
 
 // AcceptWitnessed rewrites one stored line of jobs.jsonl, as its JSON members, so every
-// check goal it holds accepts [BasisWitnessed]: the goals a store held before [Goal.Accept]
+// check postcondition it holds accepts [BasisWitnessed]: the postconditions a store held before [Postcondition.Accept]
 // existed were graded only from runs the store's own caller started, which is witnessed.
-// A goal that names an accept list keeps it, and the header and any other line come back
+// A postcondition that names an accept list keeps it, and the header and any other line come back
 // unchanged, so the rewrite is the same applied twice.
 //
 // It is a one-time rewrite of the file under the caller's migration, never a default a
-// reader applies: a goal read without accept is a fault.
+// reader applies: a postcondition read without accept is a fault.
 func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMessage, error) {
 	raw, ok := line["spec"]
 	if !ok {
@@ -129,13 +129,13 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 	if err := codec.Unmarshal(raw, &spec); err != nil {
 		return nil, fmt.Errorf("reading spec: %w", err)
 	}
-	goalsRaw, ok := spec["goals"]
+	postconditionsRaw, ok := spec["postconditions"]
 	if !ok {
 		return line, nil
 	}
-	var goals []map[string]codec.RawMessage
-	if err := codec.Unmarshal(goalsRaw, &goals); err != nil {
-		return nil, fmt.Errorf("reading spec.goals: %w", err)
+	var postconditions []map[string]codec.RawMessage
+	if err := codec.Unmarshal(postconditionsRaw, &postconditions); err != nil {
+		return nil, fmt.Errorf("reading spec.postconditions: %w", err)
 	}
 	// The CamelCase values the store wrote at this migration, before it stored Go values.
 	witnessed, err := codec.Marshal([]string{"Witnessed"})
@@ -144,14 +144,14 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 	}
 	const check = "Check"
 	changed := false
-	for i, g := range goals {
+	for i, g := range postconditions {
 		var kind string
 		if k, ok := g["kind"]; ok {
 			if err := codec.Unmarshal(k, &kind); err != nil {
-				return nil, fmt.Errorf("reading spec.goals[%d].kind: %w", i, err)
+				return nil, fmt.Errorf("reading spec.postconditions[%d].kind: %w", i, err)
 			}
 		}
-		// An empty kind is a check, as [Goal.Resolve] reads it.
+		// An empty kind is a check, as [Postcondition.Resolve] reads it.
 		if _, named := g["accept"]; named || (kind != check && kind != "") {
 			continue
 		}
@@ -161,11 +161,11 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 	if !changed {
 		return line, nil
 	}
-	if spec["goals"], err = codec.Marshal(goals); err == nil {
+	if spec["postconditions"], err = codec.Marshal(postconditions); err == nil {
 		line["spec"], err = codec.Marshal(spec)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("writing spec.goals: %w", err)
+		return nil, fmt.Errorf("writing spec.postconditions: %w", err)
 	}
 	return line, nil
 }

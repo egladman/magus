@@ -21,7 +21,7 @@ export type JobRow = {
   criteria: string
   check: string
   writePaths: string[]
-  goals: string[]
+  postconditions: string[]
   proof: string
   endReason: string
   baseVerdict: string

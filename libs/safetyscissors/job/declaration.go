@@ -72,8 +72,8 @@ type Declaration struct {
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitzero"`
-	// Goals are what done means, graded by [Store.Grade]. See [Job.Goals].
-	Goals []Goal `json:"goals,omitempty"`
+	// Postconditions are what done means, graded by [Store.Grade]. See [Job.Postconditions].
+	Postconditions []Postcondition `json:"postconditions,omitempty"`
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
 	// it writes the job, so a declaration carries a length and never an
 	// instant. Empty is no bound; there is no default here (a workspace may
@@ -203,7 +203,7 @@ func pathOutsideWorkspace(p string) string {
 }
 
 // Faults is every fault the record shows on its own, without a workspace: each field's
-// shape, the deviations and the goals. What a check says is the store's [CheckSpec]'s
+// shape, the deviations and the postconditions. What a check says is the store's [CheckSpec]'s
 // to refuse, at write. It never stops at the first. A
 // deviation may permit only a code in permissible, the caller's own.
 func (d Declaration) Faults(permissible ...Code) []Fault {
@@ -326,7 +326,7 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
 		}
 	}
-	return append(ps, goalFaults(d.Goals, !d.Check.IsZero())...)
+	return append(ps, postconditionFaults(d.Postconditions, !d.Check.IsZero())...)
 }
 
 // claimFaults is every fault of a claim record: it carries only schema_version, id
@@ -472,7 +472,7 @@ func (d Declaration) Apply(j *Job) {
 	j.Follows = strings.TrimSpace(d.Follows)
 	// The store validates the check when it writes the row; see [WithCheckSpec].
 	j.Check = d.Check
-	j.Goals = cloneGoals(d.Goals)
+	j.Postconditions = clonePostconditions(d.Postconditions)
 	j.State = d.State
 	j.ReadOnly = d.ReadOnly
 	j.MaxAttempts = d.MaxAttempts
@@ -492,21 +492,21 @@ func (d Declaration) ApplySpec(j *Job) {
 	}
 }
 
-func cloneGoals(in []Goal) []Goal {
+func clonePostconditions(in []Postcondition) []Postcondition {
 	if in == nil {
 		return nil
 	}
-	out := make([]Goal, len(in))
-	for i, goal := range in {
+	out := make([]Postcondition, len(in))
+	for i, postcondition := range in {
 		// RESOLVED on the way through, which is what makes this the write boundary the
-		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
+		// enums' no-empty-member rule depends on: every path that stores postconditions (Apply,
 		// job.PutMerge) clones them through here.
-		out[i] = goal.Resolve()
-		out[i].Check = goal.Check
-		out[i].Paths = slices.Clone(goal.Paths)
-		out[i].Symbols = slices.Clone(goal.Symbols)
-		out[i].DependsOn = slices.Clone(goal.DependsOn)
-		out[i].Accept = slices.Clone(goal.Accept)
+		out[i] = postcondition.Resolve()
+		out[i].Check = postcondition.Check
+		out[i].Paths = slices.Clone(postcondition.Paths)
+		out[i].Symbols = slices.Clone(postcondition.Symbols)
+		out[i].DependsOn = slices.Clone(postcondition.DependsOn)
+		out[i].Accept = slices.Clone(postcondition.Accept)
 	}
 	return out
 }

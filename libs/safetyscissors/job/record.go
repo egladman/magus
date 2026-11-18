@@ -27,68 +27,68 @@ type jobRecord struct {
 
 // jobSpec is what a declaration writes.
 type jobSpec struct {
-	Parent       string                      `json:"parent,omitempty"`
-	Agent        *agentRecord                `json:"agent,omitzero"`
-	Checkpoint   string                      `json:"checkpoint,omitempty"`
-	Paths        Paths                       `json:"paths,omitzero"`
-	DependsOn    []string                    `json:"depends_on,omitempty"`
-	Integrates   []string                    `json:"integrates,omitempty"`
-	Breaks       []string                    `json:"breaks,omitempty"`
-	BriefFormat  string                      `json:"brief_format,omitempty"`
-	Delivery     string                      `json:"delivery,omitempty"`
-	ParentHead   string                      `json:"parent_head,omitempty"`
-	Follows      string                      `json:"follows,omitempty"`
-	MaxAttempts  int                         `json:"max_attempts,omitzero"`
-	MaxClaims    int                         `json:"max_claims,omitzero"`
-	Deferred     []Deferred                  `json:"deferred,omitempty"`
-	LeftUnmerged string                      `json:"left_unmerged,omitempty"`
-	Weight       float64                     `json:"weight,omitzero"`
-	Check        Check                       `json:"check,omitzero"`
-	Validation   string                      `json:"validation,omitempty"`
-	Goals        []goalRecord                `json:"goals,omitempty"`
-	ReadOnly     bool                        `json:"read_only,omitzero"`
-	Deviations   []Deviation                 `json:"deviations,omitempty"`
-	Unknown      map[string]codec.RawMessage `json:"-" codec:"unknown"`
+	Parent         string                      `json:"parent,omitempty"`
+	Agent          *agentRecord                `json:"agent,omitzero"`
+	Checkpoint     string                      `json:"checkpoint,omitempty"`
+	Paths          Paths                       `json:"paths,omitzero"`
+	DependsOn      []string                    `json:"depends_on,omitempty"`
+	Integrates     []string                    `json:"integrates,omitempty"`
+	Breaks         []string                    `json:"breaks,omitempty"`
+	BriefFormat    string                      `json:"brief_format,omitempty"`
+	Delivery       string                      `json:"delivery,omitempty"`
+	ParentHead     string                      `json:"parent_head,omitempty"`
+	Follows        string                      `json:"follows,omitempty"`
+	MaxAttempts    int                         `json:"max_attempts,omitzero"`
+	MaxClaims      int                         `json:"max_claims,omitzero"`
+	Deferred       []Deferred                  `json:"deferred,omitempty"`
+	LeftUnmerged   string                      `json:"left_unmerged,omitempty"`
+	Weight         float64                     `json:"weight,omitzero"`
+	Check          Check                       `json:"check,omitzero"`
+	Validation     string                      `json:"validation,omitempty"`
+	Postconditions []postconditionRecord       `json:"postconditions,omitempty"`
+	ReadOnly       bool                        `json:"read_only,omitzero"`
+	Deviations     []Deviation                 `json:"deviations,omitempty"`
+	Unknown        map[string]codec.RawMessage `json:"-" codec:"unknown"`
 }
 
 // jobStatus is what the store computes. Its conditions are the row's
 // lifecycle; see [lifecycleConditions].
 type jobStatus struct {
-	Conditions      []apiversion.Condition      `json:"conditions,omitempty"`
-	ModelTier       *modelTierRecord            `json:"model_tier,omitzero"`
-	ReworkRounds    int                         `json:"rework_rounds,omitzero"`
-	Widenings       int                         `json:"widenings,omitzero"`
-	Claims          []claimRecord               `json:"claims,omitempty"`
-	Landed          bool                        `json:"landed,omitzero"`
-	Paused          int64                       `json:"paused,omitzero"`
-	PausedBy        originRecord                `json:"paused_by,omitzero"`
-	PauseReason     string                      `json:"pause_reason,omitempty"`
-	PausedUntil     int64                       `json:"paused_until,omitzero"`
-	Rejection       *rejectionRecord            `json:"rejection,omitzero"`
-	Releases        []releaseRecord             `json:"releases,omitempty"`
-	Unattributed    []UnattributedWrite         `json:"unattributed,omitempty"`
-	Entries         []entryRecord               `json:"entries,omitempty"`
-	ReleaseRequests []ReleaseRequest            `json:"release_requests,omitempty"`
-	WriteProof      string                      `json:"write_proof,omitempty"`
-	Validated       int64                       `json:"validated,omitzero"`
-	ReportedBase    string                      `json:"reported_base,omitempty"`
-	BaseVerdict     string                      `json:"base_verdict,omitempty"`
-	RegisteredBy    originRecord                `json:"registered_by,omitzero"`
-	Authority       string                      `json:"authority,omitempty"`
-	Registered      int64                       `json:"registered,omitzero"`
-	HolderStopped   int64                       `json:"holder_stopped,omitzero"`
-	CheckoutRoot    string                      `json:"checkout_root,omitempty"`
-	Worktree        *worktreeRecord             `json:"worktree,omitzero"`
-	EndReason       string                      `json:"end_reason,omitempty"`
-	Created         int64                       `json:"created"`
-	Updated         int64                       `json:"updated"`
-	Deadline        int64                       `json:"deadline,omitzero"`
-	Attempt         *runAttemptRecord           `json:"attempt,omitzero"`
-	GateAttempts    []gateAttemptRecord         `json:"gate_attempts,omitempty"`
-	LastRun         *runRecord                  `json:"last_run,omitzero"`
-	Integration     *integrationRecord          `json:"integration,omitzero"`
-	WaiterEvidence  *integrationRecord          `json:"waiter_evidence,omitzero"`
-	Unknown         map[string]codec.RawMessage `json:"-" codec:"unknown"`
+	Conditions            []apiversion.Condition       `json:"conditions,omitempty"`
+	ModelTier             *modelTierRecord             `json:"model_tier,omitzero"`
+	ReworkRounds          int                          `json:"rework_rounds,omitzero"`
+	Widenings             int                          `json:"widenings,omitzero"`
+	Claims                []claimRecord                `json:"claims,omitempty"`
+	Landed                bool                         `json:"landed,omitzero"`
+	Paused                int64                        `json:"paused,omitzero"`
+	PausedBy              originRecord                 `json:"paused_by,omitzero"`
+	PauseReason           string                       `json:"pause_reason,omitempty"`
+	PausedUntil           int64                        `json:"paused_until,omitzero"`
+	Rejection             *rejectionRecord             `json:"rejection,omitzero"`
+	Releases              []releaseRecord              `json:"releases,omitempty"`
+	Unattributed          []UnattributedWrite          `json:"unattributed,omitempty"`
+	Entries               []entryRecord                `json:"entries,omitempty"`
+	ReleaseRequests       []ReleaseRequest             `json:"release_requests,omitempty"`
+	WriteProof            string                       `json:"write_proof,omitempty"`
+	Validated             int64                        `json:"validated,omitzero"`
+	ReportedBase          string                       `json:"reported_base,omitempty"`
+	BaseVerdict           string                       `json:"base_verdict,omitempty"`
+	RegisteredBy          originRecord                 `json:"registered_by,omitzero"`
+	Authority             string                       `json:"authority,omitempty"`
+	Registered            int64                        `json:"registered,omitzero"`
+	HolderStopped         int64                        `json:"holder_stopped,omitzero"`
+	CheckoutRoot          string                       `json:"checkout_root,omitempty"`
+	Worktree              *worktreeRecord              `json:"worktree,omitzero"`
+	EndReason             string                       `json:"end_reason,omitempty"`
+	Created               int64                        `json:"created"`
+	Updated               int64                        `json:"updated"`
+	Deadline              int64                        `json:"deadline,omitzero"`
+	Attempt               *runAttemptRecord            `json:"attempt,omitzero"`
+	PostconditionAttempts []postconditionAttemptRecord `json:"postcondition_attempts,omitempty"`
+	LastRun               *runRecord                   `json:"last_run,omitzero"`
+	Integration           *integrationRecord           `json:"integration,omitzero"`
+	WaiterEvidence        *integrationRecord           `json:"waiter_evidence,omitzero"`
+	Unknown               map[string]codec.RawMessage  `json:"-" codec:"unknown"`
 }
 
 // MarshalJSON writes the record with the members it kept in Unknown, so a member a
@@ -180,8 +180,8 @@ func recordSpec(row Job, unknown map[string]codec.RawMessage) jobSpec {
 		Unknown: unknown,
 	}
 	spec.Check = row.Check
-	for _, g := range row.Goals {
-		spec.Goals = append(spec.Goals, recordGoal(g))
+	for _, g := range row.Postconditions {
+		spec.Postconditions = append(spec.Postconditions, recordPostcondition(g))
 	}
 	return spec
 }
@@ -230,8 +230,8 @@ func recordRuns(st *jobStatus, row Job) {
 		a := runAttemptRecord(*row.Attempt)
 		st.Attempt = &a
 	}
-	for _, g := range row.GateAttempts {
-		st.GateAttempts = append(st.GateAttempts, gateAttemptRecord{GateID: g.GateID, Attempt: runAttemptRecord(g.Attempt)})
+	for _, g := range row.PostconditionAttempts {
+		st.PostconditionAttempts = append(st.PostconditionAttempts, postconditionAttemptRecord{PostconditionID: g.PostconditionID, Attempt: runAttemptRecord(g.Attempt)})
 	}
 	if row.LastRun != nil {
 		run := runRecord(*row.LastRun)
@@ -275,8 +275,8 @@ func (s jobSpec) job(bad *wireReads) Job {
 		Validation: s.Validation, ReadOnly: s.ReadOnly, Deviations: s.Deviations,
 	}
 	row.Check = s.Check
-	for _, g := range s.Goals {
-		row.Goals = append(row.Goals, g.goal(bad))
+	for _, g := range s.Postconditions {
+		row.Postconditions = append(row.Postconditions, g.postcondition(bad))
 	}
 	return row
 }
@@ -314,8 +314,8 @@ func (st jobStatus) populate(row *Job, bad *wireReads, creds wireEnum[Credential
 		a := CapturedRun(*st.Attempt)
 		row.Attempt = &a
 	}
-	for _, g := range st.GateAttempts {
-		row.GateAttempts = append(row.GateAttempts, GateAttempt{GateID: g.GateID, Attempt: CapturedRun(g.Attempt)})
+	for _, g := range st.PostconditionAttempts {
+		row.PostconditionAttempts = append(row.PostconditionAttempts, PostconditionAttempt{PostconditionID: g.PostconditionID, Attempt: CapturedRun(g.Attempt)})
 	}
 	if st.LastRun != nil {
 		run := Run(*st.LastRun)
@@ -452,8 +452,10 @@ func wireBaseVerdict() wireEnum[BaseVerdict] {
 func wireBriefFormat() wireEnum[BriefFormat] {
 	return newWireEnum(BriefFormatMarkdown, BriefFormatBuzz)
 }
-func wireGoalKind() wireEnum[GoalKind]     { return newWireEnum(goalKinds()...) }
-func wireGoalExpect() wireEnum[GoalExpect] { return newWireEnum(goalExpects()...) }
+func wirePostconditionKind() wireEnum[PostconditionKind] { return newWireEnum(postconditionKinds()...) }
+func wirePostconditionExpect() wireEnum[PostconditionExpect] {
+	return newWireEnum(postconditionExpects()...)
+}
 
 func wireClaimKind() wireEnum[ClaimKind] {
 	return newWireEnum(ClaimRefs, ClaimTest, ClaimOutput, ClaimReleased, ClaimDeadHolder)
@@ -503,7 +505,7 @@ func (r *agentRecord) spec(bad *wireReads) *Agent {
 		Worker: Worker{Type: wireWorkerType().read(r.Worker.Type, bad), Reason: r.Worker.Reason}}
 }
 
-type goalRecord struct {
+type postconditionRecord struct {
 	ID          string   `json:"id"`
 	Description string   `json:"description,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"`
@@ -514,12 +516,12 @@ type goalRecord struct {
 	Symbols     []string `json:"symbols,omitempty"`
 	Signature   string   `json:"signature,omitempty"`
 	// Accept is written by every build since [AcceptWitnessedMigration], which wrote it
-	// onto each check goal stored before it, so a reader never defaults it.
+	// onto each check postcondition stored before it, so a reader never defaults it.
 	Accept []string `json:"accept,omitempty"`
 }
 
-func recordGoal(g Goal) goalRecord {
-	r := goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
+func recordPostcondition(g Postcondition) postconditionRecord {
+	r := postconditionRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
 		Kind: string(g.Kind), Expect: string(g.Expect), Check: g.Check,
 		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
 	for _, b := range g.Accept {
@@ -528,9 +530,9 @@ func recordGoal(g Goal) goalRecord {
 	return r
 }
 
-func (r goalRecord) goal(bad *wireReads) Goal {
-	g := Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
-		Kind: wireGoalKind().read(r.Kind, bad), Expect: wireGoalExpect().read(r.Expect, bad), Check: r.Check,
+func (r postconditionRecord) postcondition(bad *wireReads) Postcondition {
+	g := Postcondition{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
+		Kind: wirePostconditionKind().read(r.Kind, bad), Expect: wirePostconditionExpect().read(r.Expect, bad), Check: r.Check,
 		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
 	bases := wireBasis()
 	for _, w := range r.Accept {
@@ -707,9 +709,9 @@ type runAttemptRecord struct {
 	ObservedGeneration int      `json:"observed_generation,omitzero"`
 }
 
-type gateAttemptRecord struct {
-	GateID  string           `json:"gate_id"`
-	Attempt runAttemptRecord `json:"attempt"`
+type postconditionAttemptRecord struct {
+	PostconditionID string           `json:"postcondition_id"`
+	Attempt         runAttemptRecord `json:"attempt"`
 }
 
 type runRecord struct {
@@ -956,9 +958,9 @@ func (r *workerRecord) UnmarshalJSON(data []byte) error {
 	return readNested(data, (*plain)(r), "workerRecord")
 }
 
-func (r *goalRecord) UnmarshalJSON(data []byte) error {
-	type plain goalRecord
-	return readNested(data, (*plain)(r), "goalRecord")
+func (r *postconditionRecord) UnmarshalJSON(data []byte) error {
+	type plain postconditionRecord
+	return readNested(data, (*plain)(r), "postconditionRecord")
 }
 
 func (r *modelTierRecord) UnmarshalJSON(data []byte) error {
@@ -1016,9 +1018,9 @@ func (r *runAttemptRecord) UnmarshalJSON(data []byte) error {
 	return readNested(data, (*plain)(r), "runAttemptRecord")
 }
 
-func (r *gateAttemptRecord) UnmarshalJSON(data []byte) error {
-	type plain gateAttemptRecord
-	return readNested(data, (*plain)(r), "gateAttemptRecord")
+func (r *postconditionAttemptRecord) UnmarshalJSON(data []byte) error {
+	type plain postconditionAttemptRecord
+	return readNested(data, (*plain)(r), "postconditionAttemptRecord")
 }
 
 func (r *runRecord) UnmarshalJSON(data []byte) error {

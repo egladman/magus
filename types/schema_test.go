@@ -62,7 +62,7 @@ func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 var packageQualifier = regexp.MustCompile(`\b[a-z][a-z0-9_]*\.`)
 
 // wireType drops the pointer and every package qualifier, so a type that moves
-// between packages is the same wire type and []job.Goal stays []Goal.
+// between packages is the same wire type and []job.Postcondition stays []Postcondition.
 func wireType(t string) string {
 	return packageQualifier.ReplaceAllString(strings.TrimPrefix(t, "*"), "")
 }

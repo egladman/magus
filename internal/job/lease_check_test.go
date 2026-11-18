@@ -125,8 +125,8 @@ func (s *LeaseCheckSuite) TestRenderIsTheCommandLine() {
 	s.True(strings.HasSuffix(line, " run test libs/x -- -run A"), line)
 }
 
-func (s *LeaseCheckSuite) TestGoalCheckRefusesAGoalWithNone() {
-	_, err := GoalCheck(job.Goal{ID: "g", Kind: job.GoalKindCheck})
+func (s *LeaseCheckSuite) TestPostconditionCheckRefusesAPostconditionWithNone() {
+	_, err := PostconditionCheck(job.Postcondition{ID: "g", Kind: job.PostconditionKindCheck})
 	s.Require().ErrorIs(err, types.ErrNoLeaseCheck)
 }
 
@@ -145,10 +145,10 @@ func (s *LeaseCheckSuite) TestDeclarationProblemsNameTheCheckThatDoesNotRead() {
 	s.Require().Len(ps, 1)
 	s.Equal(types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 
-	ps = declarationProblems(job.Declaration{ID: "w", Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck,
+	ps = declarationProblems(job.Declaration{ID: "w", Postconditions: []job.Postcondition{{ID: "g", Kind: job.PostconditionKindCheck,
 		Check: fixtureCheck(types.LeaseCheck{Target: "test", Script: "p.buzz"}), Accept: []job.Basis{job.BasisWitnessed}}}})
 	s.Require().Len(ps, 1)
-	s.Equal(types.JobProblem{Code: types.JobGoalInvalid, Field: "goals[0].check.script", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
+	s.Equal(types.JobProblem{Code: types.JobPostconditionInvalid, Field: "postconditions[0].check.script", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 }
 
 // checkIn is stored read as a lease check, failing t when it does not read.

@@ -27,7 +27,7 @@ func TestJobProblemErrWithoutAFixIsTheMessage(t *testing.T) {
 func TestJobProblemRemediesEncodeAsDataOnlyWhenSet(t *testing.T) {
 	bare, err := codec.Marshal(JobProblem{Code: JobRecordInvalid, Message: "bad", Fix: "fix it"})
 	require.NoError(t, err)
-	assert.NotContains(t, string(bare), "goal")
+	assert.NotContains(t, string(bare), "postcondition")
 	assert.NotContains(t, string(bare), "deviation")
 
 	p := JobProblem{
@@ -51,13 +51,13 @@ func TestJobProblemsErrIsNilWhenEmpty(t *testing.T) {
 func TestJobProblemsErrJoinsEveryProblemInRecordOrder(t *testing.T) {
 	ps := JobProblems{
 		{Code: JobRecordInvalid, Field: "id", Message: "first"},
-		{Code: JobGoalInvalid, Field: "goals[0].id", Message: "second"},
+		{Code: JobPostconditionInvalid, Field: "postconditions[0].id", Message: "second"},
 	}
 
 	err := JobValidation{Problems: ps}.Error()
 
 	require.ErrorIs(t, err, JobRecordInvalid)
-	require.ErrorIs(t, err, JobGoalInvalid)
+	require.ErrorIs(t, err, JobPostconditionInvalid)
 	var joined interface{ Unwrap() []error }
 	require.True(t, errors.As(err, &joined))
 	got := joined.Unwrap()

@@ -30,8 +30,8 @@ func declarationProblems(d job.Declaration) types.JobProblems {
 	fs := slices.DeleteFunc(d.Faults(permissible...), func(f job.Fault) bool { return drops[f.Field] })
 	if d.Enter == "" && len(d.Claim) == 0 && !d.Settles() {
 		fs = append(fs, checkFaults(job.FaultRecord, "check", d.Check)...)
-		for i, g := range d.Goals {
-			fs = append(fs, goalCheckFaults(g, fmt.Sprintf("goals[%d].", i))...)
+		for i, g := range d.Postconditions {
+			fs = append(fs, postconditionCheckFaults(g, fmt.Sprintf("postconditions[%d].", i))...)
 		}
 	}
 	return types.FaultProblems(fs)
@@ -41,19 +41,19 @@ func declarationProblems(d job.Declaration) types.JobProblems {
 // [declarationProblems] finds, joined.
 func ValidateDeclaration(d job.Declaration) error { return declarationProblems(d).Error() }
 
-// validateGoal reports whether g can be matched to an output record without interpreting
+// validatePostcondition reports whether g can be matched to an output record without interpreting
 // a shell command: every problem it shows on its own, joined.
-func validateGoal(g job.Goal) error {
-	return types.FaultProblems(append(g.Faults(), goalCheckFaults(g, "")...)).Error()
+func validatePostcondition(g job.Postcondition) error {
+	return types.FaultProblems(append(g.Faults(), postconditionCheckFaults(g, "")...)).Error()
 }
 
-// goalCheckFaults is the faults of a check goal's check, each Field under prefix. A goal
+// postconditionCheckFaults is the faults of a check postcondition's check, each Field under prefix. A postcondition
 // of another kind carrying a check is the module's fault to report.
-func goalCheckFaults(g job.Goal, prefix string) []job.Fault {
-	if g.Resolve().Kind != job.GoalKindCheck {
+func postconditionCheckFaults(g job.Postcondition, prefix string) []job.Fault {
+	if g.Resolve().Kind != job.PostconditionKindCheck {
 		return nil
 	}
-	return checkFaults(job.FaultGoal, prefix+"check", g.Check)
+	return checkFaults(job.FaultPostcondition, prefix+"check", g.Check)
 }
 
 // checkFaults is why stored, at field, is no lease check: it does not decode, or it names

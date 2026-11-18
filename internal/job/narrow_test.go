@@ -296,10 +296,10 @@ func TestReleaseUnderPattern(t *testing.T) { suite.Run(t, new(releaseUnderPatter
 func (s *releaseUnderPatternSuite) applied(write ...string) job.Job {
 	loc := tempLocation(s.T(), testkit.NewRepository(s.T(), configFiles).Root())
 	store := NewStore(loc)
-	seed(s.T(), store, job.Job{ID: "cfg", Agent: job.Instructed("goal"), State: job.StateRunning, Paths: job.Paths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
+	seed(s.T(), store, job.Job{ID: "cfg", Agent: job.Instructed("postcondition"), State: job.StateRunning, Paths: job.Paths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
 	_, _, err := NarrowHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"}, "")
 	s.Require().NoError(err)
-	applied, err := Apply(s.T().Context(), store, []job.Declaration{{ID: "cfg", Agent: job.Instructed("goal"), Paths: job.Paths{Write: write}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), store, []job.Declaration{{ID: "cfg", Agent: job.Instructed("postcondition"), Paths: job.Paths{Write: write}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 	return applied[0].Next
 }
@@ -469,7 +469,7 @@ func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the reasons a run is owed are "no seat" and "remote CI runs it"`)
+	s.ErrorContains(err, `postcondition "lint" is filed as owed because "generated drift", and the reasons a run is owed are "no seat" and "remote CI runs it"`)
 	s.ErrorContains(err, "the integrator regenerates")
 }
 
@@ -481,7 +481,7 @@ func (s *exitEvidenceSuite) TestOwedCheckForAnyReasonButNoSeatIsRefused() {
 
 	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "check" is filed as owed because "not this row's target"`)
+	s.ErrorContains(err, `postcondition "check" is filed as owed because "not this row's target"`)
 }
 
 func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
@@ -510,7 +510,7 @@ func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
 	s.Equal(job.StateExited, exited.State)
 }
 
-func TestLintGoalLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
+func TestLintPostconditionLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
@@ -522,8 +522,8 @@ func TestLintGoalLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
 	var row job.Job
 	merged(&row)
 
-	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
-	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, []string{"cli/registry.go"}, checkIn(t, row.Goals[i].Check).Args, "lint reads a soft path once the row changes it")
+	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "postconditions: %v", row.Postconditions)
+	assert.Equal(t, []string{"cli/registry.go"}, checkIn(t, row.Postconditions[i].Check).Args, "lint reads a soft path once the row changes it")
 	assert.Contains(t, row.Paths.Write, "cli/registry_test.go", "the worker may still write it")
 }

@@ -84,7 +84,7 @@ func TestJobGraphReadsUnderAStaleIndexOnlyWhenItsChangesMissTheWritePaths(t *tes
 			assert.Equal(t, tc.reads, got != nil)
 			assert.Equal(t, tc.reads, loads == 1)
 			if tc.reads {
-				assert.Empty(t, graph.StaleIndexes(t.Context()), "an index that kept nothing from the read names no ungraded goal")
+				assert.Empty(t, graph.StaleIndexes(t.Context()), "an index that kept nothing from the read names no ungraded postcondition")
 			} else {
 				assert.Equal(t, []types.KnowledgeStaleIndex{tc.stale}, graph.StaleIndexes(t.Context()))
 			}

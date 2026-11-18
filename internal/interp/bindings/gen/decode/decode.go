@@ -1864,97 +1864,6 @@ func decodeFunctionGap(v vm.Value, path string) (types.FunctionGap, error) {
 	return out, nil
 }
 
-// DecodeGoal decodes a Buzz Goal, an object instance or a map, into a types.Goal.
-func DecodeGoal(v vm.Value) (types.Goal, error) {
-	return decodeGoal(v, "goal")
-}
-
-func decodeGoal(v vm.Value, path string) (types.Goal, error) {
-	var out types.Goal
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "Goal", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "id":
-			sID, err := decodeString(item, path+".id")
-			if err != nil {
-				return out, err
-			}
-			out.Goal.ID = sID
-		case "description":
-			sDescription, err := decodeString(item, path+".description")
-			if err != nil {
-				return out, err
-			}
-			out.Goal.Description = sDescription
-		case "dependsOn":
-			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
-			if err != nil {
-				return out, err
-			}
-			out.Goal.DependsOn = strsDependsOn
-		case "kind":
-			sKind, err := decodeEnum(item, path+".kind", "GoalKind", enumGoalKindValues)
-			if err != nil {
-				return out, err
-			}
-			out.Goal.Kind = job.GoalKind(sKind)
-		case "expect":
-			sExpect, err := decodeEnum(item, path+".expect", "GoalExpect", enumGoalExpectValues)
-			if err != nil {
-				return out, err
-			}
-			out.Goal.Expect = job.GoalExpect(sExpect)
-		case "check":
-			xCheck, err := decodeLeaseCheck(item, path+".check")
-			if err != nil {
-				return out, err
-			}
-			out.Check = xCheck
-		case "paths":
-			strsPaths, err := decodeStringList(item, path+".paths")
-			if err != nil {
-				return out, err
-			}
-			out.Goal.Paths = strsPaths
-		case "symbols":
-			strsSymbols, err := decodeStringList(item, path+".symbols")
-			if err != nil {
-				return out, err
-			}
-			out.Goal.Symbols = strsSymbols
-		case "signature":
-			sSignature, err := decodeString(item, path+".signature")
-			if err != nil {
-				return out, err
-			}
-			out.Goal.Signature = sSignature
-		case "accept":
-			listAccept, err := decodeList(item, path+".accept", "[Basis]")
-			if err != nil {
-				return out, err
-			}
-			if len(listAccept) > 0 {
-				itemsAccept := make([]job.Basis, len(listAccept))
-				for indexAccept, itemAccept := range listAccept {
-					sAcceptItem, err := decodeEnum(itemAccept, fmt.Sprintf("%s[%d]", path+".accept", indexAccept), "Basis", enumBasisValues)
-					if err != nil {
-						return out, err
-					}
-					itemsAccept[indexAccept] = job.Basis(sAcceptItem)
-				}
-				out.Goal.Accept = itemsAccept
-			}
-		default:
-			return out, unknownMember(path, "Goal", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeSymbolIndexDigest decodes a Buzz Graph, an object instance or a map, into a types.SymbolIndexDigest.
 func DecodeSymbolIndexDigest(v vm.Value) (types.SymbolIndexDigest, error) {
 	return decodeSymbolIndexDigest(v, "graph")
@@ -2946,21 +2855,21 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Job.Validation = sValidation
-		case "goals":
-			listGoals, err := decodeList(item, path+".goals", "[Goal]")
+		case "postconditions":
+			listPostconditions, err := decodeList(item, path+".postconditions", "[Postcondition]")
 			if err != nil {
 				return out, err
 			}
-			if len(listGoals) > 0 {
-				itemsGoals := make([]types.Goal, len(listGoals))
-				for indexGoals, itemGoals := range listGoals {
-					xGoalsItem, err := decodeGoal(itemGoals, fmt.Sprintf("%s[%d]", path+".goals", indexGoals))
+			if len(listPostconditions) > 0 {
+				itemsPostconditions := make([]types.Postcondition, len(listPostconditions))
+				for indexPostconditions, itemPostconditions := range listPostconditions {
+					xPostconditionsItem, err := decodePostcondition(itemPostconditions, fmt.Sprintf("%s[%d]", path+".postconditions", indexPostconditions))
 					if err != nil {
 						return out, err
 					}
-					itemsGoals[indexGoals] = xGoalsItem
+					itemsPostconditions[indexPostconditions] = xPostconditionsItem
 				}
-				out.Goals = itemsGoals
+				out.Postconditions = itemsPostconditions
 			}
 		case "state":
 			sState, err := decodeEnum(item, path+".state", "JobState", enumJobStateValues)
@@ -3136,21 +3045,21 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				optAttempt = xAttempt
 				out.Job.Attempt = &optAttempt
 			}
-		case "gateAttempts":
-			listGateAttempts, err := decodeList(item, path+".gateAttempts", "[JobGateAttempt]")
+		case "postconditionAttempts":
+			listPostconditionAttempts, err := decodeList(item, path+".postconditionAttempts", "[JobPostconditionAttempt]")
 			if err != nil {
 				return out, err
 			}
-			if len(listGateAttempts) > 0 {
-				itemsGateAttempts := make([]job.GateAttempt, len(listGateAttempts))
-				for indexGateAttempts, itemGateAttempts := range listGateAttempts {
-					xGateAttemptsItem, err := decodeJobGateAttempt(itemGateAttempts, fmt.Sprintf("%s[%d]", path+".gateAttempts", indexGateAttempts))
+			if len(listPostconditionAttempts) > 0 {
+				itemsPostconditionAttempts := make([]job.PostconditionAttempt, len(listPostconditionAttempts))
+				for indexPostconditionAttempts, itemPostconditionAttempts := range listPostconditionAttempts {
+					xPostconditionAttemptsItem, err := decodeJobPostconditionAttempt(itemPostconditionAttempts, fmt.Sprintf("%s[%d]", path+".postconditionAttempts", indexPostconditionAttempts))
 					if err != nil {
 						return out, err
 					}
-					itemsGateAttempts[indexGateAttempts] = xGateAttemptsItem
+					itemsPostconditionAttempts[indexPostconditionAttempts] = xPostconditionAttemptsItem
 				}
-				out.Job.GateAttempts = itemsGateAttempts
+				out.Job.PostconditionAttempts = itemsPostconditionAttempts
 			}
 		case "lastRun":
 			if !item.IsNull() {
@@ -3429,39 +3338,6 @@ func decodeJobEntry(v vm.Value, path string) (job.Entry, error) {
 	return out, nil
 }
 
-// DecodeJobGateAttempt decodes a Buzz JobGateAttempt, an object instance or a map, into a job.GateAttempt.
-func DecodeJobGateAttempt(v vm.Value) (job.GateAttempt, error) {
-	return decodeJobGateAttempt(v, "jobGateAttempt")
-}
-
-func decodeJobGateAttempt(v vm.Value, path string) (job.GateAttempt, error) {
-	var out job.GateAttempt
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "JobGateAttempt", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "gateID":
-			sGateID, err := decodeString(item, path+".gateID")
-			if err != nil {
-				return out, err
-			}
-			out.GateID = sGateID
-		case "attempt":
-			xAttempt, err := decodeJobCapturedRun(item, path+".attempt")
-			if err != nil {
-				return out, err
-			}
-			out.Attempt = xAttempt
-		default:
-			return out, unknownMember(path, "JobGateAttempt", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeJobIntegration decodes a Buzz JobIntegration, an object instance or a map, into a job.Integration.
 func DecodeJobIntegration(v vm.Value) (job.Integration, error) {
 	return decodeJobIntegration(v, "jobIntegration")
@@ -3563,6 +3439,39 @@ func decodeJobPaths(v vm.Value, path string) (job.Paths, error) {
 			out.Soft = strsSoft
 		default:
 			return out, unknownMember(path, "JobPaths", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeJobPostconditionAttempt decodes a Buzz JobPostconditionAttempt, an object instance or a map, into a job.PostconditionAttempt.
+func DecodeJobPostconditionAttempt(v vm.Value) (job.PostconditionAttempt, error) {
+	return decodeJobPostconditionAttempt(v, "jobPostconditionAttempt")
+}
+
+func decodeJobPostconditionAttempt(v vm.Value, path string) (job.PostconditionAttempt, error) {
+	var out job.PostconditionAttempt
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "JobPostconditionAttempt", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "postconditionID":
+			sPostconditionID, err := decodeString(item, path+".postconditionID")
+			if err != nil {
+				return out, err
+			}
+			out.PostconditionID = sPostconditionID
+		case "attempt":
+			xAttempt, err := decodeJobCapturedRun(item, path+".attempt")
+			if err != nil {
+				return out, err
+			}
+			out.Attempt = xAttempt
+		default:
+			return out, unknownMember(path, "JobPostconditionAttempt", key)
 		}
 	}
 	return out, nil
@@ -4638,6 +4547,97 @@ func decodeImagePlatform(v vm.Value, path string) (imagetypes.Platform, error) {
 	}
 	if !hasArchitecture {
 		return out, missingMember(path, "Platform", "architecture")
+	}
+	return out, nil
+}
+
+// DecodePostcondition decodes a Buzz Postcondition, an object instance or a map, into a types.Postcondition.
+func DecodePostcondition(v vm.Value) (types.Postcondition, error) {
+	return decodePostcondition(v, "postcondition")
+}
+
+func decodePostcondition(v vm.Value, path string) (types.Postcondition, error) {
+	var out types.Postcondition
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Postcondition", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeString(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.ID = sID
+		case "description":
+			sDescription, err := decodeString(item, path+".description")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Description = sDescription
+		case "dependsOn":
+			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.DependsOn = strsDependsOn
+		case "kind":
+			sKind, err := decodeEnum(item, path+".kind", "PostconditionKind", enumPostconditionKindValues)
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Kind = job.PostconditionKind(sKind)
+		case "expect":
+			sExpect, err := decodeEnum(item, path+".expect", "PostconditionExpect", enumPostconditionExpectValues)
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Expect = job.PostconditionExpect(sExpect)
+		case "check":
+			xCheck, err := decodeLeaseCheck(item, path+".check")
+			if err != nil {
+				return out, err
+			}
+			out.Check = xCheck
+		case "paths":
+			strsPaths, err := decodeStringList(item, path+".paths")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Paths = strsPaths
+		case "symbols":
+			strsSymbols, err := decodeStringList(item, path+".symbols")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Symbols = strsSymbols
+		case "signature":
+			sSignature, err := decodeString(item, path+".signature")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Signature = sSignature
+		case "accept":
+			listAccept, err := decodeList(item, path+".accept", "[Basis]")
+			if err != nil {
+				return out, err
+			}
+			if len(listAccept) > 0 {
+				itemsAccept := make([]job.Basis, len(listAccept))
+				for indexAccept, itemAccept := range listAccept {
+					sAcceptItem, err := decodeEnum(itemAccept, fmt.Sprintf("%s[%d]", path+".accept", indexAccept), "Basis", enumBasisValues)
+					if err != nil {
+						return out, err
+					}
+					itemsAccept[indexAccept] = job.Basis(sAcceptItem)
+				}
+				out.Postcondition.Accept = itemsAccept
+			}
+		default:
+			return out, unknownMember(path, "Postcondition", key)
+		}
 	}
 	return out, nil
 }
@@ -9298,8 +9298,6 @@ var enumDiscoveryRoleValues = []string{"", "project", "member"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumEntryPointValues = []string{"", "cli", "hook", "mcp", "rpc", "server"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
-var enumGoalExpectValues = []string{"", "passed", "changed", "present", "absent", "unreferenced", "signature"}
-var enumGoalKindValues = []string{"", "check", "paths", "symbol"}
 var enumGuardDecisionValues = []string{"", "defer", "advise", "ask", "deny"}
 var enumHookPointValues = []string{"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"}
 var enumJobBaseVerdictValues = []string{"", "match", "revision-match", "diverged", "unknown"}
@@ -9310,6 +9308,8 @@ var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
 var enumModelTierSourceValues = []string{"job", "matrix", "user-matrix", "default"}
 var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
+var enumPostconditionExpectValues = []string{"", "passed", "changed", "present", "absent", "unreferenced", "signature"}
+var enumPostconditionKindValues = []string{"", "check", "paths", "symbol"}
 var enumRelationIDValues = []string{"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
 var enumSkillFormValues = []string{"", "both", "short", "full"}

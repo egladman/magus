@@ -45,14 +45,14 @@ export enum<str> EntryPoint {
     server = "server",
 }
 
-export enum<str> GoalKind {
+export enum<str> PostconditionKind {
     none = "",
     check = "check",
     paths = "paths",
     symbol = "symbol",
 }
 
-export enum<str> GoalExpect {
+export enum<str> PostconditionExpect {
     none = "",
     passed = "passed",
     changed = "changed",
@@ -654,12 +654,12 @@ export object LeaseCheck {
     test: bool = false,
 }
 
-export object Goal {
+export object Postcondition {
     id: str = "",
     description: str = "",
     dependsOn: [str] = [],
-    kind: GoalKind = GoalKind.none,
-    expect: GoalExpect = GoalExpect.none,
+    kind: PostconditionKind = PostconditionKind.none,
+    expect: PostconditionExpect = PostconditionExpect.none,
     check: LeaseCheck = LeaseCheck{},
     paths: [str] = [],
     symbols: [str] = [],
@@ -725,8 +725,8 @@ export object JobAttempt {
     observedGeneration: int = 0,
 }
 
-export object JobGateAttempt {
-    gateID: str = "",
+export object JobPostconditionAttempt {
+    postconditionID: str = "",
     attempt: JobAttempt = JobAttempt{},
 }
 
@@ -781,7 +781,7 @@ export object Job {
     rejection: JobRejection? = null,
     check: LeaseCheck? = null,
     validation: str = "",
-    goals: [Goal] = [],
+    postconditions: [Postcondition] = [],
     state: JobState = JobState.none,
     readOnly: bool = false,
     releases: [JobRelease] = [],
@@ -803,7 +803,7 @@ export object Job {
     updated: int = 0,
     deadline: int = 0,
     attempt: JobAttempt? = null,
-    gateAttempts: [JobGateAttempt] = [],
+    postconditionAttempts: [JobPostconditionAttempt] = [],
     lastRun: JobRun? = null,
     integration: JobIntegration? = null,
     waiterEvidence: JobIntegration? = null,
@@ -2705,7 +2705,7 @@ export object ModelTierRequest {
     instructions: str = "",
     readOnly: bool = false,
     check: LeaseCheck? = null,
-    goals: [Goal] = [],
+    postconditions: [Postcondition] = [],
     kind: JobKind = JobKind.check,
     writePaths: [str] = [],
     writeProjects: [str] = [],

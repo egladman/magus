@@ -176,7 +176,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Finding", Zero: types.Finding{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFinding(v.(types.Finding)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), enums) }},
-	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
 	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectSymbolIndexDigest(v.(types.SymbolIndexDigest), enums)
 	}},
@@ -211,7 +210,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobDenial", Zero: job.Denial{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDenial(v.(job.Denial)) }},
 	{Name: "JobEntry", Zero: job.Entry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(job.Entry), enums) }},
 	{Name: "JobForkFacts", Zero: job.ForkFacts{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobForkFacts(v.(job.ForkFacts)) }},
-	{Name: "JobGateAttempt", Zero: job.GateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(job.GateAttempt)) }},
 	{Name: "JobIntegration", Zero: job.Integration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobIntegration(v.(job.Integration)) }},
 	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList), enums) }},
 	{Name: "JobModelTier", Zero: tier.Assignment{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -220,6 +218,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobOverlap", Zero: job.Overlap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobOverlap(v.(job.Overlap)) }},
 	{Name: "JobOverlapFootprint", Zero: job.OverlapFootprint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobOverlapFootprint(v.(job.OverlapFootprint)) }},
 	{Name: "JobPaths", Zero: job.Paths{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobPaths(v.(job.Paths)) }},
+	{Name: "JobPostconditionAttempt", Zero: job.PostconditionAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectJobPostconditionAttempt(v.(job.PostconditionAttempt))
+	}},
 	{Name: "JobReadOnly", Zero: job.ReadOnly{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobReadOnly(v.(job.ReadOnly)) }},
 	{Name: "JobRegistration", Zero: types.JobRegistration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobRegistration(v.(types.JobRegistration), enums)
@@ -313,6 +314,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "PipeRecord", Zero: types.PipeRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPipeRecord(v.(types.PipeRecord)) }},
 	{Name: "Platform", Zero: imagetypes.Platform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(imagetypes.Platform), enums) }},
+	{Name: "Postcondition", Zero: types.Postcondition{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPostcondition(v.(types.Postcondition), enums) }},
 	{Name: "Precedent", Zero: types.Precedent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedent(v.(types.Precedent), enums) }},
 	{Name: "PrecedentKey", Zero: types.PrecedentKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentKey(v.(types.PrecedentKey)) }},
 	{Name: "PrecedentScope", Zero: types.PrecedentScope{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentScope(v.(types.PrecedentScope)) }},

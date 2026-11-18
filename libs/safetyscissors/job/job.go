@@ -261,14 +261,14 @@ type Result struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// VerificationEvidence links a goal to captured output, or says why its
+// VerificationEvidence links a postcondition to captured output, or says why its
 // run is owed instead. Owed names the reason, and the integration that merges
-// the job's branch runs the goal.
+// the job's branch runs the postcondition.
 type VerificationEvidence struct {
 	GateID    string `json:"gate_id" yaml:"gate_id"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
-	// Unrun is the cause that kept the goal's run from running in this
+	// Unrun is the cause that kept the postcondition's run from running in this
 	// environment. It files a failed attempt: `job wait` fails it.
 	Unrun string `json:"unrun,omitempty" yaml:"unrun,omitempty"`
 }
@@ -297,7 +297,7 @@ type Status struct {
 	// Verified.
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
 	// StaleIndexes are the projects whose symbol index was older than their sources when the
-	// job was described, so its symbol goals were not graded.
+	// job was described, so its symbol postconditions were not graded.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	// Footprint is the declaration each changed line of the job's diff since its checkpoint
 	// lands in. It decides Verified only for a job claiming declarations (see
@@ -319,7 +319,7 @@ type Status struct {
 	// something only when FootprintKnown does.
 	LinesAdded   int `json:"lines_added" yaml:"lines_added"`
 	LinesDeleted int `json:"lines_deleted" yaml:"lines_deleted"`
-	// UndeclaredExports are the exported Go symbols the diff added that no symbol goal of
+	// UndeclaredExports are the exported Go symbols the diff added that no symbol postcondition of
 	// the job or an ancestor names, and LeftUnreferenced the symbols that lost their last
 	// use in the diff and are still defined. Both are reports, never violations, and mean
 	// something only when SymbolDeltaKnown does.
@@ -336,7 +336,7 @@ type Status struct {
 // Clean reports whether the holder's result left no risk unresolved.
 func (s Status) Clean() bool { return len(s.UnresolvedRisks) == 0 }
 
-// VerificationStatus reports verification of one goal.
+// VerificationStatus reports verification of one postcondition.
 type VerificationStatus struct {
 	ID        string `json:"id" yaml:"id"`
 	Verified  bool   `json:"verified" yaml:"verified"`
@@ -344,8 +344,8 @@ type VerificationStatus struct {
 	// Scope is the `--` args the run behind OutputRef narrowed its go test with, "" when it
 	// ran every package and test its check names.
 	Scope string `json:"scope,omitempty" yaml:"scope,omitempty"`
-	// Owed is the caller's reason the goal's run is owed to the integration rather than
-	// cited, "" for a goal graded on a run.
+	// Owed is the caller's reason the postcondition's run is owed to the integration rather than
+	// cited, "" for a postcondition graded on a run.
 	Owed       string   `json:"owed,omitempty" yaml:"owed,omitempty"`
 	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
 }
@@ -379,10 +379,10 @@ type CapturedRun struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// GateAttempt is the stored output record for one goal.
-type GateAttempt struct {
-	GateID  string      `json:"gate_id" yaml:"gate_id"`
-	Attempt CapturedRun `json:"attempt" yaml:"attempt"`
+// PostconditionAttempt is the stored output record for one postcondition.
+type PostconditionAttempt struct {
+	PostconditionID string      `json:"postcondition_id" yaml:"postcondition_id"`
+	Attempt         CapturedRun `json:"attempt" yaml:"attempt"`
 }
 
 // Paths is a job's declared boundary. Write and Deny bound what its lease
@@ -509,10 +509,10 @@ type Job struct {
 	// the row. Nothing in this module writes or reads it: [Declaration.Apply] leaves it as
 	// it was, so a store that keeps it renders it from Check on every write.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
-	// Goals are the job's definition of done that the store grades: a check that passed, paths
-	// or symbols this job changed, added or removed. Check is graded as one more goal. Named
-	// goals rather than gates so the word never collides with the CI gate.
-	Goals []Goal `json:"goals,omitempty" yaml:"goals,omitempty"`
+	// Postconditions are the job's definition of done that the store grades: a check that passed, paths
+	// or symbols this job changed, added or removed. Check is graded as one more postcondition. Named
+	// postconditions rather than gates so the word never collides with the CI gate.
+	Postconditions []Postcondition `json:"postconditions,omitempty" yaml:"postconditions,omitempty"`
 	// State is the job's lifecycle position. See State for why no_return is
 	// its own value.
 	State State `json:"state,omitempty" yaml:"state,omitempty"`
@@ -597,25 +597,25 @@ type Job struct {
 	// in the holder's OWN checkout, so a waiter in another checkout
 	// reopens it. The result is on the [Attempt].
 	Attempt *CapturedRun `json:"attempt,omitzero" yaml:"attempt,omitempty"`
-	// GateAttempts are the portable output-store snapshots for every explicit goal.
+	// PostconditionAttempts are the portable output-store snapshots for every explicit postcondition.
 	// Attempt remains the snapshot for the primary Check.
-	GateAttempts []GateAttempt `json:"gate_attempts,omitempty" yaml:"gate_attempts,omitempty"`
+	PostconditionAttempts []PostconditionAttempt `json:"postcondition_attempts,omitempty" yaml:"postcondition_attempts,omitempty"`
 	// LastRun is the job's most recent run, nil until one is submitted. The
 	// invocation id lands at submit, the cost and outcome when the run ends.
 	LastRun *Run `json:"last_run,omitzero" yaml:"last_run,omitempty"`
-	// Integration is the latest grade of this job's check goals in another tree, nil until
+	// Integration is the latest grade of this job's check postconditions in another tree, nil until
 	// a grade in an integration records one. Store-computed like Result, and kept
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
 	Integration *Integration `json:"integration,omitzero" yaml:"integration,omitempty"`
-	// WaiterEvidence names the goals whose passing run came from the waiter's checkout
+	// WaiterEvidence names the postconditions whose passing run came from the waiter's checkout
 	// rather than the holder's, nil unless the waiter took some. It sits
-	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
+	// beside PostconditionAttempts, which keep the holder's own attempts untouched: a postcondition that
 	// failed where the work was written and passed once re-run here is two facts. Each
-	// Gates entry is one goal, the ref taken for it and its verdict; Checkout and At say
+	// Gates entry is one postcondition, the ref taken for it and its verdict; Checkout and At say
 	// where and when.
 	//
-	// A Integration because the record is the same one --integration keeps: goals graded
+	// A Integration because the record is the same one --integration keeps: postconditions graded
 	// against runs in another checkout. What differs is only that these verdicts moved the
 	// job's state, so the record exists only for a job that passed.
 	WaiterEvidence *Integration `json:"waiter_evidence,omitzero" yaml:"waiter_evidence,omitempty"`
@@ -655,7 +655,7 @@ type Worktree struct {
 // and the guard treats it as its job's own.
 func (w *Worktree) Standing() bool { return w != nil && w.Removed == 0 }
 
-// Integration is a job's check goals graded against runs recorded in Checkout, the tree
+// Integration is a job's check postconditions graded against runs recorded in Checkout, the tree
 // an integration branch was merged into, at At (unix seconds).
 type Integration struct {
 	Checkout string               `json:"checkout" yaml:"checkout"`
@@ -961,7 +961,7 @@ func (j Job) HardPaths() []string {
 // job requiring another is read and listed, and only writing it is
 // refused.
 func features() []string {
-	return []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}
+	return []string{"claim-declarations", "dead-job-end", "job-generations", "signature-postconditions"}
 }
 
 // Unmet returns the entries of Requires that this build does not implement,
@@ -1001,7 +1001,7 @@ func (j Job) HandedOutAfresh() Job {
 
 // Clone returns a deep copy: no slice, map or pointer it holds is shared with u, so a
 // value handed out of a store is safe to keep. Nil stays nil, so a job that stored null
-// does not come back as []. Its goals come back resolved (see [Goal.Resolve]).
+// does not come back as []. Its postconditions come back resolved (see [Postcondition.Resolve]).
 func (j Job) Clone() Job {
 	c := j
 	c.Requires = slices.Clone(j.Requires)
@@ -1013,7 +1013,7 @@ func (j Job) Clone() Job {
 	c.DependsOn = slices.Clone(j.DependsOn)
 	c.Integrates = slices.Clone(j.Integrates)
 	c.Breaks = slices.Clone(j.Breaks)
-	c.Goals = cloneGoals(j.Goals)
+	c.Postconditions = clonePostconditions(j.Postconditions)
 	c.Releases = slices.Clone(j.Releases)
 	c.Claims = slices.Clone(j.Claims)
 	c.Unattributed = slices.Clone(j.Unattributed)
@@ -1036,9 +1036,9 @@ func (j Job) Clone() Job {
 		attempt.ExtraArgs = slices.Clone(j.Attempt.ExtraArgs)
 		c.Attempt = &attempt
 	}
-	c.GateAttempts = slices.Clone(j.GateAttempts)
-	for i := range c.GateAttempts {
-		c.GateAttempts[i].Attempt.ExtraArgs = slices.Clone(c.GateAttempts[i].Attempt.ExtraArgs)
+	c.PostconditionAttempts = slices.Clone(j.PostconditionAttempts)
+	for i := range c.PostconditionAttempts {
+		c.PostconditionAttempts[i].Attempt.ExtraArgs = slices.Clone(c.PostconditionAttempts[i].Attempt.ExtraArgs)
 	}
 	if j.LastRun != nil {
 		run := *j.LastRun
@@ -1084,7 +1084,7 @@ func (j Job) HoldsNoBuildSeat() bool {
 	if !j.ReadOnly || len(j.Paths.Write) > 0 {
 		return false
 	}
-	return !slices.ContainsFunc(j.EffectiveGoals(), func(g Goal) bool { return g.Resolve().Kind == GoalKindCheck })
+	return !slices.ContainsFunc(j.EffectivePostconditions(), func(g Postcondition) bool { return g.Resolve().Kind == PostconditionKindCheck })
 }
 
 // Schema is the envelope a job record embeds. A reader ignores the members it does not

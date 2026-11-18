@@ -57,7 +57,7 @@ func jobJSONFields() []string {
 // state, and a rendered run line cover every shape it accepts, and a key it ignores leaves
 // the row untouched under all four.
 func jobMergeApplies(key string) bool {
-	// The last value is a well-formed goal. Without it the probe reports goals as
+	// The last value is a well-formed postcondition. Without it the probe reports postconditions as
 	// unmerged, because none of the scalar shapes decodes into one.
 	for _, value := range []any{
 		"declared", "magus run test .", []any{"x"}, true,

@@ -67,7 +67,7 @@
           },
           "unrun": {
             "type": "string",
-            "description": "Unrun is the cause that kept the goal's run from running in this environment. It files a failed attempt: `job wait` fails it."
+            "description": "Unrun is the cause that kept the postcondition's run from running in this environment. It files a failed attempt: `job wait` fails it."
           }
         }
       }

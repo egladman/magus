@@ -141,6 +141,6 @@ func narrowAdvice(holder string, unused []string) string {
 	if len(unused) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("; or the root narrows %s to what it has changed with `%s`, which keeps its goals",
+	return fmt.Sprintf("; or the root narrows %s to what it has changed with `%s`, which keeps its postconditions",
 		holder, hint.JobApply.With(holder, "--release-write-path", strings.Join(unused, ",")))
 }

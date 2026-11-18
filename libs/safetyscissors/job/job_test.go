@@ -62,29 +62,29 @@ func (s *jobSuite) TestAClaimEvidenceRefusalIsTyped() {
 	s.Equal("hunch:x", refused.Because)
 }
 
-func (s *jobSuite) TestAGoalResolvesItsKindAndExpectation() {
-	s.Equal(Goal{ID: "g", Kind: GoalKindCheck, Expect: ExpectPassed}, Goal{ID: "g"}.Resolve())
-	s.Equal(Goal{ID: "g", Kind: GoalKindPaths, Expect: ExpectChanged}, Goal{ID: "g", Kind: GoalKindPaths}.Resolve())
-	s.Equal(ExpectAbsent, Goal{Kind: GoalKindSymbol, Expect: ExpectAbsent}.Resolve().Expect)
+func (s *jobSuite) TestAPostconditionResolvesItsKindAndExpectation() {
+	s.Equal(Postcondition{ID: "g", Kind: PostconditionKindCheck, Expect: ExpectPassed}, Postcondition{ID: "g"}.Resolve())
+	s.Equal(Postcondition{ID: "g", Kind: PostconditionKindPaths, Expect: ExpectChanged}, Postcondition{ID: "g", Kind: PostconditionKindPaths}.Resolve())
+	s.Equal(ExpectAbsent, Postcondition{Kind: PostconditionKindSymbol, Expect: ExpectAbsent}.Resolve().Expect)
 }
 
-// Only the store's CheckSpec reads a check, so a check goal's subject is none here.
-func (s *jobSuite) TestACheckGoalHasNoSubject() {
-	s.Nil(Goal{Kind: GoalKindCheck, Check: checkJSON("test", ".")}.Subject())
-	s.Equal([]string{"docs"}, Goal{Kind: GoalKindPaths, Paths: []string{"docs"}}.Subject())
+// Only the store's CheckSpec reads a check, so a check postcondition's subject is none here.
+func (s *jobSuite) TestACheckPostconditionHasNoSubject() {
+	s.Nil(Postcondition{Kind: PostconditionKindCheck, Check: checkJSON("test", ".")}.Subject())
+	s.Equal([]string{"docs"}, Postcondition{Kind: PostconditionKindPaths, Paths: []string{"docs"}}.Subject())
 }
 
-func (s *jobSuite) TestEffectiveGoalsLeadWithThePrimaryCheck() {
-	row := Job{Check: checkJSON("test", "."), Goals: []Goal{{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}}}}
-	goals := row.EffectiveGoals()
-	s.Require().Len(goals, 2)
-	s.Equal(PrimaryGoalID, goals[0].ID)
-	s.Equal(row.Check, goals[0].Check)
-	s.Empty(Job{Check: rawCheck("null")}.EffectiveGoals(), "a null check declares none")
-	s.Equal(ExpectPassed, goals[0].Expect)
-	s.Equal([]Basis{BasisWitnessed}, goals[0].Accept, "the lease's own check is run by its holder's runner")
-	s.Equal(ExpectChanged, goals[1].Expect, "the declared goal comes back resolved")
-	s.Len(Job{}.EffectiveGoals(), 0)
+func (s *jobSuite) TestEffectivePostconditionsLeadWithThePrimaryCheck() {
+	row := Job{Check: checkJSON("test", "."), Postconditions: []Postcondition{{ID: "docs", Kind: PostconditionKindPaths, Paths: []string{"docs"}}}}
+	postconditions := row.EffectivePostconditions()
+	s.Require().Len(postconditions, 2)
+	s.Equal(PrimaryPostconditionID, postconditions[0].ID)
+	s.Equal(row.Check, postconditions[0].Check)
+	s.Empty(Job{Check: rawCheck("null")}.EffectivePostconditions(), "a null check declares none")
+	s.Equal(ExpectPassed, postconditions[0].Expect)
+	s.Equal([]Basis{BasisWitnessed}, postconditions[0].Accept, "the lease's own check is run by its holder's runner")
+	s.Equal(ExpectChanged, postconditions[1].Expect, "the declared postcondition comes back resolved")
+	s.Len(Job{}.EffectivePostconditions(), 0)
 }
 
 func (s *jobSuite) TestStatesSortLiveEditingAndTerminal() {
@@ -263,7 +263,7 @@ func (s *jobSuite) TestAStoreHeaderKeepsUnknownMembersAndAddsOneOnACopy() {
 	s.Nil(Rows{}.Unknown())
 }
 
-func (s *jobSuite) faultsAccepted(g Goal) []string {
+func (s *jobSuite) faultsAccepted(g Postcondition) []string {
 	var out []string
 	for _, f := range g.Faults() {
 		if strings.HasPrefix(f.Field, "accept") {
@@ -273,32 +273,32 @@ func (s *jobSuite) faultsAccepted(g Goal) []string {
 	return out
 }
 
-func (s *jobSuite) TestACheckGoalAcceptingNoBasisIsAFault() {
-	g := Goal{ID: "tests", Check: checkJSON("test", ".")}
+func (s *jobSuite) TestACheckPostconditionAcceptingNoBasisIsAFault() {
+	g := Postcondition{ID: "tests", Check: checkJSON("test", ".")}
 
-	s.Equal([]string{`accept: goal "tests" is a check goal accepting no basis, so no run could grade it`}, s.faultsAccepted(g))
-	s.Empty(g.Resolve().Accept, "resolving names no basis on the goal's behalf")
+	s.Equal([]string{`accept: postcondition "tests" is a check postcondition accepting no basis, so no run could grade it`}, s.faultsAccepted(g))
+	s.Empty(g.Resolve().Accept, "resolving names no basis on the postcondition's behalf")
 }
 
 func (s *jobSuite) TestAnUnknownOrRepeatedBasisIsAFault() {
-	g := Goal{ID: "tests", Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, "trusted", BasisWitnessed}}
+	g := Postcondition{ID: "tests", Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, "trusted", BasisWitnessed}}
 
 	s.Equal([]string{
-		`accept[1]: goal "tests" accepts "trusted", which is not a basis`,
-		`accept[2]: goal "tests" accepts "witnessed" twice`,
+		`accept[1]: postcondition "tests" accepts "trusted", which is not a basis`,
+		`accept[2]: postcondition "tests" accepts "witnessed" twice`,
 	}, s.faultsAccepted(g))
 }
 
-func (s *jobSuite) TestACheckGoalNamingItsBasesHasNoAcceptFault() {
-	g := Goal{ID: "tests", Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, BasisReported}}
+func (s *jobSuite) TestACheckPostconditionNamingItsBasesHasNoAcceptFault() {
+	g := Postcondition{ID: "tests", Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, BasisReported}}
 
 	s.Empty(s.faultsAccepted(g))
 }
 
-func (s *jobSuite) TestOnlyACheckGoalCarriesAccept() {
-	g := Goal{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}, Accept: []Basis{BasisReported}}
+func (s *jobSuite) TestOnlyACheckPostconditionCarriesAccept() {
+	g := Postcondition{ID: "docs", Kind: PostconditionKindPaths, Paths: []string{"docs"}, Accept: []Basis{BasisReported}}
 
-	s.Equal([]string{`accept: goal "docs" is a paths goal and carries accept, which only a check goal reads`}, s.faultsAccepted(g))
+	s.Equal([]string{`accept: postcondition "docs" is a paths postcondition and carries accept, which only a check postcondition reads`}, s.faultsAccepted(g))
 }
 
 // TestValidJobID pins the rule every lease channel shares. The marker scanner is not the
@@ -603,12 +603,12 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 			Write: append(make([]string, 0, 4), "types/"),
 			Deny:  append(make([]string, 0, 4), "gen/"),
 		},
-		DependsOn:    append(make([]string, 0, 4), "b"),
-		Breaks:       append(make([]string, 0, 4), "--old-flag"),
-		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: checkJSON("test", "."), DependsOn: []string{"check"}}),
-		GateAttempts: append(make([]GateAttempt, 0, 4), GateAttempt{GateID: "unit", Attempt: CapturedRun{Ref: "out1"}}),
-		Releases:     append(make([]Release, 0, 4), Release{Path: "types/x.go"}),
-		Unattributed: append(make([]UnattributedWrite, 0, 4), UnattributedWrite{Path: "types/y.go"}),
+		DependsOn:             append(make([]string, 0, 4), "b"),
+		Breaks:                append(make([]string, 0, 4), "--old-flag"),
+		Postconditions:        append(make([]Postcondition, 0, 4), Postcondition{ID: "unit", Check: checkJSON("test", "."), DependsOn: []string{"check"}}),
+		PostconditionAttempts: append(make([]PostconditionAttempt, 0, 4), PostconditionAttempt{PostconditionID: "unit", Attempt: CapturedRun{Ref: "out1"}}),
+		Releases:              append(make([]Release, 0, 4), Release{Path: "types/x.go"}),
+		Unattributed:          append(make([]UnattributedWrite, 0, 4), UnattributedWrite{Path: "types/y.go"}),
 	}
 
 	first, second := orig.Clone(), orig.Clone()
@@ -616,8 +616,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	first.Paths.Deny = append(first.Paths.Deny, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
 	first.Breaks = append(first.Breaks, "first")
-	first.Goals[0].DependsOn = append(first.Goals[0].DependsOn, "first")
-	first.GateAttempts = append(first.GateAttempts, GateAttempt{GateID: "first"})
+	first.Postconditions[0].DependsOn = append(first.Postconditions[0].DependsOn, "first")
+	first.PostconditionAttempts = append(first.PostconditionAttempts, PostconditionAttempt{PostconditionID: "first"})
 	first.Releases = append(first.Releases, Release{Path: "first/z.go"})
 	first.Unattributed = append(first.Unattributed, UnattributedWrite{Path: "first/z.go"})
 
@@ -625,8 +625,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	second.Paths.Deny = append(second.Paths.Deny, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
 	second.Breaks = append(second.Breaks, "second")
-	second.Goals[0].DependsOn = append(second.Goals[0].DependsOn, "second")
-	second.GateAttempts = append(second.GateAttempts, GateAttempt{GateID: "second"})
+	second.Postconditions[0].DependsOn = append(second.Postconditions[0].DependsOn, "second")
+	second.PostconditionAttempts = append(second.PostconditionAttempts, PostconditionAttempt{PostconditionID: "second"})
 	second.Releases = append(second.Releases, Release{Path: "second/z.go"})
 	second.Unattributed = append(second.Unattributed, UnattributedWrite{Path: "second/z.go"})
 
@@ -637,12 +637,12 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 			Write: []string{"types/", "first/"},
 			Deny:  []string{"gen/", "first/"},
 		},
-		DependsOn:    []string{"b", "first"},
-		Breaks:       []string{"--old-flag", "first"},
-		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), DependsOn: []string{"check", "first"}}},
-		GateAttempts: []GateAttempt{{GateID: "unit", Attempt: CapturedRun{Ref: "out1"}}, {GateID: "first"}},
-		Releases:     []Release{{Path: "types/x.go"}, {Path: "first/z.go"}},
-		Unattributed: []UnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}},
+		DependsOn:             []string{"b", "first"},
+		Breaks:                []string{"--old-flag", "first"},
+		Postconditions:        []Postcondition{{ID: "unit", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), DependsOn: []string{"check", "first"}}},
+		PostconditionAttempts: []PostconditionAttempt{{PostconditionID: "unit", Attempt: CapturedRun{Ref: "out1"}}, {PostconditionID: "first"}},
+		Releases:              []Release{{Path: "types/x.go"}, {Path: "first/z.go"}},
+		Unattributed:          []UnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}},
 	}, first)
 
 	// The original is the store's row and nobody appended through it, so it must still
@@ -653,16 +653,16 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 			Write: []string{"types/"},
 			Deny:  []string{"gen/"},
 		},
-		DependsOn:    []string{"b"},
-		Breaks:       []string{"--old-flag"},
-		Goals:        []Goal{{ID: "unit", Check: checkJSON("test", "."), DependsOn: []string{"check"}}},
-		GateAttempts: []GateAttempt{{GateID: "unit", Attempt: CapturedRun{Ref: "out1"}}},
-		Releases:     []Release{{Path: "types/x.go"}},
-		Unattributed: []UnattributedWrite{{Path: "types/y.go"}},
+		DependsOn:             []string{"b"},
+		Breaks:                []string{"--old-flag"},
+		Postconditions:        []Postcondition{{ID: "unit", Check: checkJSON("test", "."), DependsOn: []string{"check"}}},
+		PostconditionAttempts: []PostconditionAttempt{{PostconditionID: "unit", Attempt: CapturedRun{Ref: "out1"}}},
+		Releases:              []Release{{Path: "types/x.go"}},
+		Unattributed:          []UnattributedWrite{{Path: "types/y.go"}},
 	}, orig)
 }
 
-// A run's args sit one level down, in the attempt and in each goal's attempt, so they
+// A run's args sit one level down, in the attempt and in each postcondition's attempt, so they
 // alias the store's array unless Clone copies them too. Asserted across two clones for the
 // reason TestJobCloneCopiesEverySliceField gives.
 func TestJobCloneCopiesAttemptArgs(t *testing.T) {
@@ -670,22 +670,22 @@ func TestJobCloneCopiesAttemptArgs(t *testing.T) {
 
 	args := func() []string { return append(make([]string, 0, 4), "-run", "TestOne") }
 	orig := Job{
-		ID:           "a",
-		Attempt:      &CapturedRun{Ref: "out1", ExtraArgs: args()},
-		GateAttempts: []GateAttempt{{GateID: "unit", Attempt: CapturedRun{Ref: "out2", ExtraArgs: args()}}},
+		ID:                    "a",
+		Attempt:               &CapturedRun{Ref: "out1", ExtraArgs: args()},
+		PostconditionAttempts: []PostconditionAttempt{{PostconditionID: "unit", Attempt: CapturedRun{Ref: "out2", ExtraArgs: args()}}},
 	}
 
 	first, second := orig.Clone(), orig.Clone()
 	first.Attempt.ExtraArgs = append(first.Attempt.ExtraArgs, "first")
-	first.GateAttempts[0].Attempt.ExtraArgs = append(first.GateAttempts[0].Attempt.ExtraArgs, "first")
+	first.PostconditionAttempts[0].Attempt.ExtraArgs = append(first.PostconditionAttempts[0].Attempt.ExtraArgs, "first")
 	second.Attempt.ExtraArgs = append(second.Attempt.ExtraArgs, "second")
-	second.GateAttempts[0].Attempt.ExtraArgs = append(second.GateAttempts[0].Attempt.ExtraArgs, "second")
+	second.PostconditionAttempts[0].Attempt.ExtraArgs = append(second.PostconditionAttempts[0].Attempt.ExtraArgs, "second")
 	first.Attempt.ExtraArgs[0] = "-bench"
 
 	assert.Equal(t, []string{"-bench", "TestOne", "first"}, first.Attempt.ExtraArgs)
-	assert.Equal(t, []string{"-run", "TestOne", "first"}, first.GateAttempts[0].Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne", "first"}, first.PostconditionAttempts[0].Attempt.ExtraArgs)
 	assert.Equal(t, []string{"-run", "TestOne"}, orig.Attempt.ExtraArgs)
-	assert.Equal(t, []string{"-run", "TestOne"}, orig.GateAttempts[0].Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne"}, orig.PostconditionAttempts[0].Attempt.ExtraArgs)
 }
 
 // The rejection is the next holder's evidence, so a clone handed out of
@@ -746,8 +746,8 @@ func TestJobCloneKeepsNilSlicesNil(t *testing.T) {
 	c := Job{ID: "a"}.Clone()
 	assert.Nil(t, c.Unattributed)
 	assert.Nil(t, c.Releases)
-	assert.Nil(t, c.Goals)
-	assert.Nil(t, c.GateAttempts)
+	assert.Nil(t, c.Postconditions)
+	assert.Nil(t, c.PostconditionAttempts)
 }
 
 func TestJobUnmetNamesWhatThisBuildLacks(t *testing.T) {
@@ -755,7 +755,7 @@ func TestJobUnmetNamesWhatThisBuildLacks(t *testing.T) {
 
 	assert.Nil(t, Job{}.Unmet())
 	assert.Nil(t, Job{Requires: []string{"claim-declarations"}}.Unmet())
-	assert.Equal(t, []string{"jobs-v99", "x"}, Job{Requires: []string{"jobs-v99", "signature-goals", "x"}}.Unmet())
+	assert.Equal(t, []string{"jobs-v99", "x"}, Job{Requires: []string{"jobs-v99", "signature-postconditions", "x"}}.Unmet())
 }
 
 func TestServerRunNeedsNoAgentAndTheServerAsRegistrar(t *testing.T) {
@@ -1065,9 +1065,9 @@ func TestParseClaimEvidenceReadsADeadHolder(t *testing.T) {
 }
 
 func TestHoldsNoBuildSeat(t *testing.T) {
-	check := Goal{Kind: GoalKindCheck, Check: checkJSON("test", ".")}
+	check := Postcondition{Kind: PostconditionKindCheck, Check: checkJSON("test", ".")}
 	assert.True(t, Job{ReadOnly: true}.HoldsNoBuildSeat())
-	assert.False(t, Job{ReadOnly: true, Goals: []Goal{check}}.HoldsNoBuildSeat(), "a check runs a target")
+	assert.False(t, Job{ReadOnly: true, Postconditions: []Postcondition{check}}.HoldsNoBuildSeat(), "a check runs a target")
 	assert.False(t, Job{ReadOnly: true, Paths: Paths{Write: []string{"a/**"}}}.HoldsNoBuildSeat())
 	assert.False(t, Job{}.HoldsNoBuildSeat(), "a writer is not read-only")
 }

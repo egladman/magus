@@ -154,7 +154,7 @@ func landsRow(actor Actor, id string, rows []Job) bool {
 // An [AsClaim] write is the store's claim rule's to grade, so this refuses it: a claim
 // graded by nothing would be a widening anybody can make.
 //
-// spec compares the goals' checks, as [ChangedFields] does; an error from it refuses
+// spec compares the postconditions' checks, as [ChangedFields] does; an error from it refuses
 // the write.
 func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists bool, rows []Job, spec CheckSpec) error {
 	if kind == AsClaim {
@@ -292,11 +292,11 @@ func authorizeClear(actor Actor) error {
 // the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
 // the registration verdict) are not here: nothing a caller sends decides them.
 //
-// spec compares two goals' checks, which only the caller can read (see [WithCheckSpec]);
+// spec compares two postconditions' checks, which only the caller can read (see [WithCheckSpec]);
 // an error from it is a [*CheckRefusedError], and a nil spec asked to compare two checks
 // an [*UnconfiguredError].
 func ChangedFields(prev, next Job, spec CheckSpec) ([]string, error) {
-	goals, err := goalsEqual(next.ID, prev.Goals, next.Goals, spec)
+	postconditions, err := postconditionsEqual(next.ID, prev.Postconditions, next.Postconditions, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func ChangedFields(prev, next Job, spec CheckSpec) ([]string, error) {
 	add("delivery", prev.Delivery != next.Delivery)
 	add("parent_head", prev.ParentHead != next.ParentHead)
 	add("validation", prev.Validation != next.Validation)
-	add("goals", !goals)
+	add("postconditions", !postconditions)
 	add("deviations", !slices.Equal(prev.Deviations, next.Deviations))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
@@ -369,12 +369,12 @@ func changedAgentFields(prev, next *Agent) []string {
 	return out
 }
 
-// goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
+// postconditionsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
 // bound worker mutation, and the model is small, typed, and stable. Every field counts: a
-// holder that could rewrite a goal's kind, expectation or subject could grade itself done.
+// holder that could rewrite a postcondition's kind, expectation or subject could grade itself done.
 // The checks go through spec, the caller's reading of them; id names the row in its
 // refusal.
-func goalsEqual(id string, a, b []Goal, spec CheckSpec) (bool, error) {
+func postconditionsEqual(id string, a, b []Postcondition, spec CheckSpec) (bool, error) {
 	if len(a) != len(b) {
 		return false, nil
 	}
@@ -394,9 +394,9 @@ func goalsEqual(id string, a, b []Goal, spec CheckSpec) (bool, error) {
 	return true, nil
 }
 
-// checksEqual compares a's and b's checks through spec. Two goals that declare none are
+// checksEqual compares a's and b's checks through spec. Two postconditions that declare none are
 // equal without it.
-func checksEqual(id string, a, b Goal, spec CheckSpec) (bool, error) {
+func checksEqual(id string, a, b Postcondition, spec CheckSpec) (bool, error) {
 	switch has := !a.Check.IsZero(); {
 	case has != !b.Check.IsZero():
 		return false, nil
@@ -407,7 +407,7 @@ func checksEqual(id string, a, b Goal, spec CheckSpec) (bool, error) {
 	}
 	same, err := spec.Equal(a.Check, b.Check)
 	if err != nil {
-		return false, &CheckRefusedError{Job: id, Field: goalCheckField(b.ID), Err: err}
+		return false, &CheckRefusedError{Job: id, Field: postconditionCheckField(b.ID), Err: err}
 	}
 	return same, nil
 }

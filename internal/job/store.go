@@ -868,13 +868,13 @@ func digestSpans(body []byte, spans [][2]int) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// checkCommand is the argv a witnessed run of goal's check carries, run in this store's
+// checkCommand is the argv a witnessed run of postcondition's check carries, run in this store's
 // checkout: [checkArgv].
-func (s *Store) checkCommand(_ job.Job, goal job.Goal) ([]string, string, error) {
+func (s *Store) checkCommand(_ job.Job, postcondition job.Postcondition) ([]string, string, error) {
 	if s.root == "" {
 		return nil, "", errors.New("this job store has no checkout to run a check in")
 	}
-	c, err := GoalCheck(goal)
+	c, err := PostconditionCheck(postcondition)
 	if err != nil {
 		return nil, "", err
 	}

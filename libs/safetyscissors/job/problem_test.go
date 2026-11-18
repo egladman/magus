@@ -17,12 +17,12 @@ func (s *FaultSuite) TestARecordFieldFaultsAsTheRecord() {
 	s.Equal("max_attempts", fs[0].Field)
 }
 
-func (s *FaultSuite) TestAGoalFaultsAsAGoalUnderItsIndex() {
-	g := Goal{ID: "g", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"A", "B"}}
-	fs := Declaration{ID: "worker", Goals: []Goal{g}}.Faults()
+func (s *FaultSuite) TestAPostconditionFaultsAsAPostconditionUnderItsIndex() {
+	g := Postcondition{ID: "g", Kind: PostconditionKindSymbol, Expect: ExpectSignature, Symbols: []string{"A", "B"}}
+	fs := Declaration{ID: "worker", Postconditions: []Postcondition{g}}.Faults()
 	s.Require().Len(fs, 1)
-	s.Equal(FaultGoal, fs[0].Kind)
-	s.Equal("goals[0].symbols", fs[0].Field)
+	s.Equal(FaultPostcondition, fs[0].Kind)
+	s.Equal("postconditions[0].symbols", fs[0].Field)
 }
 
 // The module names no code, so a deviation may permit only what the caller lists, and the

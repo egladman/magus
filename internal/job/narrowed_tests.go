@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// narrowedTestProblems is every go test check of row, its own or a check goal's, that
+// narrowedTestProblems is every go test check of row, its own or a check postcondition's, that
 // narrows the run with -run or -skip to a set that leaves out a Test function defined in the
 // Go packages of the job's write paths, as JobCheckUnrunnable. A hand-picked pattern passes
 // while a test it never ran fails in the root's gate.
@@ -49,16 +49,16 @@ func narrowedTestProblems(store *Store, row job.Job) types.JobProblems {
 	}
 	var ps types.JobProblems
 	for _, gc := range checks {
-		g := gc.Goal
-		if g.Kind != job.GoalKindCheck || scopedToWritePackages(store.root, gc.Check, row.Paths.Write, store.testSelection()) {
+		g := gc.Postcondition
+		if g.Kind != job.PostconditionKindCheck || scopedToWritePackages(store.root, gc.Check, row.Paths.Write, store.testSelection()) {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
-		if g.ID != job.PrimaryGoalID {
-			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
+		if g.ID != job.PrimaryPostconditionID {
+			named = fmt.Sprintf("%s's postcondition %q", row.ID, g.ID)
 		}
 		if p, ok := narrowedCheckProblem(store.root, named, gc.Check, row.Paths.Write, store.testSelection()); ok {
-			p.Field = goalCheckField(row, g)
+			p.Field = postconditionCheckField(row, g)
 			ps = append(ps, p)
 		}
 	}

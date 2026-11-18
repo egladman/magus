@@ -262,10 +262,10 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 	return holder, nil
 }
 
-// scriptCheckHolder names the one live row here whose goal checks script.
+// scriptCheckHolder names the one live row here whose postcondition checks script.
 // A CLI process cannot see the host session a hook bound its worker by.
 // Two such rows leave it empty: the run cannot say whose it was.
-// A goal whose check will not read is an error, since it could be the one.
+// A postcondition whose check will not read is an error, since it could be the one.
 func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error) {
 	here, err := resolvedDir(root)
 	if err != nil {
@@ -277,7 +277,7 @@ func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error)
 		if err != nil || there != here || !job.Editing(row) {
 			continue
 		}
-		checks, err := goalChecksScript(row, script)
+		checks, err := postconditionChecksScript(row, script)
 		if err != nil {
 			return "", err
 		}
@@ -292,15 +292,15 @@ func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error)
 	return holder, nil
 }
 
-// goalChecksScript reports whether one of row's goals is a check that runs script.
-func goalChecksScript(row jobtypes.Job, script string) (bool, error) {
-	for _, g := range row.EffectiveGoals() {
+// postconditionChecksScript reports whether one of row's postconditions is a check that runs script.
+func postconditionChecksScript(row jobtypes.Job, script string) (bool, error) {
+	for _, g := range row.EffectivePostconditions() {
 		if g.Check.IsZero() {
 			continue
 		}
-		check, err := job.GoalCheck(g)
+		check, err := job.PostconditionCheck(g)
 		if err != nil {
-			return false, fmt.Errorf("job %s goal %s: %w", row.ID, g.ID, err)
+			return false, fmt.Errorf("job %s postcondition %s: %w", row.ID, g.ID, err)
 		}
 		if check.Script != "" && path.Clean(check.Script) == path.Clean(script) {
 			return true, nil

@@ -100,7 +100,7 @@ upgrade/web  ~/src/ben
 -- wait-api.out --
 verified upgrade/api, recorded pass
 its holder reports it ran magus run test api
-goal check: verified (out<hex>)
+postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
 -- ls-done.out --

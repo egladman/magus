@@ -137,12 +137,12 @@ func (s *CheckSpecSuite) TestAWriteStoresTheBytesValidateReturns() {
 
 	row, err := st.Update(s.T().Context(), "a", func(j *Job) {
 		j.Check = rawCheck(`{ "target": "test" }`)
-		j.Goals = []Goal{{ID: "lint", Kind: GoalKindCheck, Check: rawCheck(`{"project":"p","target":"lint"}`), Accept: []Basis{BasisWitnessed}}}
+		j.Postconditions = []Postcondition{{ID: "lint", Kind: PostconditionKindCheck, Check: rawCheck(`{"project":"p","target":"lint"}`), Accept: []Basis{BasisWitnessed}}}
 	})
 
 	s.Require().NoError(err)
 	s.Equal(`{"target":"test","project":"."}`, row.Check.String())
-	s.Equal(`{"target":"lint","project":"p"}`, row.Goals[0].Check.String())
+	s.Equal(`{"target":"lint","project":"p"}`, row.Postconditions[0].Check.String())
 	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal(`{"target":"test","project":"."}`, rows[0].Check.String())
@@ -152,13 +152,13 @@ func (s *CheckSpecSuite) TestACheckTheSpecRefusesIsNotWritten() {
 	st := s.open()
 
 	_, err := st.Update(s.T().Context(), "a", func(j *Job) {
-		j.Goals = []Goal{{ID: "lint", Kind: GoalKindCheck, Check: rawCheck(`{"target":"lint","shell":"rm"}`), Accept: []Basis{BasisWitnessed}}}
+		j.Postconditions = []Postcondition{{ID: "lint", Kind: PostconditionKindCheck, Check: rawCheck(`{"target":"lint","shell":"rm"}`), Accept: []Basis{BasisWitnessed}}}
 	})
 
 	refused, ok := errors.AsType[*CheckRefusedError](err)
 	s.Require().True(ok, err)
 	s.Equal("a", refused.Job)
-	s.Equal("goals[lint].check", refused.Field)
+	s.Equal("postconditions[lint].check", refused.Field)
 	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(rows)
@@ -174,40 +174,40 @@ func (s *CheckSpecSuite) TestARowCheckThatIsNullDeclaresNone() {
 }
 
 func (s *CheckSpecSuite) TestChangedFieldsComparesChecksThroughTheSpec() {
-	prev := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
+	prev := Job{ID: "a", Postconditions: []Postcondition{{ID: "t", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
 	spelled := prev.Clone()
-	spelled.Goals[0].Check = rawCheck(`{"target":"test"}`)
+	spelled.Postconditions[0].Check = rawCheck(`{"target":"test"}`)
 	other := prev.Clone()
-	other.Goals[0].Check = checkJSON("test", ".", "-run", "X")
+	other.Postconditions[0].Check = checkJSON("test", ".", "-run", "X")
 
 	same, err := ChangedFields(prev, spelled, specChecks{})
 	s.Require().NoError(err)
 	s.Empty(same, "one check spelled two ways is one check")
 	changed, err := ChangedFields(prev, other, specChecks{})
 	s.Require().NoError(err)
-	s.Equal([]string{"goals"}, changed)
+	s.Equal([]string{"postconditions"}, changed)
 }
 
 func (s *CheckSpecSuite) TestChangedFieldsRefusesACheckTheSpecCannotRead() {
-	prev := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
+	prev := Job{ID: "a", Postconditions: []Postcondition{{ID: "t", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
 	next := prev.Clone()
-	next.Goals[0].Check = rawCheck(`{"target":"test","x":1}`)
+	next.Postconditions[0].Check = rawCheck(`{"target":"test","x":1}`)
 
 	_, err := ChangedFields(prev, next, specChecks{})
 
 	refused, ok := errors.AsType[*CheckRefusedError](err)
 	s.Require().True(ok, err)
-	s.Equal("goals[t].check", refused.Field)
+	s.Equal("postconditions[t].check", refused.Field)
 }
 
 func (s *CheckSpecSuite) TestChangedFieldsNeedsTheSpecOnlyToCompareTwoChecks() {
-	prev := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindPaths, Expect: ExpectChanged, Paths: []string{"x"}}}}
+	prev := Job{ID: "a", Postconditions: []Postcondition{{ID: "t", Kind: PostconditionKindPaths, Expect: ExpectChanged, Paths: []string{"x"}}}}
 
 	changed, err := ChangedFields(prev, prev.Clone(), nil)
 	s.Require().NoError(err)
 	s.Empty(changed)
 
-	withCheck := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
+	withCheck := Job{ID: "a", Postconditions: []Postcondition{{ID: "t", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
 	_, err = ChangedFields(withCheck, withCheck.Clone(), nil)
 	refused, ok := errors.AsType[*UnconfiguredError](err)
 	s.Require().True(ok, err)
@@ -215,9 +215,9 @@ func (s *CheckSpecSuite) TestChangedFieldsNeedsTheSpecOnlyToCompareTwoChecks() {
 }
 
 func (s *CheckSpecSuite) TestFaultsJudgeAChecksPresenceAndNeverItsContent() {
-	d := Declaration{Schema: Schema{Version: APIVersion}, ID: "a", Check: rawCheck(`{"anything":1}`), Goals: []Goal{
-		{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}, Check: checkJSON("lint", ".")},
-		{ID: "unit", Kind: GoalKindCheck, Accept: []Basis{BasisWitnessed}},
+	d := Declaration{Schema: Schema{Version: APIVersion}, ID: "a", Check: rawCheck(`{"anything":1}`), Postconditions: []Postcondition{
+		{ID: "docs", Kind: PostconditionKindPaths, Paths: []string{"docs"}, Check: checkJSON("lint", ".")},
+		{ID: "unit", Kind: PostconditionKindCheck, Accept: []Basis{BasisWitnessed}},
 	}}
 
 	var fields []string
@@ -225,5 +225,5 @@ func (s *CheckSpecSuite) TestFaultsJudgeAChecksPresenceAndNeverItsContent() {
 		fields = append(fields, f.Field)
 	}
 
-	s.ElementsMatch([]string{"goals[0].check", "goals[1].check"}, fields)
+	s.ElementsMatch([]string{"postconditions[0].check", "postconditions[1].check"}, fields)
 }

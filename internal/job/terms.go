@@ -71,7 +71,7 @@ type Terms struct {
 	// unknown and renders nothing.
 	Stage release.Stage `json:"stage" yaml:"stage"`
 	// DeletionCandidates are the unreferenced symbols in the write paths, from
-	// [UnreferencedInPaths]: findings to finish or delete, never goals.
+	// [UnreferencedInPaths]: findings to finish or delete, never postconditions.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
 	// ReferencedOutside are the files outside the write paths that use what they define,
 	// from [ReferencedOutside]: findings, never a boundary.
@@ -182,7 +182,7 @@ func (b Terms) String() string {
 		fmt.Fprintf(&s, "delivery: %s\n", deliveryLine(b.Lease))
 	}
 
-	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
+	writeList(&s, "interface", interfaceLines(b.Lease.Postconditions))
 	writeBlock(&s, "instructions", b.Lease.Instructions())
 	writeAttempts(&s, b.Lease, job.NewAttempts(b.Attempts))
 	writeList(&s, "may break", b.Lease.Breaks)
@@ -261,13 +261,13 @@ func deliveryLine(row job.Job) string {
 	return row.Delivery
 }
 
-// interfaceLines is one entry per symbol goal: what the job must leave behind, as the
+// interfaceLines is one entry per symbol postcondition: what the job must leave behind, as the
 // signature the fork froze. It leads the terms because the contract a holder implements
 // is the part the rest of the brief only bounds.
-func interfaceLines(goals []job.Goal) []string {
+func interfaceLines(postconditions []job.Postcondition) []string {
 	var lines []string
-	for _, g := range goals {
-		if g.Kind != job.GoalKindSymbol {
+	for _, g := range postconditions {
+		if g.Kind != job.PostconditionKindSymbol {
 			continue
 		}
 		line := fmt.Sprintf("%s (%s)", strings.Join(g.Symbols, ", "), string(g.Expect))
@@ -282,7 +282,7 @@ func interfaceLines(goals []job.Goal) []string {
 	return lines
 }
 
-// maxUnmetShown caps the unmet goals the newest previous attempt lists.
+// maxUnmetShown caps the unmet postconditions the newest previous attempt lists.
 const maxUnmetShown = 5
 
 // writeAttempts writes which attempt the holder is on and what the attempts before it left:

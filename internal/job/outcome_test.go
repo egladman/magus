@@ -56,7 +56,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	row.Check = fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
 	row.Paths.Write = []string{"pkg/a.go#func A", "pkg/a.go#func B", "pkg/b.go"}
 	row.Attempt = &job.CapturedRun{}
-	row.GateAttempts = []job.GateAttempt{{}, {}}
+	row.PostconditionAttempts = []job.PostconditionAttempt{{}, {}}
 	row.ReworkRounds, row.Widenings = 2, 1
 	row.ModelTier = &tier.Assignment{
 		Name: "routine", Rank: 0, Skills: tier.SkillVariantFull, Source: tier.SourceMatrix,
@@ -88,7 +88,7 @@ func TestNewJobOutcomeNumbersTheAttemptAndClassifiesIt(t *testing.T) {
 
 	want := got
 	want.Attempt = 2
-	want.Retry = job.RetryAfterPerson // a goal unmet twice needs a person
+	want.Retry = job.RetryAfterPerson // a postcondition unmet twice needs a person
 	assert.Equal(t, want, got)
 }
 

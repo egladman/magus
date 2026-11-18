@@ -133,12 +133,12 @@ func rowCheck(row job.Job) (types.LeaseCheck, bool, error) {
 	return c, true, nil
 }
 
-// GoalCheck is g's check. A goal that carries none is refused with
+// PostconditionCheck is g's check. A postcondition that carries none is refused with
 // [types.ErrNoLeaseCheck].
-func GoalCheck(g job.Goal) (types.LeaseCheck, error) {
+func PostconditionCheck(g job.Postcondition) (types.LeaseCheck, error) {
 	c, err := types.DecodeLeaseCheck(g.Check)
 	if err != nil {
-		return types.LeaseCheck{}, fmt.Errorf("goal %s: %w", g.ID, err)
+		return types.LeaseCheck{}, fmt.Errorf("postcondition %s: %w", g.ID, err)
 	}
 	return c, nil
 }
@@ -177,42 +177,42 @@ func (leaseChecks) Render(stored job.Check) (string, error) {
 	return CheckCommand(c), nil
 }
 
-// goalCheck is a check goal with its check read.
-type goalCheck struct {
-	Goal  job.Goal
-	Check types.LeaseCheck
+// postconditionCheck is a check postcondition with its check read.
+type postconditionCheck struct {
+	Postcondition job.Postcondition
+	Check         types.LeaseCheck
 }
 
-// readGoalChecks is every goal of goals that carries a check, each check read. A check that
+// readPostconditionChecks is every postcondition of postconditions that carries a check, each check read. A check that
 // does not read refuses the whole set: the store keeps only checks that do.
-func readGoalChecks(goals []job.Goal) ([]goalCheck, error) {
-	var out []goalCheck
-	for _, g := range goals {
+func readPostconditionChecks(postconditions []job.Postcondition) ([]postconditionCheck, error) {
+	var out []postconditionCheck
+	for _, g := range postconditions {
 		if g.Check.IsZero() {
 			continue
 		}
-		c, err := GoalCheck(g)
+		c, err := PostconditionCheck(g)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, goalCheck{Goal: g, Check: c})
+		out = append(out, postconditionCheck{Postcondition: g, Check: c})
 	}
 	return out, nil
 }
 
-// effectiveChecks is readGoalChecks row's effective goals, its own check first.
-func effectiveChecks(row job.Job) ([]goalCheck, error) {
-	checks, err := readGoalChecks(row.EffectiveGoals())
+// effectiveChecks is readPostconditionChecks row's effective postconditions, its own check first.
+func effectiveChecks(row job.Job) ([]postconditionCheck, error) {
+	checks, err := readPostconditionChecks(row.EffectivePostconditions())
 	if err != nil {
 		return nil, fmt.Errorf("job %s: %w", row.ID, err)
 	}
 	return checks, nil
 }
 
-// renderGoalCheck is g's check as the command that runs it, or a sentence saying it does
-// not read: a blank would pass for a goal with no check.
-func renderGoalCheck(g job.Goal) string {
-	c, err := GoalCheck(g)
+// renderPostconditionCheck is g's check as the command that runs it, or a sentence saying it does
+// not read: a blank would pass for a postcondition with no check.
+func renderPostconditionCheck(g job.Postcondition) string {
+	c, err := PostconditionCheck(g)
 	if err != nil {
 		return fmt.Sprintf("(a check that does not read: %v)", err)
 	}

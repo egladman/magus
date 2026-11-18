@@ -22,7 +22,7 @@ type CheckSpec interface {
 // checkSpec is what [WithCheckSpec] gave the store.
 type checkSpec struct{ CheckSpec }
 
-// WithCheckSpec is how the store reads the checks a row and its goals carry: the store
+// WithCheckSpec is how the store reads the checks a row and its postconditions carry: the store
 // keeps a check as an opaque [Check] and never interprets one. Open refuses a nil spec
 // with a [*CheckSpecError].
 //
@@ -55,7 +55,7 @@ var ErrNoCheck = errors.New("names no check")
 // CheckRefusedError is a check the store's [CheckSpec] refused.
 type CheckRefusedError struct {
 	// Job is the row the check belongs to, and Field where it sits: "check",
-	// "goals[<id>].check", "statement.check" or "report.check".
+	// "postconditions[<id>].check", "statement.check" or "report.check".
 	Job, Field string
 	Err        error
 }
@@ -66,15 +66,15 @@ func (e *CheckRefusedError) Error() string {
 
 func (e *CheckRefusedError) Unwrap() error { return e.Err }
 
-// goalCheckField is where goal id's check sits, as a [CheckRefusedError] names it.
-func goalCheckField(id string) string {
-	if id == PrimaryGoalID {
+// postconditionCheckField is where postcondition id's check sits, as a [CheckRefusedError] names it.
+func postconditionCheckField(id string) string {
+	if id == PrimaryPostconditionID {
 		return "check"
 	}
-	return fmt.Sprintf("goals[%s].check", id)
+	return fmt.Sprintf("postconditions[%s].check", id)
 }
 
-// validateChecks runs the store's [CheckSpec.Validate] over row's check and every goal's,
+// validateChecks runs the store's [CheckSpec.Validate] over row's check and every postcondition's,
 // and keeps the checks it returns.
 func (spec *checkSpec) validateChecks(row *Job) error {
 	if !row.Check.IsZero() {
@@ -84,15 +84,15 @@ func (spec *checkSpec) validateChecks(row *Job) error {
 		}
 		row.Check = valid
 	}
-	for i, g := range row.Goals {
+	for i, g := range row.Postconditions {
 		if g.Check.IsZero() {
 			continue
 		}
 		valid, err := spec.Validate(g.Check)
 		if err != nil {
-			return &CheckRefusedError{Job: row.ID, Field: goalCheckField(g.ID), Err: err}
+			return &CheckRefusedError{Job: row.ID, Field: postconditionCheckField(g.ID), Err: err}
 		}
-		row.Goals[i].Check = valid
+		row.Postconditions[i].Check = valid
 	}
 	return nil
 }

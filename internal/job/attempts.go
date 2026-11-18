@@ -62,11 +62,11 @@ func foldAttempt(prev job.Job, live job.Attempt, earlier []job.Attempt, denials 
 		p.Unmet = cloneGates(r.Unmet[:min(len(r.Unmet), maxFolded)])
 		p.Violations = slices.Clone(r.Violations[:min(len(r.Violations), maxFolded)])
 	}
-	runs := make([]job.CapturedRun, 0, len(prev.GateAttempts)+1)
+	runs := make([]job.CapturedRun, 0, len(prev.PostconditionAttempts)+1)
 	if prev.Attempt != nil {
 		runs = append(runs, *prev.Attempt)
 	}
-	for _, g := range prev.GateAttempts {
+	for _, g := range prev.PostconditionAttempts {
 		runs = append(runs, g.Attempt)
 	}
 	for _, run := range runs {
@@ -80,7 +80,7 @@ func foldAttempt(prev job.Job, live job.Attempt, earlier []job.Attempt, denials 
 
 // classifyAttempt says what must change before another attempt like p could help, earlier
 // being the attempts before it, newest last. A boundary denial or a changed path outside the
-// write paths needs a widening; a goal unmet in p and in the attempt before it needs a
+// write paths needs a widening; a postcondition unmet in p and in the attempt before it needs a
 // person, since a second agent already failed it. Anything else, an end the sweep wrote
 // included, is retryable as is.
 func classifyAttempt(p job.Attempt, earlier []job.Attempt) job.RetryVerdict {
@@ -100,10 +100,10 @@ func classifyAttempt(p job.Attempt, earlier []job.Attempt) job.RetryVerdict {
 	}
 	if n := len(earlier); n > 0 {
 		before := earlier[n-1]
-		for _, goal := range p.Status.Unmet {
-			if slices.ContainsFunc(before.Status.Unmet, func(g job.VerificationStatus) bool { return g.ID == goal.ID }) {
+		for _, postcondition := range p.Status.Unmet {
+			if slices.ContainsFunc(before.Status.Unmet, func(g job.VerificationStatus) bool { return g.ID == postcondition.ID }) {
 				return job.RetryVerdict{Change: job.RetryAfterPerson,
-					Reason: fmt.Sprintf("goal %s was unmet in attempts %d and %d", goal.ID, before.N, p.N)}
+					Reason: fmt.Sprintf("postcondition %s was unmet in attempts %d and %d", postcondition.ID, before.N, p.N)}
 			}
 		}
 	}
@@ -111,7 +111,7 @@ func classifyAttempt(p job.Attempt, earlier []job.Attempt) job.RetryVerdict {
 }
 
 // evidenceAt is the evidence row holds for a grade at its own generation: its result and the
-// runs behind its check and goals, with prior the oldest generation among the records taken
+// runs behind its check and postconditions, with prior the oldest generation among the records taken
 // against an earlier spec, zero when none was.
 //
 // A run taken at an earlier generation is set aside, since it ran for a spec that asked for
@@ -137,15 +137,15 @@ func evidenceAt(row job.Job, result *job.Result) (ev graded, prior int) {
 	if row.Attempt != nil && !older(row.Attempt.ObservedGeneration) {
 		ev.attempt = *row.Attempt
 	}
-	for _, g := range row.GateAttempts {
+	for _, g := range row.PostconditionAttempts {
 		if !older(g.Attempt.ObservedGeneration) {
-			ev.gateAttempts = append(ev.gateAttempts, g)
+			ev.postconditionAttempts = append(ev.postconditionAttempts, g)
 		}
 	}
 	return ev, prior
 }
 
-// unmetGates are the goals among gates that did not verify, at most maxFolded, copied.
+// unmetGates are the postconditions among gates that did not verify, at most maxFolded, copied.
 func unmetGates(gates []job.VerificationStatus) []job.VerificationStatus {
 	var out []job.VerificationStatus
 	for _, g := range gates {

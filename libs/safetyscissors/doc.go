@@ -11,7 +11,7 @@
 //
 //   - budget: the slot limiter, machine-wide memory and slot claims, and their verdicts.
 //   - job: the job record a caller declares, the row a store keeps, and the store, which
-//     grades a check goal from a run that is witnessed, attested or reported.
+//     grades a check postcondition from a run that is witnessed, attested or reported.
 //   - sandbox: read, write and exec confinement narrowed to a lease, required by default.
 //   - session: the append-only record of what invocations did, its fold and its pruning.
 //   - step: one thing a program is about to do, as data, and the spec of each kind.

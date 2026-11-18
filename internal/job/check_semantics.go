@@ -243,11 +243,11 @@ func uncheckedTestSelection(ws Workspace, row job.Job, refused types.JobProblems
 	}
 	var unchecked []string
 	for _, gc := range checks {
-		goal, check := gc.Goal, gc.Check
-		if goal.Kind != job.GoalKindCheck || check.Script != "" {
+		postcondition, check := gc.Postcondition, gc.Check
+		if postcondition.Kind != job.PostconditionKindCheck || check.Script != "" {
 			continue
 		}
-		field := goalCheckField(row, goal)
+		field := postconditionCheckField(row, postcondition)
 		if slices.ContainsFunc(refused, func(p types.JobProblem) bool {
 			return p.Code == types.JobCheckUnrunnable && strings.HasPrefix(p.Field, field+".")
 		}) {

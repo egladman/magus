@@ -85,21 +85,21 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredGoesBackOut() {
 	s.Contains(string(out), `"extra":true`)
 }
 
-func (s *RecordSuite) TestAGoalsBasesRoundTrip() {
-	row := Job{ID: "a", State: StateDeclared, Goals: []Goal{{ID: "tests", Kind: GoalKindCheck, Expect: ExpectPassed,
+func (s *RecordSuite) TestAPostconditionsBasesRoundTrip() {
+	row := Job{ID: "a", State: StateDeclared, Postconditions: []Postcondition{{ID: "tests", Kind: PostconditionKindCheck, Expect: ExpectPassed,
 		Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, BasisAttested}}}}
 
 	r := recordJob(row, nil)
 	got, err := r.job(newWireEnum[CredentialKind]())
 
 	s.Require().NoError(err)
-	s.Equal([]string{"witnessed", "attested"}, r.Spec.Goals[0].Accept)
-	s.Equal([]Basis{BasisWitnessed, BasisAttested}, got.Goals[0].Accept)
+	s.Equal([]string{"witnessed", "attested"}, r.Spec.Postconditions[0].Accept)
+	s.Equal([]Basis{BasisWitnessed, BasisAttested}, got.Postconditions[0].Accept)
 }
 
 func (s *RecordSuite) TestAStoredBasisNoBuildSpellsIsRefused() {
-	r := recordJob(Job{ID: "a", State: StateDeclared, Goals: []Goal{{ID: "tests", Kind: GoalKindCheck, Check: checkJSON("test", ".")}}}, nil)
-	r.Spec.Goals[0].Accept = []string{"trusted"}
+	r := recordJob(Job{ID: "a", State: StateDeclared, Postconditions: []Postcondition{{ID: "tests", Kind: PostconditionKindCheck, Check: checkJSON("test", ".")}}}, nil)
+	r.Spec.Postconditions[0].Accept = []string{"trusted"}
 
 	_, err := r.job(newWireEnum[CredentialKind]())
 
@@ -112,14 +112,14 @@ func (s *RecordSuite) nestedRefusal(err error) *UnknownMemberError {
 	return refused
 }
 
-func (s *RecordSuite) TestAMemberANewerWriterStoredInAGoalIsRefused() {
+func (s *RecordSuite) TestAMemberANewerWriterStoredInAPostconditionIsRefused() {
 	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
-		`"spec":{"goals":[{"id":"tests","kind":"check","later":1}]},"status":{"created":0,"updated":0}}`)
+		`"spec":{"postconditions":[{"id":"tests","kind":"check","later":1}]},"status":{"created":0,"updated":0}}`)
 
 	_, _, err := ReadRecord(line)
 
 	refused := s.nestedRefusal(err)
-	s.Equal("goalRecord", refused.Record)
+	s.Equal("postconditionRecord", refused.Record)
 	s.Equal([]string{"later"}, refused.Members)
 }
 
@@ -143,8 +143,8 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredOnAnAttemptIsRefused() {
 
 func (s *RecordSuite) TestEveryNestedRecordRoundTrips() {
 	row := Job{ID: "a", State: StateDeclared, Agent: &Agent{Instructions: "go", Worker: Worker{Type: WorkerTypeNew}},
-		Goals:        []Goal{{ID: "tests", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}},
-		RegisteredBy: Origin{User: "eli"}, Worktree: &Worktree{Root: "/w", Source: "/s", Base: "abc"},
+		Postconditions: []Postcondition{{ID: "tests", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}},
+		RegisteredBy:   Origin{User: "eli"}, Worktree: &Worktree{Root: "/w", Source: "/s", Base: "abc"},
 		Rejection: &Rejection{Unmet: []VerificationStatus{{ID: "tests"}}, At: 1}}
 	out, err := MarshalRecord(row, nil)
 	s.Require().NoError(err)
@@ -154,7 +154,7 @@ func (s *RecordSuite) TestEveryNestedRecordRoundTrips() {
 	s.Require().NoError(err)
 	s.Require().True(ok)
 	s.Equal(row.Agent, got.Agent)
-	s.Equal(row.Goals, got.Goals)
+	s.Equal(row.Postconditions, got.Postconditions)
 	s.Equal(row.Worktree, got.Worktree)
 	s.Equal(row.Rejection, got.Rejection)
 }
@@ -177,9 +177,9 @@ func (s *RecordSuite) TestAnOlderBuildsCamelCaseNestedKeyIsRefused() {
 func (s *RecordSuite) TestARowsLineIsPinned() {
 	row := Job{ID: "a", State: StateRunning, Generation: 2, Created: 10, Updated: 20, Check: checkJSON("test", "."),
 		DependsOn: []string{"b"}, BriefFormat: BriefFormatBuzz, ReadOnly: true, MaxAttempts: 3,
-		Goals:        []Goal{{ID: "lint", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("lint", "p"), Accept: []Basis{BasisWitnessed}}},
-		RegisteredBy: Origin{User: "eli", EntryPoint: EntryPointCLI, Credential: Credential{Kind: "socket-peer", ID: "c1"}},
-		WriteProof:   WriteProofDisjoint, BaseVerdict: BaseRevisionMatch, ReportedBase: "abc",
+		Postconditions: []Postcondition{{ID: "lint", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("lint", "p"), Accept: []Basis{BasisWitnessed}}},
+		RegisteredBy:   Origin{User: "eli", EntryPoint: EntryPointCLI, Credential: Credential{Kind: "socket-peer", ID: "c1"}},
+		WriteProof:     WriteProofDisjoint, BaseVerdict: BaseRevisionMatch, ReportedBase: "abc",
 		ModelTier: &tier.Assignment{Name: "bounded", Rank: 2, Skills: tier.SkillVariantShort, Source: tier.SourceUserMatrix}}
 
 	out, err := MarshalRecord(row, nil)
@@ -187,7 +187,7 @@ func (s *RecordSuite) TestARowsLineIsPinned() {
 	s.Require().NoError(err)
 	s.Equal(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a","generation":2},`+
 		`"spec":{"depends_on":["b"],"brief_format":"buzz","max_attempts":3,"check":{"target":"test","project":"."},`+
-		`"goals":[{"id":"lint","kind":"check","expect":"passed","check":{"target":"lint","project":"p"},"accept":["witnessed"]}],"read_only":true},`+
+		`"postconditions":[{"id":"lint","kind":"check","expect":"passed","check":{"target":"lint","project":"p"},"accept":["witnessed"]}],"read_only":true},`+
 		`"status":{"conditions":[{"type":"Running","status":"True","observed_generation":2,"last_transition_time":"1970-01-01T00:00:20Z","reason":"Running","message":""}],`+
 		`"model_tier":{"name":"bounded","rank":2,"skills":"short","source":"user-matrix"},"write_proof":"disjoint","reported_base":"abc","base_verdict":"revision-match",`+
 		`"registered_by":{"user":"eli","entry_point":"cli","credential":{"class":"socket-peer","id":"c1"}},"created":10,"updated":20}}`, string(out))

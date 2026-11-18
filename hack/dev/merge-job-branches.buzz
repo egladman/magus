@@ -27,7 +27,7 @@ export object MergeJob {
     dependsOn: [str],
     checkoutRoot: str = "",
     check: str = "",
-    goals: [stack\CheckGoal],
+    postconditions: [stack\CheckPostcondition],
 }
 
 // Candidate is one branch to merge, with the job it carries out when there is one.
@@ -36,7 +36,7 @@ export object Candidate {
     job: str = "",
     dependsOn: [str],
     check: str = "",
-    goals: [stack\CheckGoal],
+    postconditions: [stack\CheckPostcondition],
     paths: [str],
 }
 
@@ -142,7 +142,7 @@ export fun order(cands: [Candidate], contains: {str: [str]}, base: str) > result
         }
         foreach (n in notes[c.branch]!) { why.append(n); }
         layers.append(stack\StackLayer{ branch = c.branch, parent = parent, job = c.job, paths = c.paths,
-            declarations = [<str>], check = c.check, goals = c.goals, status = "planned", reason = why.join("; ") });
+            declarations = [<str>], check = c.check, postconditions = c.postconditions, status = "planned", reason = why.join("; ") });
         parent = c.branch;
     }
     return result\ok::<stack\BranchStack>(stack\BranchStack{ base = base, layers = layers });
@@ -176,7 +176,7 @@ export fun candidatesFromJobs(ids: [str], rows: [MergeJob], branchOf: fun (row: 
         final branch = branchOf(row!);
         if (branch.error -> err) { return result\Result::<[Candidate]>{ error = err }; }
         acc.append(Candidate{ branch = branch.value!, job = id, dependsOn = row!.dependsOn, check = row!.check,
-            goals = row!.goals, paths = [<str>] });
+            postconditions = row!.postconditions, paths = [<str>] });
     }
     return result\ok::<[Candidate]>(acc);
 }
@@ -204,10 +204,10 @@ export fun candidatesFromBranches(branches: [str], rows: [MergeJob], checkedOut:
         if (found.error -> err) { return result\Result::<[Candidate]>{ error = err }; }
         final row = found.value;
         if (row == null) {
-            acc.append(Candidate{ branch = b, dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] });
+            acc.append(Candidate{ branch = b, dependsOn = [<str>], postconditions = [<stack\CheckPostcondition>], paths = [<str>] });
         } else {
             acc.append(Candidate{ branch = b, job = row!.id, dependsOn = row!.dependsOn, check = row!.check,
-                goals = row!.goals, paths = [<str>] });
+                postconditions = row!.postconditions, paths = [<str>] });
         }
     }
     return result\ok::<[Candidate]>(acc);
@@ -269,13 +269,13 @@ fun checkCommand(c: LeaseCheck?) > str {
 }
 
 // parseCheck reads a row check back from the command checkCommand renders.
-export fun parseCheck(cmd: str) > result\Result::<stack\CheckGoal> {
+export fun parseCheck(cmd: str) > result\Result::<stack\CheckPostcondition> {
     final words = mut [<str>];
     foreach (w in cmd.split(" ")) {
         if (w != "") { words.append(w); }
     }
     if (words.len() < 3 or words[0] != "magus" or words[1] != "run") {
-        return result\fail::<stack\CheckGoal>("merge-job-branches: the check `{cmd}` is not a `magus run <target> [<project>]` command");
+        return result\fail::<stack\CheckPostcondition>("merge-job-branches: the check `{cmd}` is not a `magus run <target> [<project>]` command");
     }
     var project = ".";
     var at = 3;
@@ -284,20 +284,20 @@ export fun parseCheck(cmd: str) > result\Result::<stack\CheckGoal> {
     if (at < words.len() and words[at] == "--") {
         for (i: int = at + 1; i < words.len(); i = i + 1) { args.append(words[i]); }
     }
-    return result\ok::<stack\CheckGoal>(stack\CheckGoal{ id = PRIMARY, target = words[2], project = project, args = args });
+    return result\ok::<stack\CheckPostcondition>(stack\CheckPostcondition{ id = PRIMARY, target = words[2], project = project, args = args });
 }
 
 fun storeRows() > result\Result::<[MergeJob]> {
     try {
         final acc = mut [<MergeJob>];
         foreach (j in magus\workspace().jobs().jobs) {
-            final goals = mut [<stack\CheckGoal>];
-            foreach (g in j.goals) {
-                if (g.kind == magus\GoalKind.check) {
-                    goals.append(stack\CheckGoal{ id = g.id, target = g.check.target, project = g.check.project, args = g.check.args });
+            final postconditions = mut [<stack\CheckPostcondition>];
+            foreach (g in j.postconditions) {
+                if (g.kind == magus\PostconditionKind.check) {
+                    postconditions.append(stack\CheckPostcondition{ id = g.id, target = g.check.target, project = g.check.project, args = g.check.args });
                 }
             }
-            acc.append(MergeJob{ id = j.id, dependsOn = j.dependsOn, checkoutRoot = j.checkoutRoot, check = checkCommand(j.check), goals = goals });
+            acc.append(MergeJob{ id = j.id, dependsOn = j.dependsOn, checkoutRoot = j.checkoutRoot, check = checkCommand(j.check), postconditions = postconditions });
         }
         return result\ok::<[MergeJob]>(acc);
     } catch (err: any) {
@@ -590,7 +590,7 @@ export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (d
             }
         }
         acc.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
-            declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
+            declarations = l.declarations, check = l.check, postconditions = l.postconditions, status = status, reason = reason });
     }
     return result\ok::<stack\BranchStack>(stack\BranchStack{ schema = s.schema, base = s.base, layers = acc });
 }
@@ -704,7 +704,7 @@ export object Verdict {
 
 // runCheck runs one check in dir, returning its output ref and whether it
 // passed. The run waits for the build budget itself.
-fun runCheck(dir: str, g: stack\CheckGoal) > result\Result::<[str]> {
+fun runCheck(dir: str, g: stack\CheckPostcondition) > result\Result::<[str]> {
     final args = mut [g.target, g.project, "--concurrency", "1"];
     if (g.args.len() > 0) {
         args.append("--");
@@ -718,22 +718,22 @@ fun runCheck(dir: str, g: stack\CheckGoal) > result\Result::<[str]> {
     }
 }
 
-// verifyLayers runs each merged job's check and check goals in dir, serially, then records
+// verifyLayers runs each merged job's check and check postconditions in dir, serially, then records
 // the grade with `magus job wait --integration`. A job passes only when every run and the
 // recorded grade pass.
 export fun verifyLayers(dir: str, s: stack\BranchStack) > result\Result::<[Verdict]> {
     final acc = mut [<Verdict>];
     foreach (l in s.layers) {
         if (l.job == "" or l.status != "merged") { continue; }
-        final checks = mut [<stack\CheckGoal>];
+        final checks = mut [<stack\CheckPostcondition>];
         if (l.check != "") {
             final parsed = parseCheck(l.check);
             if (parsed.error -> err) { return result\Result::<[Verdict]>{ error = err }; }
             checks.append(parsed.value!);
         }
-        foreach (g in l.goals) { checks.append(g); }
+        foreach (g in l.postconditions) { checks.append(g); }
         if (checks.len() == 0) {
-            acc.append(Verdict{ job = l.job, pass = false, lines = ["declares no check and no check goal, so nothing here can grade it"] });
+            acc.append(Verdict{ job = l.job, pass = false, lines = ["declares no check and no check postcondition, so nothing here can grade it"] });
             continue;
         }
         var pass = true;
@@ -826,13 +826,13 @@ fun plannedFromStack(root: str, values: {str: str}) > result\Result::<stack\Bran
         if (named.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
         resolved.append(named.value!);
         var check = l.check;
-        var goals = l.goals;
-        if (l.job != "" and check == "" and goals.len() == 0) {
+        var postconditions = l.postconditions;
+        if (l.job != "" and check == "" and postconditions.len() == 0) {
             final row = rowNamed(rows, id: l.job);
-            if (row != null) { check = row!.check; goals = row!.goals; }
+            if (row != null) { check = row!.check; postconditions = row!.postconditions; }
         }
         layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
-            declarations = l.declarations, check = check, goals = goals, status = "planned", reason = l.reason });
+            declarations = l.declarations, check = check, postconditions = postconditions, status = "planned", reason = l.reason });
     }
     nameResolved(resolved, values: values);
     return result\ok::<stack\BranchStack>(stack\BranchStack{ schema = s.schema, base = s.base, layers = layers });
@@ -880,7 +880,7 @@ fun planned(root: str, values: {str: str}) > result\Result::<stack\BranchStack> 
         final changed = changedPaths(root, branch: c.branch, base: base);
         if (changed.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
         withPaths.append(Candidate{ branch = c.branch, job = c.job, dependsOn = c.dependsOn, check = c.check,
-            goals = c.goals, paths = changed.value! });
+            postconditions = c.postconditions, paths = changed.value! });
     }
     nameResolved(resolved, values: values);
     final contains = containsMap(root, branches: names, base: base);
@@ -1012,7 +1012,7 @@ export fun main(args: [str]) > void !> any {
             if (inside.error -> err) { throw err.message; }
             if (inside.value!) { status = "merged"; reason = "in {into}"; }
             layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
-                declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
+                declarations = l.declarations, check = l.check, postconditions = l.postconditions, status = status, reason = reason });
         }
         merged = stack\BranchStack{ schema = plan.schema, base = plan.base, layers = layers };
         final checked = withTree(root, rev: into, dir: fs\scratchCheckoutDir("merge-job-branches"), remove: removeWorktree, body: fun (dir: str) > result\Result::<bool> {
@@ -1062,13 +1062,13 @@ fun fixtureRows() > result\Result::<[MergeJob]> {
         foreach (j in doc.q("jobs").listValue()) {
             final deps = mut [<str>];
             foreach (d in j.q("depends_on").listValue()) { deps.append(d.stringValue()); }
-            final goals = mut [<stack\CheckGoal>];
-            foreach (g in j.q("goals").listValue()) {
-                goals.append(stack\CheckGoal{ id = g.q("id").stringValue(), target = g.q("target").stringValue(),
+            final postconditions = mut [<stack\CheckPostcondition>];
+            foreach (g in j.q("postconditions").listValue()) {
+                postconditions.append(stack\CheckPostcondition{ id = g.q("id").stringValue(), target = g.q("target").stringValue(),
                     project = g.q("project").stringValue() });
             }
             rows.append(MergeJob{ id = j.q("id").stringValue(), dependsOn = deps, checkoutRoot = j.q("checkout_root").string() ?? "",
-                check = j.q("check").stringValue(), goals = goals });
+                check = j.q("check").stringValue(), postconditions = postconditions });
         }
         return result\ok::<[MergeJob]>(rows);
     } catch (err: any) {
@@ -1092,15 +1092,15 @@ test "jobs merge after the jobs they depend_on, and a dependency left out is nam
     assert\equal(s.layers[0].parent, want: "main", message: "the first layer goes on the base");
     assert\equal(s.layers[2].parent, want: "feat/api", message: "each later layer goes on the one merged before it");
     assert\equal(s.layers[2].reason, want: "after feat/api: its job depends_on api; depends_on elsewhere, which this merge leaves out", message: "reason");
-    assert\equal(s.layers[1].goals[0].id, want: "lint", message: "the row's check goals travel with the layer");
+    assert\equal(s.layers[1].postconditions[0].id, want: "lint", message: "the row's check postconditions travel with the layer");
     assert\equal(stack\orderLayers(s).layers.len(), want: 3, message: "the plan is a stack the module orders");
 }
 
 test "a branch based on another merges after it, and ready branches keep their input order" {
     final cands = [
-        Candidate{ branch = "dep", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
-        Candidate{ branch = "gen-b", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
-        Candidate{ branch = "gen-c", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
+        Candidate{ branch = "dep", dependsOn = [<str>], postconditions = [<stack\CheckPostcondition>], paths = [<str>] },
+        Candidate{ branch = "gen-b", dependsOn = [<str>], postconditions = [<stack\CheckPostcondition>], paths = [<str>] },
+        Candidate{ branch = "gen-c", dependsOn = [<str>], postconditions = [<stack\CheckPostcondition>], paths = [<str>] },
     ];
     final s = order(cands, contains: {"dep": ["gen-b"]}, base: "main").value!;
     assert\equal(joinBranches(s), want: "gen-b dep gen-c", message: "order");
@@ -1114,7 +1114,7 @@ test "a cycle, an unknown job and a branch named twice are errors naming them" {
         want: "merge-job-branches: the branches order in a cycle: feat/loop-a -> feat/loop-b -> feat/loop-a", message: "cycle");
     assert\equal(candidatesFromJobs(["nope"], rows: rows, branchOf: featBranch).error!.message,
         want: "merge-job-branches: no job nope in the job store", message: "unknown job");
-    final twice = Candidate{ branch = "x", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] };
+    final twice = Candidate{ branch = "x", dependsOn = [<str>], postconditions = [<stack\CheckPostcondition>], paths = [<str>] };
     assert\equal(order([twice, twice], contains: {<str: [str]>}, base: "main").error!.message,
         want: "merge-job-branches: x is named twice", message: "twice");
 }
@@ -1251,7 +1251,7 @@ fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
     foreach (n in names) {
         final paths = changedPaths(root, branch: n, base: "main");
         if (paths.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-        cands.append(Candidate{ branch = n, dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = paths.value! });
+        cands.append(Candidate{ branch = n, dependsOn = [<str>], postconditions = [<stack\CheckPostcondition>], paths = paths.value! });
     }
     final contains = containsMap(root, branches: names, base: "main");
     if (contains.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
@@ -1334,8 +1334,8 @@ test "a split stack merged back yields the original change's tree" {
     _ = branchFrom(root, name: "part-2", start: "part-1", files: {"src/a.txt": "a3\n"}, subject: "part 2");
     _ = sh(root, args: ["checkout", "-q", "main"]);
     final written = stack\writeStack(stack\BranchStack{ base = "main", layers = [
-        stack\StackLayer{ branch = "part-2", parent = "part-1", paths = ["src/a.txt"], declarations = [<str>], goals = [<stack\CheckGoal>], status = "created" },
-        stack\StackLayer{ branch = "part-1", parent = "main", paths = ["src/x.txt", "gen/list.txt"], declarations = [<str>], goals = [<stack\CheckGoal>], status = "created" },
+        stack\StackLayer{ branch = "part-2", parent = "part-1", paths = ["src/a.txt"], declarations = [<str>], postconditions = [<stack\CheckPostcondition>], status = "created" },
+        stack\StackLayer{ branch = "part-1", parent = "main", paths = ["src/x.txt", "gen/list.txt"], declarations = [<str>], postconditions = [<stack\CheckPostcondition>], status = "created" },
     ] });
     final plan = stack\orderLayers(stack\readStack(written));
     var tree = "";

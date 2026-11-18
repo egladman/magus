@@ -28,11 +28,11 @@ type Put struct {
 	State *State  `json:"state,omitzero"`
 	// Check is the declared check; nil leaves the row's as it is and the zero Check
 	// clears it.
-	Check     *Check    `json:"check,omitzero"`
-	Paths     PathsPut  `json:"paths,omitzero"`
-	DependsOn *[]string `json:"depends_on,omitzero"`
-	Breaks    *[]string `json:"breaks,omitzero"`
-	Goals     *[]Goal   `json:"goals,omitzero"`
+	Check          *Check           `json:"check,omitzero"`
+	Paths          PathsPut         `json:"paths,omitzero"`
+	DependsOn      *[]string        `json:"depends_on,omitzero"`
+	Breaks         *[]string        `json:"breaks,omitzero"`
+	Postconditions *[]Postcondition `json:"postconditions,omitzero"`
 	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
 	Deviations *[]Deviation `json:"deviations,omitzero"`
 	ReadOnly   *bool        `json:"read_only,omitzero"`

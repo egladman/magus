@@ -27,15 +27,15 @@ import (
 // job rows live per repository.
 type AttemptResolver func(context.Context, string) (job.CapturedRun, error)
 
-// gradedByHolder reports whether row is read-only and declares no check or goal: magus has
+// gradedByHolder reports whether row is read-only and declares no check or postcondition: magus has
 // nothing to grade it by, so the result its holder files is the grade, and [Exit] records
 // pass on it unless the result names an unresolved risk.
 func gradedByHolder(row job.Job) bool {
-	return row.ReadOnly && row.Check.IsZero() && len(row.Goals) == 0
+	return row.ReadOnly && row.Check.IsZero() && len(row.Postconditions) == 0
 }
 
 // returnedReason is the end_reason of a row [gradedByHolder] passed.
-const returnedReason = "returned: its holder filed a result, and a read-only row declaring no check or goal passes on it"
+const returnedReason = "returned: its holder filed a result, and a read-only row declaring no check or postcondition passes on it"
 
 // endedReason says which end a write recording no_return on the live row prev is, so a
 // row its holder returned with nothing to grade never reads as one nobody returned. byHolder
@@ -48,7 +48,7 @@ func endedReason(prev job.Job, filed, byHolder bool) string {
 	case prev.Registered == 0:
 		return fmt.Sprintf("ended with no result filed, before any holder ran `%s` on it", hint.JobExec.With(prev.ID))
 	case gradedByHolder(prev):
-		return "ended ungraded: a read-only row declaring no check or goal has nothing magus can grade, so what it found went only to its caller"
+		return "ended ungraded: a read-only row declaring no check or postcondition has nothing magus can grade, so what it found went only to its caller"
 	case byHolder:
 		return "abandoned by its holder, which filed no result"
 	default:
@@ -132,16 +132,16 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 		}
 	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
-	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
+	attempt, postconditionAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
 	if err != nil {
 		return job.Job{}, err
 	}
 	tree := WorkTree(store.root, rows[i])
-	goals := rows[i].EffectiveGoals()
+	postconditions := rows[i].EffectivePostconditions()
 	changed := func() ([]string, map[string]bool) {
-		return rowFiles(tree, Observed{}, *result, store.generated), namedFiles(tree, goals, result.ChangedPaths)
+		return rowFiles(tree, Observed{}, *result, store.generated), namedFiles(tree, postconditions, result.ChangedPaths)
 	}
-	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(tree), changed, store.testSelection()); err != nil {
+	if err := refuseWrongRun(rows[i], attempt, postconditionAttempts, workspaceDefaultCharms(tree), changed, store.testSelection()); err != nil {
 		return job.Job{}, err
 	}
 	return update(func(row *job.Job) {
@@ -150,9 +150,9 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 		stamped := *result
 		stamped.ObservedGeneration = generation
 		filed = &stamped
-		row.GateAttempts = gateAttempts
-		for i := range row.GateAttempts {
-			row.GateAttempts[i].Attempt.ObservedGeneration = generation
+		row.PostconditionAttempts = postconditionAttempts
+		for i := range row.PostconditionAttempts {
+			row.PostconditionAttempts[i].Attempt.ObservedGeneration = generation
 		}
 		if attempt.Found {
 			attempt.ObservedGeneration = generation
@@ -177,34 +177,36 @@ func workspaceDefaultCharms(tree string) []string {
 	return cfg.DefaultCharms
 }
 
-// refuseWrongRun refuses evidence of another command than its goal's check,
-// charm set included. A goal the row does not declare is left for the wait.
+// refuseWrongRun refuses evidence of another command than its postcondition's check,
+// charm set included. A postcondition the row does not declare is left for the wait.
 // changed is what the result claims: exit reads no diff, and the wait does. It
 // loads the workspace, so only a run the check does not name verbatim asks.
-func refuseWrongRun(row job.Job, primary job.CapturedRun, gates []job.GateAttempt, defaults []string, changed func() ([]string, map[string]bool), selection testSelection) error {
-	goals, err := effectiveChecks(row)
+func refuseWrongRun(row job.Job, primary job.CapturedRun, gates []job.PostconditionAttempt, defaults []string, changed func() ([]string, map[string]bool), selection testSelection) error {
+	postconditions, err := effectiveChecks(row)
 	if err != nil {
 		return err
 	}
 	check := func(id string, attempt job.CapturedRun) error {
-		i := slices.IndexFunc(goals, func(g goalCheck) bool { return g.Goal.ID == id && g.Goal.Kind == job.GoalKindCheck })
-		if i < 0 || ranCheck(goals[i].Check, attempt, defaults, selection) {
+		i := slices.IndexFunc(postconditions, func(g postconditionCheck) bool {
+			return g.Postcondition.ID == id && g.Postcondition.Kind == job.PostconditionKindCheck
+		})
+		if i < 0 || ranCheck(postconditions[i].Check, attempt, defaults, selection) {
 			return nil
 		}
 		files, named := changed()
-		if ranOver(goals[i].Check, attempt, defaults, files, named, selection) {
+		if ranOver(postconditions[i].Check, attempt, defaults, files, named, selection) {
 			return nil
 		}
-		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, recordedCommand(attempt), CheckCommand(resolveCheck(goals[i].Check, defaults)), leftOut(goals[i].Check, attempt, files, named, selection))
+		return fmt.Errorf("job: postcondition %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
+			id, attempt.Ref, recordedCommand(attempt), CheckCommand(resolveCheck(postconditions[i].Check, defaults)), leftOut(postconditions[i].Check, attempt, files, named, selection))
 	}
 	if primary.Found {
-		if err := check(job.PrimaryGoalID, primary); err != nil {
+		if err := check(job.PrimaryPostconditionID, primary); err != nil {
 			return err
 		}
 	}
 	for _, gate := range gates {
-		if err := check(gate.GateID, gate.Attempt); err != nil {
+		if err := check(gate.PostconditionID, gate.Attempt); err != nil {
 			return err
 		}
 	}
@@ -234,8 +236,8 @@ func (e *alreadyEndedError) Error() string {
 // filed against an earlier spec never passes; a supplied result is resolved in this checkout.
 // A bound store verifies only a row below its own lease (see [job.Actor.Verifies]).
 //
-// evidence names, per check goal, a run recorded in the waiter's checkout to grade in place
-// of the holder's: the key is the goal id, or [job.PrimaryGoalID] for the job's own
+// evidence names, per check postcondition, a run recorded in the waiter's checkout to grade in place
+// of the holder's: the key is the postcondition id, or [job.PrimaryPostconditionID] for the job's own
 // check, and the value the run's output ref, which resolve must look up in this checkout
 // alone. Nil or empty grades the filed evidence. See [graded.withWaiterEvidence] for what
 // must hold first.
@@ -274,7 +276,7 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 	} else {
 		resolve, where := store.acrossCheckouts(jobs, id, resolve)
 		ev.result = *result
-		ev.attempt, ev.gateAttempts, err = resolveResultAttempts(ctx, *result, resolve, where)
+		ev.attempt, ev.postconditionAttempts, err = resolveResultAttempts(ctx, *result, resolve, where)
 		if err != nil {
 			return job.Status{}, err
 		}
@@ -286,7 +288,7 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 	// that needed it refuses; nothing here turns a failed look into a satisfied gate.
 	var seen Observed
 	if observe != nil {
-		if seen, err = observe(ctx, inheritGoals(jobs[i], jobs)); err != nil {
+		if seen, err = observe(ctx, inheritPostconditions(jobs[i], jobs)); err != nil {
 			return job.Status{}, err
 		}
 	}
@@ -294,11 +296,11 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 	seen.tries = job.NewAttempts(tries)
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
-	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritGoals(jobs[i], jobs).EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
+	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritPostconditions(jobs[i], jobs).EffectivePostconditions(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
 
 	var taken *job.Integration
 	if len(evidence) > 0 {
-		if ev, taken, err = ev.withWaiterEvidence(ctx, store, inheritGoals(jobs[i], jobs), evidence, resolve, seen); err != nil {
+		if ev, taken, err = ev.withWaiterEvidence(ctx, store, inheritPostconditions(jobs[i], jobs), evidence, resolve, seen); err != nil {
 			return job.Status{}, err
 		}
 	}
@@ -308,8 +310,8 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
-		held := inheritGoals(*row, jobs)
-		status = VerifyGates(held, ev.result, ev.attempt, ev.gateAttempts, jobs, seen)
+		held := inheritPostconditions(*row, jobs)
+		status = VerifyGates(held, ev.result, ev.attempt, ev.postconditionAttempts, jobs, seen)
 		// A verdict declares nothing, so the row keeps this generation through the write.
 		generation := max(row.Generation, 1)
 		status.ObservedGeneration, status.PriorGeneration = generation, prior
@@ -411,7 +413,7 @@ func localSources(paths []string, generated func(string) bool) []string {
 	return slices.Compact(slices.Sorted(slices.Values(out)))
 }
 
-// rowFiles is what a file-scoped goal's run has to have read: what the job's
+// rowFiles is what a file-scoped postcondition's run has to have read: what the job's
 // branch committed, else its diff, and what its result claims. A generated
 // report or a deleted file has nothing to read.
 func rowFiles(tree string, seen Observed, result job.Result, generated func(string) bool) []string {
@@ -654,7 +656,7 @@ func sameHead(ctx context.Context, left, right string) bool {
 // verification compares these snapshots to the row's declared gates under the store
 // lock, so an extra or missing reference never becomes authority. where names the
 // checkouts resolve searched, for the refusal.
-func resolveResultAttempts(ctx context.Context, result job.Result, resolve AttemptResolver, where string) (job.CapturedRun, []job.GateAttempt, error) {
+func resolveResultAttempts(ctx context.Context, result job.Result, resolve AttemptResolver, where string) (job.CapturedRun, []job.PostconditionAttempt, error) {
 	if resolve == nil {
 		return job.CapturedRun{}, nil, errors.New("job: no output resolver files a result's evidence")
 	}
@@ -682,22 +684,22 @@ func resolveResultAttempts(ctx context.Context, result job.Result, resolve Attem
 		primary = attempt
 	}
 	seen := map[string]bool{}
-	gates := make([]job.GateAttempt, 0, len(result.VerificationEvidence))
+	gates := make([]job.PostconditionAttempt, 0, len(result.VerificationEvidence))
 	for _, evidence := range result.VerificationEvidence {
 		switch {
 		case evidence.GateID == "":
 			return job.CapturedRun{}, nil, errors.New("job: each verification_evidence entry requires gate_id")
 		case evidence.Owed != "" && evidence.Unrun != "":
-			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q is filed as both owed and unrun, so name one", evidence.GateID)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: postcondition %q is filed as both owed and unrun, so name one", evidence.GateID)
 		case evidence.Owed != "" && evidence.OutputRef != "":
-			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q, and an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: postcondition %q is filed as owed and cites output ref %q, and an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
 		case evidence.Unrun != "" && evidence.OutputRef != "":
-			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q is filed as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", evidence.GateID, evidence.OutputRef)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: postcondition %q is filed as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", evidence.GateID, evidence.OutputRef)
 		case evidence.Owed == "" && evidence.Unrun == "" && evidence.OutputRef == "":
-			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q names none of output_ref, owed or unrun, so it files nothing", evidence.GateID)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: postcondition %q names none of output_ref, owed or unrun, so it files nothing", evidence.GateID)
 		}
 		if seen[evidence.GateID] {
-			return job.CapturedRun{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: the result carries duplicate evidence for postcondition %q", evidence.GateID)
 		}
 		seen[evidence.GateID] = true
 		if evidence.Owed != "" || evidence.Unrun != "" {
@@ -708,9 +710,9 @@ func resolveResultAttempts(ctx context.Context, result job.Result, resolve Attem
 			return job.CapturedRun{}, nil, err
 		}
 		if !attempt.Found {
-			return job.CapturedRun{}, nil, fmt.Errorf("job: goal %q output ref %q names no run %s recorded", evidence.GateID, evidence.OutputRef, where)
+			return job.CapturedRun{}, nil, fmt.Errorf("job: postcondition %q output ref %q names no run %s recorded", evidence.GateID, evidence.OutputRef, where)
 		}
-		gates = append(gates, job.GateAttempt{GateID: evidence.GateID, Attempt: attempt})
+		gates = append(gates, job.PostconditionAttempt{PostconditionID: evidence.GateID, Attempt: attempt})
 	}
 	return primary, gates, nil
 }
@@ -719,18 +721,18 @@ func resolveResultAttempts(ctx context.Context, result job.Result, resolve Attem
 // CI, and names where
 // the reasons workers reach for go instead.
 func refuseOwedReason(result job.Result) error {
-	owed := map[string]string{job.PrimaryGoalID: result.Validation.Owed}
+	owed := map[string]string{job.PrimaryPostconditionID: result.Validation.Owed}
 	for _, evidence := range result.VerificationEvidence {
 		owed[evidence.GateID] = evidence.Owed
 	}
-	for _, goal := range slices.Sorted(maps.Keys(owed)) {
-		if reason := owed[goal]; reason != "" && reason != OwedNoSeat && reason != owedRemoteCI {
-			return fmt.Errorf("job: goal %q is filed as owed because %q, and the reasons a run is owed are %q and %q:"+
+	for _, postcondition := range slices.Sorted(maps.Keys(owed)) {
+		if reason := owed[postcondition]; reason != "" && reason != OwedNoSeat && reason != owedRemoteCI {
+			return fmt.Errorf("job: postcondition %q is filed as owed because %q, and the reasons a run is owed are %q and %q:"+
 				" a check the environment kept from running is filed as unrun with that cause, which fails the job,"+
 				" the integrator regenerates an output outside the write paths, so that files nothing,"+
-				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
+				" your orchestrator drops a postcondition that is not this job's or adds a deviation,"+
 				" and a lint finding in a file this job did not change clears by linting the files it changed",
-				goal, reason, OwedNoSeat, owedRemoteCI)
+				postcondition, reason, OwedNoSeat, owedRemoteCI)
 		}
 	}
 	return nil
@@ -800,7 +802,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	if i < 0 {
 		return job.Status{}, fmt.Errorf("job: there is no job %q", id)
 	}
-	row := inheritGoals(jobs[i], jobs)
+	row := inheritPostconditions(jobs[i], jobs)
 
 	tries, err := store.Attempts(ctx)
 	if err != nil {
@@ -817,12 +819,12 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	seen.tries = job.NewAttempts(tries)
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, row), seen, ev.result, store.generated)
-	seen.namedFiles = namedFiles(WorkTree(store.root, row), row.EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
+	seen.namedFiles = namedFiles(WorkTree(store.root, row), row.EffectivePostconditions(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.
 	row.State = ""
-	status := VerifyGates(row, ev.result, ev.attempt, ev.gateAttempts, jobs, seen)
+	status := VerifyGates(row, ev.result, ev.attempt, ev.postconditionAttempts, jobs, seen)
 	status.ObservedGeneration, status.PriorGeneration = max(row.Generation, 1), prior
 
 	// The GATES decide this verdict, not the whole result. VerifyGates also applies the

@@ -12,7 +12,7 @@ type Agent struct {
 	// workspace's matrix or default.
 	Model Model `json:"model,omitzero" yaml:"model,omitempty"`
 	// Instructions say what the job is for and what done means, as prose
-	// a reader grades. The machine-checkable half is the job's goals.
+	// a reader grades. The machine-checkable half is the job's postconditions.
 	Instructions string `json:"instructions,omitempty" yaml:"instructions,omitempty"`
 	// Worker says which worker takes the job. Its type is always written.
 	Worker Worker `json:"worker" yaml:"worker"`

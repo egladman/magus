@@ -13,54 +13,54 @@ type ReportSuite struct{ gradingSuite }
 func TestReportSuite(t *testing.T) { suite.Run(t, new(ReportSuite)) }
 
 func (s *ReportSuite) TestAReportNamesWhoRanIt() {
-	s.declare(checkGoalAccepting("tests", BasisReported))
+	s.declare(checkPostconditionAccepting("tests", BasisReported))
 
-	_, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: "tests", Check: testCheck(), By: " "})
+	_, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Postcondition: "tests", Check: testCheck(), By: " "})
 
 	refused, ok := errors.AsType[*ReportError](err)
 	s.Require().True(ok, err)
-	s.Equal(ReportError{Job: "j1", Goal: "tests"}, *refused)
+	s.Equal(ReportError{Job: "j1", Postcondition: "tests"}, *refused)
 }
 
-func (s *ReportSuite) TestAReportOfAnUndeclaredGoalIsRefused() {
-	s.declare(checkGoalAccepting("tests", BasisReported))
+func (s *ReportSuite) TestAReportOfAnUndeclaredPostconditionIsRefused() {
+	s.declare(checkPostconditionAccepting("tests", BasisReported))
 
-	_, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: "nope", Check: testCheck(), By: "worker"})
+	_, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Postcondition: "nope", Check: testCheck(), By: "worker"})
 
-	refused, ok := errors.AsType[*GoalError](err)
+	refused, ok := errors.AsType[*PostconditionError](err)
 	s.Require().True(ok, err)
 	s.Empty(refused.Kind)
 }
 
-func (s *ReportSuite) TestAReportOfAPathsGoalIsRefused() {
-	s.declare(Goal{ID: "docs", Kind: GoalKindPaths, Expect: ExpectChanged, Paths: []string{"docs"}})
+func (s *ReportSuite) TestAReportOfAPathsPostconditionIsRefused() {
+	s.declare(Postcondition{ID: "docs", Kind: PostconditionKindPaths, Expect: ExpectChanged, Paths: []string{"docs"}})
 
-	_, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: "docs", By: "worker"})
+	_, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Postcondition: "docs", By: "worker"})
 
-	refused, ok := errors.AsType[*GoalError](err)
+	refused, ok := errors.AsType[*PostconditionError](err)
 	s.Require().True(ok, err)
-	s.Equal(GoalKindPaths, refused.Kind)
+	s.Equal(PostconditionKindPaths, refused.Kind)
 }
 
-func (s *ReportSuite) TestTheLeasesOwnCheckIsAGoalThatAcceptsOnlyAWitnessedRun() {
+func (s *ReportSuite) TestTheLeasesOwnCheckIsAPostconditionThatAcceptsOnlyAWitnessedRun() {
 	_, err := s.store.Update(s.T().Context(), "j1", func(j *Job) { j.Check = testCheck() })
 	s.Require().NoError(err)
-	ref, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: PrimaryGoalID, Check: testCheck(), By: "worker"})
+	ref, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Postcondition: PrimaryPostconditionID, Check: testCheck(), By: "worker"})
 	s.Require().NoError(err)
 
-	g, err := s.store.Grade(s.T().Context(), "j1", map[string]RunRef{PrimaryGoalID: ref})
+	g, err := s.store.Grade(s.T().Context(), "j1", map[string]RunRef{PrimaryPostconditionID: ref})
 
 	s.Require().NoError(err)
-	s.Require().Len(g.Goals, 1)
-	s.Contains(g.Goals[0].Violations, "the run is reported and this goal accepts only [witnessed]")
+	s.Require().Len(g.Postconditions, 1)
+	s.Contains(g.Postconditions[0].Violations, "the run is reported and this postcondition accepts only [witnessed]")
 }
 
 func (s *ReportSuite) TestATreeThatCannotBeDigestedIsATreeError() {
-	s.declare(checkGoalAccepting("tests", BasisReported))
+	s.declare(checkPostconditionAccepting("tests", BasisReported))
 	cause := errors.New("no revision")
 	st := s.open(WithTree(func(context.Context) (string, error) { return "", cause }))
 
-	_, err := st.ReportRun(s.T().Context(), Report{Job: "j1", Goal: "tests", Check: testCheck(), By: "worker"})
+	_, err := st.ReportRun(s.T().Context(), Report{Job: "j1", Postcondition: "tests", Check: testCheck(), By: "worker"})
 
 	refused, ok := errors.AsType[*TreeError](err)
 	s.Require().True(ok, err)

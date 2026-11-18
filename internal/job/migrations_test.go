@@ -551,7 +551,7 @@ const (
 		`"metadata":{"name":"a","generation":2,"annotations":{"x.example/dependsOn":"keepMe"}},` +
 		`"spec":{"agent":{"instructions":"x","worker":{"type":"Resumed"}},"paths":{"write":["a.go"]},"dependsOn":["b"],` +
 		`"briefFormat":"Markdown","maxAttempts":2,"check":{"target":"generate","project":".","noDefaultCharms":true},` +
-		`"goals":[{"id":"g","kind":"Check","expect":"Passed","check":{"target":"test","project":"."},"accept":["Witnessed"]},` +
+		`"postconditions":[{"id":"g","kind":"Check","expect":"Passed","check":{"target":"test","project":"."},"accept":["Witnessed"]},` +
 		`{"id":"s","kind":"Symbol","expect":"Unreferenced","symbols":["X"]}]},` +
 		`"status":{"conditions":[{"type":"Running","status":"True","observedGeneration":2,"lastTransitionTime":"1970-01-01T00:00:02Z","reason":"Running","message":""}],` +
 		`"modelTier":{"name":"bounded","rank":1,"skills":"Short","source":"UserMatrix"},"writeProof":"Disjoint","reportedBase":"abc",` +
@@ -567,9 +567,9 @@ func (s *snakeRecordSuite) snakeRowWant() string {
 		Agent: &job.Agent{Instructions: "x", Worker: job.Worker{Type: job.WorkerTypeResumed}},
 		Paths: job.Paths{Write: []string{"a.go"}}, DependsOn: []string{"b"}, BriefFormat: job.BriefFormatMarkdown, MaxAttempts: 2,
 		Check: fixtureCheck(types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}),
-		Goals: []job.Goal{
-			{ID: "g", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), Accept: []job.Basis{job.BasisWitnessed}},
-			{ID: "s", Kind: job.GoalKindSymbol, Expect: job.ExpectUnreferenced, Symbols: []string{"X"}},
+		Postconditions: []job.Postcondition{
+			{ID: "g", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), Accept: []job.Basis{job.BasisWitnessed}},
+			{ID: "s", Kind: job.PostconditionKindSymbol, Expect: job.ExpectUnreferenced, Symbols: []string{"X"}},
 		},
 		ModelTier:  &tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceUserMatrix},
 		WriteProof: job.WriteProofDisjoint, ReportedBase: "abc", BaseVerdict: job.BaseRevisionMatch,
@@ -710,7 +710,7 @@ func (s *snakeStoreSuite) TestTheStoreReadsAfterItsLinesAreRespelled() {
 	row := f.Jobs[0]
 	s.Equal(job.StateRunning, row.State)
 	s.Equal(types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}, checkIn(s.T(), row.Check))
-	s.Equal([]job.Basis{job.BasisWitnessed}, row.Goals[0].Accept)
+	s.Equal([]job.Basis{job.BasisWitnessed}, row.Postconditions[0].Accept)
 	s.Equal(job.WriteProofDisjoint, row.WriteProof)
 	s.Equal(job.EntryPointCLI, row.RegisteredBy.EntryPoint)
 	lines := storedLines(s.T(), jobs)

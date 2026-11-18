@@ -234,7 +234,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 	assert.Contains(t, ps[0].Message, "A (running, updated")
 	assert.Contains(t, ps[0].Message, "A has changed nothing under notes.md")
 	assert.Contains(t, ps[0].Fix, "--depends-on A")
-	assert.Contains(t, ps[0].Fix, "the root narrows A to what it has changed with `magus job apply A --release-write-path notes.md`, which keeps its goals")
+	assert.Contains(t, ps[0].Fix, "the root narrows A to what it has changed with `magus job apply A --release-write-path notes.md`, which keeps its postconditions")
 
 	requests := releaseRequests(t, bRoot)
 	require.Len(t, requests, 1, "a shared file that is not a project's configuration asks too")
@@ -527,7 +527,7 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 }
 
 // The refusal prints the claim pair it computed, from the declarations the holder has
-// touched and the symbols the new job's goals name, and says whether the two are disjoint.
+// touched and the symbols the new job's postconditions name, and says whether the two are disjoint.
 func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 	t.Parallel()
 
@@ -536,26 +536,26 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 	aRev := aRepo.Head()
 	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
 
-	symbol := func(names ...string) []job.Goal {
-		return []job.Goal{{ID: "g", Kind: job.GoalKindSymbol, Expect: job.ExpectChanged, Symbols: names}}
+	symbol := func(names ...string) []job.Postcondition {
+		return []job.Postcondition{{ID: "g", Kind: job.PostconditionKindSymbol, Expect: job.ExpectChanged, Symbols: names}}
 	}
 	for _, tc := range []struct {
-		name  string
-		goals []job.Goal
-		holds []string
-		want  []string
+		name           string
+		postconditions []job.Postcondition
+		holds          []string
+		want           []string
 	}{
 		{"disjoint declarations", symbol("C"), []string{"run.go"}, []string{
 			"A has touched func A(ctx int) { in it so far. A has changed something under every one of its write paths:",
 			"Claim `run.go#A` on A and `run.go#C` on B, which name different declarations (nothing was written to either row), or add `--depends-on A` to B, or fold B into A",
 		}},
 		{"the same declaration", symbol("A"), []string{"run.go"}, []string{
-			"B's symbol goals and A's touched work both reach A in it, so a claim cannot split them: add `--depends-on A` to B, or fold B into A",
+			"B's symbol postconditions and A's touched work both reach A in it, so a claim cannot split them: add `--depends-on A` to B, or fold B into A",
 		}},
 		{"a symbol the file does not define", symbol("Missing"), []string{"run.go"}, []string{
 			"Claim `run.go#A` on A (it has touched it) and a declaration other than that on B",
 		}},
-		{"no symbol goal at all", nil, []string{"run.go"}, []string{
+		{"no symbol postcondition at all", nil, []string{"run.go"}, []string{
 			"Claim `run.go#A` on A (it has touched it) and a declaration other than that on B",
 		}},
 	} {
@@ -566,7 +566,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 			rows, err := s.List(t.Context())
 			require.NoError(t, err)
 
-			err = unorderedFileShareProblems(context.Background(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}, Goals: tc.goals}).Error()
+			err = unorderedFileShareProblems(context.Background(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}, Postconditions: tc.postconditions}).Error()
 			require.ErrorIs(t, err, types.WritePathFileShared)
 			for _, want := range tc.want {
 				assert.Contains(t, err.Error(), want)
@@ -574,7 +574,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 		})
 	}
 
-	t.Run("a holder that has touched nothing, and a job with no symbol goals, get the generic advice", func(t *testing.T) {
+	t.Run("a holder that has touched nothing, and a job with no symbol postconditions, get the generic advice", func(t *testing.T) {
 		t.Parallel()
 		quiet := testkit.NewRepository(t, claimFiles)
 		s := NewStore(tempLocation(t, bRoot))
@@ -627,9 +627,9 @@ func TestForkNotes(t *testing.T) {
 	t.Run("a file shared with a job not yet taken", func(t *testing.T) {
 		t.Parallel()
 		rows := []job.Job{{ID: "A", State: job.StateDeclared, Paths: job.Paths{Write: []string{"run.go"}}}}
-		goals := []job.Goal{{ID: "g", Kind: job.GoalKindSymbol, Expect: job.ExpectChanged, Symbols: []string{"C"}}}
-		got := ForkNotes(ctx, s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}, Goals: goals})
-		assert.Equal(t, []string{"B and A both write run.go. Claim `run.go#C` on B (its symbol goals name it) and a declaration other than that on A, or add `--depends-on A` to B, or fold B into A"}, got)
+		postconditions := []job.Postcondition{{ID: "g", Kind: job.PostconditionKindSymbol, Expect: job.ExpectChanged, Symbols: []string{"C"}}}
+		got := ForkNotes(ctx, s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}, Postconditions: postconditions})
+		assert.Equal(t, []string{"B and A both write run.go. Claim `run.go#C` on B (its symbol postconditions name it) and a declaration other than that on A, or add `--depends-on A` to B, or fold B into A"}, got)
 	})
 
 	t.Run("a peer sharing many files gets one line", func(t *testing.T) {

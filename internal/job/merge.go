@@ -67,10 +67,10 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	}
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
-	if goals, ok, e := decodeObjects[job.Goal](params, "goals", "goals"); e != nil {
+	if postconditions, ok, e := decodeObjects[job.Postcondition](params, "postconditions", "postconditions"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		put.Goals = &goals
+		put.Postconditions = &postconditions
 	}
 	if deviations, ok, e := decodeObjects[job.Deviation](params, "deviations", "deviations"); e != nil {
 		err = errors.Join(err, e)
@@ -165,7 +165,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 //
 // Every value is checked HERE rather than inside the returned merge, because Store.Update
 // runs it while holding the lock and has no way to report a failure. A state outside the
-// vocabulary, a timeout that does not parse, goals that do not validate, a negative
+// vocabulary, a timeout that does not parse, postconditions that do not validate, a negative
 // max_attempts, and an enter beside any other field are errors, joined.
 func PutMerge(p job.Put) (func(*job.Job), error) {
 	var (
@@ -220,12 +220,12 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 			set = append(set, func(u *job.Job) { apply(u, v) })
 		}
 	}
-	if p.Goals != nil {
-		goals, _ := resolveAccept(*p.Goals)
-		if e := ValidateDeclaration((job.Declaration{ID: "merge", Goals: goals})); e != nil {
+	if p.Postconditions != nil {
+		postconditions, _ := resolveAccept(*p.Postconditions)
+		if e := ValidateDeclaration((job.Declaration{ID: "merge", Postconditions: postconditions})); e != nil {
 			err = errors.Join(err, e)
 		} else {
-			set = append(set, func(u *job.Job) { u.Goals = goals })
+			set = append(set, func(u *job.Job) { u.Postconditions = postconditions })
 		}
 	}
 	if p.Deviations != nil {
@@ -350,7 +350,7 @@ func declaredKeys(p job.Put) []string {
 		{"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"paths.write", p.Paths.Write != nil}, {"paths.deny", p.Paths.Deny != nil},
 		{"paths.read", p.Paths.Read != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
-		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
+		{"postconditions", p.Postconditions != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil},
 		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
 	} {
@@ -365,7 +365,7 @@ func declaredKeys(p job.Put) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "agent", "checkpoint", "paths",
-	"depends_on", "breaks", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
+	"depends_on", "breaks", "brief_format", "check", "validation", "postconditions", "deviations", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows",
 	"delivery", "parent_head",
 }

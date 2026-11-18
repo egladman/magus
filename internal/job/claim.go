@@ -530,7 +530,7 @@ func describeTouched(decls []string, unreadable error) string {
 }
 
 // splitAdvice is what a refusal tells the new job to do about file, which holder already
-// holds. When the holder's touched declarations and the job's symbol goals each name
+// holds. When the holder's touched declarations and the job's symbol postconditions each name
 // declarations of file, it prints the claim pair that splits the file and says whether the
 // two are disjoint. magus writes neither claim: the rows are the orchestrator's. With
 // nothing to compute a pair from it gives the generic advice.
@@ -548,8 +548,8 @@ func splitAdvice(ctx context.Context, store *Store, row, holder job.Job, file st
 			theirs = appendUnique(theirs, claimWord(d, all))
 		}
 	}
-	for _, g := range row.Goals {
-		if g.Kind != job.GoalKindSymbol {
+	for _, g := range row.Postconditions {
+		if g.Kind != job.PostconditionKindSymbol {
 			continue
 		}
 		for _, symbol := range g.Symbols {
@@ -569,14 +569,14 @@ func splitAdvice(ctx context.Context, store *Store, row, holder job.Job, file st
 	case len(theirs) == 0 && len(mine) == 0:
 		return generic
 	case len(theirs) == 0:
-		return fmt.Sprintf("Claim %s (its symbol goals name it) and a declaration other than that on %s, or %s", claims(mine, row.ID), holder.ID, orElse)
+		return fmt.Sprintf("Claim %s (its symbol postconditions name it) and a declaration other than that on %s, or %s", claims(mine, row.ID), holder.ID, orElse)
 	case len(mine) == 0:
 		return fmt.Sprintf("Claim %s (it has touched it) and a declaration other than that on %s, or %s", claims(theirs, holder.ID), row.ID, orElse)
 	}
 	for _, m := range mine {
 		for _, t := range theirs {
 			if sameDeclaration(m, t, all) {
-				return fmt.Sprintf("%s's symbol goals and %s's touched work both reach %s in it, so a claim cannot split them: %s", row.ID, holder.ID, m, orElse)
+				return fmt.Sprintf("%s's symbol postconditions and %s's touched work both reach %s in it, so a claim cannot split them: %s", row.ID, holder.ID, m, orElse)
 			}
 		}
 	}

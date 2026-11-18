@@ -34,7 +34,7 @@ func TestLeaseGraphEvidenceTakesOnlyAnExactNode(t *testing.T) {
 	assert.False(t, ok, "a fuzzy match is not evidence")
 }
 
-// describe reads the graph evidence as it reads the symbol goals: from the graph as built,
+// describe reads the graph evidence as it reads the symbol postconditions: from the graph as built,
 // and from none while a symbol index is stale, which it reports cold.
 func TestLeaseGraphEvidenceBuildsNothingOverAStaleIndex(t *testing.T) {
 	t.Parallel()
@@ -148,10 +148,10 @@ func TestGoExport(t *testing.T) {
 		id, name string
 		exported bool
 	}{
-		{"symbol:go a `github.com/x/types`/Goal#Signature.", "Goal#Signature", true},
-		{"symbol:go a `a`/ResolveSymbolGoals().", "ResolveSymbolGoals", true},
-		{"symbol:go a `a`/goal#Signature.", "", false},
-		{"symbol:go a `a`/Goal#Resolve().(ctx)", "", false},
+		{"symbol:go a `github.com/x/types`/Postcondition#Signature.", "Postcondition#Signature", true},
+		{"symbol:go a `a`/ResolveSymbolPostconditions().", "ResolveSymbolPostconditions", true},
+		{"symbol:go a `a`/postcondition#Signature.", "", false},
+		{"symbol:go a `a`/Postcondition#Resolve().(ctx)", "", false},
 	} {
 		name, exported := goExport(tc.id)
 		assert.Equal(t, fmt.Sprint(tc.name, tc.exported), fmt.Sprint(name, exported), tc.id)

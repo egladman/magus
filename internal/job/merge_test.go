@@ -30,9 +30,9 @@ func applyPut(t *testing.T, put job.Put, base job.Job) job.Job {
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original goal", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
+	base := job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original postcondition", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
-	assert.Equal(t, job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original goal", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, State: job.StateRunning}, got,
+	assert.Equal(t, job.Job{ID: "u1", Agent: &job.Agent{Instructions: "original postcondition", Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, State: job.StateRunning}, got,
 		"an absent key must not erase what an earlier put set")
 	assert.Equal(t, base, applyPut(t, job.Put{}, base), "a put naming nothing changes nothing")
 }
@@ -40,7 +40,7 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 	t.Parallel()
 
-	base := job.Job{ID: "u1", Agent: job.Instructed("original goal")}
+	base := job.Job{ID: "u1", Agent: job.Instructed("original postcondition")}
 	got := applyMerge(t, map[string]any{"agent": nil}, base)
 	assert.Nil(t, got.Agent, "agent present with a null value clears it, unlike an absent key")
 }

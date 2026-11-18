@@ -25,7 +25,7 @@ const deletionHeading = "deletion candidates in the write paths: nothing else na
 // method may satisfy an interface the graph cannot see, and a field is read by reflection
 // as often as by name. A read-only row writes nothing and gets nil.
 //
-// Candidates are findings for the holder to finish or delete, never goals: the graph
+// Candidates are findings for the holder to finish or delete, never postconditions: the graph
 // measures references, it does not judge them.
 func UnreferencedInPaths(row job.Job, unreferenced []types.UnreferencedEntry) []types.UnreferencedEntry {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {

@@ -260,7 +260,7 @@ func TestInstallProjectsSkipsAProjectTheCheckoutLacks(t *testing.T) {
 	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), row, projects))
 }
 
-func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
+func TestAPostconditionAddedDuringAForkIsSaidOnce(t *testing.T) {
 	t.Parallel()
 	s, _ := validateWorkspace(t)
 	var notes strings.Builder
@@ -272,7 +272,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	_, err := validateDryFork(t.Context(), quiet, "w", merge)
 	require.NoError(t, err)
 	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
-	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())
+	assert.Equal(t, 1, strings.Count(notes.String(), `added the postcondition "lint"`), notes.String())
 }
 
 func TestInstallProjectsSaysNoneForAReadOnlyJob(t *testing.T) {

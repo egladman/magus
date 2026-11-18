@@ -101,41 +101,41 @@ func (s *AuthorizeSuite) TestChangedFieldsNamesTheDeclaredFieldsInWireSpelling()
 	s.Equal([]string{"paths.read", "max_attempts"}, changed)
 }
 
-// A worker that could rewrite its own goal's check could grade itself done, so a change
-// the caller's CheckSpec sees is a change to the goals.
-func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnGoalsCheck() {
+// A worker that could rewrite its own postcondition's check could grade itself done, so a change
+// the caller's CheckSpec sees is a change to the postconditions.
+func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnPostconditionsCheck() {
 	prev := s.worker()
-	prev.Goals = []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}}
+	prev.Postconditions = []Postcondition{{ID: "t", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}}
 	respelled, rewritten := prev.Clone(), prev.Clone()
-	respelled.Goals[0].Check = rawCheck(`{"target":"test"}`)
-	rewritten.Goals[0].Check = checkJSON("test", ".", "-run", "Nothing")
+	respelled.Postconditions[0].Check = rawCheck(`{"target":"test"}`)
+	rewritten.Postconditions[0].Check = checkJSON("test", ".", "-run", "Nothing")
 
 	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, respelled, true, []Job{prev}, specChecks{}))
 	var refused *RefusedError
 	s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, rewritten, true, []Job{prev}, specChecks{}), &refused)
-	s.Contains(refused.Rule, "goals")
+	s.Contains(refused.Rule, "postconditions")
 }
 
-// A worker that could widen its own goal's accept list could grade itself on a weaker
+// A worker that could widen its own postcondition's accept list could grade itself on a weaker
 // basis, and one that could rewrite a signature could hold its symbol to any shape.
-func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnGoalsAcceptOrSignature() {
+func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnPostconditionsAcceptOrSignature() {
 	prev := s.worker()
-	prev.Goals = []Goal{
-		{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}},
-		{ID: "sig", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"pkg.F"}, Signature: "func F()"},
+	prev.Postconditions = []Postcondition{
+		{ID: "t", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}},
+		{ID: "sig", Kind: PostconditionKindSymbol, Expect: ExpectSignature, Symbols: []string{"pkg.F"}, Signature: "func F()"},
 	}
 	widened, reshaped := prev.Clone(), prev.Clone()
-	widened.Goals[0].Accept = []Basis{BasisWitnessed, BasisReported}
-	reshaped.Goals[1].Signature = "func F(int)"
+	widened.Postconditions[0].Accept = []Basis{BasisWitnessed, BasisReported}
+	reshaped.Postconditions[1].Signature = "func F(int)"
 
 	for name, next := range map[string]Job{"accept": widened, "signature": reshaped} {
 		var refused *RefusedError
 		s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, next, true, []Job{prev}, specChecks{}), &refused, name)
-		s.Contains(refused.Rule, "goals", name)
+		s.Contains(refused.Rule, "postconditions", name)
 	}
 	changed, err := ChangedFields(prev, widened, specChecks{})
 	s.Require().NoError(err)
-	s.Equal([]string{"goals"}, changed)
+	s.Equal([]string{"postconditions"}, changed)
 }
 
 func (s *AuthorizeSuite) TestSubsetNarrowsAGlobButNeverWidensIt() {

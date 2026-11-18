@@ -92,7 +92,7 @@ step at a time.`,
 			Name:        "job",
 			Effect:      command.EffectRead,
 			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
-			Description: "Print what one job grants its holder: the criteria, the write and read paths, the check, its goals, its dependencies, and the paths out of reach. It adds each write path's blast radius and each goal's grade against current evidence.",
+			Description: "Print what one job grants its holder: the criteria, the write and read paths, the check, its postconditions, its dependencies, and the paths out of reach, with each write path's blast radius and each postcondition's current grade.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
@@ -108,7 +108,7 @@ with one refusal: a job whose check is the ci
 gate, or a target that chains to it, has no terms printed at all. The gate runs
 once, in the forking session's tree, after every job lands.
 
-It also grades where each declared goal stands against the evidence magus holds
+It also grades where each declared postcondition stands against the evidence magus holds
 right now, which is still a READ: it records nothing, so asking never advances a
 job and never blocks the holder still working on it. It is the same grading
 ` + "`magus job wait`" + ` does, so the two cannot disagree.`,
@@ -2376,7 +2376,7 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and every declared goal held: a recorded passing run for a check,
+store carries, and every declared postcondition held: a recorded passing run for a check,
 the diff since the checkpoint and the knowledge graph for paths and symbols.
 Evidence must have been captured after the job was declared, so an old green run
 cannot satisfy new work. A target's own run policy bounds its execution; wait does
@@ -2424,7 +2424,7 @@ them and magus describe job prints one job's terms.`,
 			Flags: []command.Flag{
 				{Name: "schema", Kind: command.Bool, Default: false, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: command.Bool, Default: false, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
-				{Name: "instructions", Kind: command.String, Doc: "What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the goals a --stdin record declares"},
+				{Name: "instructions", Kind: command.String, Doc: "What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the postconditions a --stdin record declares"},
 				{Name: "new-worker", Kind: command.String, Doc: "Start a new worker for this job instead of resuming the warm one of the job it follows, for this reason"},
 				{Name: "timeout", Kind: command.Duration, Unit: "m", Doc: "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout"},
 				{Name: "parent", Kind: command.String, Doc: "The job this one is forked from"},
@@ -2446,7 +2446,7 @@ them and magus describe job prints one job's terms.`,
 			Effect: command.EffectLocalWrite,
 			Short:  "Upsert jobs' specs from a file or stdin, keeping each job's state",
 			Description: "Upsert each record's spec, the way `kubectl apply -f` reads a manifest: criteria, write, deny and " +
-				"read paths, check, goals, model, depends_on, parent and timeout. The record is the whole spec, so a spec " +
+				"read paths, check, postconditions, model, depends_on, parent and timeout. The record is the whole spec, so a spec " +
 				"field it leaves out is cleared, except an omitted checkpoint or timeout, which keeps the job's. Status is " +
 				"never written: the job keeps its state, holder and registration, and a record carrying state is refused. " +
 				"A new id creates the job. --stdin reads stdin, and a stream holds one JSON job, an array, or one job per " +
@@ -2455,7 +2455,7 @@ them and magus describe job prints one job's terms.`,
 				"orchestrator drops from a taken job is recorded as a revoked release carrying the digest of what the job " +
 				"left. Widening is the orchestrator's; a session holding a lease may apply only a spec that releases some " +
 				"of its own paths. The global --dry-run prints the spec diff and writes nothing.",
-			Long: `Upsert each record's spec: criteria, write, deny and read paths, check, goals,
+			Long: `Upsert each record's spec: criteria, write, deny and read paths, check, postconditions,
 model, depends_on, parent and timeout. The record is the whole spec, so a spec
 field it leaves out is cleared; an omitted checkpoint or timeout keeps the job's.
 Status is never written: the job keeps its state, holder and registration, and a
@@ -2476,11 +2476,11 @@ job's own spec plus the paths, so every refusal of a whole record holds. It
 cannot be combined with -f.
 
 --release-write-path <path> <id> drops the named write paths and keeps the rest
-of the job's spec, goals and check included. A path may be a ` + "`<file>#<declaration>`" + `
+of the job's spec, postconditions and check included. A path may be a ` + "`<file>#<declaration>`" + `
 claim, which runs to the end of its value.
 
-A record that removes a write path and drops goals the job carries is refused;
-each problem names the goal to keep.
+A record that removes a write path and drops postconditions the job carries is refused;
+each problem names the postcondition to keep.
 
 The one claim a holder applies is proved: a record carrying only id and
 claim, [{"path": ..., "because": ...}], where because is refs:<symbol>,
@@ -2491,13 +2491,13 @@ record when it refuses a write it can prove. It applies alone.`,
 				{Name: "f", Kind: command.String, Doc: "The records to apply from a `file`: one JSON job, a JSON array, or one job per line"},
 				{Name: "stdin", Kind: command.Bool, Default: false, Doc: "Read the records from stdin instead of a file, as job fork --stdin does"},
 				{Name: "add-write-path", Kind: command.StringList, Doc: "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated"},
-				{Name: "release-write-path", Kind: command.StringList, Doc: "A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path"},
+				{Name: "release-write-path", Kind: command.StringList, Doc: "A write path to drop from the job, keeping its postconditions and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path"},
 			},
 			Usage: "magus job apply <-f <file>|--stdin|--add-write-path <path> <id>|--release-write-path <path> <id>>",
 			Examples: []command.Example{
 				{Comment: "Print what the records would change, writing nothing", Command: "magus job apply -f jobs.jsonl --dry-run"},
 				{Comment: "Widen one job by a path, without writing a record", Command: "magus job apply my-job --add-write-path internal/job/plan.go"},
-				{Comment: "Release a path and keep the job's goals", Command: "magus job apply my-job --release-write-path internal/job/list.go"},
+				{Comment: "Release a path and keep the job's postconditions", Command: "magus job apply my-job --release-write-path internal/job/list.go"},
 			},
 		},
 		{
@@ -2526,8 +2526,8 @@ record when it refuses a write it can prove. It applies alone.`,
 			Flags: []command.Flag{
 				{Name: "schema", Kind: command.Bool, Default: false, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: command.Bool, Default: false, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
-				{Name: "integration", Kind: command.Bool, Effect: command.EffectLocalWrite, Default: false, Doc: "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state"},
-				{Name: "evidence", Kind: command.Custom, Doc: "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable"},
+				{Name: "integration", Kind: command.Bool, Effect: command.EffectLocalWrite, Default: false, Doc: "Grade only the job's check postconditions against the runs the --stdin result names in THIS checkout, and record that beside its state"},
+				{Name: "evidence", Kind: command.Custom, Doc: "Grade check postcondition `<postcondition>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable"},
 			},
 		},
 		{

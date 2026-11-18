@@ -67,14 +67,14 @@ func TestOverrunsForegroundIsFalseWhenNothingOverruns(t *testing.T) {
 	}
 }
 
-// A check with no recorded run says nothing about the goals after it.
+// A check with no recorded run says nothing about the postconditions after it.
 func TestOverrunsForegroundLooksPastACheckWithNoRecordedRun(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{
-		ID:    "w",
-		Check: fixtureCheck(types.LeaseCheck{Target: "go-vet", Project: "."}),
-		Goals: []job.Goal{{ID: "test", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}},
+		ID:             "w",
+		Check:          fixtureCheck(types.LeaseCheck{Target: "go-vet", Project: "."}),
+		Postconditions: []job.Postcondition{{ID: "test", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}},
 	}
 	asked := 0
 	lastRun := func(_, target string) (time.Duration, bool) {

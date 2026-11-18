@@ -30,19 +30,19 @@ func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []mo
 		return types.ModelTierRequest{}, err
 	}
 	req := types.ModelTierRequest{
-		ID:           row.ID,
-		Parent:       row.Parent,
-		Instructions: row.Instructions(),
-		ReadOnly:     row.ReadOnly,
-		Check:        view.Check,
-		Goals:        view.Goals,
-		Kind:         modelTierKind(row),
-		WritePaths:   slices.Clone(row.Paths.Write),
-		ReadPaths:    slices.Clone(row.Paths.Read),
-		DependsOn:    slices.Clone(row.DependsOn),
-		WriteFiles:   writeFileCount(row.Paths.Write),
-		Model:        row.Agent.RequestedModel(),
-		History:      slices.Clone(history),
+		ID:             row.ID,
+		Parent:         row.Parent,
+		Instructions:   row.Instructions(),
+		ReadOnly:       row.ReadOnly,
+		Check:          view.Check,
+		Postconditions: view.Postconditions,
+		Kind:           modelTierKind(row),
+		WritePaths:     slices.Clone(row.Paths.Write),
+		ReadPaths:      slices.Clone(row.Paths.Read),
+		DependsOn:      slices.Clone(row.DependsOn),
+		WriteFiles:     writeFileCount(row.Paths.Write),
+		Model:          row.Agent.RequestedModel(),
+		History:        slices.Clone(history),
 	}
 	if row.Parent != "" {
 		if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.Parent }); i >= 0 && rows[i].ModelTier != nil {
@@ -58,25 +58,25 @@ func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []mo
 }
 
 // modelTierKind is what row is judged by, the first that applies: a script check, symbol
-// goals, path goals, a target check, else a reader of its prose. A check that does not read
+// postconditions, path postconditions, a target check, else a reader of its prose. A check that does not read
 // as a lease check, which no store keeps, is judged as a target check.
 func modelTierKind(row job.Job) types.JobKind {
 	var symbol, paths, target bool
-	for _, g := range row.EffectiveGoals() {
+	for _, g := range row.EffectivePostconditions() {
 		g = g.Resolve()
 		switch g.Kind {
-		case job.GoalKindCheck:
+		case job.PostconditionKindCheck:
 			if g.Check.IsZero() {
 				continue
 			}
-			c, err := GoalCheck(g)
+			c, err := PostconditionCheck(g)
 			if err == nil && c.Script != "" {
 				return types.JobKindScript
 			}
 			target = target || err != nil || c.Target != ""
-		case job.GoalKindSymbol:
+		case job.PostconditionKindSymbol:
 			symbol = true
-		case job.GoalKindPaths:
+		case job.PostconditionKindPaths:
 			paths = true
 		}
 	}

@@ -120,12 +120,12 @@ func runsTheGate(row job.Job) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return slices.ContainsFunc(checks, func(c goalCheck) bool { return c.Check.Target == types.TargetCI }), nil
+	return slices.ContainsFunc(checks, func(c postconditionCheck) bool { return c.Check.Target == types.TargetCI }), nil
 }
 
 // checkLine names a row's check as a refusal quotes it.
 func checkLine(row job.Job) string {
-	gates := row.EffectiveGoals()
+	gates := row.EffectivePostconditions()
 	if len(gates) == 0 {
 		return "no check at all"
 	}
@@ -134,7 +134,7 @@ func checkLine(row job.Job) string {
 		if gate.Check.IsZero() {
 			continue
 		}
-		lines = append(lines, renderGoalCheck(gate))
+		lines = append(lines, renderPostconditionCheck(gate))
 	}
 	if len(lines) == 0 {
 		return "no check at all"

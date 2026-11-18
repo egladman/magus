@@ -111,9 +111,9 @@ func TestTermsRendersUnrunGatesAsASection(t *testing.T) {
 	bare := NewTerms(briefRow(), TermsFacts{}).String()
 	assert.NotContains(t, bare, unrunHeading)
 
-	gate := UnrunGate{Target: "lint", Project: ".", Source: "**/*.go", Goal: unrunGoal(".", "lint", map[string]bool{})}
+	gate := UnrunGate{Target: "lint", Project: ".", Source: "**/*.go", Postcondition: unrunPostcondition(".", "lint", map[string]bool{})}
 	got := NewTerms(briefRow(), TermsFacts{UnrunGates: []UnrunGate{gate}}).String()
-	assert.Contains(t, got, "\n"+unrunHeading+"\n  lint . (reads **/*.go)\n  goals to add: ")
+	assert.Contains(t, got, "\n"+unrunHeading+"\n  lint . (reads **/*.go)\n  postconditions to add: ")
 	assert.Less(t, strings.Index(got, unrunHeading), strings.Index(got, "the only check you run"),
 		"the section sits among the facts, ahead of the check")
 }
@@ -159,11 +159,11 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Goals = []job.Goal{
-		{ID: "api", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Open"},
+	row.Postconditions = []job.Postcondition{
+		{ID: "api", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Open"},
 			Signature: "func Open(root string) error", Description: "opens the ledger at root"},
-		{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OpenLegacy"}},
-		{ID: "unit", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
+		{ID: "gone", Kind: job.PostconditionKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OpenLegacy"}},
+		{ID: "unit", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
 	}
 	row.Breaks = []string{"--old-flag", "ledger.Open"}
 	facts := TermsFacts{
@@ -191,7 +191,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	assert.Less(t, strings.Index(got, "may break"), strings.Index(got, "release stage"))
 	assert.Less(t, strings.Index(got, "release stage"), strings.Index(got, deletionHeading))
 	assert.Less(t, strings.Index(got, deletionHeading), strings.Index(got, "write paths"))
-	assert.NotContains(t, got, "unit", "a check goal is not an interface; the check stays the only one named")
+	assert.NotContains(t, got, "unit", "a check postcondition is not an interface; the check stays the only one named")
 	assert.Equal(t, got, NewTerms(row, facts).String(), "two renders are byte-identical")
 }
 
@@ -219,7 +219,7 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	row.Agent, row.DependsOn, row.Paths.Deny = nil, nil, nil
 	got := NewTerms(row, TermsFacts{}).String()
 
-	assert.NotContains(t, got, "goal")
+	assert.NotContains(t, got, "postcondition")
 	assert.NotContains(t, got, "depends on")
 	assert.NotContains(t, got, "deny paths")
 	assert.Contains(t, got, "the only check you run")

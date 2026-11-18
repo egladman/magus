@@ -16,15 +16,15 @@ import (
 )
 
 // describe job reads the graph as built and job wait may build it. On a current index the
-// two grade a row alike; on a stale one describe builds nothing and leaves the symbol goal
+// two grade a row alike; on a stale one describe builds nothing and leaves the symbol postcondition
 // ungraded, naming the rebuild.
 func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 	t.Parallel()
 
 	g := deltaGraph(map[string]string{"Present": "code.go:3"})
-	row := jobtypes.Job{ID: "wave/sym", Paths: jobtypes.Paths{Write: []string{"code.go"}}, Goals: []jobtypes.Goal{
-		{ID: "here", Kind: jobtypes.GoalKindSymbol, Expect: jobtypes.ExpectPresent, Symbols: []string{"Present"}},
-		{ID: "gone", Kind: jobtypes.GoalKindSymbol, Expect: jobtypes.ExpectAbsent, Symbols: []string{"Removed"}},
+	row := jobtypes.Job{ID: "wave/sym", Paths: jobtypes.Paths{Write: []string{"code.go"}}, Postconditions: []jobtypes.Postcondition{
+		{ID: "here", Kind: jobtypes.PostconditionKindSymbol, Expect: jobtypes.ExpectPresent, Symbols: []string{"Present"}},
+		{ID: "gone", Kind: jobtypes.PostconditionKindSymbol, Expect: jobtypes.ExpectAbsent, Symbols: []string{"Removed"}},
 	}}
 	read := func(rebuild bool, stale []types.KnowledgeStaleIndex) *Graph {
 		return &Graph{
@@ -65,8 +65,8 @@ func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
 	t.Parallel()
 
 	root, checkout := t.TempDir(), t.TempDir()
-	row := jobtypes.Job{ID: "wave/sym", CheckoutRoot: checkout, Goals: []jobtypes.Goal{
-		{ID: "here", Kind: jobtypes.GoalKindSymbol, Expect: jobtypes.ExpectPresent, Symbols: []string{"Present"}},
+	row := jobtypes.Job{ID: "wave/sym", CheckoutRoot: checkout, Postconditions: []jobtypes.Postcondition{
+		{ID: "here", Kind: jobtypes.PostconditionKindSymbol, Expect: jobtypes.ExpectPresent, Symbols: []string{"Present"}},
 	}}
 	var trees []string
 	graphIn := func(tree string) *Graph {

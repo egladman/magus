@@ -104,9 +104,9 @@ message Job {
   int64 created = 20; // unix SECONDS, as the store records them
   int64 updated = 21;
 
-  // Goals are the job's declared definition of done, graded by `magus job wait`, empty on a
-  // job that named none beyond its primary check. See CompletionGate.
-  repeated CompletionGate goals = 22;
+  // Postconditions are the job's declared definition of done, graded by `magus job wait`,
+  // empty on a job that named none beyond its primary check. See Postcondition.
+  repeated Postcondition postconditions = 22;
   // Result is what the holder filed on exit, unset until it has.
   JobResult result = 23;
   // Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork
@@ -126,7 +126,7 @@ message Job {
   int64 registered = 30; // unix seconds the holder took the job, 0 while untaken
   JobOrigin registered_by = 31; // who declared the row
   JobAttempt attempt = 32; // the newest recorded run of the job's own check
-  repeated JobGateAttempt gate_attempts = 33;
+  repeated JobPostconditionAttempt postcondition_attempts = 33;
   repeated JobUnattributedWrite unattributed = 34;
   repeated JobEntry entries = 35;
   JobIntegration integration = 36; // unset until the integrator verified the job
@@ -136,9 +136,10 @@ message Job {
   reserved "schema_version";
   string api_version = 45;
   repeated string requires = 37;
-  // waiter_evidence is the goals whose passing run came from the waiter's checkout rather than
-  // the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
-  // holder's own attempts untouched; this is the second fact beside them.
+  // waiter_evidence is the postconditions whose passing run came from the waiter's checkout
+  // rather than the holder's, unset unless `magus job wait --evidence` took some.
+  // postcondition_attempts keep the holder's own attempts untouched; this is the second fact
+  // beside them.
   JobIntegration waiter_evidence = 39;
   // breaks are the flags, JSON keys, exported symbols or stored formats the root approved this
   // job breaking; empty means it breaks nothing on its own authority.
@@ -237,9 +238,9 @@ message JobAttempt {
   repeated string extra_args = 13;
 }
 
-// JobGateAttempt is the newest recorded run of one goal's check.
-message JobGateAttempt {
-  string gate_id = 1;
+// JobPostconditionAttempt is the newest recorded run of one postcondition's check.
+message JobPostconditionAttempt {
+  string postcondition_id = 1;
   JobAttempt attempt = 2;
 }
 
@@ -297,12 +298,12 @@ message JobOverlapFootprint {
   string reason = 3;
 }
 
-// CompletionGate is one machine-verifiable condition a job's completion is checked against,
-// projected from types.Goal. kind names WHAT it examines and expect names what must be true of
-// it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as
+// Postcondition is one machine-verifiable condition a job's completion is checked against,
+// projected from types.Postcondition. kind names WHAT it examines and expect names what must
+// be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as
 // the command that runs it, the same way Job.check is - the wire never carries the unrendered
 // form, so a client needs no second parser for it.
-message CompletionGate {
+message Postcondition {
   string id = 1;
   string description = 2;
   string kind = 3;
@@ -311,7 +312,8 @@ message CompletionGate {
   repeated string paths = 6;
   repeated string symbols = 7;
   repeated string depends_on = 8;
-  // The declaration a `signature` goal holds its one symbol to, as the symbol index renders it.
+  // The declaration a `signature` postcondition holds its one symbol to, as the symbol
+  // index renders it.
   string signature = 9;
 }
 
@@ -326,7 +328,7 @@ message JobResult {
   repeated JobVerificationEvidence verification_evidence = 6;
 }
 
-// JobVerificationEvidence is the run a holder offered for one goal.
+// JobVerificationEvidence is the run a holder offered for one postcondition.
 message JobVerificationEvidence {
   string gate_id = 1;
   string output_ref = 2;

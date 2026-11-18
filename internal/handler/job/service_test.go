@@ -228,22 +228,22 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 		row.Checkpoint = "60dc9151"
 		row.Paths.Write = []string{"internal/job", "types/job.go"}
 		row.State = job.StateRunning
-		row.Goals = []job.Goal{
+		row.Postconditions = []job.Postcondition{
 			{
 				ID:     "lint",
-				Kind:   job.GoalKindCheck,
+				Kind:   job.PostconditionKindCheck,
 				Expect: job.ExpectPassed,
 				Check:  rawCheck(t, types.LeaseCheck{Target: "lint", Project: "."}),
 			},
 			{
 				ID:     "store-touched",
-				Kind:   job.GoalKindPaths,
+				Kind:   job.PostconditionKindPaths,
 				Expect: job.ExpectChanged,
 				Paths:  []string{"internal/job/store.go"},
 			},
 			{
 				ID:        "store-shape",
-				Kind:      job.GoalKindSymbol,
+				Kind:      job.PostconditionKindSymbol,
 				Expect:    job.ExpectSignature,
 				Symbols:   []string{"Update"},
 				Signature: "func (Store).Update(ctx context.Context, id string) error",
@@ -289,18 +289,18 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
 	require.NotEmpty(t, got.Releases[0].Digest, "a release says which version of the path the next worker inherits")
 
-	require.Len(t, got.Goals, 3)
-	require.Equal(t, "lint", got.Goals[0].Id)
-	require.Equal(t, "check", got.Goals[0].Kind)
-	require.Equal(t, "passed", got.Goals[0].Expect)
-	require.Equal(t, "magus run lint .", got.Goals[0].Check, "check is rendered as the command that runs it")
-	require.Equal(t, "store-touched", got.Goals[1].Id)
-	require.Equal(t, []string{"internal/job/store.go"}, got.Goals[1].Paths)
-	require.Empty(t, got.Goals[1].Check, "a paths gate carries no check to render")
-	require.Equal(t, "signature", got.Goals[2].Expect)
-	require.Equal(t, []string{"Update"}, got.Goals[2].Symbols)
-	require.Equal(t, "func (Store).Update(ctx context.Context, id string) error", got.Goals[2].Signature)
-	require.Empty(t, got.Goals[1].Signature, "only a signature goal carries one")
+	require.Len(t, got.Postconditions, 3)
+	require.Equal(t, "lint", got.Postconditions[0].Id)
+	require.Equal(t, "check", got.Postconditions[0].Kind)
+	require.Equal(t, "passed", got.Postconditions[0].Expect)
+	require.Equal(t, "magus run lint .", got.Postconditions[0].Check, "check is rendered as the command that runs it")
+	require.Equal(t, "store-touched", got.Postconditions[1].Id)
+	require.Equal(t, []string{"internal/job/store.go"}, got.Postconditions[1].Paths)
+	require.Empty(t, got.Postconditions[1].Check, "a paths gate carries no check to render")
+	require.Equal(t, "signature", got.Postconditions[2].Expect)
+	require.Equal(t, []string{"Update"}, got.Postconditions[2].Symbols)
+	require.Equal(t, "func (Store).Update(ctx context.Context, id string) error", got.Postconditions[2].Signature)
+	require.Empty(t, got.Postconditions[1].Signature, "only a signature postcondition carries one")
 
 	require.NotNil(t, got.Result)
 	require.Equal(t, []string{"internal/job/store.go"}, got.Result.ChangedPaths)
@@ -385,10 +385,10 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 			AttemptID: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
 			Lease: "api/store", ExtraArgs: []string{"-run", "TestStore"},
 		},
-		Releases:     []job.Release{{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}},
-		GateAttempts: []job.GateAttempt{{GateID: "lint", Attempt: job.CapturedRun{Found: true, Ref: "out2"}}},
-		Unattributed: []job.UnattributedWrite{{Path: "api/store.go", Digest: "sha", At: 7}},
-		Entries:      []job.Entry{{Path: "api/new.go", By: by, At: 8, Consumed: 9}},
+		Releases:              []job.Release{{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}},
+		PostconditionAttempts: []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: job.CapturedRun{Found: true, Ref: "out2"}}},
+		Unattributed:          []job.UnattributedWrite{{Path: "api/store.go", Digest: "sha", At: 7}},
+		Entries:               []job.Entry{{Path: "api/new.go", By: by, At: 8, Consumed: 9}},
 		Integration: &job.Integration{
 			Checkout: "/w", At: 10, Verified: true,
 			Gates: []job.VerificationStatus{{ID: "lint", Verified: false, OutputRef: "out3", Violations: []string{"red"}}},
@@ -445,9 +445,9 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 		Checkout: "/waiter", At: 12, Verified: true,
 		Gates: []*jobv1.JobVerificationStatus{{Id: "lint", Verified: true, OutputRef: "out4"}},
 	}, got.WaiterEvidence))
-	require.Len(t, got.GateAttempts, 1)
-	require.Equal(t, "lint", got.GateAttempts[0].GateId)
-	require.Equal(t, "out2", got.GateAttempts[0].Attempt.GetRef())
+	require.Len(t, got.PostconditionAttempts, 1)
+	require.Equal(t, "lint", got.PostconditionAttempts[0].PostconditionId)
+	require.Equal(t, "out2", got.PostconditionAttempts[0].Attempt.GetRef())
 	require.True(t, proto.Equal(&jobv1.JobUnattributedWrite{Path: "api/store.go", Digest: "sha", At: 7}, got.Unattributed[0]))
 	require.Len(t, got.Entries, 1)
 	require.Equal(t, int64(9), got.Entries[0].Consumed)

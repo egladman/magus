@@ -83,7 +83,7 @@ func decodeDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) 
 		return job.Declaration{}, nil, memberProblems(raw, err).Error()
 	}
 	var defaulted []string
-	row.Goals, defaulted = resolveAccept(row.Goals)
+	row.Postconditions, defaulted = resolveAccept(row.Postconditions)
 	err = errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), ValidateDeclaration(row))
 	return row, defaultedAccepts(row.ID, defaulted), err
 }
@@ -148,7 +148,7 @@ func foldValidation(row *job.Declaration, line string) error {
 // what tells a declaration from a record of another shape, and a guess at it re-declared a
 // live job as an empty row. A claim or a settlement is refused too, since fork would
 // declare it, and `magus job apply` is the door that takes them. It also names each check
-// goal whose accept defaulted, for the caller to say so.
+// postcondition whose accept defaulted, for the caller to say so.
 func DecodeStdinDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) {
 	row, defaulted, err := decodeDeclaration(r)
 	if err != nil {
@@ -284,7 +284,7 @@ func unwrapDescribed(raw []byte) ([]byte, error) {
 	if !isObject || row == nil {
 		return raw, nil
 	}
-	derived := append(jsonMembers(reflect.TypeFor[Terms]()), "goals")
+	derived := append(jsonMembers(reflect.TypeFor[Terms]()), "postconditions")
 	var unknown []string
 	for _, name := range slices.Sorted(maps.Keys(members)) {
 		if !slices.Contains(derived, name) {
@@ -313,7 +313,7 @@ func objectMembers(raw []byte) (map[string]codec.RawMessage, bool) {
 // DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
 // array of them, or one object per line. Each is held to [decodeDeclaration]'s rules, and a
 // failure names the record by its position, so nothing is applied from a stream with one
-// bad record in it. It also names each check goal whose accept defaulted.
+// bad record in it. It also names each check postcondition whose accept defaulted.
 func DecodeDeclarations(r io.Reader) ([]job.Declaration, []DefaultedAccept, error) {
 	raw, err := readInput(r, "records")
 	if err != nil {

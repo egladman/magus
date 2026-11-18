@@ -115,7 +115,7 @@ func regroup(e migrate.Entry) (migrate.Entry, error) {
 	return e, nil
 }
 
-// acceptWitnessed writes accept: [witnessed] onto every stored check goal; see
+// acceptWitnessed writes accept: [witnessed] onto every stored check postcondition; see
 // [job.AcceptWitnessed].
 func acceptWitnessed(e migrate.Entry) (migrate.Entry, error) { return job.AcceptWitnessed(e) }
 
@@ -257,9 +257,9 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	row.Paths = job.Paths{Write: flat.WritePaths, Read: flat.ReadPaths, Deny: flat.DenyPaths, Soft: flat.SoftPaths}
 	// The record is written in today's spelling, which the later migrations that respell a
 	// CamelCase value never see: what they would make of it is made here.
-	for i, g := range row.Goals {
-		if g.Resolve().Kind == job.GoalKindCheck && len(g.Accept) == 0 {
-			row.Goals[i].Accept = []job.Basis{job.BasisWitnessed}
+	for i, g := range row.Postconditions {
+		if g.Resolve().Kind == job.PostconditionKindCheck && len(g.Accept) == 0 {
+			row.Postconditions[i].Accept = []job.Basis{job.BasisWitnessed}
 		}
 	}
 	if row.ModelTier != nil && row.ModelTier.Source == "row" {
@@ -627,10 +627,10 @@ func recordEnums() []enumMember {
 	fixed := []enumMember{
 		{"Job", []string{"spec", "brief_format"}, newStoredEnum(job.BriefFormatMarkdown, job.BriefFormatBuzz)},
 		{"Job", []string{"spec", "agent", "worker", "type"}, newStoredEnum(job.WorkerTypeResumed, job.WorkerTypeNew)},
-		{"Job", []string{"spec", "goals", "[]", "kind"}, newStoredEnum(job.GoalKindCheck, job.GoalKindPaths, job.GoalKindSymbol)},
-		{"Job", []string{"spec", "goals", "[]", "expect"}, newStoredEnum(job.ExpectPassed, job.ExpectChanged, job.ExpectPresent,
+		{"Job", []string{"spec", "postconditions", "[]", "kind"}, newStoredEnum(job.PostconditionKindCheck, job.PostconditionKindPaths, job.PostconditionKindSymbol)},
+		{"Job", []string{"spec", "postconditions", "[]", "expect"}, newStoredEnum(job.ExpectPassed, job.ExpectChanged, job.ExpectPresent,
 			job.ExpectAbsent, job.ExpectUnreferenced, job.ExpectSignature)},
-		{"Job", []string{"spec", "goals", "[]", "accept"}, newStoredEnum(job.Bases()...)},
+		{"Job", []string{"spec", "postconditions", "[]", "accept"}, newStoredEnum(job.Bases()...)},
 		{"Job", []string{"status", "model_tier", "skills"}, newStoredEnum(tier.SkillVariantShort, tier.SkillVariantFull)},
 		{"Job", []string{"status", "model_tier", "source"}, newStoredEnum(tier.SourceJob, tier.SourceMatrix, tier.SourceUserMatrix, tier.SourceDefault)},
 		{"Job", []string{"status", "write_proof"}, newStoredEnum(job.WriteProofAlone, job.WriteProofDisjoint, job.WriteProofOverlapping)},
@@ -750,7 +750,7 @@ func respellEnum(raw codec.RawMessage, at string, enum storedEnum) (codec.RawMes
 }
 
 // snakeChecks respells noDefaultCharms inside the check of a row's spec and of each of its
-// goals.
+// postconditions.
 func snakeChecks(e migrate.Entry) error {
 	raw, ok := e["spec"]
 	if !ok {
@@ -766,19 +766,19 @@ func snakeChecks(e migrate.Entry) error {
 			return err
 		}
 	}
-	if goalsRaw, ok := spec["goals"]; ok {
-		var goals []map[string]codec.RawMessage
-		if err := codec.Unmarshal(goalsRaw, &goals); err != nil {
-			return fmt.Errorf("reading spec.goals: %w", err)
+	if postconditionsRaw, ok := spec["postconditions"]; ok {
+		var postconditions []map[string]codec.RawMessage
+		if err := codec.Unmarshal(postconditionsRaw, &postconditions); err != nil {
+			return fmt.Errorf("reading spec.postconditions: %w", err)
 		}
-		for i, g := range goals {
+		for i, g := range postconditions {
 			if check, ok := g["check"]; ok {
-				if g["check"], err = snakeCheck(check, fmt.Sprintf("spec.goals[%d].check", i)); err != nil {
+				if g["check"], err = snakeCheck(check, fmt.Sprintf("spec.postconditions[%d].check", i)); err != nil {
 					return err
 				}
 			}
 		}
-		if spec["goals"], err = codec.Marshal(goals); err != nil {
+		if spec["postconditions"], err = codec.Marshal(postconditions); err != nil {
 			return err
 		}
 	}

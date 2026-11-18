@@ -46,7 +46,7 @@ func OverrunsForeground(row job.Job, lastRun LastRun, limit ForegroundMax) (Fore
 		return ForegroundOverrun{}, false
 	}
 	for _, gc := range checks {
-		if gc.Goal.Kind != job.GoalKindCheck || gc.Check.Target == "" {
+		if gc.Postcondition.Kind != job.PostconditionKindCheck || gc.Check.Target == "" {
 			continue
 		}
 		project := cmp.Or(gc.Check.Project, ".")

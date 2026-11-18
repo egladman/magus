@@ -270,19 +270,19 @@ func TestRefuseNarrowedTestsCountsAFileWhoseConstraintDoesNotRead(t *testing.T) 
 	assert.Contains(t, err.Error(), "pkg (TestUnread)")
 }
 
-// A check goal narrowed with -run is held to the same rule as the job's own check.
-func TestRefuseNarrowedTestsGradesEveryCheckGoal(t *testing.T) {
+// A check postcondition narrowed with -run is held to the same rule as the job's own check.
+func TestRefuseNarrowedTestsGradesEveryCheckPostcondition(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
 	row := job.Job{
 		ID: "w", Paths: job.Paths{Write: []string{"pkg/a.go"}}, Check: fixtureCheck(*goTestCheck()),
-		Goals: []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(*goTestCheck("-run", "Alpha"))}},
+		Postconditions: []job.Postcondition{{ID: "unit", Kind: job.PostconditionKindCheck, Check: fixtureCheck(*goTestCheck("-run", "Alpha"))}},
 	}
 
 	err := refuseNarrowedIn(root, row)
 
-	require.ErrorContains(t, err, `w's goal "unit" `+"`magus run go-test . -- -run Alpha`")
+	require.ErrorContains(t, err, `w's postcondition "unit" `+"`magus run go-test . -- -run Alpha`")
 	assert.Contains(t, err.Error(), "pkg (TestBeta, TestGamma_sub)")
 }
 
@@ -350,9 +350,9 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	require.ErrorContains(t, err, "TestBeta", "narrowing the check of a row that exists")
 
 	_, err = ForkMerge(ctx, s, "w", func(u *job.Job) {
-		u.Goals = append(u.Goals, job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(*narrow)}.Resolve())
+		u.Postconditions = append(u.Postconditions, job.Postcondition{ID: "unit", Kind: job.PostconditionKindCheck, Check: fixtureCheck(*narrow)}.Resolve())
 	}, config.Jobs{}, nil)
-	require.ErrorContains(t, err, `goal "unit"`, "adding a narrowed goal to a row that exists")
+	require.ErrorContains(t, err, `postcondition "unit"`, "adding a narrowed postcondition to a row that exists")
 
 	_, err = ForkMerge(ctx, s, "w", func(u *job.Job) { u.Paths.Write = []string{"pkg/a.go", "pkg/b.go"} }, config.Jobs{}, nil)
 	require.NoError(t, err, "an update that leaves the check alone is held to nothing new")

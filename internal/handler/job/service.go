@@ -309,7 +309,7 @@ func (s *Service) job(ctx context.Context, j jobstore.CatalogEntry, running map[
 	} else if ok {
 		info.LastRun = lastRun(ev)
 	}
-	info.Goals = wireGoals(row.Goals)
+	info.Postconditions = wirePostconditions(row.Postconditions)
 	info.Result = wireJobResult(result)
 	return info
 }
@@ -323,22 +323,22 @@ func (s *Service) job(ctx context.Context, j jobstore.CatalogEntry, running map[
 // running flag this service refuses to keep for the catalog.
 func delegatedJob(row job.Job, result *job.Result) *jobv1.Job {
 	j := &jobv1.Job{
-		Name:       jobsPrefix + row.ID,
-		Id:         row.ID,
-		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
-		State:      string(row.State),
-		Parent:     row.Parent,
-		Check:      row.Validation,
-		Paths:      &jobv1.JobPaths{Write: row.Paths.Write, Read: row.Paths.Read, Deny: row.Paths.Deny, Soft: row.Paths.Soft},
-		DependsOn:  row.DependsOn,
-		Breaks:     row.Breaks,
-		ReadOnly:   row.ReadOnly,
-		Checkpoint: row.Checkpoint,
-		Created:    row.Created,
-		Updated:    row.Updated,
-		Goals:      wireGoals(row.Goals),
-		Result:     wireJobResult(result),
-		Deadline:   row.Deadline,
+		Name:           jobsPrefix + row.ID,
+		Id:             row.ID,
+		Holder:         jobv1.JobHolder_JOB_HOLDER_SESSION,
+		State:          string(row.State),
+		Parent:         row.Parent,
+		Check:          row.Validation,
+		Paths:          &jobv1.JobPaths{Write: row.Paths.Write, Read: row.Paths.Read, Deny: row.Paths.Deny, Soft: row.Paths.Soft},
+		DependsOn:      row.DependsOn,
+		Breaks:         row.Breaks,
+		ReadOnly:       row.ReadOnly,
+		Checkpoint:     row.Checkpoint,
+		Created:        row.Created,
+		Updated:        row.Updated,
+		Postconditions: wirePostconditions(row.Postconditions),
+		Result:         wireJobResult(result),
+		Deadline:       row.Deadline,
 
 		EndReason:      row.EndReason,
 		WriteProof:     string(row.WriteProof),
@@ -364,8 +364,8 @@ func delegatedJob(row job.Job, result *job.Result) *jobv1.Job {
 	for _, r := range row.Releases {
 		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt, Revoked: r.Revoked})
 	}
-	for _, g := range row.GateAttempts {
-		j.GateAttempts = append(j.GateAttempts, &jobv1.JobGateAttempt{GateId: g.GateID, Attempt: wireAttempt(&g.Attempt)})
+	for _, g := range row.PostconditionAttempts {
+		j.PostconditionAttempts = append(j.PostconditionAttempts, &jobv1.JobPostconditionAttempt{PostconditionId: g.PostconditionID, Attempt: wireAttempt(&g.Attempt)})
 	}
 	for _, u := range row.Unattributed {
 		j.Unattributed = append(j.Unattributed, &jobv1.JobUnattributedWrite{Path: u.Path, Digest: u.Digest, At: u.At})
@@ -474,16 +474,16 @@ func lastRun(e journal.Call) *jobv1.JobRun {
 	return run
 }
 
-// wireGoals maps the stored goals to the wire shape. check is rendered as the command that
+// wirePostconditions maps the stored postconditions to the wire shape. check is rendered as the command that
 // runs it, the same way the row's Validation already is for the primary Check field: the
 // wire never carries the unrendered LeaseCheck, so a client needs no second parser for it.
-func wireGoals(gates []job.Goal) []*jobv1.CompletionGate {
+func wirePostconditions(gates []job.Postcondition) []*jobv1.Postcondition {
 	if len(gates) == 0 {
 		return nil
 	}
-	out := make([]*jobv1.CompletionGate, 0, len(gates))
+	out := make([]*jobv1.Postcondition, 0, len(gates))
 	for _, g := range gates {
-		wire := &jobv1.CompletionGate{
+		wire := &jobv1.Postcondition{
 			Id:          g.ID,
 			Description: g.Description,
 			Kind:        string(g.Kind),
@@ -493,18 +493,18 @@ func wireGoals(gates []job.Goal) []*jobv1.CompletionGate {
 			DependsOn:   g.DependsOn,
 			Signature:   g.Signature,
 		}
-		if g.Kind == job.GoalKindCheck && !g.Check.IsZero() {
-			wire.Check = renderGoalCheck(g)
+		if g.Kind == job.PostconditionKindCheck && !g.Check.IsZero() {
+			wire.Check = renderPostconditionCheck(g)
 		}
 		out = append(out, wire)
 	}
 	return out
 }
 
-// renderGoalCheck is g's check as the command that runs it. A check that will not read
-// shows as that, since a blank would pass for a goal with no check.
-func renderGoalCheck(g job.Goal) string {
-	check, err := jobstore.GoalCheck(g)
+// renderPostconditionCheck is g's check as the command that runs it. A check that will
+// not read shows as that, since a blank would pass for a postcondition with no check.
+func renderPostconditionCheck(g job.Postcondition) string {
+	check, err := jobstore.PostconditionCheck(g)
 	if err != nil {
 		return fmt.Sprintf("(unreadable check: %v)", err)
 	}

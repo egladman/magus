@@ -308,18 +308,18 @@ func overlapFootprintLine(f *job.OverlapFootprint) string {
 	return "footprints: " + f.Verdict
 }
 
-// DescribeOutput is a job's terms plus where its declared goals stand, which is what
+// DescribeOutput is a job's terms plus where its declared postconditions stand, which is what
 // `-o json`/`-o yaml` for `describe job` renders. json and yaml flatten the embedded
-// terms, so the wire shape is the terms plus one `goals` key, the same
+// terms, so the wire shape is the terms plus one `postconditions` key, the same
 // queryWithNext/explainWithNext pattern uses to add a field without changing the type
 // underneath it.
 type DescribeOutput struct {
 	Terms `yaml:",inline"`
-	// Goals is where each of the job's declared goals stands, graded against the evidence
+	// Postconditions is where each of the job's declared postconditions stands, graded against the evidence
 	// magus holds right now. Grading is still a READ: it records nothing, so asking never
 	// advances a job and never blocks the holder still working on it. It is the same
 	// grading `job wait` does, so the two cannot disagree.
-	Goals job.Status `json:"goals" yaml:"goals"`
+	Postconditions job.Status `json:"postconditions" yaml:"postconditions"`
 }
 
 // describedJob is the job as `job apply` reads it. The stored row names no
@@ -335,11 +335,11 @@ func (o DescribeOutput) MarshalJSON() ([]byte, error) {
 	return codec.Marshal(struct {
 		Lease describedJob `json:"job"`
 		Terms
-		Goals job.Status `json:"goals"`
+		Postconditions job.Status `json:"postconditions"`
 	}{
-		Lease: describedJob{APIVersion: types.APIVersion(job.APIVersion), Job: o.Lease},
-		Terms: o.Terms,
-		Goals: o.Goals,
+		Lease:          describedJob{APIVersion: types.APIVersion(job.APIVersion), Job: o.Lease},
+		Terms:          o.Terms,
+		Postconditions: o.Postconditions,
 	})
 }
 
@@ -351,7 +351,7 @@ func PrintClaimNotes(out io.Writer, notes []string) {
 }
 
 // ForkReport is ForkOutput with the write path claims the fork derived from its symbol
-// goals. The fork computes them, and only paths.write stores them.
+// postconditions. The fork computes them, and only paths.write stores them.
 type ForkReport struct {
 	ForkOutput    `yaml:",inline"`
 	DerivedClaims []string `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
@@ -465,7 +465,7 @@ func PrintStatus(out io.Writer, s Status) {
 		if gate.Verified {
 			state = "verified"
 		}
-		fmt.Fprintf(out, "goal %s: %s", gate.ID, state)
+		fmt.Fprintf(out, "postcondition %s: %s", gate.ID, state)
 		if gate.OutputRef != "" {
 			fmt.Fprintf(out, " (%s)", gate.OutputRef)
 		}

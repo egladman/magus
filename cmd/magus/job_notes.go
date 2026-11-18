@@ -47,7 +47,7 @@ func forkDryRun(opts output.Options, v types.JobValidation) error {
 // warnWorkspaceUnloaded names on stderr what a workspace that will not load left unchecked,
 // so a row stored without those checks never reads as a clean one.
 func warnWorkspaceUnloaded(ctx context.Context, err error) {
-	slog.WarnContext(ctx, "the workspace did not load, so the outputs regenerated outside the write paths, the ci targets no goal runs and a check too long for the foreground were not listed",
+	slog.WarnContext(ctx, "the workspace did not load, so the outputs regenerated outside the write paths, the ci targets no postcondition runs and a check too long for the foreground were not listed",
 		attr.Notice("unchecked"), attr.Error(err))
 }
 

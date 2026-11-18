@@ -16,7 +16,7 @@ import (
 type JobProblem struct {
 	Code DiagnosticCode `json:"code"`
 	// Field is a JSON path into the record (`paths.write[2]`, `check.project`,
-	// `goals[1].symbols[0]`), empty when the problem is the record as a whole.
+	// `postconditions[1].symbols[0]`), empty when the problem is the record as a whole.
 	Field string `json:"field,omitempty"`
 	// Subject is what a [job.Deviation] names to permit this problem: the write path, the
 	// `target project` pair, or the output path. Empty on a problem no deviation reaches.
@@ -25,11 +25,11 @@ type JobProblem struct {
 	Message string `json:"message"`
 	// Fix is the edit to the record that clears the problem.
 	Fix string `json:"fix"`
-	// Goal is the goal whose addition to the record's goals clears the problem, as data.
-	// Magus prints it and never applies it: a caller merges `problems[].goal` itself.
-	Goal *Goal `json:"goal,omitempty"`
+	// Postcondition is the postcondition whose addition to the record's postconditions clears the problem, as data.
+	// Magus prints it and never applies it: a caller merges `problems[].postcondition` itself.
+	Postcondition *Postcondition `json:"postcondition,omitempty"`
 	// Deviation is the deviation whose addition to the record's deviations permits the
-	// problem, as data, with the same rule as Goal. A problem whose fix is one or the other
+	// problem, as data, with the same rule as Postcondition. A problem whose fix is one or the other
 	// carries only the one that fix names.
 	Deviation *job.Deviation `json:"deviation,omitempty"`
 }
@@ -114,8 +114,8 @@ func (p JobProblem) Permissible() bool {
 // code, so the kind decides it here.
 func faultCode(k job.FaultKind) DiagnosticCode {
 	switch k {
-	case job.FaultGoal:
-		return JobGoalInvalid
+	case job.FaultPostcondition:
+		return JobPostconditionInvalid
 	case job.FaultRecord:
 		return JobRecordInvalid
 	}

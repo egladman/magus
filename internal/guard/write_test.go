@@ -1394,7 +1394,7 @@ func TestGradeLeasedWriteToAPathAWideningAddedInTheLeasesCheckout(t *testing.T) 
 
 			widen := jobtypes.Declaration{Schema: jobtypes.Schema{Version: jobtypes.APIVersion}, ID: "w", Agent: jobtypes.Instructed("widen me"),
 				Checkpoint: "rev-a", Paths: jobtypes.Paths{Write: []string{"std/*.go", "cmd/*.go"}},
-				Goals: []jobtypes.Goal{{ID: "done", Kind: jobtypes.GoalKindPaths, Expect: jobtypes.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
+				Postconditions: []jobtypes.Postcondition{{ID: "done", Kind: jobtypes.PostconditionKindPaths, Expect: jobtypes.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []jobtypes.Declaration{widen}, config.Jobs{}, nil, nil, false)
 			require.NoError(t, err)
 

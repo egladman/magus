@@ -218,7 +218,7 @@ func WithTree(tree func(context.Context) (string, error)) StoreOption {
 // refuses every statement rather than record one unchecked.
 func WithVerifier(v Verifier) StoreOption { return func(c *storeConfig) { c.verifier = v } }
 
-// WithCheckCommand names the command a check goal is run by. The store never reads what
+// WithCheckCommand names the command a check postcondition is run by. The store never reads what
 // a check names (see [WithCheckSpec]), so it derives no argv itself. Without it
 // [Store.Witness] refuses.
 func WithCheckCommand(command CheckCommand) StoreOption {
@@ -431,7 +431,7 @@ func Unwritable(row Job) error {
 }
 
 // requiredFeatures are the JobSchema features row's content needs a reader to implement,
-// sorted: a `file#Declaration` claim, a `signature` goal and an attempt record (a cap, a
+// sorted: a `file#Declaration` claim, a `signature` postcondition and an attempt record (a cap, a
 // prior attempt, a second attempt) are each read wrongly by a reader older than the version
 // that named them, so a row carrying one is read-only to it. Derived from the content on
 // every write, so a row that drops its last claim is writable again.
@@ -440,8 +440,8 @@ func requiredFeatures(row Job) []string {
 	if slices.ContainsFunc(slices.Concat(row.Paths.Write, row.Paths.Deny), HasClaim) {
 		out = append(out, "claim-declarations")
 	}
-	if slices.ContainsFunc(row.Goals, func(g Goal) bool { return g.Resolve().Expect == ExpectSignature }) {
-		out = append(out, "signature-goals")
+	if slices.ContainsFunc(row.Postconditions, func(g Postcondition) bool { return g.Resolve().Expect == ExpectSignature }) {
+		out = append(out, "signature-postconditions")
 	}
 	// Every row has a generation, so a row carrying only that is not stamped: it would make
 	// every row read-only to an older reader.

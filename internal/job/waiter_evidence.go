@@ -15,14 +15,14 @@ import (
 )
 
 // graded is the evidence a verdict grades: the result, the run behind its check, and the
-// runs behind its goals.
+// runs behind its postconditions.
 type graded struct {
-	result       job.Result
-	attempt      job.CapturedRun
-	gateAttempts []job.GateAttempt
+	result                job.Result
+	attempt               job.CapturedRun
+	postconditionAttempts []job.PostconditionAttempt
 }
 
-// withWaiterEvidence is ev with the runs behind the goals in refs swapped for runs
+// withWaiterEvidence is ev with the runs behind the postconditions in refs swapped for runs
 // resolved in THIS checkout, and the record Wait stores beside them once they verify, its
 // verdicts and time left for Wait (see [gradedTake]). The holder's own attempts on the row
 // stay as filed: ev's slices are cloned before they are edited.
@@ -32,11 +32,11 @@ type graded struct {
 // under another name. Verification then runs as always, so a run of the wrong check, older
 // than the row or failed is refused there.
 //
-// It refuses a goal the job does not hold as a check, and a goal that already passes on
+// It refuses a postcondition the job does not hold as a check, and a postcondition that already passes on
 // the holder's evidence, which another run would only hide. It also refuses unless the
 // files the job changed read the same here as in the holder's checkout and each run taken
 // read them as they read here now (see [sameChangedPaths]): only then is a run here a run
-// of the holder's tree. A goal records its run's attempt id where the store gave one: the
+// of the holder's tree. A postcondition records its run's attempt id where the store gave one: the
 // ref typed may name a step, which the step's next run would answer for instead.
 func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row job.Job, refs map[string]string, resolve AttemptResolver, seen Observed) (graded, *job.Integration, error) {
 	if resolve == nil {
@@ -45,23 +45,23 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row job.J
 	if store.root == "" {
 		return graded{}, nil, errors.New("job: waiter evidence names runs recorded in a checkout, and this store has none")
 	}
-	goals := row.EffectiveGoals()
+	postconditions := row.EffectivePostconditions()
 	ids := slices.Sorted(maps.Keys(refs))
-	for _, goalID := range ids {
-		i := slices.IndexFunc(goals, func(g job.Goal) bool { return g.ID == goalID })
+	for _, postconditionID := range ids {
+		i := slices.IndexFunc(postconditions, func(g job.Postcondition) bool { return g.ID == postconditionID })
 		if i < 0 {
-			held := make([]string, len(goals))
-			for j, g := range goals {
+			held := make([]string, len(postconditions))
+			for j, g := range postconditions {
 				held[j] = g.ID
 			}
-			return graded{}, nil, fmt.Errorf("job: %s holds no goal %q to take evidence for (it holds %s)", row.ID, goalID, strings.Join(held, ", "))
+			return graded{}, nil, fmt.Errorf("job: %s holds no postcondition %q to take evidence for (it holds %s)", row.ID, postconditionID, strings.Join(held, ", "))
 		}
-		if goals[i].Kind != job.GoalKindCheck {
-			return graded{}, nil, fmt.Errorf("job: goal %q is a %s goal, and only a check goal is graded from a run", goalID, goals[i].Kind)
+		if postconditions[i].Kind != job.PostconditionKindCheck {
+			return graded{}, nil, fmt.Errorf("job: postcondition %q is a %s postcondition, and only a check postcondition is graded from a run", postconditionID, postconditions[i].Kind)
 		}
-		ownRef, ownAttempt := ev.goalRun(goalID)
-		if verifyGate(row, goals[i], ownRef, ownAttempt, seen).Verified {
-			return graded{}, nil, fmt.Errorf("job: goal %q already passes on the holder's own evidence, so there is no verdict for another run to replace", goalID)
+		ownRef, ownAttempt := ev.postconditionRun(postconditionID)
+		if verifyGate(row, postconditions[i], ownRef, ownAttempt, seen).Verified {
+			return graded{}, nil, fmt.Errorf("job: postcondition %q already passes on the holder's own evidence, so there is no verdict for another run to replace", postconditionID)
 		}
 	}
 
@@ -69,22 +69,22 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row job.J
 	if err != nil {
 		return graded{}, nil, err
 	}
-	out := graded{result: ev.result, attempt: ev.attempt, gateAttempts: slices.Clone(ev.gateAttempts)}
+	out := graded{result: ev.result, attempt: ev.attempt, postconditionAttempts: slices.Clone(ev.postconditionAttempts)}
 	out.result.VerificationEvidence = slices.Clone(ev.result.VerificationEvidence)
 	taken := &job.Integration{Checkout: here}
 	runs := make([]job.CapturedRun, 0, len(ids))
-	for _, goalID := range ids {
-		ref := strings.TrimSpace(refs[goalID])
+	for _, postconditionID := range ids {
+		ref := strings.TrimSpace(refs[postconditionID])
 		found, err := resolve(ctx, ref)
 		if err != nil {
 			return graded{}, nil, err
 		}
 		if !found.Found {
-			return graded{}, nil, fmt.Errorf("job: goal %q output ref %q names no run this checkout recorded", goalID, ref)
+			return graded{}, nil, fmt.Errorf("job: postcondition %q output ref %q names no run this checkout recorded", postconditionID, ref)
 		}
 		ref = cmp.Or(found.AttemptID, ref)
-		out.setGoalRun(goalID, ref, found)
-		taken.Gates = append(taken.Gates, job.VerificationStatus{ID: goalID, OutputRef: ref})
+		out.setPostconditionRun(postconditionID, ref, found)
+		taken.Gates = append(taken.Gates, job.VerificationStatus{ID: postconditionID, OutputRef: ref})
 		runs = append(runs, found)
 	}
 
@@ -98,53 +98,53 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row job.J
 	return out, taken, nil
 }
 
-// runs is every run ev holds: the check's, then each goal's.
+// runs is every run ev holds: the check's, then each postcondition's.
 func (ev graded) runs() []job.CapturedRun {
-	out := append(make([]job.CapturedRun, 0, 1+len(ev.gateAttempts)), ev.attempt)
-	for _, g := range ev.gateAttempts {
+	out := append(make([]job.CapturedRun, 0, 1+len(ev.postconditionAttempts)), ev.attempt)
+	for _, g := range ev.postconditionAttempts {
 		out = append(out, g.Attempt)
 	}
 	return out
 }
 
-// goalRun is the ref and the run ev holds for goalID, zero when it holds none.
-func (ev graded) goalRun(goalID string) (string, job.CapturedRun) {
-	if goalID == job.PrimaryGoalID {
+// postconditionRun is the ref and the run ev holds for postconditionID, zero when it holds none.
+func (ev graded) postconditionRun(postconditionID string) (string, job.CapturedRun) {
+	if postconditionID == job.PrimaryPostconditionID {
 		return ev.result.Validation.OutputRef, ev.attempt
 	}
 	var (
 		ref     string
 		attempt job.CapturedRun
 	)
-	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e job.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
+	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e job.VerificationEvidence) bool { return e.GateID == postconditionID }); j >= 0 {
 		ref = ev.result.VerificationEvidence[j].OutputRef
 	}
-	if j := slices.IndexFunc(ev.gateAttempts, func(g job.GateAttempt) bool { return g.GateID == goalID }); j >= 0 {
-		attempt = ev.gateAttempts[j].Attempt
+	if j := slices.IndexFunc(ev.postconditionAttempts, func(g job.PostconditionAttempt) bool { return g.PostconditionID == postconditionID }); j >= 0 {
+		attempt = ev.postconditionAttempts[j].Attempt
 	}
 	return ref, attempt
 }
 
-// setGoalRun makes ref and run the evidence for goalID, in place. ev's slices must not be
+// setPostconditionRun makes ref and run the evidence for postconditionID, in place. ev's slices must not be
 // shared with a row.
-func (ev *graded) setGoalRun(goalID, ref string, run job.CapturedRun) {
-	if goalID == job.PrimaryGoalID {
+func (ev *graded) setPostconditionRun(postconditionID, ref string, run job.CapturedRun) {
+	if postconditionID == job.PrimaryPostconditionID {
 		ev.result.Validation.OutputRef, ev.attempt = ref, run
 		return
 	}
-	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e job.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
+	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e job.VerificationEvidence) bool { return e.GateID == postconditionID }); j >= 0 {
 		ev.result.VerificationEvidence[j].OutputRef = ref
 	} else {
-		ev.result.VerificationEvidence = append(ev.result.VerificationEvidence, job.VerificationEvidence{GateID: goalID, OutputRef: ref})
+		ev.result.VerificationEvidence = append(ev.result.VerificationEvidence, job.VerificationEvidence{GateID: postconditionID, OutputRef: ref})
 	}
-	if j := slices.IndexFunc(ev.gateAttempts, func(g job.GateAttempt) bool { return g.GateID == goalID }); j >= 0 {
-		ev.gateAttempts[j].Attempt = run
+	if j := slices.IndexFunc(ev.postconditionAttempts, func(g job.PostconditionAttempt) bool { return g.PostconditionID == postconditionID }); j >= 0 {
+		ev.postconditionAttempts[j].Attempt = run
 	} else {
-		ev.gateAttempts = append(ev.gateAttempts, job.GateAttempt{GateID: goalID, Attempt: run})
+		ev.postconditionAttempts = append(ev.postconditionAttempts, job.PostconditionAttempt{PostconditionID: postconditionID, Attempt: run})
 	}
 }
 
-// gradedTake is taken as the row records it: each goal's verdict copied from status, the
+// gradedTake is taken as the row records it: each postcondition's verdict copied from status, the
 // verdict as a whole status's own, stamped at.
 func gradedTake(taken job.Integration, status job.Status, at int64) *job.Integration {
 	taken.At, taken.Verified, taken.ObservedGeneration = at, status.Verified, status.ObservedGeneration

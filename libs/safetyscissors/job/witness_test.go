@@ -24,7 +24,7 @@ func TestWitnessSuite(t *testing.T) { suite.Run(t, new(WitnessSuite)) }
 
 func (s *WitnessSuite) SetupTest() {
 	s.gradingSuite.SetupTest()
-	s.declare(checkGoalAccepting("tests", BasisWitnessed))
+	s.declare(checkPostconditionAccepting("tests", BasisWitnessed))
 }
 
 func (s *WitnessSuite) command() *exec.Cmd {
@@ -261,11 +261,11 @@ func (s *WitnessSuite) TestAStoreWithNoCheckCommandRefuses() {
 	s.Equal("WithCheckCommand", refused.Option)
 }
 
-func (s *WitnessSuite) TestAGoalThatAcceptsOnlyReportedIsNotVerifiedByAWitnessedRun() {
-	s.declare(checkGoalAccepting("tests", BasisReported))
+func (s *WitnessSuite) TestAPostconditionThatAcceptsOnlyReportedIsNotVerifiedByAWitnessedRun() {
+	s.declare(checkPostconditionAccepting("tests", BasisReported))
 
 	g := s.grade(s.witnessed())
 
 	s.False(g.Verified)
-	s.Contains(g.Violations, "the run is witnessed and this goal accepts only [reported]")
+	s.Contains(g.Violations, "the run is witnessed and this postcondition accepts only [reported]")
 }

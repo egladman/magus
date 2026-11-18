@@ -454,7 +454,7 @@ func (w *rowWrite) conclude(ctx context.Context) error {
 		row.Rejection = prev.Rejection
 	}
 	if w.refork {
-		row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil
+		row.Attempt, row.PostconditionAttempts, row.Rejection = nil, nil, nil
 		row.Integration, row.WaiterEvidence = nil, nil
 		row.ReworkRounds, row.Widenings, row.Claims = 0, 0, nil
 	}

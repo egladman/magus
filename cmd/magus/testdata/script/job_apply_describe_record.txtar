@@ -11,7 +11,7 @@ exec magus job apply -f $WORK/row.json
 stdout '^created wave/a, declared, with 1 write path\(s\)$'
 
 exec magus describe job wave/a -o json
-stdout '"goals"'
+stdout '"postconditions"'
 cp stdout $WORK/described.json
 exec magus job apply -f $WORK/described.json
 stdout '^unchanged wave/a'

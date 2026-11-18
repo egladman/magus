@@ -103,7 +103,7 @@ func WithNotices(notices func(job.Notice)) Option {
 	}
 }
 
-// WithCheckSpec is how the job store reads the checks a row and its goals carry (see
+// WithCheckSpec is how the job store reads the checks a row and its postconditions carry (see
 // [job.WithCheckSpec]). Required: a store without one refuses every write.
 func WithCheckSpec(spec job.CheckSpec) Option {
 	return func(c *config) error {

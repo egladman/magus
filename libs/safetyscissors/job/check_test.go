@@ -119,7 +119,7 @@ func (s *CheckSuite) TestMarshalJSONHandsOutACopy() {
 // form, and that form reads and writes again unchanged.
 func (s *CheckSuite) TestAStoredRowsChecksRewriteToOneLine() {
 	stored := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
-		`"spec":{"check":{ "target" : "test", "project": "." },"goals":[{"id":"lint","kind":"check","expect":"passed",` +
+		`"spec":{"check":{ "target" : "test", "project": "." },"postconditions":[{"id":"lint","kind":"check","expect":"passed",` +
 		`"check":{"target":"lint","project":"p"},"accept":["witnessed"]}]},"status":{"created":10,"updated":20}}`)
 	row, ok, err := ReadRecord(stored)
 	s.Require().NoError(err)
@@ -133,6 +133,6 @@ func (s *CheckSuite) TestAStoredRowsChecksRewriteToOneLine() {
 	twice, err := MarshalRecord(again, nil)
 	s.Require().NoError(err)
 
-	s.Contains(string(once), `"check":{"target":"test","project":"."},"goals":[{"id":"lint","kind":"check","expect":"passed","check":{"target":"lint","project":"p"},"accept":["witnessed"]}]`)
+	s.Contains(string(once), `"check":{"target":"test","project":"."},"postconditions":[{"id":"lint","kind":"check","expect":"passed","check":{"target":"lint","project":"p"},"accept":["witnessed"]}]`)
 	s.Equal(string(once), string(twice))
 }

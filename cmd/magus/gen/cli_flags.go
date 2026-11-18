@@ -1616,7 +1616,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	command.NegatedBoolVar(fs, &f.Schema, FlagJobForkSchema)
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
 	command.NegatedBoolVar(fs, &f.Stdin, FlagJobForkStdin)
-	fs.StringVar(&f.Instructions, FlagJobForkInstructions, "", "What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the goals a --stdin record declares")
+	fs.StringVar(&f.Instructions, FlagJobForkInstructions, "", "What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the postconditions a --stdin record declares")
 	fs.StringVar(&f.NewWorker, FlagJobForkNewWorker, "", "Start a new worker for this job instead of resuming the warm one of the job it follows, for this reason")
 	command.DurationVar(fs, &f.Timeout, FlagJobForkTimeout, 0, "m", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
@@ -1650,7 +1650,7 @@ func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	fs.BoolVar(&f.Stdin, FlagJobApplyStdin, false, "Read the records from stdin instead of a file, as job fork --stdin does")
 	command.NegatedBoolVar(fs, &f.Stdin, FlagJobApplyStdin)
 	command.StringListVar(fs, &f.AddWritePath, FlagJobApplyAddWritePath, "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated")
-	command.StringListVar(fs, &f.ReleaseWritePath, FlagJobApplyReleaseWritePath, "A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path")
+	command.StringListVar(fs, &f.ReleaseWritePath, FlagJobApplyReleaseWritePath, "A write path to drop from the job, keeping its postconditions and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path")
 	return &f
 }
 
@@ -1701,7 +1701,7 @@ func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
 	command.NegatedBoolVar(fs, &f.Schema, FlagJobWaitSchema)
 	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
 	command.NegatedBoolVar(fs, &f.Stdin, FlagJobWaitStdin)
-	fs.BoolVar(&f.Integration, FlagJobWaitIntegration, false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
+	fs.BoolVar(&f.Integration, FlagJobWaitIntegration, false, "Grade only the job's check postconditions against the runs the --stdin result names in THIS checkout, and record that beside its state")
 	command.NegatedBoolVar(fs, &f.Integration, FlagJobWaitIntegration)
 	return &f
 }

@@ -120,10 +120,10 @@ func CompilingCheck() types.LeaseCheck {
 // person runs.
 const humanOnlyRule = "human-only"
 
-// deniedCheckProblems is every check of row, its own or a check goal's, the guard would deny
+// deniedCheckProblems is every check of row, its own or a check postcondition's, the guard would deny
 // its holder, as JobCheckUnrunnable. The holder runs every check under the lease, so a
 // denied one leaves the job unable to verify itself and ends it unverified. Each check is
-// graded as the row with that check, and a check two goals share is graded once. A check
+// graded as the row with that check, and a check two postconditions share is graded once. A check
 // the grader reached no verdict on is one JobUngraded problem, and grading stops there: why
 // no verdict was reached is the workspace's or the binary's, and holds for every check. A
 // deferred grade ends the grading the same way but is no problem: the row is stored. A
@@ -143,8 +143,8 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 		return types.JobProblems{unreadableCheckProblem(err)}
 	}
 	for _, gc := range checks {
-		goal, check := gc.Goal, gc.Check
-		if goal.Kind != job.GoalKindCheck || check.Target == "" && check.Script == "" {
+		postcondition, check := gc.Postcondition, gc.Check
+		if postcondition.Kind != job.PostconditionKindCheck || check.Target == "" && check.Script == "" {
 			continue
 		}
 		if slices.ContainsFunc(graded, func(c types.LeaseCheck) bool { return sameLeaseCheck(&c, &check) }) {
@@ -152,18 +152,18 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 		}
 		graded = append(graded, check)
 		pending := row
-		pending.Check = goal.Check
+		pending.Check = postcondition.Check
 		verdict := grader(ctx, store.root, pending)
 		which := "check"
-		if goal.ID != job.PrimaryGoalID {
-			which = fmt.Sprintf("goal %s's check", goal.ID)
+		if postcondition.ID != job.PrimaryPostconditionID {
+			which = fmt.Sprintf("postcondition %s's check", postcondition.ID)
 		}
 		if verdict.Deferred != "" {
 			return ps
 		}
 		if verdict.NotGraded != "" {
 			p := ungradedCheckProblem(row.ID, which, check, verdict.NotGraded)
-			p.Field = goalCheckField(row, goal)
+			p.Field = postconditionCheckField(row, postcondition)
 			if verdict.NotGraded == noGraderReason {
 				p.Fix = "open the job store with a Location that names its Grader, as magus's own doors do"
 			}
@@ -173,7 +173,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 			continue
 		}
 		p := deniedCheckProblem(row, which, check, verdict)
-		p.Field = goalCheckField(row, goal)
+		p.Field = postconditionCheckField(row, postcondition)
 		ps = append(ps, p)
 	}
 	return ps

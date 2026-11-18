@@ -1,0 +1,284 @@
+// Cost: one `magus refs --text` per word, one `magus describe file`.
+// Renames the job's goal to postcondition, the word decided on 2026-11-18,
+// and the proto's CompletionGate with it. Run it again on a newer main to
+// rename the sites that main added.
+//
+//	magus buzz hack/dev/rename-goal-to-postcondition.buzz -- [--apply]
+//
+// The word is a JSON key, a Buzz member and prose too, which a symbol
+// rename cannot reach. Where goal is plain English it stays: KEPT names the
+// files that only use it so, KEPT_PHRASES the plain uses in a renamed file.
+namespace renamegoaltopostcondition;
+
+import "flags";
+import "fs";
+import "magus";
+import "result";
+import "std";
+import "vcs";
+
+import "assert";
+
+final SUMMARY = "rename the job's goal to postcondition across the tree";
+final SERVES = ["rule:sed-in-place", "rule:interpreter-rewrite"];
+
+final USAGE = "usage: magus buzz hack/dev/rename-goal-to-postcondition.buzz -- [--apply]";
+final HELP = "cost: one refs --text per word, one describe file\n{USAGE}";
+
+export object Word {
+    was: str,
+    becomes: str,
+}
+
+// WORDS run in order, so CompletionGate goes before any goal word.
+final WORDS = [
+    Word{ was = "CompletionGate", becomes = "Postcondition" },
+    Word{ was = "GOAL", becomes = "POSTCONDITION" },
+    Word{ was = "Goal", becomes = "Postcondition" },
+    Word{ was = "goal", becomes = "postcondition" },
+];
+
+final SELF = "hack/dev/rename-goal-to-postcondition.buzz";
+
+// KEPT use goal only as plain English, or must keep it: release notes, commit
+// history, training sets, frozen schemas, the ADRs (amended, never rewritten),
+// the brief's goal (what a worker is to achieve), the plan list's goal line
+// (criteria and parent) and Claude Code's /goal.
+final KEPT = [
+    ".agents/skills/magus-local-development/",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "benchmarks/",
+    "blog/",
+    "changes/unreleased/long-running-sessions-guide.md",
+    "console/scripts/stylelint-spacer-token.test.mjs",
+    "console/src/apps/dashboard/plan/jobs.ts",
+    "console/src/apps/dashboard/plan/main-dom.test.ts",
+    "console/src/apps/dashboard/plan/main.ts",
+    "console/src/apps/dashboard/plan/plan.css",
+    "console/stylelint.config.mjs",
+    "docs/active.urls.lock",
+    "docs/concepts/review.md",
+    "docs/decisions/",
+    "docs/design.md",
+    "docs/design/",
+    "docs/dprint.json",
+    "docs/glossary/job.md",
+    "docs/guides/integrations/agents/long-running-sessions.md",
+    "docs/guides/integrations/agents/orchestration.md",
+    "docs/guides/reviewing-changes.md",
+    "docs/recommendations.md",
+    "docs/retired.urls.lock",
+    "docs/scope.md",
+    "docs/site/diagrams/",
+    "hack/dev/rename-gate-to-verification.buzz",
+    "hack/lint/gate-pages-say-what-they-do-not-measure.buzz",
+    "internal/graph/knowledge/",
+    "internal/sessions/",
+    "libs/clikit/",
+    "libs/gopherbuzz/",
+    "libs/proofread/",
+    "libs/safetyscissors/verdict/",
+    "libs/train/",
+    "register_test.go",
+    "releases/",
+    "std/magus_test.go",
+    "std/sort.go",
+    "testdata/retrieval/",
+    "types/brief.go",
+    "types/testdata/schema/",
+];
+
+export fun kept(path: str) > bool {
+    return path == SELF or KEPT.filter(fun (i: int, k: str) > bool => path == k or (k.endsWith("/") and path.startsWith(k))).len() > 0;
+}
+
+// KEPT_PHRASES are plain uses inside a renamed file, and the plan list's CSS
+// classes, whose stylesheet is KEPT.
+final KEPT_PHRASES = [
+    "__goal",
+    "owns the goal",
+    "goal and why",
+    "top-level goal",
+    "state the goal and acceptance criteria",
+    "reaches the goal",
+    "reaches\n  the goal",
+    "the goal is\n  unmet",
+    "its goal's first line",
+    "the owner's goal",
+    "the goal's FIRST line",
+    "Non-goals",
+    "with its goal",
+];
+
+// rewrite applies every word to text in order, leaving KEPT_PHRASES as they are.
+export fun rewrite(text: str) > str {
+    var renamed = text;
+    foreach (i, p in KEPT_PHRASES) {
+        renamed = renamed.replace(p, with: "@@kept-{i}@@");
+    }
+    foreach (w in WORDS) {
+        renamed = renamed.replace(w.was, with: w.becomes);
+    }
+    foreach (i, p in KEPT_PHRASES) {
+        renamed = renamed.replace("@@kept-{i}@@", with: p);
+    }
+    return renamed;
+}
+
+// firstFinding is the first line of a guard refusal that names a file line.
+export fun firstFinding(message: str) > str {
+    foreach (line in message.split("\n")) {
+        if (line.indexOf("over the limit") != null) {
+            return line.trim();
+        }
+    }
+    return message.split("\n")[0];
+}
+
+// pathOf is the workspace path of one `refs --text -o name` line, or "".
+export fun pathOf(line: str, root: str) > str {
+    var rest = line;
+    if (rest.startsWith(root + "/")) {
+        rest = rest.sub(root.len() + 1, len: rest.len() - root.len() - 1);
+    }
+    final colon = rest.indexOf(":");
+    if (colon == null or colon! == 0) {
+        return "";
+    }
+    return rest.sub(0, len: colon!);
+}
+
+fun sites(root: str) > result\Result::<[str]> {
+    final seen = mut {<str: bool>};
+    foreach (w in WORDS) {
+        var listing = "";
+        try {
+            // refs --text exits 1 on no match, as grep does.
+            listing = magus\cmd("refs", args: ["--text", w.was, "-o", "name"],
+                opts: magus\CommandOptions{ quiet = true, allowFailure = true }).stdout;
+        } catch (err: any) {
+            return result\caught::<[str]>(err, doing: "rename-goal-to-postcondition: find {w.was}");
+        }
+        foreach (line in listing.split("\n")) {
+            final p = pathOf(line, root: root);
+            if (p != "" and !kept(p)) {
+                seen[p] = true;
+            }
+        }
+    }
+    final found = seen.keys();
+    var ignored = [<str>];
+    try {
+        // A host's skill install is ignored and rewritten by its installer.
+        ignored = vcs\ignoredFiles(found, dir: root);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "rename-goal-to-postcondition: drop ignored paths");
+    }
+    final paths = found.filter(fun (i: int, p: str) > bool => ignored.indexOf(p) == null).cloneMutable();
+    paths.sort(fun (a: str, b: str) > bool => a < b);
+    return result\ok::<[str]>(paths);
+}
+
+object Tally {
+    changed: int = 0,
+    generated: int = 0,
+    refused: mut [str],
+}
+
+fun renameAll(root: str, paths: [str], apply: bool) > Tally !> any {
+    final t = mut Tally{ refused = mut [<str>] };
+    foreach (f in magus\describe.file(paths).files) {
+        if (f.role == "output") {
+            t.generated = t.generated + 1;
+            continue;
+        }
+        final abs = "{root}/{f.path}";
+        final before = fs\readFile(abs);
+        final after = rewrite(before);
+        if (after == before) {
+            continue;
+        }
+        t.changed = t.changed + 1;
+        if (apply) {
+            // The comment guard refuses a write whose longer word breaks a
+            // comment's limits; the file is named for a hand rewording.
+            try {
+                fs\writeFile(abs, content: after);
+            } catch (err: any) {
+                t.refused.append("{f.path}: {firstFinding("{err}")}");
+            }
+        } else {
+            std\print("  {f.path}");
+        }
+    }
+    return t;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "rename-goal-to-postcondition: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final apply = parsed.values["--apply"] != null;
+    final root = vcs\root();
+    final found = sites(root);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    final paths = found.value!;
+    if (paths.len() == 0) {
+        std\print("nothing to rename");
+        return;
+    }
+    final t = renameAll(root, paths: paths, apply: apply);
+    final verb = if (apply) "renamed" else "dry run, would rename";
+    std\print("{verb}: {t.changed} files; {t.generated} generated left to their generators");
+    if (!apply) {
+        std\print("pass --apply to write");
+    }
+    foreach (p in t.refused) {
+        std\print("  refused, rename by hand: {p}");
+    }
+    if (t.refused.len() > 0) {
+        throw "rename-goal-to-postcondition: {t.refused.len()} files refused";
+    }
+}
+
+test "every spelling of the word becomes postcondition" {
+    assert\equal(rewrite("Goal GoalKindCheck goals EffectiveGoals JobGoalInvalid GOAL"),
+        want: "Postcondition PostconditionKindCheck postconditions EffectivePostconditions JobPostconditionInvalid POSTCONDITION", message: "spellings");
+}
+
+test "the proto message takes the same name" {
+    assert\equal(rewrite("repeated CompletionGate goals = 22;"), want: "repeated Postcondition postconditions = 22;", message: "proto");
+}
+
+test "a plain use of the word stays" {
+    assert\equal(rewrite("The root agent owns the goal; the top-level goal is met"),
+        want: "The root agent owns the goal; the top-level goal is met", message: "plain");
+    assert\equal(rewrite(".console-plan-list__goal-criteria lists goals"),
+        want: ".console-plan-list__goal-criteria lists postconditions", message: "css class");
+}
+
+test "a second run changes nothing" {
+    final once = rewrite("a check goal owns the goal; CompletionGate");
+    assert\equal(rewrite(once), want: once, message: "idempotent");
+}
+
+test "history, ADRs and plain-English files keep the word" {
+    std\assert(kept("releases/v0.5.0-rc.3.yaml"), message: "release");
+    std\assert(kept("docs/decisions/0050-the-harness-is-a-module-named-safetyscissors.md"), message: "adr");
+    std\assert(kept("types/brief.go"), message: "brief");
+    std\assert(!kept("libs/safetyscissors/job/goal.go"), message: "source");
+}
+
+test "a refs line gives its workspace path" {
+    assert\equal(pathOf("/r/internal/job/a.go:12:x := 1", root: "/r"), want: "internal/job/a.go", message: "absolute");
+    assert\equal(pathOf("", root: "/r"), want: "", message: "blank");
+}

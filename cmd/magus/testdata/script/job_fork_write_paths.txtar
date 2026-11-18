@@ -1,7 +1,7 @@
 # `magus job fork` refuses a write path naming an existing directory (MGS3018), project
 # roots included, and writes no row: the workspace root and a sub-project root are refused
 # like any other directory. A file and a path the job creates fork. Every job declares a
-# paths goal, because a writing job without a check or a goal is refused before its paths
+# paths postcondition, because a writing job without a check or a postcondition is refused before its paths
 # are read.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
@@ -47,13 +47,13 @@ import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}
 -- root.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/root", "paths": {"write": ["."]},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
 -- console.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/console", "paths": {"write": ["console"]},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["console/magusfile.buzz"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["console/magusfile.buzz"]}]}
 -- file.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/file", "paths": {"write": ["src/pkg/code.go"]},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
 -- new.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/new", "paths": {"write": ["src/fresh"]},
- "goals": [{"id": "created", "kind": "paths", "expect": "present", "paths": ["src/fresh"]}]}
+ "postconditions": [{"id": "created", "kind": "paths", "expect": "present", "paths": ["src/fresh"]}]}

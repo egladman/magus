@@ -55,7 +55,7 @@ func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 		Subject: "**/*.go",
 		Message: `write path "**/*.go" matches 4 files in 2 projects: more than 1 project, ` +
 			"a leading `**`, which reaches every directory of the workspace",
-		Fix: `replace "**/*.go" with the files the goals and criteria name: "paths": {"write": ["pkg/b.go"]}; ` +
+		Fix: `replace "**/*.go" with the files the postconditions and criteria name: "paths": {"write": ["pkg/b.go"]}; ` +
 			`or keep it with the deviation {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`,
 	}}, got)
 }
@@ -72,7 +72,7 @@ func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
 
 	require.Len(t, got, 1)
 	assert.Equal(t, `write path "pkg/gen/*.txt" matches 51 files in 1 project: more than 50 files`, got[0].Message)
-	assert.Contains(t, got[0].Fix, "the criteria and goals name no file the graph resolves")
+	assert.Contains(t, got[0].Fix, "the criteria and postconditions name no file the graph resolves")
 }
 
 func TestBroadClaimReadsTheWorkspaceBounds(t *testing.T) {
@@ -173,17 +173,17 @@ func TestBroadClaimPermittedPathPassesThroughPermit(t *testing.T) {
 func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := job.Job{
-		ID:    "sweep",
-		Paths: job.Paths{Write: []string{"**/*.go"}},
-		Agent: job.Instructed("Fill (web/x.go:12)."),
-		Goals: []job.Goal{{ID: "funcs", Kind: job.GoalKindSymbol, Symbols: []string{"Missing"}}},
+		ID:             "sweep",
+		Paths:          job.Paths{Write: []string{"**/*.go"}},
+		Agent:          job.Instructed("Fill (web/x.go:12)."),
+		Postconditions: []job.Postcondition{{ID: "funcs", Kind: job.PostconditionKindSymbol, Symbols: []string{"Missing"}}},
 	}
 
 	for name, read := range map[string]SymbolReader{"no reader": nil, "unanswered": symbolsAt(nil)} {
 		t.Run(name, func(t *testing.T) {
 			got := broadClaimProblems(context.Background(), root, row, Workspace{}, read)
 			require.Len(t, got, 1)
-			assert.Contains(t, got[0].Fix, `"paths": {"write": ["web/x.go"]} (the knowledge graph did not answer the symbol goals`)
+			assert.Contains(t, got[0].Fix, `"paths": {"write": ["web/x.go"]} (the knowledge graph did not answer the symbol postconditions`)
 		})
 	}
 }
@@ -191,9 +191,9 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 func TestNarrowestCoverNamesTheDefiningFileItsTestsAndTheCriteriaFiles(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := job.Job{
-		ID:    "fill",
-		Agent: job.Instructed("Implement Foo; see `web/x.go`, the claim pkg/b.go#Bar, and docs/missing.md, a/b and v1.2."),
-		Goals: []job.Goal{{ID: "funcs", Kind: job.GoalKindSymbol, Symbols: []string{"Foo"}}},
+		ID:             "fill",
+		Agent:          job.Instructed("Implement Foo; see `web/x.go`, the claim pkg/b.go#Bar, and docs/missing.md, a/b and v1.2."),
+		Postconditions: []job.Postcondition{{ID: "funcs", Kind: job.PostconditionKindSymbol, Symbols: []string{"Foo"}}},
 	}
 
 	got := narrowestCover(context.Background(), root, row, symbolsAt(map[string][]string{"Foo": {"pkg/a.go"}}))

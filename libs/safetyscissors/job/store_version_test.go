@@ -49,19 +49,19 @@ func (s *StoreVersionSuite) spec(line map[string]codec.RawMessage) string {
 	return string(line["spec"])
 }
 
-func (s *StoreVersionSuite) TestAStoredCheckGoalComesToAcceptWitnessed() {
-	line := s.line(`{"kind":"Job","spec":{"goals":[{"id":"tests","kind":"Check"},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}}`)
+func (s *StoreVersionSuite) TestAStoredCheckPostconditionComesToAcceptWitnessed() {
+	line := s.line(`{"kind":"Job","spec":{"postconditions":[{"id":"tests","kind":"Check"},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}}`)
 
 	got, err := AcceptWitnessed(line)
 
 	s.Require().NoError(err)
-	s.JSONEq(`{"goals":[{"id":"tests","kind":"Check","accept":["Witnessed"]},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}`, s.spec(got))
+	s.JSONEq(`{"postconditions":[{"id":"tests","kind":"Check","accept":["Witnessed"]},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}`, s.spec(got))
 	again, err := AcceptWitnessed(got)
 	s.Require().NoError(err)
 	s.JSONEq(s.spec(got), s.spec(again), "the rewrite is the same applied twice")
 }
 
-func (s *StoreVersionSuite) TestALineWithNoGoalsComesBackAsItWas() {
+func (s *StoreVersionSuite) TestALineWithNoPostconditionsComesBackAsItWas() {
 	header := s.line(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":7}`)
 
 	got, err := AcceptWitnessed(header)
@@ -75,7 +75,7 @@ func (s *StoreVersionSuite) TestALineWithNoGoalsComesBackAsItWas() {
 // only the caller's later migration brings it forward.
 func (s *StoreVersionSuite) TestAMigratedRowKeepsTheOlderLayout() {
 	line := s.line(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
-		`"spec":{"goals":[{"id":"tests","kind":"Check","expect":"Passed","check":{"target":"test","project":"."}}]},"status":{}}`)
+		`"spec":{"postconditions":[{"id":"tests","kind":"Check","expect":"Passed","check":{"target":"test","project":"."}}]},"status":{}}`)
 
 	got, err := AcceptWitnessed(line)
 	s.Require().NoError(err)

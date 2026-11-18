@@ -530,7 +530,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
 	writeStdin(t, `{"api_version": "safetyscissors.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
-		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
+		` "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin"}))
@@ -650,7 +650,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 		return job.Observed{Changed: []string{"a.go"}, ChangedKnown: true}, nil
 	}
 
-	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{jobtypes.PrimaryGoalID: passed.Ref})
+	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{jobtypes.PrimaryPostconditionID: passed.Ref})
 
 	require.ErrorContains(t, err, "names no run this checkout recorded")
 	rows, err := store.List(t.Context())
@@ -1547,7 +1547,7 @@ func (s *jobApplyReleaseWritePathSuite) SetupTest() {
 	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
 	row.Check = storedCheck(s.T(), types.LeaseCheck{Target: "test", Project: "."})
 	row.Validation = job.CheckCommand(types.LeaseCheck{Target: "test", Project: "."})
-	row.Goals = []jobtypes.Goal{{ID: "g", Kind: jobtypes.GoalKindPaths, Paths: []string{"a.go"}}}
+	row.Postconditions = []jobtypes.Postcondition{{ID: "g", Kind: jobtypes.PostconditionKindPaths, Paths: []string{"a.go"}}}
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})

@@ -80,7 +80,7 @@ created release/tax, declared, with 1 write path(s)
 model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 -- pass.out --
 integration: release/pricing passes in ~/src/shop; its state is unchanged
-release/pricing: 1 of 1 goal(s) met
+release/pricing: 1 of 1 postcondition(s) met
   [met] check
 -- ls.out --
 JOB              HOLDER  STATE     MODEL    PATHS  PROOF     CHECK
@@ -90,6 +90,6 @@ release/tax      -       declared  bounded  1      disjoint  magus run test .
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- fail.out --
 integration: release/pricing fails in ~/src/shop; its state is unchanged
-release/pricing: 0 of 1 goal(s) met
+release/pricing: 0 of 1 postcondition(s) met
   [unmet] check
       the run behind output ref "out<hex>" failed, so its check did not pass

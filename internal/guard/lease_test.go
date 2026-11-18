@@ -2924,7 +2924,7 @@ func TestAWideningApplyKeepsTheHoldersBinding(t *testing.T) {
 
 			widen := jobtypes.Declaration{Schema: jobtypes.Schema{Version: jobtypes.APIVersion}, ID: "held-job", Agent: jobtypes.Instructed("widen me"),
 				Checkpoint: "rev-a", Paths: jobtypes.Paths{Write: []string{"std/*.go", "cmd/*.go"}},
-				Goals: []jobtypes.Goal{{ID: "done", Kind: jobtypes.GoalKindPaths, Expect: jobtypes.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
+				Postconditions: []jobtypes.Postcondition{{ID: "done", Kind: jobtypes.PostconditionKindPaths, Expect: jobtypes.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []jobtypes.Declaration{widen}, config.Jobs{}, nil, nil, false)
 			require.NoError(t, err)
 			_, err = store.List(t.Context())
@@ -4067,7 +4067,7 @@ func regeneratingWorkspace(t *testing.T) Dependencies {
 
 // TestWorkerRegeneratesItsOwnOutputs pins gap 177: a worker whose change leaves an output
 // outside its write paths stale (MGS3044) may run that output's generator and commit what
-// it writes, so its lint goal is not failed by an MGS4006 it may not fix. Only such
+// it writes, so its lint postcondition is not failed by an MGS4006 it may not fix. Only such
 // outputs: a generator that also writes elsewhere is refused, and a hand edit stays refused.
 func TestWorkerRegeneratesItsOwnOutputs(t *testing.T) {
 	row := regeneratingLease("z/flag")

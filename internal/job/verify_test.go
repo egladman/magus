@@ -23,14 +23,14 @@ import (
 type ScriptEvidenceSuite struct {
 	suite.Suite
 	row  job.Job
-	gate job.Goal
+	gate job.Postcondition
 }
 
 func TestScriptEvidenceSuite(t *testing.T) { suite.Run(t, new(ScriptEvidenceSuite)) }
 
 func (s *ScriptEvidenceSuite) SetupTest() {
 	s.row = job.Job{ID: "job-a"}
-	s.gate = job.Goal{ID: "g", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}})}
+	s.gate = job.Postcondition{ID: "g", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}})}
 }
 
 func (s *ScriptEvidenceSuite) attempt(lease string, args []string) job.CapturedRun {
@@ -103,19 +103,19 @@ func claimed(rep job.Result) Observed {
 	return Observed{Changed: rep.ChangedPaths, ChangedKnown: true, TestSelection: goCheckSelection}
 }
 
-func goalRow() job.Job {
+func postconditionRow() job.Job {
 	return job.Job{
 		ID:    "harness/gated",
 		Paths: job.Paths{Write: []string{"internal/job"}},
 		State: job.StateRunning,
-		Goals: []job.Goal{
+		Postconditions: []job.Postcondition{
 			{ID: "unit", Description: "job package tests pass", Check: fixtureCheck(types.LeaseCheck{Target: "go::go-test", Project: "."})},
 			{ID: "docs", Description: "docs checks pass", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"unit"}},
 		},
 	}
 }
 
-func goalResult() job.Result {
+func postconditionResult() job.Result {
 	return job.Result{
 		Schema:       job.Schema{Version: job.ResultAPIVersion},
 		Job:          "harness/gated",
@@ -128,10 +128,10 @@ func goalResult() job.Result {
 	}
 }
 
-func goalAttempts() []job.GateAttempt {
-	return []job.GateAttempt{
-		{GateID: "unit", Attempt: job.CapturedRun{Found: true, Ref: "unit-ref", Project: ".", Target: "go-test", Spell: "go"}},
-		{GateID: "docs", Attempt: job.CapturedRun{Found: true, Ref: "docs-ref", Project: "docs", Target: "test"}},
+func postconditionAttempts() []job.PostconditionAttempt {
+	return []job.PostconditionAttempt{
+		{PostconditionID: "unit", Attempt: job.CapturedRun{Found: true, Ref: "unit-ref", Project: ".", Target: "go-test", Spell: "go"}},
+		{PostconditionID: "docs", Attempt: job.CapturedRun{Found: true, Ref: "docs-ref", Project: "docs", Target: "test"}},
 	}
 }
 
@@ -146,59 +146,59 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 		Verified: true,
 		Command:  "magus run go::go-test . -- -run Ledger",
 		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
-		Gates: []job.VerificationStatus{{ID: job.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
+		Gates: []job.VerificationStatus{{ID: job.PrimaryPostconditionID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
 	}, got)
 }
 
-func TestVerifyGoalsRequireEvidenceForEveryDeclaredGate(t *testing.T) {
+func TestVerifyPostconditionsRequireEvidenceForEveryDeclaredGate(t *testing.T) {
 	t.Parallel()
 
-	status := VerifyGates(goalRow(), goalResult(), job.CapturedRun{}, goalAttempts(), nil, claimed(goalResult()))
+	status := VerifyGates(postconditionRow(), postconditionResult(), job.CapturedRun{}, postconditionAttempts(), nil, claimed(postconditionResult()))
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)
 	assert.True(t, status.Gates[0].Verified)
 	assert.True(t, status.Gates[1].Verified)
 }
 
-func TestVerifyGoalsRejectMissingOrWrongEvidence(t *testing.T) {
+func TestVerifyPostconditionsRejectMissingOrWrongEvidence(t *testing.T) {
 	t.Parallel()
 
-	rep := goalResult()
+	rep := postconditionResult()
 	rep.VerificationEvidence = rep.VerificationEvidence[:1]
-	status := VerifyGates(goalRow(), rep, job.CapturedRun{}, goalAttempts()[:1], nil, Observed{})
+	status := VerifyGates(postconditionRow(), rep, job.CapturedRun{}, postconditionAttempts()[:1], nil, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "docs"`)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `postcondition "docs"`)
 
-	rep = goalResult()
-	attempts := goalAttempts()
+	rep = postconditionResult()
+	attempts := postconditionAttempts()
 	attempts[1].Attempt.Project = "."
-	status = VerifyGates(goalRow(), rep, job.CapturedRun{}, attempts, nil, Observed{})
+	status = VerifyGates(postconditionRow(), rep, job.CapturedRun{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "different run")
 }
 
-func TestVerifyGoalsRejectUndeclaredEvidence(t *testing.T) {
+func TestVerifyPostconditionsRejectUndeclaredEvidence(t *testing.T) {
 	t.Parallel()
 
-	rep := goalResult()
+	rep := postconditionResult()
 	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "invented", OutputRef: "invented-ref"})
-	attempts := append(goalAttempts(), job.GateAttempt{
-		GateID:  "invented",
-		Attempt: job.CapturedRun{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
+	attempts := append(postconditionAttempts(), job.PostconditionAttempt{
+		PostconditionID: "invented",
+		Attempt:         job.CapturedRun{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
 	})
-	status := VerifyGates(goalRow(), rep, job.CapturedRun{}, attempts, nil, Observed{})
+	status := VerifyGates(postconditionRow(), rep, job.CapturedRun{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared goal \"invented\"")
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared postcondition \"invented\"")
 }
 
-// A job with goals and no check has no gate for validation.unrun to name, and
+// A job with postconditions and no check has no gate for validation.unrun to name, and
 // a run reported as missing still fails the job.
-func TestVerifyGoalsRejectAnUnrunCheckTheJobDoesNotDeclare(t *testing.T) {
+func TestVerifyPostconditionsRejectAnUnrunCheckTheJobDoesNotDeclare(t *testing.T) {
 	t.Parallel()
 
-	rep := goalResult()
+	rep := postconditionResult()
 	rep.Validation.Unrun = "docker is down"
-	status := VerifyGates(goalRow(), rep, job.CapturedRun{}, goalAttempts(), nil, claimed(rep))
+	status := VerifyGates(postconditionRow(), rep, job.CapturedRun{}, postconditionAttempts(), nil, claimed(rep))
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "declares no check")
 }
@@ -223,7 +223,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	seen.GreenGate = green
 	status := VerifyGates(ciRow("ci", "."), rep, job.CapturedRun{}, nil, nil, seen)
 	assert.True(t, status.Verified, status.Violations)
-	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, Verified: true}}, status.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryPostconditionID, Verified: true}}, status.Gates)
 
 	for name, tc := range map[string]struct {
 		row  job.Job
@@ -273,31 +273,31 @@ func TestVerifyAcceptsEvidenceFromTheSecondOfDeclaration(t *testing.T) {
 	}
 }
 
-func TestVerifyGoalDependenciesPropagate(t *testing.T) {
+func TestVerifyPostconditionDependenciesPropagate(t *testing.T) {
 	t.Parallel()
 
-	row := goalRow()
-	row.Goals = append(row.Goals, job.Goal{
+	row := postconditionRow()
+	row.Postconditions = append(row.Postconditions, job.Postcondition{
 		ID: "publish", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"docs"},
 	})
-	rep := goalResult()
+	rep := postconditionResult()
 	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "publish", OutputRef: "publish-ref"})
-	attempts := append(goalAttempts(), job.GateAttempt{
-		GateID: "publish", Attempt: job.CapturedRun{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
+	attempts := append(postconditionAttempts(), job.PostconditionAttempt{
+		PostconditionID: "publish", Attempt: job.CapturedRun{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
 	})
 	attempts[0].Attempt.Failed = true
 	status := VerifyGates(row, rep, job.CapturedRun{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, status.Gates[1].Violations, `depends_on goal "unit" has not verified`)
-	assert.Contains(t, status.Gates[2].Violations, `depends_on goal "docs" has not verified`)
+	assert.Contains(t, status.Gates[1].Violations, `depends_on postcondition "unit" has not verified`)
+	assert.Contains(t, status.Gates[2].Violations, `depends_on postcondition "docs" has not verified`)
 }
 
-func TestVerifyGoalsEnforceJobDependencies(t *testing.T) {
+func TestVerifyPostconditionsEnforceJobDependencies(t *testing.T) {
 	t.Parallel()
 
-	row := goalRow()
+	row := postconditionRow()
 	row.DependsOn = []string{"upstream"}
-	status := VerifyGates(row, goalResult(), job.CapturedRun{}, goalAttempts(), []job.Job{{ID: "upstream", State: job.StateExited}}, Observed{})
+	status := VerifyGates(row, postconditionResult(), job.CapturedRun{}, postconditionAttempts(), []job.Job{{ID: "upstream", State: job.StateExited}}, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "upstream")
 }
@@ -454,13 +454,13 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	v := verifyClaim(row, passingResult(), scoped, nil)
 	assert.True(t, v.Verified, "%q", v.Violations)
 	require.Len(t, v.Notes, 1)
-	assert.Equal(t, "goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped with `-- -run Spawn|Waiter`:"+
+	assert.Equal(t, "postcondition \"check\" was graded on output ref \"a1b2c3d4\", a run scoped with `-- -run Spawn|Waiter`:"+
 		" -run and -skip select tests inside the packages `magus run go::go-test .` runs, so it ran every package the check does", v.Notes[0])
 	require.Len(t, v.Gates, 1)
 	assert.Equal(t, job.VerificationStatus{ID: "check", Verified: true, OutputRef: "a1b2c3d4", Scope: "-- -run Spawn|Waiter"}, v.Gates[0])
 	var out strings.Builder
 	RenderGates(&out, v)
-	assert.Contains(t, out.String(), "  [met] check, a run scoped with `-- -run Spawn|Waiter`\nnote: goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
+	assert.Contains(t, out.String(), "  [met] check, a run scoped with `-- -run Spawn|Waiter`\nnote: postcondition \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
 
 	for name, att := range map[string]job.CapturedRun{
 		"another target":  {Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "Spawn"}},
@@ -487,20 +487,20 @@ func TestWithoutTestSelectionDropsEverySpelling(t *testing.T) {
 	assert.Equal(t, []string{"run", "---run", "x"}, withoutTestSelection([]string{"run", "---run", "x"}), "not a flag go test reads")
 }
 
-// The check is the goal named check: a result may file its evidence under
+// The check is the postcondition named check: a result may file its evidence under
 // verification_evidence
 // by that id instead of validation, and its snapshot grades it the same.
-func TestVerifyTakesTheChecksEvidenceUnderItsGoalID(t *testing.T) {
+func TestVerifyTakesTheChecksEvidenceUnderItsPostconditionID(t *testing.T) {
 	t.Parallel()
 
 	rep := passingResult()
 	ref := rep.Validation.OutputRef
-	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: job.PrimaryGoalID, OutputRef: ref}}
-	snapshots := []job.GateAttempt{{GateID: job.PrimaryGoalID, Attempt: passingRun}}
+	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: job.PrimaryPostconditionID, OutputRef: ref}}
+	snapshots := []job.PostconditionAttempt{{PostconditionID: job.PrimaryPostconditionID, Attempt: passingRun}}
 
 	v := VerifyGates(acceptRow(), rep, passingRun, snapshots, nil, claimed(rep))
 	assert.True(t, v.Verified, "%q", v.Violations)
-	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, OutputRef: ref, Verified: true}}, v.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryPostconditionID, OutputRef: ref, Verified: true}}, v.Gates)
 
 	only := rep
 	only.Validation.OutputRef = ""
@@ -511,7 +511,7 @@ func TestVerifyTakesTheChecksEvidenceUnderItsGoalID(t *testing.T) {
 	two.Validation.OutputRef = "other-ref"
 	v = VerifyGates(acceptRow(), two, passingRun, snapshots, nil, claimed(two))
 	assert.False(t, v.Verified)
-	assert.Contains(t, v.Violations, `the result names output ref "other-ref" for goal "check" in validation and "a1b2c3d4" in verification_evidence; name one run`)
+	assert.Contains(t, v.Violations, `the result names output ref "other-ref" for postcondition "check" in validation and "a1b2c3d4" in verification_evidence; name one run`)
 }
 
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
@@ -524,7 +524,7 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 
 	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
-	assert.Contains(t, v.Violations[0], "declares no check and no goal")
+	assert.Contains(t, v.Violations[0], "declares no check and no postcondition")
 }
 
 // The binary's spelling is a way of running one target, so it may not decide whether the
@@ -682,7 +682,7 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "fix/job-store"}
-	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
+	gate := job.Postcondition{ID: "check", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
 	seen := Observed{DefaultCharms: []string{types.CharmReadWrite}}
 
 	status := verifyGate(row, gate, "out57a24bec47f2", job.CapturedRun{Found: true, Project: ".", Target: "test:rw"}, seen)
@@ -691,7 +691,7 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	status = verifyGate(row, gate, "out57a24bec47f2", job.CapturedRun{Found: true, Project: ".", Target: "lint:rw"}, seen)
 	assert.False(t, status.Verified)
 	require.Len(t, status.Violations, 1)
-	assert.Contains(t, status.Violations[0], "this goal's check runs `magus run test:rw .`")
+	assert.Contains(t, status.Violations[0], "this postcondition's check runs `magus run test:rw .`")
 }
 
 // A run the job wrote after grades other files, so its pass is not this job's; the run is
@@ -700,7 +700,7 @@ func TestCheckGateRefusesARunTheJobWroteAfter(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "fix/job-store"}
-	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
+	gate := job.Postcondition{ID: "check", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
 	run := job.CapturedRun{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
 
 	status := verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"out57a24bec47f2": "the ref, not the run"}})
@@ -998,12 +998,12 @@ func TestUnclaimedFootprint(t *testing.T) {
 	}
 }
 
-// integrationRow seeds a job checked by `test .` with one more check goal, in state.
+// integrationRow seeds a job checked by `test .` with one more check postcondition, in state.
 func integrationRow(t *testing.T, state job.State) *Store {
 	t.Helper()
 	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *job.Job) {
-		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), Goals: []job.Goal{
+		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), Postconditions: []job.Postcondition{
 			{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "docs"})},
 		}}.Apply(u)
 		u.State = state
@@ -1050,7 +1050,7 @@ func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 	assert.True(t, rows[0].Integration.Verified)
 }
 
-// A failing run in the merged tree records verified=false, names the goal, and moves
+// A failing run in the merged tree records verified=false, names the postcondition, and moves
 // nothing else.
 func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 	t.Parallel()
@@ -1069,14 +1069,14 @@ func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 	assert.False(t, rows[0].Integration.Verified)
 }
 
-func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
+func TestWaitIntegrationRefusesEvidenceForAPostconditionItDoesNotHold(t *testing.T) {
 	t.Parallel()
 
 	s := integrationRow(t, job.StatePass)
 	rep := integrationEvidence()
 	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "nope", OutputRef: "out3"})
 	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged", nil)
-	require.ErrorContains(t, err, `goal "nope"`)
+	require.ErrorContains(t, err, `postcondition "nope"`)
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
@@ -1102,41 +1102,41 @@ func TestWaitIntegrationAcceptsARunUnderAnotherLease(t *testing.T) {
 	require.NoError(t, err)
 	att, err := resolve(t.Context(), "out1")
 	require.NoError(t, err)
-	plain := verifyGate(rows[0], rows[0].EffectiveGoals()[0], "out1", att, Observed{})
+	plain := verifyGate(rows[0], rows[0].EffectivePostconditions()[0], "out1", att, Observed{})
 	assert.False(t, plain.Verified)
 	assert.Contains(t, strings.Join(plain.Violations, "\n"), `"root/validate"`)
 }
 
-// Symbol goals a merge can break are graded against the integrator's graph, and `changed`,
+// Symbol postconditions a merge can break are graded against the integrator's graph, and `changed`,
 // which is the holder's diff, is not graded there at all.
-func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) {
+func TestWaitIntegrationGradesSymbolPostconditionsAgainstTheCheckoutsGraph(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *job.Job) {
-		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Goals: []job.Goal{
-			{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"Api"}},
-			{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
-			{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Legacy"}},
+		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Postconditions: []job.Postcondition{
+			{ID: "moved", Kind: job.PostconditionKindSymbol, Symbols: []string{"Api"}},
+			{ID: "shape", Kind: job.PostconditionKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
+			{ID: "gone", Kind: job.PostconditionKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Legacy"}},
 		}}.Apply(u)
 		u.State = job.StatePass
 	})
 	require.NoError(t, err)
 
-	merged := goalGraph{{id: "symbol:go a/Api().", label: "Api", file: "a.go", signature: "func Api(n int)"}}
+	merged := postconditionGraph{{id: "symbol:go a/Api().", label: "Api", file: "a.go", signature: "func Api(n int)"}}
 	grade, err := WaitIntegration(t.Context(), s, "w", job.Result{Job: "w"}, runs(nil), "/merged", GraphSymbols(merged))
 	require.NoError(t, err)
 	assert.False(t, grade.Verified)
-	require.Len(t, grade.Gates, 2, "the changed goal belongs to the holder's checkout")
+	require.Len(t, grade.Gates, 2, "the changed postcondition belongs to the holder's checkout")
 	wantShape := grade.Gates[0]
 	wantShape.ID = "shape"
-	wantShape.Violations = []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}
+	wantShape.Violations = []string{"\"Api\" is declared `func Api(n int)`, and this postcondition expects `func Api()`"}
 	assert.Equal(t, wantShape, grade.Gates[0])
 	assert.Equal(t, job.VerificationStatus{ID: "gone", Verified: true}, grade.Gates[1])
 
 	blind, err := WaitIntegration(t.Context(), s, "w", job.Result{Job: "w"}, runs(nil), "/merged", nil)
 	require.NoError(t, err)
-	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol goal")
+	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol postcondition")
 	assert.Contains(t, strings.Join(blind.Gates[1].Violations, "\n"), "could not read the symbol graph")
 }
 
@@ -1150,9 +1150,9 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 		ChangedPaths:         []string{"a.go", "MAGUS.md"},
 		VerificationEvidence: []job.VerificationEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
 	}
-	attempts := []job.GateAttempt{
-		{GateID: "go-test", Attempt: job.CapturedRun{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
-		{GateID: "lint", Attempt: job.CapturedRun{Found: true, Ref: "lint-ref", Project: ".", Target: "lint"}},
+	attempts := []job.PostconditionAttempt{
+		{PostconditionID: "go-test", Attempt: job.CapturedRun{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
+		{PostconditionID: "lint", Attempt: job.CapturedRun{Found: true, Ref: "lint-ref", Project: ".", Target: "lint"}},
 	}
 	status := VerifyGates(row, rep, job.CapturedRun{}, attempts, nil, Observed{Changed: []string{"a.go", "b.go", "c.go"}, ChangedKnown: true})
 	assert.True(t, status.Verified, "the merge range is the change, and the integrator's runs are declared evidence: %v", status.Violations)
@@ -1161,18 +1161,18 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 	rep.VerificationEvidence = rep.VerificationEvidence[:1]
 	status = VerifyGates(row, rep, job.CapturedRun{}, attempts[:1], nil, Observed{})
 	assert.False(t, status.Verified, "the integrator's lint run is required, not optional")
-	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "lint"`)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `postcondition "lint"`)
 }
 
-func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
+func TestIntegratorPostconditionsLeaveADeclaredPostconditionOnTheTarget(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
-	goals, err := integratorGoals(row)
+	postconditions, err := integratorPostconditions(row)
 	require.NoError(t, err)
-	require.Len(t, goals, 1)
-	assert.Equal(t, "lint", goals[0].ID)
-	none, err := integratorGoals(acceptRow())
+	require.Len(t, postconditions, 1)
+	assert.Equal(t, "lint", postconditions[0].ID)
+	none, err := integratorPostconditions(acceptRow())
 	require.NoError(t, err)
 	assert.Empty(t, none, "a job that integrates nothing holds only what it declares")
 }
@@ -1191,7 +1191,7 @@ func TestVerifyFailsACheckFiledAsUnrunNamingTheCause(t *testing.T) {
 }
 
 // A worker never waits for a seat: a check it files as owed for want of one is a normal
-// result, passed with the goal marked owed for the integration. Any other reason, a goal
+// result, passed with the postcondition marked owed for the integration. Any other reason, a postcondition
 // that is not a check, and an integration filing its own checks as owed are refused.
 func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	t.Parallel()
@@ -1203,21 +1203,21 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	}
 	v := verifyClaim(acceptRow(), owed(OwedNoSeat), job.CapturedRun{}, nil)
 	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []job.VerificationStatus{{ID: "check", Owed: OwedNoSeat}},
-		Notes: []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}}, v)
+		Notes: []string{"postcondition \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}}, v)
 	var out strings.Builder
 	RenderGates(&out, v)
-	assert.Contains(t, out.String(), "harness/ledger-accept: 0 of 1 goal(s) met\n  [owed] check (no seat)\n")
+	assert.Contains(t, out.String(), "harness/ledger-accept: 0 of 1 postcondition(s) met\n  [owed] check (no seat)\n")
 
 	v = verifyClaim(acceptRow(), owed("slow"), job.CapturedRun{}, nil)
 	assert.False(t, v.Verified)
-	assert.Equal(t, []string{"goal \"check\": files its run as owed because \"slow\", and the one reason a run is owed is \"no seat\""}, v.Violations)
+	assert.Equal(t, []string{"postcondition \"check\": files its run as owed because \"slow\", and the one reason a run is owed is \"no seat\""}, v.Violations)
 
 	integration := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
 	rep := owed(OwedNoSeat)
 	rep.Job = "integrate"
 	v = VerifyGates(integration, rep, job.CapturedRun{}, nil, nil, Observed{})
 	assert.False(t, v.Verified)
-	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: its check waits for a seat itself")
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "postcondition \"check\": an integration runs the checks it owns: its check waits for a seat itself")
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "raises budget_wait or frees a holder")
 }
 
@@ -1234,13 +1234,13 @@ func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
 
 // A worker that found no build seat files its checks as owed, and the integration that
 // merges its branch runs each one its own full go-test and lint do not already cover.
-func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
+func TestOwedPostconditionsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	t.Parallel()
 
 	scoped := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
-	worker := job.Job{ID: "a", Check: fixtureCheck(scoped), Goals: []job.Goal{
-		{ID: "lint", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})},
-		{ID: "buzz", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "docs"})},
+	worker := job.Job{ID: "a", Check: fixtureCheck(scoped), Postconditions: []job.Postcondition{
+		{ID: "lint", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})},
+		{ID: "buzz", Kind: job.PostconditionKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "docs"})},
 	}}
 	owed := &job.Result{
 		Validation:           job.ResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: OwedNoSeat},
@@ -1255,22 +1255,22 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 		filedTry("c", owed),
 	})
 	row := job.Job{ID: "integrate", Integrates: []string{"a", "b"}}
-	held, err := integratorGoals(row)
+	held, err := integratorPostconditions(row)
 	require.NoError(t, err)
 
-	got, err := owedGoals(row, []job.Job{worker, paid, elsewhere}, tries, held)
+	got, err := owedPostconditions(row, []job.Job{worker, paid, elsewhere}, tries, held)
 	require.NoError(t, err)
-	want := []job.Goal{
-		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "docs"}),
+	want := []job.Postcondition{
+		{ID: "buzz-test-docs", Kind: job.PostconditionKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "docs"}),
 			Accept: []job.Basis{job.BasisWitnessed}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
-	none, err := owedGoals(job.Job{ID: "w"}, []job.Job{worker}, tries, nil)
+	none, err := owedPostconditions(job.Job{ID: "w"}, []job.Job{worker}, tries, nil)
 	require.NoError(t, err)
 	assert.Empty(t, none, "a job that integrates nothing owes nothing")
 }
 
-// narrowedRunSuite pins a file-scoped goal grading what the row changed.
+// narrowedRunSuite pins a file-scoped postcondition grading what the row changed.
 type narrowedRunSuite struct {
 	suite.Suite
 }
@@ -1279,7 +1279,7 @@ func TestNarrowedRun(t *testing.T) { suite.Run(t, new(narrowedRunSuite)) }
 
 func (s *narrowedRunSuite) row(args ...string) job.Job {
 	row := acceptRow()
-	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args})}.Resolve()}
+	row.Postconditions = []job.Postcondition{job.Postcondition{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args})}.Resolve()}
 	return row
 }
 
@@ -1289,23 +1289,23 @@ func (s *narrowedRunSuite) grade(row job.Job, seen Observed, args ...string) Sta
 	lint := job.CapturedRun{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: args}
 	rep := passingResult()
 	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
-	return VerifyGates(row, rep, check, []job.GateAttempt{{GateID: "lint", Attempt: lint}}, nil, seen)
+	return VerifyGates(row, rep, check, []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: lint}}, nil, seen)
 }
 
 func (s *narrowedRunSuite) seen(changed ...string) Observed {
 	return Observed{Changed: changed, ChangedKnown: true, changedFiles: changed}
 }
 
-func (s *narrowedRunSuite) TestRunOverTheChangedFilesPassesAWiderGoal() {
+func (s *narrowedRunSuite) TestRunOverTheChangedFilesPassesAWiderPostcondition() {
 	row := s.row("cmd/magus/ledger.go", "internal/ledger/report.go", "internal/ledger/report_test.go", "internal/ledger/other_test.go")
 
 	v := s.grade(row, s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go", "internal/ledger/report.go")
 
 	s.True(v.Verified, "%v", v.Violations)
-	s.Contains(strings.Join(v.Notes, "\n"), `goal "lint" was graded on output ref "out2", a run over the files this job changed`)
+	s.Contains(strings.Join(v.Notes, "\n"), `postcondition "lint" was graded on output ref "out2", a run over the files this job changed`)
 }
 
-func (s *narrowedRunSuite) TestGoalWithNoArgsTakesARunOverTheChangedFiles() {
+func (s *narrowedRunSuite) TestPostconditionWithNoArgsTakesARunOverTheChangedFiles() {
 	v := s.grade(s.row(), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go", "internal/ledger/report.go")
 
 	s.True(v.Verified, "%v", v.Violations)
@@ -1318,10 +1318,10 @@ func (s *narrowedRunSuite) TestRunMissingAChangedFileIsRefused() {
 	s.Contains(strings.Join(v.Violations, "\n"), "leaves out what this job changed: internal/ledger/report.go")
 }
 
-func (s *narrowedRunSuite) TestRunOverTheGoalsArgsMissingAChangedFileIsRefused() {
+func (s *narrowedRunSuite) TestRunOverThePostconditionsArgsMissingAChangedFileIsRefused() {
 	v := s.grade(s.row("cmd/magus/ledger.go"), s.seen("internal/ledger/report_test.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go")
 
-	s.False(v.Verified, "the goal's own list is no answer for a file the row went on to change")
+	s.False(v.Verified, "the postcondition's own list is no answer for a file the row went on to change")
 	s.Contains(strings.Join(v.Violations, "\n"), "internal/ledger/report_test.go")
 }
 
@@ -1351,7 +1351,7 @@ func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
 	c := types.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
 	run := job.CapturedRun{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
 
-	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}, nil, goCheckSelection), "a file outside the project is not this goal's")
+	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}, nil, goCheckSelection), "a file outside the project is not this postcondition's")
 	s.False(ranOver(c, run, nil, []string{"libs/x/b.go"}, nil, goCheckSelection))
 }
 
@@ -1369,7 +1369,7 @@ func (s *narrowedRunSuite) named(files ...string) func(types.LeaseCheck, ...stri
 		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), nil, 0o644))
 	}
 	return func(c types.LeaseCheck, changed ...string) map[string]bool {
-		return namedFiles(tree, []job.Goal{{Kind: job.GoalKindCheck, Check: fixtureCheck(c)}}, changed)
+		return namedFiles(tree, []job.Postcondition{{Kind: job.PostconditionKindCheck, Check: fixtureCheck(c)}}, changed)
 	}
 }
 

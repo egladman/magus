@@ -1,6 +1,6 @@
 # magus-multi-agent reference
 
-The detail behind the magus-multi-agent skill: what a job record may claim, what happens to a job after its spawn, the goals magus grades, and how to watch the fleet without interrupting it.
+The detail behind the magus-multi-agent skill: what a job record may claim, what happens to a job after its spawn, the postconditions magus grades, and how to watch the fleet without interrupting it.
 
 ## Write paths, claims and checks
 
@@ -22,7 +22,7 @@ different declarations of a file; `--depends-on` is for two jobs on the SAME one
   written yet; check its spelling.
 - A fork refused with {{mgslink "MGS3032"}} (another checkout holds the file) prints the
   claim pair it computed: the declarations the holder has touched so far, and the symbols
-  the new job's goals name, with whether the two are disjoint. Re-fork both rows with the
+  the new job's postconditions name, with whether the two are disjoint. Re-fork both rows with the
   pair, or follow the other advice it prints. Neither row is written for you.
 - A project's magusfile or magus.yaml is never held whole: fork refuses it with
   {{mgslink "MGS3036"}} and lists its claims. Inside the `magus\project({...})` call, and
@@ -59,9 +59,9 @@ The same checkpoint is what a later incremental re-review diffs from (see the
 every problem at once, each with its code and the edit that clears it, and exits 1 while any
 remains. Fix every listed problem, then fork the same record.
 
-A problem whose edit is one goal or deviation also carries it as `problems[].goal` or
+A problem whose edit is one postcondition or deviation also carries it as `problems[].postcondition` or
 `problems[].deviation` in `-o json`; magus never applies them. Under `ci.remote_gate`, one glob
-deviation per target (`test *`) settles it; a goal the guard denies ({{mgslink "MGS3040"}}) takes it too.
+deviation per target (`test *`) settles it; a postcondition the guard denies ({{mgslink "MGS3040"}}) takes it too.
 
 A glob write path past `jobs.max_claim_files` (default 50 files) or `jobs.max_claim_projects`
 (default 1 project) is refused as {{mgslink "MGS3043"}}. Name the files the job edits. A sweep
@@ -94,8 +94,8 @@ EOF
 the brief names, so each gate keeps its own ref.
 
 A check its worker found no seat for is owed, not run: `"validation": {"command":
-"<the check>", "output_ref": "", "owed": "no seat"}`, or the same `owed` on a goal's
-`verification_evidence` entry. `{{cmd "job wait"}}` passes the result with the goal marked
+"<the check>", "output_ref": "", "owed": "no seat"}`, or the same `owed` on a postcondition's
+`verification_evidence` entry. `{{cmd "job wait"}}` passes the result with the postcondition marked
 `[owed]`, and the integration that merges the branch runs it. "no seat" is the only
 reason, and an integration may not owe its own checks.
 
@@ -196,10 +196,10 @@ Moving a live job's boundary is yours. Change its record and run `{{cmd "job app
 <file>` (`-f -` reads stdin).
 
 - The record is the whole spec: one write widens or revokes write paths and adds
-  goals, and the job keeps its state{{if .Full}}. A re-fork would hand a taken job out again as
+  postconditions, and the job keeps its state{{if .Full}}. A re-fork would hand a taken job out again as
   declared{{end}}.
 - `--dry-run` prints the spec diff and writes nothing.
-- A check you find the job owes, mid-flight or after its exit, is a goal you add this way.
+- A check you find the job owes, mid-flight or after its exit, is a postcondition you add this way.
   The write bumps the job's `generation`, so its check must run again before
   `{{cmd "job wait"}}` passes: the wait refuses evidence filed earlier and prints the check to
   rerun.
@@ -209,7 +209,7 @@ Moving a live job's boundary is yours. Change its record and run `{{cmd "job app
   names `{{cmd "describe job"}}` and tells it to ask you.
 
 A job that ended is retried by forking its id again, `{{cmd "job fork"}} <id>`. That starts
-its next attempt and folds the one that ended into the row's `prior`: its unmet goals,
+its next attempt and folds the one that ended into the row's `prior`: its unmet postconditions,
 violations, the guard's denials, unresolved risks and failing run refs, which
 `{{cmd "describe job"}}` prints for the next holder. A new id loses that history. magus never
 retries on its own; it marks an attempt not retryable when repeating it unchanged cannot
@@ -240,7 +240,7 @@ prove it leaves live, and ending those stays yours. A taken job that went quiet 
 
 `--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
 denies every write graded under that lease, and its paths stop blocking other jobs.
-The row stays live until you end it. A job with acceptance criteria needs no bound{{if .Full}}: the goals end it, and a timeout only helps where a stuck worker
+The row stays live until you end it. A job with acceptance criteria needs no bound{{if .Full}}: the postconditions end it, and a timeout only helps where a stuck worker
 would otherwise hold paths nobody else can write{{end}}.
 
 `{{cmd "job wait"}}` holds a writing job's `changed_paths` to the diff magus observes since
@@ -250,7 +250,7 @@ its checkpoint:
   write paths.
 - A diff it cannot read FAILS, so fork writing jobs with a checkpoint.
 - It refuses pass while any descendant is still live.
-- It grades a child against its own symbol goals and its ancestors'.
+- It grades a child against its own symbol postconditions and its ancestors'.
 
 The guard grades each write of a worker that exported `magus.lease` against these rows
 and denies one outside them, naming the owner. A writer magus cannot attribute is only
@@ -301,15 +301,15 @@ before reporting upward.{{end}}
 
 ## Declare the criteria magus can check for you
 
-A job's acceptance criteria are prose a reader grades. A GOAL is the part magus grades
+A job's acceptance criteria are prose a reader grades. A POSTCONDITION is the part magus grades
 itself, from evidence the worker cannot author. `{{cmd "job wait"}}` refuses to record pass
 until every one verifies.
 
-- Goals are data: write them in the job record's `goals`, never as flags.
-- `{{cmd "job fork"}}` refuses a job that writes and declares neither a check nor a goal.
-- `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) takes the same `goals` array.
+- Postconditions are data: write them in the job record's `postconditions`, never as flags.
+- `{{cmd "job fork"}}` refuses a job that writes and declares neither a check nor a postcondition.
+- `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) takes the same `postconditions` array.
 
-A record on stdin declares a `paths` goal and two `symbol` goals:
+A record on stdin declares a `paths` postcondition and two `symbol` postconditions:
 
 ```sh
 magus job fork --stdin <<'EOF'
@@ -317,7 +317,7 @@ magus job fork --stdin <<'EOF'
  "criteria": "accounts move to the new store; nothing names the old one",
  "paths": {"write": ["db/migrations/*.sql", "api/migrate.go"]},
  "check": {"target": "go-test", "project": "api", "args": ["-run", "TestMigrate"]},
- "goals": [
+ "postconditions": [
    {"id": "migration", "kind": "paths", "expect": "changed", "paths": ["db/migrations/*.sql"]},
    {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
    {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
@@ -325,7 +325,7 @@ magus job fork --stdin <<'EOF'
 EOF
 ```
 
-A goal names WHAT it examines and what must be true of it:
+A postcondition names WHAT it examines and what must be true of it:
 
 | kind     | expects                                         | read from                                      |
 | -------- | ----------------------------------------------- | ---------------------------------------------- |
@@ -335,7 +335,7 @@ A goal names WHAT it examines and what must be true of it:
 
 One entry reads `{"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}`.
 Each kind has a default expectation (`passed` for a check, `changed` otherwise), so the
-common goal names only its kind and subject.
+common postcondition names only its kind and subject.
 
 Reach for `symbol` + `unreferenced` when partitioning a rename: the REMAINDER instruction made
 checkable. Split per project, and the callers in no project belong to no job. Every
@@ -345,15 +345,15 @@ job passes and the rename is unfinished.
   definition; once the definition is gone, `unreferenced` FAILS rather than guess.
 - The job that deletes it declares `absent` beside a check that builds the callers.
 
-Every kind reads what magus already holds, which makes a goal a contract, not an
-attestation. There is no goal for "this command exited 0"{{if .Full}}, deliberately: magus
-did not record that run and cannot attribute it, so it would be the easiest goal to
+Every kind reads what magus already holds, which makes a postcondition a contract, not an
+attestation. There is no postcondition for "this command exited 0"{{if .Full}}, deliberately: magus
+did not record that run and cannot attribute it, so it would be the easiest postcondition to
 satisfy falsely{{end}}. Declare a target and use `check`.
 
 The worker's own `changed_paths` is its account, never the evidence. The diff and the
 tree are read in the checkout that took the job, so wait from your own tree while the
-worker's still exists. An observation magus could not MAKE fails the goal{{if .Full}}: otherwise the cheapest way past
-a goal would be to break the observation{{end}}.
+worker's still exists. An observation magus could not MAKE fails the postcondition{{if .Full}}: otherwise the cheapest way past
+a postcondition would be to break the observation{{end}}.
 
 Ask where a job stands without advancing it:
 
@@ -361,11 +361,11 @@ Ask where a job stands without advancing it:
 magus describe job <job>
 ```
 
-It prints where each goal stands beside the terms: the same grading `{{cmd "job wait"}}`
+It prints where each postcondition stands beside the terms: the same grading `{{cmd "job wait"}}`
 does, recording nothing. Use it instead of asking a worker how it is going.
 
-SEQUENCE goals with `depends_on` between them; a failed prerequisite propagates. Do
-NOT nest them: a goal that wants children is a JOB that wants splitting{{if .Full}}, which the instructions above cover. Flat goals keep
+SEQUENCE postconditions with `depends_on` between them; a failed prerequisite propagates. Do
+NOT nest them: a postcondition that wants children is a JOB that wants splitting{{if .Full}}, which the instructions above cover. Flat postconditions keep
 the job tree the only hierarchy with an owner{{end}}.
 
 Run workers non-blocking by default. Block on one only when your next action needs its
@@ -474,7 +474,7 @@ A job that verifies is recorded `pass`. A rejection exits 1 naming every violati
 a result that will not decode exits 2. A holder does not verify its own job, or a
 sibling's. Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`).{{if .Full}}
 Wait proves the ref names a passing run of this job's own check, never that the
-work meets the job's GOAL.{{end}} A worker's prose about its criteria is not that evidence.
+work meets the job's POSTCONDITION.{{end}} A worker's prose about its criteria is not that evidence.
 
 Also: resolve cross-job API changes centrally; regenerate declared outputs once
 after source converges; re-run `{{cmd "affected"}} <target> --plan` over the actual

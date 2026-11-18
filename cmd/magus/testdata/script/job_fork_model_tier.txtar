@@ -78,16 +78,16 @@ magus\modelTier(choose);
 package pkg
 -- small.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/small", "paths": {"write": ["a.go"]},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- wide.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/wide", "paths": {"write": ["b.go", "c.go"]},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go", "c.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go", "c.go"]}]}
 -- named.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/named", "paths": {"write": ["d.go"]}, "agent": {"model": {"tier": "design"}, "worker": {"type": "resumed"}},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["d.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["d.go"]}]}
 -- model.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/model", "paths": {"write": ["e.go"]}, "agent": {"model": {"id": "haiku"}, "worker": {"type": "resumed"}},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["e.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["e.go"]}]}
 -- applied.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "wave/applied", "paths": {"write": ["f.go"]},
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["f.go"]}]}
+ "postconditions": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["f.go"]}]}

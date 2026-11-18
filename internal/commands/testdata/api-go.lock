@@ -1632,9 +1632,9 @@ github.com/egladman/magus/types.Declaration.ApplySpec method func(j *github.com/
 github.com/egladman/magus/types.Declaration.Check field *LeaseCheck "json:\"check,omitzero\""
 github.com/egladman/magus/types.Declaration.Declaration embedded github.com/egladman/magus/libs/safetyscissors/job.Declaration
 github.com/egladman/magus/types.Declaration.Faults method func(permissible ...github.com/egladman/magus/libs/safetyscissors/job.Code) []github.com/egladman/magus/libs/safetyscissors/job.Fault
-github.com/egladman/magus/types.Declaration.Goals field []Goal "json:\"goals,omitempty\""
 github.com/egladman/magus/types.Declaration.MarshalJSON method func() ([]byte, error)
 github.com/egladman/magus/types.Declaration.Module method func() (github.com/egladman/magus/libs/safetyscissors/job.Declaration, error)
+github.com/egladman/magus/types.Declaration.Postconditions field []Postcondition "json:\"postconditions,omitempty\""
 github.com/egladman/magus/types.Declaration.Settles method func() bool
 github.com/egladman/magus/types.Declaration.Unknown method func() []string
 github.com/egladman/magus/types.Declaration.UnmarshalJSON method(ptr) func(data []byte) error
@@ -2126,14 +2126,6 @@ github.com/egladman/magus/types.GlobClaims func(glob string, rel string, nested 
 github.com/egladman/magus/types.GlobStrings func(globs []Glob) []string
 github.com/egladman/magus/types.GlobsOverlap func(a string, b string) bool
 github.com/egladman/magus/types.GoModReplaceDrift const DiagnosticCode = "MGS1016"
-github.com/egladman/magus/types.Goal type struct
-github.com/egladman/magus/types.Goal.Check field LeaseCheck "json:\"check,omitzero\" yaml:\"check,omitempty\""
-github.com/egladman/magus/types.Goal.Faults method func() []github.com/egladman/magus/libs/safetyscissors/job.Fault
-github.com/egladman/magus/types.Goal.Goal embedded github.com/egladman/magus/libs/safetyscissors/job.Goal
-github.com/egladman/magus/types.Goal.MarshalYAML method func() (any, error)
-github.com/egladman/magus/types.Goal.Module method func() (github.com/egladman/magus/libs/safetyscissors/job.Goal, error)
-github.com/egladman/magus/types.Goal.Resolve method func() github.com/egladman/magus/libs/safetyscissors/job.Goal
-github.com/egladman/magus/types.Goal.Subject method func() []string
 github.com/egladman/magus/types.GrantInsufficient const DiagnosticCode = "MGS9015"
 github.com/egladman/magus/types.Graph type struct
 github.com/egladman/magus/types.Graph.BlastRadius method(ptr) func() map[string]int
@@ -2462,9 +2454,8 @@ github.com/egladman/magus/types.IsWrapperInvocation func(ref string) bool
 github.com/egladman/magus/types.Job type struct
 github.com/egladman/magus/types.Job.Check field *LeaseCheck "json:\"check,omitzero\" yaml:\"check,omitempty\""
 github.com/egladman/magus/types.Job.Clone method func() github.com/egladman/magus/libs/safetyscissors/job.Job
-github.com/egladman/magus/types.Job.EffectiveGoals method func() []github.com/egladman/magus/libs/safetyscissors/job.Goal
+github.com/egladman/magus/types.Job.EffectivePostconditions method func() []github.com/egladman/magus/libs/safetyscissors/job.Postcondition
 github.com/egladman/magus/types.Job.EndedWithSession method func() bool
-github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\" yaml:\"goals,omitempty\""
 github.com/egladman/magus/types.Job.HandedOutAfresh method func() github.com/egladman/magus/libs/safetyscissors/job.Job
 github.com/egladman/magus/types.Job.HardPaths method func() []string
 github.com/egladman/magus/types.Job.HoldsNoBuildSeat method func() bool
@@ -2475,13 +2466,13 @@ github.com/egladman/magus/types.Job.MarshalYAML method func() (any, error)
 github.com/egladman/magus/types.Job.Module method func() (github.com/egladman/magus/libs/safetyscissors/job.Job, error)
 github.com/egladman/magus/types.Job.Overdue method func(now int64) bool
 github.com/egladman/magus/types.Job.PausedAt method func(now int64) bool
+github.com/egladman/magus/types.Job.Postconditions field []Postcondition "json:\"postconditions,omitempty\" yaml:\"postconditions,omitempty\""
 github.com/egladman/magus/types.Job.ServerRun method func() bool
 github.com/egladman/magus/types.Job.SpecChangedSince method func(observed int) bool
 github.com/egladman/magus/types.Job.Unmet method func() []string
 github.com/egladman/magus/types.JobCheckUnrunnable const DiagnosticCode = "MGS3040"
 github.com/egladman/magus/types.JobCheckpointUnplaceable const DiagnosticCode = "MGS3041"
 github.com/egladman/magus/types.JobForkLimitExceeded const DiagnosticCode = "MGS3042"
-github.com/egladman/magus/types.JobGoalInvalid const DiagnosticCode = "MGS3038"
 github.com/egladman/magus/types.JobKind type string
 github.com/egladman/magus/types.JobKind.String method func() string
 github.com/egladman/magus/types.JobKind.Valid method func() bool
@@ -2521,15 +2512,16 @@ github.com/egladman/magus/types.JobOutcome.Unattributed field int "json:\"unattr
 github.com/egladman/magus/types.JobOutcome.Widenings field int "json:\"widenings,omitempty\"     yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Work field *JobWork "json:\"work,omitzero\"           yaml:\"work,omitempty\""
 github.com/egladman/magus/types.JobOutcome.WriteFiles field int "json:\"write_files\"             yaml:\"write_files\""
+github.com/egladman/magus/types.JobPostconditionInvalid const DiagnosticCode = "MGS3038"
 github.com/egladman/magus/types.JobProblem type struct
 github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"code\""
 github.com/egladman/magus/types.JobProblem.Deviation field *github.com/egladman/magus/libs/safetyscissors/job.Deviation "json:\"deviation,omitempty\""
 github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
-github.com/egladman/magus/types.JobProblem.Goal field *Goal "json:\"goal,omitempty\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
 github.com/egladman/magus/types.JobProblem.Permissible method func() bool
+github.com/egladman/magus/types.JobProblem.Postcondition field *Postcondition "json:\"postcondition,omitempty\""
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
 github.com/egladman/magus/types.JobProblems type []JobProblem
 github.com/egladman/magus/types.JobProblems.Error method func() error
@@ -3204,7 +3196,6 @@ github.com/egladman/magus/types.ModelTierRequest type struct
 github.com/egladman/magus/types.ModelTierRequest.Check field *LeaseCheck
 github.com/egladman/magus/types.ModelTierRequest.DeclaredRank field *int
 github.com/egladman/magus/types.ModelTierRequest.DependsOn field []string
-github.com/egladman/magus/types.ModelTierRequest.Goals field []Goal
 github.com/egladman/magus/types.ModelTierRequest.History field []ModelTierRecord
 github.com/egladman/magus/types.ModelTierRequest.ID field string
 github.com/egladman/magus/types.ModelTierRequest.Instructions field string
@@ -3212,6 +3203,7 @@ github.com/egladman/magus/types.ModelTierRequest.Kind field JobKind
 github.com/egladman/magus/types.ModelTierRequest.Model field github.com/egladman/magus/libs/safetyscissors/job.Model
 github.com/egladman/magus/types.ModelTierRequest.Parent field string
 github.com/egladman/magus/types.ModelTierRequest.ParentRank field *int
+github.com/egladman/magus/types.ModelTierRequest.Postconditions field []Postcondition
 github.com/egladman/magus/types.ModelTierRequest.ReadOnly field bool
 github.com/egladman/magus/types.ModelTierRequest.ReadPaths field []string
 github.com/egladman/magus/types.ModelTierRequest.WriteFiles field int
@@ -3256,11 +3248,11 @@ github.com/egladman/magus/types.Needs func(refs ...string) Chain
 github.com/egladman/magus/types.NestedOwner func(rel string, nested []string) string
 github.com/egladman/magus/types.NewDeclaration func(d github.com/egladman/magus/libs/safetyscissors/job.Declaration) (Declaration, error)
 github.com/egladman/magus/types.NewFileReport func(files []FileEntry) FileReport
-github.com/egladman/magus/types.NewGoal func(g github.com/egladman/magus/libs/safetyscissors/job.Goal) (Goal, error)
 github.com/egladman/magus/types.NewGraph func(repo DepGraphRepository, projects map[string]*Project) *Graph
 github.com/egladman/magus/types.NewGraphConfig func(initial Observer) *GraphConfig
 github.com/egladman/magus/types.NewJob func(row github.com/egladman/magus/libs/safetyscissors/job.Job) (Job, error)
 github.com/egladman/magus/types.NewJobList func(list github.com/egladman/magus/libs/safetyscissors/job.List) (JobList, error)
+github.com/egladman/magus/types.NewPostcondition func(g github.com/egladman/magus/libs/safetyscissors/job.Postcondition) (Postcondition, error)
 github.com/egladman/magus/types.NewProjectRef func(path string, dir string) ProjectRef
 github.com/egladman/magus/types.NewStepLog func() *StepLog
 github.com/egladman/magus/types.NewestReleaseStage func(tags []VCSTag) github.com/egladman/magus/types/release.Stage
@@ -3449,6 +3441,14 @@ github.com/egladman/magus/types.PlatformStyle.Valid method func() bool
 github.com/egladman/magus/types.PlatformStyle.Values method func() []string
 github.com/egladman/magus/types.PlatformStyleGo const PlatformStyle = "go"
 github.com/egladman/magus/types.PlatformStyleUname const PlatformStyle = "uname"
+github.com/egladman/magus/types.Postcondition type struct
+github.com/egladman/magus/types.Postcondition.Check field LeaseCheck "json:\"check,omitzero\" yaml:\"check,omitempty\""
+github.com/egladman/magus/types.Postcondition.Faults method func() []github.com/egladman/magus/libs/safetyscissors/job.Fault
+github.com/egladman/magus/types.Postcondition.MarshalYAML method func() (any, error)
+github.com/egladman/magus/types.Postcondition.Module method func() (github.com/egladman/magus/libs/safetyscissors/job.Postcondition, error)
+github.com/egladman/magus/types.Postcondition.Postcondition embedded github.com/egladman/magus/libs/safetyscissors/job.Postcondition
+github.com/egladman/magus/types.Postcondition.Resolve method func() github.com/egladman/magus/libs/safetyscissors/job.Postcondition
+github.com/egladman/magus/types.Postcondition.Subject method func() []string
 github.com/egladman/magus/types.Precedent type struct
 github.com/egladman/magus/types.Precedent.Cited field []Case "json:\"cited,omitempty\""
 github.com/egladman/magus/types.Precedent.Cohort field int "json:\"cohort\""

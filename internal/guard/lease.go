@@ -1430,7 +1430,7 @@ func (j rowJudge) runsOffCheck(r targetRun) bool {
 	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
-// readCheck reads the check a row or goal stores. The store validated it when it wrote the
+// readCheck reads the check a row or postcondition stores. The store validated it when it wrote the
 // row, so an error here means a row that bypassed the store.
 func readCheck(stored jobtypes.Check) (types.LeaseCheck, error) {
 	var c types.LeaseCheck
@@ -1438,12 +1438,12 @@ func readCheck(stored jobtypes.Check) (types.LeaseCheck, error) {
 	return c, err
 }
 
-// rowChecks are the runs a row names as its checks: the check record and every check goal.
+// rowChecks are the runs a row names as its checks: the check record and every check postcondition.
 // A check that cannot be read names no run, which narrows what a worker may run.
 func rowChecks(row jobtypes.Job) []types.LeaseCheck {
 	var out []types.LeaseCheck
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != jobtypes.GoalKindCheck {
+	for _, g := range row.EffectivePostconditions() {
+		if g.Kind != jobtypes.PostconditionKindCheck {
 			continue
 		}
 		if c, err := readCheck(g.Check); err == nil && c.Target != "" {
@@ -2168,7 +2168,7 @@ func cliFork(args []string, stdin string) childFork {
 		scriptOnly := hasCheck && err == nil && declared.Target == "" && declared.Script != ""
 		return childFork{
 			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.Paths.Write) > 0,
-			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Goals) > 0 ||
+			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Postconditions) > 0 ||
 				(hasCheck && !scriptOnly) || (row.State != "" && row.State != jobtypes.StateDeclared),
 		}
 	}
@@ -2567,15 +2567,15 @@ func withoutRelocation(args []string) []string {
 //
 // It exists because the refusal quoted row.Validation whatever had actually matched, and a
 // row can now name the gate from any of several places: told that its check `go-test api`
-// names `ci`, a reader goes looking for a bug in a line that is fine while the goal that
+// names `ci`, a reader goes looking for a bug in a line that is fine while the postcondition that
 // really did it goes unmentioned.
 func LeaseGateSource(row jobtypes.Job) (string, bool) {
-	// EVERY goal is asked, and the primary check no longer answers for the row. Returning
+	// EVERY postcondition is asked, and the primary check no longer answers for the row. Returning
 	// on row.Check alone meant a job whose check was some narrow target stopped the walk
-	// before its goals were read, so a narrow check beside a `ci` check goal took the gate
+	// before its postconditions were read, so a narrow check beside a `ci` check postcondition took the gate
 	// through the door the check rule holds shut.
-	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != jobtypes.GoalKindCheck {
+	for _, gate := range row.EffectivePostconditions() {
+		if gate.Kind != jobtypes.PostconditionKindCheck {
 			continue
 		}
 		check, err := readCheck(gate.Check)
@@ -2584,10 +2584,10 @@ func LeaseGateSource(row jobtypes.Job) (string, bool) {
 		}
 		t, err := types.ParseTarget(check.Target)
 		if err == nil && t.Name == types.TargetCI {
-			if gate.ID == jobtypes.PrimaryGoalID {
+			if gate.ID == jobtypes.PrimaryPostconditionID {
 				return job.CheckCommand(check), true
 			}
-			return fmt.Sprintf("goal %q (%s)", gate.ID, job.CheckCommand(check)), true
+			return fmt.Sprintf("postcondition %q (%s)", gate.ID, job.CheckCommand(check)), true
 		}
 	}
 	if validationNamesGate(row.Validation) {

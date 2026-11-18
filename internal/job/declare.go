@@ -150,19 +150,19 @@ func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) job.
 	return d, nil
 }
 
-// resolveAccept is goals with each check goal that names no basis accepting a witnessed
-// run, the run magus's own `magus run` of the check records, and the ids of the goals it
-// defaulted so. The module refuses a check goal accepting nothing, so a declaration magus
-// reads resolves it before it is validated, as the module resolves a goal's expect; a
-// goal naming its bases keeps them.
-func resolveAccept(goals []job.Goal) ([]job.Goal, []string) {
-	if goals == nil {
+// resolveAccept is postconditions with each check postcondition that names no basis accepting a witnessed
+// run, the run magus's own `magus run` of the check records, and the ids of the postconditions it
+// defaulted so. The module refuses a check postcondition accepting nothing, so a declaration magus
+// reads resolves it before it is validated, as the module resolves a postcondition's expect; a
+// postcondition naming its bases keeps them.
+func resolveAccept(postconditions []job.Postcondition) ([]job.Postcondition, []string) {
+	if postconditions == nil {
 		return nil, nil
 	}
-	out := slices.Clone(goals)
+	out := slices.Clone(postconditions)
 	var defaulted []string
 	for i, g := range out {
-		if len(g.Accept) == 0 && g.Resolve().Kind == job.GoalKindCheck {
+		if len(g.Accept) == 0 && g.Resolve().Kind == job.PostconditionKindCheck {
 			out[i].Accept = []job.Basis{job.BasisWitnessed}
 			defaulted = append(defaulted, g.ID)
 		}
@@ -170,18 +170,18 @@ func resolveAccept(goals []job.Goal) ([]job.Goal, []string) {
 	return out, defaulted
 }
 
-// DefaultedAccept is a check goal a declaration named no bases for, which a fork resolves
+// DefaultedAccept is a check postcondition a declaration named no bases for, which a fork resolves
 // to accept a witnessed run.
-type DefaultedAccept struct{ Job, Goal string }
+type DefaultedAccept struct{ Job, Postcondition string }
 
 func (d DefaultedAccept) String() string {
-	return fmt.Sprintf("%s: check goal %q names no accept, so it defaulted to accept [%s]", d.Job, d.Goal, job.BasisWitnessed)
+	return fmt.Sprintf("%s: check postcondition %q names no accept, so it defaulted to accept [%s]", d.Job, d.Postcondition, job.BasisWitnessed)
 }
 
-func defaultedAccepts(id string, goals []string) []DefaultedAccept {
-	out := make([]DefaultedAccept, 0, len(goals))
-	for _, g := range goals {
-		out = append(out, DefaultedAccept{Job: id, Goal: g})
+func defaultedAccepts(id string, postconditions []string) []DefaultedAccept {
+	out := make([]DefaultedAccept, 0, len(postconditions))
+	for _, g := range postconditions {
+		out = append(out, DefaultedAccept{Job: id, Postcondition: g})
 	}
 	return out
 }
@@ -259,7 +259,7 @@ func WidenedDeclaration(ctx context.Context, store *Store, id string, add []stri
 	return rec, nil
 }
 
-// NarrowedDeclaration is rec without the paths in release; goals stay.
+// NarrowedDeclaration is rec without the paths in release; postconditions stay.
 // A path the job does not hold is refused, so a typo is never a no-op.
 func NarrowedDeclaration(rec job.Declaration, id string, release []string) (job.Declaration, error) {
 	rec.Paths.Write = slices.Clone(rec.Paths.Write)
