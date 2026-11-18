@@ -1,8 +1,10 @@
 package safetyscissors
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -12,20 +14,33 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
-// Option configures [New]. Options apply in order: a later option replaces what an
-// earlier one of the same name set, except [WithJobOptions], which adds to it.
-type Option func(*config) error
+// Config is what [New] opens the harness from. Every exported field is required; each
+// optional part is set by an [Option].
+type Config struct {
+	// Dir is where the stores live, laid out as [Dirs] says.
+	Dir string
+	// Invocation is the id this process records sessions as: the module mints none. An
+	// id [session.ValidFileID] refuses is a [*session.InvalidIDError].
+	Invocation string
+	// Start is the start record the invocation's first record follows.
+	Start session.InvocationStart
+	// Actor says who the job store writes as, asked on every write.
+	Actor func() job.Actor
+	// Notices hears what the job store did that no call asked about, such as a rewrite
+	// dropping a line no writer finished. The module never prints.
+	Notices func(job.Notice)
+	// CheckSpec is how the job store reads the checks a row and its postconditions carry
+	// (see [job.WithCheckSpec]).
+	CheckSpec job.CheckSpec
+	// Retention and PruneErrors configure the prune opening the session writer runs (see
+	// [session.Config]): how long an invocation file outlives its newest fact, and who
+	// hears what went wrong.
+	Retention   time.Duration
+	PruneErrors func(context.Context, error)
 
-type config struct {
-	invocation string
-	start      session.InvocationStart
-	invoked    bool
-	actor      func() job.Actor
-	notices    func(job.Notice)
-	checks     []job.StoreOption
-	clock      func() time.Time
-	jobOpts    []job.StoreOption
-	dirs       Dirs
+	clock   func() time.Time
+	jobOpts []job.Option
+	dirs    Dirs
 
 	slots     int
 	slotOpts  []budget.LimiterOption
@@ -42,6 +57,18 @@ type config struct {
 	binds       []sandbox.Bind
 	sandboxOpts []sandbox.Option
 	withSandbox bool
+
+	errs []error
+}
+
+// Option adjusts a [Config] before [New] reads it. Options apply in order: a later option
+// replaces what an earlier one of the same name set, except [WithJobOptions], which adds
+// to it. An option given a nil or invalid value records an *[OptionError] on the Config
+// rather than being ignored, so New refuses the harness.
+type Option func(*Config)
+
+func (c *Config) fail(option, problem string) {
+	c.errs = append(c.errs, &OptionError{Option: option, Problem: problem})
 }
 
 // Dirs is where each store lives. [New] places them under its dir as
@@ -86,94 +113,55 @@ func (d Dirs) shared() []error {
 	return errs
 }
 
-// WithInvocation names the invocation this process records sessions as, and the start
-// record its first record follows. Required: the module mints no invocation id. An id
-// [session.ValidFileID] refuses is New's error.
-func WithInvocation(id string, start session.InvocationStart) Option {
-	return func(c *config) error {
-		c.invocation, c.start, c.invoked = id, start, true
-		return nil
-	}
-}
-
-// WithActor says who the job store writes as, asked on every write. Required: a store
-// without one refuses every write.
-func WithActor(actor func() job.Actor) Option {
-	return func(c *config) error {
-		if actor == nil {
-			return &OptionError{Option: "WithActor", Problem: "the function is nil"}
-		}
-		c.actor = actor
-		return nil
-	}
-}
-
-// WithNotices hears what the job store did that no call asked about, such as a rewrite
-// dropping a line no writer finished. Required: a store with nowhere to report refuses
-// every write, and the module never prints.
-func WithNotices(notices func(job.Notice)) Option {
-	return func(c *config) error {
-		if notices == nil {
-			return &OptionError{Option: "WithNotices", Problem: "the function is nil"}
-		}
-		c.notices = notices
-		return nil
-	}
-}
-
-// WithCheckSpec is how the job store reads the checks a row and its postconditions carry (see
-// [job.WithCheckSpec]). Required: a store without one refuses every write.
-func WithCheckSpec(spec job.CheckSpec) Option {
-	return func(c *config) error {
-		if spec == nil {
-			return &OptionError{Option: "WithCheckSpec", Problem: "the spec is nil"}
-		}
-		c.checks = []job.StoreOption{job.WithCheckSpec(spec)}
-		return nil
-	}
-}
-
 // WithClock replaces the real clock for the job store, the session writer and the
-// machine budget.
+// machine budget. A nil clock is an *[OptionError].
 func WithClock(clock func() time.Time) Option {
-	return func(c *config) error {
+	return func(c *Config) {
 		if clock == nil {
-			return &OptionError{Option: "WithClock", Problem: "the function is nil"}
+			c.fail("WithClock", "the function is nil")
+			return
 		}
 		c.clock = clock
-		return nil
 	}
 }
 
-// WithJobOptions passes the job store's other seams through (see [job.StoreOption]).
-// They apply before the store options New derives from [WithActor], [WithNotices],
-// [WithCheckSpec] and [WithClock], which win over the same seam passed here.
-func WithJobOptions(opts ...job.StoreOption) Option {
-	return func(c *config) error {
+// WithJobOptions passes the job store's other seams through (see [job.Option]). They
+// apply before the store options New derives from [Config.Actor], [Config.Notices],
+// [Config.CheckSpec] and [WithClock], which win over the same seam passed here. No
+// options, or a nil one, is an *[OptionError].
+func WithJobOptions(opts ...job.Option) Option {
+	return func(c *Config) {
+		if len(opts) == 0 || slices.ContainsFunc(opts, func(o job.Option) bool { return o == nil }) {
+			c.fail("WithJobOptions", "no options, or a nil one")
+			return
+		}
 		c.jobOpts = append(c.jobOpts, opts...)
-		return nil
 	}
 }
 
 // WithDirs replaces the places [New] lays the stores out at under its dir. No two of
 // Jobs, Sessions and Activity may name one directory, compared cleaned, since each
-// reader would read the other's files as its own.
+// reader would read the other's files as its own. A Dirs that sets no field is an
+// *[OptionError].
 func WithDirs(d Dirs) Option {
-	return func(c *config) error {
+	return func(c *Config) {
+		if d == (Dirs{}) {
+			c.fail("WithDirs", "it sets no directory")
+			return
+		}
 		c.dirs = d
-		return nil
 	}
 }
 
 // WithSlots configures a slot limiter of n slots (see [budget.NewLimiter]). n below 1
 // is refused, because it is not a slot count.
 func WithSlots(n int, opts ...budget.LimiterOption) Option {
-	return func(c *config) error {
+	return func(c *Config) {
 		if n < 1 {
-			return &OptionError{Option: "WithSlots", Problem: "the slot count is below 1"}
+			c.fail("WithSlots", "the slot count is below 1")
+			return
 		}
 		c.slots, c.slotOpts, c.withSlots = n, opts, true
-		return nil
 	}
 }
 
@@ -181,12 +169,12 @@ func WithSlots(n int, opts ...budget.LimiterOption) Option {
 // [budget.NewMachine]). A figure below 1 is refused: the budget reads it as unlimited,
 // and a caller that means that builds the budget with budget.NewMachine itself.
 func WithMachine(megabytes, slots int, opts ...budget.MachineOption) Option {
-	return func(c *config) error {
+	return func(c *Config) {
 		if megabytes < 1 || slots < 1 {
-			return &OptionError{Option: "WithMachine", Problem: "the memory budget and the slot count must both be at least 1"}
+			c.fail("WithMachine", "the memory budget and the slot count must both be at least 1")
+			return
 		}
 		c.machineMB, c.machineSlots, c.machineOpts, c.withMachine = megabytes, slots, opts, true
-		return nil
 	}
 }
 
@@ -194,22 +182,20 @@ func WithMachine(megabytes, slots int, opts ...budget.MachineOption) Option {
 // [SafetyScissors.SpawnCeiling] judges a spawn against. A declaration NewSet refuses is
 // New's error.
 func WithTiers(decl tier.Declaration) Option {
-	return func(c *config) error {
-		c.tiers, c.withTiers = decl, true
-		return nil
-	}
+	return func(c *Config) { c.tiers, c.withTiers = decl, true }
 }
 
 // WithSandbox confines every child [SafetyScissors.Command] starts to binds, narrowed
 // to a lease's write paths over the checkout at root (see [sandbox.New] and
 // [sandbox.LeaseBoundary]). The policy keeps sandbox's Required mode unless opts set
-// another, so New refuses a host that cannot confine a child.
+// another, so New refuses a host that cannot confine a child. An empty root is an
+// *[OptionError].
 func WithSandbox(root string, binds []sandbox.Bind, opts ...sandbox.Option) Option {
-	return func(c *config) error {
+	return func(c *Config) {
 		if root == "" {
-			return &OptionError{Option: "WithSandbox", Problem: "it names no checkout root"}
+			c.fail("WithSandbox", "it names no checkout root")
+			return
 		}
 		c.root, c.binds, c.sandboxOpts, c.withSandbox = root, binds, opts, true
-		return nil
 	}
 }

@@ -31,7 +31,7 @@ func (s *LeaseBoundarySuite) SetupTest() {
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		s.Require().NoError(os.MkdirAll(filepath.Join(s.root, filepath.FromSlash(dir)), 0o755))
 	}
-	base, err := New([]Bind{{Path: s.root, Mode: "rwx"}, {Path: s.outside}, {Path: "/dev/null", Mode: "rw"}})
+	base, err := New(Config{Binds: []Bind{{Path: s.root, Mode: "rwx"}, {Path: s.outside}, {Path: "/dev/null", Mode: "rw"}}})
 	s.Require().NoError(err)
 	s.base = base
 }

@@ -324,7 +324,7 @@ func (s *redGateSuite) SetupTest() {
 }
 
 func (s *redGateSuite) results(inv string, results ...session.TargetResult) {
-	w, err := session.Open(s.T().Context(), s.dir, inv, session.InvocationStart{Workspace: s.repo.Root()})
+	w, err := session.Open(s.T().Context(), sessions.StoreConfig(s.dir, inv, session.InvocationStart{Workspace: s.repo.Root()}))
 	s.Require().NoError(err)
 	for _, r := range results {
 		s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, r))

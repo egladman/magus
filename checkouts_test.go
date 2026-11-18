@@ -41,7 +41,7 @@ func recordSessionRun(t *testing.T, repoRoot, workspace, ref string) {
 	t.Helper()
 	dir, err := sessions.Dir(repoRoot)
 	require.NoError(t, err)
-	w, err := session.Open(t.Context(), dir, "inv"+strings.ToLower(strings.NewReplacer("/", "", "-", "").Replace(filepath.Base(workspace))), session.InvocationStart{Workspace: workspace})
+	w, err := session.Open(t.Context(), sessions.StoreConfig(dir, "inv"+strings.ToLower(strings.NewReplacer("/", "", "-", "").Replace(filepath.Base(workspace))), session.InvocationStart{Workspace: workspace}))
 	require.NoError(t, err)
 	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{Target: "lint", Project: ".", Outcome: session.OutcomeFail, Ref: ref}))
 }

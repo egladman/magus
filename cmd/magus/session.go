@@ -212,12 +212,12 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	}
 	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	guard.JoinServedNext(summary.Events, summary.Commands, hint.ReadServedNext(cacheDir))
-	result, err := session.LoadEvents(ctx, dir, summary.Events, session.InvocationStart{
+	result, err := session.LoadEvents(ctx, sessions.StoreConfig(dir, "", session.InvocationStart{
 		Origin:    localOrigin(ctx, jobtypes.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,
-	}, session.WithTie(sessions.AttentionTie()))
+	}), summary.Events, session.WithTie(sessions.AttentionTie()))
 	if err != nil {
 		return err
 	}

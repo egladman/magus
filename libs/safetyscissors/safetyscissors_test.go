@@ -27,12 +27,17 @@ func TestNew(t *testing.T) { suite.Run(t, new(NewSuite)) }
 
 func (s *NewSuite) SetupTest() { s.dir = s.T().TempDir() }
 
-func required() []Option {
-	return []Option{
-		WithInvocation("inv1", session.InvocationStart{Command: "test"}),
-		WithActor(func() job.Actor { return job.Actor{} }),
-		WithNotices(func(job.Notice) {}),
-		WithCheckSpec(keptChecks{}),
+// config is every required field, with a prune error failing the test.
+func (s *NewSuite) config() Config {
+	return Config{
+		Dir:         s.dir,
+		Invocation:  "inv1",
+		Start:       session.InvocationStart{Command: "test"},
+		Actor:       func() job.Actor { return job.Actor{} },
+		Notices:     func(job.Notice) {},
+		CheckSpec:   keptChecks{},
+		Retention:   session.DefaultRetention,
+		PruneErrors: func(_ context.Context, err error) { s.T().Errorf("prune: %v", err) },
 	}
 }
 
@@ -47,7 +52,7 @@ func (keptChecks) Equal(a, b job.Check) (bool, error) { return a.String() == b.S
 func (keptChecks) Render(c job.Check) (string, error) { return c.String(), nil }
 
 func (s *NewSuite) open(opts ...Option) *SafetyScissors {
-	ss, err := New(s.T().Context(), s.dir, append(required(), opts...)...)
+	ss, err := New(s.T().Context(), s.config(), opts...)
 	s.Require().NoError(err)
 	return ss
 }
@@ -86,25 +91,39 @@ func (s *NewSuite) optionProblems(err error) []string {
 	return named
 }
 
-func (s *NewSuite) TestNewNamesEveryMissingRequiredOptionAtOnce() {
-	_, err := New(s.T().Context(), s.dir)
-	s.Require().Error(err)
-	s.Equal([]string{"WithInvocation", "WithActor", "WithNotices", "WithCheckSpec"}, s.optionProblems(err))
+func (s *NewSuite) configProblems(err error) []string {
+	var named []string
+	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		if field, ok := errors.AsType[*ConfigError](e); ok {
+			named = append(named, field.Field)
+		}
+	}
+	return named
 }
 
-func (s *NewSuite) TestNewRefusesACheckSpecWithANilFunction() {
-	_, err := New(s.T().Context(), s.dir, append(required(), WithCheckSpec(nil))...)
+func (s *NewSuite) TestNewNamesEveryMissingRequiredFieldAtOnce() {
+	_, err := New(s.T().Context(), Config{Dir: s.dir, Invocation: "inv1"})
 	s.Require().Error(err)
-	s.Equal([]string{"WithCheckSpec"}, s.optionProblems(err))
+	s.Equal([]string{"Actor", "Notices", "CheckSpec", "Retention", "PruneErrors"}, s.configProblems(err))
+}
+
+func (s *NewSuite) TestNewRefusesEveryInvalidOptionAtOnce() {
+	_, err := New(s.T().Context(), s.config(), WithClock(nil), WithJobOptions(nil), WithDirs(Dirs{}), WithSandbox("", nil))
+	s.Require().Error(err)
+	s.Equal([]string{"WithClock", "WithJobOptions", "WithDirs", "WithSandbox"}, s.optionProblems(err))
 }
 
 func (s *NewSuite) TestNewRefusesAnEmptyDir() {
-	_, err := New(s.T().Context(), " ", required()...)
-	s.ErrorContains(err, "needs the directory the stores live in")
+	cfg := s.config()
+	cfg.Dir = " "
+	_, err := New(s.T().Context(), cfg)
+	s.Equal([]string{"Dir"}, s.configProblems(err))
 }
 
 func (s *NewSuite) TestNewRefusesAnInvalidInvocationID() {
-	_, err := New(s.T().Context(), s.dir, append(required(), WithInvocation("../x", session.InvocationStart{}))...)
+	cfg := s.config()
+	cfg.Invocation = "../x"
+	_, err := New(s.T().Context(), cfg)
 	_, ok := errors.AsType[*session.InvalidIDError](err)
 	s.True(ok, "got %v", err)
 }
@@ -125,7 +144,7 @@ func (s *NewSuite) TestWithDirsMovesOnlyTheFieldsItSets() {
 
 func (s *NewSuite) TestWithDirsRefusesJobsAndSessionsInOneDirectory() {
 	shared := s.T().TempDir()
-	_, err := New(s.T().Context(), s.dir, append(required(), WithDirs(Dirs{Jobs: shared, Sessions: shared}))...)
+	_, err := New(s.T().Context(), s.config(), WithDirs(Dirs{Jobs: shared, Sessions: shared}))
 	s.Equal([]string{"WithDirs"}, s.optionProblems(err))
 }
 
@@ -135,7 +154,7 @@ func (s *NewSuite) TestWithDirsRefusesEveryPairInOneDirectoryCleaned() {
 		{Activity: shared, Sessions: shared + "/"},
 		{Jobs: shared, Activity: shared + "/./"},
 	} {
-		_, err := New(s.T().Context(), s.dir, append(required(), WithDirs(d))...)
+		_, err := New(s.T().Context(), s.config(), WithDirs(d))
 		s.Equal([]string{"WithDirs"}, s.optionProblems(err), "%+v", d)
 	}
 }
@@ -168,7 +187,7 @@ func (s *NewSuite) TestASpawnWithNoTiersIsRefused() {
 }
 
 func (s *NewSuite) TestABudgetBelowOneIsRefused() {
-	_, err := New(s.T().Context(), s.dir, append(required(), WithSlots(0), WithMachine(0, 4))...)
+	_, err := New(s.T().Context(), s.config(), WithSlots(0), WithMachine(0, 4))
 	s.Equal([]string{"WithSlots", "WithMachine"}, s.optionProblems(err))
 }
 
@@ -182,7 +201,7 @@ func (s *NewSuite) TestConfiguredBudgetsAreReturned() {
 }
 
 func (s *NewSuite) TestARefusedTierDeclarationIsNewsError() {
-	_, err := New(s.T().Context(), s.dir, append(required(), WithTiers(tier.Declaration{Enum: "Tier"}))...)
+	_, err := New(s.T().Context(), s.config(), WithTiers(tier.Declaration{Enum: "Tier"}))
 	_, ok := errors.AsType[*tier.DeclarationError](err)
 	s.True(ok, "got %v", err)
 }
@@ -238,7 +257,7 @@ func (s *NewSuite) TestATierRecordedAtAnotherRankIsRefused() {
 
 func (s *NewSuite) TestARequiredSandboxOnAHostThatCannotConfineFailsNew() {
 	cannot := func() (int, error) { return 0, &sandbox.UnsupportedError{} }
-	_, err := New(s.T().Context(), s.dir, append(required(), WithSandbox(s.dir, nil, sandbox.WithKernelProbe(cannot)))...)
+	_, err := New(s.T().Context(), s.config(), WithSandbox(s.dir, nil, sandbox.WithKernelProbe(cannot)))
 	_, ok := errors.AsType[*sandbox.UnconfinedError](err)
 	s.True(ok, "got %v", err)
 }
@@ -283,12 +302,16 @@ func ExampleNew() {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	ss, err := New(ctx, dir,
-		WithInvocation("inv1", session.InvocationStart{Command: "example"}),
-		WithActor(func() job.Actor { return job.Actor{} }),
-		WithNotices(func(job.Notice) {}),
-		WithCheckSpec(keptChecks{}),
-	)
+	ss, err := New(ctx, Config{
+		Dir:         dir,
+		Invocation:  "inv1",
+		Start:       session.InvocationStart{Command: "example"},
+		Actor:       func() job.Actor { return job.Actor{} },
+		Notices:     func(job.Notice) {},
+		CheckSpec:   keptChecks{},
+		Retention:   session.DefaultRetention,
+		PruneErrors: func(_ context.Context, err error) { fmt.Println(err) },
+	})
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -25,20 +25,20 @@ func TestStoreSuite(t *testing.T) { suite.Run(t, new(StoreSuite)) }
 
 func (s *StoreSuite) SetupTest() { s.dir = s.T().TempDir() }
 
-func (s *StoreSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.dir, append(writable(), opts...)...)
+func (s *StoreSuite) open(opts ...Option) *Store {
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, append(writable(), opts...)...)
 	s.Require().NoError(err)
 	return st
 }
 
 // writable is opts with the seams every write needs: an unbound actor, a notice sink and
 // the tests' check spec.
-func writable(opts ...StoreOption) []StoreOption {
-	return append([]StoreOption{WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {}), testCheckSpec()}, opts...)
+func writable(opts ...Option) []Option {
+	return append([]Option{WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {}), testCheckSpec()}, opts...)
 }
 
 func (s *StoreSuite) TestAStoreWithNoActorRefusesAWrite() {
-	st, err := Open(s.dir, WithNotices(func(Notice) {}))
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, WithNotices(func(Notice) {}))
 	s.Require().NoError(err)
 
 	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
@@ -50,7 +50,7 @@ func (s *StoreSuite) TestAStoreWithNoActorRefusesAWrite() {
 }
 
 func (s *StoreSuite) TestAStoreWithNoNoticesRefusesAWrite() {
-	st, err := Open(s.dir, WithActor(func() Actor { return Actor{} }))
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, WithActor(func() Actor { return Actor{} }))
 	s.Require().NoError(err)
 
 	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
@@ -61,7 +61,7 @@ func (s *StoreSuite) TestAStoreWithNoNoticesRefusesAWrite() {
 }
 
 func (s *StoreSuite) TestAPinnedActorNeedsNoActorOption() {
-	st, err := Open(s.dir, WithNotices(func(Notice) {}), testCheckSpec())
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, WithNotices(func(Notice) {}), testCheckSpec())
 	s.Require().NoError(err)
 
 	_, err = st.As(Actor{}).Update(s.T().Context(), "a", func(*Job) {})
@@ -108,9 +108,24 @@ func (s *StoreSuite) TestACancelledReadStopsWaitingOnAnAppendInFlight() {
 }
 
 func (s *StoreSuite) TestOpenRefusesNoDirectory() {
-	_, err := Open(" ")
+	_, err := Open(s.T().Context(), Config{Dir: " "})
 
-	s.ErrorContains(err, "none was named")
+	refused, ok := errors.AsType[*ConfigError](err)
+	s.Require().True(ok, err)
+	s.Equal("Dir", refused.Field)
+}
+
+func (s *StoreSuite) TestOpenRefusesEveryNilOptionAtOnce() {
+	_, err := Open(s.T().Context(), Config{Dir: s.dir}, WithActor(nil), WithNotices(nil), WithRoot(""),
+		WithMigrations("safetyscissors.job/v1alpha2", nil), WithCredentialKinds(), WithVerifier(nil))
+
+	var refused []string
+	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		opt, ok := errors.AsType[*OptionError](e)
+		s.Require().True(ok, "%v is an OptionError", e)
+		refused = append(refused, opt.Option)
+	}
+	s.Equal([]string{"WithActor", "WithNotices", "WithRoot", "WithMigrations", "WithCredentialKinds", "WithVerifier"}, refused)
 }
 
 func (s *StoreSuite) TestAnUnopenedStoreFailsEveryOperation() {
@@ -193,23 +208,12 @@ func (s *StoreSuite) TestAFileAtANewerStoreVersionIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
 		[]byte(`{"api_version":"safetyscissors.job/v1alpha3","kind":"JobList"}`+"\n"), 0o600))
 
-	_, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", nil)).List(s.T().Context())
+	_, err := s.open().List(s.T().Context())
 
 	var newer *NewerWriterError
 	s.Require().ErrorAs(err, &newer)
 	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha3"), newer.Found)
-	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha2"), newer.Known)
-}
-
-func (s *StoreSuite) TestAFileAtAnOlderStoreVersionIsRefusedWithNoMigrations() {
-	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
-		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
-
-	_, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", nil)).List(s.T().Context())
-
-	var refused *RecordVersionError
-	s.Require().ErrorAs(err, &refused)
-	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha1"), refused.Got)
+	s.Equal(APIVersion, newer.Known)
 }
 
 func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
@@ -229,9 +233,10 @@ func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
 }
 
 func (s *StoreSuite) TestAStoreVersionThatDoesNotParseIsRefused() {
-	_, err := Open(s.dir, WithMigrations("v2", nil))
+	_, err := Open(s.T().Context(), Config{Dir: s.dir},
+		WithMigrations("v2", func(context.Context, string, apiversion.APIVersion, []codec.Line) error { return nil }))
 
-	s.Require().ErrorContains(err, `job: WithMigrations: api version "v2" is not`)
+	s.Require().ErrorContains(err, `job: option WithMigrations: api version "v2" is not`)
 }
 
 // A reader that saw the older file before the lock, and finds another writer migrated
@@ -240,7 +245,7 @@ func (s *StoreSuite) TestAMigrationReReadsTheFileUnderTheLock() {
 	path := filepath.Join(s.dir, jobsFileName)
 	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
 	migrated := 0
-	migrate := func(context.Context, string, int, []codec.Line) error {
+	migrate := func(context.Context, string, apiversion.APIVersion, []codec.Line) error {
 		migrated++
 		return nil
 	}
@@ -250,13 +255,13 @@ func (s *StoreSuite) TestAMigrationReReadsTheFileUnderTheLock() {
 		_ = codec.WithLock(s.T().Context(), path+".lock", time.Second, func() error {
 			close(held)
 			<-release
-			return os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
+			return os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha2","kind":"JobList"}`+"\n"), 0o600)
 		})
 	}()
 	<-held
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.open(WithMigrations(1, migrate)).List(s.T().Context())
+		_, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", migrate)).List(s.T().Context())
 		done <- err
 	}()
 	time.Sleep(50 * time.Millisecond)

@@ -173,7 +173,7 @@ func (s *GateScopeSuite) TestAProjectFailIsARedBranch() {
 }
 
 func (s *GateScopeSuite) TestAnEntryWithoutAScopeReadsAsProjectScope() {
-	w, err := session.Open(s.T().Context(), s.dir, NewID(), s.start)
+	w, err := session.Open(s.T().Context(), StoreConfig(s.dir, NewID(), s.start))
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindGateResult, map[string]string{"target": "ci", "ref": "b", "commit": "c1", "outcome": session.OutcomePass}))
 
@@ -212,7 +212,7 @@ func (s *FailuresOwedSuite) SetupTest() { s.dir = s.T().TempDir() }
 // results files one invocation's target results, then waits out the millisecond so the
 // next record sorts after them.
 func (s *FailuresOwedSuite) results(inv string, results ...session.TargetResult) {
-	w, err := session.Open(s.T().Context(), s.dir, inv, session.InvocationStart{Workspace: "/repo"})
+	w, err := session.Open(s.T().Context(), StoreConfig(s.dir, inv, session.InvocationStart{Workspace: "/repo"}))
 	s.Require().NoError(err)
 	for _, r := range results {
 		s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, r))

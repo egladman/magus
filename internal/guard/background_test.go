@@ -122,7 +122,7 @@ func recordRun(t *testing.T, root, project, target string, took time.Duration) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	w, err := session.Open(t.Context(), dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)), session.InvocationStart{Command: "run"})
+	w, err := session.Open(t.Context(), sessions.StoreConfig(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)), session.InvocationStart{Command: "run"}))
 	require.NoError(t, err)
 	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{
 		Target: target, Project: project, Outcome: session.OutcomePass, DurationMs: took.Milliseconds(),
@@ -245,8 +245,8 @@ func (s *NarrowedRunPriceSuite) SetupTest() {
 func (s *NarrowedRunPriceSuite) recordNarrowed(took time.Duration) {
 	dir, err := sessions.Dir(s.root)
 	s.Require().NoError(err)
-	w, err := session.Open(s.T().Context(), dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
-		session.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"})
+	w, err := session.Open(s.T().Context(), sessions.StoreConfig(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
+		session.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"}))
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, session.TargetResult{
 		Target: "diagrams-generate", Project: "docs", Outcome: session.OutcomePass, DurationMs: took.Milliseconds(),

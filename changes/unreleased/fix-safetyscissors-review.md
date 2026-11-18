@@ -29,6 +29,22 @@
   `JSONLConfig` and options, and its fields are unexported. An empty `Path`, a zero `Perm`
   (it meant 0644) or a nil `Key` is a `*JSONLConfigError`, a nil option value an
   `*OptionError`; the zero `JSONL` is refused by `Load` and `Update`, where it panicked.
+- **Breaking for SDK callers: `session.Open` and `session.LoadEvents` take a `Config`.**
+  `Retention` and `PruneErrors` are required: opening prunes at `Retention`, where it used
+  `DefaultRetention`, and hands each prune, lock or stamp error to `PruneErrors`, where it
+  dropped them. A missing field is a `*session.ConfigError`, a nil option an
+  `*OptionError`.
+- **Breaking for SDK callers: `job.Open` takes a context and a `Config`.** `StoreOption` is
+  `job.Option`, and every `With` option refuses a nil or empty value with a
+  `*job.OptionError`, where it was stored; `CheckSpecError` is gone. An empty `Dir` is a
+  `*job.ConfigError`.
+- **Breaking for SDK callers: `sandbox.New` takes a `Config`.** Binds move to
+  `Config.Binds`. A nil function, an empty lease id or an unknown mode is a
+  `*sandbox.OptionError`, where it was stored.
+- **Breaking for SDK callers: `safetyscissors.New` takes a `Config`.** `WithInvocation`,
+  `WithActor`, `WithNotices` and `WithCheckSpec` are `Config` fields, joined by the
+  required `Retention` and `PruneErrors`; a missing one is a `*ConfigError`.
+  `WithJobOptions` takes `job.Option`.
 - **`safetyscissors.New` refuses any two stores in one directory.** Jobs, Sessions and
   Activity are compared pairwise after `filepath.Clean`, where only Jobs and Sessions
   were compared, as written.

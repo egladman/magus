@@ -18,7 +18,7 @@ type StoreGrantsSuite struct {
 func TestStoreGrantsSuite(t *testing.T) { suite.Run(t, new(StoreGrantsSuite)) }
 
 func (s *StoreGrantsSuite) SetupTest() {
-	st, err := Open(s.T().TempDir(), writable(WithOrigin(func(context.Context) Origin { return Origin{User: "eli"} }))...)
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, writable(WithOrigin(func(context.Context) Origin { return Origin{User: "eli"} }))...)
 	s.Require().NoError(err)
 	s.store = st
 	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.State = StateRunning })

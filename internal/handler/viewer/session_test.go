@@ -30,7 +30,7 @@ func serveSessions(t *testing.T, events []session.LoadEvent) viewerv1alpha1conne
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = session.LoadEvents(t.Context(), dir, events, session.InvocationStart{Workspace: root, Command: "test"})
+	_, err = session.LoadEvents(t.Context(), sessions.StoreConfig(dir, "", session.InvocationStart{Workspace: root, Command: "test"}), events)
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()

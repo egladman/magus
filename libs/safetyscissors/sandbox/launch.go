@@ -62,16 +62,17 @@ func Command(ctx context.Context, p *Policy, name string, args ...string) (*exec
 // process was started by Command. Then it confines itself and execs the requested
 // command and never returns, except with the error that kept it from doing either; the
 // caller then exits without running the command (126 is the shell's "found but could
-// not execute"). An empty launcher name is an [*OptionError], not handled.
+// not execute"). Each option refused, such as an empty launcher name, is an
+// [*OptionError], joined, and not handled.
 func Relaunch(args []string, opts ...Option) (handled bool, err error) {
-	p := &Policy{launcher: defaultLauncherName}
+	var c Config
 	for _, o := range opts {
-		o(p)
+		o(&c)
 	}
-	if p.launcher == "" {
-		return false, &OptionError{Option: "WithLauncherName", Problem: "the name is empty"}
+	if err := errors.Join(c.errs...); err != nil {
+		return false, err
 	}
-	if len(args) == 0 || args[0] != p.launcher {
+	if len(args) == 0 || args[0] != c.launcherName() {
 		return false, nil
 	}
 	return true, launch(args[1:])

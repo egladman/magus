@@ -24,8 +24,8 @@ type StoreUnixSuite struct {
 func TestStoreUnixSuite(t *testing.T) { suite.Run(t, new(StoreUnixSuite)) }
 
 // open is a store whose releases digest root.
-func (s *StoreUnixSuite) open(root string, opts ...StoreOption) *Store {
-	st, err := Open(s.T().TempDir(), append(writable(WithRoot(root)), opts...)...)
+func (s *StoreUnixSuite) open(root string, opts ...Option) *Store {
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, append(writable(WithRoot(root)), opts...)...)
 	s.Require().NoError(err)
 	return st
 }

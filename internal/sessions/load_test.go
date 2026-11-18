@@ -40,7 +40,7 @@ func loadStream(t *testing.T, root string, lines ...string) (LoadSummary, error)
 	if err != nil {
 		return summary, err
 	}
-	result, err := session.LoadEvents(t.Context(), dir, summary.Events, session.InvocationStart{Workspace: root, Command: "session load"})
+	result, err := session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{Workspace: root, Command: "session load"}), summary.Events)
 	require.NoError(t, err)
 	summary.Loaded, summary.Deduped, summary.Store = result.Loaded, result.Deduped, dir
 	summary.ByKind = result.ByKind

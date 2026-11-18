@@ -38,7 +38,7 @@ func contactStore(t *testing.T, events ...contact) string {
 			AtMs: e.atMs, Text: e.path, Denied: e.denied,
 		}})
 	}
-	_, err := session.LoadEvents(t.Context(), dir, loaded, session.InvocationStart{Workspace: t.TempDir(), Command: "test"})
+	_, err := session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{Workspace: t.TempDir(), Command: "test"}), loaded)
 	require.NoError(t, err)
 	return dir
 }

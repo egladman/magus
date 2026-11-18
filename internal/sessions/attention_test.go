@@ -243,7 +243,7 @@ func (s *AttentionSuite) TestAttentionRoundTripsThroughTheStore() {
 	}
 	block.Request = RequestID("agent1", block)
 
-	agent, err := session.Open(t.Context(), dir, "agent1", session.InvocationStart{Workspace: "/repo", Command: "notify"})
+	agent, err := session.Open(t.Context(), StoreConfig(dir, "agent1", session.InvocationStart{Workspace: "/repo", Command: "notify"}))
 	require.NoError(t, err)
 	require.NoError(t, agent.Append(t.Context(), KindAttentionOpen, block))
 
@@ -254,7 +254,7 @@ func (s *AttentionSuite) TestAttentionRoundTripsThroughTheStore() {
 	assert.Equal(t, block.Request, open[0].ID)
 	assert.Equal(t, "permission", open[0].Outcome)
 
-	human, err := session.Open(t.Context(), dir, "human1", session.InvocationStart{Workspace: "/repo", Command: "attention dispose"})
+	human, err := session.Open(t.Context(), StoreConfig(dir, "human1", session.InvocationStart{Workspace: "/repo", Command: "attention dispose"}))
 	require.NoError(t, err)
 	require.NoError(t, human.Append(t.Context(), KindAttentionDispose, AttentionDispose{Request: block.Request, Note: "pushed it myself"}))
 

@@ -91,7 +91,10 @@ func newConfinement(p *Policy) (*scissors.Policy, error) {
 		}
 		binds = append(binds, scissors.Bind{Path: r.Path, Mode: mode, Create: r.Create})
 	}
-	opts := []scissors.Option{scissors.WithLease(p.Lease, p.LeaseFrom), scissors.WithLauncherName(launcherName)}
+	opts := []scissors.Option{scissors.WithLauncherName(launcherName)}
+	if p.Lease != "" {
+		opts = append(opts, scissors.WithLease(p.Lease, p.LeaseFrom))
+	}
 	switch p.Mode.Resolved() {
 	case types.SandboxModeRequired:
 	case types.SandboxModeBestEffort, types.SandboxModeOff:
@@ -102,7 +105,7 @@ func newConfinement(p *Policy) (*scissors.Policy, error) {
 	if p.probe != nil {
 		opts = append(opts, scissors.WithKernelProbe(p.probe))
 	}
-	return scissors.New(binds, opts...)
+	return scissors.New(scissors.Config{Binds: binds}, opts...)
 }
 
 // warnUnconfined says that a best-effort child runs without the kernel layer, and why.

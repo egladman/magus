@@ -7,8 +7,8 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
-// OptionError is [New]'s refusal of an option it was passed, or of a required one it
-// was not. New reports every refusal at once, joined.
+// OptionError is [New]'s refusal of an option it was passed. New reports every refusal
+// at once, joined.
 type OptionError struct {
 	// Option is the option's name, such as "WithSlots".
 	Option string
@@ -18,6 +18,18 @@ type OptionError struct {
 
 func (e *OptionError) Error() string {
 	return fmt.Sprintf("safetyscissors: option %s: %s", e.Option, e.Problem)
+}
+
+// ConfigError is a required [Config] field [New] cannot open the harness from.
+type ConfigError struct {
+	// Field is the field's name, such as "Actor".
+	Field string
+	// Problem says what is wrong with it.
+	Problem string
+}
+
+func (e *ConfigError) Error() string {
+	return fmt.Sprintf("safetyscissors: config %s: %s", e.Field, e.Problem)
 }
 
 // UnconfiguredError is a call that needs a part [New] was not given. It names the

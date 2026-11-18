@@ -21,7 +21,7 @@ func TestHints(t *testing.T) { suite.Run(t, new(HintsSuite)) }
 func loadedStore(t *testing.T, events []session.LoadEvent) session.Fold {
 	t.Helper()
 	dir := t.TempDir()
-	_, err := session.LoadEvents(t.Context(), dir, events, session.InvocationStart{Workspace: dir})
+	_, err := session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{Workspace: dir}), events)
 	require.NoError(t, err)
 	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
@@ -121,14 +121,14 @@ func (s *HintsSuite) TestHintUptakeRecoversIDsOnASecondLoad() {
 		shellCall("s1", "a1", 1_000, "", nil, nil),
 		shellCall("s1", "a2", 2_000, "", nil, nil),
 	}
-	_, err := session.LoadEvents(t.Context(), dir, early, session.InvocationStart{Workspace: dir})
+	_, err := session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{Workspace: dir}), early)
 	require.NoError(t, err)
 
 	joined := []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"query-explain"}, nil),
 		shellCall("s1", "a2", 2_000, "", nil, []string{"query-explain"}),
 	}
-	_, err = session.LoadEvents(t.Context(), dir, joined, session.InvocationStart{Workspace: dir})
+	_, err = session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{Workspace: dir}), joined)
 	require.NoError(t, err)
 
 	fold, err := session.ReadAll(t.Context(), dir)

@@ -228,13 +228,13 @@ func (s *TouchesSuite) TestReplayOnAnEmptyTrailIsEmptyNotAnError() {
 func (s *TouchesSuite) TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed() {
 	t := s.T()
 	dir := t.TempDir()
-	_, err := session.LoadEvents(t.Context(), dir, []session.LoadEvent{
+	_, err := session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{}), []session.LoadEvent{
 		// Handed out of order: the host clock is what sequences them.
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
-	}, session.InvocationStart{})
+	})
 	require.NoError(t, err)
 	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
@@ -262,11 +262,11 @@ func (s *TouchesSuite) TestAttachTouchesMergesTheTrailAndTheLoadedStore() {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{
+	_, err = session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{}), []session.LoadEvent{
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
 		{Session: "s2", Event: session.AgentEvent{Host: "codex", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
-	}, session.InvocationStart{})
+	})
 	require.NoError(t, err)
 
 	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}, {Path: "untouched.go"}}}

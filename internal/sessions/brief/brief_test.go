@@ -723,7 +723,7 @@ func fileResult(t *testing.T, root string, start session.InvocationStart, inv st
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	w, err := session.Open(t.Context(), dir, inv, start, session.WithTie(sessions.AttentionTie()))
+	w, err := session.Open(t.Context(), sessions.StoreConfig(dir, inv, start), session.WithTie(sessions.AttentionTie()))
 	require.NoError(t, err)
 	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, r))
 }

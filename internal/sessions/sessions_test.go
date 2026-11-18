@@ -39,7 +39,7 @@ func TestMessageBound(t *testing.T) { suite.Run(t, new(MessageBoundSuite)) }
 func (s *MessageBoundSuite) TestAppendBoundsAnOversizedAttentionMessage() {
 	dir := s.T().TempDir()
 
-	w, err := session.Open(s.T().Context(), dir, "sess1", session.InvocationStart{})
+	w, err := session.Open(s.T().Context(), StoreConfig(dir, "sess1", session.InvocationStart{}))
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindAttentionOpen, AttentionOpen{
 		Request: "att-1",

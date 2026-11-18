@@ -251,7 +251,7 @@ func (m treeMover) Write(p []byte) (int, error) {
 }
 
 func (s *WitnessSuite) TestAStoreWithNoCheckCommandRefuses() {
-	st, err := Open(s.dir, writable(WithTree(s.store.tree))...)
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, writable(WithTree(s.store.tree))...)
 	s.Require().NoError(err)
 
 	_, err = st.Witness(s.T().Context(), "j1", "tests", s.command())

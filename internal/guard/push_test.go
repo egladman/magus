@@ -724,7 +724,7 @@ func (s *GateScopeSuite) TestAPreScopeVerdictSaysItReadsAsProjectScope() {
 	root := s.T().TempDir()
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
-	w, err := session.Open(withSecrets(s.T().Context()), dir, sessions.NewID(), session.InvocationStart{Workspace: root})
+	w, err := session.Open(withSecrets(s.T().Context()), sessions.StoreConfig(dir, sessions.NewID(), session.InvocationStart{Workspace: root}))
 	s.Require().NoError(err)
 	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
 	s.Require().NoError(w.Append(withSecrets(s.T().Context()), sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": session.OutcomePass}))

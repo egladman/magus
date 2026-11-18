@@ -225,8 +225,7 @@ func (s *Store) open() *Store {
 		s.Store = job.Unopened(s.err)
 		return s
 	}
-	opened, err := job.Open(filepath.Dir(s.path),
-		job.WithRoot(s.root),
+	opts := []job.Option{
 		job.WithActor(s.Actor),
 		job.WithOrigin(func(ctx context.Context) job.Origin { return recorder.StampOrigin(ctx, job.Origin{}) }),
 		job.WithDenials(s.holderDenials),
@@ -243,7 +242,11 @@ func (s *Store) open() *Store {
 		job.WithErrorWrap(diagnose),
 		job.WithTree(s.CheckoutToken),
 		job.WithCheckCommand(s.checkCommand),
-	)
+	}
+	if s.root != "" {
+		opts = append(opts, job.WithRoot(s.root))
+	}
+	opened, err := job.Open(context.Background(), job.Config{Dir: filepath.Dir(s.path)}, opts...)
 	if err != nil {
 		s.Store = job.Unopened(err)
 		return s

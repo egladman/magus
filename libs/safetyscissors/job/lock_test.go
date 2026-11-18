@@ -21,9 +21,9 @@ func TestLockSuite(t *testing.T) { suite.Run(t, new(LockSuite)) }
 // the error can find it rather than guess which of a dozen processes is stuck.
 func (s *LockSuite) TestALockWaitNamesTheHolder() {
 	dir := s.T().TempDir()
-	holder, err := Open(dir, writable()...)
+	holder, err := Open(s.T().Context(), Config{Dir: dir}, writable()...)
 	s.Require().NoError(err)
-	waiter, err := Open(dir, writable()...)
+	waiter, err := Open(s.T().Context(), Config{Dir: dir}, writable()...)
 	s.Require().NoError(err)
 	taken, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error)

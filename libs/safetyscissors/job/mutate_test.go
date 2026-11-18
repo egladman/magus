@@ -14,8 +14,8 @@ type MutateSuite struct {
 
 func TestMutateSuite(t *testing.T) { suite.Run(t, new(MutateSuite)) }
 
-func (s *MutateSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.T().TempDir(), append(writable(), opts...)...)
+func (s *MutateSuite) open(opts ...Option) *Store {
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, append(writable(), opts...)...)
 	s.Require().NoError(err)
 	return st
 }
