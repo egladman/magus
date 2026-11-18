@@ -486,7 +486,7 @@ func (s *AttentionSuite) TestResolveRequestIDSeesDisposedRequests() {
 	assert.ErrorAs(t, err, &disposed, "a prefix that resolves to a closed request reports the closure")
 }
 
-func (s *AttentionSuite) TestResolveRequestIDReportsNothingMatchedAsErrNoRequest() {
+func (s *AttentionSuite) TestResolveRequestIDReportsNothingMatchedAsNoRequest() {
 	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{attRecord(t, "s1", 1, 10, KindAttentionOpen, openPayload("att-abc", "one"))}}

@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/std"
@@ -199,7 +200,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 		cacheDir = opts.Magus.CacheDir()
 	}
 	if err := recorder.RotateCalls(context.Background(), cacheDir); err != nil {
-		log.Warn("the activity log was not rotated at start; the rotate-activities job tries again", slog.String("error", err.Error()))
+		log.Warn("the activity log was not rotated at start; the rotate-activities job tries again", attr.Error(err))
 	}
 	registerTools(srv, opts, log, originFn, cacheDir, tasks)
 	return srv

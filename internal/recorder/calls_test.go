@@ -219,7 +219,7 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheToolRan() {
 
 // A hook row names the magus that judged the call and the directory the host reported, and
 // leaves both off when the producer did not know them.
-func (s *CallsSuite) TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd() {
+func (s *CallsSuite) TestAppendAgentCommand_RecordsTheJudgingBinaryAndDirectory() {
 	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
