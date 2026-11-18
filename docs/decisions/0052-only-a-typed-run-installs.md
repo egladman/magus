@@ -145,7 +145,7 @@ refuses a cold tree unless it carries an `:install` charm.
 
 ### Install in CI only
 
-A workflow step runs `magus run install /`, or the affected projects, ahead of each shard,
+A workflow step runs `magus run install --all`, or the affected projects, ahead of each shard,
 as the bootstrap does locally (`hack/dev/bootstrap-checkout.buzz`).
 
 - Why it lost: an unscoped graph read freshens every project, affected or not, and the

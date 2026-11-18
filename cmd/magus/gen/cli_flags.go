@@ -562,6 +562,8 @@ const (
 	FlagRefsSource = "source"
 	// refs: --text
 	FlagRefsText = "text"
+	// run: --all
+	FlagRunAll = "all"
 	// run: --cache
 	FlagRunCache = "cache"
 	// run: --default-charms
@@ -856,6 +858,7 @@ func BindWhere(fs *flag.FlagSet) *WhereFlags {
 // It does NOT carry --skip: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type RunFlags struct {
+	All             bool          // --[no-]all
 	Graph           bool          // --[no-]graph
 	Upstream        bool          // --[no-]upstream
 	Depth           int           // --depth
@@ -876,6 +879,8 @@ type RunFlags struct {
 // BindRun registers `magus run`'s flags on fs and returns the destination.
 func BindRun(fs *flag.FlagSet) *RunFlags {
 	var f RunFlags
+	fs.BoolVar(&f.All, FlagRunAll, false, "Select every project in the workspace, wherever the current directory is; takes no project arguments")
+	command.NegatedBoolVar(fs, &f.All, FlagRunAll)
 	fs.BoolVar(&f.Graph, FlagRunGraph, false, "Render the dependency graph for the selected scope instead of executing")
 	command.NegatedBoolVar(fs, &f.Graph, FlagRunGraph)
 	fs.BoolVar(&f.Upstream, FlagRunUpstream, false, "With --graph: show dependents instead of dependencies")

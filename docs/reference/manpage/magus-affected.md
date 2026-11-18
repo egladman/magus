@@ -25,6 +25,10 @@ short-circuits and falls back to the full project set with the source label
 A project is affected if any of its source files changed directly, or if a
 project it depends on is affected (transitive closure over the dependency graph).
 
+affected takes no project arguments, . and / included: the diff decides the set,
+and a named project would shrink the gate the diff sized. To pick the projects,
+run magus run \<target\> \<projects\>.
+
 Use --stdin to read changed paths from a pipe instead of running a VCS diff.
 This pairs with magus watch for continuous-build workflows:
 
