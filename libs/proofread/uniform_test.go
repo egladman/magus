@@ -19,7 +19,7 @@ func TestUniformShipsOff(t *testing.T) {
 // unevenVoice is an author whose change descriptions vary their items and
 // openers.
 func unevenVoice() *Voice {
-	return &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	return &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Ranges: map[Feature]Range{
 			"item_words_sd":        {P5: 3, P95: 12, Windows: 9},
 			"item_opener_share":    {P5: 0.2, P95: 0.5, Windows: 9},
@@ -75,7 +75,7 @@ func TestUniformLeavesATextAsUnevenAsItsAuthor(t *testing.T) {
 }
 
 func TestUniformLeavesAnAuthorWhoWritesEvenly(t *testing.T) {
-	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	v := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Ranges: map[Feature]Range{
 			"item_words_sd":        {P5: 0, P95: 2, Windows: 9},
 			"item_opener_share":    {P5: 0.8, P95: 1, Windows: 9},

@@ -388,9 +388,9 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 		t.Errorf("review-reply with no voice = %s, want no finding", stdout)
 	}
 
-	bad := writeFile(t, dir, "bad.json", `{"schema":"other"}`)
+	bad := writeFile(t, dir, "bad.json", `{"api_version":"other"}`)
 	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", bad); code != exitError ||
-		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread.voice/v1alpha1\n" {
+		stderr != "proofread: voice "+bad+": api_version \"other\" is not proofread.voice/v1alpha1\n" {
 		t.Errorf("a bad voice file: code %d stderr %q", code, stderr)
 	}
 
