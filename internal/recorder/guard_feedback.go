@@ -215,7 +215,22 @@ func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, e
 	}
 }
 
+// isMagusRunRequest reports a `magus run` under every spelling
+// parseConsultation reads: leading assignments, `./magus` or an absolute
+// path, and flags before the verb.
 func isMagusRunRequest(command string) bool {
 	fields := strings.Fields(command)
-	return len(fields) >= 2 && fields[0] == "magus" && fields[1] == "run"
+	i := 0
+	for i < len(fields) && isEnvAssignment(fields[i]) {
+		i++
+	}
+	if i == len(fields) || !isMagusProgram(fields[i]) {
+		return false
+	}
+	for i++; i < len(fields) && strings.HasPrefix(fields[i], "-"); i++ {
+		if consultValueFlags[fields[i]] {
+			i++
+		}
+	}
+	return i < len(fields) && fields[i] == "run"
 }

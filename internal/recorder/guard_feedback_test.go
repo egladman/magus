@@ -153,6 +153,15 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 	assert.False(t, known)
 }
 
+func TestIsMagusRunRequestReadsEverySpelling(t *testing.T) {
+	for _, cmd := range []string{"magus run test .", "./magus run test .", "/usr/local/bin/magus run ci", "MAGUS_X=1 ./magus -s run ci", "./magus --root /repo run ci"} {
+		assert.True(t, isMagusRunRequest(cmd), cmd)
+	}
+	for _, cmd := range []string{"magus query x", "./magus", "go run .", "magus --root run", ""} {
+		assert.False(t, isMagusRunRequest(cmd), cmd)
+	}
+}
+
 func recordFeedbackCommand(t *testing.T, base, host, session, command string) {
 	t.Helper()
 	AppendAgentCommand(context.Background(), base, AgentCommand{
