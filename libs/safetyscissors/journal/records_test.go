@@ -139,6 +139,16 @@ func (s *RecordsSuite) TestReadInvocationReadsTheHeadAndTheTail() {
 	}, inv)
 }
 
+func (s *RecordsSuite) TestAFirstLineOverTheTailWindowStillReadsTheFinish() {
+	started := NewRecord(time.UnixMilli(10), "inv1", Started{Command: Command{Arguments: []string{strings.Repeat("a", tailWindow)}}})
+	finished := NewRecord(time.UnixMilli(90), "inv1", Finished{Status: StatusPass})
+	s.write("inv1", s.line(started)+"\n"+s.line(finished)+"\n")
+	inv, err := ReadInvocation(s.T().Context(), s.dir, "inv1")
+	s.Require().NoError(err)
+	s.Equal(time.UnixMilli(10), inv.Started)
+	s.Equal(StatusPass, inv.Status)
+}
+
 func (s *RecordsSuite) TestAnInterruptedInvocationEndsAtItsLastRecord() {
 	s.write("inv1", s.line(s.output(1, "a"))+"\n"+s.line(s.output(7, "b"))+"\n")
 	inv, err := ReadInvocation(s.T().Context(), s.dir, "inv1")

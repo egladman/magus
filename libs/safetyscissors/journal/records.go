@@ -155,8 +155,8 @@ func RecordsSince(ctx context.Context, dir, id string, offset int64) (records it
 }
 
 // ReadInvocation returns the invocation whose journal dir holds for id. It
-// reads the journal's first line and its last complete one, never the whole
-// file.
+// reads the journal's first line, whatever its length, and its last complete
+// one within the final tailWindow bytes, never the whole file.
 func ReadInvocation(ctx context.Context, dir, id string) (Invocation, error) {
 	if err := ctx.Err(); err != nil {
 		return Invocation{}, err
@@ -167,11 +167,13 @@ func ReadInvocation(ctx context.Context, dir, id string) (Invocation, error) {
 	}
 	defer func() { _ = f.Close() }()
 	inv := Invocation{ID: id}
-	head, err := bufio.NewReader(io.LimitReader(f, tailWindow)).ReadBytes('\n')
+	// The first line is read whole: a Started record carries the argv, which
+	// has no bound.
+	head, err := bufio.NewReader(f).ReadBytes('\n')
+	if errors.Is(err, io.EOF) {
+		return inv, nil
+	}
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return inv, nil
-		}
 		return Invocation{}, fmt.Errorf("journal: read %s: %w", path, err)
 	}
 	var first Record
