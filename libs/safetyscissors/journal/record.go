@@ -171,6 +171,10 @@ func NewRecord[B Body](at time.Time, invocation string, body B) Record {
 	case Secret:
 		r.line.Kind = KindSecret
 		r.line.Project, r.line.Target, r.line.Text = b.Project, b.Target, b.Text
+	default:
+		// Unreachable while Body lists one case per type above; the zero
+		// Record it gives is one MarshalJSON refuses.
+		return Record{}
 	}
 	return r
 }
