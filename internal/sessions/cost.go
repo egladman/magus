@@ -90,8 +90,8 @@ type rootContext struct {
 // delegableShare is the part of the main thread's tool-result characters that came from
 // work a subagent could have done in its place. ByClass counts characters.
 type delegableShare struct {
-	Chars   chars                  `json:"chars"`
-	Total   chars                  `json:"total"`
+	Chars   chars         `json:"chars"`
+	Total   chars         `json:"total"`
 	ByClass []CountedName `json:"by_class,omitempty"`
 }
 
@@ -105,7 +105,7 @@ func (d delegableShare) Share() float64 {
 
 // spawnTally counts the session's spawns by the model each declared, "" for none.
 type spawnTally struct {
-	Total   int                    `json:"total"`
+	Total   int           `json:"total"`
 	ByModel []CountedName `json:"by_model,omitempty"`
 }
 

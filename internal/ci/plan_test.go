@@ -38,33 +38,33 @@ func add(c *FailedResults, run journal.Run) {
 
 func (s *FailedResultsSuite) TestClearedFailureIsNotPrinted() {
 	c := &FailedResults{}
-	add(c,resultEvent(".", "tidy", journal.StatusFail))
-	add(c,resultEvent("docs", "lint", journal.StatusFail))
-	add(c,resultEvent(".", "tidy", journal.StatusPass))
+	add(c, resultEvent(".", "tidy", journal.StatusFail))
+	add(c, resultEvent("docs", "lint", journal.StatusFail))
+	add(c, resultEvent(".", "tidy", journal.StatusPass))
 
 	s.Equal([]journal.Run{resultEvent("docs", "lint", journal.StatusFail)}, c.List())
 }
 
 func (s *FailedResultsSuite) TestCachedPassClearsAFailure() {
 	c := &FailedResults{}
-	add(c,resultEvent(".", "tidy", journal.StatusFail))
-	add(c,resultEvent(".", "tidy", journal.StatusCached))
+	add(c, resultEvent(".", "tidy", journal.StatusFail))
+	add(c, resultEvent(".", "tidy", journal.StatusCached))
 
 	s.Empty(c.List())
 }
 
 func (s *FailedResultsSuite) TestAFailureInEveryPassIsPrintedOnce() {
 	c := &FailedResults{}
-	add(c,resultEvent(".", "broken", journal.StatusFail))
-	add(c,resultEvent(".", "broken", journal.StatusFail))
+	add(c, resultEvent(".", "broken", journal.StatusFail))
+	add(c, resultEvent(".", "broken", journal.StatusFail))
 
 	s.Equal([]journal.Run{resultEvent(".", "broken", journal.StatusFail)}, c.List())
 }
 
 func (s *FailedResultsSuite) TestFailureAfterAPassIsKept() {
 	c := &FailedResults{}
-	add(c,resultEvent(".", "tidy", journal.StatusPass))
-	add(c,resultEvent(".", "tidy", journal.StatusFail))
+	add(c, resultEvent(".", "tidy", journal.StatusPass))
+	add(c, resultEvent(".", "tidy", journal.StatusFail))
 
 	s.Equal([]journal.Run{resultEvent(".", "tidy", journal.StatusFail)}, c.List())
 }

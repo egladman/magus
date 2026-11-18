@@ -993,7 +993,7 @@ func newRecorder(watch ...string) *watchedWriter {
 	return r
 }
 
-func (r *watchedWriter)Write(p []byte) (int, error) {
+func (r *watchedWriter) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.buf.Write(p)
@@ -1004,7 +1004,7 @@ func (r *watchedWriter)Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (r *watchedWriter)String() string {
+func (r *watchedWriter) String() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.buf.String()

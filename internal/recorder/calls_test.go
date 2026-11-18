@@ -81,9 +81,9 @@ func seedEvents(t *testing.T, base string, n int) []journal.Call {
 
 func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	dir := t.TempDir()
-	AppendCall(t.Context(),dir, journal.Call{Time: atMs(1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
-	AppendCall(t.Context(),dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
-	AppendCall(t.Context(),dir, journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
+	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+	AppendCall(t.Context(), dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
+	AppendCall(t.Context(), dir, journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
 
 	events, err := recentCalls(t.Context(), dir, 10)
 	if err != nil {
@@ -104,7 +104,7 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 func TestTrailIsPrivateToItsOwner(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	for i := range 3 {
-		AppendCall(t.Context(),dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
 	}
 	ref := WritePayload(t.Context(), dir, "mcp", []byte("a payload")).Ref
 	require.NotEmpty(t, ref)
@@ -121,7 +121,7 @@ func TestTrailIsPrivateToItsOwner(t *testing.T) {
 }
 
 func TestAppend_EmptyBaseIsNoop(t *testing.T) {
-	AppendCall(t.Context(),"", journal.Call{Name: "x"}) // must not panic or create anything
+	AppendCall(t.Context(), "", journal.Call{Name: "x"}) // must not panic or create anything
 }
 
 func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
@@ -611,7 +611,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 		response := WritePayload(t.Context(), dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
 		ref := response.Ref
 		refs = append(refs, ref)
-		AppendCall(t.Context(),dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: string(rune('a' + i - 1)), Response: response})
+		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: string(rune('a' + i - 1)), Response: response})
 		// Past blobGraceWindow, so this test exercises real orphan collection rather
 		// than the grace-window protection covered by TestGCBlobs_ProtectsPendingBlob.
 		backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
@@ -708,7 +708,7 @@ func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 
 func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
-	AppendCall(t.Context(),dir, journal.Call{Time: atMs(1),Name: "a"})
+	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
 	rotate(dir, 10) // under cap: no rewrite
 	if evs, _ := recentCalls(t.Context(), dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
@@ -719,7 +719,7 @@ func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 3; i++ {
-		AppendCall(t.Context(),dir, journal.Call{Time: atMs(int64(i)),Kind: journal.CallKindJob, Name: "x"})
+		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindJob, Name: "x"})
 	}
 	RotateCalls(dir) // maxEvents is 10000, so this is a no-op that must not lose events
 	if evs, _ := recentCalls(t.Context(), dir, 10); len(evs) != 3 {
@@ -740,8 +740,8 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
 	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
-	require.Equal(t, journal.Call{Time: atMs(int64(maxEvents + 5)),Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[0])
-	require.Equal(t, journal.Call{Time: atMs(6),Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[len(got)-1])
+	require.Equal(t, journal.Call{Time: atMs(int64(maxEvents + 5)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[0])
+	require.Equal(t, journal.Call{Time: atMs(6), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[len(got)-1])
 }
 
 // A blob is a whole tool payload, so it stays private to its owner.
@@ -786,7 +786,7 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 // ever skipped while over cap.
 func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	dir := t.TempDir()
-	AppendCall(t.Context(),dir, journal.Call{Time: atMs(1),Name: "a"})
+	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
 
 	info, err := os.Stat(eventsPath(dir))
 	require.NoError(t, err)
@@ -816,7 +816,7 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	var lines []string
 	line := func(kind journal.CallKind, ts int) string {
-		b, err := codec.Marshal(journal.Call{Time: atMs(int64(ts)),Kind: kind, Name: "x", Outcome: journal.OutcomeOK})
+		b, err := codec.Marshal(journal.Call{Time: atMs(int64(ts)), Kind: kind, Name: "x", Outcome: journal.OutcomeOK})
 		require.NoError(t, err)
 		return string(b)
 	}
@@ -848,7 +848,7 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 	var lines []string
 	for i := 1; i <= 100; i++ {
-		b, err := codec.Marshal(journal.Call{Time: atMs(int64(i)),Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK})
+		b, err := codec.Marshal(journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK})
 		require.NoError(t, err)
 		lines = append(lines, string(b))
 	}
@@ -880,7 +880,7 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 	ref := writeBlobRef(ctx, base, "mcp", []byte(`{"headers":{"Authorization":"Bearer `+credential+`"}}`))
 	require.NotEmpty(t, ref)
 
-	AppendCall(ctx, base,journal.Call{
+	AppendCall(ctx, base, journal.Call{
 		Time:    time.Now(),
 		Kind:    journal.CallKindAgentCommand,
 		Name:    "curl -H 'Authorization: Bearer " + credential + "'",
@@ -925,7 +925,7 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
 
-	AppendCall(ctx, base,journal.Call{
+	AppendCall(ctx, base, journal.Call{
 		Time:      time.Now(),
 		Kind:      journal.CallKindAgentCommand,
 		Origin:    job.Origin{Host: "agent-7"},

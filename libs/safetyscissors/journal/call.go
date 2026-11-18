@@ -65,7 +65,7 @@ const (
 type Call struct {
 	Time       time.Time // "ts" on disk, unix milliseconds at the call's start
 	Kind       CallKind
-	job.Origin           // who acted, one field per channel; inline on disk
+	job.Origin // who acted, one field per channel; inline on disk
 	UserAgent  string
 	Workspace  string // the root the call pertained to; empty for a server-wide one
 	Name       string // the specific call: a tool name, a job command; "action" on disk
@@ -113,9 +113,9 @@ type Payload struct {
 // callLine is the activity line as the writer lays it out. Its fields, tags
 // and order are the on-disk format.
 type callLine struct {
-	Ts            int64           `json:"ts"`
-	Kind          CallKind        `json:"kind"`
-	UserAgent     string          `json:"user_agent,omitempty"`
+	Ts            int64    `json:"ts"`
+	Kind          CallKind `json:"kind"`
+	UserAgent     string   `json:"user_agent,omitempty"`
 	job.Origin    `json:",inline"`
 	Workspace     string          `json:"workspace,omitempty"`
 	Action        string          `json:"action"`

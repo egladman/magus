@@ -418,4 +418,3 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	run.First, run.Last, run.SpanMs = time.Time{}, time.Time{}, 0
 	s.Equal(RepeatRun{Worker: "w1", Thread: "unknown", Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 2, ToolMs: 100}, run)
 }
-

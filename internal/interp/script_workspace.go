@@ -49,8 +49,8 @@ type lazyWorkspaceContext struct {
 	root            string
 	open            ScriptOpener
 
-	once      sync.Once
-	workspace types.WorkspaceRepository
+	once         sync.Once
+	workspace    types.WorkspaceRepository
 	activityBase string
 	// judge is the one ApplySandbox installs, set once attached.
 	judge    std.EditJudge
@@ -59,7 +59,7 @@ type lazyWorkspaceContext struct {
 
 var (
 	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
-	activityContextKey     = contextKeyReadBy(func(ctx context.Context) { recorder.BaseFromContext(ctx) })
+	activityContextKey  = contextKeyReadBy(func(ctx context.Context) { recorder.BaseFromContext(ctx) })
 	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 

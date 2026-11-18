@@ -83,7 +83,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 		Time: time.UnixMilli(4), Kind: journal.CallKindAgentCommand, Workspace: "/ws/a",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
 		Lease:  "fleet/a", LeaseFrom: jobtypes.LeaseSourceMarker,
-		Name:   "Bash", Outcome: journal.OutcomeOK, Request: request, Response: verdict, Preview: "guard: deny",
+		Name: "Bash", Outcome: journal.OutcomeOK, Request: request, Response: verdict, Preview: "guard: deny",
 	})
 	return dir, respRef
 }

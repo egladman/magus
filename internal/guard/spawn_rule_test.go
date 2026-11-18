@@ -380,7 +380,7 @@ const finishedSpawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PostT
 
 // spawnBlob is the part of an agent_spawn request blob these tests read.
 type spawnBlob struct {
-	Target       string              `json:"target"`
+	Target       string                 `json:"target"`
 	RuleFailures []recorder.RuleFailure `json:"rule_failures"`
 }
 
