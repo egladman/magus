@@ -81,9 +81,12 @@ func (s *GlueSuite) TestALinkToTheWorkspacesOwnSourceIsCurrentAndInstallLeavesIt
 	s.Require().NoError(os.Symlink("../../../src/magus-command.buzz", filepath.Join(s.root, gluePath)))
 	s.Empty(glueProblem(s.root, s.asset))
 
+	s.write(".magus/harnesses/h/assets.jsonl", []byte(`{"path":"a","digest":"b"}`+"\n"+`{"path":"c","digest":"d"}`+"\n"))
 	plan := types.HarnessInstallation{Files: map[string]types.HarnessFile{}}
 	s.Require().NoError(planHarnessAssets(s.root, HarnessDescriptor{ID: "h", Assets: []HarnessRuntimeAsset{s.asset}}, &plan))
-	s.NotContains(plan.Files, gluePath)
+	s.Empty(plan.Files, "a linked copy plans neither its file nor an empty receipt")
+	_, err := ApplyHarnessInstallation(context.Background(), s.root, plan, false)
+	s.Require().NoError(err)
 
 	s.Require().NoError(os.Remove(filepath.Join(s.root, "src/magus-command.buzz")))
 	s.Contains(glueProblem(s.root, s.asset), "links to a file that does not exist")

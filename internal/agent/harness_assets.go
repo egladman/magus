@@ -151,6 +151,11 @@ func planHarnessAssets(root string, d HarnessDescriptor, plan *types.HarnessInst
 		receipts.Write(encoded)
 		receipts.WriteByte('\n')
 	}
+	// Every asset is a link the workspace owns, so there is nothing to record, and an empty
+	// body would plan as a JSON merge into the receipt file.
+	if receipts.Len() == 0 {
+		return nil
+	}
 	state, err := planWholeFile(root, receipt, receipts.String())
 	if err != nil {
 		return err
