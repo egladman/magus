@@ -5,7 +5,21 @@ import (
 	"io"
 	"text/tabwriter"
 	"time"
+
+	"github.com/egladman/magus/internal/recorder"
 )
+
+// PromptCacheForCheckout resolves the prompt-cache clock from the newest
+// guard observation in the activity log under cacheDir. It reads the
+// checkout, not the repository: the question is about the agent in front
+// of you. A log that holds nothing gives an empty clock.
+func PromptCacheForCheckout(cacheDir string, now time.Time) PromptCacheClock {
+	act, ok := recorder.LastAgentActivity(cacheDir)
+	if !ok {
+		return PromptCacheClock{}
+	}
+	return PromptCacheAt(act.Session, act.At, now)
+}
 
 // The published prompt-cache windows a session's last activity is measured against.
 //
