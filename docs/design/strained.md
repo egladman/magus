@@ -74,6 +74,11 @@ The principle pages name debts of their own:
 - **Thin packages** ([Abstract at the right layer, or not at all](principles/abstract-at-the-right-layer.md)):
   nothing fails a package that is one file and its test and exports one symbol.
   A conformance metric for it, held to the conformance ceiling like `file-split`, is the candidate.
+- **A gain claimed from a benchmark alone** ([A benchmark is a recipe for four](principles/a-benchmark-is-a-recipe-for-four.md)):
+  nothing refuses a change note that claims a gain for real work from a
+  benchmark run only, or a figure quoted at a size no run reached. The page
+  asks for two sizes and a witness from the run journals; today that is
+  review's to hold.
 
 The line between automated and manual moves as a mechanism earns confidence.
 To move a row out of [Manual on purpose](judgment/manual-on-purpose.md), or a

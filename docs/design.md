@@ -90,6 +90,7 @@ automates a decision and when it hands the decision to you.
 - [Terminal output stays copyable](design/principles/terminal-output-stays-copyable.md): Scrollback is one column of records; the live band reads left to right as one record per row; a tiled view lives only behind a flag on the alternate screen.
 - [Compute once, reuse everywhere](design/principles/compute-once.md): A result is computed once, by the stage that owns it; every later stage reads that result, and recomputes only on a real cache miss.
 - [A selector does one thing, spelled one way](design/principles/a-selector-does-one-thing.md): Each verb picks its projects one way; a meaning has one spelling, an operand is a word that survives shell completion, and a concept that is not a path is a flag.
+- [A benchmark is a recipe for four](design/principles/a-benchmark-is-a-recipe-for-four.md): A benchmark measures the benchmark; the gap between it and real work is never zero and is unknown until it is measured, so a result is claimed at the size it was run and a change tuned only to a benchmark needs a witness from real use.
 
 ### Judgment
 
