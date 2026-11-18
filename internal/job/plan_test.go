@@ -1289,7 +1289,8 @@ func TestLeaseRewrites(t *testing.T) { suite.Run(t, new(leaseRewritesSuite)) }
 func (s *leaseRewritesSuite) TestDisabledVersionControlIsAnErrorNotAPanic() {
 	_, loc := appliedRow(s.T(), "a.go")
 	s.T().Setenv("MAGUS_VCS_ENABLED", "false")
-	ctx := job.WithLease(s.T().Context(), "w")
+	ctx, err := job.WithLease(s.T().Context(), "w")
+	s.Require().NoError(err)
 
 	s.NotPanics(func() {
 		lease, paths, err := LeaseRewrites(ctx, loc, "gen", nil)

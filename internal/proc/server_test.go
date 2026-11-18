@@ -138,24 +138,25 @@ func TestRunAdoptsClientLease(t *testing.T) {
 // The wire is not a trusted channel: any local process may dial the socket, and a lease id is
 // exempt from the trail's redaction. Validating server-side is what stops a forwarded value
 // carrying a credential onto an event line; the client's own check is not the server's.
-func TestRunDropsAnInvalidClientLease(t *testing.T) {
-	for name, id := range map[string]string{
-		"spaces":   "not a lease id",
-		"newlines": "fleet/f3\nsecret=hunter2",
-		"toolong":  strings.Repeat("a", job.MaxIDLen+1),
-	} {
-		t.Run(name, func(t *testing.T) {
-			got := make(chan string, 1)
-			s := newJobService(func(ctx context.Context, _ []string) error {
-				got <- job.LeaseFromContext(ctx)
-				return nil
-			})
-
-			var reply runReply
-			require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "build"}, Lease: id}, &reply))
-			assert.Empty(t, <-got, "an id that fails the rule is dropped, matching the environment reader")
+func TestRunRefusesAnInvalidClientLease(t *testing.T) {
+	refused := func(id string) {
+		t.Helper()
+		ran := false
+		s := newJobService(func(context.Context, []string) error {
+			ran = true
+			return nil
 		})
+
+		var reply runReply
+		err := s.run(t.Context(), runRequest{Args: []string{"run", "build"}, Lease: id}, &reply)
+
+		var invalid *job.InvalidLeaseError
+		require.ErrorAs(t, err, &invalid, "%q", id)
+		assert.False(t, ran, "a refused lease runs nothing under no lease")
 	}
+	refused("not a lease id")
+	refused("fleet/f3\nsecret=hunter2")
+	refused(strings.Repeat("a", job.MaxIDLen+1))
 }
 
 // TestRunRequestLeaseCrossesTheWire pins the field on the encoded body rather than on the

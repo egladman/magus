@@ -30,6 +30,14 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// leased is ctx carrying lease.
+func leased(t testing.TB, ctx context.Context, lease string) context.Context {
+	t.Helper()
+	ctx, err := jobtypes.WithLease(ctx, lease)
+	require.NoError(t, err)
+	return ctx
+}
+
 // mustPersist stores one execution and returns its step ref, failing the test on error.
 // Most tests only need the ref; the stamped descriptor is re-read via ByRef/Attempts.
 func mustPersist(t *testing.T, s *OutputStore, cacheKey string, output []byte, d OutputDescriptor) string {
@@ -208,7 +216,7 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 		t.Helper()
 		return recordIn(t.Context())
 	}
-	adopted := jobtypes.WithLease(t.Context(), "wave/client")
+	adopted := leased(t, t.Context(), "wave/client")
 
 	t.Setenv(recorder.EnvBaggage, "")
 	assert.Empty(t, record().Lease, "a run under no lease records none")
@@ -995,7 +1003,7 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 
 	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
-	hit, err := c2.Run(jobtypes.WithLease(t.Context(), "wave/hit"), step, build)
+	hit, err := c2.Run(leased(t, t.Context(), "wave/hit"), step, build)
 	require.NoError(t, err)
 	require.True(t, hit.Hit, "second run must hit")
 	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")

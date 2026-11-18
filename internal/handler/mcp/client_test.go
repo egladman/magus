@@ -53,7 +53,7 @@ func TestClientStandInProcess(t *testing.T) {
 		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling)); err != nil {
 			return ctx, err
 		}
-		return job.WithLease(types.WithWorkspace(ctx, ws), recorder.LeaseFromEnv()), nil
+		return job.WithLease(types.WithWorkspace(ctx, ws), recorder.LeaseFromEnv())
 	})
 	if ws != nil {
 		_ = ws.Close()

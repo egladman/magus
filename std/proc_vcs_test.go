@@ -121,6 +121,6 @@ func TestVcsCmdIsStillLeaseGraded(t *testing.T) {
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(context.Context, job.Job, string, []string, string, []string) error { return refusal })
 
-	_, err = VCSCommand(job.WithLease(WithCurrentWorkingDirectory(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, types.VCSCommandOptions{})
+	_, err = VCSCommand(leased(t, WithCurrentWorkingDirectory(ws, repo.Root()), "worker"),[]string{"commit", "--allow-empty", "-m", "x"}, types.VCSCommandOptions{})
 	assert.ErrorIs(t, err, refusal)
 }

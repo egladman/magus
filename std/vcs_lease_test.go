@@ -39,8 +39,8 @@ func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	})
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"push"}, "/repo", nil), "no acting lease, nothing to ask")
-	require.NoError(t, vcsLeaseRefusal(job.WithLease(ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
-	assert.ErrorIs(t, vcsLeaseRefusal(job.WithLease(ws, "worker"), "git", []string{"push"}, "/repo", nil), refusal)
+	require.NoError(t, vcsLeaseRefusal(leased(t, ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
+	assert.ErrorIs(t, vcsLeaseRefusal(leased(t, ws, "worker"),"git", []string{"push"}, "/repo", nil), refusal)
 	assert.Equal(t, []string{"worker git push /repo"}, asked)
 }
 
@@ -52,7 +52,7 @@ func TestVcsLeaseRefusalFailsClosedWithNoGate(t *testing.T) {
 	withVCSLeaseGate(t, nil)
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"commit", "-m", "x"}, "/repo", nil))
-	err := vcsLeaseRefusal(job.WithLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo", nil)
+	err := vcsLeaseRefusal(leased(t, ws, "worker"),"git", []string{"commit", "-m", "x"}, "/repo", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "lease worker is acting and this binary registers no lease-vcs gate")
 	assert.Contains(t, err.Error(), "`git commit -m x`")

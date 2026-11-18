@@ -631,8 +631,7 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 		"a stamped absence over BAGGAGE":       {baggage: "fleet/env"},
 		"the forwarded lease":                  {forwarded: "fleet/client", want: answer{"fleet/client", job.LeaseSourceEnv}},
 		"the forwarded lease over BAGGAGE":     {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", job.LeaseSourceEnv}},
-		"an invalid forwarded lease is absent": {forwarded: "not a lease id", baggage: "fleet/env"},
-		"the record over a claim":              {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", job.LeaseSourceContested}},
+		"the record over a claim":            {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", job.LeaseSourceContested}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(recorder.EnvBaggage, "")
@@ -646,7 +645,9 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 
 			ctx := t.Context()
 			if !tc.unstamped {
-				ctx = job.WithLease(ctx, tc.forwarded)
+				var err error
+				ctx, err = job.WithLease(ctx, tc.forwarded)
+				require.NoError(t, err)
 			}
 			lease, from := RunLease(ctx, placeAt(t, cacheDir))
 			assert.Equal(t, tc.want, answer{lease, from})

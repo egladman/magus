@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 )
@@ -98,7 +97,7 @@ func (s *MemoryPressureSuite) TestARefusalToALeasedWorkerNamesTheOwedFiling() {
 	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	_, err := g.acquire(job.WithLease(s.T().Context(), "wave/api"), budget.Claim{Target: "test"})
+	_, err := g.acquire(leased(s.T(), s.T().Context(), "wave/api"), budget.Claim{Target: "test"})
 	s.Require().ErrorIs(err, types.MemoryPressureHigh)
 	s.Contains(err.Error(), LeasedPressureNext("wave/api"))
 	s.NotContains(err.Error(), "never waits for a seat", "a seat is not what this lacks")
@@ -924,7 +923,7 @@ func (s *BudgetWaitSuite) TestAComposersRetakeWaitsInsteadOfFailing() {
 
 func (s *BudgetWaitSuite) TestALeasedWorkerWaitsItsBoundThenNamesTheOwedFiling() {
 	s.gate.wait = 50 * time.Millisecond
-	_, err := s.gate.acquire(job.WithLease(s.T().Context(), "wave/api"), stranger)
+	_, err := s.gate.acquire(leased(s.T(), s.T().Context(), "wave/api"), stranger)
 
 	s.Require().ErrorIs(err, types.MachineBudgetExhausted)
 	s.Contains(err.Error(), fmt.Sprintf(

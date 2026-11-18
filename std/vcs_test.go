@@ -503,7 +503,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 		return refusal
 	})
 
-	_, err = VCSCommand(job.WithLease(ws, "worker"), []string{"push", "origin", "main"}, types.VCSCommandOptions{Quiet: true})
+	_, err = VCSCommand(leased(t, ws, "worker"),[]string{"push", "origin", "main"}, types.VCSCommandOptions{Quiet: true})
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
 
@@ -514,7 +514,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 
 	gitEnv = nil
 	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
-	err = OsWithEnv(job.WithLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
+	err = OsWithEnv(leased(t, ws, "worker"),map[string]string{"GIT_DIR": "/from/with_env"},
 		cbFunc(func(ctx context.Context) error {
 			_, err := VCSCommand(ctx, []string{"commit", "-m", "x"}, types.VCSCommandOptions{Quiet: true})
 			return err

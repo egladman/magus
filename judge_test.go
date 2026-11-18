@@ -242,7 +242,7 @@ func (s *jobReaderSuite) judge(authority string) verdict.Judgment {
 	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	j, err := m.JudgeCommand(job.WithLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
+	j, err := m.JudgeCommand(leased(s.T(), s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
 	s.Require().NoError(err)
 	return j
 }
@@ -268,7 +268,7 @@ func (s *jobReaderSuite) TestATaskIsJudgedByItsJobsCheckout() {
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 
-	j, err := m.JudgeCommand(job.WithLease(s.T().Context(), "task"), "s1", m.Root(), "ls")
+	j, err := m.JudgeCommand(leased(s.T(), s.T().Context(), "task"), "s1", m.Root(), "ls")
 
 	s.Require().NoError(err)
 	s.Contains(j.Reason, "Not in this workspace.")

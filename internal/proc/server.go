@@ -560,7 +560,10 @@ func (s *service) run(reqCtx context.Context, req runRequest, reply *runReply) e
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
-	ctx = job.WithLease(ctx, req.Lease)
+	ctx, err := job.WithLease(ctx, req.Lease)
+	if err != nil {
+		return err
+	}
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
 	if req.Sandbox.Enabled() {

@@ -1,6 +1,8 @@
 package job
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -17,13 +19,36 @@ func (s *LeaseContextSuite) TestAContextWithNoAnswerLeavesTheEnvironmentToAReade
 }
 
 func (s *LeaseContextSuite) TestAValidLeaseIsCarried() {
-	ctx := WithLease(s.T().Context(), "area/fix-parser")
+	ctx, err := WithLease(s.T().Context(), "area/fix-parser")
+	s.Require().NoError(err)
 	s.Equal("area/fix-parser", LeaseFromContext(ctx))
 }
 
-func (s *LeaseContextSuite) TestAnInvalidLeaseAnswersNoLease() {
-	ctx := WithLease(WithLease(s.T().Context(), "outer"), "Not A Lease")
-	lease, ok := LookupLease(ctx)
-	s.True(ok, "an invalid id still answers, so a reader does not fall back to the environment")
-	s.Empty(lease, "and it overrides the outer lease")
+func (s *LeaseContextSuite) TestAnInvalidLeaseIsRefused() {
+	outer, err := WithLease(s.T().Context(), "outer")
+	s.Require().NoError(err)
+
+	ctx, err := WithLease(outer, "Not A Lease")
+
+	refused, ok := errors.AsType[*InvalidLeaseError](err)
+	s.Require().True(ok, err)
+	s.Equal("Not A Lease", refused.Lease)
+	s.Equal("outer", LeaseFromContext(ctx), "a refused lease leaves ctx as it was")
+}
+
+func (s *LeaseContextSuite) TestNoLeaseOverridesAnOuterOne() {
+	outer, err := WithLease(s.T().Context(), "outer")
+	s.Require().NoError(err)
+
+	for _, ctx := range []context.Context{WithoutLease(outer), s.leased(outer, "")} {
+		lease, ok := LookupLease(ctx)
+		s.True(ok, "no lease still answers, so a reader does not fall back to the environment")
+		s.Empty(lease)
+	}
+}
+
+func (s *LeaseContextSuite) leased(ctx context.Context, lease string) context.Context {
+	ctx, err := WithLease(ctx, lease)
+	s.Require().NoError(err)
+	return ctx
 }
