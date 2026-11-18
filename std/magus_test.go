@@ -1000,12 +1000,11 @@ func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
 	assert.ErrorIs(t, err, types.JobUngraded, "so is the missing grade, in the same error")
 }
 
-// rawLeaseCheck is the stored form of the check a person would type, the way a put carries it.
+// rawLeaseCheck is the stored form of a `<target> <project>` check, the way a put carries it.
 func rawLeaseCheck(t *testing.T, text string) codec.RawMessage {
 	t.Helper()
-	check, err := job.ParseLeaseCheck(text)
-	require.NoError(t, err)
-	raw, err := job.RawCheck(check)
+	target, project, _ := strings.Cut(text, " ")
+	raw, err := types.EncodeLeaseCheck(types.LeaseCheck{Target: target, Project: project})
 	require.NoError(t, err)
 	return raw
 }

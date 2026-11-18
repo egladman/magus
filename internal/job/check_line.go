@@ -51,7 +51,7 @@ func runProject(project string) string {
 // validationLine is a row's Validation: its check as [CheckCommand] renders it, "" for a row
 // with none. A store write renders it so the two cannot disagree.
 func validationLine(row job.Job) string {
-	c, ok, err := RowCheck(row)
+	c, ok, err := rowCheck(row)
 	if err != nil || !ok {
 		return ""
 	}
@@ -92,7 +92,7 @@ func ParseCheckCommand(s string) (types.LeaseCheck, error) {
 			words[i] = "/"
 		}
 	}
-	return ParseLeaseCheck(strings.Join(words, " "))
+	return parseLeaseCheck(strings.Join(words, " "))
 }
 
 // checkCommandError is a line [ParseCheckCommand] refuses. Script says it began as a

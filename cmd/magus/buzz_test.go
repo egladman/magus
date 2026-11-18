@@ -21,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
-	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -411,7 +410,7 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 }
 
 func (s *BuzzRecordSuite) scriptCheckRow(id, root, script string) job.Job {
-	raw, err := jobstore.RawCheck(types.LeaseCheck{Script: script})
+	raw, err := types.EncodeLeaseCheck(types.LeaseCheck{Script: script})
 	s.Require().NoError(err)
 	return job.Job{ID: id, State: job.StateRunning, CheckoutRoot: root, Check: raw}
 }

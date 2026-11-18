@@ -558,7 +558,7 @@ func (s *listJobsSuite) TestKeepsThePairWhenTheWorkspaceListsNoProjects() {
 // rawCheck is c as a row stores it.
 func rawCheck(t *testing.T, c types.LeaseCheck) codec.RawMessage {
 	t.Helper()
-	raw, err := jobstore.RawCheck(c)
+	raw, err := types.EncodeLeaseCheck(c)
 	require.NoError(t, err)
 	return raw
 }

@@ -147,7 +147,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 		if goal.Kind != job.GoalKindCheck || check.Target == "" && check.Script == "" {
 			continue
 		}
-		if slices.ContainsFunc(graded, func(c types.LeaseCheck) bool { return SameLeaseCheck(&c, &check) }) {
+		if slices.ContainsFunc(graded, func(c types.LeaseCheck) bool { return sameLeaseCheck(&c, &check) }) {
 			continue
 		}
 		graded = append(graded, check)

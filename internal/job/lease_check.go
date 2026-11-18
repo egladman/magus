@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
+// parseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
 // shape a record is written in. The project defaults to ".".
 //
 // A flag anywhere is REFUSED rather than read as a word: a check is an identity the output
@@ -20,7 +20,7 @@ import (
 // silently shifts the project.
 //
 // The one flag read is --no-default-charms, which the record carries as NoDefaultCharms.
-func ParseLeaseCheck(s string) (types.LeaseCheck, error) {
+func parseLeaseCheck(s string) (types.LeaseCheck, error) {
 	words := strings.Fields(s)
 	var args []string
 	if i := slices.Index(words, "--"); i >= 0 {
@@ -35,16 +35,16 @@ func ParseLeaseCheck(s string) (types.LeaseCheck, error) {
 		}
 		positional = append(positional, w)
 		if strings.HasPrefix(w, "-") {
-			return types.LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries the flag %s,"+
+			return types.LeaseCheck{}, &checkError{Line: s, Reason: fmt.Sprintf("%q carries the flag %s,"+
 				" flags belong after `--`, where they reach the tool rather than the runner", s, w)}
 		}
 	}
 	words = positional
 	switch {
 	case len(words) == 0:
-		return types.LeaseCheck{}, &CheckError{Line: s, Reason: "this one names no target"}
+		return types.LeaseCheck{}, &checkError{Line: s, Reason: "this one names no target"}
 	case len(words) > 2:
-		return types.LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries %d words before any `--`", s, len(words))}
+		return types.LeaseCheck{}, &checkError{Line: s, Reason: fmt.Sprintf("%q carries %d words before any `--`", s, len(words))}
 	}
 	c := types.LeaseCheck{Target: words[0], Project: ".", Args: args, NoDefaultCharms: noDefaultCharms}
 	if len(words) == 2 {
@@ -54,47 +54,47 @@ func ParseLeaseCheck(s string) (types.LeaseCheck, error) {
 	return c, nil
 }
 
-// CheckError is a check [ParseLeaseCheck] refuses: the line it was given, and why.
-type CheckError struct {
+// checkError is a check [parseLeaseCheck] refuses: the line it was given, and why.
+type checkError struct {
 	Line   string
 	Reason string
 }
 
-func (e *CheckError) Error() string {
+func (e *checkError) Error() string {
 	return "a check is `<target> <project> [-- args]` and " + e.Reason
 }
 
-// CheckShapeError is a check that names both a script and a target, or gives a script
+// checkShapeError is a check that names both a script and a target, or gives a script
 // what only a target takes, or a target what only a script takes.
-type CheckShapeError struct {
+type checkShapeError struct {
 	// Field is the member at fault: "script" or "test".
 	Field  string
 	Reason string
 }
 
-func (e *CheckShapeError) Error() string { return e.Reason }
+func (e *checkShapeError) Error() string { return e.Reason }
 
-// ValidateLeaseCheck is c as a store keeps it, or why c is no check. A target check
+// validateLeaseCheck is c as a store keeps it, or why c is no check. A target check
 // names its project, "." when it named none, cleaned; a script check keeps only its
 // script, args and test, since a recorded script run belongs to the workspace.
-func ValidateLeaseCheck(c types.LeaseCheck) (types.LeaseCheck, error) {
+func validateLeaseCheck(c types.LeaseCheck) (types.LeaseCheck, error) {
 	switch {
 	case c.Script == "" && c.Test:
-		return types.LeaseCheck{}, &CheckShapeError{Field: "test",
+		return types.LeaseCheck{}, &checkShapeError{Field: "test",
 			Reason: fmt.Sprintf("check target %q sets test, which runs a script's tests and so belongs to a script check", c.Target)}
 	case c.Script != "" && c.Target != "":
-		return types.LeaseCheck{}, &CheckShapeError{Field: "script",
+		return types.LeaseCheck{}, &checkShapeError{Field: "script",
 			Reason: fmt.Sprintf("check names target %q and script %q, a check names one", c.Target, c.Script)}
 	case c.Script != "" && c.Project != "" && c.Project != ".":
-		return types.LeaseCheck{}, &CheckShapeError{Field: "script",
+		return types.LeaseCheck{}, &checkShapeError{Field: "script",
 			Reason: fmt.Sprintf("check script %q names project %q, a recorded script run belongs to the workspace", c.Script, c.Project)}
 	case c.Script != "" && c.NoDefaultCharms:
-		return types.LeaseCheck{}, &CheckShapeError{Field: "script",
+		return types.LeaseCheck{}, &checkShapeError{Field: "script",
 			Reason: fmt.Sprintf("check script %q sets no_default_charms, a script runs under no charms", c.Script)}
 	case c.Script != "":
 		return types.LeaseCheck{Script: c.Script, Args: c.Args, Test: c.Test}, nil
 	}
-	parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", c.Target, c.Project))
+	parsed, err := parseLeaseCheck(fmt.Sprintf("%s %s", c.Target, c.Project))
 	if err != nil {
 		return types.LeaseCheck{}, err
 	}
@@ -103,9 +103,9 @@ func ValidateLeaseCheck(c types.LeaseCheck) (types.LeaseCheck, error) {
 	return parsed, nil
 }
 
-// SameLeaseCheck reports whether a and b declare the same check. Two nil checks are the
+// sameLeaseCheck reports whether a and b declare the same check. Two nil checks are the
 // same, and a nil check is not the same as any declared one.
-func SameLeaseCheck(a, b *types.LeaseCheck) bool {
+func sameLeaseCheck(a, b *types.LeaseCheck) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -113,17 +113,17 @@ func SameLeaseCheck(a, b *types.LeaseCheck) bool {
 		a.NoDefaultCharms == b.NoDefaultCharms && a.Test == b.Test && slices.Equal(a.Args, b.Args)
 }
 
-// RawCheck is c as the job store keeps it: validated, then encoded.
-func RawCheck(c types.LeaseCheck) (codec.RawMessage, error) {
-	valid, err := ValidateLeaseCheck(c)
+// rawCheck is c as the job store keeps it: validated, then encoded.
+func rawCheck(c types.LeaseCheck) (codec.RawMessage, error) {
+	valid, err := validateLeaseCheck(c)
 	if err != nil {
 		return nil, err
 	}
 	return types.EncodeLeaseCheck(valid)
 }
 
-// RowCheck is row's own check and whether it declares one.
-func RowCheck(row job.Job) (types.LeaseCheck, bool, error) {
+// rowCheck is row's own check and whether it declares one.
+func rowCheck(row job.Job) (types.LeaseCheck, bool, error) {
 	if !job.HasCheck(row.Check) {
 		return types.LeaseCheck{}, false, nil
 	}
@@ -154,7 +154,7 @@ func validateStoredCheck(raw codec.RawMessage) (codec.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return RawCheck(c)
+	return rawCheck(c)
 }
 
 func equalStoredChecks(a, b codec.RawMessage) (bool, error) {
@@ -166,7 +166,7 @@ func equalStoredChecks(a, b codec.RawMessage) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return SameLeaseCheck(&ca, &cb), nil
+	return sameLeaseCheck(&ca, &cb), nil
 }
 
 func renderStoredCheck(raw codec.RawMessage) (string, error) {

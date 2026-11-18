@@ -138,7 +138,7 @@ func FlagDeclaration(id string, f flaggen.JobForkFlags, models func(string) job.
 	if strings.TrimSpace(f.Check) == "" {
 		return d, nil
 	}
-	parsed, err := ParseLeaseCheck(f.Check)
+	parsed, err := parseLeaseCheck(f.Check)
 	if err != nil {
 		parsed = types.LeaseCheck{Target: f.Check}
 	}

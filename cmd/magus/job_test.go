@@ -247,7 +247,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 // storedCheck is c as a row stores it.
 func storedCheck(t testing.TB, c types.LeaseCheck) codec.RawMessage {
 	t.Helper()
-	raw, err := job.RawCheck(c)
+	raw, err := types.EncodeLeaseCheck(c)
 	require.NoError(t, err)
 	return raw
 }

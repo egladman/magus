@@ -58,7 +58,7 @@ func goalCheckFaults(g job.Goal, prefix string) []job.Fault {
 }
 
 // checkFaults is why raw, at field, is no lease check: it does not decode, or it names
-// what [ValidateLeaseCheck] refuses. A field that declares no check has none.
+// what [validateLeaseCheck] refuses. A field that declares no check has none.
 func checkFaults(kind job.FaultKind, field string, raw codec.RawMessage) []job.Fault {
 	if !job.HasCheck(raw) {
 		return nil
@@ -68,8 +68,8 @@ func checkFaults(kind job.FaultKind, field string, raw codec.RawMessage) []job.F
 		return []job.Fault{{Kind: kind, Field: field, Message: err.Error(),
 			Fix: "write the check as {target, project, args, no_default_charms} or {script, args, test}"}}
 	}
-	_, err = ValidateLeaseCheck(c)
-	var shape *CheckShapeError
+	_, err = validateLeaseCheck(c)
+	var shape *checkShapeError
 	switch {
 	case err == nil:
 		return nil

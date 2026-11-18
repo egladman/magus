@@ -45,35 +45,35 @@ type LeaseCheckSuite struct{ suite.Suite }
 func TestLeaseCheck(t *testing.T) { suite.Run(t, new(LeaseCheckSuite)) }
 
 func (s *LeaseCheckSuite) TestParseReadsTargetProjectAndArgs() {
-	c, err := ParseLeaseCheck("go-test internal/job/ --no-default-charms -- -run X")
+	c, err := parseLeaseCheck("go-test internal/job/ --no-default-charms -- -run X")
 	s.Require().NoError(err)
 	s.Equal(types.LeaseCheck{Target: "go-test", Project: "internal/job", Args: []string{"-run", "X"}, NoDefaultCharms: true}, c)
 }
 
 func (s *LeaseCheckSuite) TestParseRefusesAFlagBeforeTheArgs() {
-	_, err := ParseLeaseCheck("-o json test .")
-	var refused *CheckError
+	_, err := parseLeaseCheck("-o json test .")
+	var refused *checkError
 	s.Require().ErrorAs(err, &refused)
 	s.Contains(refused.Reason, "carries the flag -o")
 }
 
 func (s *LeaseCheckSuite) TestValidateDropsAScriptsProjectAndRefusesTwoSubjects() {
-	c, err := ValidateLeaseCheck(types.LeaseCheck{Script: "p.buzz", Project: ".", Test: true})
+	c, err := validateLeaseCheck(types.LeaseCheck{Script: "p.buzz", Project: ".", Test: true})
 	s.Require().NoError(err)
 	s.Equal(types.LeaseCheck{Script: "p.buzz", Test: true}, c)
 
-	_, err = ValidateLeaseCheck(types.LeaseCheck{Script: "p.buzz", Target: "test"})
-	var shape *CheckShapeError
+	_, err = validateLeaseCheck(types.LeaseCheck{Script: "p.buzz", Target: "test"})
+	var shape *checkShapeError
 	s.Require().ErrorAs(err, &shape)
 	s.Equal("script", shape.Field)
 
-	_, err = ValidateLeaseCheck(types.LeaseCheck{Target: "test", Test: true})
+	_, err = validateLeaseCheck(types.LeaseCheck{Target: "test", Test: true})
 	s.Require().ErrorAs(err, &shape)
 	s.Equal("test", shape.Field)
 }
 
 func (s *LeaseCheckSuite) TestRawCheckStoresTheCleanedProject() {
-	raw, err := RawCheck(types.LeaseCheck{Target: "lint", Project: "libs/x/", NoDefaultCharms: true})
+	raw, err := rawCheck(types.LeaseCheck{Target: "lint", Project: "libs/x/", NoDefaultCharms: true})
 	s.Require().NoError(err)
 	s.JSONEq(`{"target":"lint","project":"libs/x","no_default_charms":true}`, string(raw))
 }
@@ -123,10 +123,10 @@ func (s *LeaseCheckSuite) TestGoalCheckRefusesAGoalWithNone() {
 }
 
 func (s *LeaseCheckSuite) TestRowCheckSaysWhetherTheRowDeclaresOne() {
-	_, ok, err := RowCheck(job.Job{ID: "w"})
+	_, ok, err := rowCheck(job.Job{ID: "w"})
 	s.Require().NoError(err)
 	s.False(ok)
-	c, ok, err := RowCheck(job.Job{ID: "w", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})})
+	c, ok, err := rowCheck(job.Job{ID: "w", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})})
 	s.Require().NoError(err)
 	s.True(ok)
 	s.Equal("test", c.Target)

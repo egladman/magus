@@ -94,7 +94,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
 				return
 			}
-			raw, perr := RawCheck(c)
+			raw, perr := rawCheck(c)
 			if perr != nil {
 				err = errors.Join(err, fmt.Errorf("encoding %s: %w", key, perr))
 				return
@@ -108,7 +108,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	case hasCheck && hasLine:
 		err = errors.Join(err, errors.New("job: a put carries `check` or a rendered `validation` line, not both"))
 	case hasCheck:
-		check("check", ParseLeaseCheck)
+		check("check", parseLeaseCheck)
 	case hasLine:
 		// compat: see ParseCheckCommand.
 		check("validation", ParseCheckCommand)
@@ -243,7 +243,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 		case e != nil:
 			err = errors.Join(err, fmt.Errorf("job: check: %w", e))
 		default:
-			raw, e := RawCheck(c)
+			raw, e := rawCheck(c)
 			if e != nil {
 				err = errors.Join(err, fmt.Errorf("encoding the check: %w", e))
 				break

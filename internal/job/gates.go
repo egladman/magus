@@ -40,7 +40,7 @@ func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 		grader = noGrader
 	}
 	return func(c types.LeaseCheck) CheckVerdict {
-		raw, err := RawCheck(c)
+		raw, err := rawCheck(c)
 		if err != nil {
 			return CheckVerdict{NotGraded: err.Error()}
 		}

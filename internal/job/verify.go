@@ -410,7 +410,7 @@ func owedChecks(d job.Job, result job.Result) ([]types.LeaseCheck, error) {
 // every package and test a narrower one selects.
 func checkCovers(full, c types.LeaseCheck) bool {
 	if full.Script != "" || c.Script != "" {
-		return SameLeaseCheck(&full, &c)
+		return sameLeaseCheck(&full, &c)
 	}
 	name := func(target string) string {
 		_, tail, ok := strings.Cut(target, "::")

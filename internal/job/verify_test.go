@@ -662,7 +662,7 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 func TestCheckOptOutIsARecordField(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := ParseLeaseCheck("generate . --no-default-charms")
+	parsed, err := parseLeaseCheck("generate . --no-default-charms")
 	require.NoError(t, err)
 	assert.True(t, parsed.NoDefaultCharms)
 

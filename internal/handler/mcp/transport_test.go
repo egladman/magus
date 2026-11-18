@@ -270,7 +270,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	jobs := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.Root()})
-	check, err := job.RawCheck(types.LeaseCheck{Target: "test", Project: "."})
+	check, err := types.EncodeLeaseCheck(types.LeaseCheck{Target: "test", Project: "."})
 	require.NoError(t, err)
 	for _, row := range []jobtypes.Job{
 		{ID: "root/worker", Paths: jobtypes.Paths{Write: []string{"internal/job"}}, State: jobtypes.StateRunning},

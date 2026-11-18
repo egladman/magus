@@ -57,7 +57,7 @@ func (s *ForkGraderSuite) counted(ctx context.Context, root string) (guard.Depen
 func (s *ForkGraderSuite) rows() []jobtypes.Job {
 	var rows []jobtypes.Job
 	for _, c := range s.checks() {
-		raw, err := job.RawCheck(c)
+		raw, err := types.EncodeLeaseCheck(c)
 		s.Require().NoError(err)
 		rows = append(rows, jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: raw})
 	}
