@@ -1,14 +1,14 @@
 ---
 title: Console app
 order: 2
-description: "One of the console applications (Runs, Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings), mounted into a tab or a pane. Each is single-instance."
+description: "One of the console applications (Runs, Log Viewer, Graph Explorer, Dashboard, Activity, Settings), mounted into a tab or a pane. Each is single-instance."
 tags: [glossary, console]
 ---
 
 # Console app
 
 One of the console's applications (Runs, Log Viewer, Graph Explorer, Dashboard,
-Activity Trail, Settings). "App" rather than "page" because one is never a
+Activity, Settings). "App" rather than "page" because one is never a
 document you navigate to: it is mounted into a tab, or into a pane beside
 another one. Each is single-instance: opening one you already have focuses it
 instead of duplicating it.
