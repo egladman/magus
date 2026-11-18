@@ -28,6 +28,9 @@ import (
 // its own, because a descriptor is stored under a key that already contains this
 // number, and magus reads no descriptor it did not write.
 //
+// 8 respells the manifest's JSON keys in snake_case; a manifest in the old spelling
+// decodes to empty values, so the bump evicts every entry before it can be read.
+//
 // 7 drops that descriptor schema and evicts every entry predating the change, so no
 // descriptor missing the reproduce fields (spell, args, vcs) survives to be read as
 // though those were empty rather than unrecorded.
@@ -35,7 +38,7 @@ import (
 // 6 added the spell: line for explicit spell::op runs, emitted only when the filter
 // is set, but a pre-6 store could already hold entries an op-form run recorded under
 // the plain target's key, and only a bump evicts that poison class.
-const KeyVersion = 7
+const KeyVersion = 8
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.

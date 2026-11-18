@@ -202,7 +202,7 @@ type Target struct {
 	// A run-wide collapse looked equivalent and was not: opting `test` in also made
 	// `lint` and `build` retryable under a composed `ci`, which is how a real
 	// regression gets a second attempt nobody asked to give it.
-	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"retry_on_volatile"`
+	RetryOnVolatile bool `json:"retry_on_volatile,omitempty" buzz:"retry_on_volatile"`
 	// RetryOnVolatileReason is the prose the magusfile gave for RetryOnVolatile, and it
 	// is required for the reason SkipCacheReason and DriftReason are. Asking magus to
 	// rerun a target until it goes green is a claim that THIS TARGET FAILS WITHOUT THE
@@ -255,8 +255,8 @@ type Target struct {
 	//
 	// Stored flat because the nesting exists for the author's benefit: a Go caller
 	// reading two optional bools should not walk three structs to find them.
-	IncludeOS   *bool `json:"includeOS,omitempty" buzz:"-"`
-	IncludeArch *bool `json:"includeArch,omitempty" buzz:"-"`
+	IncludeOS   *bool `json:"include_os,omitempty" buzz:"-"`
+	IncludeArch *bool `json:"include_arch,omitempty" buzz:"-"`
 }
 
 // DriftPolicy says what happens when a target's declared outputs move under a read-only

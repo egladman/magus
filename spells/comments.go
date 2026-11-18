@@ -23,9 +23,9 @@ type Language struct {
 // classifies as code.
 type CommentSyntax struct {
 	// LineComments open a comment that runs to end of line.
-	LineComments []string `json:"lineComments,omitempty"`
+	LineComments []string `json:"line_comments,omitempty"`
 	// BlockComments are open/close pairs.
-	BlockComments []CommentBlock `json:"blockComments,omitempty"`
+	BlockComments []CommentBlock `json:"block_comments,omitempty"`
 	// Nested block comments honor nesting (Rust); otherwise the first closer
 	// ends the comment.
 	Nested bool `json:"nested,omitempty"`
@@ -50,7 +50,7 @@ type Quote struct {
 	Close string `json:"close,omitempty"`
 	// IgnoreEscape: a backslash before the closer does NOT keep the string
 	// open (raw strings, and forms where backslash is literal).
-	IgnoreEscape bool `json:"ignoreEscape,omitempty"`
+	IgnoreEscape bool `json:"ignore_escape,omitempty"`
 }
 
 // CommentSyntaxIndex routes a file extension (lowercase, with dot) to the

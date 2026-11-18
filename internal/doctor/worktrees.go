@@ -109,8 +109,14 @@ func readDiskSamples(path string) ([]types.DiskSample, error) {
 	scan := bufio.NewScanner(f)
 	for n := 1; scan.Scan(); n++ {
 		var s types.DiskSample
-		if err := codec.Unmarshal(scan.Bytes(), &s); err != nil {
+		unknown, err := codec.UnmarshalWithUnknown(scan.Bytes(), &s)
+		if err != nil {
 			return nil, fmt.Errorf("%s line %d: %w", path, n, err)
+		}
+		// Lines written before the keys went snake_case would read as a sample with no
+		// bytes, a trend of nothing, so they are refused by name.
+		if _, old := unknown["totalBytes"]; old {
+			return nil, fmt.Errorf("%s line %d spells total_bytes and free_bytes in camelCase, the format before they went snake_case; delete the file to start the store again", path, n)
 		}
 		samples = append(samples, s)
 	}

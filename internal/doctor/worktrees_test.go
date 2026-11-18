@@ -107,7 +107,15 @@ func TestDiskTrendNamesTheLastReclaimChunks(t *testing.T) {
 
 func TestReadDiskSamplesNamesAMalformedLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "samples.jsonl")
-	require.NoError(t, os.WriteFile(path, []byte(`{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""}`+"\nnot json\n"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(`{"at":1,"path":"/w","total_bytes":2,"free_bytes":1,"action":"sample","detail":""}`+"\nnot json\n"), 0o644))
 	_, err := readDiskSamples(path)
 	assert.ErrorContains(t, err, "line 2")
+}
+
+func TestReadDiskSamplesRefusesTheCamelCaseSpelling(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "samples.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(`{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""}`+"\n"), 0o644))
+	_, err := readDiskSamples(path)
+	assert.ErrorContains(t, err, "line 1")
+	assert.ErrorContains(t, err, "camelCase")
 }

@@ -107,9 +107,9 @@ fun record(m: Meet) > {str: any} {
     return {
         "a": m.a,
         "b": m.b,
-        "aReachesB": m.aReachesB,
-        "bReachesA": m.bReachesA,
-        "importersOfBoth": m.importersOfBoth,
+        "a_reaches_b": m.aReachesB,
+        "b_reaches_a": m.bReachesA,
+        "importers_of_both": m.importersOfBoth,
     };
 }
 
