@@ -304,3 +304,24 @@ No principle bends.
   journal and is what a reader would branch on. Whether a line version is wanted before
   1.0 is not decided.
 - Durations on stores from other machines were not measured.
+
+## Amendments
+
+### 2026-11-18: magus code stops knowing where the activity log lives
+
+The fold's integration ran the repository's conformance ceiling, and where it and the
+spec disagreed the ceiling won, ruled by Eli on 11-18.
+
+- `recorder.CallsDir` is unexported. Six files outside `internal/recorder` joined the
+  path themselves, which the store-path-export check refuses. `internal/recorder` gains
+  two reader verbs instead: `Calls(ctx, base, limit)`, over `journal.Calls`, and
+  `ReadPayload(base, payload)`. The module's readers still take the store's own
+  directory (part D11 of the spec); only magus stops spelling `activity/`.
+- Exports only their own package used are unexported, as the export-scope check
+  requires: `AgentCommandAPIVersion`, `AgentSpawnAPIVersion` and `NameAgentSpawn` in
+  `internal/recorder`, and `NewFactHandler`, `ActivityCall`, `ActivitySpawn` and
+  `ReadActivity` in `internal/sessions`. A caller outside reads a session's activity
+  through `sessions.ActivityHere`.
+- `internal/recorder/feedback_shape.go` folds into `feedback.go`,
+  `internal/sessions/prompt_cache.go` into `prompt.go`, and `feedback_marks.go` is
+  `marks.go`, as the file-split check asks of a file the fold created.
