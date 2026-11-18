@@ -9,7 +9,7 @@ export fun guardPathFigure() > figure\Figure !> any {
     final catalog = magus\graph().dir("internal/guard/builtin");
     final jobs = magus\graph().dir("internal/job");
     final sessions = magus\graph().dir("internal/sessions");
-    final trail = magus\graph().dir("internal/trail");
+    final recorder = magus\graph().dir("internal/recorder");
     final hook = figure\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
     final policy = figure\external("Workspace rules", sub: "magus\\guard.command, can only add", look: figure\Look.input);
     final verdict = figure\external("Verdict", sub: "deny, advise or pass, with next:", look: figure\Look.focal);
@@ -20,7 +20,7 @@ export fun guardPathFigure() > figure\Figure !> any {
                 + "event to magus shell. The built-in rules judge it first, reading the job store "
                 + "for the lease the call acts as and the session record for what the session "
                 + "already did; the workspace's magus\\guard.command rule sees only what they let "
-                + "through and can only add to the verdict. Each judgment goes to the trail. A "
+                + "through and can only add to the verdict. Each judgment goes to the activity log. A "
                 + "deny carries its reason and a next: breadcrumb naming the command to run "
                 + "instead, and the hook renders it into the host's reply.")
         .actor(hook)
@@ -29,19 +29,19 @@ export fun guardPathFigure() > figure\Figure !> any {
         .box(catalog, label: "Rule catalog", sub: "ids and grades")
         .box(jobs, label: "Job store", sub: "leases, write paths", look: figure\Look.store)
         .box(sessions, label: "Session record", sub: "what this session did", look: figure\Look.store)
-        .box(trail, label: "Trail", sub: "every judgment kept", look: figure\Look.store)
+        .box(recorder, label: "Activity log", sub: "every judgment kept", look: figure\Look.store)
         .actor(policy)
         .actor(verdict)
         .edgesFromGraph()
-        .hideEdges([shell], dst: [catalog, jobs, sessions, trail],
+        .hideEdges([shell], dst: [catalog, jobs, sessions, recorder],
             why: "the shell's own uses are other verbs; a call reaches them through the guard")
-        .hideEdges([jobs, trail], dst: [sessions, trail],
+        .hideEdges([jobs, sessions], dst: [sessions, recorder],
             why: "the stores read each other for their own verbs; the guard's path reads each one directly")
         .markEdge(shell, dst: guard, label: "judges")
         .markEdge(guard, dst: catalog, label: "rules")
         .markEdge(guard, dst: jobs, label: "lease")
         .markEdge(guard, dst: sessions, label: "history")
-        .markEdge(guard, dst: trail, label: "records")
+        .markEdge(guard, dst: recorder, label: "records")
         .flowIn(hook, dst: shell, label: "argv + stdin")
         .flowOut(guard, dst: policy, label: "let through")
         .flowOut(guard, dst: verdict)
@@ -51,5 +51,5 @@ export fun guardPathFigure() > figure\Figure !> any {
         .legend(figure\Look.external, label: "the host's side")
         .legend(figure\Look.input, label: "this repo's rules")
         .legend(figure\Look.store, label: "append-only records")
-        .scope([shell, guard, catalog, jobs, sessions, trail]);
+        .scope([shell, guard, catalog, jobs, sessions, recorder]);
 }

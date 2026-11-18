@@ -11,7 +11,7 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
     final httpx = magus\graph().dir("internal/httpx");
     final secret = magus\graph().dir("libs/secrets");
     final jobs = magus\graph().dir("internal/job");
-    final journal = magus\graph().dir("internal/journal");
+    final journal = magus\graph().dir("internal/recorder");
     final spawn = magus\graph().dir("internal/proc/spawn");
     return figure\of("cache-internals",
             title: "What a cache lookup reads, and what it writes back",
@@ -31,6 +31,8 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
         .box(secret, label: "Signing key", sub: "sign and verify", look: figure\Look.input)
         .rank(dirs: [jobs, journal, secret])
         .edgesFromGraph()
+        .hideEdges([httpx, spawn], dst: [journal, secret],
+            why: "the remote tier and the spawner record and redact for their own verbs; the figure follows a lookup")
         .legend(figure\Look.focal, label: "the lookup")
         .legend(figure\Look.input, label: "trusted runs only")
         .legend(figure\Look.store, label: "append-only")

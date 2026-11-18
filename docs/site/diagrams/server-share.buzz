@@ -16,7 +16,7 @@ export fun serverShareFigure() > figure\Figure !> any {
         magus\graph().dir("internal/handler/historymetrics"),
         magus\graph().dir("internal/handler/metrics"),
     ];
-    final interceptor = magus\graph().dir("internal/handler/trailrpc");
+    final interceptor = magus\graph().dir("internal/handler/activityrpc");
     final withheld = figure\without(handlers, drop: [served, interceptor] + connectReads);
     final dash = figure\external("Console", sub: "dashboard", tag: "pwa", look: figure\Look.plain);
     final phone = figure\external("Phone on the LAN", sub: "same-origin viewer", tag: "client");

@@ -11,7 +11,7 @@ export fun goPackages(glob: str) > [magus\Dir] !> any {
 // dataTypes is the types packages a figure of the project model leaves out:
 // closed string sets and data the figures do not trace.
 export fun dataTypes() > [magus\Dir] !> any {
-    final names = ["enum", "daemon", "diff", "events", "image", "trail",
+    final names = ["enum", "daemon", "diff", "feedback", "image",
                    "check", "impact", "release", "vcs"];
     return names.map(fun (i: int, name: str) > magus\Dir !> any => magus\graph().dir("types/" + name));
 }
