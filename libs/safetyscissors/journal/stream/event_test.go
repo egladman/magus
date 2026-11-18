@@ -1,12 +1,16 @@
 package stream
 
 import (
-	"github.com/egladman/magus/libs/codec"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/codec"
 )
+
+type EventSuite struct{ suite.Suite }
+
+func TestEvent(t *testing.T) { suite.Run(t, new(EventSuite)) }
 
 // decode reads one wire line through Event's own decoder.
 func decode(line []byte) (Event, error) {
@@ -15,10 +19,10 @@ func decode(line []byte) (Event, error) {
 	return e, err
 }
 
-// TestStreamEventMarshalsFlat pins the wire shape an integrator parses: envelope
+// TestMarshalsFlat pins the wire shape an integrator parses: envelope
 // fields and body fields at ONE level, never nested under a data key. A change
 // here breaks every client, so it asserts the literal line.
-func TestStreamEventMarshalsFlat(t *testing.T) {
+func (s *EventSuite) TestMarshalsFlat() {
 	e := Event{
 		Ts:        1756312800000,
 		Workspace: "/repo",
@@ -34,8 +38,8 @@ func TestStreamEventMarshalsFlat(t *testing.T) {
 		},
 	}
 	got, err := codec.Marshal(e)
-	require.NoError(t, err)
-	assert.JSONEq(t, `{
+	s.Require().NoError(err)
+	s.JSONEq(`{
 		"schema":1,"type":"target.result","ts":1756312800000,
 		"workspace":"/repo","inv":"inv1a2b3c",
 		"project":"cmd/magus","target":"build","status":"failed",
@@ -43,47 +47,38 @@ func TestStreamEventMarshalsFlat(t *testing.T) {
 	}`, string(got))
 }
 
-// TestStreamEventRoundTrips: every type in the taxonomy survives encode/decode
-// whole. Ranging over EventTypes is what makes adding a type without
-// wiring its decode arm a test failure rather than a runtime surprise.
-func TestStreamEventRoundTrips(t *testing.T) {
+// TestEveryTypeRoundTrips ranges over EventTypes, so a type added without
+// its decode arm fails here rather than at runtime.
+func (s *EventSuite) TestEveryTypeRoundTrips() {
 	bodies := map[EventType]Body{
 		RunStarted:   Run{Phase: "started", Command: []string{"run", "build"}, Trigger: "run", MagusVersion: "0.5.0"},
 		RunFinished:  Run{Phase: "finished", Status: "pass"},
 		TargetResult: Target{Project: "api", Target: "test", Status: "ok", CacheHit: true, Ref: "outx", DurationMs: 12, Error: ""},
 		TargetOutput: Output{Project: "api", Target: "test", Stream: "stderr", Text: "FAIL"},
 	}
-
 	for _, typ := range EventTypes() {
 		body, ok := bodies[typ]
-		require.True(t, ok, "taxonomy type %q has no round-trip case; add one", typ)
-
-		t.Run(string(typ), func(t *testing.T) {
-			want := Event{Ts: 1756312800000, Workspace: "/repo", Inv: "inv1", Body: body}
-			line, err := codec.Marshal(want)
-			require.NoError(t, err)
-
-			got, err := decode(line)
-			require.NoError(t, err)
-			assert.Equal(t, want, got)
-			assert.Equal(t, typ, got.Body.EventType())
-		})
+		s.Require().True(ok, "taxonomy type %q has no round-trip case; add one", typ)
+		want := Event{Ts: 1756312800000, Workspace: "/repo", Inv: "inv1", Body: body}
+		line, err := codec.Marshal(want)
+		s.Require().NoError(err)
+		got, err := decode(line)
+		s.Require().NoError(err)
+		s.Equal(want, got)
+		s.Equal(typ, got.Body.EventType())
 	}
 }
 
-// TestStreamEventRejectsUnusableBody: a typeless or non-object line cannot be
-// parsed by any subscriber, so producing one has to fail at the producer where
-// it can still be diagnosed.
-func TestStreamEventRejectsUnusableBody(t *testing.T) {
-	t.Run("nil body", func(t *testing.T) {
-		_, err := codec.Marshal(Event{Ts: 1})
-		assert.ErrorContains(t, err, "no body")
-	})
+// TestANilBodyDoesNotMarshal: a typeless line cannot be parsed by any
+// subscriber, so producing one fails at the producer.
+func (s *EventSuite) TestANilBodyDoesNotMarshal() {
+	_, err := codec.Marshal(Event{Ts: 1})
+	s.ErrorContains(err, "no body")
+}
 
-	t.Run("body that is not an object", func(t *testing.T) {
-		_, err := codec.Marshal(Event{Ts: 1, Body: scalarBody{}})
-		assert.ErrorContains(t, err, "want a JSON object")
-	})
+func (s *EventSuite) TestABodyThatIsNotAnObjectDoesNotMarshal() {
+	_, err := codec.Marshal(Event{Ts: 1, Body: scalarBody{}})
+	s.ErrorContains(err, "want a JSON object")
 }
 
 // scalarBody marshals to a JSON scalar, which the splice cannot flatten.
@@ -92,80 +87,73 @@ type scalarBody struct{}
 func (scalarBody) EventType() EventType         { return RunStarted }
 func (scalarBody) MarshalJSON() ([]byte, error) { return []byte(`"nope"`), nil }
 
-// TestStreamRunPhaseDefaultsToFinished: a body with no phase must still close a
+// TestRunPhaseDefaultsToFinished: a body with no phase must still close a
 // run a subscriber has open. Leaving a spinner spinning forever is the worse
 // failure, so the fallback is deliberate rather than an accident of ordering.
-func TestStreamRunPhaseDefaultsToFinished(t *testing.T) {
-	assert.Equal(t, RunFinished, Run{}.EventType())
-	assert.Equal(t, RunFinished, Run{Phase: "bogus"}.EventType())
-	assert.Equal(t, RunStarted, Run{Phase: "started"}.EventType())
+func (s *EventSuite) TestRunPhaseDefaultsToFinished() {
+	s.Equal(RunFinished, Run{}.EventType())
+	s.Equal(RunFinished, Run{Phase: "bogus"}.EventType())
+	s.Equal(RunStarted, Run{Phase: "started"}.EventType())
 }
 
-// TestStreamFilterZeroValueExcludesOutput pins the one asymmetry in the filter:
-// the default is everything EXCEPT target.output, because that type outnumbers
-// the rest combined and a subscriber cannot recover from being sent it unasked.
-func TestStreamFilterZeroValueExcludesOutput(t *testing.T) {
+// TestFilterZeroValueExcludesOutput: the default is everything EXCEPT
+// target.output, which outnumbers the rest combined.
+func (s *EventSuite) TestFilterZeroValueExcludesOutput() {
 	var f Filter
 	for _, typ := range EventTypes() {
-		assert.Equal(t, typ != TargetOutput, f.Allows(typ), "type %q", typ)
+		s.Equal(typ != TargetOutput, f.Allows(typ), "type %q", typ)
 	}
 
 	only := Filter{Types: []EventType{TargetOutput}}
-	assert.True(t, only.Allows(TargetOutput))
-	assert.False(t, only.Allows(TargetResult))
+	s.True(only.Allows(TargetOutput))
+	s.False(only.Allows(TargetResult))
 }
 
-// TestDecodeStreamEventUnknownType: a Go caller gets a refusal rather than a
+// TestDecodeRefusesAnUnknownType: a Go caller gets a refusal rather than a
 // zero body it would have to test for. Line-oriented clients skip instead, which
 // is what lets the taxonomy grow without a schema bump.
-func TestDecodeStreamEventUnknownType(t *testing.T) {
+func (s *EventSuite) TestDecodeRefusesAnUnknownType() {
 	_, err := decode([]byte(`{"schema":1,"type":"target.reslut","ts":1}`))
-	assert.ErrorContains(t, err, `unknown type "target.reslut"`)
+	s.ErrorContains(err, `unknown type "target.reslut"`)
 }
 
-// TestDecodeStreamEventAcceptsNewerSchema: the envelope contract is that
+// TestDecodeAcceptsANewerSchema: the envelope contract is that
 // additive changes keep old fields meaning what they meant, so a client built
 // against schema 1 must not refuse a later line.
-func TestDecodeStreamEventAcceptsNewerSchema(t *testing.T) {
+func (s *EventSuite) TestDecodeAcceptsANewerSchema() {
 	got, err := decode([]byte(`{"schema":99,"type":"run.finished","ts":7,"phase":"finished","status":"pass","future_field":true}`))
-	require.NoError(t, err)
-	assert.Equal(t, Run{Phase: "finished", Status: "pass"}, got.Body)
-	assert.Equal(t, int64(7), got.Ts)
+	s.Require().NoError(err)
+	s.Equal(Run{Phase: "finished", Status: "pass"}, got.Body)
+	s.Equal(int64(7), got.Ts)
 }
 
-// TestParseStreamEventTypeRejectsTypos: an ignored typo presents as a stream
+// TestParseEventTypeRejectsTypos: an ignored typo presents as a stream
 // that is merely quiet, which is the failure that costs an hour to find.
-func TestParseStreamEventTypeRejectsTypos(t *testing.T) {
+func (s *EventSuite) TestParseEventTypeRejectsTypos() {
 	got, err := ParseEventType("target.result")
-	require.NoError(t, err)
-	assert.Equal(t, TargetResult, got)
+	s.Require().NoError(err)
+	s.Equal(TargetResult, got)
 
 	_, err = ParseEventType("target.reslut")
-	assert.ErrorContains(t, err, "unknown event type")
+	s.ErrorContains(err, "unknown event type")
 }
 
-// TestStreamEventOmitsInapplicableNumbers pins a distinction the wire has to keep:
-// a field that does not APPLY must be absent, not zero. A cached replay has no
-// duration, and shipping "duration_ms":0 tells a subscriber the target took no
-// time rather than that it never ran.
-//
-// It is a real regression guard rather than a restatement of the tag. Under the
-// jsonv2 codec this repo builds with, `omitempty` omits only empty JSON values
-// (null, "", [], {}) and NOT zero numbers, so the intuitive tag silently ships
-// the zero. These fields carry `omitzero` for that reason.
-func TestStreamEventOmitsInapplicableNumbers(t *testing.T) {
+// TestOmitsInapplicableNumbers: a field that does not apply is absent, not
+// zero, since "duration_ms":0 says a replay took no time. Under jsonv2,
+// `omitempty` keeps a zero number, so these fields carry `omitzero`.
+func (s *EventSuite) TestOmitsInapplicableNumbers() {
 	cached, err := codec.Marshal(Event{Ts: 1, Body: Target{
 		Project: "api", Target: "build", Status: "ok", CacheHit: true, Ref: "out_1",
 	}})
-	require.NoError(t, err)
-	assert.NotContains(t, string(cached), "duration_ms", "a replay has no duration to report")
+	s.Require().NoError(err)
+	s.NotContains(string(cached), "duration_ms", "a replay has no duration to report")
 
 	started, err := codec.Marshal(Event{Ts: 1, Body: Run{Phase: "started"}})
-	require.NoError(t, err)
-	assert.NotContains(t, string(started), "duration_ms", "a run that just started has no duration")
+	s.Require().NoError(err)
+	s.NotContains(string(started), "duration_ms", "a run that just started has no duration")
 
 	// Present when it genuinely applies, so the omission above is not just "never emitted".
 	ran, err := codec.Marshal(Event{Ts: 1, Body: Target{Status: "ok", DurationMs: 1200}})
-	require.NoError(t, err)
-	assert.Contains(t, string(ran), `"duration_ms":1200`)
+	s.Require().NoError(err)
+	s.Contains(string(ran), `"duration_ms":1200`)
 }

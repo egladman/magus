@@ -119,17 +119,21 @@ func (s *CallsSuite) TestAMissingLogHasNoCalls() {
 	s.Empty(errs, "a directory nothing has recorded in is a normal state")
 }
 
-func (s *CallsSuite) TestNoDirAndNoLimitAreRefused() {
-	for _, args := range []struct {
-		dir   string
-		limit int
-	}{{"", 10}, {s.dir, 0}} {
-		var errs []error
-		for _, err := range Calls(s.T().Context(), args.dir, args.limit) {
-			errs = append(errs, err)
-		}
-		s.Len(errs, 1, "dir %q limit %d", args.dir, args.limit)
+// refusals collects what Calls yields for dir and limit.
+func (s *CallsSuite) refusals(dir string, limit int) []error {
+	var errs []error
+	for _, err := range Calls(s.T().Context(), dir, limit) {
+		errs = append(errs, err)
 	}
+	return errs
+}
+
+func (s *CallsSuite) TestNoDirIsRefused() {
+	s.Len(s.refusals("", 10), 1)
+}
+
+func (s *CallsSuite) TestNoLimitIsRefused() {
+	s.Len(s.refusals(s.dir, 0), 1)
 }
 
 // TestABadLineIsALineError replaces the reader that dropped a corrupt line

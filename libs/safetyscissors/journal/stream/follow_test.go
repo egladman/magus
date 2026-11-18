@@ -8,20 +8,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type FollowerSuite struct{ suite.Suite }
+
+func TestFollower(t *testing.T) { suite.Run(t, new(FollowerSuite)) }
 
 // writeLog appends raw JSONL to one invocation's run log, standing in for a
 // concurrently running magus process.
-func writeLog(t *testing.T, dir, inv, content string) {
-	t.Helper()
-	require.NoError(t, os.MkdirAll(dir, 0o755))
+func (s *FollowerSuite) writeLog(dir, inv, content string) {
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	f, err := os.OpenFile(filepath.Join(dir, inv+".jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	require.NoError(t, err)
+	s.Require().NoError(err)
 	_, err = f.WriteString(content)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	s.Require().NoError(err)
+	s.Require().NoError(f.Close())
 }
 
 // collect drains events into a slice via the emit callback the Follower takes.
@@ -32,137 +34,135 @@ func collect(got *[]Event) func(Event) error {
 	}
 }
 
-func TestFollowerReplaysRetainedRuns(t *testing.T) {
-	dir := t.TempDir()
-	writeLog(t, dir, "inv1", `{"ts":1,"inv":"inv1","kind":"started","command":{"arguments":["run","build"],"trigger":"run"}}
+func (s *FollowerSuite) TestReplaysRetainedRuns() {
+	dir := s.T().TempDir()
+	s.writeLog(dir, "inv1", `{"ts":1,"inv":"inv1","kind":"started","command":{"arguments":["run","build"],"trigger":"run"}}
 {"ts":2,"inv":"inv1","kind":"result","project":"api","target":"build","status":"pass","ref":"out_1"}
 {"ts":3,"inv":"inv1","kind":"finished","status":"pass"}
 `)
 
 	var got []Event
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Replay(t.Context(), 0, collect(&got)))
+	s.Require().NoError(f.Replay(s.T().Context(), 0, collect(&got)))
 
-	require.Len(t, got, 3)
-	assert.Equal(t, RunStarted, got[0].Body.EventType())
-	assert.Equal(t, Target{Project: "api", Target: "build", Status: "ok", Ref: "out_1"}, got[1].Body)
-	assert.Equal(t, RunFinished, got[2].Body.EventType())
-	assert.Equal(t, "/repo", got[0].Workspace)
+	s.Require().Len(got, 3)
+	s.Equal(RunStarted, got[0].Body.EventType())
+	s.Equal(Target{Project: "api", Target: "build", Status: "ok", Ref: "out_1"}, got[1].Body)
+	s.Equal(RunFinished, got[2].Body.EventType())
+	s.Equal("/repo", got[0].Workspace)
 }
 
-// TestFollowerReplayDoesNotRepeatOnFollow: Replay leaves the offset at end of
+// TestReplayDoesNotRepeatOnFollow: Replay leaves the offset at end of
 // file, so attaching a follow after it must deliver only what is new.
-func TestFollowerReplayDoesNotRepeatOnFollow(t *testing.T) {
-	dir := t.TempDir()
-	writeLog(t, dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
+func (s *FollowerSuite) TestReplayDoesNotRepeatOnFollow() {
+	dir := s.T().TempDir()
+	s.writeLog(dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
 
 	var replayed []Event
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Replay(t.Context(), 0, collect(&replayed)))
-	require.Len(t, replayed, 1)
+	s.Require().NoError(f.Replay(s.T().Context(), 0, collect(&replayed)))
+	s.Require().Len(replayed, 1)
 
 	var fresh []Event
-	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&fresh)))
-	assert.Empty(t, fresh)
+	s.Require().NoError(f.drain(s.T().Context(), "inv1.jsonl", collect(&fresh)))
+	s.Empty(fresh)
 }
 
-// TestFollowerSkipsPartialLines is the property that makes reading a log while
-// magus writes it safe: an output-triggered page flush can split a line, and
-// half a JSON object must never reach a subscriber, nor be skipped once the
+// TestSkipsPartialLines: an output-triggered page flush can split a line,
+// and half a JSON object never reaches a subscriber nor is lost once the
 // rest of it lands.
-func TestFollowerSkipsPartialLines(t *testing.T) {
-	dir := t.TempDir()
-	writeLog(t, dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n"+`{"ts":2,"inv":"inv1","kind":"res`)
+func (s *FollowerSuite) TestSkipsPartialLines() {
+	dir := s.T().TempDir()
+	s.writeLog(dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n"+`{"ts":2,"inv":"inv1","kind":"res`)
 
 	var got []Event
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Replay(t.Context(), 0, collect(&got)))
-	require.Len(t, got, 1, "the torn line must not be emitted")
+	s.Require().NoError(f.Replay(s.T().Context(), 0, collect(&got)))
+	s.Require().Len(got, 1, "the torn line must not be emitted")
 
-	writeLog(t, dir, "inv1", `ult","project":"api","target":"build","status":"pass"}`+"\n")
-	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&got)))
-	require.Len(t, got, 2, "the completed line must be picked up, not lost")
-	assert.Equal(t, TargetResult, got[1].Body.EventType())
+	s.writeLog(dir, "inv1", `ult","project":"api","target":"build","status":"pass"}`+"\n")
+	s.Require().NoError(f.drain(s.T().Context(), "inv1.jsonl", collect(&got)))
+	s.Require().Len(got, 2, "the completed line must be picked up, not lost")
+	s.Equal(TargetResult, got[1].Body.EventType())
 }
 
-// TestFollowerReplayLimitKeepsNewest: attaching to a workspace with a long
+// TestReplayLimitKeepsNewest: attaching to a workspace with a long
 // history must not deliver all of it.
-func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
-	dir := t.TempDir()
+func (s *FollowerSuite) TestReplayLimitKeepsNewest() {
+	dir := s.T().TempDir()
 	for _, inv := range []string{"inv1", "inv2", "inv3"} {
-		writeLog(t, dir, inv, fmt.Sprintf(`{"ts":1,"inv":"%s","kind":"finished","status":"pass"}`+"\n", inv))
+		s.writeLog(dir, inv, fmt.Sprintf(`{"ts":1,"inv":"%s","kind":"finished","status":"pass"}`+"\n", inv))
 		// Distinct mtimes: ordering is by modification time, and a same-tick write
 		// would make the assertion depend on filesystem timestamp resolution.
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	var got []Event
-	require.NoError(t, NewFollower(dir, "/repo").Replay(t.Context(), 2, collect(&got)))
-	require.Len(t, got, 2)
-	assert.Equal(t, "inv2", got[0].Inv)
-	assert.Equal(t, "inv3", got[1].Inv)
+	s.Require().NoError(NewFollower(dir, "/repo").Replay(s.T().Context(), 2, collect(&got)))
+	s.Require().Len(got, 2)
+	s.Equal("inv2", got[0].Inv)
+	s.Equal("inv3", got[1].Inv)
 }
 
-// TestFollowerReplayLimitSurvivesTheFirstFollowTick covers what the limit test above
-// cannot: Follow re-lists the directory, so a log the window excluded drained in full
-// on the first tick.
-func TestFollowerReplayLimitSurvivesTheFirstFollowTick(t *testing.T) {
-	dir := t.TempDir()
+// TestReplayLimitSurvivesTheFirstFollowTick: Follow re-lists the directory,
+// so a log the window excluded must not drain in full on the first tick.
+func (s *FollowerSuite) TestReplayLimitSurvivesTheFirstFollowTick() {
+	dir := s.T().TempDir()
 	for _, inv := range []string{"inv1", "inv2", "inv3"} {
-		writeLog(t, dir, inv, fmt.Sprintf(`{"ts":1,"inv":"%s","kind":"finished","status":"pass"}`+"\n", inv))
+		s.writeLog(dir, inv, fmt.Sprintf(`{"ts":1,"inv":"%s","kind":"finished","status":"pass"}`+"\n", inv))
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	f := NewFollower(dir, "/repo")
 	var replayed []Event
-	require.NoError(t, f.Replay(t.Context(), 1, collect(&replayed)))
-	require.Len(t, replayed, 1)
+	s.Require().NoError(f.Replay(s.T().Context(), 1, collect(&replayed)))
+	s.Require().Len(replayed, 1)
 
 	var followed []Event
-	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(s.T().Context(), 300*time.Millisecond)
 	defer cancel()
-	require.NoError(t, f.Follow(ctx, 10*time.Millisecond, collect(&followed)))
-	assert.Empty(t, followed, "the excluded logs must stay excluded once Follow starts")
+	s.Require().NoError(f.Follow(ctx, 10*time.Millisecond, collect(&followed)))
+	s.Empty(followed, "the excluded logs must stay excluded once Follow starts")
 }
 
-// TestFollowerSkipDeliversOnlyWhatHappensNext covers plain `--follow`: history
+// TestSkipDeliversOnlyWhatHappensNext covers plain `--follow`: history
 // is positioned past, not replayed.
-func TestFollowerSkipDeliversOnlyWhatHappensNext(t *testing.T) {
-	dir := t.TempDir()
-	writeLog(t, dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
+func (s *FollowerSuite) TestSkipDeliversOnlyWhatHappensNext() {
+	dir := s.T().TempDir()
+	s.writeLog(dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
 
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Skip())
+	s.Require().NoError(f.Skip())
 
 	var got []Event
-	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&got)))
-	assert.Empty(t, got)
+	s.Require().NoError(f.drain(s.T().Context(), "inv1.jsonl", collect(&got)))
+	s.Empty(got)
 
-	writeLog(t, dir, "inv1", `{"ts":2,"inv":"inv1","kind":"result","project":"api","target":"test","status":"fail"}`+"\n")
-	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&got)))
-	require.Len(t, got, 1)
-	assert.Equal(t, Target{Project: "api", Target: "test", Status: "failed"}, got[0].Body)
+	s.writeLog(dir, "inv1", `{"ts":2,"inv":"inv1","kind":"result","project":"api","target":"test","status":"fail"}`+"\n")
+	s.Require().NoError(f.drain(s.T().Context(), "inv1.jsonl", collect(&got)))
+	s.Require().Len(got, 1)
+	s.Equal(Target{Project: "api", Target: "test", Status: "failed"}, got[0].Body)
 }
 
-// TestFollowerMissingDirectoryIsNotAnError: a workspace that has never run
+// TestMissingDirectoryIsNotAnError: a workspace that has never run
 // anything is a normal state for an editor attaching at startup.
-func TestFollowerMissingDirectoryIsNotAnError(t *testing.T) {
-	f := NewFollower(filepath.Join(t.TempDir(), "absent"), "/repo")
+func (s *FollowerSuite) TestMissingDirectoryIsNotAnError() {
+	f := NewFollower(filepath.Join(s.T().TempDir(), "absent"), "/repo")
 	var got []Event
-	require.NoError(t, f.Replay(t.Context(), 0, collect(&got)))
-	assert.Empty(t, got)
+	s.Require().NoError(f.Replay(s.T().Context(), 0, collect(&got)))
+	s.Empty(got)
 }
 
-// TestFollowPicksUpANewInvocation is the end-to-end claim the design rests on:
-// a run started by ANOTHER process reaches a follower that was already attached.
-func TestFollowPicksUpANewInvocation(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(dir, 0o755))
+// TestFollowPicksUpANewInvocation: a run started by ANOTHER process reaches
+// a follower that was already attached.
+func (s *FollowerSuite) TestFollowPicksUpANewInvocation() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
 
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Skip())
+	s.Require().NoError(f.Skip())
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(s.T().Context())
 	defer cancel()
 
 	seen := make(chan Event, 4)
@@ -174,16 +174,16 @@ func TestFollowPicksUpANewInvocation(t *testing.T) {
 		})
 	}()
 
-	writeLog(t, dir, "inv9", `{"ts":1,"inv":"inv9","kind":"result","project":"api","target":"build","status":"fail"}`+"\n")
+	s.writeLog(dir, "inv9", `{"ts":1,"inv":"inv9","kind":"result","project":"api","target":"build","status":"fail"}`+"\n")
 
 	select {
 	case got := <-seen:
-		assert.Equal(t, Target{Project: "api", Target: "build", Status: "failed"}, got.Body)
-		assert.Equal(t, "inv9", got.Inv)
+		s.Equal(Target{Project: "api", Target: "build", Status: "failed"}, got.Body)
+		s.Equal("inv9", got.Inv)
 	case <-time.After(3 * time.Second):
-		t.Fatal("a run started elsewhere never reached the follower")
+		s.Fail("a run started elsewhere never reached the follower")
 	}
 
 	cancel()
-	require.NoError(t, <-done, "cancellation is not a failure")
+	s.Require().NoError(<-done, "cancellation is not a failure")
 }
