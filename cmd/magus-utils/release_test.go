@@ -97,7 +97,7 @@ func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
 
 	var idx selfupdate.ReleaseIndex
 	require.NoError(t, codec.Unmarshal(data, &idx))
-	require.Equal(t, selfupdate.ReleaseIndexAPIVersion, idx.SchemaVersion)
+	require.Equal(t, "magus.release-index/v1alpha1", idx.SchemaVersion)
 
 	rel, err := selfupdate.SelectRelease(&idx, "")
 	require.NoError(t, err)

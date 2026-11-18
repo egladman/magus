@@ -155,7 +155,7 @@ type ReleaseArtifact struct {
 	SHA256 string `yaml:"sha256" json:"sha256"`
 }
 
-// releaseIndexAPIVersion is selfupdate.ReleaseIndexAPIVersion, spelled again because this
+// releaseIndexAPIVersion is the constant of that name in internal/selfupdate, spelled again because this
 // command does not import the client; a test pins the pair.
 const releaseIndexAPIVersion = "magus.release-index/v1alpha1"
 
