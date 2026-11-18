@@ -8,7 +8,7 @@ require (
 	github.com/egladman/magus/libs/codec v0.1.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.23.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
@@ -20,4 +20,3 @@ require (
 replace github.com/egladman/magus/libs/apiversion => ../apiversion
 
 replace github.com/egladman/magus/libs/codec => ../codec
-
