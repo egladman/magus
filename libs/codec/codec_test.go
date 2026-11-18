@@ -62,6 +62,12 @@ func (s *ConformanceSuite) TestMarshalNormalizesARawMessage() {
 		s.marshal(map[string]RawMessage{"raw": RawMessage(`{ "a" : "\u003c\u2028", "n": 1.50 }`)}))
 }
 
+// A stored RawMessage keeps its author's member order: only a Go map is sorted.
+func (s *ConformanceSuite) TestMarshalKeepsARawMessagesMemberOrder() {
+	s.Equal(`{"raw":{"z":1,"a":{"y":2,"b":3}}}`,
+		s.marshal(map[string]RawMessage{"raw": RawMessage(`{"z": 1, "a": {"y": 2, "b": 3}}`)}))
+}
+
 func (s *ConformanceSuite) TestMarshalRefusesInvalidUTF8() {
 	_, err := Marshal(map[string]string{"bad": "a\xffb"})
 	s.Require().ErrorIs(err, ErrInvalidUTF8)
