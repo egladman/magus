@@ -2,6 +2,7 @@ package job
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,10 +11,12 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -130,69 +133,82 @@ func (s *pathsNestedSuite) TestTheHeaderLineIsKept() {
 	s.NotContains(got, "spec")
 }
 
-// headerlessStoreSuite pins a store with no header line, which replays every migration
-// from 0 over rows a later magus already wrote.
+// headerlessStoreSuite pins a store with no header line, which would replay every
+// migration from 0.
 type headerlessStoreSuite struct {
 	suite.Suite
 }
 
 func TestHeaderlessStoreSuite(t *testing.T) { suite.Run(t, new(headerlessStoreSuite)) }
 
-func (s *headerlessStoreSuite) TestAnEnvelopedRowLoadsAndIsKept() {
-	ctx := s.T().Context()
+func (s *headerlessStoreSuite) TestAnEnvelopedRowIsRefusedAsDamagedAndNothingWritten() {
 	st := tempStore(s.T(), s.T().TempDir())
 	row := job.Job{ID: "a", State: job.StateRunning, Created: 1, Updated: 1, Paths: job.Paths{Write: []string{"a.go"}}}
 	line, err := job.MarshalRecord(row, nil)
 	s.Require().NoError(err)
-	path := plantRaw(s.T(), st, string(line))
-	current := tempStore(s.T(), s.T().TempDir())
-	plantRaw(s.T(), current, fmt.Sprintf("%s\n%s", headerLine(""), line))
-	want, err := current.List(ctx)
-	s.Require().NoError(err)
-	s.Require().Len(want, 1)
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", line, line))
 
-	rows, err := st.List(ctx)
+	_, err = st.List(s.T().Context())
+
+	headerless, ok := errors.AsType[*headerlessStoreError](err)
+	s.Require().True(ok, "%v", err)
+	s.Equal(1, headerless.Line)
+	s.ErrorContains(err, fmt.Sprintf("job store %s has no header line, and line 1 is an enveloped row, which only a store past migration %d holds", path, envelopedAt()))
+	s.ErrorContains(err, fmt.Sprintf("move it aside with `mv %s %s.damaged` and fork the jobs again", path, path))
+	s.Equal(fmt.Sprintf("%s\n%s\n", line, line), string(s.read(path)), "nothing was written")
+}
+
+func (s *headerlessStoreSuite) TestAFlatRowMigratesFromZero() {
+	st := tempStore(s.T(), s.T().TempDir())
+	st.notices = &bytes.Buffer{}
+	path := plantRaw(s.T(), st, `{"id":"a","state":"running","created":1,"updated":1}`)
+
+	rows, err := st.List(s.T().Context())
 
 	s.Require().NoError(err)
-	s.Equal(want, rows, "the row reads as it does under a current header")
+	s.Require().Len(rows, 1)
 	stored := storedLines(s.T(), path)
 	s.Require().Len(stored, 2, "the header the migration wrote, then the row")
 	s.Equal(string(job.APIVersion), stored[1]["apiVersion"])
 }
 
-// rootlessMigrationSuite pins the migration refusal for a store opened with
-// no root, which keys on the working directory. It changes directory, so it
-// runs alone.
+func (s *headerlessStoreSuite) read(path string) []byte {
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	return raw
+}
+
+// rootlessMigrationSuite pins the migration of a store opened with no root, which
+// keys on the working directory. It changes directory, so it runs alone.
 type rootlessMigrationSuite struct {
 	suite.Suite
 }
 
 func TestRootlessMigrationSuite(t *testing.T) { suite.Run(t, new(rootlessMigrationSuite)) }
 
-func (s *rootlessMigrationSuite) TestAJobCheckoutRefusesAndWritesNothing() {
-	root := s.T().TempDir()
-	s.T().Chdir(root)
-	st, path, notices := checkoutStore(s.T(), "", "running", forkCheckout(root))
-	raw, err := os.ReadFile(path)
-	s.Require().NoError(err)
-
-	_, err = st.Read(s.T().Context())
-
-	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
-	after, err := os.ReadFile(path)
-	s.Require().NoError(err)
-	s.Equal(string(raw), string(after), "nothing was written")
-	s.Empty(notices.String())
-}
-
-func (s *rootlessMigrationSuite) TestAnotherCheckoutMigrates() {
-	s.T().Chdir(s.T().TempDir())
-	st, path, _ := checkoutStore(s.T(), "", "running", forkCheckout(s.T().TempDir()))
+func (s *rootlessMigrationSuite) TestAWorkingDirectoryNoVersionControlHoldsMigrates() {
+	wd := s.T().TempDir()
+	s.T().Chdir(wd)
+	st, path, notices := behindStore(s.T(), "")
 
 	_, err := st.Read(s.T().Context())
 
 	s.Require().NoError(err)
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Contains(notices.String(), "so no base judged this magus")
+}
+
+func (s *rootlessMigrationSuite) TestAWorkingDirectoryOnABranchIsRefused() {
+	repo := testkit.NewRepository(s.T(), nil)
+	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
+	branch := repo.Commit("branch", map[string]string{"b.txt": "b\n"})
+	s.T().Chdir(repo.Root())
+	st, _, _ := behindStore(s.T(), "")
+
+	_, err := st.Read(types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v1", Commit: branch}))
+
+	_, ok := errors.AsType[*offBaseMigrationError](err)
+	s.True(ok, "%v", err)
 }
 
 // regroupSuite pins the move of a store's lines from the batch.magus group to the
@@ -252,13 +268,25 @@ func (s *regroupSuite) TestARowTakesTheJobGroupAndItsAnnotations() {
 		job.APIVersion, job.APIVersion.Group()+"/requires"), string(text))
 }
 
+// regrouped is a stored line as [regroup] rewrites it.
+func (s *regroupSuite) regrouped(text []byte) ([]byte, error) {
+	e, err := decodeEntry(text)
+	if err != nil {
+		return nil, err
+	}
+	if e, err = regroup(e); err != nil {
+		return nil, err
+	}
+	return codec.Marshal(e)
+}
+
 func (s *regroupSuite) TestAMigratedLineIsKeptByteForByte() {
 	line := []byte(fmt.Sprintf(`{"apiVersion":%q,"kind":"Job","metadata":{"annotations":{%q:"x"},"name":"a"},"spec":{}}`,
 		job.APIVersion, job.APIVersion.Group()+"/requires"))
-	once, err := regroupedText(line)
+	once, err := s.regrouped(line)
 	s.Require().NoError(err)
 
-	twice, err := regroupedText(once)
+	twice, err := s.regrouped(once)
 
 	s.Require().NoError(err)
 	s.JSONEq(string(line), string(once))
@@ -325,4 +353,175 @@ func (s *jobRecordReadSuite) TestAFlatRowSourceMigratesToJob() {
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	s.Equal(&tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceJob}, f.Jobs[0].ModelTier)
+}
+
+// baseFenceSuite pins who may migrate the job store every checkout and branch of a
+// repository shares: only a binary built on a commit the base contains.
+type baseFenceSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	// base is the commit origin/main names, and branch one past it on a branch.
+	base, branch string
+}
+
+func TestBaseFenceSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(baseFenceSuite))
+}
+
+func (s *baseFenceSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"})
+	s.base = s.repo.Head()
+	s.repo.Git("update-ref", "refs/remotes/origin/main", s.base)
+	s.repo.Git("checkout", "-q", "-b", "feat")
+	s.branch = s.repo.Commit("branch work", map[string]string{"b.txt": "b\n"})
+}
+
+// built is a context whose binary was built at version from commit.
+func (s *baseFenceSuite) built(version, commit string) context.Context {
+	return types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: version, Commit: commit})
+}
+
+// refused asserts a read and a write of the store at path under ctx are refused as off
+// the base for why, and that nothing was written.
+func (s *baseFenceSuite) refused(ctx context.Context, st *Store, path, why string) *offBaseMigrationError {
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+
+	_, err = st.Read(ctx)
+
+	off, ok := errors.AsType[*offBaseMigrationError](err)
+	s.Require().True(ok, "%v", err)
+	s.Contains(err.Error(), why)
+	s.Contains(err.Error(), "rebuild magus from origin/main, or run this binary under its own XDG_STATE_HOME")
+	_, err = st.Update(ctx, "b", func(cur *job.Job) { *cur = lease("b") })
+	s.Require().ErrorAs(err, &off, "a write refuses it too")
+	after, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(string(raw), string(after), "nothing was written")
+	return off
+}
+
+func (s *baseFenceSuite) TestABinaryBuiltOnTheBaseMigratesAndStampsItself() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	f, err := st.Read(s.built("v0.4.3", s.base))
+
+	s.Require().NoError(err)
+	s.Equal("ship it", f.Jobs[0].Parent)
+	header := storedLines(s.T(), path)[0]
+	s.InDelta(1, header["migration"], 0)
+	s.Equal(map[string]any{"version": "v0.4.3", "commit": s.base}, header["writer"])
+}
+
+func (s *baseFenceSuite) TestABranchBinaryIsRefused() {
+	st, path, notices := behindStore(s.T(), s.repo.Root())
+
+	off := s.refused(s.built("v0.4.3-1-gfeat", s.branch), st, path,
+		fmt.Sprintf("origin/main at %s does not contain commit %.12s, which built it", s.repo.Git("rev-parse", "--short", s.base), s.branch))
+
+	s.Equal(&offBaseMigrationError{
+		Path: path, Found: 0, Known: 1, Build: types.MagusBuild{Version: "v0.4.3-1-gfeat", Commit: s.branch}, Base: "origin/main",
+		Why: fmt.Sprintf("origin/main at %s does not contain commit %.12s, which built it", s.repo.Git("rev-parse", "--short", s.base), s.branch),
+	}, off)
+	s.Contains(off.Error(), "(its header names no writer")
+	s.Empty(notices.String())
+}
+
+func (s *baseFenceSuite) TestTheRefusalNamesTheLastWriter() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	stamped := strings.Replace(string(raw), `"kind":"JobList"`, `"kind":"JobList","writer":{"version":"v0.4.2","commit":"0123456789abcdef"}`, 1)
+	s.Require().NoError(os.WriteFile(path, []byte(stamped), 0o644))
+
+	s.refused(s.built("v0.4.3-1-gfeat", s.branch), st, path, "magus v0.4.2 (commit 0123456789ab) wrote it last")
+}
+
+func (s *baseFenceSuite) TestABinaryWithNoBuildCommitIsRefused() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	s.refused(s.built("v0.4.3", "unknown"), st, path, "this binary carries no build commit, so nothing says origin/main contains it")
+}
+
+func (s *baseFenceSuite) TestABinaryBuiltFromAModifiedTreeIsRefused() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	s.refused(s.built("v0.4.3-dirty", s.base), st, path, "this binary was built from a modified tree")
+}
+
+func (s *baseFenceSuite) TestACommitTheRepositoryLacksIsRefused() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	s.refused(s.built("v0.4.3", strings.Repeat("e", 40)), st, path, "cannot say whether origin/main")
+}
+
+func (s *baseFenceSuite) TestABaseThatDoesNotResolveIsRefused() {
+	s.repo.Git("update-ref", "-d", "refs/remotes/origin/main")
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	s.refused(s.built("v0.4.3", s.base), st, path, "origin/main does not resolve in "+s.repo.Root())
+}
+
+// A job's own checkout migrates like any other once its binary is on the base: the
+// refusal is the binary's, not the checkout's.
+func (s *baseFenceSuite) TestALinkedCheckoutOnTheBaseMigrates() {
+	wt := s.repo.AddWorktree("job")
+	st, path, _ := behindStore(s.T(), wt.Root())
+
+	_, err := st.Read(s.built("v0.4.3", s.base))
+
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+}
+
+func (s *jobSuite) TestARootNoVersionControlHoldsMigratesAndSaysNothingJudgedIt() {
+	root := s.T().TempDir()
+	st, path, notices := behindStore(s.T(), root)
+
+	_, err := st.Read(s.T().Context())
+
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Contains(notices.String(), fmt.Sprintf("job: no version control holds %s, so no base judged this magus before it migrated job store %s\n", root, path))
+}
+
+// writerStampSuite pins the writer every write of the job store records in its header.
+type writerStampSuite struct {
+	suite.Suite
+}
+
+func TestWriterStampSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(writerStampSuite))
+}
+
+func (s *writerStampSuite) TestEveryWriteStampsItsWriter() {
+	st := tempStore(s.T(), s.T().TempDir())
+	ctx := types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v1", Commit: "c1"})
+	_, err := st.Update(ctx, "a", func(cur *job.Job) { *cur = lease("a") })
+	s.Require().NoError(err)
+	path, err := st.Path()
+	s.Require().NoError(err)
+	s.Equal(map[string]any{"version": "v1", "commit": "c1"}, storedLines(s.T(), path)[0]["writer"])
+
+	ctx = types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v2", Commit: "c2"})
+	_, err = st.Update(ctx, "b", func(cur *job.Job) { *cur = lease("b") })
+
+	s.Require().NoError(err)
+	lines := storedLines(s.T(), path)
+	s.Equal(map[string]any{"version": "v2", "commit": "c2"}, lines[0]["writer"], "the header names the last writer")
+	s.Len(lines, 3, "a new writer rewrites the file, so one header leads it")
+}
+
+func (s *writerStampSuite) TestAWriteWithNoBuildOnItsContextStampsTheBinary() {
+	st := tempStore(s.T(), s.T().TempDir())
+
+	_, err := st.Update(s.T().Context(), "a", func(cur *job.Job) { *cur = lease("a") })
+
+	s.Require().NoError(err)
+	path, err := st.Path()
+	s.Require().NoError(err)
+	commit, _ := buildinfo.Commit()
+	s.Equal(map[string]any{"version": buildinfo.UnknownVersion, "commit": commit}, storedLines(s.T(), path)[0]["writer"])
 }

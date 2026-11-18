@@ -97,6 +97,56 @@ func (s *migrateSuite) TestAFailingHeaderRewriteLeavesTheFile() {
 	s.Equal(body, s.contents(st))
 }
 
+func (s *migrateSuite) TestTheStampRunsAfterTheMigrationsAndBeforeTheVersion() {
+	m := renameMember("plan", "book")
+	m.Header = func(e Entry) (Entry, error) {
+		e["book"] = e["plan"]
+		delete(e, "plan")
+		return e, nil
+	}
+	st := s.store("{\"plan\":\"p\",\"writer\":\"old\"}\n{\"id\":\"a\"}\n", m)
+	st.Stamp = func(e Entry) (Entry, error) {
+		_, renamed := e["book"]
+		s.True(renamed, "the migrations' header rewrite ran first")
+		e["writer"], e["migration"] = codec.RawMessage(`"new"`), codec.RawMessage("99")
+		return e, nil
+	}
+
+	_, err := st.Apply()
+	s.Require().NoError(err)
+	s.Equal("{\"book\":\"p\",\"migration\":1,\"writer\":\"new\"}\n{\"id\":\"a\"}\n", s.contents(st))
+}
+
+func (s *migrateSuite) TestAFailingStampLeavesTheFile() {
+	body := "{\"plan\":\"p\"}\n{\"id\":\"a\"}\n"
+	st := s.store(body, renameMember("plan", "book"))
+	st.Stamp = func(Entry) (Entry, error) { return nil, errors.New("no") }
+
+	_, err := st.Apply()
+	s.ErrorContains(err, "stamping the header: no")
+	s.Equal(body, s.contents(st))
+}
+
+func (s *migrateSuite) TestAStampReturningNoHeaderFails() {
+	body := "{\"id\":\"a\"}\n"
+	st := s.store(body, renameMember("plan", "book"))
+	st.Stamp = func(Entry) (Entry, error) { return nil, nil }
+
+	_, err := st.Apply()
+	s.ErrorContains(err, "stamping the header: returned no header")
+	s.Equal(body, s.contents(st))
+}
+
+func (s *migrateSuite) TestACurrentFileIsNotStamped() {
+	body := "{\"migration\":1}\n{\"id\":\"a\"}\n"
+	st := s.store(body, renameMember("plan", "book"))
+	st.Stamp = func(Entry) (Entry, error) { s.Fail("a file with nothing to migrate is not rewritten"); return nil, nil }
+
+	_, err := st.Apply()
+	s.Require().NoError(err)
+	s.Equal(body, s.contents(st))
+}
+
 func (s *migrateSuite) TestAddsAHeaderToAFileWithoutOne() {
 	st := s.store("{\"id\":\"a\",\"attempt\":1}\n", renameMember("attempt", "run"))
 
