@@ -211,6 +211,10 @@ type StopRequest struct {
 	// StopHookActive is the host's report that this stop follows one a hook already
 	// refused, so a rule that refuses once per stop lets the second through.
 	StopHookActive bool
+	// Background are the jobs, sorted, whose running try the stopping agent spawned in the
+	// host's background mode. The host tracks each child and wakes the agent when it ends,
+	// so a stop over one waits for it rather than abandons it. Empty for none.
+	Background []string
 	// Transcript is the path of the stopping agent's transcript as the host reported it,
 	// empty when it reported none.
 	Transcript string
