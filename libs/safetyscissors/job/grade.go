@@ -85,9 +85,13 @@ func (e *TreeError) Unwrap() error { return e.Err }
 // cited for a goal id the job does not declare as a check is a [*GoalError]. Paths and
 // symbol goals are not graded here: their evidence is the diff and the graph, not a run.
 //
-// It needs [WithTree], to tell a run of the tree as it is from a run of an older one.
+// It needs [WithTree], to tell a run of the tree as it is from a run of an older one, and
+// [WithCheckSpec], to tell a run of the goal's check from a run of another.
 func (s *Store) Grade(ctx context.Context, id string, refs map[string]RunRef) (Grade, error) {
 	if err := s.needTree("Grade"); err != nil {
+		return Grade{}, err
+	}
+	if err := s.needChecks("Grade"); err != nil {
 		return Grade{}, err
 	}
 	row, err := s.row(ctx, id)
@@ -115,7 +119,7 @@ func (s *Store) Grade(ctx context.Context, id string, refs map[string]RunRef) (G
 	}
 	out := Grade{Job: id}
 	for _, g := range checks {
-		out.Goals = append(out.Goals, gradeGoal(row, g, refs[g.ID], runs, tree))
+		out.Goals = append(out.Goals, s.checks.gradeGoal(row, g, refs[g.ID], runs, tree))
 	}
 	out.Verified = len(out.Goals) > 0 && !slices.ContainsFunc(out.Goals, func(gg GoalGrade) bool { return !gg.Verified })
 	if err := s.appendGrades(ctx, gradesEntry{grade: recordGrade(out, s.Now())}); err != nil {
@@ -124,7 +128,7 @@ func (s *Store) Grade(ctx context.Context, id string, refs map[string]RunRef) (G
 	return out, nil
 }
 
-func gradeGoal(row Job, g Goal, ref RunRef, runs map[RunRef]run, tree string) GoalGrade {
+func (spec *checkSpec) gradeGoal(row Job, g Goal, ref RunRef, runs map[RunRef]run, tree string) GoalGrade {
 	gg := GoalGrade{Goal: g.ID, Ref: ref}
 	if ref == "" {
 		gg.Violations = []string{"cites no run"}
@@ -143,8 +147,11 @@ func gradeGoal(row Job, g Goal, ref RunRef, runs map[RunRef]run, tree string) Go
 	if !slices.Contains(g.Accept, r.basis) {
 		v = append(v, fmt.Sprintf("the run is %s and this goal accepts only %v", r.basis, g.Accept))
 	}
-	if !SameLeaseCheck(&r.check, &g.Check) {
-		v = append(v, fmt.Sprintf("the run is of `%s` and this goal's check is `%s`", r.check.words(), g.Check.words()))
+	switch same, err := spec.equal(r.check, g.Check); {
+	case err != nil:
+		v = append(v, fmt.Sprintf("the run's check could not be compared with this goal's: %v", err))
+	case !same:
+		v = append(v, fmt.Sprintf("the run is of `%s` and this goal's check is `%s`", spec.renderCheck(r.check), spec.renderCheck(g.Check)))
 	}
 	if row.Created != 0 && r.started.Unix() < row.Created {
 		v = append(v, "the run started before the job was declared")
@@ -227,7 +234,7 @@ func (s *Store) goalError(row Job, goal string) error {
 type run struct {
 	job, goal      string
 	basis          Basis
-	check          LeaseCheck
+	check          codec.RawMessage
 	argv           []string
 	dir            string
 	tree           string
@@ -379,7 +386,7 @@ type checkRunRecord struct {
 	Job     string           `json:"job"`
 	Goal    string           `json:"goal"`
 	Basis   string           `json:"basis"`
-	Check   leaseCheckRecord `json:"check"`
+	Check   codec.RawMessage `json:"check"`
 	Argv    []string         `json:"argv,omitempty"`
 	Dir     string           `json:"dir,omitempty"`
 	Tree    string           `json:"tree"`
@@ -394,8 +401,8 @@ type checkRunRecord struct {
 
 func recordCheckRun(r run) checkRunRecord {
 	return checkRunRecord{
-		TypeMeta: runType(), Job: r.job, Goal: r.goal, Basis: wireBasis().spell(r.basis),
-		Check: leaseCheckRecord(r.check), Argv: slices.Clone(r.argv), Dir: r.dir, Tree: r.tree, Exit: r.exit,
+		TypeMeta: runType(), Job: r.job, Goal: r.goal, Basis: string(r.basis),
+		Check: slices.Clone(r.check), Argv: slices.Clone(r.argv), Dir: r.dir, Tree: r.tree, Exit: r.exit,
 		Output: r.output, Started: r.started.UnixMilli(), Ended: r.ended.UnixMilli(), Moved: r.moved,
 		Signer: r.signer, By: r.by,
 	}
@@ -409,7 +416,7 @@ func (r checkRunRecord) run() (run, error) {
 		return run{}, fmt.Errorf("run %s: %w", r.Ref, err)
 	}
 	return run{
-		job: r.Job, goal: r.Goal, basis: basis, check: LeaseCheck(r.Check), argv: r.Argv, dir: r.Dir,
+		job: r.Job, goal: r.Goal, basis: basis, check: r.Check, argv: r.Argv, dir: r.Dir,
 		tree: r.Tree, exit: r.Exit, output: r.Output, started: time.UnixMilli(r.Started), ended: time.UnixMilli(r.Ended),
 		moved: r.Moved, signer: r.Signer, by: r.By,
 	}, nil
@@ -437,7 +444,7 @@ func recordGrade(g Grade, now time.Time) *gradeRecord {
 	out := &gradeRecord{TypeMeta: gradeType(), Job: g.Job, Graded: now.UnixMilli(), Verified: g.Verified}
 	for _, gg := range g.Goals {
 		out.Goals = append(out.Goals, goalGradeRecord{
-			Goal: gg.Goal, Ref: gg.Ref, Basis: wireBasis().spell(gg.Basis), Passed: gg.Passed, Verified: gg.Verified,
+			Goal: gg.Goal, Ref: gg.Ref, Basis: string(gg.Basis), Passed: gg.Passed, Verified: gg.Verified,
 			Violations: slices.Clone(gg.Violations),
 		})
 	}

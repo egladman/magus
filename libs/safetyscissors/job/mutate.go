@@ -188,7 +188,12 @@ func (w *rowWrite) run(ctx context.Context, apply func(cur *Job, exists bool, no
 	}
 	w.row = w.row.Clone()
 	w.row.ID = w.id
-	w.declare()
+	if err := w.s.checks.validateChecks(&w.row); err != nil {
+		return w.s.wrap(err)
+	}
+	if err := w.declare(); err != nil {
+		return err
+	}
 	if err := w.authorize(ctx); err != nil {
 		return err
 	}
@@ -204,20 +209,60 @@ func (w *rowWrite) run(ctx context.Context, apply func(cur *Job, exists bool, no
 		return err
 	}
 	w.count()
-	w.conclude(ctx)
+	if err := w.conclude(ctx); err != nil {
+		return err
+	}
 	return w.place(ctx)
 }
 
 // declare gives a declaration the state it implies.
-func (w *rowWrite) declare() {
+func (w *rowWrite) declare() error {
 	// Every door into the store declares here, so a record naming no state
 	// is stored as declared: an empty state reads as ended.
 	if w.kind == AsDeclaration && w.row.State == "" {
 		w.row.State = StateDeclared
 	}
-	if w.kind == AsDeclaration && w.exists() && widensInPlace(w.prev, w.row) {
+	if w.kind != AsDeclaration || !w.exists() {
+		return nil
+	}
+	widens, err := widensInPlace(w.prev, w.row, w.s.checks.equal)
+	if err != nil {
+		return w.s.wrap(err)
+	}
+	if widens {
 		w.row.State = w.prev.State
 	}
+	return nil
+}
+
+// boundaryFields are the declared fields a widen or narrow changes, in ChangedFields'
+// spelling.
+func boundaryFields() []string { return []string{"paths.write", "paths.deny", "paths.read"} }
+
+// widensInPlace reports a declaration that changes a live row's boundaries and nothing
+// else it declares, while resetting a state its holder already moved past declared: a
+// re-fork that only moves paths. Such a write keeps the stored state, since resetting it
+// would hand the holder's job out again. A deadline may move with it. A re-fork that
+// changes no boundary still resets the state, which is how a rejected job is handed out
+// again.
+func widensInPlace(prev, next Job, equal CheckEqual) (bool, error) {
+	if !prev.State.Live() || prev.State == StateDeclared || next.State != StateDeclared {
+		return false, nil
+	}
+	changed, err := ChangedFields(prev, next, equal)
+	if err != nil {
+		return false, err
+	}
+	moved := false
+	for _, field := range changed {
+		switch {
+		case slices.Contains(boundaryFields(), field):
+			moved = true
+		case field != "state" && field != "deadline":
+			return false, nil
+		}
+	}
+	return moved, nil
 }
 
 // authorize grades the write and stamps the entry an entry declaration adds.
@@ -225,7 +270,7 @@ func (w *rowWrite) authorize(ctx context.Context) error {
 	w.entering = w.kind == AsDeclaration && requestsEntry(w.prev, w.row)
 	switch {
 	case w.entering:
-		if err := authorizeEntry(w.actor, w.id, w.prev, w.row, w.exists(), w.f.Jobs); err != nil {
+		if err := authorizeEntry(w.actor, w.id, w.prev, w.row, w.exists(), w.f.Jobs, w.s.checks.equal); err != nil {
 			return w.s.wrap(err)
 		}
 		e := &w.row.Entries[len(w.row.Entries)-1]
@@ -233,7 +278,7 @@ func (w *rowWrite) authorize(ctx context.Context) error {
 	case w.kind == AsClaim && w.s.hook != nil:
 		// Only the caller's claim rule grades a claim; see [AsClaim].
 	case w.kind.Graded():
-		if err := AuthorizeRow(w.actor, w.id, w.kind, w.prev, w.row, w.exists(), w.f.Jobs); err != nil {
+		if err := AuthorizeRow(w.actor, w.id, w.kind, w.prev, w.row, w.exists(), w.f.Jobs, w.s.checks.equal); err != nil {
 			return w.s.wrap(err)
 		}
 	}
@@ -396,11 +441,15 @@ func (w *rowWrite) count() {
 
 // conclude sets the generation, the evidence, and what the row requires and
 // releases. A fork of the next attempt starts the evidence and counters over.
-func (w *rowWrite) conclude(ctx context.Context) {
+func (w *rowWrite) conclude(ctx context.Context) error {
 	row, prev := &w.row, w.prev
 	// The generation and the evidence are the store's too. Only a wait
 	// records a rejection.
-	row.Generation = nextGeneration(prev, *row, w.exists(), w.kind)
+	generation, err := nextGeneration(prev, *row, w.exists(), w.kind, w.s.checks.equal)
+	if err != nil {
+		return w.s.wrap(err)
+	}
+	row.Generation = generation
 	if w.kind != AsVerdict {
 		row.Rejection = prev.Rejection
 	}
@@ -420,6 +469,7 @@ func (w *rowWrite) conclude(ctx context.Context) {
 	default:
 		row.Authority = prev.Authority
 	}
+	return nil
 }
 
 // place stores the row in the ledger.
@@ -445,25 +495,32 @@ func (w *rowWrite) place(ctx context.Context) error {
 // than prev's for a write that changes the declared spec ([SpecChanges]). An observation
 // declares nothing, and neither does a write that only widens the write paths: evidence
 // taken under the narrower set still asks what the wider one asks.
-func nextGeneration(prev, row Job, exists bool, kind WriteKind) int {
+func nextGeneration(prev, row Job, exists bool, kind WriteKind, equal CheckEqual) (int, error) {
 	if !exists {
-		return 1
+		return 1, nil
 	}
 	generation := max(prev.Generation, 1)
-	if kind != AsObservation && changesSpec(prev, row) {
+	if kind == AsObservation {
+		return generation, nil
+	}
+	changed, err := changesSpec(prev, row, equal)
+	if changed {
 		generation++
 	}
-	return generation
+	return generation, err
 }
 
 // changesSpec reports whether row declares anything prev did not, other than write paths
 // that each hold every path prev held.
-func changesSpec(prev, row Job) bool {
-	changes := SpecChanges(prev, row)
-	if len(changes) == 1 && changes[0] == "paths.write" {
-		return !widens(prev.Paths.Write, row.Paths.Write)
+func changesSpec(prev, row Job, equal CheckEqual) (bool, error) {
+	changes, err := SpecChanges(prev, row, equal)
+	if err != nil {
+		return false, err
 	}
-	return len(changes) > 0
+	if len(changes) == 1 && changes[0] == "paths.write" {
+		return !widens(prev.Paths.Write, row.Paths.Write), nil
+	}
+	return len(changes) > 0, nil
 }
 
 // widens reports whether every path in held lies within some path of next.

@@ -61,9 +61,10 @@ type Declaration struct {
 	// checkout's revision when it names none.
 	// The job owns it: see [Worktree]. Empty works wherever the job is taken.
 	Checkout string `json:"checkout,omitempty" schema:"abspath"`
-	// Check is the one check this lease runs, and acceptance binds a worker's evidence
-	// to it.
-	Check *LeaseCheck `json:"check,omitzero"`
+	// Check is the one check this lease runs, as opaque JSON the store reads through
+	// [WithCheckSpec], and acceptance binds a worker's evidence to it. Nil, empty or JSON
+	// null declares none.
+	Check codec.RawMessage `json:"check,omitzero"`
 	// State is the job's lifecycle position, empty for a job that has not said
 	// where it stands. no_return is a lease that never reported, which is not
 	// a failure.
@@ -202,7 +203,8 @@ func pathOutsideWorkspace(p string) string {
 }
 
 // Faults is every fault the record shows on its own, without a workspace: each field's
-// shape, the check, the deviations and the goals. It never stops at the first. A
+// shape, the deviations and the goals. What a check says is the store's [CheckValidate]'s
+// to refuse, at write. It never stops at the first. A
 // deviation may permit only a code in permissible, the caller's own.
 func (d Declaration) Faults(permissible ...Code) []Fault {
 	var ps []Fault
@@ -305,8 +307,6 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 				"name an entry of paths.write, or drop it")
 		}
 	}
-	_, declared, checkFaults := d.check()
-	ps = append(ps, checkFaults...)
 	for i, b := range d.Breaks {
 		if strings.TrimSpace(b) == "" {
 			at := fmt.Sprintf("breaks[%d]", i)
@@ -326,7 +326,7 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
 		}
 	}
-	return append(ps, goalFaults(d.Goals, declared)...)
+	return append(ps, goalFaults(d.Goals, HasCheck(d.Check))...)
 }
 
 // claimFaults is every fault of a claim record: it carries only schema_version, id
@@ -422,33 +422,6 @@ func (e *TimeoutError) Error() string {
 	return fmt.Sprintf("timeout %q is not a positive duration such as 30m or 2h", e.Timeout)
 }
 
-// check is the job's declared check and whether it declares one. A check that does not
-// parse is refused HERE, at the door.
-func (d Declaration) check() (LeaseCheck, bool, []Fault) {
-	invalid := func(field string, err error, fix string) []Fault {
-		return []Fault{{Kind: FaultRecord, Field: field, Message: err.Error(), Fix: fix}}
-	}
-	switch {
-	case d.Check != nil && d.Check.Script != "":
-		if err := d.Check.validScript(); err != nil {
-			return LeaseCheck{}, false, invalid("check.script", err, "name a target or a script, and give a script no project or charms")
-		}
-		return LeaseCheck{Script: d.Check.Script, Args: d.Check.Args, Test: d.Check.Test}, true, nil
-	case d.Check != nil:
-		if err := d.Check.validScript(); err != nil {
-			return LeaseCheck{}, false, invalid("check.test", err, "drop test, or name a script")
-		}
-		parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", d.Check.Target, d.Check.Project))
-		if err != nil {
-			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")
-		}
-		parsed.Args = d.Check.Args
-		parsed.NoDefaultCharms = d.Check.NoDefaultCharms
-		return parsed, true, nil
-	}
-	return LeaseCheck{}, false, nil
-}
-
 // The deliveries a person picks for a job's work.
 const (
 	// DeliveryFold folds the work into the parent's pull request.
@@ -497,11 +470,10 @@ func (d Declaration) Apply(j *Job) {
 	j.Delivery = d.Delivery
 	j.ParentHead = strings.TrimSpace(d.ParentHead)
 	j.Follows = strings.TrimSpace(d.Follows)
-	// Faults refused an unparsable check before the job reached a store.
-	check, declared, _ := d.check()
+	// The store validates the check when it writes the row; see [WithCheckSpec].
 	j.Check = nil
-	if declared {
-		j.Check = &check
+	if HasCheck(d.Check) {
+		j.Check = slices.Clone(d.Check)
 	}
 	j.Goals = cloneGoals(d.Goals)
 	j.State = d.State
@@ -533,7 +505,7 @@ func cloneGoals(in []Goal) []Goal {
 		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
 		// job.PutMerge) clones them through here.
 		out[i] = goal.Resolve()
-		out[i].Check.Args = slices.Clone(goal.Check.Args)
+		out[i].Check = slices.Clone(goal.Check)
 		out[i].Paths = slices.Clone(goal.Paths)
 		out[i].Symbols = slices.Clone(goal.Symbols)
 		out[i].DependsOn = slices.Clone(goal.DependsOn)

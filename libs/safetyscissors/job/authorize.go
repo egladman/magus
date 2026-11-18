@@ -153,7 +153,10 @@ func landsRow(actor Actor, id string, rows []Job) bool {
 //
 // An [AsClaim] write is the store's claim rule's to grade, so this refuses it: a claim
 // graded by nothing would be a widening anybody can make.
-func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists bool, rows []Job) error {
+//
+// equal compares the goals' checks, as [ChangedFields] does; an error from it refuses
+// the write.
+func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists bool, rows []Job, equal CheckEqual) error {
 	if kind == AsClaim {
 		return refuse(actor, id, "no claim rule grades a claim on this store, so none is accepted")
 	}
@@ -170,7 +173,7 @@ func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists
 		return refuse(actor, id, "a caller the transport cannot name may be any row's holder or none, so it writes no row")
 	}
 	if kind == AsVerdict {
-		return authorizeVerdict(actor, id, prev, next, rows)
+		return authorizeVerdict(actor, id, prev, next, rows, equal)
 	}
 	if id != actor.Lease {
 		return authorizeChild(actor, id, next, exists, rows)
@@ -178,7 +181,11 @@ func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists
 	if !exists {
 		return refuse(actor, id, "nothing declares that row, and a worker does not declare its own lease")
 	}
-	for _, field := range ChangedFields(prev, next) {
+	changed, err := ChangedFields(prev, next, equal)
+	if err != nil {
+		return err
+	}
+	for _, field := range changed {
 		switch field {
 		case "paths.write":
 			if !Subset(next.Paths.Write, prev.Paths.Write) {
@@ -207,11 +214,15 @@ func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists
 
 // authorizeVerdict grades a bound holder's verdict: on a row below its own lease (see
 // [Actor.Verifies]), the move to pass and no other change.
-func authorizeVerdict(actor Actor, id string, prev, next Job, rows []Job) error {
+func authorizeVerdict(actor Actor, id string, prev, next Job, rows []Job, equal CheckEqual) error {
 	if !actor.Verifies(rows, id) {
 		return refuse(actor, id, "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's")
 	}
-	for _, field := range ChangedFields(prev, next) {
+	changed, err := ChangedFields(prev, next, equal)
+	if err != nil {
+		return err
+	}
+	for _, field := range changed {
 		if field != "state" || next.State != StatePass {
 			return refuse(actor, id, fmt.Sprintf("a verdict moves a row to %s and changes nothing else, and this one changes %s",
 				StatePass, field))
@@ -280,7 +291,15 @@ func authorizeClear(actor Actor) error {
 // ChangedFields names the DECLARED fields that differ between two versions of a row, in
 // the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
 // the registration verdict) are not here: nothing a caller sends decides them.
-func ChangedFields(prev, next Job) []string {
+//
+// equal compares two goals' checks, which only the caller can read (see [WithCheckSpec]);
+// an error from it is a [*CheckRefusedError], and a nil equal asked to compare two checks
+// an [*UnconfiguredError].
+func ChangedFields(prev, next Job, equal CheckEqual) ([]string, error) {
+	goals, err := goalsEqual(next.ID, prev.Goals, next.Goals, equal)
+	if err != nil {
+		return nil, err
+	}
 	var out []string
 	add := func(name string, differs bool) {
 		if differs {
@@ -302,7 +321,7 @@ func ChangedFields(prev, next Job) []string {
 	add("delivery", prev.Delivery != next.Delivery)
 	add("parent_head", prev.ParentHead != next.ParentHead)
 	add("validation", prev.Validation != next.Validation)
-	add("goals", !goalsEqual(prev.Goals, next.Goals))
+	add("goals", !goals)
 	add("deviations", !slices.Equal(prev.Deviations, next.Deviations))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
@@ -313,15 +332,19 @@ func ChangedFields(prev, next Job) []string {
 	// Stamped by the store, yet a worker's put can move it through a timeout, and a holder
 	// that extends its own bound has none.
 	add("deadline", prev.Deadline != next.Deadline)
-	return out
+	return out, nil
 }
 
 // SpecChanges names the spec fields that differ between prev and next, in the wire
 // spelling: [ChangedFields] less the ones a declaration never writes.
-func SpecChanges(prev, next Job) []string {
-	return slices.DeleteFunc(ChangedFields(prev, next), func(f string) bool {
+func SpecChanges(prev, next Job, equal CheckEqual) ([]string, error) {
+	changed, err := ChangedFields(prev, next, equal)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(changed, func(f string) bool {
 		return f == "state" || f == "reported_base" || f == "deadline"
-	})
+	}), nil
 }
 
 // changedAgentFields names what differs between two agent sections: agent
@@ -349,20 +372,43 @@ func changedAgentFields(prev, next *Agent) []string {
 // goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
 // bound worker mutation, and the model is small, typed, and stable. Every field counts: a
 // holder that could rewrite a goal's kind, expectation or subject could grade itself done.
-func goalsEqual(a, b []Goal) bool {
+// The checks go through equal, the caller's reading of them; id names the row in its
+// refusal.
+func goalsEqual(id string, a, b []Goal, equal CheckEqual) (bool, error) {
 	if len(a) != len(b) {
-		return false
+		return false, nil
 	}
 	for i := range a {
 		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
 			a[i].Kind != b[i].Kind || a[i].Expect != b[i].Expect ||
 			!slices.Equal(a[i].Paths, b[i].Paths) || !slices.Equal(a[i].Symbols, b[i].Symbols) ||
-			a[i].Check.Target != b[i].Check.Target || a[i].Check.Script != b[i].Check.Script || a[i].Check.Project != b[i].Check.Project ||
-			!slices.Equal(a[i].Check.Args, b[i].Check.Args) || !slices.Equal(a[i].DependsOn, b[i].DependsOn) {
-			return false
+			!slices.Equal(a[i].DependsOn, b[i].DependsOn) {
+			return false, nil
+		}
+		same, err := checksEqual(id, a[i], b[i], equal)
+		if err != nil || !same {
+			return false, err
 		}
 	}
-	return true
+	return true, nil
+}
+
+// checksEqual compares a's and b's checks through equal. Two goals that declare none are
+// equal without it.
+func checksEqual(id string, a, b Goal, equal CheckEqual) (bool, error) {
+	switch has := HasCheck(a.Check); {
+	case has != HasCheck(b.Check):
+		return false, nil
+	case !has:
+		return true, nil
+	case equal == nil:
+		return false, &UnconfiguredError{Op: "ChangedFields", Option: "WithCheckSpec"}
+	}
+	same, err := equal(a.Check, b.Check)
+	if err != nil {
+		return false, &CheckRefusedError{Job: id, Field: goalCheckField(b.ID), Err: err}
+	}
+	return same, nil
 }
 
 // listedIn reports whether every entry of inner is one outer also lists, as exact strings.

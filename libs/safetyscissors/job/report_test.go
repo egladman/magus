@@ -43,7 +43,7 @@ func (s *ReportSuite) TestAReportOfAPathsGoalIsRefused() {
 }
 
 func (s *ReportSuite) TestTheLeasesOwnCheckIsAGoalThatAcceptsOnlyAWitnessedRun() {
-	_, err := s.store.Update(s.T().Context(), "j1", func(j *Job) { c := testCheck(); j.Check = &c })
+	_, err := s.store.Update(s.T().Context(), "j1", func(j *Job) { j.Check = testCheck() })
 	s.Require().NoError(err)
 	ref, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: PrimaryGoalID, Check: testCheck(), By: "worker"})
 	s.Require().NoError(err)

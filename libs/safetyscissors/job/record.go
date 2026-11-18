@@ -6,7 +6,6 @@ import (
 	"maps"
 	"reflect"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/libs/apiversion"
@@ -32,22 +31,22 @@ type jobSpec struct {
 	Agent        *agentRecord                `json:"agent,omitzero"`
 	Checkpoint   string                      `json:"checkpoint,omitempty"`
 	Paths        Paths                       `json:"paths,omitzero"`
-	DependsOn    []string                    `json:"dependsOn,omitempty"`
+	DependsOn    []string                    `json:"depends_on,omitempty"`
 	Integrates   []string                    `json:"integrates,omitempty"`
 	Breaks       []string                    `json:"breaks,omitempty"`
-	BriefFormat  string                      `json:"briefFormat,omitempty"`
+	BriefFormat  string                      `json:"brief_format,omitempty"`
 	Delivery     string                      `json:"delivery,omitempty"`
-	ParentHead   string                      `json:"parentHead,omitempty"`
+	ParentHead   string                      `json:"parent_head,omitempty"`
 	Follows      string                      `json:"follows,omitempty"`
-	MaxAttempts  int                         `json:"maxAttempts,omitzero"`
-	MaxClaims    int                         `json:"maxClaims,omitzero"`
+	MaxAttempts  int                         `json:"max_attempts,omitzero"`
+	MaxClaims    int                         `json:"max_claims,omitzero"`
 	Deferred     []Deferred                  `json:"deferred,omitempty"`
-	LeftUnmerged string                      `json:"leftUnmerged,omitempty"`
+	LeftUnmerged string                      `json:"left_unmerged,omitempty"`
 	Weight       float64                     `json:"weight,omitzero"`
-	Check        *leaseCheckRecord           `json:"check,omitzero"`
+	Check        codec.RawMessage            `json:"check,omitzero"`
 	Validation   string                      `json:"validation,omitempty"`
 	Goals        []goalRecord                `json:"goals,omitempty"`
-	ReadOnly     bool                        `json:"readOnly,omitzero"`
+	ReadOnly     bool                        `json:"read_only,omitzero"`
 	Deviations   []Deviation                 `json:"deviations,omitempty"`
 	Unknown      map[string]codec.RawMessage `json:"-" codec:"unknown"`
 }
@@ -56,39 +55,39 @@ type jobSpec struct {
 // lifecycle; see [lifecycleConditions].
 type jobStatus struct {
 	Conditions      []apiversion.Condition      `json:"conditions,omitempty"`
-	ModelTier       *modelTierRecord            `json:"modelTier,omitzero"`
-	ReworkRounds    int                         `json:"reworkRounds,omitzero"`
+	ModelTier       *modelTierRecord            `json:"model_tier,omitzero"`
+	ReworkRounds    int                         `json:"rework_rounds,omitzero"`
 	Widenings       int                         `json:"widenings,omitzero"`
 	Claims          []claimRecord               `json:"claims,omitempty"`
 	Landed          bool                        `json:"landed,omitzero"`
 	Paused          int64                       `json:"paused,omitzero"`
-	PausedBy        originRecord                `json:"pausedBy,omitzero"`
-	PauseReason     string                      `json:"pauseReason,omitempty"`
-	PausedUntil     int64                       `json:"pausedUntil,omitzero"`
+	PausedBy        originRecord                `json:"paused_by,omitzero"`
+	PauseReason     string                      `json:"pause_reason,omitempty"`
+	PausedUntil     int64                       `json:"paused_until,omitzero"`
 	Rejection       *rejectionRecord            `json:"rejection,omitzero"`
 	Releases        []releaseRecord             `json:"releases,omitempty"`
 	Unattributed    []UnattributedWrite         `json:"unattributed,omitempty"`
 	Entries         []entryRecord               `json:"entries,omitempty"`
-	ReleaseRequests []ReleaseRequest            `json:"releaseRequests,omitempty"`
-	WriteProof      string                      `json:"writeProof,omitempty"`
+	ReleaseRequests []ReleaseRequest            `json:"release_requests,omitempty"`
+	WriteProof      string                      `json:"write_proof,omitempty"`
 	Validated       int64                       `json:"validated,omitzero"`
-	ReportedBase    string                      `json:"reportedBase,omitempty"`
-	BaseVerdict     string                      `json:"baseVerdict,omitempty"`
-	RegisteredBy    originRecord                `json:"registeredBy,omitzero"`
+	ReportedBase    string                      `json:"reported_base,omitempty"`
+	BaseVerdict     string                      `json:"base_verdict,omitempty"`
+	RegisteredBy    originRecord                `json:"registered_by,omitzero"`
 	Authority       string                      `json:"authority,omitempty"`
 	Registered      int64                       `json:"registered,omitzero"`
-	HolderStopped   int64                       `json:"holderStopped,omitzero"`
-	CheckoutRoot    string                      `json:"checkoutRoot,omitempty"`
+	HolderStopped   int64                       `json:"holder_stopped,omitzero"`
+	CheckoutRoot    string                      `json:"checkout_root,omitempty"`
 	Worktree        *worktreeRecord             `json:"worktree,omitzero"`
-	EndReason       string                      `json:"endReason,omitempty"`
+	EndReason       string                      `json:"end_reason,omitempty"`
 	Created         int64                       `json:"created"`
 	Updated         int64                       `json:"updated"`
 	Deadline        int64                       `json:"deadline,omitzero"`
 	Attempt         *runAttemptRecord           `json:"attempt,omitzero"`
-	GateAttempts    []gateAttemptRecord         `json:"gateAttempts,omitempty"`
-	LastRun         *runRecord                  `json:"lastRun,omitzero"`
+	GateAttempts    []gateAttemptRecord         `json:"gate_attempts,omitempty"`
+	LastRun         *runRecord                  `json:"last_run,omitzero"`
 	Integration     *integrationRecord          `json:"integration,omitzero"`
-	WaiterEvidence  *integrationRecord          `json:"waiterEvidence,omitzero"`
+	WaiterEvidence  *integrationRecord          `json:"waiter_evidence,omitzero"`
 	Unknown         map[string]codec.RawMessage `json:"-" codec:"unknown"`
 }
 
@@ -153,8 +152,7 @@ func (st *jobStatus) UnmarshalJSON(data []byte) error {
 // recordJob is row as the line jobs.jsonl stores. stored is the row's
 // record as read, nil for a new row: what it carries that row cannot say
 // is kept.
-// creds spells the credential kinds the store's caller admits.
-func recordJob(row Job, stored *jobRecord, creds wireEnum[CredentialKind]) jobRecord {
+func recordJob(row Job, stored *jobRecord) jobRecord {
 	var prev jobRecord
 	if stored != nil {
 		prev = *stored
@@ -166,7 +164,7 @@ func recordJob(row Job, stored *jobRecord, creds wireEnum[CredentialKind]) jobRe
 	meta := prev.Metadata.WithRequires(recordGroup, features)
 	meta.Name, meta.Generation = row.ID, int64(row.Generation)
 	return jobRecord{TypeMeta: jobType(), Metadata: meta, Spec: recordSpec(row, prev.Spec.Unknown),
-		Status: recordStatus(row, prev.Status, creds), Unknown: prev.Unknown}
+		Status: recordStatus(row, prev.Status), Unknown: prev.Unknown}
 }
 
 // recordSpec is the declared half of row's record.
@@ -175,16 +173,13 @@ func recordSpec(row Job, unknown map[string]codec.RawMessage) jobSpec {
 		Parent: row.Parent, Agent: recordAgent(row.Agent), Checkpoint: row.Checkpoint,
 		Paths:     row.Paths,
 		DependsOn: row.DependsOn, Integrates: row.Integrates, Breaks: row.Breaks,
-		BriefFormat: wireBriefFormat().spell(row.BriefFormat), Delivery: row.Delivery, ParentHead: row.ParentHead,
+		BriefFormat: string(row.BriefFormat), Delivery: row.Delivery, ParentHead: row.ParentHead,
 		Follows: row.Follows, MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims,
 		Deferred: row.Deferred, LeftUnmerged: row.LeftUnmerged, Weight: row.Weight,
 		Validation: row.Validation, ReadOnly: row.ReadOnly, Deviations: row.Deviations,
 		Unknown: unknown,
 	}
-	if row.Check != nil {
-		c := leaseCheckRecord(*row.Check)
-		spec.Check = &c
-	}
+	spec.Check = slices.Clone(row.Check)
 	for _, g := range row.Goals {
 		spec.Goals = append(spec.Goals, recordGoal(g))
 	}
@@ -193,17 +188,17 @@ func recordSpec(row Job, unknown map[string]codec.RawMessage) jobSpec {
 
 // recordStatus is the computed half of row's record. prev is the stored
 // status, whose conditions and unknown members carry over.
-func recordStatus(row Job, prev jobStatus, creds wireEnum[CredentialKind]) jobStatus {
+func recordStatus(row Job, prev jobStatus) jobStatus {
 	st := jobStatus{
 		Conditions:   lifecycleConditions(row, prev.Conditions),
 		ModelTier:    recordModelTier(row.ModelTier),
 		ReworkRounds: row.ReworkRounds, Widenings: row.Widenings, Landed: row.Landed,
-		Paused: row.Paused, PausedBy: recordOrigin(row.PausedBy, creds), PauseReason: row.PauseReason, PausedUntil: row.PausedUntil,
+		Paused: row.Paused, PausedBy: recordOrigin(row.PausedBy), PauseReason: row.PauseReason, PausedUntil: row.PausedUntil,
 		Rejection:    recordRejection(row.Rejection),
 		Unattributed: row.Unattributed, ReleaseRequests: row.ReleaseRequests,
-		WriteProof: wireWriteProof().spell(row.WriteProof), Validated: row.Validated,
-		ReportedBase: row.ReportedBase, BaseVerdict: wireBaseVerdict().spell(row.BaseVerdict),
-		RegisteredBy: recordOrigin(row.RegisteredBy, creds), Authority: row.Authority, Registered: row.Registered,
+		WriteProof: string(row.WriteProof), Validated: row.Validated,
+		ReportedBase: row.ReportedBase, BaseVerdict: string(row.BaseVerdict),
+		RegisteredBy: recordOrigin(row.RegisteredBy), Authority: row.Authority, Registered: row.Registered,
 		HolderStopped: row.HolderStopped, CheckoutRoot: row.CheckoutRoot, EndReason: row.EndReason,
 		Created: row.Created, Updated: row.Updated, Deadline: row.Deadline,
 		Integration: recordIntegration(row.Integration), WaiterEvidence: recordIntegration(row.WaiterEvidence),
@@ -211,15 +206,15 @@ func recordStatus(row Job, prev jobStatus, creds wireEnum[CredentialKind]) jobSt
 	}
 	for _, c := range row.Claims {
 		st.Claims = append(st.Claims, claimRecord{
-			Path: c.Path, Evidence: claimEvidenceRecord{Kind: wireClaimKind().spell(c.Evidence.Kind), Subject: c.Evidence.Subject},
-			Proof: c.Proof, At: c.At, By: recordOrigin(c.By, creds),
+			Path: c.Path, Evidence: claimEvidenceRecord{Kind: string(c.Evidence.Kind), Subject: c.Evidence.Subject},
+			Proof: c.Proof, At: c.At, By: recordOrigin(c.By),
 		})
 	}
 	for _, rel := range row.Releases {
 		st.Releases = append(st.Releases, releaseRecord(rel))
 	}
 	for _, e := range row.Entries {
-		st.Entries = append(st.Entries, entryRecord{Path: e.Path, By: recordOrigin(e.By, creds), At: e.At, Consumed: e.Consumed})
+		st.Entries = append(st.Entries, entryRecord{Path: e.Path, By: recordOrigin(e.By), At: e.At, Consumed: e.Consumed})
 	}
 	recordRuns(&st, row)
 	return st
@@ -279,10 +274,7 @@ func (s jobSpec) job(bad *wireReads) Job {
 		Deferred: s.Deferred, LeftUnmerged: s.LeftUnmerged, Weight: s.Weight,
 		Validation: s.Validation, ReadOnly: s.ReadOnly, Deviations: s.Deviations,
 	}
-	if s.Check != nil {
-		c := LeaseCheck(*s.Check)
-		row.Check = &c
-	}
+	row.Check = slices.Clone(s.Check)
 	for _, g := range s.Goals {
 		row.Goals = append(row.Goals, g.goal(bad))
 	}
@@ -419,52 +411,34 @@ func lifecycleState(conditions []apiversion.Condition) (State, error) {
 	return state, nil
 }
 
-// wireEnum spells an enum's lowercase Go values in CamelCase on a record.
-// It writes a value it does not list unchanged, and refuses to read one.
+// wireEnum is an enum's closed set as a record stores it: each value as its Go value. A
+// writer stores any value unchanged, and a reader refuses one the set does not list.
 type wireEnum[T ~string] struct {
-	wire map[T]string
-	gov  map[string]T
+	known map[string]T
 }
 
-// wireReads collects the stored spellings no wireEnum lists, so a record
+// wireReads collects the stored values no wireEnum lists, so a record
 // carrying one is refused with an error rather than read.
 type wireReads struct{ errs []error }
 
 func (r *wireReads) refusal() error { return errors.Join(r.errs...) }
 
 func newWireEnum[T ~string](values ...T) wireEnum[T] {
-	e := wireEnum[T]{wire: map[T]string{}, gov: map[string]T{}}
+	e := wireEnum[T]{known: make(map[string]T, len(values))}
 	for _, v := range values {
-		w := camelCase(string(v))
-		e.wire[v], e.gov[w] = w, v
+		e.known[string(v)] = v
 	}
 	return e
 }
 
-func (e wireEnum[T]) spell(v T) string {
-	if w, ok := e.wire[v]; ok {
-		return w
-	}
-	return string(v)
-}
-
-// read is the value w spells, empty for an empty w. A spelling e does not
+// read is the value w stores, empty for an empty w. A value e does not
 // list goes on bad: a reader switching on the value meets only values it knows.
 func (e wireEnum[T]) read(w string, bad *wireReads) T {
-	if v, ok := e.gov[w]; ok || w == "" {
+	if v, ok := e.known[w]; ok || w == "" {
 		return v
 	}
 	bad.errs = append(bad.errs, fmt.Errorf("%q is not a stored %s", w, reflect.TypeFor[T]().Name()))
 	return ""
-}
-
-// camelCase spells words joined by '_' or '-' as one CamelCase word.
-func camelCase(v string) string {
-	var b strings.Builder
-	for word := range strings.FieldsFuncSeq(v, func(r rune) bool { return r == '_' || r == '-' }) {
-		b.WriteString(strings.ToUpper(word[:1]) + word[1:])
-	}
-	return b.String()
 }
 
 func wireWriteProof() wireEnum[WriteProof] {
@@ -499,8 +473,8 @@ func wireSkills() wireEnum[tier.SkillVariant] {
 	return newWireEnum(tier.SkillVariantShort, tier.SkillVariantFull)
 }
 
-// The records below mirror domain types under camelCase keys. A domain
-// type whose keys are all one word is stored as it is.
+// The records below mirror domain types under snake_case keys, and each refuses a member
+// it does not declare (see [readNested]), which a domain type does not.
 
 type agentRecord struct {
 	Model        Model        `json:"model,omitzero"`
@@ -518,7 +492,7 @@ func recordAgent(s *Agent) *agentRecord {
 		return nil
 	}
 	return &agentRecord{Model: s.Model, Instructions: s.Instructions,
-		Worker: workerRecord{Type: wireWorkerType().spell(s.Worker.Type), Reason: s.Worker.Reason}}
+		Worker: workerRecord{Type: string(s.Worker.Type), Reason: s.Worker.Reason}}
 }
 
 func (r *agentRecord) spec(bad *wireReads) *Agent {
@@ -529,22 +503,13 @@ func (r *agentRecord) spec(bad *wireReads) *Agent {
 		Worker: Worker{Type: wireWorkerType().read(r.Worker.Type, bad), Reason: r.Worker.Reason}}
 }
 
-type leaseCheckRecord struct {
-	Target          string   `json:"target"`
-	Script          string   `json:"script,omitempty"`
-	Project         string   `json:"project,omitempty"`
-	Args            []string `json:"args,omitempty"`
-	NoDefaultCharms bool     `json:"noDefaultCharms,omitzero"`
-	Test            bool     `json:"test,omitzero"`
-}
-
 type goalRecord struct {
 	ID          string           `json:"id"`
 	Description string           `json:"description,omitempty"`
-	DependsOn   []string         `json:"dependsOn,omitempty"`
+	DependsOn   []string         `json:"depends_on,omitempty"`
 	Kind        string           `json:"kind"`
 	Expect      string           `json:"expect,omitempty"`
-	Check       leaseCheckRecord `json:"check,omitzero"`
+	Check       codec.RawMessage `json:"check,omitzero"`
 	Paths       []string         `json:"paths,omitempty"`
 	Symbols     []string         `json:"symbols,omitempty"`
 	Signature   string           `json:"signature,omitempty"`
@@ -555,18 +520,17 @@ type goalRecord struct {
 
 func recordGoal(g Goal) goalRecord {
 	r := goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
-		Kind: wireGoalKind().spell(g.Kind), Expect: wireGoalExpect().spell(g.Expect), Check: leaseCheckRecord(g.Check),
+		Kind: string(g.Kind), Expect: string(g.Expect), Check: slices.Clone(g.Check),
 		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
-	bases := wireBasis()
 	for _, b := range g.Accept {
-		r.Accept = append(r.Accept, bases.spell(b))
+		r.Accept = append(r.Accept, string(b))
 	}
 	return r
 }
 
 func (r goalRecord) goal(bad *wireReads) Goal {
 	g := Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
-		Kind: wireGoalKind().read(r.Kind, bad), Expect: wireGoalExpect().read(r.Expect, bad), Check: LeaseCheck(r.Check),
+		Kind: wireGoalKind().read(r.Kind, bad), Expect: wireGoalExpect().read(r.Expect, bad), Check: slices.Clone(r.Check),
 		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
 	bases := wireBasis()
 	for _, w := range r.Accept {
@@ -590,7 +554,7 @@ func recordModelTier(t *tier.Assignment) *modelTierRecord {
 	if t == nil {
 		return nil
 	}
-	return &modelTierRecord{Name: t.Name, Rank: t.Rank, Skills: wireSkills().spell(t.Skills), Source: wireTierSource().spell(t.Source),
+	return &modelTierRecord{Name: t.Name, Rank: t.Rank, Skills: string(t.Skills), Source: string(t.Source),
 		Reason: t.Reason, Site: t.Site, Model: t.Model, Shared: t.Shared}
 }
 
@@ -605,7 +569,7 @@ func (r *modelTierRecord) tier(bad *wireReads) *tier.Assignment {
 type originRecord struct {
 	User       string           `json:"user,omitempty"`
 	UID        string           `json:"uid,omitempty"`
-	EntryPoint string           `json:"entryPoint,omitempty"`
+	EntryPoint string           `json:"entry_point,omitempty"`
 	Host       string           `json:"host,omitempty"`
 	Session    string           `json:"session,omitempty"`
 	Agent      string           `json:"agent,omitzero"`
@@ -618,10 +582,10 @@ type credentialRecord struct {
 	Name string `json:"name,omitempty"`
 }
 
-func recordOrigin(o Origin, creds wireEnum[CredentialKind]) originRecord {
-	return originRecord{User: o.User, UID: o.UID, EntryPoint: wireEntryPoint().spell(o.EntryPoint), Host: o.Host,
+func recordOrigin(o Origin) originRecord {
+	return originRecord{User: o.User, UID: o.UID, EntryPoint: string(o.EntryPoint), Host: o.Host,
 		Session: o.Session, Agent: o.Agent, Credential: credentialRecord{
-			Kind: creds.spell(o.Credential.Kind), ID: o.Credential.ID, Name: o.Credential.Name,
+			Kind: string(o.Credential.Kind), ID: o.Credential.ID, Name: o.Credential.Name,
 		}}
 }
 
@@ -648,10 +612,10 @@ type claimEvidenceRecord struct {
 type releaseRecord struct {
 	Path        string `json:"path"`
 	Digest      string `json:"digest"`
-	ReleasedAt  int64  `json:"releasedAt"`
+	ReleasedAt  int64  `json:"released_at"`
 	Revoked     bool   `json:"revoked,omitzero"`
-	TakenBy     string `json:"takenBy,omitempty"`
-	DeadBecause string `json:"deadBecause,omitempty"`
+	TakenBy     string `json:"taken_by,omitempty"`
+	DeadBecause string `json:"dead_because,omitempty"`
 	Narrowed    bool   `json:"narrowed,omitzero"`
 }
 
@@ -665,7 +629,7 @@ type entryRecord struct {
 type verificationRecord struct {
 	ID         string   `json:"id"`
 	Verified   bool     `json:"verified"`
-	OutputRef  string   `json:"outputRef,omitempty"`
+	OutputRef  string   `json:"output_ref,omitempty"`
 	Scope      string   `json:"scope,omitempty"`
 	Owed       string   `json:"owed,omitempty"`
 	Violations []string `json:"violations,omitempty"`
@@ -697,7 +661,7 @@ type rejectionRecord struct {
 	Unmet              []verificationRecord `json:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"`
 	At                 int64                `json:"at"`
-	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
+	ObservedGeneration int                  `json:"observed_generation,omitzero"`
 }
 
 func recordRejection(r *Rejection) *rejectionRecord {
@@ -720,7 +684,7 @@ type worktreeRecord struct {
 	Base         string `json:"base"`
 	Created      int64  `json:"created"`
 	Binary       string `json:"binary,omitempty"`
-	BinaryDigest string `json:"binaryDigest,omitempty"`
+	BinaryDigest string `json:"binary_digest,omitempty"`
 	Removed      int64  `json:"removed,omitzero"`
 	Kept         string `json:"kept,omitempty"`
 	Made         bool   `json:"made,omitzero"`
@@ -729,33 +693,33 @@ type worktreeRecord struct {
 type runAttemptRecord struct {
 	Found              bool     `json:"found"`
 	Ref                string   `json:"ref,omitempty"`
-	TimestampMs        int64    `json:"timestampMs,omitzero"`
+	TimestampMs        int64    `json:"timestamp_ms,omitzero"`
 	Project            string   `json:"project,omitempty"`
 	Target             string   `json:"target,omitempty"`
 	Spell              string   `json:"spell,omitempty"`
 	Failed             bool     `json:"failed,omitzero"`
-	AttemptID          string   `json:"attemptId,omitempty"`
-	DurationMs         int64    `json:"durationMs,omitzero"`
+	AttemptID          string   `json:"attempt_id,omitempty"`
+	DurationMs         int64    `json:"duration_ms,omitzero"`
 	Revision           string   `json:"revision,omitempty"`
 	Dirty              bool     `json:"dirty,omitzero"`
 	Lease              string   `json:"lease,omitempty"`
-	ExtraArgs          []string `json:"extraArgs,omitempty"`
-	ObservedGeneration int      `json:"observedGeneration,omitzero"`
+	ExtraArgs          []string `json:"extra_args,omitempty"`
+	ObservedGeneration int      `json:"observed_generation,omitzero"`
 }
 
 type gateAttemptRecord struct {
-	GateID  string           `json:"gateId"`
+	GateID  string           `json:"gate_id"`
 	Attempt runAttemptRecord `json:"attempt"`
 }
 
 type runRecord struct {
 	Invocation     string `json:"invocation,omitempty"`
 	Ended          int64  `json:"ended,omitzero"`
-	DurationMs     int64  `json:"durationMs,omitzero"`
+	DurationMs     int64  `json:"duration_ms,omitzero"`
 	OK             bool   `json:"ok"`
 	Error          string `json:"error,omitempty"`
-	ItemsRemoved   int64  `json:"itemsRemoved,omitzero"`
-	BytesReclaimed int64  `json:"bytesReclaimed,omitzero"`
+	ItemsRemoved   int64  `json:"items_removed,omitzero"`
+	BytesReclaimed int64  `json:"bytes_reclaimed,omitzero"`
 }
 
 type integrationRecord struct {
@@ -763,7 +727,7 @@ type integrationRecord struct {
 	At                 int64                `json:"at"`
 	Verified           bool                 `json:"verified"`
 	Gates              []verificationRecord `json:"gates,omitempty"`
-	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
+	ObservedGeneration int                  `json:"observed_generation,omitzero"`
 }
 
 func recordIntegration(i *Integration) *integrationRecord {
@@ -810,51 +774,51 @@ type attemptSpec struct {
 	N   int    `json:"n"`
 }
 
-// attemptStatusRecord is [AttemptStatus] under camelCase keys.
+// attemptStatusRecord is [AttemptStatus] as attempts.jsonl stores it.
 // JobState is what the job ended as, never the try's lifecycle.
 type attemptStatusRecord struct {
 	Started            int64                `json:"started,omitzero"`
 	Ended              int64                `json:"ended,omitzero"`
 	End                string               `json:"end,omitempty"`
 	Result             *resultRecord        `json:"result,omitzero"`
-	JobState           string               `json:"jobState,omitempty"`
-	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
-	EndReason          string               `json:"endReason,omitempty"`
-	ModelTier          string               `json:"modelTier,omitzero"`
+	JobState           string               `json:"job_state,omitempty"`
+	ObservedGeneration int                  `json:"observed_generation,omitzero"`
+	EndReason          string               `json:"end_reason,omitempty"`
+	ModelTier          string               `json:"model_tier,omitzero"`
 	Checkpoint         string               `json:"checkpoint,omitempty"`
-	ReportedBase       string               `json:"reportedBase,omitempty"`
-	ReworkRounds       int                  `json:"reworkRounds,omitzero"`
+	ReportedBase       string               `json:"reported_base,omitempty"`
+	ReworkRounds       int                  `json:"rework_rounds,omitzero"`
 	Widenings          int                  `json:"widenings,omitzero"`
 	Unmet              []verificationRecord `json:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"`
-	FailingRefs        []string             `json:"failingRefs,omitempty"`
+	FailingRefs        []string             `json:"failing_refs,omitempty"`
 	Denials            []denialRecord       `json:"denials,omitempty"`
-	DenialsKnown       bool                 `json:"denialsKnown,omitzero"`
+	DenialsKnown       bool                 `json:"denials_known,omitzero"`
 	Retry              retryRecord          `json:"retry,omitzero"`
 	Dropped            bool                 `json:"dropped,omitzero"`
 }
 
 type resultRecord struct {
 	Job                  string                 `json:"job,omitempty"`
-	ChangedPaths         []string               `json:"changedPaths"`
+	ChangedPaths         []string               `json:"changed_paths"`
 	Validation           resultValidationRecord `json:"validation,omitzero"`
-	VerificationEvidence []evidenceRecord       `json:"verificationEvidence,omitempty"`
+	VerificationEvidence []evidenceRecord       `json:"verification_evidence,omitempty"`
 	Descendants          []string               `json:"descendants,omitempty"`
-	UnresolvedRisks      []string               `json:"unresolvedRisks"`
-	FollowUps            []string               `json:"followUps,omitempty"`
-	ObservedGeneration   int                    `json:"observedGeneration,omitzero"`
+	UnresolvedRisks      []string               `json:"unresolved_risks"`
+	FollowUps            []string               `json:"follow_ups,omitempty"`
+	ObservedGeneration   int                    `json:"observed_generation,omitzero"`
 }
 
 type resultValidationRecord struct {
 	Command   string `json:"command"`
-	OutputRef string `json:"outputRef"`
+	OutputRef string `json:"output_ref"`
 	Owed      string `json:"owed,omitempty"`
 	Unrun     string `json:"unrun,omitempty"`
 }
 
 type evidenceRecord struct {
-	GateID    string `json:"gateId"`
-	OutputRef string `json:"outputRef"`
+	GateID    string `json:"gate_id"`
+	OutputRef string `json:"output_ref"`
 	Owed      string `json:"owed,omitempty"`
 	Unrun     string `json:"unrun,omitempty"`
 }
@@ -863,7 +827,7 @@ type denialRecord struct {
 	Rule       string `json:"rule"`
 	Reason     string `json:"reason,omitempty"`
 	Action     string `json:"action,omitempty"`
-	VerdictRef string `json:"verdictRef,omitempty"`
+	VerdictRef string `json:"verdict_ref,omitempty"`
 	Ts         int64  `json:"ts"`
 }
 
@@ -890,12 +854,12 @@ func (r attemptRecord) key() string { return fmt.Sprintf("%s\x00%d", r.Spec.Job,
 func recordAttempt(a Attempt) attemptRecord {
 	s := a.Status
 	st := attemptStatusRecord{
-		Started: s.Started, Ended: s.Ended, End: wireAttemptEnd().spell(s.End), Result: recordResult(s.Result),
-		JobState: wireJobState().spell(s.State), ObservedGeneration: s.ObservedGeneration, EndReason: s.EndReason,
+		Started: s.Started, Ended: s.Ended, End: string(s.End), Result: recordResult(s.Result),
+		JobState: string(s.State), ObservedGeneration: s.ObservedGeneration, EndReason: s.EndReason,
 		ModelTier: s.ModelTier, Checkpoint: s.Checkpoint, ReportedBase: s.ReportedBase,
 		ReworkRounds: s.ReworkRounds, Widenings: s.Widenings, Unmet: recordVerifications(s.Unmet),
 		Violations: slices.Clone(s.Violations), FailingRefs: slices.Clone(s.FailingRefs), DenialsKnown: s.DenialsKnown,
-		Retry: retryRecord{Retryable: s.Retry.Retryable, Change: wireRetryChange().spell(s.Retry.Change), Reason: s.Retry.Reason, Code: s.Retry.Code},
+		Retry: retryRecord{Retryable: s.Retry.Retryable, Change: string(s.Retry.Change), Reason: s.Retry.Reason, Code: s.Retry.Code},
 	}
 	for _, d := range s.Denials {
 		st.Denials = append(st.Denials, denialRecord(d))
@@ -990,11 +954,6 @@ func (r *agentRecord) UnmarshalJSON(data []byte) error {
 func (r *workerRecord) UnmarshalJSON(data []byte) error {
 	type plain workerRecord
 	return readNested(data, (*plain)(r), "workerRecord")
-}
-
-func (r *leaseCheckRecord) UnmarshalJSON(data []byte) error {
-	type plain leaseCheckRecord
-	return readNested(data, (*plain)(r), "leaseCheckRecord")
 }
 
 func (r *goalRecord) UnmarshalJSON(data []byte) error {

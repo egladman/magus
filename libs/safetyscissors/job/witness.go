@@ -108,10 +108,14 @@ func witnessRefusalText(r WitnessRefusal) string {
 // another check. A run the tree moved under is recorded, and grades as not verified,
 // since no one tree is what it read.
 //
-// It needs [WithTree] and [WithCheckCommand]; each refusal is a
-// [*GradingUnconfiguredError], a [*GoalError], a [*WitnessRefusedError] or a [*TreeError].
+// It needs [WithTree], [WithCheckSpec] and [WithCheckCommand]; each refusal is a
+// [*GradingUnconfiguredError], a [*GoalError], a [*CheckRefusedError], a
+// [*WitnessRefusedError] or a [*TreeError].
 func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (RunRef, error) {
 	if err := s.needTree("Witness"); err != nil {
+		return "", err
+	}
+	if err := s.needChecks("Witness"); err != nil {
 		return "", err
 	}
 	if s.command == nil {
@@ -126,6 +130,10 @@ func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (Ru
 	row, g, err := s.checkGoal(ctx, id, goal)
 	if err != nil {
 		return "", err
+	}
+	check, err := s.checks.runCheck(row.ID, goalCheckField(g.ID), g.Check)
+	if err != nil {
+		return "", s.wrap(err)
 	}
 	argv, dir, err := s.command(row, g)
 	if err != nil {
@@ -154,7 +162,7 @@ func (s *Store) Witness(ctx context.Context, id, goal string, cmd *exec.Cmd) (Ru
 		return "", err
 	}
 	return s.record(ctx, run{
-		job: row.ID, goal: g.ID, basis: BasisWitnessed, check: g.Check, argv: slices.Clone(argv), dir: dir,
+		job: row.ID, goal: g.ID, basis: BasisWitnessed, check: check, argv: slices.Clone(argv), dir: dir,
 		tree: tree, exit: exit, output: out.sum(), started: started, ended: ended, moved: after != tree,
 	})
 }

@@ -186,7 +186,7 @@ func idRule(id string) string {
 }
 
 // APIVersion is the job shape this module writes and the only one a
-// client may send, and the apiVersion of every line of jobs.jsonl and
+// client may send, and the api_version of every line of jobs.jsonl and
 // attempts.jsonl (ADR 0044): a line stamped with another is refused. An added
 // field does not move it, since [Schema].Unknown carries unknown members
 // through a rewrite.
@@ -502,8 +502,9 @@ type Job struct {
 	// which leaves State where it was. Store-computed. The tries are
 	// [Attempt] records beside the job.
 	Rejection *Rejection `json:"rejection,omitzero" yaml:"rejection,omitempty"`
-	// Check is the one check this lease runs. See [LeaseCheck].
-	Check *LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
+	// Check is the one check this lease runs, as the opaque JSON the store's
+	// [CheckValidate] kept; nil is none. See [WithCheckSpec].
+	Check codec.RawMessage `json:"check,omitzero" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it, by the store that keeps
 	// the row. Nothing in this module writes or reads it: [Declaration.Apply] leaves it as
 	// it was, so a store that keeps it renders it from Check on every write.
@@ -1029,11 +1030,7 @@ func (j Job) Clone() Job {
 		assigned.Shared = slices.Clone(j.ModelTier.Shared)
 		c.ModelTier = &assigned
 	}
-	if j.Check != nil {
-		check := *j.Check
-		check.Args = slices.Clone(j.Check.Args)
-		c.Check = &check
-	}
+	c.Check = slices.Clone(j.Check)
 	if j.Attempt != nil {
 		attempt := *j.Attempt
 		attempt.ExtraArgs = slices.Clone(j.Attempt.ExtraArgs)

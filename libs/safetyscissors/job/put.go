@@ -1,5 +1,7 @@
 package job
 
+import "github.com/egladman/magus/libs/codec"
+
 // Put is one put against a job row: the fields it changes and nothing else. A nil
 // field is left as the row has it; a non-nil field is written, and a non-nil empty value
 // is an explicit clear. That is why every field is a pointer: the second put in a job's
@@ -26,12 +28,13 @@ type Put struct {
 	// other field.
 	Enter *string `json:"enter,omitzero"`
 	State *State  `json:"state,omitzero"`
-	// Check is the declared check; one with neither a target nor a script clears it.
-	Check     *LeaseCheck `json:"check,omitzero"`
-	Paths     PathsPut    `json:"paths,omitzero"`
-	DependsOn *[]string   `json:"depends_on,omitzero"`
-	Breaks    *[]string   `json:"breaks,omitzero"`
-	Goals     *[]Goal     `json:"goals,omitzero"`
+	// Check is the declared check, as opaque JSON; nil leaves the row's as it is. The
+	// caller's merge decides which value clears it.
+	Check     codec.RawMessage `json:"check,omitzero"`
+	Paths     PathsPut         `json:"paths,omitzero"`
+	DependsOn *[]string        `json:"depends_on,omitzero"`
+	Breaks    *[]string        `json:"breaks,omitzero"`
+	Goals     *[]Goal          `json:"goals,omitzero"`
 	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
 	Deviations *[]Deviation `json:"deviations,omitzero"`
 	ReadOnly   *bool        `json:"read_only,omitzero"`

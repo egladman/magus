@@ -1,42 +1,12 @@
 package job
 
 import (
-	"cmp"
 	"fmt"
-	"path"
 	"slices"
 	"strings"
-)
 
-// LeaseCheck is the one check a lease runs, in the parts the output store records a run
-// by. The parts are the target, the project it runs in, and whatever
-// is forwarded past `--`. The target carries a `spell::` filter when the job
-// named one.
-//
-// A RECORD rather than a command line. A line has to be parsed before it can be compared
-// with a stored run, and a parser that reads positions binds `run -o json test .` to a
-// target named json. Rendering one as a command is the runner's business.
-type LeaseCheck struct {
-	// Target is the target the check runs, without the runner's run command in front of it.
-	// Empty when Script names the check instead.
-	Target string `json:"target"             yaml:"target" schema:"target"`
-	// Script is a Buzz script the check runs, recorded, in place of a
-	// target, for a fact no target checks: a passing recorded run of it is the evidence. A
-	// check names a target or a script, never both.
-	Script string `json:"script,omitempty"   yaml:"script,omitempty"`
-	// Project is the project the target runs in, "." when the job names none.
-	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
-	// Args are forwarded to the tool after `--`, never to the runner.
-	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
-	// NoDefaultCharms runs the check with --no-default-charms, so only a run made without
-	// the workspace's default_charms satisfies it: the charmless `generate` that compares
-	// against HEAD, in a workspace whose default is rw.
-	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
-	// Test runs Script's tests instead of its main: passing tests and
-	// a passing main are different facts, so each is satisfied only by its own run. A
-	// script check alone carries it.
-	Test bool `json:"test,omitzero" yaml:"test,omitempty"`
-}
+	"github.com/egladman/magus/libs/codec"
+)
 
 // PrimaryGoalID names the job's singular check when it is projected into its goals. It
 // is a stable identity, not a user assertion.
@@ -62,8 +32,9 @@ type Goal struct {
 	// Expect is optional and defaults to the kind's own: passed for check, changed for
 	// paths and symbol. The common goal names only its kind and its subject.
 	Expect GoalExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
-	// Check is the run a GoalKindCheck goal examines. Zero on every other kind.
-	Check LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
+	// Check is the run a GoalKindCheck goal examines, as opaque JSON the store reads
+	// through [WithCheckSpec]. Nil on every other kind.
+	Check codec.RawMessage `json:"check,omitzero" yaml:"check,omitempty"`
 	// Paths are the globs a GoalKindPaths goal examines. Zero on every other kind.
 	Paths []string `json:"paths,omitempty" yaml:"paths,omitempty"`
 	// Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph
@@ -173,14 +144,13 @@ func (k GoalKind) defaultExpect() GoalExpect {
 	return ExpectChanged
 }
 
-// Subject is what the goal examines, rendered for a message that has to name it.
+// Subject is the paths or symbols the goal examines, for a message that has to name them.
+// A check goal's subject is its check, which only the store's [CheckRender] renders, so
+// it is nil here.
 func (g Goal) Subject() []string {
 	switch g.Kind {
 	case GoalKindCheck:
-		if g.Check.Target == "" && g.Check.Script == "" {
-			return nil
-		}
-		return []string{g.Check.words()}
+		return nil
 	case GoalKindPaths:
 		return g.Paths
 	default:
@@ -209,90 +179,13 @@ func goalAccepts(kind GoalKind) ([]GoalExpect, bool) {
 // capability semantics while every verifier has one complete collection to grade.
 func (j Job) EffectiveGoals() []Goal {
 	goals := cloneGoals(j.Goals)
-	if j.Check != nil {
+	if HasCheck(j.Check) {
 		// The lease's own check is run by whoever holds the lease, through the runner that
 		// started it, so its run is witnessed; Check carries no accept list of its own.
-		primary := Goal{ID: PrimaryGoalID, Check: *j.Check, Accept: []Basis{BasisWitnessed}}.Resolve()
+		primary := Goal{ID: PrimaryGoalID, Check: slices.Clone(j.Check), Accept: []Basis{BasisWitnessed}}.Resolve()
 		goals = append([]Goal{primary}, goals...)
 	}
 	return goals
-}
-
-// words is the check in the form [ParseLeaseCheck] reads, `<target> <project> [-- args]`,
-// or its script in place of the target and project.
-func (c LeaseCheck) words() string {
-	line := c.Script
-	if line == "" {
-		line = c.Target + " " + cmp.Or(c.Project, ".")
-	}
-	if len(c.Args) > 0 {
-		line += " -- " + strings.Join(c.Args, " ")
-	}
-	return line
-}
-
-// SameLeaseCheck reports whether a and b declare the same check. Two nil checks are the
-// same, and a nil check is not the same as any declared one. A function over pointers
-// rather than a method, because a job's Check is optional and either side may
-// be nil.
-func SameLeaseCheck(a, b *LeaseCheck) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
-		a.NoDefaultCharms == b.NoDefaultCharms && a.Test == b.Test && slices.Equal(a.Args, b.Args)
-}
-
-// ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
-// shape a record is written in. The project defaults to ".".
-//
-// A flag anywhere is REFUSED rather than read as a word: a check is an identity the output
-// store can be asked about, and `-o json` in it either names a target nobody ran or
-// silently shifts the project.
-//
-// The one flag read is --no-default-charms, which the record carries as NoDefaultCharms.
-func ParseLeaseCheck(s string) (LeaseCheck, error) {
-	words := strings.Fields(s)
-	var args []string
-	if i := slices.Index(words, "--"); i >= 0 {
-		words, args = words[:i], words[i+1:]
-	}
-	var noDefaultCharms bool
-	positional := words[:0:0]
-	for _, w := range words {
-		if w == "--no-default-charms" {
-			noDefaultCharms = true
-			continue
-		}
-		positional = append(positional, w)
-		if strings.HasPrefix(w, "-") {
-			return LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries the flag %s,"+
-				" flags belong after `--`, where they reach the tool rather than the runner", s, w)}
-		}
-	}
-	words = positional
-	switch {
-	case len(words) == 0:
-		return LeaseCheck{}, &CheckError{Line: s, Reason: "this one names no target"}
-	case len(words) > 2:
-		return LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries %d words before any `--`", s, len(words))}
-	}
-	c := LeaseCheck{Target: words[0], Project: ".", Args: args, NoDefaultCharms: noDefaultCharms}
-	if len(words) == 2 {
-		c.Project = words[1]
-	}
-	c.Project = path.Clean(c.Project)
-	return c, nil
-}
-
-// CheckError is a check [ParseLeaseCheck] refuses: the line it was given, and why.
-type CheckError struct {
-	Line   string
-	Reason string
-}
-
-func (e *CheckError) Error() string {
-	return "a check is `<target> <project> [-- args]` and " + e.Reason
 }
 
 // goalFaults is every fault of a record's goals: each goal's own shape, then what
@@ -416,7 +309,7 @@ func (g Goal) faults(field string) []Fault {
 	// Exactly one subject, named by the kind. A goal carrying two is one whose author
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
-	if g.Kind != GoalKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
+	if g.Kind != GoalKindCheck && HasCheck(g.Check) {
 		bad("check", fmt.Sprintf("goal %q is a %s goal and also carries a check", g.ID, g.Kind), "a goal examines one subject: drop the check")
 	}
 	if g.Kind != GoalKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
@@ -427,7 +320,11 @@ func (g Goal) faults(field string) []Fault {
 	}
 	// An unknown kind has no subject field, and its own problem above says so.
 	subject := map[GoalKind]string{GoalKindCheck: "check", GoalKindPaths: "paths", GoalKindSymbol: "symbols"}[g.Kind]
-	if subject != "" && len(trimmedNonEmpty(g.Subject())) == 0 {
+	names := len(trimmedNonEmpty(g.Subject())) > 0
+	if g.Kind == GoalKindCheck {
+		names = HasCheck(g.Check)
+	}
+	if subject != "" && !names {
 		bad(subject, fmt.Sprintf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind),
 			"name what the goal examines")
 	}
@@ -446,13 +343,6 @@ func (g Goal) faults(field string) []Fault {
 		return ps
 	}
 	acceptFaults(g, bad)
-	if err := g.Check.validScript(); err != nil {
-		bad("check.script", err.Error(), "name a target or a script, and give a script no project or charms")
-	} else if g.Check.Script == "" {
-		if _, err := ParseLeaseCheck(fmt.Sprintf("%s %s", g.Check.Target, g.Check.Project)); err != nil {
-			bad("check.target", err.Error(), "name one target and the project it runs in")
-		}
-	}
 	return ps
 }
 
@@ -475,21 +365,3 @@ func acceptFaults(g Goal, bad func(sub, message, fix string)) {
 	}
 }
 
-// validScript refuses a check naming both a script and a target, a script with a
-// project, since a recorded script run belongs to the workspace, and test on a target.
-func (c LeaseCheck) validScript() error {
-	switch {
-	case c.Script == "" && c.Test:
-		return fmt.Errorf("check target %q sets test, which runs a script's tests and so belongs to a script check", c.Target)
-	case c.Script == "":
-		return nil
-	case c.Target != "":
-		return fmt.Errorf("check names target %q and script %q, a check names one", c.Target, c.Script)
-	case c.Project != "" && c.Project != ".":
-		return fmt.Errorf("check script %q names project %q, a recorded script run belongs to the workspace", c.Script, c.Project)
-	case c.NoDefaultCharms:
-		return fmt.Errorf("check script %q sets no_default_charms, a script runs under no charms", c.Script)
-	default:
-		return nil
-	}
-}

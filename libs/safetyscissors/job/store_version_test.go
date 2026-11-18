@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -69,7 +70,10 @@ func (s *StoreVersionSuite) TestALineWithNoGoalsComesBackAsItWas() {
 	s.Equal(header, got)
 }
 
-func (s *StoreVersionSuite) TestAMigratedRowReadsItsBasis() {
+// AcceptWitnessed rewrites a line of the CamelCase layout an older build stored, so it
+// writes that layout's spelling, and the line it leaves is still one this build refuses:
+// only the caller's later migration brings it forward.
+func (s *StoreVersionSuite) TestAMigratedRowKeepsTheOlderLayout() {
 	line := s.line(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{"goals":[{"id":"tests","kind":"Check","expect":"Passed","check":{"target":"test","project":"."}}]},"status":{}}`)
 
@@ -77,9 +81,10 @@ func (s *StoreVersionSuite) TestAMigratedRowReadsItsBasis() {
 	s.Require().NoError(err)
 	text, err := codec.Marshal(got)
 	s.Require().NoError(err)
-	row, ok, err := ReadRecord(text)
+	_, _, err = ReadRecord(text)
 
-	s.Require().NoError(err)
-	s.Require().True(ok)
-	s.Equal([]Basis{BasisWitnessed}, row.Goals[0].Accept)
+	s.Contains(s.spec(got), `"accept":["Witnessed"]`)
+	refused, ok := errors.AsType[*apiversion.RefusedError](err)
+	s.Require().True(ok, err)
+	s.Empty(refused.Got.APIVersion, "the older layout keyed its version apiVersion")
 }

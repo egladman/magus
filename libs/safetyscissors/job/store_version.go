@@ -53,7 +53,7 @@ func (e *NewerRecordsError) Error() string {
 	return fmt.Sprintf("%s: %s is %s %s, and this build reads %s %s", e.Path, e.Record, e.Got.APIVersion, e.Got.Kind, e.Want.APIVersion, e.Want.Kind)
 }
 
-// RecordVersionError is a line of the store stamped with an apiVersion this build does not
+// RecordVersionError is a line of the store stamped with an api_version this build does not
 // read. A line of a known version but another kind is a [*codec.LineError] instead.
 type RecordVersionError struct {
 	Path string
@@ -137,11 +137,12 @@ func AcceptWitnessed(line map[string]codec.RawMessage) (map[string]codec.RawMess
 	if err := codec.Unmarshal(goalsRaw, &goals); err != nil {
 		return nil, fmt.Errorf("reading spec.goals: %w", err)
 	}
-	witnessed, err := codec.Marshal([]string{wireBasis().spell(BasisWitnessed)})
+	// The CamelCase values the store wrote at this migration, before it stored Go values.
+	witnessed, err := codec.Marshal([]string{"Witnessed"})
 	if err != nil {
 		return nil, err
 	}
-	check := wireGoalKind().spell(GoalKindCheck)
+	const check = "Check"
 	changed := false
 	for i, g := range goals {
 		var kind string

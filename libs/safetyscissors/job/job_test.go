@@ -3,7 +3,6 @@ package job
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -43,26 +42,6 @@ func (s *jobSuite) TestAnIDIsAtMostMaxIDLen() {
 	s.refusesID(strings.Repeat("a", MaxIDLen+1), fmt.Sprintf("an id is at most %d characters", MaxIDLen))
 }
 
-func (s *jobSuite) TestParseLeaseCheckRefusesWithACheckError() {
-	c, err := ParseLeaseCheck("test cmd/magus/ -- -run X")
-	s.Require().NoError(err)
-	s.Equal(LeaseCheck{Target: "test", Project: "cmd/magus", Args: []string{"-run", "X"}}, c)
-	c, err = ParseLeaseCheck("generate --no-default-charms")
-	s.Require().NoError(err)
-	s.Equal(LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}, c)
-	s.refusesCheck("")
-	s.refusesCheck("-o json test .")
-	s.refusesCheck("test . extra")
-}
-
-func (s *jobSuite) refusesCheck(line string) {
-	s.T().Helper()
-	_, err := ParseLeaseCheck(line)
-	var refused *CheckError
-	s.Require().ErrorAs(err, &refused, line)
-	s.Equal(line, refused.Line)
-}
-
 func (s *jobSuite) TestATimeoutIsEmptyOrAPositiveDuration() {
 	d, err := ParseTimeout(" ")
 	s.Require().NoError(err)
@@ -89,19 +68,21 @@ func (s *jobSuite) TestAGoalResolvesItsKindAndExpectation() {
 	s.Equal(ExpectAbsent, Goal{Kind: GoalKindSymbol, Expect: ExpectAbsent}.Resolve().Expect)
 }
 
-func (s *jobSuite) TestACheckGoalsSubjectIsTheCheckAsParseLeaseCheckReadsIt() {
-	s.Equal([]string{"test cmd/magus -- -run X"},
-		Goal{Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: "cmd/magus", Args: []string{"-run", "X"}}}.Subject())
-	s.Equal([]string{"probes/key.buzz"}, Goal{Kind: GoalKindCheck, Check: LeaseCheck{Script: "probes/key.buzz", Test: true}}.Subject())
-	s.Equal([]string{"lint ."}, Goal{Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint"}}.Subject())
-	s.Nil(Goal{Kind: GoalKindCheck}.Subject())
+// Only the store's CheckRender reads a check, so a check goal's subject is none here.
+func (s *jobSuite) TestACheckGoalHasNoSubject() {
+	s.Nil(Goal{Kind: GoalKindCheck, Check: checkJSON("test", ".")}.Subject())
+	s.Equal([]string{"docs"}, Goal{Kind: GoalKindPaths, Paths: []string{"docs"}}.Subject())
 }
 
 func (s *jobSuite) TestEffectiveGoalsLeadWithThePrimaryCheck() {
-	row := Job{Check: &LeaseCheck{Target: "test", Project: "."}, Goals: []Goal{{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}}}}
+	row := Job{Check: checkJSON("test", "."), Goals: []Goal{{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}}}}
 	goals := row.EffectiveGoals()
 	s.Require().Len(goals, 2)
 	s.Equal(PrimaryGoalID, goals[0].ID)
+	s.Equal(row.Check, goals[0].Check)
+	goals[0].Check[0] = 'x'
+	s.Equal(checkJSON("test", "."), row.Check, "the primary goal's check is a copy")
+	s.Empty(Job{Check: codec.RawMessage("null")}.EffectiveGoals(), "a null check declares none")
 	s.Equal(ExpectPassed, goals[0].Expect)
 	s.Equal([]Basis{BasisWitnessed}, goals[0].Accept, "the lease's own check is run by its holder's runner")
 	s.Equal(ExpectChanged, goals[1].Expect, "the declared goal comes back resolved")
@@ -120,20 +101,19 @@ func (s *jobSuite) TestStatesSortLiveEditingAndTerminal() {
 func (s *jobSuite) TestCloneSharesNothing() {
 	row := Job{
 		Paths:     Paths{Write: []string{"a"}},
-		Check:     &LeaseCheck{Target: "test", Args: []string{"-run", "X"}},
+		Check:     checkJSON("test", "."),
 		ModelTier: &tier.Assignment{Name: "routine", Shared: []string{"x"}},
 		Attempt:   &CapturedRun{ExtraArgs: []string{"-v"}},
 		Rejection: &Rejection{Violations: []string{"v"}},
 	}
 	c := row.Clone()
 	c.Paths.Write[0] = "b"
-	c.Check.Args[0] = "-count"
-	c.Check.Target = "lint"
+	c.Check[0] = 'x'
 	c.ModelTier.Shared[0] = "y"
 	c.Attempt.ExtraArgs[0] = "-race"
 	c.Rejection.Violations[0] = "w"
 	s.Equal("a", row.Paths.Write[0])
-	s.Equal(LeaseCheck{Target: "test", Args: []string{"-run", "X"}}, *row.Check)
+	s.Equal(checkJSON("test", "."), row.Check)
 	s.Equal("x", row.ModelTier.Shared[0])
 	s.Equal("-v", row.Attempt.ExtraArgs[0])
 	s.Equal("v", row.Rejection.Violations[0])
@@ -222,15 +202,21 @@ func (s *jobSuite) TestAServerRunHasNoAgentAndTheServersOrigin() {
 
 func (s *jobSuite) TestAReadOnlyJobWithNoCheckHoldsNoBuildSeat() {
 	s.True(Job{ReadOnly: true}.HoldsNoBuildSeat())
-	s.False(Job{ReadOnly: true, Check: &LeaseCheck{Target: "test"}}.HoldsNoBuildSeat())
+	s.False(Job{ReadOnly: true, Check: checkJSON("test", ".")}.HoldsNoBuildSeat())
 	s.False(Job{}.HoldsNoBuildSeat())
 }
 
-func (s *jobSuite) TestApplyLeavesValidationToTheStore() {
+// Apply copies the check as declared: what it says is the store's CheckValidate's to read.
+func (s *jobSuite) TestApplyLeavesTheCheckAndValidationToTheStore() {
 	row := Job{Validation: "kept"}
-	Declaration{ID: "a", Check: &LeaseCheck{Target: "test", Project: "cmd/magus/"}}.Apply(&row)
-	s.Equal(&LeaseCheck{Target: "test", Project: "cmd/magus"}, row.Check)
+	check := codec.RawMessage(`{"target":"test","project":"cmd/magus/"}`)
+	Declaration{ID: "a", Check: check}.Apply(&row)
+	s.Equal(check, row.Check)
+	check[0] = ' '
+	s.Equal(byte('{'), row.Check[0], "the row holds its own copy")
 	s.Equal("kept", row.Validation)
+	Declaration{ID: "a", Check: codec.RawMessage("null")}.Apply(&row)
+	s.Nil(row.Check)
 }
 
 const declared = `{"api_version":"safetyscissors.job/v1alpha1","id":"a","later":{"x":[1]}}`
@@ -251,8 +237,9 @@ func (s *jobSuite) TestADeclarationKeepsUnknownMembersThroughEncodingJSON() {
 func (s *jobSuite) TestAStrictDecodeRefusesAnAuthoredDeclarationsUnknownMember() {
 	var d Declaration
 	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(declared), &d), codec.ErrUnknownField)
-	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a","check":{"target":"t","x":1}}`), &d),
-		codec.ErrUnknownField, "and a nested one")
+	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a","check":{"target":"t","x":1}}`), &d),
+		"a check is opaque here: the store's CheckValidate refuses what it does not declare")
+	s.JSONEq(`{"target":"t","x":1}`, string(d.Check))
 	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a"}`), &d))
 	s.Nil(d.Unknown)
 }
@@ -275,14 +262,14 @@ func (s *jobSuite) faultsAccepted(g Goal) []string {
 }
 
 func (s *jobSuite) TestACheckGoalAcceptingNoBasisIsAFault() {
-	g := Goal{ID: "tests", Check: LeaseCheck{Target: "test", Project: "."}}
+	g := Goal{ID: "tests", Check: checkJSON("test", ".")}
 
 	s.Equal([]string{`accept: goal "tests" is a check goal accepting no basis, so no run could grade it`}, s.faultsAccepted(g))
 	s.Empty(g.Resolve().Accept, "resolving names no basis on the goal's behalf")
 }
 
 func (s *jobSuite) TestAnUnknownOrRepeatedBasisIsAFault() {
-	g := Goal{ID: "tests", Check: LeaseCheck{Target: "test", Project: "."}, Accept: []Basis{BasisWitnessed, "trusted", BasisWitnessed}}
+	g := Goal{ID: "tests", Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, "trusted", BasisWitnessed}}
 
 	s.Equal([]string{
 		`accept[1]: goal "tests" accepts "trusted", which is not a basis`,
@@ -291,7 +278,7 @@ func (s *jobSuite) TestAnUnknownOrRepeatedBasisIsAFault() {
 }
 
 func (s *jobSuite) TestACheckGoalNamingItsBasesHasNoAcceptFault() {
-	g := Goal{ID: "tests", Check: LeaseCheck{Target: "test", Project: "."}, Accept: []Basis{BasisWitnessed, BasisReported}}
+	g := Goal{ID: "tests", Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed, BasisReported}}
 
 	s.Empty(s.faultsAccepted(g))
 }
@@ -606,7 +593,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		},
 		DependsOn:    append(make([]string, 0, 4), "b"),
 		Breaks:       append(make([]string, 0, 4), "--old-flag"),
-		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
+		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: checkJSON("test", "."), DependsOn: []string{"check"}}),
 		GateAttempts: append(make([]GateAttempt, 0, 4), GateAttempt{GateID: "unit", Attempt: CapturedRun{Ref: "out1"}}),
 		Releases:     append(make([]Release, 0, 4), Release{Path: "types/x.go"}),
 		Unattributed: append(make([]UnattributedWrite, 0, 4), UnattributedWrite{Path: "types/y.go"}),
@@ -640,7 +627,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		},
 		DependsOn:    []string{"b", "first"},
 		Breaks:       []string{"--old-flag", "first"},
-		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
+		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), DependsOn: []string{"check", "first"}}},
 		GateAttempts: []GateAttempt{{GateID: "unit", Attempt: CapturedRun{Ref: "out1"}}, {GateID: "first"}},
 		Releases:     []Release{{Path: "types/x.go"}, {Path: "first/z.go"}},
 		Unattributed: []UnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}},
@@ -656,7 +643,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		},
 		DependsOn:    []string{"b"},
 		Breaks:       []string{"--old-flag"},
-		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
+		Goals:        []Goal{{ID: "unit", Check: checkJSON("test", "."), DependsOn: []string{"check"}}},
 		GateAttempts: []GateAttempt{{GateID: "unit", Attempt: CapturedRun{Ref: "out1"}}},
 		Releases:     []Release{{Path: "types/x.go"}},
 		Unattributed: []UnattributedWrite{{Path: "types/y.go"}},
@@ -779,91 +766,6 @@ func TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne(t *testing.T) {
 
 	Declaration{ID: "worker"}.ApplySpec(&row)
 	assert.Empty(t, row.Breaks)
-}
-
-func TestSameLeaseCheckComparesEveryField(t *testing.T) {
-	t.Parallel()
-
-	base := LeaseCheck{Target: "test", Script: "probe.buzz", Project: "p", Args: []string{"-run", "A"}, NoDefaultCharms: true}
-	assert.True(t, SameLeaseCheck(&base, &base))
-	same := base
-	same.Args = []string{"-run", "A"}
-	assert.True(t, SameLeaseCheck(&base, &same), "equal by value, not by identity")
-
-	for i := range reflect.TypeFor[LeaseCheck]().NumField() {
-		other := base
-		field := reflect.ValueOf(&other).Elem().Field(i)
-		switch field.Kind() {
-		case reflect.String:
-			field.SetString(field.String() + "x")
-		case reflect.Bool:
-			field.SetBool(!field.Bool())
-		case reflect.Slice:
-			field.Set(reflect.ValueOf([]string{"-run", "B"}))
-		default:
-			t.Fatalf("LeaseCheck.%s has kind %s, which this test does not know how to vary", reflect.TypeFor[LeaseCheck]().Field(i).Name, field.Kind())
-		}
-		assert.False(t, SameLeaseCheck(&base, &other), "a differing %s is a different check", reflect.TypeFor[LeaseCheck]().Field(i).Name)
-	}
-}
-
-func TestSameLeaseCheckTreatsNilAsNoCheck(t *testing.T) {
-	t.Parallel()
-
-	declared := &LeaseCheck{Target: "test", Project: "."}
-	assert.True(t, SameLeaseCheck(nil, nil))
-	assert.False(t, SameLeaseCheck(nil, declared))
-	assert.False(t, SameLeaseCheck(declared, nil))
-}
-
-// The parse is what makes a check comparable with a stored run, so the shapes it refuses
-// are the point: a flag read as a positional binds evidence to a target nobody ran.
-func TestParseLeaseCheck(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		in    string
-		want  LeaseCheck
-		wants string
-	}{
-		{name: "target and project", in: "test internal/ledger", want: LeaseCheck{Target: "test", Project: "internal/ledger"}},
-		{name: "the project defaults to the root", in: "ci", want: LeaseCheck{Target: "ci", Project: "."}},
-		{
-			name: "args ride past the separator",
-			in:   "go::go-test . -- -run Ledger",
-			want: LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}},
-		},
-		{
-			name: "the charm flag is read, not refused",
-			in:   "lint . --no-default-charms",
-			want: LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true},
-		},
-		{
-			name: "the charm flag may lead",
-			in:   "--no-default-charms generate .",
-			want: LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true},
-		},
-		{name: "another magus flag stays refused beside the charm flag", in: "lint . --no-default-charms -o json", wants: "carries the flag -o"},
-		{name: "a flag before the separator", in: "-o json test .", wants: "carries the flag -o"},
-		{name: "a third word", in: "test a b", wants: "carries 3 words"},
-		{name: "nothing at all", in: "  ", wants: "names no target"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := ParseLeaseCheck(tt.in)
-			if tt.wants != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wants)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
 }
 
 // An exited dependency is done editing, so nobody collecting it leaves its dependent
@@ -1151,7 +1053,7 @@ func TestParseClaimEvidenceReadsADeadHolder(t *testing.T) {
 }
 
 func TestHoldsNoBuildSeat(t *testing.T) {
-	check := Goal{Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: "."}}
+	check := Goal{Kind: GoalKindCheck, Check: checkJSON("test", ".")}
 	assert.True(t, Job{ReadOnly: true}.HoldsNoBuildSeat())
 	assert.False(t, Job{ReadOnly: true, Goals: []Goal{check}}.HoldsNoBuildSeat(), "a check runs a target")
 	assert.False(t, Job{ReadOnly: true, Paths: Paths{Write: []string{"a/**"}}}.HoldsNoBuildSeat())

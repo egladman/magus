@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -36,7 +37,7 @@ func (s *gradingSuite) open(opts ...StoreOption) *Store {
 	return st
 }
 
-func testCheck() LeaseCheck { return LeaseCheck{Target: "test", Project: "."} }
+func testCheck() codec.RawMessage { return checkJSON("test", ".") }
 
 func checkGoalAccepting(id string, accept ...Basis) Goal {
 	return Goal{ID: id, Kind: GoalKindCheck, Expect: ExpectPassed, Check: testCheck(), Accept: accept}
@@ -47,7 +48,7 @@ func (s *gradingSuite) declare(goals ...Goal) {
 	s.Require().NoError(err)
 }
 
-func (s *gradingSuite) report(check LeaseCheck) RunRef {
+func (s *gradingSuite) report(check codec.RawMessage) RunRef {
 	ref, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: "tests", Check: check, By: "worker"})
 	s.Require().NoError(err)
 	return ref
@@ -132,7 +133,7 @@ func (s *GradeSuite) TestARunOfAnOlderTreeIsStale() {
 func (s *GradeSuite) TestARunOfAnotherCheckIsAViolation() {
 	s.declare(checkGoalAccepting("tests", BasisReported))
 
-	g := s.grade(s.report(LeaseCheck{Target: "lint", Project: "."}))
+	g := s.grade(s.report(checkJSON("lint", ".")))
 
 	s.False(g.Verified)
 	s.Contains(g.Violations, "the run is of `lint .` and this goal's check is `test .`")
@@ -199,9 +200,38 @@ func (s *GradeSuite) TestRunsAndGradesAreLinesOfGradesJSONL() {
 func (s *GradeSuite) TestALineOfAnotherKindIsRefused() {
 	s.declare(checkGoalAccepting("tests", BasisReported))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, gradesFileName),
-		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Verdict"}`+"\n"), 0o600))
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Verdict"}`+"\n"), 0o600))
 
 	_, err := s.store.Grade(s.T().Context(), "j1", nil)
 
 	s.ErrorIs(err, codec.ErrLineUndecodable)
+}
+
+// An older build's camelCase run line carries no api_version, so it is refused rather
+// than read as a run of nothing.
+func (s *GradeSuite) TestAnOlderBuildsRunLineIsRefused() {
+	s.declare(checkGoalAccepting("tests", BasisReported))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, gradesFileName),
+		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","goal":"tests","basis":"Reported"}`+"\n"), 0o600))
+
+	_, err := s.store.Grade(s.T().Context(), "j1", map[string]RunRef{"tests": "run-1"})
+
+	s.ErrorIs(err, codec.ErrLineUndecodable)
+}
+
+func (s *GradeSuite) TestARunsAndAGradesLinesArePinned() {
+	rec := recordCheckRun(run{job: "j1", goal: "tests", basis: BasisWitnessed, check: checkJSON("test", "."),
+		argv: []string{"magus", "run"}, tree: "t1", exit: 1, started: time.UnixMilli(5), ended: time.UnixMilli(6), moved: true})
+	rec.Ref = "run-1"
+	grade := recordGrade(Grade{Job: "j1", Goals: []GoalGrade{{Goal: "tests", Ref: "run-1", Basis: BasisAttested, Passed: true}}}, time.UnixMilli(7))
+
+	runLine, err := codec.Marshal(gradesEntry{run: &rec})
+	s.Require().NoError(err)
+	gradeLine, err := codec.Marshal(gradesEntry{grade: grade})
+	s.Require().NoError(err)
+
+	s.Equal(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","goal":"tests","basis":"witnessed",`+
+		`"check":{"target":"test","project":"."},"argv":["magus","run"],"tree":"t1","exit":1,"started":5,"ended":6,"moved":true}`, string(runLine))
+	s.Equal(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":7,"verified":false,`+
+		`"goals":[{"goal":"tests","ref":"run-1","basis":"attested","passed":true,"verified":false}]}`, string(gradeLine))
 }

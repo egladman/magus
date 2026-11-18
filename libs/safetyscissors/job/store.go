@@ -103,6 +103,7 @@ type storeConfig struct {
 	tree     func(context.Context) (string, error)
 	verifier Verifier
 	command  CheckCommand
+	checks   *checkSpec
 }
 
 // StoreOption sets one of a Store's seams. Each option a caller leaves out has the
@@ -190,9 +191,9 @@ func WithMigrations(version int, migrate Migrate) StoreOption {
 	return func(c *storeConfig) { c.version, c.migrate = version, migrate }
 }
 
-// WithCredentialKinds are the credential kinds an origin the store records may carry. A
-// stored kind none of them spells is refused rather than read. Without it an origin
-// carrying any kind is refused.
+// WithCredentialKinds are the credential kinds an origin the store records may carry,
+// stored as the caller spells them. A stored kind none of them names is refused rather
+// than read. Without it an origin carrying any kind is refused.
 func WithCredentialKinds(kinds ...CredentialKind) StoreOption {
 	return func(c *storeConfig) { c.creds = newWireEnum(kinds...) }
 }
@@ -216,16 +217,17 @@ func WithTree(tree func(context.Context) (string, error)) StoreOption {
 // refuses every statement rather than record one unchecked.
 func WithVerifier(v Verifier) StoreOption { return func(c *storeConfig) { c.verifier = v } }
 
-// WithCheckCommand names the command a check goal is run by. A [LeaseCheck] names a target
-// or a script, not an argv, so the store derives none itself. Without it [Store.Witness]
-// refuses.
+// WithCheckCommand names the command a check goal is run by. The store never reads what
+// a check names (see [WithCheckSpec]), so it derives no argv itself. Without it
+// [Store.Witness] refuses.
 func WithCheckCommand(command CheckCommand) StoreOption {
 	return func(c *storeConfig) { c.command = command }
 }
 
 // Open returns the ledger kept in dir, which holds jobs.jsonl, attempts.jsonl,
 // grants.jsonl, grades.jsonl and the lock. The files are created by the first write. dir is the
-// caller's: Open resolves nothing about a repository.
+// caller's: Open resolves nothing about a repository. A [WithCheckSpec] given a nil function
+// is a [*CheckSpecError].
 func Open(dir string, opts ...StoreOption) (*Store, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("job: open a store on the directory that holds it, and none was named")
@@ -233,6 +235,9 @@ func Open(dir string, opts ...StoreOption) (*Store, error) {
 	s := &Store{storeConfig: storeConfig{path: filepath.Join(dir, jobsFileName), creds: newWireEnum[CredentialKind]()}}
 	for _, opt := range opts {
 		opt(&s.storeConfig)
+	}
+	if err := s.checks.refusal(); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -535,13 +540,17 @@ func requestsEntry(prev, next Job) bool {
 
 // authorizeEntry grades an entry: prev is the row before it and next carries the one
 // entry appended to it.
-func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []Job) error {
+func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []Job, equal CheckEqual) error {
 	entry := next.Entries[len(next.Entries)-1]
-	switch {
-	case !exists:
+	if !exists {
 		return fmt.Errorf("%q: there is nothing to enter: %w", id, ErrUnknownJob)
-	case len(ChangedFields(prev, next)) > 0:
-		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(ChangedFields(prev, next), ", "))
+	}
+	changed, err := ChangedFields(prev, next, equal)
+	switch {
+	case err != nil:
+		return err
+	case len(changed) > 0:
+		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(changed, ", "))
 	case actor.Lease == id:
 		return refuse(actor, id, "a holder writes its own paths and never enters them")
 	case actor.Bound() && !slices.ContainsFunc(Ancestors(rows, id), func(r Job) bool { return r.ID == actor.Lease }):
@@ -593,32 +602,6 @@ func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
 		return nil
 	}
 	return err
-}
-
-// boundaryFields are the declared fields a widen or narrow changes, in ChangedFields'
-// spelling.
-func boundaryFields() []string { return []string{"paths.write", "paths.deny", "paths.read"} }
-
-// widensInPlace reports a declaration that changes a live row's boundaries and nothing
-// else it declares, while resetting a state its holder already moved past declared: a
-// re-fork that only moves paths. Such a write keeps the stored state, since resetting it
-// would hand the holder's job out again. A deadline may move with it. A re-fork that
-// changes no boundary still resets the state, which is how a rejected job is handed out
-// again.
-func widensInPlace(prev, next Job) bool {
-	if !prev.State.Live() || prev.State == StateDeclared || next.State != StateDeclared {
-		return false
-	}
-	moved := false
-	for _, field := range ChangedFields(prev, next) {
-		switch {
-		case slices.Contains(boundaryFields(), field):
-			moved = true
-		case field != "state" && field != "deadline":
-			return false
-		}
-	}
-	return moved
 }
 
 // ReasonIntegratorRegenerates is the reason of a deviation a fork derives for an output
@@ -811,6 +794,9 @@ func (s *Store) Rewrite(ctx context.Context, fn func(*Rows) error) error {
 func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
 	if err := s.needWriter("Rewrite"); err != nil {
 		return err
+	}
+	if s.checks == nil {
+		return s.wrap(&UnconfiguredError{Op: "Rewrite", Option: "WithCheckSpec"})
 	}
 	// Made here, before the lock and file helpers create it world-readable. Rows carry a
 	// repository's plan and its checkout paths.
@@ -1092,7 +1078,7 @@ func (s *Store) encodeJobs(f Rows) ([][]byte, error) {
 		if r, ok := f.stored[row.ID]; ok {
 			stored = &r
 		}
-		line, err := codec.Marshal(recordJob(row, stored, s.creds))
+		line, err := codec.Marshal(recordJob(row, stored))
 		if err != nil {
 			return nil, fmt.Errorf("job: %s: %w", row.ID, err)
 		}
@@ -1102,10 +1088,9 @@ func (s *Store) encodeJobs(f Rows) ([][]byte, error) {
 }
 
 // MarshalRecord is row as the line jobs.jsonl stores, with unknown kept beside its
-// declared members and kinds the credential kinds its origins may carry, for a migration
-// that writes a row an older layout held.
-func MarshalRecord(row Job, unknown map[string]codec.RawMessage, kinds ...CredentialKind) ([]byte, error) {
-	r := recordJob(row, nil, newWireEnum(kinds...))
+// declared members, for a migration that writes a row an older layout held.
+func MarshalRecord(row Job, unknown map[string]codec.RawMessage) ([]byte, error) {
+	r := recordJob(row, nil)
 	r.Unknown = unknown
 	return codec.Marshal(r)
 }
