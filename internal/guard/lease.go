@@ -4077,9 +4077,15 @@ func vcsMutation(c hint.Invocation) string {
 // a non-reader command was pointed at, which is the safe direction for a boundary as
 // specific as the cache dir but not for one as ordinary as a path: grading every word would
 // refuse `echo hi` for writing outside the boundary.
+//
+// With no acting lease, only an agent's write into a job's checkout is refused
+// ([denyUnboundShellWrite]); a person and the root session write anywhere.
 func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
-		return ""
+		if deps.caller.Agent == "" {
+			return ""
+		}
+		return denyUnboundShellWrite(ctx, deps, command)
 	}
 	location := hookLocation(ctx, deps)
 	if location.workspace == "" {
