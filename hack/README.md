@@ -168,6 +168,8 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
 | `hack/magusfile/badges.buzz` | the coverage badge SVG, in the GitHub Actions badge's palette |
 | `hack/magusfile/buzz-coverage.buzz` | the `magus buzz -t` runs `buzz-test` makes, one per module, and the LCOV tracefile their fragments join into |
+| `hack/magusfile/bootstrap-slow-steps_test.buzz` | that bootstrap-checkout names each step past its bound and still finishes, checked by `buzz-test` on a ticking clock |
+| `hack/magusfile/bootstrap-timing.buzz` | the warm-cache bound of each bootstrap step, and the one line a slow step prints; pure |
 | `hack/magusfile/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
