@@ -7,13 +7,13 @@ tags: [design, principle, benchmarks, measurement, evidence]
 
 # Fit the work, never the benchmark
 
-A recipe that serves four does not serve twenty when every quantity is
+A meal planned for four does not serve twenty when every quantity is
 multiplied by five. The salt is too much, the pan is too small, the water
 boils off at a different rate, and the cooking time was never a quantity at
-all. The recipe was right. What it left out was its own tolerance: the range
+all. The plan was right. What it left out was its own tolerance: the range
 of kitchens, pans and head counts it was tried in.
 
-A benchmark is that recipe. It was run on one tree, on one machine, on one
+A benchmark is that plan. It was run on one tree, on one machine, on one
 set of tasks, at one size, and its number is true there. Between that
 artificial result and the work people do with the tool there is a gap. It is
 never zero, and it is unknown until someone measures it. A benchmark cannot
