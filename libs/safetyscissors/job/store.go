@@ -963,11 +963,18 @@ func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) 
 	if s.migrate == nil {
 		return Rows{}, jobsLog{}, s.refuseVersion(f)
 	}
-	migrate := func() error { return s.migrate(ctx, s.path, f.APIVersion, lines) }
 	if wait {
-		err = s.locked(ctx, migrate)
+		// The lines were read before the lock: re-read them under it, so a writer that
+		// migrated or appended in between is migrated from what it left.
+		err = s.locked(ctx, func() error {
+			f, log, lines, err := s.parse(ctx, false)
+			if err != nil || s.current(f, log) {
+				return err
+			}
+			return s.migrate(ctx, s.path, f.APIVersion, lines)
+		})
 	} else {
-		err = migrate()
+		err = s.migrate(ctx, s.path, f.APIVersion, lines)
 	}
 	if err != nil {
 		return Rows{}, jobsLog{}, err

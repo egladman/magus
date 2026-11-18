@@ -234,6 +234,38 @@ func (s *StoreSuite) TestAStoreVersionThatDoesNotParseIsRefused() {
 	s.Require().ErrorContains(err, `job: WithMigrations: api version "v2" is not`)
 }
 
+// A reader that saw the older file before the lock, and finds another writer migrated
+// it while it waited, migrates nothing from what it read.
+func (s *StoreSuite) TestAMigrationReReadsTheFileUnderTheLock() {
+	path := filepath.Join(s.dir, jobsFileName)
+	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
+	migrated := 0
+	migrate := func(context.Context, string, int, []codec.Line) error {
+		migrated++
+		return nil
+	}
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		_ = codec.WithLock(s.T().Context(), path+".lock", time.Second, func() error {
+			close(held)
+			<-release
+			return os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
+		})
+	}()
+	<-held
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.open(WithMigrations(1, migrate)).List(s.T().Context())
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+
+	s.Require().NoError(<-done)
+	s.Zero(migrated, "the file another writer migrated under the lock is not migrated again")
+}
+
 func (s *StoreSuite) TestTheDocumentAnOlderWriterKeptIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, documentFileName), []byte(`{}`), 0o600))
 
