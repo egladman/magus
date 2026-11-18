@@ -15,16 +15,15 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -259,16 +258,16 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// credential, which is the act an audit trail exists to record.
 		//
 		// The reference and the provider, NEVER the value, and that is a discipline here,
-		// not a mechanism. journal.Emit redacts against the resolver on the context it is
+		// not a mechanism. Emit redacts with the resolver on the context it is
 		// given, and this is the per-call context, which carries none. Do not add a value
 		// to this Text expecting something downstream to catch it.
-		if project, target, ok := journal.StepFromContext(ctx); ok {
+		if project, target, ok := recorder.StepFromContext(ctx); ok {
 			via := r.ProviderName()
 			if via == "" {
 				via = "built-in environment provider"
 			}
-			journal.Emit(ctx, journal.Event{
-				Kind: journal.KindSecret, Project: project, Target: target,
+			recorder.Emit(ctx, journal.Secret{
+				Project: project, Target: target,
 				Text: fmt.Sprintf("read secret %q via %s", ref, via),
 			})
 		}
@@ -306,7 +305,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// run. Preload (where a magusfile's TOP LEVEL is evaluated, and which `magus ls`,
 		// `describe` and `graph` reach) has none, and an endpoint opened there would bind
 		// a forwarder for the whole process life, so it is refused here by name.
-		run := journal.InvocationIDFromContext(ctx)
+		run := recorder.InvocationIDFromContext(ctx)
 		if run == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.endpoint: secret grant %q: an endpoint belongs to a run, and this call is outside one, open it inside a target body rather than at the magusfile's top level, where it would outlive every run that could use it`, g.Ref)
 		}
@@ -314,9 +313,9 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, fmt.Errorf(`magus\secret.endpoint: %w`, err)
 		}
-		if project, target, ok := journal.StepFromContext(ctx); ok {
-			journal.Emit(ctx, journal.Event{
-				Kind: journal.KindSecret, Project: project, Target: target,
+		if project, target, ok := recorder.StepFromContext(ctx); ok {
+			recorder.Emit(ctx, journal.Secret{
+				Project: project, Target: target,
 				Text: fmt.Sprintf("opened a local endpoint for %s carrying secret %q", g.Host, g.Ref),
 			})
 		}
@@ -341,7 +340,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 // interaction policy rests on, and put a credential one formatting mistake from a
 // durable append-only file.
 func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) {
-	base := trail.BaseFromContext(ctx)
+	base := recorder.BaseFromContext(ctx)
 	if base == "" {
 		return
 	}
@@ -351,12 +350,12 @@ func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) 
 	if o, ok := origin.FromContext(ctx); ok {
 		userAgent = o.UserAgent
 	}
-	trail.Append(ctx, base, trailtypes.Event{
-		Ts:        time.Now().UnixMilli(),
-		Kind:      trailtypes.KindGrantIssued,
+	recorder.AppendCall(ctx, base, journal.Call{
+		Time:      time.Now(),
+		Kind:      journal.CallKindCredentialGrant,
 		UserAgent: userAgent,
-		Action:    action,
-		Outcome:   trailtypes.OutcomeOK,
+		Name:      action,
+		Outcome:   journal.OutcomeOK,
 		Preview:   fmt.Sprintf("%s -> %s (%s)", g.Ref, g.Host, g.Header),
 	})
 }
@@ -1015,7 +1014,7 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 		if len(args) == 0 || !args[0].IsInt() || args[0].AsInt() < 1 {
 			return vm.Null, fmt.Errorf("ctx.permitted: requires a count of at least 1")
 		}
-		if !journal.RecordPermits(ctx, int(args[0].AsInt())) {
+		if !recorder.RecordPermits(ctx, int(args[0].AsInt())) {
 			return vm.Null, fmt.Errorf("ctx.permitted: no target is running to record it on")
 		}
 		return vm.Null, nil

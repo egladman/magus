@@ -12,7 +12,12 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type LoadSuite struct{ suite.Suite }
+
+func TestLoad(t *testing.T) { suite.Run(t, new(LoadSuite)) }
 
 // firstWordRejudge stands in for the guard's rules, which this package cannot import: it
 // names the first word as the program and passes every command.
@@ -77,7 +82,8 @@ func loadedEvent(t *testing.T, root, hostSession string, i int) session.AgentEve
 // TestLoadIsIdempotent is the property every adapter is built on: an adapter
 // re-reads whole transcript files rather than tracking where it stopped, so the
 // second pass over the same file has to be free.
-func TestLoadIsIdempotent(t *testing.T) {
+func (s *LoadSuite) TestLoadIsIdempotent() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -103,7 +109,8 @@ func TestLoadIsIdempotent(t *testing.T) {
 	assert.Len(t, session.AgentEvents(fold, "s1"), 3, "a second load must not double the history")
 }
 
-func TestLoadDropsAnotherRepositorysEvents(t *testing.T) {
+func (s *LoadSuite) TestLoadDropsAnotherRepositorysEvents() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 	elsewhere := t.TempDir()
@@ -122,7 +129,8 @@ func TestLoadDropsAnotherRepositorysEvents(t *testing.T) {
 // a command line is content, and content stays in the host's own transcript. The
 // assertion is over the FILES rather than over the struct, because a field added
 // later would satisfy a struct-shaped test and still write the line to disk.
-func TestLoadNeverStoresTheCommandText(t *testing.T) {
+func (s *LoadSuite) TestLoadNeverStoresTheCommandText() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -143,7 +151,8 @@ func TestLoadNeverStoresTheCommandText(t *testing.T) {
 
 // A rejected line names what is wrong with it and does not take the rest of the
 // stream down: an adapter emitting one bad shape emits it for a whole transcript.
-func TestLoadRejectsAnUnknownKind(t *testing.T) {
+func (s *LoadSuite) TestLoadRejectsAnUnknownKind() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -160,7 +169,8 @@ func TestLoadRejectsAnUnknownKind(t *testing.T) {
 
 // TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory is the bound: a line longer than
 // any event is rejected by number and skipped, and the lines after it still load.
-func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
+func (s *LoadSuite) TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory() {
+	t := s.T()
 	long := fmt.Sprintf("{\"event\":\"command\",\"host\":\"claude-code\",\"session\":\"s1\",\"cwd\":\"/nowhere\",\"command\":\"%s\"}", strings.Repeat("x", loadMaxLineBytes+1))
 
 	summary, err := ReadLoadStream(strings.NewReader(fmt.Sprintf(`%s
@@ -190,14 +200,16 @@ var adapterCases = map[string]string{
 
 // A kind the session contract gains with no adapter case is a kind no load has
 // ever been shown to store.
-func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
+func (s *LoadSuite) TestSessionAdapterCasesCoverEveryKind() {
+	t := s.T()
 	for _, kind := range session.EventKinds() {
 		assert.Contains(t, adapterCases, kind,
 			"adapterCases has no line for %q: every kind in the session contract needs one", kind)
 	}
 }
 
-func TestLoadStoresEveryAdapterCase(t *testing.T) {
+func (s *LoadSuite) TestLoadStoresEveryAdapterCase() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 

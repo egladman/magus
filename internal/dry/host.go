@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
-	trailtypes "github.com/egladman/magus/types/trail"
+	"github.com/egladman/magus/types/feedback"
 )
 
 // installHost wires a session for magusfile evaluation, layering host modules
@@ -541,24 +541,24 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StringValue(""),
 	}))
 
-	// The real shape/shapes parse with internal/trail, which would pull vcs and os/user
-	// into the WASM playground, so they answer as a line the parser cannot read. read and
-	// marks find no trail; mark echoes a zero row for the reason job.put does.
+	// The real shape parser pulls vcs and os/user into the WASM playground,
+	// so shape answers as an unreadable line. mark echoes a zero row, as
+	// job.put does.
 
-	m.MapSet("magus__Session__trail", function("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectTrail(trailtypes.Trail{}), nil
+	m.MapSet("magus__Session__trail", function("magus.Session.trail", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectFeedbackReport(feedback.Report{}), nil
 	}))
-	guard.MapSet("shape", function("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	guard.MapSet("shape", function("magus.guard.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StringValue(""), nil
 	}))
-	guard.MapSet("shapes", function("magus.trail.shapes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	guard.MapSet("shapes", function("magus.guard.shapes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
-	m.MapSet("magus__Session__marks", function("magus.trail.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("magus__Session__marks", function("magus.Session.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
-	m.MapSet("magus__Session__mark", function("magus.trail.mark", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectTrailMark(trailtypes.Mark{}, ffi.SessionEnums(ctx, sess, "magus")), nil
+	m.MapSet("magus__Session__mark", function("magus.Session.mark", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectFeedbackMark(feedback.Mark{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 
 	// A tier is proven from a checkout's diff and go list, neither of which the sandbox has,

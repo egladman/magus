@@ -24,8 +24,8 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
+	"github.com/egladman/magus/types/feedback"
 	imagetypes "github.com/egladman/magus/types/image"
-	"github.com/egladman/magus/types/trail"
 	vcstypes "github.com/egladman/magus/types/vcs"
 )
 
@@ -8694,13 +8694,13 @@ func decodeJobWorker(v vm.Value, path string) (job.Worker, error) {
 	return out, nil
 }
 
-// DecodeTrailReadOptions decodes a Buzz ReadOptions, an object instance or a map, into a trail.ReadOptions.
-func DecodeTrailReadOptions(v vm.Value) (trail.ReadOptions, error) {
-	return decodeTrailReadOptions(v, "readOptions")
+// DecodeFeedbackReadOptions decodes a Buzz ReadOptions, an object instance or a map, into a feedback.ReadOptions.
+func DecodeFeedbackReadOptions(v vm.Value) (feedback.ReadOptions, error) {
+	return decodeFeedbackReadOptions(v, "readOptions")
 }
 
-func decodeTrailReadOptions(v vm.Value, path string) (trail.ReadOptions, error) {
-	var out trail.ReadOptions
+func decodeFeedbackReadOptions(v vm.Value, path string) (feedback.ReadOptions, error) {
+	var out feedback.ReadOptions
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "ReadOptions", v)

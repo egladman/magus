@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -147,7 +147,7 @@ func appendGateWaiver(ctx context.Context, store *job.Store, w types.GateWaiver)
 	if err != nil {
 		return types.GateWaiver{}, err
 	}
-	w.By, w.At = trail.StampOrigin(ctx, jobtypes.Origin{}), time.Now().Unix()
+	w.By, w.At = recorder.StampOrigin(ctx, jobtypes.Origin{}), time.Now().Unix()
 	return w, log.Update(ctx, func([]types.GateWaiver) []types.GateWaiver { return []types.GateWaiver{w} })
 }
 

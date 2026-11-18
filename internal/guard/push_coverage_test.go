@@ -13,8 +13,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/mock"
@@ -151,14 +151,14 @@ func (s *NarrowPushSuite) TestARunAtAnOlderRevisionLeavesAFileChangedSinceUncove
 }
 
 // coveragePhase is the phase pushCoverage recorded on ctx's log.
-func (s *NarrowPushSuite) coveragePhase(ctx context.Context) trail.Phase {
+func (s *NarrowPushSuite) coveragePhase(ctx context.Context) journal.Phase {
 	for _, p := range judgmentPhases(ctx).finished() {
 		if p.Name == phasePushCoverage {
 			return p
 		}
 	}
 	s.Fail("no push_coverage phase was recorded")
-	return trail.Phase{}
+	return journal.Phase{}
 }
 
 // A revision read the budget cuts answers no commit, which once read as a
@@ -171,7 +171,7 @@ func (s *NarrowPushSuite) TestAPushWhoseRevisionReadIsCutIsRefusedNamingTheRead(
 	}
 	deadline, cancel := context.WithTimeout(s.T().Context(), judgeReserve+20*time.Millisecond)
 	defer cancel()
-	ctx := withPhaseLog(deadline, trail.Phase{})
+	ctx := withPhaseLog(deadline, journal.Phase{})
 
 	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())
 	decision, reason := gradePushWithoutGate(ev, "")
@@ -187,7 +187,7 @@ func (s *NarrowPushSuite) TestACutRevisionReadIsTheLapseTheTrailRecords() {
 		<-ctx.Done()
 		return ""
 	}
-	ctx := withPhaseLog(s.T().Context(), trail.Phase{})
+	ctx := withPhaseLog(s.T().Context(), journal.Phase{})
 
 	ev := pushCoverageWithin(ctx, time.Millisecond, s.deps, s.at, "git push", DialectBash, s.repo.Root())
 
@@ -225,7 +225,7 @@ func (s *NarrowPushSuite) TestAPushWhoseWorkspaceOpenLapsesIsRefusedNamingTheOpe
 		<-release
 		return nil, context.Canceled
 	}
-	ctx := withPhaseLog(s.T().Context(), trail.Phase{})
+	ctx := withPhaseLog(s.T().Context(), journal.Phase{})
 
 	ev := pushCoverageWithin(ctx, judgeReserve+20*time.Millisecond, s.deps, s.at, "git push", DialectBash, s.repo.Root())
 	decision, reason := gradePushWithoutGate(ev, "")

@@ -13,12 +13,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/coverage"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -417,7 +416,7 @@ func (r *ScriptRunner) Context(ctx context.Context, root string) (context.Contex
 	// A top-level `magus buzz` is an invocation like any other. Without its own entry a
 	// magus its script spawns inherits MAGUS_LEVEL but no ancestry, and the machine gate
 	// refuses it MGS3009 under a contended budget.
-	ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), journal.NewInvocationID())
+	ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), recorder.NewInvocationID())
 	// --root is the directory a script runs as if started in, as -C is for make: its
 	// vcs calls, execs and relative paths resolve there, not in the process cwd.
 	if _, set := std.CurrentWorkingDirectoryFromContext(ctx); root != "" && !set {
@@ -451,7 +450,7 @@ func (r *ScriptRunner) Context(ctx context.Context, root string) (context.Contex
 	if serr != nil {
 		return nil, serr
 	}
-	return trail.ContextWithBase(sctx, ws.CacheDir), nil
+	return recorder.ContextWithBase(sctx, ws.CacheDir), nil
 }
 
 // RunContext is Context plus one EvalOnce for the run.

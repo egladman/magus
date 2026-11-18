@@ -2,12 +2,12 @@ package cache
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,28 +15,27 @@ import (
 // eventSink is a capture handler that keeps every journal event a run emitted, so a test
 // can assert on the RECORD an observer would read rather than on a log line.
 type eventSink struct {
-	mu     sync.Mutex
-	events []journal.Event
+	mu      sync.Mutex
+	records []journal.Record
 }
 
-func (s *eventSink) Enabled(context.Context, slog.Level) bool { return true }
-
-func (s *eventSink) Handle(_ context.Context, r slog.Record) error {
-	if e, ok := journal.EventFromRecord(r); ok {
-		s.mu.Lock()
-		s.events = append(s.events, e)
-		s.mu.Unlock()
-	}
-	return nil
-}
-
-func (s *eventSink) WithAttrs([]slog.Attr) slog.Handler { return s }
-func (s *eventSink) WithGroup(string) slog.Handler      { return s }
-
-func (s *eventSink) snapshot() []journal.Event {
+func (s *eventSink) Handle(_ context.Context, r journal.Record) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]journal.Event(nil), s.events...)
+	s.records = append(s.records, r)
+}
+
+// runs is the result records the sink kept, in order.
+func (s *eventSink) runs() []journal.Run {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []journal.Run
+	for _, r := range s.records {
+		if run, ok := r.Run(); ok {
+			out = append(out, run)
+		}
+	}
+	return out
 }
 
 // TestRunAsideIsAccountedLikeABatchStep is the whole point of RunAside: work that runs
@@ -56,8 +55,8 @@ func TestRunAsideIsAccountedLikeABatchStep(t *testing.T) {
 	s.NoCache = true // a settle re-run is always a skip-cache target
 
 	sink := &eventSink{}
-	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
-	ctx = journal.WithInvocationID(ctx, "invtest")
+	ctx := recorder.WithSinks(t.Context(), sink.Handle)
+	ctx = recorder.WithInvocationID(ctx, "invtest")
 	prog := NewProgress()
 	ctx = ContextWithProgress(ctx, prog)
 
@@ -85,19 +84,14 @@ func TestRunAsideIsAccountedLikeABatchStep(t *testing.T) {
 	assert.Empty(t, c.inflight.Running(), "the inflight record is cleared on the way out")
 	assert.Equal(t, 0, lim.Snapshot().Running, "the slot is handed back on the way out")
 
-	var results []journal.Event
-	for _, e := range sink.snapshot() {
-		if e.Kind == journal.KindResult {
-			results = append(results, e)
-		}
-	}
+	results := sink.runs()
 	require.Len(t, results, 1, "one journal result event for the off-batch step")
 	assert.NotEmpty(t, results[0].Ref, "the event carries the output ref its log is stored under")
-	assert.Equal(t, journal.Event{
-		Ts: results[0].Ts, Inv: results[0].Inv, // the clock and the run's id
-		Project: "test/pkg", Target: "settle", Kind: journal.KindResult, Level: "info", Status: journal.StatusPass,
-		Ref: results[0].Ref, DurationMs: results[0].DurationMs, CacheKey: results[0].CacheKey,
-		Sizing: journal.SizingNone,
+	assert.Equal(t, journal.Run{
+		Project: "test/pkg", Target: "settle", Level: "info", Status: journal.StatusPass,
+		Ref: results[0].Ref, Duration: results[0].Duration, CacheKey: results[0].CacheKey,
+		Sizing: journal.SizingNone, MaxRSSBytes: results[0].MaxRSSBytes, CPU: results[0].CPU,
+		Started: results[0].Started, Waited: results[0].Waited,
 	}, results[0])
 }
 
@@ -111,7 +105,7 @@ func TestRunAsideReportsFailureLikeABatchStep(t *testing.T) {
 	s.NoCache = true
 
 	sink := &eventSink{}
-	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	ctx := recorder.WithSinks(t.Context(), sink.Handle)
 
 	_, err := c.RunAside(ctx, s, func(context.Context) error {
 		return assert.AnError
@@ -119,8 +113,8 @@ func TestRunAsideReportsFailureLikeABatchStep(t *testing.T) {
 	require.Error(t, err, "RunAside surfaces the step's error")
 
 	var failed bool
-	for _, e := range sink.snapshot() {
-		if e.Kind == journal.KindResult && e.Status == journal.StatusFail {
+	for _, e := range sink.runs() {
+		if e.Status == journal.StatusFail {
 			failed = true
 			assert.Equal(t, "settle", e.Target)
 		}
@@ -139,7 +133,7 @@ func TestProgressBeatsOnEveryCapturedLine(t *testing.T) {
 	prog.at.Store(time.Now().Add(-time.Hour).UnixNano())
 	require.Greater(t, prog.Idle(), 30*time.Minute, "fabricated quiet period")
 
-	em.emit(journal.StreamStdout, "compiling")
+	em.emit(journal.Stdout, "compiling")
 	assert.Less(t, prog.Idle(), time.Second, "an output line is a beat")
 }
 

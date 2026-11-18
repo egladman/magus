@@ -12,8 +12,8 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -91,12 +91,12 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 	if err != nil {
 		return err
 	}
-	spawn := trail.SpawnFromEnv()
+	spawn := recorder.SpawnFromEnv()
 	lease, leaseFrom, err := guard.CheckoutLease(ctx, wsRoot, jobPlace)
 	if err != nil {
 		return fmt.Errorf("magus session checkpoint: %w", err)
 	}
-	origin := trail.LocalOrigin(ctx)
+	origin := recorder.LocalOrigin(ctx)
 	origin.Host, origin.Session = c.Host, c.HostSession
 	stored, recorded, err := sessions.RecordCheckpoint(ctx, dir, c, session.InvocationStart{
 		Origin:    origin,
@@ -105,7 +105,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		Lease:     lease,
 		LeaseFrom: leaseFrom,
 		TraceID:   spawn.TraceID,
-		SpanID:    trail.NewSpanID(),
+		SpanID:    recorder.NewSpanID(),
 		Spawner:   spawn.Spawner,
 	})
 	if err != nil {

@@ -40,8 +40,8 @@ func run(ctx context.Context) error {
 }
 ```
 
-`stateDir` holds `jobs/`, `sessions/` and the trail's `activity/`; `WithDirs` moves any
-of them. Every subpackage stays importable on its own.
+`stateDir` holds `jobs/`, `sessions/` and the activity log's `activity/`; `WithDirs`
+moves any of them. Every subpackage stays importable on its own.
 
 ## Mark
 

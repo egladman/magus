@@ -9,8 +9,8 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -159,7 +159,7 @@ func fileStallRow(ctx context.Context, at location, who hookAttribution, lease s
 		Message: fmt.Sprintf("job %s is blocked by %s, which only the root can clear: %s It ran on %s; refusals under this lease: %d.",
 			lease, judged.Rule, firstLine(judged.Reason), workerModel(ctx, at, who, lease), rec.Refusals),
 	}
-	origin := trail.StampOrigin(ctx, job.Origin{EntryPoint: job.EntryPointHook, Host: who.Host, Session: who.Session, Agent: who.Agent})
+	origin := recorder.StampOrigin(ctx, job.Origin{EntryPoint: job.EntryPointHook, Host: who.Host, Session: who.Session, Agent: who.Agent})
 	// MarkFired already said this block is new, and this runs inside a hook.
 	_ = sessions.AppendRequest(ctx, dir, cmp.Or(who.Session, lease), open, session.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
 }

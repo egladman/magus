@@ -6,8 +6,9 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
 )
@@ -88,9 +89,9 @@ func Collect(ctx context.Context, ws Workspace, src Sources, rev difftypes.Diff,
 	}
 	p.Anchors = anchors
 	p.LeftBehind = collectLeftBehind(ctx, ws, src, rev, patch, working)
-	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
+	// The trail and window sessions.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
-	p.Evidence, p.EvidenceGap, err = trail.Consulted(ctx, ws.Root(), ws.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
+	p.Evidence, p.EvidenceGap, err = recorder.Consulted(ctx, ws.Root(), ws.CacheDir(), review.ChangedPaths(rev), sessions.DefaultReplayEvents)
 	p.EvidenceNotes = errorNotes(err)
 	p.Review = collectReview(rev, src.RequiredIn(ctx), src.BulkReasons(ws.CacheDir(), rev))
 	return p, nil

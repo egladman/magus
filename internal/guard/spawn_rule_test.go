@@ -21,11 +21,11 @@ import (
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -194,13 +194,14 @@ func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 	first := Judge(ctx, deps, req)
 	repeat := Judge(ctx, deps, req)
 
-	rows := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+	rows := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, rows, 2)
 	for i, shown := range []verdict.Judgment{first, repeat} {
 		ref := verdictRef.FindString(shown.Reason)
 		require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", shown.Reason)
-		assert.Equal(t, ref, rows[i].VerdictRef, "row %d", i)
-		stored, err := trailtypes.ReadBlob(cacheDir, rows[i].VerdictRef)
+		require.NotNil(t, rows[i].Guard, "row %d", i)
+		assert.Equal(t, ref, rows[i].Guard.Verdict.Ref, "row %d", i)
+		stored, err := loggedPayload(cacheDir, rows[i].Guard.Verdict.Ref)
 		require.NoError(t, err)
 		assert.Contains(t, string(stored), "\nsee: "+ruleDocsBase+string(denySpawnUnbriefed)+"/")
 	}
@@ -280,9 +281,9 @@ func TestSpawnRulesKeepTheStricterSide(t *testing.T) {
 			v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
 
-			spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+			spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 			require.Len(t, spawns, 1)
-			assert.Equal(t, tc.decidedBy, spawns[0].DecidedBy, "the trail names which side decided")
+			assert.Equal(t, tc.decidedBy, callDecidedBy(spawns[0]), "the trail names which side decided")
 		})
 	}
 }
@@ -299,9 +300,9 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 	assert.Contains(t, v.Context, "The approved magus\\guard.spawn rule judged nothing: the rule could not be resolved")
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this spawn.")
 
-	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+	spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, []trail.RuleFailure{{
+	assert.Equal(t, []recorder.RuleFailure{{
 		Side:  decidedByApproved,
 		Error: "the rule could not be resolved: approved magusfile: magusfile.buzz:3:1: expected expression",
 	}}, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
@@ -317,9 +318,9 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 	probe := &spawnRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Add a Done when section."}}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 
-	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+	spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, decidedByBuiltin+decidedByJoin+decidedByWorktree, spawns[0].DecidedBy)
+	assert.Equal(t, decidedByBuiltin+decidedByJoin+decidedByWorktree, callDecidedBy(spawns[0]))
 }
 
 // Role is computed from the job store, never declared by the caller.
@@ -379,13 +380,13 @@ const finishedSpawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PostT
 
 // spawnBlob is the part of an agent_spawn request blob these tests read.
 type spawnBlob struct {
-	Target       string              `json:"target"`
-	RuleFailures []trail.RuleFailure `json:"rule_failures"`
+	Target       string                 `json:"target"`
+	RuleFailures []recorder.RuleFailure `json:"rule_failures"`
 }
 
-func readSpawnBlob(t *testing.T, cacheDir string, e trailtypes.Event) spawnBlob {
+func readSpawnBlob(t *testing.T, cacheDir string, e journal.Call) spawnBlob {
 	t.Helper()
-	body, err := trailtypes.ReadBlob(cacheDir, e.RequestRef)
+	body, err := loggedPayload(cacheDir, e.Request.Ref)
 	require.NoError(t, err)
 	var got spawnBlob
 	require.NoError(t, codec.Unmarshal(body, &got))
@@ -422,10 +423,10 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 				assert.Contains(t, v.Context, "Only the built-in rules and the approved magus\\guard.spawn rule applied to this spawn.")
 			}
 
-			spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+			spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 			require.Len(t, spawns, 1)
-			assert.Equal(t, tc.by, spawns[0].DecidedBy)
-			assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
+			assert.Equal(t, tc.by, callDecidedBy(spawns[0]))
+			assert.Equal(t, []recorder.RuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
 				readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 		})
 	}
@@ -450,9 +451,9 @@ func TestContinueIsRecordedOnTheTrail(t *testing.T) {
 	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
 
-	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+	spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, trail.ActionAgentContinue, spawns[0].Action)
+	assert.Equal(t, recorder.NameAgentContinue, spawns[0].Name)
 	assert.Equal(t, spawnBlob{Target: "a1b2c3"}, readSpawnBlob(t, cacheDir, spawns[0]))
 }
 
@@ -565,13 +566,13 @@ func TestSpawnRuleSeesTheCheckoutItWasJudgedIn(t *testing.T) {
 	assert.Equal(t, at.workspace, probe.asked[0].Checkout)
 }
 
-// trailEvents returns matching events oldest-first: ReadRecent reports newest-first, and a
-// lineage assertion reads left-to-right as it happened.
-func trailEvents(t *testing.T, base string, kind trailtypes.Kind) []trailtypes.Event {
+// callsOfKind returns matching calls oldest-first, so a
+// lineage assertion reads in the order it happened.
+func callsOfKind(t *testing.T, base string, kind journal.CallKind) []journal.Call {
 	t.Helper()
-	all, err := trailtypes.ReadRecent(t.Context(), base, 1000)
+	all, err := loggedCalls(t.Context(), base, 1000)
 	require.NoError(t, err)
-	var out []trailtypes.Event
+	var out []journal.Call
 	for i := len(all) - 1; i >= 0; i-- {
 		if all[i].Kind == kind {
 			out = append(out, all[i])
@@ -975,7 +976,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	rev, _ := types.ParseCheckpointToken(rows[0].ReportedBase)
 	assert.Equal(t, workerHead, rev, "the base is read from the worker's checkout, not the spawner's")
 
-	events := trailEvents(t, workerCache, trailtypes.KindAgentCommand)
+	events := callsOfKind(t, workerCache, journal.CallKindAgentCommand)
 	require.Len(t, events, 2)
 	for _, e := range events {
 		assert.Equal(t, graded{Lease: "guard-facts", From: jobtypes.LeaseSourceAgent}, graded{Lease: e.Lease, From: e.LeaseFrom})
@@ -1264,7 +1265,7 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "bound-session"}, "bound-job")
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator agent-job", "", "", "", "a1b2c3"), Host: "claude-code"})
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=claimed-job")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=claimed-job")
 
 	type answer struct {
 		Lease string
@@ -1295,7 +1296,7 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 			v := Judge(ctx, Dependencies{}, tc.req)
 			assert.Equal(t, tc.want, answer{v.Lease, jobtypes.LeaseSource(v.LeaseFrom)})
 
-			events := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+			events := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 			require.NotEmpty(t, events)
 			last := events[len(events)-1]
 			assert.Equal(t, tc.want, answer{last.Lease, last.LeaseFrom}, "the trail records the same answer")
@@ -1544,17 +1545,17 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	assert.Equal(t, verdictWithRule("deny", workspaceSpawnRule), unworded(v))
 	assert.Regexp(t, `magus ran out of time judging a subagent spawn: resolving the approved magus\\guard\.spawn rule did not finish within \d+ms`, v.Reason)
 
-	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
+	spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
+	assert.Equal(t, decidedByApproved, callDecidedBy(spawns[0]))
 	failures := readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures
 	require.Len(t, failures, 2, "under one deadline the working tree's rule has none left after the approved resolve")
 	assert.Equal(t, decidedByApproved, failures[0].Side)
 	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
-	assert.Equal(t, trail.RuleFailure{Side: decidedByWorktree, Error: "the rule had no time left before the guard's deadline"}, failures[1])
-	require.NotEmpty(t, spawns[0].Phases)
-	assert.Equal(t, phaseApprovedResolve, spawns[0].Phases[0].Name)
-	assert.True(t, spawns[0].Phases[0].Lapsed)
+	assert.Equal(t, recorder.RuleFailure{Side: decidedByWorktree, Error: "the rule had no time left before the guard's deadline"}, failures[1])
+	require.NotEmpty(t, guardPhases(spawns[0]))
+	assert.Equal(t, phaseApprovedResolve, guardPhases(spawns[0])[0].Name)
+	assert.True(t, guardPhases(spawns[0])[0].Lapsed)
 }
 
 // Codex reports a finished spawn's response as a string holding JSON, and its v2 spawn
@@ -1683,9 +1684,9 @@ func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 				row("fresh-job", jobtypes.StateDeclared), row("done-job", jobtypes.StateExited))
 			bindCaller(t, ctx, who, "held-job")
 			if tc.claim != "" {
-				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+				t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, tc.claim))
 			} else {
-				t.Setenv(trail.EnvBaggage, "")
+				t.Setenv(recorder.EnvBaggage, "")
 			}
 
 			v := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, "ls"), Host: who.Host})

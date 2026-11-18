@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -23,7 +23,7 @@ func (s *Store) Pause(ctx context.Context, reason string, until int64, ids ...st
 	if strings.TrimSpace(reason) == "" {
 		return nil, errors.New("job: a pause names its reason, which the holder and the person resuming it read")
 	}
-	by := trail.StampOrigin(ctx, job.Origin{})
+	by := recorder.StampOrigin(ctx, job.Origin{})
 	return s.setPaused(ctx, ids, func(cur *job.Job, now int64) error {
 		if until != 0 && until <= now {
 			return fmt.Errorf("job: %s: the pause's bound is already past, so it would lapse as it was written", cur.ID)

@@ -1,11 +1,26 @@
 package sessions
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"text/tabwriter"
 	"time"
+
+	"github.com/egladman/magus/internal/recorder"
 )
+
+// PromptCacheForCheckout resolves the prompt-cache clock from the newest
+// guard observation in the activity log under cacheDir. It reads the
+// checkout, not the repository: the question is about the agent in front
+// of you. A log that holds nothing gives an empty clock.
+func PromptCacheForCheckout(ctx context.Context, cacheDir string, now time.Time) PromptCacheClock {
+	act, ok := recorder.LastAgentActivity(ctx, cacheDir)
+	if !ok {
+		return PromptCacheClock{}
+	}
+	return promptCacheAt(act.Session, act.At, now)
+}
 
 // The published prompt-cache windows a session's last activity is measured against.
 //
@@ -105,14 +120,14 @@ type PromptCacheWindowStatus struct {
 	Closed bool `json:"closed"`
 }
 
-// PromptCacheAt resolves the table against one session's last activity.
+// promptCacheAt resolves the table against one session's last activity.
 //
 // last is the newest observation of that session; now is the instant to judge it
 // against, passed rather than read so a caller renders one stable clock and a test
 // can pin one. A zero last yields a zero clock with no providers: a session nothing
 // has observed has no age to report, and computing one anyway would date every
 // window to the epoch.
-func PromptCacheAt(session string, last, now time.Time) PromptCacheClock {
+func promptCacheAt(session string, last, now time.Time) PromptCacheClock {
 	if last.IsZero() {
 		return PromptCacheClock{}
 	}

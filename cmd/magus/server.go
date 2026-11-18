@@ -24,14 +24,14 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
@@ -91,7 +91,7 @@ func serverUsage() {
 }
 
 func serverStart(ctx context.Context, args []string) error {
-	ctx = trail.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
+	ctx = recorder.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
 	var sf *flaggen.ServerStartFlags
 	_, err := commandParse("server start", args, func(fs *flag.FlagSet) {
 		sf = flaggen.BindServerStart(fs)
@@ -206,13 +206,12 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	// into.
 	serverHost.StartBridge(ctx, cancel)
 
-	// Background maintenance: rotate the trail/run-logs and reconcile the graph on their
-	// configured intervals, idle-gated. Socket and trail base are late-bound (set during
-	// startup), so the scheduler reads them per tick.
+	// Socket and the activity base are set later in startup, so the
+	// scheduler reads them per tick.
 	maintenance.Start(ctx, maintenance.Options{
 		Schedule: globalCfg.Server.Maintenance,
 		Socket:   func() string { return os.Getenv(proc.SocketEnv) },
-		Trail:    serverHost.TrailBase,
+		Activity: serverHost.ActivityBase,
 		Version:  version,
 	})
 }
@@ -615,7 +614,9 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 	if err != nil {
 		return fmt.Errorf("server rotate-activities: %w", err)
 	}
-	trail.Rotate(m.CacheDir())
+	if err := recorder.RotateCalls(ctx, m.CacheDir()); err != nil {
+		return fmt.Errorf("server rotate-activities: %w", err)
+	}
 	if opts.Format != outputText {
 		return emitRecord(opts, serverRotateActivitiesOutput{CacheDir: m.CacheDir()}, []string{m.CacheDir()})
 	}
@@ -865,13 +866,13 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
 	// The watermark is the READER's; see DiffReview.SeenComments for why it cannot be the job's.
 	if unseen := (diff.Review{SeenComments: seen}).UnseenComments(comments); len(unseen) > 0 {
-		trail.Append(ctx, m.CacheDir(), trailtypes.Event{
-			Ts:        time.Now().UnixMilli(),
-			Kind:      trailtypes.KindJob,
+		recorder.AppendCall(ctx, m.CacheDir(), journal.Call{
+			Time:      time.Now(),
+			Kind:      journal.CallKindJob,
 			Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 			Workspace: m.Root(),
-			Action:    "review.said",
-			Outcome:   trailtypes.OutcomeOK,
+			Name:      "review.said",
+			Outcome:   journal.OutcomeOK,
 			// The ids ride along so the console can key its notification on exactly this set: the
 			// job running again before the reader looks must not say the same thing twice.
 			Preview: fmt.Sprintf("%s: %d: %s", at.Repo, len(unseen), strings.Join(unseen, ",")),
@@ -898,13 +899,13 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	}
 	// Recorded before the mark is cleared: a crash between the two repeats the event on the next
 	// tick, where clearing first would lose it for good.
-	trail.Append(ctx, m.CacheDir(), trailtypes.Event{
-		Ts:        time.Now().UnixMilli(),
-		Kind:      trailtypes.KindJob,
+	recorder.AppendCall(ctx, m.CacheDir(), journal.Call{
+		Time:      time.Now(),
+		Kind:      journal.CallKindJob,
 		Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 		Workspace: m.Root(),
-		Action:    "review.merged",
-		Outcome:   trailtypes.OutcomeOK,
+		Name:      "review.merged",
+		Outcome:   journal.OutcomeOK,
 		Preview:   preview,
 	})
 	if !underReader {

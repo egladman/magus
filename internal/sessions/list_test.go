@@ -6,12 +6,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
-func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
-	t.Parallel()
+type ListSuite struct{ suite.Suite }
+
+func TestList(t *testing.T) { suite.Run(t, new(ListSuite)) }
+
+func (s *ListSuite) TestSummarizeTargetsCollapsesRepeats() {
+	t := s.T()
 	got := summarizeTargets([]session.TargetResult{
 		{Target: "build", Project: "api", Outcome: session.OutcomePass},
 		{Target: "build", Project: "api", Outcome: session.OutcomePass},
@@ -24,8 +29,8 @@ func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
 // sessionsLeaseCell returns the LEASE cell of the row for session, which is the column the console
 // drawer's join is waiting on. Reading it positionally rather than searching the whole listing is
 // what makes the "-" case assertable: a dash appears in every unattributed column.
-func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestSessionParentResolvesOnlyWhatTheStoreHolds() {
+	t := s.T()
 	bySpan := map[string]string{"00f067aa0ba902b7": "invParent"}
 
 	assert.Equal(t, "invParent", invocationParent(bySpan, "00f067aa0ba902b7"))
@@ -36,8 +41,8 @@ func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
 // The listing answers "what happened", but its reader is often looking for "what needs
 // me", so an open queue gets one cross-reference line, and a quiet queue gets silence
 // rather than a reassurance nobody asked for.
-func TestParseSinceAcceptsBothSpellings(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestParseSinceAcceptsBothSpellings() {
+	t := s.T()
 
 	empty, err := ParseSince("")
 	require.NoError(t, err)
@@ -57,8 +62,8 @@ func TestParseSinceAcceptsBothSpellings(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC), instant.UTC())
 }
 
-func TestParseSinceRejectsAValueThatIsNeitherForm(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestParseSinceRejectsAValueThatIsNeitherForm() {
+	t := s.T()
 
 	_, err := ParseSince("last tuesday")
 	require.Error(t, err)
@@ -69,8 +74,8 @@ func TestParseSinceRejectsAValueThatIsNeitherForm(t *testing.T) {
 // The filter turns on the LAST fact rather than the first, so a session that began
 // before the window and is still working stays listed. Hiding it is exactly the wrong
 // answer for the question --since asks.
-func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestInvocationsSinceKeepsALongInvocationStillWorking() {
+	t := s.T()
 
 	now := time.Now()
 	old := session.Summary{Invocation: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
@@ -81,15 +86,15 @@ func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
 	assert.Equal(t, "long", got[0].Invocation)
 }
 
-func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestInvocationsSinceWithNoCutoffKeepsEverything() {
+	t := s.T()
 
 	all := []session.Summary{{Invocation: "a"}, {Invocation: "b"}}
 	assert.Equal(t, all, InvocationsSince(all, time.Time{}))
 }
 
-func TestInvocationsInCheckoutKeepsThisCheckoutAndFactsWithNoWorkspace(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestInvocationsInCheckoutKeepsThisCheckoutAndFactsWithNoWorkspace() {
+	t := s.T()
 
 	here, elsewhere := t.TempDir(), t.TempDir()
 	all := []session.Summary{

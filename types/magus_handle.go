@@ -50,7 +50,7 @@ func (h History) Options() HistoryMetricsOptions {
 }
 
 // Session is magus\session(): which session's guard record a read
-// covers, and inside which window, each as trail.ReadOptions reads it.
+// covers, and inside which window, each as feedback.ReadOptions reads it.
 type Session struct {
 	Session string `json:"session"`
 	Since   string `json:"since"`

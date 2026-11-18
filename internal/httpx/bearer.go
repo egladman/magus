@@ -14,8 +14,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -154,7 +154,7 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) aut
 			format.Write(w, r, operatorRefused)
 			return
 		}
-		ctx, cancel := context.WithCancel(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), cred), job.EntryPointRPC))
+		ctx, cancel := context.WithCancel(recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), cred), job.EntryPointRPC))
 		defer cancel()
 		go reverify(ctx, cancel, verify, presented, need, r)
 		next.ServeHTTP(w, r.WithContext(ctx))

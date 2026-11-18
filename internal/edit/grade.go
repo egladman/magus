@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -51,7 +51,7 @@ func RenameBlindSpots(id, language string, cov knowledge.Coverage) []types.EditR
 // ws.Root() can be another spelling of the same workspace,
 // which the memoized load would read as a second one.
 func RenameGrade(ctx context.Context, deps guard.Dependencies, ws types.WorkspaceRepository, dryRun bool) func(string, []byte, []byte) (string, string) {
-	ctx = trail.ContextWithEntryPoint(ctx, job.EntryPointCLI)
+	ctx = recorder.ContextWithEntryPoint(ctx, job.EntryPointCLI)
 	return func(rel string, before, after []byte) (string, string) {
 		return guard.GradeEdit(ctx, deps, ws, rel, before, after, guard.EditGrade{DryRun: dryRun})
 	}

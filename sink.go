@@ -52,10 +52,10 @@ type encoder interface {
 	close() error
 }
 
-// recorder is an encoder whose stream also carries the records the engine writes where
-// they arise rather than through a sink: per-target results, lock decisions, race
-// findings and graph telemetry. A format without one gets none of them.
-type recorder interface {
+// recordEncoder is an encoder whose stream also carries the engine's own
+// records: per-target results, lock decisions, race findings and telemetry.
+// A format without one gets none of them.
+type recordEncoder interface {
 	recordWriter() *report.Writer
 }
 
@@ -65,7 +65,7 @@ type recorder interface {
 // cannot disagree about the format. Safe for concurrent use.
 type Sink struct {
 	enc     encoder
-	records *report.Writer // the engine's own records; nil unless enc is a recorder
+	records *report.Writer // the engine's own records; nil unless enc is a recordEncoder
 	// prose is set when records ride beside prose (WithSinkRecords), so a decision the
 	// engine states in one place or the other is stated in prose.
 	prose bool
@@ -134,7 +134,7 @@ func NewSink(format output.Format, stdout, stderr io.Writer, opts ...SinkOption)
 	if o.records == nil {
 		return sinkOver(enc), nil
 	}
-	if _, ok := enc.(recorder); ok {
+	if _, ok := enc.(recordEncoder); ok {
 		return nil, fmt.Errorf("magus: output format %q already writes records, it takes no second record stream", format)
 	}
 	recEnv := env
@@ -146,7 +146,7 @@ func NewSink(format output.Format, stdout, stderr io.Writer, opts ...SinkOption)
 
 func sinkOver(enc encoder) *Sink {
 	s := &Sink{enc: enc}
-	if r, ok := enc.(recorder); ok {
+	if r, ok := enc.(recordEncoder); ok {
 		s.records = r.recordWriter()
 	}
 	return s

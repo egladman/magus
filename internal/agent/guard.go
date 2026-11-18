@@ -253,7 +253,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // with that host's ask. A 36 copy meets "defer" as an unknown decision and refuses every
 // call until it is re-installed.
 //
-// 38: magus-command.buzz sends a stop advise to Claude Code as systemMessage, which the
+// 38: magus-command.buzz sends a stop advise as systemMessage, which the
 // host shows and never continues the turn for. A 37 copy sends it as additionalContext,
 // and the host continues the turn to answer it.
 const GuardTemplateVersion = 38

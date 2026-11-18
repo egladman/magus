@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -25,25 +26,25 @@ func TestExecEmitsExecEventWithinStep(t *testing.T) {
 
 	// A Broadcaster is the public way to observe the captured stream; its retained
 	// backlog holds every event emitted before we subscribe.
-	rec := journal.NewBroadcaster()
-	ctx := journal.WithStep(journal.WithLogger(context.Background(), journal.NewLogger(rec)), "web", "build")
+	rec := recorder.NewBroadcaster()
+	ctx := recorder.WithStep(recorder.WithSinks(context.Background(), rec.Handle), "web", "build")
 	_, err := Exec(ctx, "echo", []string{"hello world"}, ExecOptions{Quiet: true})
 	require.NoError(t, err)
 
 	got, _, cancel := rec.Subscribe()
 	defer cancel()
 	require.Len(t, got, 1)
-	assert.Equal(t, journal.Event{
-		Ts:      got[0].Ts,
-		Kind:    journal.KindExec,
+	ran, ok := got[0].Exec()
+	require.True(t, ok)
+	assert.Equal(t, journal.Exec{
 		Project: "web",
 		Target:  "build",
-		Text:    `echo "hello world"`, // args with spaces are quoted
-	}, got[0])
+		Command: `echo "hello world"`, // args with spaces are quoted
+	}, ran)
 
 	// No step on ctx: no exec event (internal probes stay silent).
-	noStep := journal.NewBroadcaster()
-	noCtx := journal.WithLogger(context.Background(), journal.NewLogger(noStep))
+	noStep := recorder.NewBroadcaster()
+	noCtx := recorder.WithSinks(context.Background(), noStep.Handle)
 	_, err = Exec(noCtx, "echo", []string{"hi"}, ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	got2, _, cancel2 := noStep.Subscribe()

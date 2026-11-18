@@ -19,7 +19,7 @@ import (
 	"time"
 
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 
@@ -38,18 +38,18 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/job/evidence"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -235,7 +235,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 	}
 	loc.Outputs, loc.DryRun = outputsIn, o.DryRun
 	loc.Grader = guard.NewCheckGrader(loadGuardDependencies)
-	loc.TrailBase = func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }
+	loc.ActivityBase = func(checkoutRoot string) (string, error) { return magus.ResolveCacheDir(checkoutRoot, cliOptions()...) }
 	if root != "" {
 		// Read once, and only when a job ends with a priceable trail, since it loads the
 		// workspace's harness spells.
@@ -1133,7 +1133,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		return exit.Usagef("magus job exec: --slots is %d; a running command takes at least 1", slots)
 	}
 	root = resolveRootOrEmpty(root)
-	caller := trail.SpawnFromEnv()
+	caller := recorder.SpawnFromEnv()
 	lease := caller.Lease
 	if root != "" {
 		if loc, err := jobPlace(root); err == nil {
@@ -1146,7 +1146,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		}
 	}
 	ancestors := types.InvocationAncestorsFromContext(ctx)
-	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), types.WrapperInvocation(journal.NewInvocationID())))
+	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), types.WrapperInvocation(recorder.NewInvocationID())))
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -1724,12 +1724,18 @@ func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() 
 // recentTrail is what this checkout's activity trail still holds, newest first. An
 // unreadable trail reads as empty: a watcher that refused to start because nothing had been
 // recorded yet would refuse exactly when a job has only just begun.
-func recentTrail(ctx context.Context, cacheDir string) []trailtypes.Event {
-	events, err := trailtypes.ReadRecent(ctx, cacheDir, jobWatchWindow)
-	if err != nil {
-		return nil
+func recentTrail(ctx context.Context, cacheDir string) []journal.Call {
+	var calls []journal.Call
+	for c, err := range recorder.ReadCalls(ctx, cacheDir, jobWatchWindow) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return nil
+		}
+		calls = append(calls, c)
 	}
-	return events
+	return calls
 }
 
 // jobWatchWindow bounds one read of the trail. It is a follower's window, not a history:

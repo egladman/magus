@@ -19,8 +19,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/record"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
@@ -134,7 +134,7 @@ func (l *projectLocker) publishHolds(ctx context.Context, paths []string) func()
 	if got, err := fl.TryLock(); err != nil || !got {
 		return func() {}
 	}
-	rec := holdsRecord{PID: os.Getpid(), Inv: journal.InvocationIDFromContext(ctx), Projects: strings.Join(canonicalProjects(paths), "\n")}
+	rec := holdsRecord{PID: os.Getpid(), Inv: recorder.InvocationIDFromContext(ctx), Projects: strings.Join(canonicalProjects(paths), "\n")}
 	if record.Write(base, rec) != nil {
 		_ = fl.Unlock()
 		_ = os.Remove(base + ".lock")

@@ -10,7 +10,7 @@ export fun jobRecordsFigure() > figure\Figure !> any {
     final forecast = magus\graph().dir("internal/ci/forecast");
     final queue = magus\graph().dir("internal/queue/types");
     final sessions = magus\graph().dir("internal/sessions");
-    final trail = magus\graph().dir("internal/trail");
+    final recorder = magus\graph().dir("internal/recorder");
     final guard = magus\graph().dir("internal/guard");
     final sandbox = magus\graph().dir("internal/sandbox");
     return figure\of("job-records",
@@ -20,7 +20,7 @@ export fun jobRecordsFigure() > figure\Figure !> any {
                 + "and write paths, and the leases that release them. Migrations upgrade an old "
                 + "row on read. describe renders the spec an agent reads, the forecast sizes the "
                 + "verifying checks, and the queue types record a landed job. The store reads the "
-                + "session record and the trail to say who held a lease. The guard judges calls "
+                + "session record and the activity log to say who held a lease. The guard judges calls "
                 + "against the row, and the sandbox narrows a run's writes to it.")
         .box(jobs, label: "Job store", sub: "rows and leases", focal: true)
         .box(migrate, label: "Row migrations", sub: "old rows upgrade on read")
@@ -28,16 +28,15 @@ export fun jobRecordsFigure() > figure\Figure !> any {
         .box(forecast, label: "Check forecast", sub: "what verifies the row")
         .box(queue, label: "Queue records", sub: "a landed job")
         .box(sessions, label: "Session record", sub: "who held the lease", look: figure\Look.store)
-        .box(trail, label: "Trail", sub: "what it did", look: figure\Look.store)
+        .box(recorder, label: "Activity log", sub: "what it did", look: figure\Look.store)
         .box(guard, label: "Guard", sub: "judges against the row")
         .box(sandbox, label: "Sandbox", sub: "write grant from the row")
         .edgesFromGraph()
-        .hideEdges([guard, sandbox], dst: [sessions, trail],
+        .hideEdges([guard, sandbox], dst: [sessions, recorder],
             why: "they read the same records the store reads; the row is the one thing drawn")
-        .hideEdges([trail], dst: [sessions], why: "the trail's own link to sessions is another verb")
         .markEdge(guard, dst: jobs, label: "lease")
         .markEdge(sandbox, dst: jobs, label: "write grant")
         .legend(figure\Look.focal, label: "the record")
         .legend(figure\Look.store, label: "append-only")
-        .scope([jobs, migrate, describe, forecast, queue, sessions, trail]);
+        .scope([jobs, migrate, describe, forecast, queue, sessions, recorder]);
 }

@@ -7,9 +7,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/safetyscissors/session"
 )
+
+type HintsSuite struct{ suite.Suite }
+
+func TestHints(t *testing.T) { suite.Run(t, new(HintsSuite)) }
 
 // loadedStore writes events into a temp session store and folds it back, so the lens
 // is exercised against the store it actually reads rather than a hand-built Fold.
@@ -40,7 +45,8 @@ func shellCall(hostSession, ref string, ms int64, digest string, served, followe
 
 // One id followed, one rejected for another magus verb, and a reflex beside both: the
 // three describe different servings and do not sum to served.
-func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
+func (s *HintsSuite) TestHintUptakeCountsFollowedRejectedAndReflex() {
+	t := s.T()
 	fold := loadedStore(t, []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "d-query", []string{"query-explain", "query-path"}, nil),
 		shellCall("s1", "a2", 2_000, "d-explain", nil, []string{"query-explain"}),
@@ -64,7 +70,8 @@ func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
 
 // The table leads with the best-converting hint, and hintUptake is where that order is
 // decided; the renderer prints what it is handed.
-func TestHintUptakeSortsByRateThenServed(t *testing.T) {
+func (s *HintsSuite) TestHintUptakeSortsByRateThenServed() {
+	t := s.T()
 	fold := loadedStore(t, []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"file-impact"}, nil),
 		shellCall("s1", "a2", 2_000, "", []string{"query-explain"}, []string{"file-impact"}),
@@ -84,7 +91,8 @@ func TestHintUptakeSortsByRateThenServed(t *testing.T) {
 
 // The floor is named in the output as a note, never applied: which hints go is a
 // decision, and magus informs.
-func TestRenderHintUptakeNamesTheFloor(t *testing.T) {
+func (s *HintsSuite) TestRenderHintUptakeNamesTheFloor() {
+	t := s.T()
 	var buf bytes.Buffer
 	require.NoError(t, RenderHintUptake(&buf, HintUptakeReport{
 		Floor:     HintFloor,
@@ -106,7 +114,8 @@ func TestRenderHintUptakeNamesTheFloor(t *testing.T) {
 // A transcript loaded before its journal lines existed carries no ids, and a re-load
 // is what repairs it. Without that the stamp is one-shot: the dedup key does not name
 // the ids, so every line written after the first load would be uncountable forever.
-func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
+func (s *HintsSuite) TestHintUptakeRecoversIDsOnASecondLoad() {
+	t := s.T()
 	dir := t.TempDir()
 	early := []session.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", nil, nil),
@@ -130,7 +139,8 @@ func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
 
 // An empty store says so and names the command that fills it: nothing served is a
 // fact about the store, not a verdict on any hint.
-func TestRenderHintUptakeOnAnEmptyStore(t *testing.T) {
+func (s *HintsSuite) TestRenderHintUptakeOnAnEmptyStore() {
+	t := s.T()
 	var buf bytes.Buffer
 	require.NoError(t, RenderHintUptake(&buf, HintUptakeReport{Floor: HintFloor, Lookahead: NextLookahead}))
 	assert.Contains(t, buf.String(), "magus session load")

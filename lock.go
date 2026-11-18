@@ -18,9 +18,9 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/egladman/magus/internal/file/record"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/workspace"
@@ -752,7 +752,7 @@ func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) proce
 		Command:    strings.Join(l.commandLine, " "),
 		Dir:        dir,
 		Started:    started,
-		Inv:        journal.InvocationIDFromContext(ctx),
+		Inv:        recorder.InvocationIDFromContext(ctx),
 		Run:        types.InvocationRoot(ctx),
 		Root:       l.root,
 		Gate:       l.gate,

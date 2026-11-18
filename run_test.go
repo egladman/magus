@@ -31,7 +31,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
@@ -40,6 +39,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/secrets"
@@ -2404,11 +2404,11 @@ func TestUndeclaredScopeEvent(t *testing.T) {
 			got, ok := undeclaredScopeEvent(tc.targets)
 			if tc.want == nil {
 				assert.False(t, ok)
-				assert.Equal(t, journal.Event{}, got)
+				assert.Equal(t, journal.Scope{}, got)
 				return
 			}
 			assert.True(t, ok)
-			assert.Equal(t, journal.Event{Kind: journal.KindScope, Undeclared: tc.want}, got)
+			assert.Equal(t, journal.Scope{Undeclared: tc.want}, got)
 		})
 	}
 }

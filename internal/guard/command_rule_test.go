@@ -16,12 +16,12 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -256,9 +256,9 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v))
 		assert.Contains(t, v.Reason, "Ask for the board once.")
 
-		commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+		commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 		require.Len(t, commands, 1)
-		assert.Equal(t, decidedByWorktree, commands[0].DecidedBy)
+		assert.Equal(t, decidedByWorktree, callDecidedBy(commands[0]))
 	})
 	t.Run("a workspace advice fills a pass", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)
@@ -292,20 +292,20 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 	again := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, first, again)
 
-	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.NotEmpty(t, commands)
-	assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
+	assert.Equal(t, []recorder.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
 		readCommandBlob(t, cacheDir, commands[0]).RuleFailures)
 }
 
 // commandBlob is the part of an agent_command response blob these tests read.
 type commandBlob struct {
-	RuleFailures []trail.RuleFailure `json:"rule_failures"`
+	RuleFailures []recorder.RuleFailure `json:"rule_failures"`
 }
 
-func readCommandBlob(t *testing.T, cacheDir string, e trailtypes.Event) commandBlob {
+func readCommandBlob(t *testing.T, cacheDir string, e journal.Call) commandBlob {
 	t.Helper()
-	body, err := trailtypes.ReadBlob(cacheDir, e.ResponseRef)
+	body, err := loggedPayload(cacheDir, e.Response.Ref)
 	require.NoError(t, err)
 	var got commandBlob
 	require.NoError(t, codec.Unmarshal(body, &got))
@@ -342,9 +342,9 @@ func TestCommandRulesKeepTheStricterSide(t *testing.T) {
 			v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
 
-			commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+			commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 			require.Len(t, commands, 1)
-			assert.Equal(t, tc.decidedBy, commands[0].DecidedBy)
+			assert.Equal(t, tc.decidedBy, callDecidedBy(commands[0]))
 		})
 	}
 }
@@ -370,12 +370,12 @@ func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
 		<-ctx.Done()
 		return nil, nil
 	}}
-	judge := func(t *testing.T, command string) (verdict.Judgment, []trail.RuleFailure) {
+	judge := func(t *testing.T, command string) (verdict.Judgment, []recorder.RuleFailure) {
 		ctx, cacheDir := spawnFixture(t)
 		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 		defer cancel()
 		v := Judge(ctx, slow, Request{Input: command, Host: "claude-code", Session: "s1"})
-		commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+		commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 		require.Len(t, commands, 1)
 		return v, readCommandBlob(t, cacheDir, commands[0]).RuleFailures
 	}

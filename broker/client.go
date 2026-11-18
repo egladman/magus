@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/types"
 )
 
@@ -131,7 +131,7 @@ type heldRider struct {
 // does not dial; the first request does.
 func NewClient(addr string, opts ...ClientOption) *Client {
 	dir, _ := os.Getwd()
-	lease := trail.SpawnFromEnv().Lease
+	lease := recorder.SpawnFromEnv().Lease
 	c := &Client{
 		addr:   addr,
 		hello:  hello{Magic: helloMagic, Protocol: APIVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},

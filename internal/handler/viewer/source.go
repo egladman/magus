@@ -1,8 +1,9 @@
 package viewer
 
 import (
+	"context"
+
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/journal"
 )
 
 // outputSource is the narrow repository contract the run-browser RPCs need: list the stored run
@@ -13,12 +14,10 @@ type outputSource interface {
 	ByRef(ref string) ([]byte, cache.OutputDescriptor, error)
 }
 
-// runSource is the narrow repository contract the invocation RPCs need: list the retained run
-// journals, read one back as events, tail one that is still being written, and resolve an output
-// ref to the run that produced it. Satisfied by *cache.OutputStore, like [outputSource] beside it.
+// runSource lists the retained run journals and resolves an output ref to the
+// run that produced it. Satisfied by *cache.OutputStore; the journals
+// themselves are read with the journal package.
 type runSource interface {
-	ListRunLogs(limit int) []cache.RunLog
-	InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error)
-	InvocationEventsSince(inv string, from int64) ([]journal.Event, int64, error)
+	ListRunLogs(ctx context.Context, limit int) []cache.RunLog
 	DescriptorByRef(ref string) (cache.OutputDescriptor, error)
 }

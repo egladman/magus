@@ -36,11 +36,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/ci/annotate"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
@@ -665,7 +665,7 @@ func (g *GateRedundancy) renderDelta(f gateFinding) string {
 // The residual window is the run's own last instant, and it is deliberately resolved
 // toward NOT recording: a dropped verdict costs one re-run, while a recorded verdict for
 // a run that did not happen makes MGS3010 refuse every later gate on that commit.
-func (g *GateRedundancy) Record(ctx context.Context, runErr error, cutShort bool, failed []journal.Event) {
+func (g *GateRedundancy) Record(ctx context.Context, runErr error, cutShort bool, failed []journal.Run) {
 	if g == nil || cutShort || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return
 	}
@@ -687,7 +687,7 @@ func (g *GateRedundancy) Record(ctx context.Context, runErr error, cutShort bool
 		Charms:          g.charms,
 		UndeclaredSeeds: g.undeclared,
 		Tier:            string(g.tier),
-		Inv:             journal.InvocationIDFromContext(ctx),
+		Inv:             recorder.InvocationIDFromContext(ctx),
 		RepairedFiles:   repaired,
 	})
 }
@@ -717,7 +717,7 @@ func (g *GateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	// A verdict decided before the signal is still filed: the store write outlives the
 	// invocation's cancellation and keeps its values for the invocation id.
 	ctx = context.WithoutCancel(ctx)
-	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
+	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
 	if err != nil {
 		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",
 			slog.String("store", dir), attr.Error(err))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,13 +16,13 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -49,7 +48,7 @@ func assertBriefIsContextSafe(t *testing.T, text string) {
 }
 
 func TestSessionBriefSurfacesOneRecurringFeedbackReview(t *testing.T) {
-	brief := Payload{Feedback: []trail.GuardFeedback{
+	brief := Payload{Feedback: []recorder.GuardFeedback{
 		{Rule: "raw-tool", Denied: 3, Sessions: 1, FollowedSessions: 1},
 		{Rule: "output-pipe", Denied: 2, Sessions: 2},
 	}}
@@ -88,7 +87,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		}},
 		GuardWiring: []string{".claude/settings.json"},
 		Rules:       []string{"AGENTS.md", "harnesses/example.json"},
-		PromptCache: briefClock(),
+		PromptCache: briefClock(t),
 		Attention: &briefAttention{
 			Open:    307,
 			Oldest:  &briefAttentionRow{ID: "att-old", Source: "guard/stall", OpenedMs: time.Now().Add(-9 * 24 * time.Hour).UnixMilli()},
@@ -180,9 +179,7 @@ func TestSessionBriefAttentionMarksRowsSinceThePreviousSession(t *testing.T) {
 		t.Helper()
 		start := session.InvocationStart{Workspace: root, Command: "run test"}
 		start.Session = hostSession
-		h := sessions.NewFactHandler(root, start)
-		require.NotNil(t, h)
-		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: inv, Target: "test", Project: ".", Status: journal.StatusPass})
+		fileResult(t, root, start, inv, session.TargetResult{Target: "test", Project: ".", Outcome: session.OutcomePass})
 	}
 	pause := func() { time.Sleep(3 * time.Millisecond) }
 
@@ -321,11 +318,8 @@ func seedBriefLease(t *testing.T, root string) {
 // seedFailingRun journals one session in root whose one target failed with ref.
 func seedFailingRun(t *testing.T, root, ref string) {
 	t.Helper()
-	handler := sessions.NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run test"})
-	require.NotNil(t, handler)
-	emitJournalEvent(t, handler, journal.Event{
-		Kind: journal.KindResult, Inv: "invBrief", Target: "test",
-		Project: "internal/ledger", Status: journal.StatusFail, Ref: ref,
+	fileResult(t, root, session.InvocationStart{Workspace: root, Command: "run test"}, "invBrief", session.TargetResult{
+		Target: "test", Project: "internal/ledger", Outcome: session.OutcomeFail, Ref: ref,
 	})
 }
 
@@ -335,17 +329,13 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	refused := sessions.NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "affected ci"})
-	require.NotNil(t, refused)
-	emitJournalEvent(t, refused, journal.Event{
-		Kind: journal.KindResult, Inv: "invRefused", Target: "ci", Project: "pkg",
-		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
+	fileResult(t, root, session.InvocationStart{Workspace: root, Command: "affected ci"}, "invRefused", session.TargetResult{
+		Target: "ci", Project: "pkg",
+		Outcome: session.OutcomeFail, DiagnosticCode: string(types.MachineBudgetExhausted),
 	})
 	time.Sleep(2 * time.Millisecond) // the other checkout's run is the newer one
-	other := sessions.NewFactHandler(root, session.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
-	require.NotNil(t, other)
-	emitJournalEvent(t, other, journal.Event{
-		Kind: journal.KindResult, Inv: "invOther", Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
+	fileResult(t, root, session.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"}, "invOther", session.TargetResult{
+		Target: "test", Project: "other", Outcome: session.OutcomeFail, Ref: "ref-other",
 	})
 
 	failures := lastRunFailures(t.Context(), testReaders(t, root), root)
@@ -423,7 +413,7 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	}
 	// Bound after the rows are written: the store refuses a bound session's write to a
 	// row it did not create.
-	t.Setenv(trail.EnvBaggage, "magus.lease=bound")
+	t.Setenv(recorder.EnvBaggage, "magus.lease=bound")
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
 	ids := make([]string, len(brief.Leases))
@@ -475,9 +465,11 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 
 // briefClock is a session idle long enough that one window is behind it and the rest
 // are not, which is the only state where the two-group split says something.
-func briefClock() sessions.PromptCacheClock {
-	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	return sessions.PromptCacheAt("s1", last, last.Add(7*time.Minute))
+func briefClock(t *testing.T) sessions.PromptCacheClock {
+	t.Helper()
+	cacheDir := t.TempDir()
+	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
+	return sessions.PromptCacheForCheckout(t.Context(), cacheDir, time.Now().Add(7*time.Minute))
 }
 
 // Finished branches off the base are counted against the fork thresholds, and an unread
@@ -586,7 +578,7 @@ func TestSessionBriefListsTheForksOfTheJobActedUnder(t *testing.T) {
 		_, err = store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	t.Setenv(trail.EnvBaggage, "magus.lease=worker")
+	t.Setenv(recorder.EnvBaggage, "magus.lease=worker")
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
 	assert.Equal(t, &briefJobTree{Root: "worker", Jobs: []briefJob{
@@ -709,7 +701,7 @@ func testReaders(t *testing.T, root string) Readers {
 			lease, _ := job.RunLease(ctx, loc)
 			return lease
 		},
-		PromptCache: func(string, time.Time) sessions.PromptCacheClock { return sessions.PromptCacheClock{} },
+		PromptCache: func(context.Context, string, time.Time) sessions.PromptCacheClock { return sessions.PromptCacheClock{} },
 		CacheDir:    func(string) (string, error) { return "", errors.New("no cache directory in this test") },
 		ResolveRoot: func(root string) string { return root },
 		ConsoleURL:  func() string { return "" },
@@ -725,9 +717,15 @@ func testReaders(t *testing.T, root string) Readers {
 	}
 }
 
-func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
+// fileResult writes one target result to root's session store under inv,
+// as an invocation's fact sink files it.
+func fileResult(t *testing.T, root string, start session.InvocationStart, inv string, r session.TargetResult) {
 	t.Helper()
-	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(h)), e)
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	w, err := session.Open(t.Context(), dir, inv, start, session.WithTie(sessions.AttentionTie()))
+	require.NoError(t, err)
+	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, r))
 }
 
 // seedFiled files result as the job's first attempt, beside store's rows. The job package

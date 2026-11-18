@@ -29,8 +29,12 @@ func openPayload(id, message string) AttentionOpen {
 	return AttentionOpen{Request: id, Outcome: "waiting", Severity: "warning", Source: "agent/claude", Where: "/repo", Message: message}
 }
 
-func TestRequestIDIsStableAndFieldSafe(t *testing.T) {
-	t.Parallel()
+type AttentionSuite struct{ suite.Suite }
+
+func TestAttention(t *testing.T) { suite.Run(t, new(AttentionSuite)) }
+
+func (s *AttentionSuite) TestRequestIDIsStableAndFieldSafe() {
+	t := s.T()
 
 	block := AttentionOpen{Source: "agent/claude", Where: "/repo", Message: "needs a decision"}
 	id := RequestID("sess1", block)
@@ -52,8 +56,8 @@ func TestRequestIDIsStableAndFieldSafe(t *testing.T) {
 //
 // These vectors are the digests the four-string RequestID produced before it took the
 // payload instead, so they fail if this form feeds the hash anything different.
-func TestRequestIDDigestsTheSameBytesAsTheFourArgumentForm(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestRequestIDDigestsTheSameBytesAsTheFourArgumentForm() {
+	t := s.T()
 
 	assert.Equal(t, "att-4003a0391273",
 		RequestID("sess1", AttentionOpen{Source: "agent/claude", Where: "/repo", Message: "needs a decision"}))
@@ -77,8 +81,8 @@ func TestRequestIDDigestsTheSameBytesAsTheFourArgumentForm(t *testing.T) {
 		}))
 }
 
-func TestAttentionOpenKeepsTheFilesItWasRaisedWith(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionOpenKeepsTheFilesItWasRaisedWith() {
+	t := s.T()
 
 	payload := openPayload("att-1", "needs approval")
 	payload.Files = []types.FileRef{{Value: "cmd/magus/notify.go"}, {Value: "internal/sessions", IsDir: true}}
@@ -91,8 +95,8 @@ func TestAttentionOpenKeepsTheFilesItWasRaisedWith(t *testing.T) {
 	assert.Equal(t, payload.Files, open[0].Files)
 }
 
-func TestAttentionOpenAppearsInTheQueue(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionOpenAppearsInTheQueue() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "agent1", 1, 100, KindAttentionOpen, openPayload("att-1", "waiting on a decision")),
@@ -112,8 +116,8 @@ func TestAttentionOpenAppearsInTheQueue(t *testing.T) {
 	}, open[0])
 }
 
-func TestAttentionDisposeEmptiesTheQueue(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionDisposeEmptiesTheQueue() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "agent1", 1, 100, KindAttentionOpen, openPayload("att-1", "waiting on a decision")),
@@ -141,8 +145,8 @@ func TestAttentionDisposeEmptiesTheQueue(t *testing.T) {
 	}, all[0])
 }
 
-func TestAttentionCollapsesARepeatedOpenIntoOneRequest(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionCollapsesARepeatedOpenIntoOneRequest() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "agent1", 1, 100, KindAttentionOpen, openPayload("att-1", "waiting on a decision")),
@@ -155,8 +159,8 @@ func TestAttentionCollapsesARepeatedOpenIntoOneRequest(t *testing.T) {
 	assert.Equal(t, int64(100), open[0].OpenedMs, "the age shown is how long the block has actually waited")
 }
 
-func TestAttentionFirstDisposeWins(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionFirstDisposeWins() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "agent1", 1, 100, KindAttentionOpen, openPayload("att-1", "waiting on a decision")),
@@ -187,8 +191,8 @@ func TestAttentionFirstDisposeWins(t *testing.T) {
 // A block that comes back after somebody dealt with it is a live wait again. Folding
 // it into the answered request would hide it behind a disposition given to a
 // different occurrence.
-func TestAttentionReopensAfterADispose(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionReopensAfterADispose() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "agent1", 1, 100, KindAttentionOpen, openPayload("att-1", "waiting on a decision")),
@@ -203,8 +207,8 @@ func TestAttentionReopensAfterADispose(t *testing.T) {
 	assert.Empty(t, open[0].Note)
 }
 
-func TestAttentionIgnoresADisposeWithNoOpen(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionIgnoresADisposeWithNoOpen() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "human1", 1, 100, KindAttentionDispose, AttentionDispose{Request: "att-nothing"}),
@@ -213,8 +217,8 @@ func TestAttentionIgnoresADisposeWithNoOpen(t *testing.T) {
 	assert.Empty(t, Attention(fold))
 }
 
-func TestAttentionIgnoresUnknownKindsAndMalformedPayloads(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionIgnoresUnknownKindsAndMalformedPayloads() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "agent1", 1, 100, "attention_escalate_v9", map[string]string{"request": "att-1"}),
@@ -230,8 +234,8 @@ func TestAttentionIgnoresUnknownKindsAndMalformedPayloads(t *testing.T) {
 
 // The queue is a view over the SAME store `magus session` reads, so an attention
 // record has to survive the file round trip and still count as session activity.
-func TestAttentionRoundTripsThroughTheStore(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionRoundTripsThroughTheStore() {
+	t := s.T()
 	dir := t.TempDir()
 
 	block := AttentionOpen{
@@ -289,8 +293,8 @@ func queueIDs(t *testing.T, dir string) []string {
 	return ids
 }
 
-func TestSourceLabelMatchesWhatRequestIDDigests(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestSourceLabelMatchesWhatRequestIDDigests() {
+	t := s.T()
 	assert.Equal(t, "agent/claude", SourceLabel("agent", "claude"))
 	assert.Equal(t, "magus", SourceLabel("magus", ""))
 }
@@ -326,7 +330,8 @@ func (s *AppendRequestSuite) TestARepeatAppendsAndCollapsesInTheFold() {
 	s.Len(queueIDs(s.T(), s.dir), 1)
 }
 
-func TestOpenRequestWritesOneRequestAndReportsIt(t *testing.T) {
+func (s *AttentionSuite) TestOpenRequestWritesOneRequestAndReportsIt() {
+	t := s.T()
 	dir := t.TempDir()
 
 	id, opened, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{Workspace: "/repo"})
@@ -338,7 +343,8 @@ func TestOpenRequestWritesOneRequestAndReportsIt(t *testing.T) {
 
 // An agent hook may fire on every prompt, so the queue has to hold one row per block
 // rather than one per attempt.
-func TestOpenRequestIsANoOpForABlockAlreadyOpen(t *testing.T) {
+func (s *AttentionSuite) TestOpenRequestIsANoOpForABlockAlreadyOpen() {
+	t := s.T()
 	dir := t.TempDir()
 
 	first, opened, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
@@ -354,7 +360,8 @@ func TestOpenRequestIsANoOpForABlockAlreadyOpen(t *testing.T) {
 
 // A block that was answered and has come back is a live wait again. Swallowing it would
 // hide it behind an answer that was given to a different block.
-func TestOpenRequestRaisesABlockAgainAfterItWasDisposed(t *testing.T) {
+func (s *AttentionSuite) TestOpenRequestRaisesABlockAgainAfterItWasDisposed() {
+	t := s.T()
 	dir := t.TempDir()
 
 	id, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
@@ -370,7 +377,8 @@ func TestOpenRequestRaisesABlockAgainAfterItWasDisposed(t *testing.T) {
 	assert.Equal(t, []string{id}, queueIDs(t, dir))
 }
 
-func TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded(t *testing.T) {
+func (s *AttentionSuite) TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded() {
+	t := s.T()
 	dir := t.TempDir()
 
 	id, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
@@ -398,7 +406,8 @@ func TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded(t *testing.T) {
 
 // A second dispose is recorded but changes nothing, so reporting success would credit
 // this caller with a closure it did not perform.
-func TestDisposeRequestRefusesAnAlreadyClosedRequest(t *testing.T) {
+func (s *AttentionSuite) TestDisposeRequestRefusesAnAlreadyClosedRequest() {
+	t := s.T()
 	dir := t.TempDir()
 
 	id, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
@@ -413,7 +422,8 @@ func TestDisposeRequestRefusesAnAlreadyClosedRequest(t *testing.T) {
 	assert.Equal(t, first.DisposedBy, disposed.DisposedBy, "the error names who actually closed it")
 }
 
-func TestDisposeRequestAcceptsAnUnambiguousPrefix(t *testing.T) {
+func (s *AttentionSuite) TestDisposeRequestAcceptsAnUnambiguousPrefix() {
+	t := s.T()
 	dir := t.TempDir()
 
 	id, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
@@ -424,7 +434,8 @@ func TestDisposeRequestAcceptsAnUnambiguousPrefix(t *testing.T) {
 	assert.Equal(t, id, req.ID, "the prefix resolves to the full id, and the record names that")
 }
 
-func TestResolveRequestIDReportsEveryCandidateForAnAmbiguousPrefix(t *testing.T) {
+func (s *AttentionSuite) TestResolveRequestIDReportsEveryCandidateForAnAmbiguousPrefix() {
+	t := s.T()
 	dir := t.TempDir()
 
 	first, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("one"), session.InvocationStart{})
@@ -447,8 +458,8 @@ func TestResolveRequestIDReportsEveryCandidateForAnAmbiguousPrefix(t *testing.T)
 
 // A full id must win over a prefix scan, or a request whose id is a prefix of another's
 // could never be addressed at all.
-func TestResolveRequestIDPrefersAnExactID(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestResolveRequestIDPrefersAnExactID() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{
 		attRecord(t, "s1", 1, 10, KindAttentionOpen, openPayload("att-abc", "one")),
@@ -461,7 +472,8 @@ func TestResolveRequestIDPrefersAnExactID(t *testing.T) {
 
 // A prefix naming a CLOSED request has to report the closure, not read as a typo, so
 // resolution deliberately sees disposed requests too.
-func TestResolveRequestIDSeesDisposedRequests(t *testing.T) {
+func (s *AttentionSuite) TestResolveRequestIDSeesDisposedRequests() {
+	t := s.T()
 	dir := t.TempDir()
 
 	id, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
@@ -474,8 +486,8 @@ func TestResolveRequestIDSeesDisposedRequests(t *testing.T) {
 	assert.ErrorAs(t, err, &disposed, "a prefix that resolves to a closed request reports the closure")
 }
 
-func TestResolveRequestIDReportsNothingMatchedAsErrNoRequest(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestResolveRequestIDReportsNothingMatchedAsNoRequest() {
+	t := s.T()
 
 	fold := session.Fold{Records: []session.Record{attRecord(t, "s1", 1, 10, KindAttentionOpen, openPayload("att-abc", "one"))}}
 	for _, ref := range []string{"", "att-zzz", "nope"} {
@@ -487,8 +499,8 @@ func TestResolveRequestIDReportsNothingMatchedAsErrNoRequest(t *testing.T) {
 // The suffix is what keeps two processes that started in the same millisecond from
 // sharing an invocation file, which is the collision the underlying invocation id cannot
 // rule out on its own.
-func TestNewIDIsAValidIDAndCarriesAProcessSuffix(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestNewIDIsAValidIDAndCarriesAProcessSuffix() {
+	t := s.T()
 
 	id := NewID()
 	assert.True(t, session.ValidFileID(id), "the id names the invocation's file, so it must not escape the store")
@@ -502,7 +514,8 @@ func TestNewIDIsAValidIDAndCarriesAProcessSuffix(t *testing.T) {
 
 // Two disposals in one store must not collapse into one session, or the store says one
 // command did what two did.
-func TestTwoDisposalsRecordTwoSessions(t *testing.T) {
+func (s *AttentionSuite) TestTwoDisposalsRecordTwoSessions() {
+	t := s.T()
 	dir := t.TempDir()
 
 	first, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("one"), session.InvocationStart{})
@@ -517,8 +530,8 @@ func TestTwoDisposalsRecordTwoSessions(t *testing.T) {
 	assert.NotEqual(t, a.DisposedBy, b.DisposedBy)
 }
 
-func TestRenderAttentionTextRendersAnUnattributedRequestWithADash(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestRenderAttentionTextRendersAnUnattributedRequestWithADash() {
+	t := s.T()
 
 	var out strings.Builder
 	require.NoError(t, RenderAttentionText(&out, []AttentionRequest{
@@ -537,8 +550,8 @@ func TestRenderAttentionTextRendersAnUnattributedRequestWithADash(t *testing.T) 
 	assert.Equal(t, "-", cells[4], "an unattributed request reads like an unknown LEASE, not like a blank")
 }
 
-func TestRenderAttentionTextLeadsWithTheFilesTheEventNamed(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestRenderAttentionTextLeadsWithTheFilesTheEventNamed() {
+	t := s.T()
 
 	var out strings.Builder
 	require.NoError(t, RenderAttentionText(&out, []AttentionRequest{{
@@ -554,8 +567,8 @@ func TestRenderAttentionTextLeadsWithTheFilesTheEventNamed(t *testing.T) {
 	assert.Contains(t, out.String(), "Nothing here closes on its own.")
 }
 
-func TestAttentionWhereNarrowsToTheProject(t *testing.T) {
-	t.Parallel()
+func (s *AttentionSuite) TestAttentionWhereNarrowsToTheProject() {
+	t := s.T()
 
 	assert.Empty(t, AttentionWhere(nil))
 	assert.Equal(t, "/repo", AttentionWhere(&types.EventLocation{Workspace: types.Path{Value: "/repo", IsDir: true}}))
@@ -569,7 +582,8 @@ func TestAttentionWhereNarrowsToTheProject(t *testing.T) {
 	}))
 }
 
-func TestDisposeErrorNamesTheStoreAndTheListingForAnUnknownID(t *testing.T) {
+func (s *AttentionSuite) TestDisposeErrorNamesTheStoreAndTheListingForAnUnknownID() {
+	t := s.T()
 	dir := t.TempDir()
 
 	_, err := DisposeRequest(t.Context(), dir, "att-doesnotexist", "", session.InvocationStart{})
@@ -581,7 +595,8 @@ func TestDisposeErrorNamesTheStoreAndTheListingForAnUnknownID(t *testing.T) {
 	assert.Contains(t, err.Error(), "magus session attention", "and the command that lists the ids that do exist")
 }
 
-func TestDisposeErrorRefusesASecondClosureAndPointsAtTheListing(t *testing.T) {
+func (s *AttentionSuite) TestDisposeErrorRefusesASecondClosureAndPointsAtTheListing() {
+	t := s.T()
 	dir := t.TempDir()
 	id, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs approval to push"), session.InvocationStart{})
 	require.NoError(t, err)
@@ -597,7 +612,8 @@ func TestDisposeErrorRefusesASecondClosureAndPointsAtTheListing(t *testing.T) {
 	assert.Empty(t, queueIDs(t, dir), "a disposed request leaves the queue")
 }
 
-func TestDisposeErrorRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testing.T) {
+func (s *AttentionSuite) TestDisposeErrorRefusesAnAmbiguousPrefixAndNamesTheCandidates() {
+	t := s.T()
 	dir := t.TempDir()
 	first, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("one"), session.InvocationStart{})
 	require.NoError(t, err)
@@ -614,7 +630,8 @@ func TestDisposeErrorRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testing.T)
 	assert.Len(t, queueIDs(t, dir), 2, "an ambiguous prefix closes nothing")
 }
 
-func TestDisposeErrorReportsAPrefixThatMatchesNothing(t *testing.T) {
+func (s *AttentionSuite) TestDisposeErrorReportsAPrefixThatMatchesNothing() {
+	t := s.T()
 	dir := t.TempDir()
 	_, _, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{})
 	require.NoError(t, err)

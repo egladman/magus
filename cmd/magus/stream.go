@@ -23,7 +23,7 @@ func streamAffected(ctx context.Context, m *magus.Magus, r io.Reader, target str
 			return err
 		}
 		if err := m.Run(ctx, targets, runOpts...); err != nil {
-			return fmt.Errorf("stream: %s: %w", target, err)
+			return fmt.Errorf("affected --stdin: %s: %w", target, err)
 		}
 		return nil
 	}, errFn)
@@ -35,13 +35,13 @@ func streamTargets(ctx context.Context, m *magus.Magus, paths []string, target s
 	if slices.Contains(paths, watch.AllSentinel) {
 		ts, err := m.ExpandPath(types.Target{Name: target})
 		if err != nil {
-			return nil, fmt.Errorf("stream: expand all: %w", err)
+			return nil, fmt.Errorf("affected --stdin: expand all: %w", err)
 		}
 		return ts, nil
 	}
 	res, err := m.AffectedFromPaths(ctx, paths)
 	if err != nil {
-		return nil, fmt.Errorf("stream: compute affected: %w", err)
+		return nil, fmt.Errorf("affected --stdin: compute affected: %w", err)
 	}
 	targets := make([]types.Target, len(res.Affected))
 	for i, p := range res.Affected {

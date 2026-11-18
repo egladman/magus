@@ -8,9 +8,9 @@
 
 import "magus/agent";
 import "magus/check";
+import "magus/feedback";
 import "magus/impact";
 import "magus/release";
-import "magus/trail";
 import "magus/vcs";
 
 export enum<str> DiagnosticOrigin {
@@ -840,15 +840,15 @@ export object Session {
     since: str = "",
     @"until": str = "",
 
-    fun trail() > magus\trail\Trail !> any {
+    fun trail() > magus\feedback\Report !> any {
         return magus__Session__trail(this);
     }
 
-    fun marks() > [magus\trail\Mark] !> any {
+    fun marks() > [magus\feedback\Mark] !> any {
         return magus__Session__marks(this);
     }
 
-    fun mark(mark: magus\trail\Mark) > magus\trail\Mark !> any {
+    fun mark(mark: magus\feedback\Mark) > magus\feedback\Mark !> any {
         return magus__Session__mark(this, mark: mark);
     }
 }
@@ -2765,9 +2765,9 @@ extern fun magus__History__trend(recv: History) > Trend !> any;
 extern fun magus__Job__exit(recv: Job, result: {str: any} = {<str: any>}) > Job !> any;
 extern fun magus__Job__wait(recv: Job, result: {str: any} = {<str: any>}) > JobStatus !> any;
 extern fun magus__Job__register(recv: Job) > JobRegistration !> any;
-extern fun magus__Session__trail(recv: Session) > magus\trail\Trail !> any;
-extern fun magus__Session__marks(recv: Session) > [magus\trail\Mark] !> any;
-extern fun magus__Session__mark(recv: Session, mark: magus\trail\Mark) > magus\trail\Mark !> any;
+extern fun magus__Session__trail(recv: Session) > magus\feedback\Report !> any;
+extern fun magus__Session__marks(recv: Session) > [magus\feedback\Mark] !> any;
+extern fun magus__Session__mark(recv: Session, mark: magus\feedback\Mark) > magus\feedback\Mark !> any;
 
 export extern fun canonicalName(name: str) > str;
 export extern fun change(base: str = "", opts: ChangeOptions? = null) > Change !> any;
@@ -2788,7 +2788,7 @@ export extern fun project(config: any, opts: any = null) > void;
 export extern fun pry() > void;
 export extern fun raise(code: DiagnosticCode, message: str, opts: RaiseOptions? = null) > void !> any;
 export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
-export extern fun session(opts: magus\trail\ReadOptions? = null) > Session !> any;
+export extern fun session(opts: magus\feedback\ReadOptions? = null) > Session !> any;
 export extern fun where(dir: str) > str !> any;
 export extern fun workspace(dir: str = "") > Workspace !> any;
 export extern fun workspaceProvider(spell: {str: any}) > void;

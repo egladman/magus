@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -332,7 +332,7 @@ func (s *Service) DiffWith(ctx context.Context, paths []string, opts diff.Option
 	}
 	// The agent record: which sessions wrote each file and what they had read first, from the
 	// guard hook's trail and from loaded transcripts.
-	if terr := trail.AttachTouches(ctx, &rev, s.magus.Root(), s.magus.CacheDir()); terr != nil {
+	if terr := sessions.AttachTouches(ctx, &rev, s.magus.Root(), s.magus.CacheDir()); terr != nil {
 		rev.Notes = append(rev.Notes, "agent record incomplete: "+terr.Error())
 	}
 	// Which of these files somebody has recorded reading, from the same store `magus diff

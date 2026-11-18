@@ -10,7 +10,7 @@ export fun vcsFigure() > figure\Figure !> any {
     final xdg = magus\graph().dir("libs/xdg");
     final records = [
         magus\graph().dir("internal/sessions"),
-        magus\graph().dir("internal/trail"),
+        magus\graph().dir("internal/recorder"),
     ];
     final runs = [
         magus\graph().dir("internal/job"),
@@ -28,7 +28,7 @@ export fun vcsFigure() > figure\Figure !> any {
             desc: "The vcs package names the revision, the branch, the dirty digest and the "
                 + "changed files for whichever backend the checkout uses, so no other package "
                 + "runs a VCS command. Job leases and the cache key read the revision, the "
-                + "session and trail records stamp it, and the landing code reads the branch and "
+                + "session and activity records stamp it, and the landing code reads the branch and "
                 + "the merge base. The package reads files through internal/file, identifies "
                 + "itself with the build stamp and keeps its state in the XDG directories.")
         .box(vcs, label: "VCS", sub: "revision, branch, dirty digest", focal: true)
@@ -36,11 +36,13 @@ export fun vcsFigure() > figure\Figure !> any {
         .box(stamp, label: "Build stamp", sub: "who ran it")
         .box(xdg, label: "XDG paths", sub: "state")
         .group(runs, label: "Runs", sub: "leases, cache key, queue")
-        .group(records, label: "Records", sub: "sessions, trail", look: figure\Look.store)
+        .group(records, label: "Records", sub: "sessions, activity", look: figure\Look.store)
         .group(landing, label: "Landing", sub: "settle, race, work")
         .edgesFromGraph()
         .hideEdges(runs + records + landing, dst: [file, xdg, stamp],
             why: "every caller leans on these for its own work; the figure shows what vcs leans on")
+        .hideEdges(landing, dst: records,
+            why: "the landing code records its own steps; the figure shows who reads vcs")
         .legend(figure\Look.focal, label: "the one interface")
         .legend(figure\Look.store, label: "append-only")
         .scope([vcs]);

@@ -1,14 +1,12 @@
 package guard
 
 import (
-	"bufio"
-	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -21,11 +19,11 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -267,17 +265,17 @@ type commandAttempt struct {
 func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun, bool) {
 	cutoff := now.Add(-refusedRetryWindow)
 	latest := map[string]commandAttempt{}
-	recentRunLogs(runsDir, cutoff, func(started journal.Event, _ time.Time, rest *bufio.Reader) {
-		if !slices.ContainsFunc(argvs, func(a []string) bool { return slices.Equal(a, started.Command.Arguments) }) {
+	recentRunLogs(runsDir, cutoff, func(inv journal.Invocation, _ time.Time) {
+		argv := inv.Command.Arguments
+		if !slices.ContainsFunc(argvs, func(a []string) bool { return slices.Equal(a, argv) }) {
 			return
 		}
-		key := strings.Join(started.Command.Arguments, "\x00")
-		at := time.UnixMilli(started.Ts)
-		if prev, ok := latest[key]; ok && !at.After(prev.started) {
+		key := strings.Join(argv, "\x00")
+		if prev, ok := latest[key]; ok && !inv.Started.After(prev.started) {
 			return
 		}
-		refusedAt, code, refused := readRefusal(rest)
-		latest[key] = commandAttempt{started: at, refusal: refusedRun{argv: started.Command.Arguments, at: refusedAt, code: code}, refused: refused}
+		refusedAt, code, refused := readRefusal(runsDir, inv.ID)
+		latest[key] = commandAttempt{started: inv.Started, refusal: refusedRun{argv: argv, at: refusedAt, code: code}, refused: refused}
 	})
 	var newest refusedRun
 	found := false
@@ -289,30 +287,27 @@ func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun,
 	return newest, found
 }
 
-// readRefusal reads the rest of one run log for a refused result: when it was
-// recorded and its code.
-func readRefusal(rest *bufio.Reader) (time.Time, types.DiagnosticCode, bool) {
-	for {
-		line, err := rest.ReadBytes('\n')
-		var ev journal.Event
-		// The byte search before decoding keeps a log full of output cheap.
-		if slices.ContainsFunc(refusalCodes, func(code types.DiagnosticCode) bool { return bytes.Contains(line, fmt.Appendf(nil, `"%s"`, code)) }) &&
-			codec.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
-			slices.Contains(refusalCodes, types.DiagnosticCode(ev.DiagnosticCode)) {
-			return time.UnixMilli(ev.Ts), types.DiagnosticCode(ev.DiagnosticCode), true
+// readRefusal reads one run log for a refused result: when it was recorded and
+// its code. A line that does not decode is passed over.
+func readRefusal(runsDir, id string) (time.Time, types.DiagnosticCode, bool) {
+	for r, err := range journal.Records(context.Background(), runsDir, id) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
 		}
 		if err != nil {
-			return time.Time{}, "", false
+			break
+		}
+		if run, ok := r.Run(); ok && slices.Contains(refusalCodes, types.DiagnosticCode(run.DiagnosticCode)) {
+			return r.Time, types.DiagnosticCode(run.DiagnosticCode), true
 		}
 	}
+	return time.Time{}, "", false
 }
 
-// recentRunLogs calls read for each run log in runsDir last written at or after cutoff,
-// with its started event, when it was last written, and the log past that first line. A
-// log written before cutoff is skipped unopened, and one that does not open on a started
-// event carrying its command is skipped unread, so a directory of thousands stays cheap.
-// A runsDir that is "" or unreadable reads nothing.
-func recentRunLogs(runsDir string, cutoff time.Time, read func(started journal.Event, modified time.Time, rest *bufio.Reader)) {
+// recentRunLogs calls read for each run log in runsDir that opens on a Started
+// record and was last written at or after cutoff. An older log is skipped
+// unopened. A runsDir that is "" or unreadable reads nothing.
+func recentRunLogs(runsDir string, cutoff time.Time, read func(inv journal.Invocation, modified time.Time)) {
 	if runsDir == "" {
 		return
 	}
@@ -321,31 +316,20 @@ func recentRunLogs(runsDir string, cutoff time.Time, read func(started journal.E
 		return
 	}
 	for _, e := range entries {
-		if e.IsDir() {
+		id, ok := strings.CutSuffix(e.Name(), ".jsonl")
+		if e.IsDir() || !ok {
 			continue
 		}
 		info, err := e.Info()
 		if err != nil || info.ModTime().Before(cutoff) {
 			continue
 		}
-		readRunLog(filepath.Join(runsDir, e.Name()), info.ModTime(), read)
+		inv, err := journal.ReadInvocation(context.Background(), runsDir, id)
+		if err != nil || inv.Started.IsZero() {
+			continue
+		}
+		read(inv, info.ModTime())
 	}
-}
-
-// readRunLog is recentRunLogs for one log at path.
-func readRunLog(path string, modified time.Time, read func(started journal.Event, modified time.Time, rest *bufio.Reader)) {
-	f, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	rd := bufio.NewReader(f)
-	first, _ := rd.ReadBytes('\n')
-	var started journal.Event
-	if codec.Unmarshal(first, &started) != nil || started.Kind != journal.KindStarted || started.Command == nil {
-		return
-	}
-	read(started, modified, rd)
 }
 
 // quoteArgs quotes each argument for a shell, so a printed command runs as it was recorded.

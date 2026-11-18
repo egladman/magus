@@ -8,7 +8,12 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ShowSuite struct{ suite.Suite }
+
+func TestShow(t *testing.T) { suite.Run(t, new(ShowSuite)) }
 
 // shownSession loads lines into a fresh store and renders what `session show` prints for s1.
 func shownSession(t *testing.T, lines ...string) string {
@@ -28,7 +33,8 @@ func shownSession(t *testing.T, lines ...string) string {
 	return out.String()
 }
 
-func TestShowGroupsCommandsByProgram(t *testing.T) {
+func (s *ShowSuite) TestShowGroupsCommandsByProgram() {
+	t := s.T()
 	out := shownSession(t,
 		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"go build ./...","outcome":{"denied":true}}`,
 		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"go test ./..."}`,
@@ -48,7 +54,8 @@ func TestShowGroupsCommandsByProgram(t *testing.T) {
 // The pair `show` prints is the NEWEST one a loaded event named, not the first: a
 // session that ran under one model and switched mid-session is checked against
 // what it ended on.
-func TestShowPrintsTheModelAndHostVersionPair(t *testing.T) {
+func (s *ShowSuite) TestShowPrintsTheModelAndHostVersionPair() {
+	t := s.T()
 	out := shownSession(t,
 		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","agent":{"model":"claude-opus-5","host_version":"2.1.260"}}`,
 		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"pwd","agent":{"model":"claude-opus-5-5","host_version":"2.1.280"}}`)
@@ -59,7 +66,8 @@ func TestShowPrintsTheModelAndHostVersionPair(t *testing.T) {
 // An adapter that cannot know the model or the host version omits the field
 // (or sends it null); `show` reports the pair as absent rather than printing an
 // empty line nobody asked for.
-func TestShowOmitsThePairLineWhenNoEventNamesOne(t *testing.T) {
+func (s *ShowSuite) TestShowOmitsThePairLineWhenNoEventNamesOne() {
+	t := s.T()
 	out := shownSession(t,
 		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
 

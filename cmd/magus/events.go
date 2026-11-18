@@ -4,15 +4,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	eventstypes "github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/eventstream"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/journal/stream"
 )
 
 // eventsCommand implements `magus events`: the subscribe command third-party
@@ -39,7 +40,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "stream, so a run started in another terminal shows up here.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Event types:")
-			for _, t := range eventstypes.EventTypes() {
+			for _, t := range stream.EventTypes() {
 				fmt.Fprintf(os.Stderr, "  %s\n", t)
 			}
 			fmt.Fprintln(os.Stderr, "")
@@ -68,7 +69,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	filter, err := eventstream.ParseFilter(ef.Type)
+	filter, err := parseEventFilter(ef.Type)
 	if err != nil {
 		return err
 	}
@@ -94,16 +95,14 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	w := eventstream.NewWriter(destination, filter)
-	defer func() { _ = w.Close() }()
-	emit := w.Emit
+	emit := stream.NewWriter(destination, filter).Write
 	if opts.Format != outputText && opts.Format != outputJSONL {
-		emit = eventstream.RecordEmitter(filter, func(v any, names []string) error {
+		emit = recordEmitter(filter, func(v any, names []string) error {
 			return emitRecord(opts, v, names)
 		})
 	}
 
-	f := eventstream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)
+	f := stream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)
 	// --limit 0 means replay NOTHING, which is what a notifier wants: waking up and
 	// announcing yesterday's failure is worse than staying quiet. Negative means
 	// replay everything. The library's Replay reads 0 as "no cap", so the mapping
@@ -114,11 +113,11 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	case ef.Limit < 0:
-		if err := f.Replay(0, emit); err != nil {
+		if err := f.Replay(ctx, 0, emit); err != nil {
 			return err
 		}
 	default:
-		if err := f.Replay(ef.Limit, emit); err != nil {
+		if err := f.Replay(ctx, ef.Limit, emit); err != nil {
 			return err
 		}
 	}
@@ -130,4 +129,50 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	// the signal into magus's conventional 128+N exit. Registering a second
 	// handler for the same signals would fight it for no gain.
 	return f.Follow(ctx, ef.Interval, emit)
+}
+
+// recordEmitter renders each event alone as it arrives: the stream never
+// closes, so no document wraps it. A -o name line is the event's type.
+func recordEmitter(filter stream.Filter, emit func(v any, names []string) error) func(stream.Event) error {
+	var mu sync.Mutex
+	return func(e stream.Event) error {
+		if e.Body == nil || !filter.Allows(e.Body.EventType()) {
+			return nil
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		return emit(e, []string{string(e.Body.EventType())})
+	}
+}
+
+// parseEventFilter turns the --type list into a filter. An unknown name is
+// an error: an empty match would read as a workspace where nothing happens.
+func parseEventFilter(csv string) (stream.Filter, error) {
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		return stream.Filter{}, nil
+	}
+	var out stream.Filter
+	for _, name := range strings.Split(csv, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		t, err := stream.ParseEventType(name)
+		if err != nil {
+			return stream.Filter{}, fmt.Errorf("magus events (known types: %s): %w", strings.Join(eventTypeNames(), ", "), err)
+		}
+		out.Types = append(out.Types, t)
+	}
+	return out, nil
+}
+
+// eventTypeNames renders the taxonomy for an error message.
+func eventTypeNames() []string {
+	all := stream.EventTypes()
+	names := make([]string, len(all))
+	for i, t := range all {
+		names[i] = string(t)
+	}
+	return names
 }

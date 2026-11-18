@@ -265,12 +265,12 @@ backend is held to the same trust set as a wired one.
 ## The Buzz host modules from Go
 
 The `std` package holds the Go side of every Buzz host module, and its exported API is
-in the same lock as the root package. The job, graph and trail doors take typed
+in the same lock as the root package. The job, graph and feedback doors take typed
 options: `std.MagusPutJob` a `job.Put`, whose nil fields leave the row as it is;
 `std.MagusExitJob` a `job.Result`; `std.MagusWaitJob` a `*job.Result`, nil
 for the evidence the exit filed; `std.MagusQuery` a `types.KnowledgeQueryOptions`;
-`std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusTrailRead` a
-`types.TrailReadOptions`. Each reads the workspace on `ctx`: pass `m.Context(ctx)`, as
+`std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusFeedbackRead` a
+`feedback.ReadOptions`. Each reads the workspace on `ctx`: pass `m.Context(ctx)`, as
 the [guide](../guides/go-sdk.md#query-the-graph) does.
 A knowledge answer carries a verdict that keeps unknown apart from absent: zero matches
 with an `unknown` verdict means part of the workspace had no symbol index.

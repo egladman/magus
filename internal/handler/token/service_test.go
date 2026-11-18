@@ -21,13 +21,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/handler/trailrpc"
+	"github.com/egladman/magus/internal/handler/activityrpc"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -71,7 +71,7 @@ func request[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg)
 
 // as is a context carrying the credential the bearer guard would have verified.
 func as(grant auth.Access) context.Context {
-	return trail.ContextWithCredential(context.Background(), auth.Credential{Kind: auth.KindStored, ID: "0badf00d", Grant: grant})
+	return recorder.ContextWithCredential(context.Background(), auth.Credential{Kind: auth.KindStored, ID: "0badf00d", Grant: grant})
 }
 
 // operator is the context the server's guard gives the operator token.
@@ -417,10 +417,10 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	dir := t.TempDir()
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s,
-		connect.WithInterceptors(trailrpc.Interceptor(dir, trailtypes.KindTokenLifecycle, trailrpc.WithSubject(AuditSubject))))
+		connect.WithInterceptors(activityrpc.Interceptor(dir, journal.CallKindTokenLifecycle, activityrpc.WithSubject(AuditSubject))))
 	op := auth.Credential{Kind: auth.KindOperator, ID: "0badf00d", Grant: auth.AccessOperator()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
+		h.ServeHTTP(w, r.WithContext(recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
 	}))
 	defer srv.Close()
 	c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
@@ -437,16 +437,15 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	secondSecret, secondID := create()
 	require.NotEqual(t, firstID, secondID)
 
-	events, err := trailtypes.ReadRecent(t.Context(), dir, 10)
-	require.NoError(t, err)
 	var subjects []string
-	for _, e := range events {
-		blob, err := trailtypes.ReadBlob(dir, e.RequestRef)
+	for e, err := range recorder.ReadCalls(t.Context(), dir, 10) {
+		require.NoError(t, err)
+		blob, err := recorder.ReadCallPayload(dir, e.Request)
 		require.NoError(t, err)
 		assert.NotContains(t, string(blob), firstSecret)
 		assert.NotContains(t, string(blob), secondSecret)
 		assert.Equal(t, op.Recorded(), e.Credential, "each record names the credential that acted")
-		subjects = append(subjects, fmt.Sprintf("%s %s", e.Action, e.Preview))
+		subjects = append(subjects, fmt.Sprintf("%s %s", e.Name, e.Preview))
 	}
 	until := " (laptop) console=write until " + exp.UTC().Format("2006-01-02")
 	assert.Equal(t, []string{

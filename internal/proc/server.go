@@ -20,11 +20,11 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/proc/sockdir"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -582,8 +582,8 @@ func (s *service) run(reqCtx context.Context, req runRequest, reply *runReply) e
 	// Mint the invocation id here, before dispatch, and thread it onto ctx so the adopted
 	// run's BeginInvocation reuses it (rather than minting its own). That lets this pool
 	// entry carry its inv: the key a dashboard uses to deep-link into the run's live log.
-	inv := journal.NewInvocationID()
-	ctx = journal.WithInvocationID(ctx, inv)
+	inv := recorder.NewInvocationID()
+	ctx = recorder.WithInvocationID(ctx, inv)
 
 	call, untrack := s.trackCall(req.Args, req.Root, inv)
 	defer untrack()
@@ -658,7 +658,7 @@ func (s *service) submitJob(reqCtx context.Context, req jobRequest, reply *jobRe
 	if workspace == "" {
 		workspace = req.Cwd
 	}
-	inv := journal.NewInvocationID()
+	inv := recorder.NewInvocationID()
 	call, untrack := s.trackCall(req.Args, workspace, inv)
 	reply.Inv = inv
 
@@ -672,7 +672,7 @@ func (s *service) submitJob(reqCtx context.Context, req jobRequest, reply *jobRe
 		defer cancel()
 		ctx = WithRoot(ctx, req.Root)
 		ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
-		ctx = journal.WithInvocationID(ctx, inv)
+		ctx = recorder.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = environ.With(ctx)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist

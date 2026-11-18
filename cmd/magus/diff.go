@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/internal/review"
 	reviewimpact "github.com/egladman/magus/internal/review/impact"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
@@ -459,7 +459,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content review.Content, p
 	// guard hook's trail and from loaded transcripts. Empty when neither has anything, which
 	// is the common case rather than a fault. A record that would not read is a note, so the
 	// review still opens.
-	if terr := trail.AttachTouches(ctx, &rev, m.Root(), m.CacheDir()); terr != nil {
+	if terr := sessions.AttachTouches(ctx, &rev, m.Root(), m.CacheDir()); terr != nil {
 		rev.Notes = append(rev.Notes, "agent record incomplete: "+terr.Error())
 	}
 	// Which of these files somebody has recorded reading. Best-effort like every other

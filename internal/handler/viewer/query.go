@@ -11,7 +11,7 @@ package viewer
 import (
 	"strings"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 )
@@ -90,49 +90,51 @@ func tokenizeQuery(s string) []string {
 // returns events unchanged. Set filters AND together; repeated values within a field OR;
 // string comparison is case-insensitive; text matches are substring (a negated text match
 // excludes events that contain it). The input slice is not mutated.
-func ApplyEventQuery(events []journal.Event, q *viewerv1.EventQuery) []journal.Event {
+func ApplyEventQuery(records []journal.Record, q *viewerv1.EventQuery) []journal.Record {
 	if q == nil {
-		return events
+		return records
 	}
-	out := make([]journal.Event, 0, len(events))
-	for _, e := range events {
-		if matchEvent(e, q) {
-			out = append(out, e)
+	out := make([]journal.Record, 0, len(records))
+	for _, r := range records {
+		if matchEvent(r, q) {
+			out = append(out, r)
 		}
 	}
 	return out
 }
 
-func matchEvent(e journal.Event, q *viewerv1.EventQuery) bool {
-	if len(q.Projects) > 0 && !containsFold(q.Projects, e.Project) {
+func matchEvent(r journal.Record, q *viewerv1.EventQuery) bool {
+	e := flatten(r)
+	if len(q.Projects) > 0 && !containsFold(q.Projects, e.project) {
 		return false
 	}
-	if len(q.Targets) > 0 && !containsFold(q.Targets, e.Target) {
+	if len(q.Targets) > 0 && !containsFold(q.Targets, e.target) {
 		return false
 	}
-	if len(q.Kinds) > 0 && !containsFold(q.Kinds, e.Kind) {
+	if len(q.Kinds) > 0 && !containsFold(q.Kinds, string(r.Kind())) {
 		return false
 	}
-	if len(q.Streams) > 0 && !containsFold(q.Streams, e.Stream) {
+	if len(q.Streams) > 0 && !containsFold(q.Streams, string(e.stream)) {
 		return false
 	}
-	if len(q.Levels) > 0 && !containsFold(q.Levels, e.Level) {
+	if len(q.Levels) > 0 && !containsFold(q.Levels, e.level) {
 		return false
 	}
-	if q.Status != "" && !strings.EqualFold(q.Status, e.Status) {
+	if q.Status != "" && !strings.EqualFold(q.Status, string(e.status)) {
 		return false
 	}
-	text := strings.ToLower(e.Text)
+	text := strings.ToLower(e.text)
 	for _, m := range q.Text {
 		if strings.Contains(text, strings.ToLower(m.Value)) == m.Negate {
 			return false
 		}
 	}
 	if q.Time != nil {
-		if q.Time.Since != nil && e.Ts < q.Time.Since.AsTime().UnixMilli() {
+		ts := unixMilli(r.Time)
+		if q.Time.Since != nil && ts < q.Time.Since.AsTime().UnixMilli() {
 			return false
 		}
-		if q.Time.Until != nil && e.Ts > q.Time.Until.AsTime().UnixMilli() {
+		if q.Time.Until != nil && ts > q.Time.Until.AsTime().UnixMilli() {
 			return false
 		}
 	}

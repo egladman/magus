@@ -1,14 +1,16 @@
 package maintenance
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/trail"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -37,20 +39,34 @@ func TestIsDue(t *testing.T) {
 	dir := t.TempDir()
 	j := scheduledJob{argv: []string{"server", "rotate-activities"}, interval: 24 * time.Hour, action: "server rotate-activities"}
 	now := time.UnixMilli(1_000_000_000)
+	due := func(j scheduledJob) bool {
+		ok, err := isDue(t.Context(), dir, j, now)
+		require.NoError(t, err)
+		return ok
+	}
 
 	// Never run within the trail: due.
-	require.True(t, isDue(t.Context(), dir, j, now))
+	require.True(t, due(j))
 
 	// Ran 25h ago (start + duration = finish): interval elapsed, due.
 	old := now.Add(-25 * time.Hour)
-	trail.Append(t.Context(), dir, trailtypes.Event{Ts: old.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trailtypes.KindJob, Action: "server rotate-activities", Outcome: trailtypes.OutcomeOK})
-	require.True(t, isDue(t.Context(), dir, j, now))
+	recorder.AppendCall(t.Context(), dir, journal.Call{Time: old.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
+	require.True(t, due(j))
 
 	// A more recent run (1h ago) is newest, so LastRun returns it: not due.
 	recent := now.Add(-time.Hour)
-	trail.Append(t.Context(), dir, trailtypes.Event{Ts: recent.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trailtypes.KindJob, Action: "server rotate-activities", Outcome: trailtypes.OutcomeOK})
-	require.False(t, isDue(t.Context(), dir, j, now))
+	recorder.AppendCall(t.Context(), dir, journal.Call{Time: recent.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
+	require.False(t, due(j))
 
 	// A run of a DIFFERENT job does not satisfy this one.
-	require.True(t, isDue(t.Context(), dir, scheduledJob{argv: []string{"graph", "build"}, interval: time.Hour, action: "graph build"}, now))
+	require.True(t, due(scheduledJob{argv: []string{"graph", "build"}, interval: time.Hour, action: "graph build"}))
+}
+
+// A log that does not read is not "never run": the job waits rather than
+// running on a guess.
+func TestIsDueReturnsALogThatDoesNotRead(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "activity", "events.jsonl"), 0o700))
+	_, err := isDue(t.Context(), dir, scheduledJob{action: "graph build", interval: time.Hour}, time.Now())
+	require.Error(t, err)
 }

@@ -978,22 +978,22 @@ func (s *RunSeatedSuite) stepHolding(capacity, n int) (context.Context, *budget.
 	return budget.WithSlotsHeld(cache.ContextWithLimiter(s.T().Context(), lim), n), lim
 }
 
-// recorder is a run writer a call can watch from inside the batch.
-type recorder struct {
+// watchedWriter is a run writer a call can watch from inside the batch.
+type watchedWriter struct {
 	mu   sync.Mutex
 	buf  bytes.Buffer
 	seen map[string]chan struct{}
 }
 
-func newRecorder(watch ...string) *recorder {
-	r := &recorder{seen: map[string]chan struct{}{}}
+func newRecorder(watch ...string) *watchedWriter {
+	r := &watchedWriter{seen: map[string]chan struct{}{}}
 	for _, w := range watch {
 		r.seen[w] = make(chan struct{})
 	}
 	return r
 }
 
-func (r *recorder) Write(p []byte) (int, error) {
+func (r *watchedWriter) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.buf.Write(p)
@@ -1004,7 +1004,7 @@ func (r *recorder) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (r *recorder) String() string {
+func (r *watchedWriter) String() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.buf.String()

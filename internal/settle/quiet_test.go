@@ -13,7 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -42,15 +43,14 @@ func terminal(t *testing.T, fn func()) string {
 
 // emitResult feeds one step result into the handler observe threaded onto ctx, the way the
 // cache reports a step to a run's invocation log.
-func emitResult(ctx context.Context, e journal.Event) {
-	e.Kind = journal.KindResult
-	journal.Emit(journal.WithLogger(ctx, journal.NewLogger(ctx.Value(observedKey{}).(slog.Handler))), e)
+func emitResult(ctx context.Context, run journal.Run) {
+	recorder.Emit(recorder.WithSinks(ctx, ctx.Value(observedKey{}).(recorder.Sink)), run)
 }
 
 type observedKey struct{}
 
-func observe(ctx context.Context, h slog.Handler) context.Context {
-	return context.WithValue(ctx, observedKey{}, h)
+func observe(ctx context.Context, sink recorder.Sink) context.Context {
+	return context.WithValue(ctx, observedKey{}, sink)
 }
 
 // TestSettleQuietlyPrintsNothingWhenTheRunPasses: a regeneration's own log, its slog
@@ -60,7 +60,7 @@ func TestSettleQuietlyPrintsNothingWhenTheRunPasses(t *testing.T) {
 	run := Quietly(func(ctx context.Context, inv []string) error {
 		fmt.Println("[pass] magus generate (ran, 2.1s)")
 		slog.InfoContext(ctx, "wrote internal/gen/mocks/store.go")
-		emitResult(ctx, journal.Event{Project: ".", Target: "generate:rw", Status: journal.StatusPass, Ref: "out1"})
+		emitResult(ctx, journal.Run{Project: ".", Target: "generate:rw", Status: journal.StatusPass, Ref: "out1"})
 		return exec.Command("sh", "-c", "echo 'INF mockery generating mocks'; echo 'wrote x' >&2").Run()
 	}, observe)
 	var err error
@@ -75,9 +75,9 @@ func TestSettleQuietlyPrintsNothingWhenTheRunPasses(t *testing.T) {
 func TestSettleQuietlyNamesTheFailingStep(t *testing.T) {
 	run := Quietly(func(ctx context.Context, inv []string) error {
 		fmt.Println("[fail] magus generate (ran, 1s)")
-		emitResult(ctx, journal.Event{Project: "docs", Target: "generate:rw", Status: journal.StatusPass, Ref: "out1"})
-		emitResult(ctx, journal.Event{Project: ".", Target: "generate:rw", Status: journal.StatusFail, Ref: "out2", Text: "mockery exited 1\n  at line 4"})
-		emitResult(ctx, journal.Event{Project: "api", Target: "generate:rw", Status: journal.StatusFail, Ref: "out3", Text: "later"})
+		emitResult(ctx, journal.Run{Project: "docs", Target: "generate:rw", Status: journal.StatusPass, Ref: "out1"})
+		emitResult(ctx, journal.Run{Project: ".", Target: "generate:rw", Status: journal.StatusFail, Ref: "out2", Error: "mockery exited 1\n  at line 4"})
+		emitResult(ctx, journal.Run{Project: "api", Target: "generate:rw", Status: journal.StatusFail, Ref: "out3", Error: "later"})
 		return errors.New("already reported")
 	}, observe)
 	var err error

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -79,7 +79,7 @@ func ActingRole(ctx context.Context, loc Location, placeErr error) (hint.Role, [
 	if placeErr != nil {
 		return hint.RoleWorker, nil
 	}
-	id, _ := ActingLease(loc, trail.LeaseFromEnv())
+	id, _ := ActingLease(loc, recorder.LeaseFromEnv())
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

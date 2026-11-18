@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
@@ -36,12 +36,12 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	// The lease travels for the same reason in the other direction: the server runs the
 	// work, so it would otherwise attribute it to the server's environment (which is
 	// nobody's lease) and the session journal would show adopted runs unattributed.
-	// Read through trail.LeaseFromEnv rather than the raw variable so a malformed
+	// Read through recorder.LeaseFromEnv rather than the raw variable so a malformed
 	// value is dropped here, once, by the same rule every other channel applies.
 	req := runRequest{
 		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root,
 		Ancestors: types.InvocationAncestorsFromContext(ctx),
-		Lease:     trail.LeaseFromEnv(),
+		Lease:     recorder.LeaseFromEnv(),
 		Sandbox:   SandboxFloorFromContext(ctx),
 	}
 	reply, err := roundTrip[runReply](ctx, addr, runExchange, req)

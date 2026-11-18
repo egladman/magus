@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 )
 
 // checkInterval is how often the scheduler wakes to look for a due job. It is deliberately coarse
@@ -30,13 +30,13 @@ const checkInterval = 15 * time.Minute
 // process. Package-level because one server runs one scheduler.
 var unusable sync.Once
 
-// Options are the runtime handles the scheduler needs from the server wiring. Socket and Trail are
-// funcs because both are set during server startup and may not be ready when Start is called; the
-// scheduler reads them at each tick.
+// Options are the runtime handles the scheduler needs from the server
+// wiring. Socket and Activity are funcs: server startup sets both, maybe
+// after Start, so the scheduler reads them at each tick.
 type Options struct {
 	Schedule config.Maintenance // per-job intervals; the only config the scheduler reads
 	Socket   func() string      // server proc socket address to submit to and query
-	Trail    func() string      // activity-trail base dir (where KIND_JOB runs are recorded)
+	Activity func() string      // activity log base, where KIND_JOB runs are recorded
 	Version  string             // adoption identity for submitted jobs
 }
 
@@ -96,7 +96,7 @@ func buildSchedule(m config.Maintenance) []scheduledJob {
 // tick. Submits are best-effort (a job's own success is observed via the trail / Dashboard);
 // coalescing means a job already running or freshly submitted is never duplicated.
 func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
-	base, addr := opts.Trail(), opts.Socket()
+	base, addr := opts.Activity(), opts.Socket()
 	if base == "" || addr == "" {
 		// Not "not up yet". Both are published during startup, so a tick that still finds
 		// one empty is a scheduler that will never run a job for the server's whole life,
@@ -115,7 +115,13 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	}
 	now := time.Now()
 	for _, j := range schedule {
-		if isDue(ctx, base, j, now) {
+		due, err := isDue(ctx, base, j, now)
+		if err != nil {
+			slog.With(attr.Component("maintenance")).WarnContext(ctx, "the activity log did not read, so the job waits for the next tick",
+				slog.String("job", j.action), attr.Error(err))
+			continue
+		}
+		if due {
 			_, _ = proc.SubmitJob(ctx, addr, j.argv, opts.Version)
 		}
 	}
@@ -124,11 +130,14 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 // isDue reports whether j should run now: true if it has never run within the retained trail, or
 // if at least its interval has elapsed since its last run (finish time = recorded start plus
 // duration). Pure over (base, now) so the schedule decision is testable without a live server.
-func isDue(ctx context.Context, base string, j scheduledJob, now time.Time) bool {
-	ev, ok := trail.LastRun(ctx, base, j.action)
-	if !ok {
-		return true // never run in the retained trail
+func isDue(ctx context.Context, base string, j scheduledJob, now time.Time) (bool, error) {
+	ev, ok, err := recorder.LastJob(ctx, base, j.action)
+	if err != nil {
+		return false, err
 	}
-	last := time.UnixMilli(ev.Ts + ev.DurationMs)
-	return now.Sub(last) >= j.interval
+	if !ok {
+		return true, nil // never run in the retained trail
+	}
+	last := ev.Time.Add(ev.Duration)
+	return now.Sub(last) >= j.interval, nil
 }

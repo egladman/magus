@@ -36,10 +36,10 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -262,11 +262,11 @@ func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	dir := t.TempDir()
-	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), jobtypes.EntryPointCLI)
+	ctx := recorder.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), jobtypes.EntryPointCLI)
 
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
 
-	events := trailEvents(t, dir, trailtypes.KindAgentCommand)
+	events := callsOfKind(t, dir, journal.CallKindAgentCommand)
 	require.Len(t, events, 1)
 	assert.Equal(t, jobtypes.EntryPointCLI, events[0].EntryPoint)
 	assert.Empty(t, events[0].Session, "a terminal window is not a host session")
@@ -894,7 +894,7 @@ func storedVerdict(t *testing.T, cacheDir, reason string) string {
 	t.Helper()
 	ref := verdictRef.FindString(reason)
 	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", reason)
-	stored, err := trailtypes.ReadBlob(cacheDir, ref)
+	stored, err := loggedPayload(cacheDir, ref)
 	require.NoError(t, err)
 	return string(stored)
 }
@@ -2143,7 +2143,7 @@ func TestJobRowsReadIsBoundedByTheDeadline(t *testing.T) {
 		}()
 	})
 
-	ctx = withPhaseLog(ctx, trailtypes.Phase{})
+	ctx = withPhaseLog(ctx, journal.Phase{})
 	ctx, cancel := context.WithTimeout(ctx, judgeReserve+200*time.Millisecond)
 	defer cancel()
 	start := time.Now()

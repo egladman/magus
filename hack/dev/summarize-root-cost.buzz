@@ -296,7 +296,7 @@ final SECOND = `\{"session": "b", "cost": \{
 
 final UNMEASURED = `\{"session": "c", "cost": \{
   "spawns": \{"total": 0\},
-  "not_measured": \{"root_context": "the trail holds no per-call facts for this session"\}
+  "not_measured": \{"root_context": "the activity log holds no per-call facts for this session"\}
 \}\}`;
 
 test "totals add up and name how many sessions measured each section" {

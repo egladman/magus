@@ -1,0 +1,150 @@
+package recorder
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types/feedback"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+)
+
+type FeedbackSuite struct{ suite.Suite }
+
+func TestFeedback(t *testing.T) { suite.Run(t, new(FeedbackSuite)) }
+
+func (s *FeedbackSuite) TestCommandShapeKeepsFlagsAndMasksArguments() {
+	s.Equal("grep -rn <arg>", CommandShape("grep -rn foo src"))
+	s.Equal("grep -rn <arg> <path>", CommandShape("grep -rn bar lib/a.go lib/b.go"))
+	s.Equal("grep -rn <arg>", CommandShape("grep -rn bar lib"))
+	s.Equal("sed -n <n> <path>", CommandShape("sed -n 1,80p internal/trail/trail.go"))
+	s.Equal("magus run go-build <path> --silent", CommandShape("./magus run go-build . --silent"))
+	s.Equal("git status --short", CommandShape("git status --short"))
+	s.Equal("go test -run <arg> <path>", CommandShape("go test -run 'TestX$' ./internal/..."))
+	s.Equal("git log --format=<arg> -<n>", CommandShape("git log --format=%H -3"))
+}
+
+func (s *FeedbackSuite) TestCommandShapeReadsPipesRedirectsAndLoops() {
+	s.Equal("cat <path> | wc -l", CommandShape("cat a.go b.go | wc -l"))
+	s.Equal("cd <path> && ls -la 2>&1 >/dev/null", CommandShape("cd /tmp && ls -la 2>&1 > /dev/null"))
+	s.Equal("for <loop> ; do echo <arg> ; done", CommandShape("for f in a b; do echo $f; done"))
+}
+
+// An assignment is where a secret sits, so it never reaches the shape.
+func (s *FeedbackSuite) TestCommandShapeDropsAssignments() {
+	s.Equal("curl -H <arg> <path>", CommandShape("TOKEN=abc curl -H \"Authorization: $TOKEN\" https://x"))
+}
+
+func (s *FeedbackSuite) TestCommandShapeOfALineThatDoesNotParseIsEmpty() {
+	s.Empty(CommandShape("echo 'unterminated"))
+}
+
+func (s *FeedbackSuite) TestCommandShapes() {
+	t := s.T()
+	assert.Equal(t, []string{"cd <path>", "grep -rn <arg>", "head -<n>"}, CommandShapes("cd /x && grep -rn foo src | head -5"))
+	assert.Equal(t, []string{"echo <arg>", "git rev-parse <arg>"}, CommandShapes("echo $(git rev-parse HEAD)"))
+	assert.Equal(t, []string{"go test <path> 2>&1"}, CommandShapes("F=1 go test ./... 2>&1"))
+	assert.Empty(t, CommandShapes("X=1"), "a bare assignment runs no program")
+	assert.Nil(t, CommandShapes("echo 'unterminated"))
+}
+
+func (s *FeedbackSuite) TestServedNexts() {
+	t := s.T()
+	reason := "`sed -n 36,42p a.go` prints the declaration whole.\nnext:\n  sed -n 36,42p a.go\n      prints the whole declaration.\n  sed -n 1,9p b.go\n      prints it too.\nsee: https://example.test/rules/grep-reader/"
+	assert.Equal(t, []string{"sed -n 36,42p a.go", "sed -n 1,9p b.go"}, servedNexts(reason))
+	assert.Empty(t, servedNexts("magus workspace: stay inside ."), "advice with no next block serves nothing")
+}
+
+func (s *FeedbackSuite) TestReadFeedbackFoldsOneSessionAcrossCheckouts() {
+	t := s.T()
+	ctx := context.Background()
+	main, worktree := t.TempDir(), t.TempDir()
+	mainBase, worktreeBase := filepath.Join(main, ".magus"), filepath.Join(worktree, ".magus")
+
+	AppendAgentCommand(ctx, mainBase, AgentCommand{Host: "claude-code", Session: "s1", Agent: "a1", Lease: "job-1", Tool: "shell.command",
+		Command: "grep -A5 'func X' a.go", Decision: verdict.Deny, Rule: "grep-reader",
+		Reason: "reads a body.\nnext:\n  sed -n 1,9p a.go\n      prints it.\nsee: x"})
+	AppendAgentCommand(ctx, worktreeBase, AgentCommand{Host: "claude-code", Session: "s1", Agent: "a1", Tool: "shell.command",
+		Command: "sed -n 1,9p a.go", Decision: verdict.Defer, PreauthorizedBy: "deny-grep-reader"})
+	AppendAgentCommand(ctx, mainBase, AgentCommand{Host: "claude-code", Session: "other", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	AppendAgentSpawn(ctx, mainBase, AgentSpawn{Host: "claude-code", Session: "s1", Child: "worker", Context: "lease: job-1\ndo it", DeclaredModel: "opus"})
+	AppendAgentSpawn(ctx, mainBase, AgentSpawn{Host: "claude-code", Session: "s1", Continue: true, Context: "more"})
+
+	now := time.Now()
+	bases := FeedbackBases([]string{main, worktree, t.TempDir()}, ".magus", now.Add(-time.Hour))
+	require.Equal(t, 2, len(bases), "a checkout with no trail is not read")
+
+	got, err := ReadFeedback(ctx, bases, FeedbackWindow{Session: "s1", Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
+	require.NoError(t, err)
+	assert.Equal(t, "claude-code", got.Host)
+	assert.ElementsMatch(t, []string{main, worktree}, got.Checkouts)
+	require.Len(t, got.Observations, 2)
+	deny := got.Observations[0]
+	assert.Equal(t, feedback.Observation{
+		At:       deny.At, // wall-clock stamp
+		Agent:    "a1",
+		Lease:    "job-1",
+		Tool:     "shell.command",
+		Command:  "grep -A5 'func X' a.go",
+		Decision: string(verdict.Deny),
+		Rule:     "grep-reader",
+		Nexts:    []string{"sed -n 1,9p a.go"},
+		Shape:    "grep -A<n> <arg> <path>",
+		Shapes:   deny.Shapes, // pinned by the CommandShapes tests
+	}, deny)
+	assert.Equal(t, "deny-grep-reader", got.Observations[1].PreauthorizedBy)
+	require.Len(t, got.Spawns, 1, "a continuation starts no subagent")
+	assert.Equal(t, feedback.Spawn{
+		At:    got.Spawns[0].At, // wall-clock stamp
+		Child: "worker",
+		Lease: "job-1",
+		Model: "opus",
+	}, got.Spawns[0])
+}
+
+func (s *FeedbackSuite) TestReadFeedbackDefaultsToTheNewestSession() {
+	t := s.T()
+	ctx := context.Background()
+	base := filepath.Join(t.TempDir(), ".magus")
+	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "older", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	time.Sleep(2 * time.Millisecond)
+	AppendAgentCommand(ctx, base, AgentCommand{Host: "codex", Session: "newer", Tool: "shell.command", Command: "pwd", Decision: verdict.Defer})
+
+	now := time.Now()
+	got, err := ReadFeedback(ctx, []string{base}, FeedbackWindow{Since: now.Add(-time.Hour), Until: now.Add(time.Minute)})
+	require.NoError(t, err)
+	assert.Equal(t, "newer", got.Session)
+	require.Len(t, got.Observations, 1)
+	assert.Equal(t, "pwd", got.Observations[0].Command)
+}
+
+func (s *FeedbackSuite) TestReadFeedbackLeavesOutEventsOutsideTheWindow() {
+	t := s.T()
+	base := filepath.Join(t.TempDir(), ".magus")
+	AppendAgentCommand(context.Background(), base, AgentCommand{Host: "codex", Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	future := time.Now().Add(time.Hour)
+	got, err := ReadFeedback(t.Context(), []string{base}, FeedbackWindow{Session: "s", Since: future, Until: future.Add(time.Hour)})
+	require.NoError(t, err)
+	assert.Empty(t, got.Observations)
+}
+
+func (s *FeedbackSuite) TestFeedbackBasesSharesAnAbsoluteCache() {
+	t := s.T()
+	shared := t.TempDir()
+	assert.Equal(t, []string{shared}, FeedbackBases([]string{"/a", "/b"}, shared, time.Now()))
+}
+
+func (s *FeedbackSuite) TestFeedbackBasesSkipsATrailUntouchedInTheWindow() {
+	t := s.T()
+	root := t.TempDir()
+	base := filepath.Join(root, ".magus")
+	AppendAgentCommand(context.Background(), base, AgentCommand{Session: "s", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	old := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(eventsPath(base), old, old))
+	assert.Empty(t, FeedbackBases([]string{root}, ".magus", time.Now().Add(-24*time.Hour)))
+}

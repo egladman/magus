@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -38,7 +38,7 @@ func warnWorkspaceNotAttached(ctx context.Context, err error) {
 // lazyWorkspaceContext opens a script's workspace on the first read instead of at
 // startup: about 700ms in this repo, against 10ms for a script that never reads it.
 //
-// The readers are types.WorkspaceFromContext and trail.BaseFromContext, called from
+// The readers are types.WorkspaceFromContext and recorder.BaseFromContext, called from
 // bindings throughout std and internal/interp. Answering their context keys here keeps
 // every one of those call sites unchanged, where a lazy WorkspaceRepository would be
 // non-nil before the open and so could not raise MGS1022 the way a nil one does, and
@@ -49,9 +49,9 @@ type lazyWorkspaceContext struct {
 	root            string
 	open            ScriptOpener
 
-	once      sync.Once
-	workspace types.WorkspaceRepository
-	trailBase string
+	once         sync.Once
+	workspace    types.WorkspaceRepository
+	activityBase string
 	// judge is the one ApplySandbox installs, set once attached.
 	judge    std.EditJudge
 	judgeErr error
@@ -59,7 +59,7 @@ type lazyWorkspaceContext struct {
 
 var (
 	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
-	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { trail.BaseFromContext(ctx) })
+	activityContextKey  = contextKeyReadBy(func(ctx context.Context) { recorder.BaseFromContext(ctx) })
 	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 
@@ -75,12 +75,12 @@ func (c *lazyWorkspaceContext) Value(key any) any {
 			return nil
 		}
 		return c.workspace
-	case trailContextKey:
+	case activityContextKey:
 		c.once.Do(c.attach)
-		if c.trailBase == "" {
+		if c.activityBase == "" {
 			return nil
 		}
-		return c.trailBase
+		return c.activityBase
 	case editJudgeContextKey:
 		return c.editJudge()
 	}
@@ -134,7 +134,7 @@ func (c *lazyWorkspaceContext) attach() {
 		return
 	}
 	c.workspace = ws.Repo
-	c.trailBase = ws.CacheDir
+	c.activityBase = ws.CacheDir
 	// The judge the eager door gets, the sandbox being off here.
 	sctx, err := ws.ApplySandbox(c.Context)
 	if err != nil {

@@ -1,0 +1,290 @@
+package sessions
+
+import (
+	"bytes"
+	"testing"
+	"time"
+
+	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+)
+
+type CostSuite struct{ suite.Suite }
+
+func TestCost(t *testing.T) { suite.Run(t, new(CostSuite)) }
+
+var costEpoch = time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)
+
+// fixtureModels stand in for the rows a harness spell publishes; no table is built into
+// magus.
+func fixtureModels() model.Table {
+	return model.InEffect([]model.Row{
+		{ID: "claude-fable-5-1", Window: 1_000_000, Price: budget.Price{Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50}},
+		{ID: "claude-opus-5-5", Window: 1_000_000, Price: budget.Price{Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20}},
+		{ID: "claude-sonnet-5-5", Window: 1_000_000, Price: budget.Price{Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10}},
+		{ID: "claude-haiku-5-5", Window: 1_000_000, Price: budget.Price{Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50, LongContext: &budget.PriceStep{Above: 100_000, Multiplier: 5}}},
+		{ID: "claude-haiku-4-5", Window: 200_000, Price: budget.Price{Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5}},
+	}, nil)
+}
+
+func at(sec int) time.Time { return costEpoch.Add(time.Duration(sec) * time.Second) }
+
+func mainCall(sec int, size int64, mdl string) activityCall {
+	return activityCall{At: at(sec), AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, ContextTokens: size, ContextModel: mdl}}
+}
+
+func (s *CostSuite) TestSummarizeCostMeasuresEverySectionFromACompleteTrail() {
+	t := s.T()
+	tr := &Activity{Commands: 6, Spawns: []activitySpawn{
+		{Child: "Explore", At: at(5), DeclaredModel: "claude-sonnet-5-5"},
+		{Child: "Explore", At: at(100), DeclaredModel: ""},
+	}}
+	var calls []activityCall
+	for sec := 1; sec <= 30; sec++ {
+		c := mainCall(sec, 300_000, "claude-opus-5-5")
+		c.Billing = types.AgentBillingMetered
+		c.ResultChars = new(1000)
+		c.Shadow = map[types.GuardProfile]verdict.Decision{
+			types.GuardProfileStrict: verdict.Deny,
+			types.GuardProfileLight:  verdict.Defer,
+		}
+		switch sec {
+		case 1:
+			c.ContextTokens = 100_000
+			c.ToolMs, c.ResultDigest = 40, "r1"
+			c.Decision, c.Rule, c.DelegableClass = verdict.Advise, "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
+		case 15:
+			c.Decision, c.Rule, c.DelegableClass = verdict.Advise, "root-repeat", types.DelegableDiff // the next spawn is past the window
+		case 16:
+			c.Decision, c.Rule = verdict.Advise, "spawn-names-model" // not a cost advisory
+		case 30:
+			c.ContextTokens = 600_000
+		}
+		calls = append(calls, c)
+	}
+	calls = append(calls,
+		activityCall{At: at(2), AgentFacts: types.AgentFacts{Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"}},
+		activityCall{At: at(3), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 50_000}})
+
+	tr.Calls = calls
+
+	got := SummarizeCost(tr, fixtureModels())
+
+	require.NotNil(t, got.Dollars)
+	assert.Equal(t, Cost{
+		RootContext: &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}},
+		Delegable: &delegableShare{
+			Chars: 2000, Total: 30_000,
+			ByClass: []CountedName{{Name: "diff", Count: 1000}, {Name: "search", Count: 1000}},
+		},
+		// An undeclared model is stored as itself; the renderer labels it.
+		Spawns:     &spawnTally{Total: 2, ByModel: []CountedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
+		Advisories: &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin},
+		Shadow: []shadowTally{
+			{Profile: types.GuardProfileLight, Decisions: map[verdict.Decision]int{verdict.Defer: 30}},
+			{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 30}},
+		},
+		Dollars: got.Dollars, // pinned below
+	}, *got, "every section was measured")
+	assert.InDelta(t, 2000.0/30_000.0, got.Delegable.Share(), 1e-12)
+	assert.Equal(t, 1, got.Advisories.Ignored())
+	assert.Equal(t, 3, got.Dollars.Calls, "100k, the run of 300k, and 600k")
+	assert.InDelta(t, (0.1+0.3+0.6)*0.20, got.Dollars.FloorUSD, 1e-9)
+}
+
+func (s *CostSuite) TestSummarizeCostSaysNothingWasMeasuredWithoutATrail() {
+	t := s.T()
+	got := SummarizeCost(nil, fixtureModels())
+
+	assert.Nil(t, got.RootContext)
+	assert.Nil(t, got.Dollars)
+	assert.Len(t, got.NotMeasured, len(costSections), "every section names why it is empty")
+}
+
+func (s *CostSuite) TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts() {
+	t := s.T()
+	tr := &Activity{Commands: 3, Spawns: []activitySpawn{{Child: "Explore", At: at(1), DeclaredModel: "claude-sonnet-5-5"}}}
+
+	got := SummarizeCost(tr, fixtureModels())
+
+	assert.Equal(t, &spawnTally{Total: 1, ByModel: []CountedName{{Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns)
+	assert.Nil(t, got.RootContext)
+	assert.Equal(t, noCallFacts, got.NotMeasured[costRootContext])
+	assert.Equal(t, noCallFacts, got.NotMeasured[costAdvisories])
+	assert.NotContains(t, got.NotMeasured, costSpawns)
+}
+
+// The path `session show` takes: calls written by the hook, folded by readActivity, summarized.
+func (s *CostSuite) TestSummarizeCostReadsTheFactsAHookRecorded() {
+	t := s.T()
+	base := t.TempDir()
+	for range 2 {
+		recorder.AppendAgentCommand(t.Context(), base, recorder.AgentCommand{
+			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: verdict.Defer,
+			AgentFacts: types.AgentFacts{
+				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
+				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: new(4000),
+				Shadow: map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny},
+			},
+		})
+	}
+	tr, err := readActivity(t.Context(), base, "s1", 100)
+	require.NoError(t, err)
+
+	got := SummarizeCost(&tr, fixtureModels())
+
+	// The other sections have their own tests.
+	want := *got
+	want.RootContext = &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}
+	want.Shadow = []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 2}}}
+	assert.Equal(t, want, *got)
+	assert.Equal(t, chars(8000), got.Delegable.Chars)
+	require.NotNil(t, got.Dollars)
+	assert.Equal(t, types.AgentBillingMetered, got.Dollars.Billing)
+}
+
+func (s *CostSuite) TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot() {
+	t := s.T()
+	calls := []activityCall{{At: at(1), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}}
+
+	got := SummarizeCost(&Activity{Commands: 1, Calls: calls}, fixtureModels())
+
+	assert.Nil(t, got.RootContext)
+	assert.Equal(t, "no call is known to be on the main thread (1 of unknown thread)", got.NotMeasured[costRootContext])
+}
+
+func (s *CostSuite) TestSummarizeCostLeavesItsCallersCallsInOrder() {
+	t := s.T()
+	calls := []activityCall{mainCall(2, 1, "m"), mainCall(1, 1, "m")}
+
+	SummarizeCost(&Activity{Calls: calls}, fixtureModels())
+
+	assert.Equal(t, []time.Time{at(2), at(1)}, []time.Time{calls[0].At, calls[1].At})
+}
+
+// No call observing a result is unmeasured; a call observing an empty one is a measured
+// zero.
+func (s *CostSuite) TestDelegableTellsAnUnobservedResultFromAnEmptyOne() {
+	t := s.T()
+	assert.Nil(t, sumDelegable([]activityCall{mainCall(1, 1, "m")}))
+
+	empty := mainCall(1, 1, "m")
+	empty.ResultChars = new(0)
+	got := sumDelegable([]activityCall{empty})
+	require.NotNil(t, got)
+	assert.Zero(t, got.Total)
+	assert.Zero(t, got.Share())
+}
+
+func (s *CostSuite) TestDollarsPriceTheCacheReadFloorOnceForEachModelCall() {
+	t := s.T()
+	metered := func(sec int, size int64, mdl string) activityCall {
+		c := mainCall(sec, size, mdl)
+		c.Billing = types.AgentBillingMetered
+		return c
+	}
+	calls := []activityCall{
+		metered(1, 500_000, "claude-opus-5-5"),
+		metered(2, 500_000, "claude-opus-5-5"), // a second tool of the same model call
+		metered(3, 600_000, "claude-opus-5-5"),
+		metered(4, 150_000, "claude-haiku-5-5"), // past its 100k step: 5x the cache-read price
+	}
+
+	est, why := estimateDollars(calls, fixtureModels())
+
+	require.NotNil(t, est, why)
+	assert.Equal(t, 3, est.Calls)
+	assert.InDelta(t, 0.5*0.20+0.6*0.20+0.15*0.01*5, est.FloorUSD, 1e-9)
+}
+
+// withheld prices one call billed as billing on mdl, which must be withheld,
+// and returns why.
+func (s *CostSuite) withheld(billing types.AgentBilling, mdl string) string {
+	c := mainCall(1, 400_000, mdl)
+	c.Billing = billing
+	est, why := estimateDollars([]activityCall{c}, fixtureModels())
+	s.Nil(est)
+	return why
+}
+
+func (s *CostSuite) TestDollarsAreWithheldUnderQuotaBilling() {
+	s.Equal("billing is quota, which has no per-token price", s.withheld(types.AgentBillingQuota, "claude-opus-5-5"))
+}
+
+func (s *CostSuite) TestDollarsAreWithheldWithBillingUnset() {
+	s.Equal("billing is unknown: set agents.billing in magus.yaml", s.withheld("", "claude-opus-5-5"))
+}
+
+func (s *CostSuite) TestDollarsAreWithheldForAModelTheTableLacks() {
+	s.Equal(`model "claude-opus-9" is not in the model table: add it under agents.models in magus.yaml`, s.withheld(types.AgentBillingMetered, "claude-opus-9"))
+}
+
+func (s *CostSuite) TestDollarsAreWithheldWhenOneCallLacksBilling() {
+	t := s.T()
+	billed := mainCall(1, 400_000, "claude-opus-5-5")
+	billed.Billing = types.AgentBillingMetered
+
+	est, why := estimateDollars([]activityCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, fixtureModels())
+
+	assert.Nil(t, est)
+	assert.Contains(t, why, "billing is unknown")
+}
+
+func (s *CostSuite) TestAdvisoryFollowEndsAfterTheWindow() {
+	t := s.T()
+	adv := mainCall(0, 1, "m")
+	adv.Decision, adv.Rule = verdict.Advise, "root-heavy-command"
+	main := []activityCall{adv}
+	for i := 1; i <= followWithin+2; i++ {
+		main = append(main, mainCall(i, 1, "m"))
+	}
+
+	inside := tallyAdvisories(main, []costSpawn{{At: at(followWithin)}})
+	outside := tallyAdvisories(main, []costSpawn{{At: at(followWithin + 1)}})
+
+	assert.Equal(t, 1, inside.Followed)
+	assert.Equal(t, 0, outside.Followed)
+	assert.Equal(t, 1, outside.Ignored())
+}
+
+// Every declared decision is printed, a zero included, in the declared order.
+func (s *CostSuite) TestShadowTallyPrintsEveryDecision() {
+	t := s.T()
+	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[verdict.Decision]int{verdict.Advise: 2, verdict.Ask: 1}}
+
+	assert.Equal(t, "standard 0 defer/2 advise/1 ask/0 deny", tally.String())
+}
+
+func (s *CostSuite) TestRenderCostPrintsMeasuredAndUnmeasuredSections() {
+	t := s.T()
+	tr := &Activity{Commands: 2, Spawns: []activitySpawn{
+		{Child: "Explore", At: at(9), DeclaredModel: "claude-sonnet-5-5"},
+		{Child: "Explore", At: at(10)},
+	}}
+	c1 := mainCall(1, 612_000, "claude-opus-5-5")
+	c1.Billing = types.AgentBillingMetered
+	c1.ResultChars = new(1500)
+	c1.DelegableClass = types.DelegableSearch
+	tr.Calls = []activityCall{c1}
+	got := SummarizeCost(tr, fixtureModels())
+
+	var buf bytes.Buffer
+	RenderCost(&buf, got)
+
+	assert.Equal(t, `
+Cost, with the root as the main thread:
+  root context     peak 612k, p50 612k over 1 call(s), claude-opus-5-5
+  delegable        100% of 1k result chars (search 1k)
+  spawns           2: none declared 1, claude-sonnet-5-5 1
+  advisories       0 given, 0 followed by a spawn within 10 calls, 0 ignored
+  shadow           not measured: no call recorded what each profile would have decided
+  dollars          $0.12 floor: cache reads of the root's 1 model call(s), metered
+  repeats          not measured: no tool-time row carried a result digest, so a repeated answer cannot be told from a changed one
+`, buf.String())
+}

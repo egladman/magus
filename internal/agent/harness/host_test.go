@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit/e2e"
 )
 
@@ -172,10 +172,10 @@ func (s *hostSuite) TestJudgedOncePerCall() {
 		if r.Response.Decision == "" {
 			continue
 		}
-		if at, ok := last[r.subject()]; ok && r.Ts-at < window {
+		if at, ok := last[r.subject()]; ok && r.Time.UnixMilli()-at < window {
 			twice = append(twice, fmt.Sprintf("%s %s", r.Request.Tool, clip(r.Request.Command+filepath.Base(r.Request.Path))))
 		}
-		last[r.subject()] = r.Ts
+		last[r.subject()] = r.Time.UnixMilli()
 	}
 	if len(twice) > 0 {
 		played.w.dumpRecords(s.T())
@@ -263,7 +263,7 @@ func (s *hostSuite) TestSkillLoadRecorded() {
 func (s *hostSuite) TestSpawnJudged() {
 	played := s.scenario("spawn-judged", convSpawn)
 	s.Truef(hasRecord(s.T(), played, func(r record) bool {
-		return r.Kind == trail.KindAgentSpawn && r.Lease == jobID && r.DecidedBy != ""
+		return r.Kind == journal.CallKindAgentSpawn && r.Lease == jobID && decidedBy(r.Call) != ""
 	}), "no judged agent_spawn record carrying lease %s", jobID)
 	if !played.replied(played.w.code("SPAWN")) {
 		s.T().Logf("the spawn rule's advice did not reach the model: reply lacks %s", played.w.code("SPAWN"))

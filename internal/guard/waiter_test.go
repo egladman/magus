@@ -17,10 +17,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -348,18 +347,18 @@ func writeRefusalLog(t *testing.T, runsDir, inv string, at time.Time, refused bo
 // writeCodedLog is writeRefusalLog naming the code; "" passes the target.
 func writeCodedLog(t *testing.T, runsDir, inv string, at time.Time, code types.DiagnosticCode, args ...string) {
 	t.Helper()
-	result := journal.Event{Ts: at.UnixMilli(), Inv: inv, Project: ".", Target: "go-test:rw", Kind: journal.KindResult, Status: journal.StatusPass}
+	result := journal.Run{Project: ".", Target: "go-test:rw", Status: journal.StatusPass}
 	if code != "" {
 		result.Status, result.DiagnosticCode = journal.StatusFail, string(code)
 	}
 	var body []byte
-	for _, ev := range []journal.Event{
-		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindStarted, Command: &journal.Command{Arguments: args}},
-		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindOutput, Text: strings.Repeat("x", 128<<10)},
-		result,
-		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindFinished, Status: result.Status},
+	for _, ev := range []journal.Record{
+		journal.NewRecord(at, inv, journal.Started{Command: journal.Command{Arguments: args}}),
+		journal.NewRecord(at, inv, journal.Output{Text: strings.Repeat("x", 128<<10)}),
+		journal.NewRecord(at, inv, result),
+		journal.NewRecord(at, inv, journal.Finished{Status: result.Status}),
 	} {
-		line, err := codec.Marshal(ev)
+		line, err := ev.MarshalJSON()
 		require.NoError(t, err)
 		body = append(append(body, line...), '\n')
 	}
