@@ -990,37 +990,39 @@ func TestLoad_versionTooNew(t *testing.T) {
 	assert.Equal(t, UnsupportedVersionError{Have: "magus.forecast-history/v1alpha2", Max: HistoryVersion, Path: path}, *skew)
 }
 
-// TestLoad_refusesNumericVersion pins that a history stamped with the integer form is
-// refused, naming the file and the delete remedy, and is neither read nor rewritten.
-func TestLoad_refusesNumericVersion(t *testing.T) {
+// TestLoad_setsAsideNumericVersion pins that a history stamped with the integer form
+// loads as empty, and the next write replaces its entries.
+func TestLoad_setsAsideNumericVersion(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	old := `{"workspace":{"version":9}}` + "\n"
+	old := `{"workspace":{"version":9}}` + "\n" + `{"stats":{"project":"old","target":"ci","p75_ms":1}}` + "\n"
 	require.NoError(t, os.WriteFile(path, []byte(old), 0o644))
 
 	var h History
-	err := h.Load(t.Context(), path)
-	require.ErrorContains(t, err, path)
-	require.ErrorContains(t, err, "delete the file")
-	require.Error(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1)))
-	got, rerr := os.ReadFile(path)
-	require.NoError(t, rerr)
-	assert.Equal(t, old, string(got))
+	require.NoError(t, h.Load(t.Context(), path))
+	assert.Equal(t, History{Version: HistoryVersion, Projects: map[string]map[string]Stats{}}, h)
+
+	require.NoError(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1)))
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Equal(t, HistoryVersion, got.Version)
+	assert.NotContains(t, got.Projects, "old")
+	assert.Contains(t, got.Projects, "svc")
 }
 
-// TestLoad_refusesForeignGroup pins that a history of another group is refused as foreign,
-// not as newer.
-func TestLoad_refusesForeignGroup(t *testing.T) {
+// TestLoad_setsAsideForeignGroup pins that a history of another group is set aside, not
+// refused as newer.
+func TestLoad_setsAsideForeignGroup(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "history.jsonl")
 	require.NoError(t, os.WriteFile(path, []byte(`{"workspace":{"api_version":"other.thing/v9"}}`+"\n"), 0o644))
 
 	var h History
-	err := h.Load(t.Context(), path)
-	require.ErrorContains(t, err, "delete the file")
-	assert.NotErrorIs(t, err, types.StoreRecordsNewer)
+	require.NoError(t, h.Load(t.Context(), path))
+	assert.Equal(t, HistoryVersion, h.Version)
+	assert.Empty(t, h.Projects)
 }
 
 // TestLoad_decodeError names the file and line of a complete line that does not decode,

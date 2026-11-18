@@ -83,7 +83,7 @@ import (
 )
 
 // HistoryVersion is the on-disk schema version.
-// The numeric history, versions 1 to 9, is refused by [History.Load]: a derived history has no migration.
+// The numeric history, versions 1 to 9, is set aside and rebuilt: a derived history has no migration.
 // v4 adds PassCount/FailCount/VolatileCount/RecentOutcomes; all prior versions load cleanly.
 // v5 adds Runs, the per-branch log of end-to-end run outcomes.
 // v6 adds Outcome.Charms and Outcome.ArgsHash, the shape of the run an outcome records.
@@ -915,7 +915,7 @@ type workspaceEntry struct {
 	Alpha               []int64               `json:"alpha"`
 	WorkspaceFallbackMs int64                 `json:"workspace_fallback_ms"`
 	// Numeric is the version member of a history written before api_version; only
-	// fold reads it, to refuse the file.
+	// fold reads it, to set the file aside.
 	Numeric *int `json:"version,omitempty"`
 }
 
@@ -1015,13 +1015,12 @@ func (h *History) Load(ctx context.Context, path string) error {
 // whatever order their lines were last written in.
 func (h *History) fold(path string, lines []historyLine) error {
 	*h = History{Version: HistoryVersion, Projects: make(map[string]map[string]Stats)}
+	var numeric *int
 	for _, l := range lines {
 		switch {
 		case l.Workspace != nil:
 			w := l.Workspace
-			if w.Numeric != nil {
-				return fmt.Errorf("history %q is the numeric version %d, which this magus does not read: delete the file and the next run rebuilds it", path, *w.Numeric)
-			}
+			numeric = w.Numeric
 			h.Version, h.UpdatedAt, h.Constants = w.Version, w.UpdatedAt, w.Constants
 			h.Setup, h.Alpha, h.WorkspaceFallbackMs = w.Setup, w.Alpha, w.WorkspaceFallbackMs
 		case l.Stats != nil:
@@ -1037,14 +1036,26 @@ func (h *History) fold(path string, lines []historyLine) error {
 			h.Jobs = append(h.Jobs, *l.Job)
 		}
 	}
+	if numeric != nil {
+		return h.setAside(path, fmt.Sprintf("the numeric version %d", *numeric))
+	}
 	if err := HistoryVersion.Refuse(h.Version); err != nil {
 		if errors.Is(err, apiversion.ErrNewer) {
 			return &UnsupportedVersionError{Have: h.Version, Max: HistoryVersion, Path: path}
 		}
-		return fmt.Errorf("history %q is %q, which this magus (%s) does not read: delete the file and the next run rebuilds it: %w", path, h.Version, HistoryVersion, err)
+		return h.setAside(path, fmt.Sprintf("%q", h.Version))
 	}
 	slices.SortStableFunc(h.Runs, func(a, b Run) int { return a.At.Compare(b.At) })
 	slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })
+	return nil
+}
+
+// setAside drops a history this magus does not read and says so: it is derived, so
+// the run rebuilds it from empty and the next write replaces the old entries.
+func (h *History) setAside(path, what string) error {
+	slog.Warn(fmt.Sprintf("forecast: history %q is %s, which this magus (%s) does not read; rebuilding it from empty and replacing it on the next write", path, what, HistoryVersion),
+		attr.Component("magus"))
+	*h = History{Version: HistoryVersion, Projects: make(map[string]map[string]Stats)}
 	return nil
 }
 
