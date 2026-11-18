@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// dir is the base-dir subdirectory holding the trail, a sibling of the journal's runs/.
+// dir is the base-dir subdirectory holding the activity log, beside runs/.
 const dir = "activity"
 
 const (
@@ -30,11 +30,9 @@ const (
 	blobsSubDir = "blobs"        // content-addressed request/response payloads
 )
 
-// refHexLen and validPrefix copy libs/safetyscissors/trail's, which keeps its own unexported
-// until the writer moves into the module; the layout under activity/ must match it.
-//
-// refHexLen is how many hex chars of a payload's SHA-256 name its blob. 16 (64 bits) is ample
-// against content collisions among one machine's payloads while staying short in a ref.
+// refHexLen copies libs/safetyscissors/journal's: how many hex chars of a
+// payload's SHA-256 name it. 64 bits is ample against one machine's
+// collisions and short in a ref.
 const refHexLen = 16
 
 // maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
@@ -156,7 +154,7 @@ type retiredDecisionError struct {
 }
 
 func (e *retiredDecisionError) Error() string {
-	return fmt.Sprintf("trail: %s holds the retired guard decision %q in blob %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
+	return fmt.Sprintf("recorder: %s holds the retired guard decision %q in payload %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
 }
 
 // blobUndecodableError is an agent-command blob that is there and does not decode. A
@@ -169,7 +167,7 @@ type blobUndecodableError struct {
 }
 
 func (e *blobUndecodableError) Error() string {
-	return fmt.Sprintf("trail: blob %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
+	return fmt.Sprintf("recorder: payload %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
 }
 
 func (e *blobUndecodableError) Unwrap() error { return e.Err }
@@ -702,7 +700,7 @@ func isEnvAssignment(tok string) bool {
 // first. A line that does not decode is passed over.
 func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	if base == "" {
-		return nil, errors.New("trail: read names no directory")
+		return nil, errors.New("recorder: read names no directory")
 	}
 	var out []journal.Call
 	for c, err := range journal.Calls(ctx, CallsDir(base), limit) {
