@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"text/template"
 	"time"
@@ -292,4 +293,29 @@ func (s *LibModulesSuite) TestSnakeSplitsAcronyms() {
 	s.Equal("sgr_bold", snake("SGRBold"))
 	s.Equal("utf8_locale", snake("UTF8Locale"))
 	s.Equal("new_zone", snake("NewZone"))
+}
+
+type shadowInner struct {
+	Check string
+	Name  string
+}
+
+type shadowView struct {
+	shadowInner
+	Check []byte
+	Extra int
+}
+
+type ObjectFieldsSuite struct{ suite.Suite }
+
+func TestObjectFields(t *testing.T) { suite.Run(t, new(ObjectFieldsSuite)) }
+
+// A view embeds a module type and redeclares one field: the shallower field
+// is the only one mirrored, and it keeps the position of the field it hides.
+func (s *ObjectFieldsSuite) TestShallowerFieldReplacesTheEmbeddedOneInPlace() {
+	var got []string
+	for _, f := range ObjectFields(reflect.TypeFor[shadowView]()) {
+		got = append(got, f.Selector)
+	}
+	s.Equal([]string{"Check", "shadowInner.Name", "Extra"}, got)
 }

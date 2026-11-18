@@ -61,7 +61,6 @@ packages:
       ForkFacts: {config: {name: JobForkFacts}}
       GateAttempt: {config: {name: JobGateAttempt}}
       Integration: {config: {name: JobIntegration}}
-      List: {config: {name: JobList}}
       Model: {config: {module: magus/agent}}
       Overlap: {config: {name: JobOverlap}}
       OverlapFootprint: {config: {name: JobOverlapFootprint}}

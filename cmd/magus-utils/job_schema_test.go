@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -131,7 +132,7 @@ func writeRecordFixture(t *testing.T, src string) string {
 	return path
 }
 
-var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureAPIVersion"}
+var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureAPIVersion", Pkg: "fixture"}
 
 // fixtureDecls reads a fixture with the closed sets the job records reach.
 func fixtureDecls(t *testing.T, src string) (*goDecls, error) {
@@ -420,4 +421,85 @@ type Fixture struct {
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+type ViewSchemaSuite struct{ suite.Suite }
+
+func TestViewSchema(t *testing.T) { suite.Run(t, new(ViewSchemaSuite)) }
+
+// viewDecls reads two packages that each declare a Record, the way the job
+// module and its types view do.
+func (s *ViewSchemaSuite) viewDecls(inner, view string) *goDecls {
+	dir := s.T().TempDir()
+	innerPath := filepath.Join(dir, "inner.go")
+	viewPath := filepath.Join(dir, "view.go")
+	s.Require().NoError(os.WriteFile(innerPath, []byte(strings.ReplaceAll(inner, "@", "`")), 0o644))
+	s.Require().NoError(os.WriteFile(viewPath, []byte(strings.ReplaceAll(view, "@", "`")), 0o644))
+	decls, err := loadGoDecls(innerPath, viewPath)
+	s.Require().NoError(err)
+	decls.sets = map[string][]string{}
+	return decls
+}
+
+const viewInner = `package inner
+
+const InnerAPIVersion = "magus.inner/v1alpha1"
+
+// Record is the module's.
+type Record struct {
+	ID    string @json:"id"@
+	Check string @json:"check,omitempty"@
+	Name  string @json:"name"@
+}
+`
+
+// A view redeclares one embedded field under the same json name: the schema
+// publishes the view's, at the position of the field it hides, and reads the
+// view's struct although the module declares one of the same name.
+func (s *ViewSchemaSuite) TestShallowerPropertyReplacesTheEmbeddedOneInPlace() {
+	decls := s.viewDecls(viewInner, `package view
+
+// Record is the view's.
+type Record struct {
+	inner.Record
+	Check *Check @json:"check,omitempty"@
+}
+
+type Check struct {
+	Target string @json:"target"@
+}
+`)
+	rec := jobRecord{Struct: "Record", Pkg: "view", Title: "view", File: "view.schema.json", Version: "InnerAPIVersion"}
+	body, err := renderJobSchema(rec, decls)
+	s.Require().NoError(err)
+
+	var doc struct {
+		Description string                    `json:"description"`
+		Required    []string                  `json:"required"`
+		Properties  map[string]map[string]any `json:"properties"`
+	}
+	s.Require().NoError(codec.Unmarshal(body, &doc))
+	s.Equal("Record is the view's.", doc.Description)
+	s.Equal([]string{"id", "name"}, doc.Required)
+	s.Equal("object", doc.Properties["check"]["type"])
+	s.Less(strings.Index(string(body), `"id"`), strings.Index(string(body), `"check"`))
+	s.Less(strings.Index(string(body), `"check"`), strings.Index(string(body), `"name"`))
+}
+
+func (s *ViewSchemaSuite) TestSamePropertyAtOneDepthIsRefused() {
+	decls := s.viewDecls(viewInner, `package view
+
+type Other struct {
+	Name string @json:"name"@
+}
+
+type Record struct {
+	inner.Record
+	Other
+}
+`)
+	rec := jobRecord{Struct: "Record", Pkg: "view", Title: "view", File: "view.schema.json", Version: "InnerAPIVersion"}
+	_, err := renderJobSchema(rec, decls)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `json name "name" is declared twice at one depth`)
 }
