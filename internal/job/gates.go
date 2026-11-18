@@ -24,14 +24,14 @@ type UnrunGate struct {
 	Source string `json:"source"  yaml:"source"`
 	// Goal is the goal that would add the target to the job, ready to put in its goals: a
 	// form the guard lets the job's worker run. Zero when IntegratorGates.
-	Goal job.Goal `json:"goal"    yaml:"goal"`
+	Goal types.Goal `json:"goal"    yaml:"goal"`
 	// IntegratorGates marks a target no form of which the guard lets a worker run, such as
 	// the build of magus itself. The integrator runs it, so no goal or deviation is asked for.
 	IntegratorGates bool `json:"integrator_gates,omitempty" yaml:"integrator_gates,omitempty"`
 }
 
 // gradeFunc is the guard's verdict on a check run by the holder of the row being gated.
-type gradeFunc func(job.LeaseCheck) CheckVerdict
+type gradeFunc func(types.LeaseCheck) CheckVerdict
 
 // gradeWith grades a check as the row with that check, the way [deniedCheckProblems]
 // does. A nil grader grades as [noGrader]: no verdict, never a pass.
@@ -39,9 +39,13 @@ func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 	if grader == nil {
 		grader = noGrader
 	}
-	return func(c job.LeaseCheck) CheckVerdict {
+	return func(c types.LeaseCheck) CheckVerdict {
+		raw, err := RawCheck(c)
+		if err != nil {
+			return CheckVerdict{NotGraded: err.Error()}
+		}
 		pending := row
-		pending.Check = &c
+		pending.Check = raw
 		return grader(context.Background(), root, pending)
 	}
 }
@@ -50,15 +54,15 @@ func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 // default charms. It reports true, with no goal, when neither form may run. A verdict that
 // reached no conclusion (NotGraded) offers the goal as given; [deniedCheckProblems] reports
 // the missing grade once for the whole row.
-func gradedGoal(goal job.Goal, grade gradeFunc) (job.Goal, bool) {
+func gradedGoal(goal types.Goal, grade gradeFunc) (types.Goal, bool) {
 	charmless := goal
 	charmless.Check.NoDefaultCharms = true
-	for _, candidate := range []job.Goal{goal, charmless} {
+	for _, candidate := range []types.Goal{goal, charmless} {
 		if !grade(candidate.Check).Denied {
 			return candidate, false
 		}
 	}
-	return job.Goal{}, true
+	return types.Goal{}, true
 }
 
 // unrunGatesLimit is how many gates a text rendering lists before it counts the rest.
@@ -301,13 +305,19 @@ type unrunFound struct {
 // runTargets is the key of every chain member a check or goal of row runs.
 func runTargets(row job.Job, lookup func(string) *types.Project) map[string]bool {
 	run := map[string]bool{}
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != job.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		// A row whose checks do not read runs nothing, so every gate is listed as unrun.
+		return run
+	}
+	for _, gc := range checks {
+		g := gc.Check
+		if gc.Goal.Kind != job.GoalKindCheck || g.Script != "" || g.Target == "" {
 			continue
 		}
-		p := lookup(cmp.Or(g.Check.Project, "."))
-		names := []string{g.Check.Target}
-		if _, tail, ok := strings.Cut(g.Check.Target, "::"); ok {
+		p := lookup(cmp.Or(g.Project, "."))
+		names := []string{g.Target}
+		if _, tail, ok := strings.Cut(g.Target, "::"); ok {
 			names = append(names, tail)
 		}
 		for _, name := range names {
@@ -326,7 +336,7 @@ var nonIDChars = regexp.MustCompile(`[^a-z0-9]+`)
 // after it when it is not the root, and a counter after that when taken already holds the
 // id. Two projects can fold to one id ("a/b" and "a-b"), and a target can share its name
 // with a goal the row holds. The id it returns is added to taken.
-func unrunGoal(project, target string, taken map[string]bool) job.Goal {
+func unrunGoal(project, target string, taken map[string]bool) types.Goal {
 	base := target
 	if project != "." {
 		base += "-" + project
@@ -337,7 +347,7 @@ func unrunGoal(project, target string, taken map[string]bool) job.Goal {
 		id = fmt.Sprintf("%s-%d", base, n)
 	}
 	taken[id] = true
-	return job.Goal{ID: id, Check: job.LeaseCheck{Target: target, Project: project}, Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
+	return types.Goal{Goal: job.Goal{ID: id, Accept: []job.Basis{job.BasisWitnessed}}.Resolve(), Check: types.LeaseCheck{Target: target, Project: project}}
 }
 
 const unrunHeading = "not run by the check or any goal, and run by ci over your write paths"
@@ -363,7 +373,7 @@ func unrunLines(gates []UnrunGate) []string {
 	shown := gates[:min(len(gates), unrunGatesLimit)]
 	var (
 		lines []string
-		goals []job.Goal
+		goals []types.Goal
 	)
 	for _, g := range shown {
 		line := fmt.Sprintf("%s %s (reads %s)", g.Target, g.Project, g.Source)

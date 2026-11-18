@@ -119,8 +119,8 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	v := validateMerge(t.Context(), s, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli", "cli/registry.go"}
-		u.Check = &job.LeaseCheck{Target: "nosuch", Project: "."}
-		u.Goals = []job.Goal{{ID: "elsewhere", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "nowhere"}}}
+		u.Check = rawOf(types.LeaseCheck{Target: "nosuch", Project: "."})
+		u.Goals = []job.Goal{{ID: "elsewhere", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: "nowhere"})}}
 	}, config.Jobs{}, nil)
 
 	got := codes(v.Problems)
@@ -341,7 +341,7 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	seed(t, s, job.Job{
 		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/registry.go"}}, Check: forkCheck(),
 		Agent: &job.Agent{Instructions: "do the thing"},
-		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: *forkCheck()}},
+		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: forkCheck()}},
 	})
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
@@ -412,7 +412,7 @@ func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row job.Job) Check
 
 func (s *ReforkGradeSuite) declare(u *job.Job) {
 	u.State, u.Checkpoint = job.StateDeclared, s.head
-	u.Paths.Write, u.Check = []string{"a.txt"}, goTestCheck()
+	u.Paths.Write, u.Check = []string{"a.txt"}, rawOf(*goTestCheck())
 }
 
 func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
@@ -568,13 +568,13 @@ func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 	row, note := resolve(declare("docs/notes.md", "cli/registry.go"))
 	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, job.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
-		Args: []string{"cli/registry.go", "docs/notes.md"}}, row.Goals[i].Check, "lint is scoped to the written files, sorted")
+	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
+		Args: []string{"cli/registry.go", "docs/notes.md"}}, checkIn(t, row.Goals[i].Check), "lint is scoped to the written files, sorted")
 	assert.Contains(t, note, `added the goal "lint" (2 files)`)
 
 	row, note = resolve(func(u *job.Job) {
 		declare("cli/registry.go")(u)
-		u.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+		u.Goals = []job.Goal{job.Goal{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."})}.Resolve()}
 	})
 	assert.Len(t, row.Goals, 1, "a goal that runs lint is kept alone")
 	assert.Empty(t, note)
@@ -601,7 +601,7 @@ func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
 
 	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, []string{"web/app.ts"}, row.Goals[i].Check.Args)
+	assert.Equal(t, []string{"web/app.ts"}, checkIn(t, row.Goals[i].Check).Args)
 }
 
 func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {
@@ -743,7 +743,7 @@ func (s *LintGoalTrackedFilesSuite) resolve(repo *testkit.Repo, ws Workspace) ([
 	merged(&row)
 	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	s.Require().GreaterOrEqual(i, 0, "goals: %v", row.Goals)
-	return row.Goals[i].Check.Args, notes.String()
+	return checkIn(s.T(), row.Goals[i].Check).Args, notes.String()
 }
 
 func (s *LintGoalTrackedFilesSuite) workspace(root string) Workspace {
@@ -805,7 +805,7 @@ func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNames
 func unrunGate() UnrunGate {
 	return UnrunGate{
 		Target: "unit", Project: ".", Source: "**/*.go",
-		Goal: job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "unit", Project: "."}},
+		Goal: types.Goal{Goal: job.Goal{ID: "unit", Kind: job.GoalKindCheck}, Check: types.LeaseCheck{Target: "unit", Project: "."}},
 	}
 }
 
@@ -930,7 +930,7 @@ func (s *acceptValidationSuite) problems(accept ...job.Basis) types.JobProblems 
 	st, _ := validateWorkspace(s.T())
 	return validateMerge(s.T().Context(), st, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli/registry.go"}
-		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}, Accept: accept}}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}), Accept: accept}}
 	}, config.Jobs{}, nil).Problems
 }
 
@@ -962,7 +962,7 @@ func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
 
 	plan, err := PlanFork(s.T().Context(), st, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli/registry.go"}
-		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "test", Project: "."}}}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}}
 	}, config.Jobs{}, nil, true)
 
 	s.Require().NoError(err)

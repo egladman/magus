@@ -524,6 +524,6 @@ func TestLintGoalLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
 
 	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, []string{"cli/registry.go"}, row.Goals[i].Check.Args, "lint reads a soft path once the row changes it")
+	assert.Equal(t, []string{"cli/registry.go"}, checkIn(t, row.Goals[i].Check).Args, "lint reads a soft path once the row changes it")
 	assert.Contains(t, row.Paths.Write, "cli/registry_test.go", "the worker may still write it")
 }

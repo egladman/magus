@@ -59,7 +59,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 
 	fromFlags, err := FlagDeclaration("adj/store", *spec, tierWords("design"))
 	require.NoError(t, err)
-	require.NoError(t, types.ValidateDeclaration(fromFlags))
+	require.NoError(t, ValidateDeclaration(fromFlags))
 
 	var a, b job.Job
 	fromFlags.Apply(&a)
@@ -73,7 +73,7 @@ func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
 	t.Parallel()
 	d, err := FlagDeclaration("adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords())
 	require.NoError(t, err)
-	err = types.ValidateDeclaration(d)
+	err = ValidateDeclaration(d)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `brief_format "json"`)
 }
@@ -105,7 +105,7 @@ func (s *forkAgentFlagsSuite) fork(args ...string) job.Declaration {
 	s.Require().NoError(flags.Parse(args))
 	d, err := FlagDeclaration("adj/store", *spec, tierWords("design"))
 	s.Require().NoError(err)
-	s.Require().NoError(types.ValidateDeclaration(d))
+	s.Require().NoError(ValidateDeclaration(d))
 	return d
 }
 
@@ -228,7 +228,7 @@ func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
 	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", job.DeliveryFold}))
 	row, err := FlagDeclaration("adj/store", *spec, tierWords())
 	s.Require().NoError(err)
-	s.Require().NoError(types.ValidateDeclaration(row))
+	s.Require().NoError(ValidateDeclaration(row))
 	s.Equal(job.DeliveryFold, row.Delivery)
 }
 
@@ -270,8 +270,8 @@ func TestWidenSuite(t *testing.T) { suite.Run(t, new(widenSuite)) }
 func (s *widenSuite) SetupTest() {
 	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go"}
-	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = CheckCommand(*row.Check)
+	row.Check = rawOf(types.LeaseCheck{Target: "test", Project: "."})
+	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
 }
@@ -325,8 +325,8 @@ func TestNarrowSuite(t *testing.T) { suite.Run(t, new(narrowSuite)) }
 func (s *narrowSuite) SetupTest() {
 	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go", "b.go", "c.go#Run"}
-	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = CheckCommand(*row.Check)
+	row.Check = rawOf(types.LeaseCheck{Target: "test", Project: "."})
+	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
 	row.Goals = []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}}
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
@@ -405,8 +405,8 @@ func TestResolveAccept(t *testing.T) { suite.Run(t, new(resolveAcceptSuite)) }
 
 func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
 	in := []job.Goal{
-		{ID: "unit", Check: job.LeaseCheck{Target: "test", Project: "."}},
-		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}, Accept: []job.Basis{job.BasisReported}},
+		{ID: "unit", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})},
+		{ID: "lint", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."}), Accept: []job.Basis{job.BasisReported}},
 		{ID: "docs", Kind: job.GoalKindPaths, Paths: []string{"docs"}},
 	}
 

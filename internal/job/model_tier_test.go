@@ -107,8 +107,8 @@ func routineAnswer() *tier.Assignment {
 func TestNewModelTierRequestDerivesKindFromTheRow(t *testing.T) {
 	t.Parallel()
 
-	target := &job.LeaseCheck{Target: "test", Project: "."}
-	script := &job.LeaseCheck{Script: "probe.buzz"}
+	target := &types.LeaseCheck{Target: "test", Project: "."}
+	script := &types.LeaseCheck{Script: "probe.buzz"}
 	symbol := job.Goal{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"A"}}
 	paths := job.Goal{ID: "touched", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}
 	tests := []struct {
@@ -116,17 +116,17 @@ func TestNewModelTierRequestDerivesKindFromTheRow(t *testing.T) {
 		row  job.Job
 		want types.JobKind
 	}{
-		{"a script check outranks everything", job.Job{Check: script, Goals: []job.Goal{symbol, paths}}, types.JobKindScript},
-		{"a script check inside a goal counts", job.Job{Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: *script}, symbol}}, types.JobKindScript},
-		{"symbol goals outrank paths and a target check", job.Job{Check: target, Goals: []job.Goal{paths, symbol}}, types.JobKindSymbol},
-		{"path goals outrank a target check", job.Job{Check: target, Goals: []job.Goal{paths}}, types.JobKindPaths},
-		{"a target check alone", job.Job{Check: target}, types.JobKindCheck},
+		{"a script check outranks everything", job.Job{Check: rawOf(*script), Goals: []job.Goal{symbol, paths}}, types.JobKindScript},
+		{"a script check inside a goal counts", job.Job{Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck, Check: rawOf(*script)}, symbol}}, types.JobKindScript},
+		{"symbol goals outrank paths and a target check", job.Job{Check: rawOf(*target), Goals: []job.Goal{paths, symbol}}, types.JobKindSymbol},
+		{"path goals outrank a target check", job.Job{Check: rawOf(*target), Goals: []job.Goal{paths}}, types.JobKindPaths},
+		{"a target check alone", job.Job{Check: rawOf(*target)}, types.JobKindCheck},
 		{"nothing graded is prose", job.Job{Agent: job.Instructed("tidy the docs")}, types.JobKindProse},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, newModelTierRequest(tt.row, nil, nil, nil, nil).Kind)
+			assert.Equal(t, tt.want, requestOf(t, tt.row, nil, nil, nil, nil).Kind)
 		})
 	}
 }
@@ -135,7 +135,7 @@ func TestNewModelTierRequestCountsFilesOnce(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{Paths: job.Paths{Write: []string{"internal/job/*.go", "run.go#func A", "run.go#func B", "docs", "docs"}}}
-	assert.Equal(t, 3, newModelTierRequest(row, nil, nil, nil, nil).WriteFiles,
+	assert.Equal(t, 3, requestOf(t, row, nil, nil, nil, nil).WriteFiles,
 		"a glob is one, and two claims in one file are that file once")
 }
 
@@ -157,25 +157,27 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	row := job.Job{
 		ID: "wave/a", Parent: "wave", Agent: &job.Agent{Instructions: "do it", Model: job.Model{Tier: "routine"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, ReadOnly: false,
 		Paths: job.Paths{Write: []string{"a.go"}, Read: []string{"b"}}, DependsOn: []string{"wave/b"},
-		Check: &job.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}},
+		Check: rawOf(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}}),
 		Goals: []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}},
 	}
 	history := []types.ModelTierRecord{{Rank: 0, ModelTier: "routine", Jobs: 12}}
 
-	req := newModelTierRequest(row, []job.Job{parent, row}, set, nil, history)
+	req := requestOf(t, row, []job.Job{parent, row}, set, nil, history)
 
 	require.NotNil(t, req.ParentRank)
 	assert.Equal(t, 2, *req.ParentRank)
 	require.NotNil(t, req.DeclaredRank)
 	assert.Equal(t, 0, *req.DeclaredRank)
 	wantReq := req
-	wantReq.Model, wantReq.History, wantReq.Goals = job.Model{Tier: "routine"}, history, row.Goals
+	view, err := types.NewJob(row)
+	require.NoError(t, err)
+	wantReq.Model, wantReq.History, wantReq.Goals = job.Model{Tier: "routine"}, history, view.Goals
 	wantReq.WritePaths, wantReq.ReadPaths, wantReq.DependsOn = []string{"a.go"}, []string{"b"}, []string{"wave/b"}
 	assert.Equal(t, wantReq, req)
 	assert.Empty(t, req.WriteProjects, "a project is a graph fact the store does not hold")
 
 	req.Check.Args[0] = "changed"
-	assert.Equal(t, "-run", row.Check.Args[0], "the request owns its copy of the check")
+	assert.Equal(t, "-run", checkIn(t, row.Check).Args[0], "the request owns its copy of the check")
 }
 
 func TestNewModelTierRequestLeavesRanksNilWhenNoneIsKnown(t *testing.T) {
@@ -183,16 +185,16 @@ func TestNewModelTierRequestLeavesRanksNilWhenNoneIsKnown(t *testing.T) {
 
 	set := tierSet(t)
 	orphan := job.Job{ID: "a", Parent: "gone", Agent: modelRequest("gpt")}
-	req := newModelTierRequest(orphan, nil, set, nil, nil)
+	req := requestOf(t, orphan, nil, set, nil, nil)
 	assert.Nil(t, req.ParentRank, "a parent that is not in the plan has no rank")
 	assert.Nil(t, req.DeclaredRank, "a model that names no tier declares no rank")
 
-	viaHost := newModelTierRequest(job.Job{ID: "b", Agent: modelRequest("opus")}, nil, set, nil, nil)
+	viaHost := requestOf(t, job.Job{ID: "b", Agent: modelRequest("opus")}, nil, set, nil, nil)
 	require.NotNil(t, viaHost.DeclaredRank)
 	assert.Equal(t, 2, *viaHost.DeclaredRank, "a host alias declares its tier's rank")
 
 	untiered := job.Job{ID: "wave"}
-	req = newModelTierRequest(job.Job{ID: "wave/a", Parent: "wave"}, []job.Job{untiered}, set, nil, nil)
+	req = requestOf(t, job.Job{ID: "wave/a", Parent: "wave"}, []job.Job{untiered}, set, nil, nil)
 	assert.Nil(t, req.ParentRank, "a parent without a tier has no rank")
 }
 
@@ -262,7 +264,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			req := newModelTierRequest(tt.row, nil, set, nil, nil)
+			req := requestOf(t, tt.row, nil, set, nil, nil)
 			got, err := resolveModelTier(t.Context(), set, nil, tt.matrix.choose, req, tt.row)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
@@ -276,7 +278,7 @@ func TestAssignModelTierWithoutAMatrixTakesTheDefault(t *testing.T) {
 
 	set := tierSet(t)
 	row := job.Job{ID: "a"}
-	got, err := resolveModelTier(t.Context(), set, nil, nil, newModelTierRequest(row, nil, set, nil, nil), row)
+	got, err := resolveModelTier(t.Context(), set, nil, nil, requestOf(t, row, nil, set, nil, nil), row)
 	require.NoError(t, err)
 	wantTier := got
 	wantTier.Source, wantTier.Name = tier.SourceDefault, "bounded"
@@ -317,7 +319,7 @@ func TestResolveModelTierReadsHarnessModelRowAliases(t *testing.T) {
 			t.Parallel()
 
 			row := job.Job{ID: "a", Agent: modelRequest(tt.model)}
-			req := newModelTierRequest(row, nil, set, models, nil)
+			req := requestOf(t, row, nil, set, models, nil)
 			got, err := resolveModelTier(t.Context(), set, models, nil, req, row)
 			require.NoError(t, err)
 			reason := got.Reason
@@ -347,7 +349,7 @@ func TestAssignModelTierRefusesAnAliasThatNamesTwoTiers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	row := job.Job{ID: "j", Agent: modelRequest("x")}
-	_, err = resolveModelTier(t.Context(), set, nil, nil, newModelTierRequest(row, nil, set, nil, nil), row)
+	_, err = resolveModelTier(t.Context(), set, nil, nil, requestOf(t, row, nil, set, nil, nil), row)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "name a tier instead")
 	assert.ErrorContains(t, err, "harness a")
@@ -358,9 +360,9 @@ func TestAssignModelTierHandsTheMatrixItsRequest(t *testing.T) {
 	t.Parallel()
 
 	set := tierSet(t)
-	row := job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}, Check: &job.LeaseCheck{Target: "test", Project: "."}}
+	row := job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}
 	matrix := countingMatrix{}
-	req := newModelTierRequest(row, nil, set, nil, nil)
+	req := requestOf(t, row, nil, set, nil, nil)
 	_, err := resolveModelTier(t.Context(), set, nil, matrix.choose, req, row)
 	require.NoError(t, err)
 	assert.Equal(t, req, matrix.seen)
@@ -386,7 +388,7 @@ func TestAssignModelTierRefusesAMatrixThatIsWrong(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := resolveModelTier(t.Context(), set, nil, tt.matrix.choose, newModelTierRequest(row, nil, set, nil, nil), row)
+			_, err := resolveModelTier(t.Context(), set, nil, tt.matrix.choose, requestOf(t, row, nil, set, nil, nil), row)
 			require.Error(t, err, "a wrong matrix fails the assignment, it never falls through to the default")
 			assert.ErrorContains(t, err, tt.want)
 		})
@@ -948,4 +950,12 @@ func (s *fourModelTiersSuite) TestARowWithNoTierIsUntouched() {
 	s.Nil(row.Agent)
 	s.Nil(row.ModelTier)
 	s.NotContains(stored, "agent")
+}
+
+// requestOf is newModelTierRequest, failing t when the row's checks do not read.
+func requestOf(t testing.TB, row job.Job, rows []job.Job, set *tier.Set, models []model.Row, history []types.ModelTierRecord) types.ModelTierRequest {
+	t.Helper()
+	req, err := newModelTierRequest(row, rows, set, models, history)
+	require.NoError(t, err)
+	return req
 }

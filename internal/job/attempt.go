@@ -29,6 +29,7 @@ func (s *Store) envelopeAttempts(ctx context.Context) error {
 		for _, line := range read.Lines {
 			var old struct {
 				APIVersion types.APIVersion  `json:"api_version"`
+				Spec       codec.RawMessage  `json:"spec"`
 				Job        string            `json:"job"`
 				N          int               `json:"n"`
 				Status     job.AttemptStatus `json:"status"`
@@ -37,7 +38,8 @@ func (s *Store) envelopeAttempts(ctx context.Context) error {
 			if err := codec.Unmarshal(line.Text, &old); err != nil {
 				return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", path, line.N, err)
 			}
-			if old.APIVersion == "" {
+			// An attempt record carries a spec; the flat line before it, its job at the top.
+			if old.APIVersion == "" || old.Spec != nil {
 				lines = append(lines, line.Text)
 				continue
 			}
@@ -54,7 +56,14 @@ func (s *Store) envelopeAttempts(ctx context.Context) error {
 // regroupAttempts respells each line of attempts.jsonl stamped with the batch.magus group
 // in the job group ([regroup]). A line already regrouped is kept, so a run cut short runs
 // again to the same file.
-func (s *Store) regroupAttempts(ctx context.Context) error {
+func (s *Store) regroupAttempts(ctx context.Context) error { return s.rewriteAttempts(ctx, regroup) }
+
+// snakeAttempts respells each line of attempts.jsonl in snake_case ([snakeRecord]). A line
+// already respelled is kept, so a run cut short runs again to the same file.
+func (s *Store) snakeAttempts(ctx context.Context) error { return s.rewriteAttempts(ctx, snakeRecord) }
+
+// rewriteAttempts rewrites each line of attempts.jsonl through up, under the file's lock.
+func (s *Store) rewriteAttempts(ctx context.Context, up func(migrate.Entry) (migrate.Entry, error)) error {
 	path, err := s.AttemptsPath()
 	if err != nil {
 		return err
@@ -70,7 +79,7 @@ func (s *Store) regroupAttempts(ctx context.Context) error {
 			if err := codec.Unmarshal(line.Text, &e); err != nil {
 				return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", path, line.N, err)
 			}
-			if e, err = regroup(e); err != nil {
+			if e, err = up(e); err != nil {
 				return fmt.Errorf("%s:%d: %w", path, line.N, err)
 			}
 			text, err := codec.Marshal(e)

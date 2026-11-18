@@ -834,7 +834,7 @@ func checkSettles(rows []job.Job, tries job.Attempts, records []job.Declaration)
 			errs = append(errs, fmt.Errorf("%s declares a spec, and a record settling a row applies with others settling rows only", rec.ID))
 			continue
 		}
-		if err := types.ValidateDeclaration(rec); err != nil {
+		if err := ValidateDeclaration(rec); err != nil {
 			errs = append(errs, err)
 			continue
 		}

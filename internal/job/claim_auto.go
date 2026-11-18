@@ -263,7 +263,7 @@ func ApplyClaim(ctx context.Context, root string, records []job.Declaration, ope
 		return job.Job{}, 0, exit.Usagef("magus job apply: a claim record applies alone, and this input holds %d records", len(records))
 	}
 	rec := records[0]
-	if err := types.ValidateDeclaration(rec); err != nil {
+	if err := ValidateDeclaration(rec); err != nil {
 		return job.Job{}, 0, exit.Usagef("magus job apply: %s", err)
 	}
 	store, err := open()

@@ -45,7 +45,7 @@ type Observed struct {
 	// TestSelection resolves the forwarded selector dialect from loaded dispatch
 	// metadata. The bool says the answer is known; nil or unknown keeps evidence
 	// arguments strict instead of guessing from a target name.
-	TestSelection func(job.LeaseCheck) (string, bool)
+	TestSelection func(types.LeaseCheck) (string, bool)
 
 	// Changed are the paths that actually differ from the job's checkpoint, as the
 	// CALLER computed them. The caller resolves it for the same reason it resolves an
@@ -141,7 +141,7 @@ type GreenGate struct {
 // the check's project, and the change since it tiers trivial, so no step of ci can
 // observe it. The gate may predate the job; the tier, not the timestamp, is what rules
 // out a stale verdict.
-func (g GreenGate) covers(c job.LeaseCheck) bool {
+func (g GreenGate) covers(c types.LeaseCheck) bool {
 	project := path.Clean(c.Project)
 	if c.Project == "" {
 		project = "."
@@ -295,25 +295,33 @@ var integratorTargets = []string{"go-test", lintTarget}
 // integratorGoals are the check goals an integration row holds beyond its declaration, one
 // per [integratorTargets] entry no goal of the row already runs at the root: the integrator
 // files their runs as evidence, and a row grading them as undeclared could never pass.
-func integratorGoals(row job.Job) []job.Goal {
+func integratorGoals(row job.Job) ([]job.Goal, error) {
 	if !row.Integrating() {
-		return nil
+		return nil, nil
 	}
 	declared := row.EffectiveGoals()
 	taken := make(map[string]bool, len(declared))
 	for _, g := range declared {
 		taken[g.ID] = true
 	}
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return nil, err
+	}
 	var goals []job.Goal
 	for _, target := range integratorTargets {
-		if slices.ContainsFunc(declared, func(g job.Goal) bool {
-			return g.Kind == job.GoalKindCheck && g.Check.Target == target && g.Check.Project == "."
+		if slices.ContainsFunc(checks, func(g goalCheck) bool {
+			return g.Goal.Kind == job.GoalKindCheck && g.Check.Target == target && g.Check.Project == "."
 		}) {
 			continue
 		}
-		goals = append(goals, unrunGoal(".", target, taken))
+		goal, err := unrunGoal(".", target, taken).Module()
+		if err != nil {
+			return nil, err
+		}
+		goals = append(goals, goal)
 	}
-	return goals
+	return goals, nil
 }
 
 // OwedNoSeat is the one reason a worker files a check as owed: the machine
@@ -328,38 +336,53 @@ const owedRemoteCI = "remote CI runs it"
 // owedGoals are the checks the jobs row merges filed as owed (see [OwedNoSeat]), one
 // goal per check no goal in held or before it covers. A merged job is one whose id names a
 // branch row integrates.
-func owedGoals(row job.Job, declared []job.Job, tries job.Attempts, held []job.Goal) []job.Goal {
+func owedGoals(row job.Job, declared []job.Job, tries job.Attempts, held []job.Goal) ([]job.Goal, error) {
 	if !row.Integrating() {
-		return nil
+		return nil, nil
 	}
 	taken := make(map[string]bool, len(held))
 	for _, g := range held {
 		taken[g.ID] = true
 	}
-	var goals []job.Goal
-	covered := func(c job.LeaseCheck) bool {
-		runs := func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && checkCovers(g.Check, c) }
-		return slices.ContainsFunc(held, runs) || slices.ContainsFunc(goals, runs)
+	heldChecks, err := checksOf(held)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		goals []job.Goal
+		owed  []types.LeaseCheck
+	)
+	covered := func(c types.LeaseCheck) bool {
+		return slices.ContainsFunc(heldChecks, func(g goalCheck) bool { return g.Goal.Kind == job.GoalKindCheck && checkCovers(g.Check, c) }) ||
+			slices.ContainsFunc(owed, func(o types.LeaseCheck) bool { return checkCovers(o, c) })
 	}
 	for _, d := range declared {
 		result := tries.Result(d.ID)
 		if result == nil || !slices.Contains(row.Integrates, d.ID) {
 			continue
 		}
-		for _, c := range owedChecks(d, *result) {
+		checks, err := owedChecks(d, *result)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range checks {
 			if covered(c) {
 				continue
 			}
-			goal := unrunGoal(cmp.Or(c.Project, "."), c.Target, taken)
-			goal.Check = c
-			goals = append(goals, goal)
+			view := unrunGoal(cmp.Or(c.Project, "."), c.Target, taken)
+			view.Check = c
+			goal, err := view.Module()
+			if err != nil {
+				return nil, err
+			}
+			goals, owed = append(goals, goal), append(owed, c)
 		}
 	}
-	return goals
+	return goals, nil
 }
 
 // owedChecks are the checks d's result files as owed rather than citing a run.
-func owedChecks(d job.Job, result job.Result) []job.LeaseCheck {
+func owedChecks(d job.Job, result job.Result) ([]types.LeaseCheck, error) {
 	owed := map[string]bool{}
 	if result.Validation.Owed != "" {
 		owed[job.PrimaryGoalID] = true
@@ -369,21 +392,25 @@ func owedChecks(d job.Job, result job.Result) []job.LeaseCheck {
 			owed[e.GateID] = true
 		}
 	}
-	var out []job.LeaseCheck
-	for _, g := range d.EffectiveGoals() {
-		if g.Kind == job.GoalKindCheck && owed[g.ID] {
+	checks, err := effectiveChecks(d)
+	if err != nil {
+		return nil, err
+	}
+	var out []types.LeaseCheck
+	for _, g := range checks {
+		if g.Goal.Kind == job.GoalKindCheck && owed[g.Goal.ID] {
 			out = append(out, g.Check)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // checkCovers reports whether a run of full is also a run of c: the same script, or the
 // same target in the same project with c's args or none, since a run with no args covers
 // every package and test a narrower one selects.
-func checkCovers(full, c job.LeaseCheck) bool {
+func checkCovers(full, c types.LeaseCheck) bool {
 	if full.Script != "" || c.Script != "" {
-		return job.SameLeaseCheck(&full, &c)
+		return SameLeaseCheck(&full, &c)
 	}
 	name := func(target string) string {
 		_, tail, ok := strings.Cut(target, "::")
@@ -488,7 +515,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 		}
 	}
 
-	if row.Check == nil && len(row.Goals) == 0 && !row.Integrating() {
+	if !job.HasCheck(row.Check) && len(row.Goals) == 0 && !row.Integrating() {
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no goal, so nothing magus can grade says it is done."+
 			" Declare one in the job record's check or goals; a fact no target checks can be shown by a script run with"+
 			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
@@ -500,8 +527,27 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 	// which is how `describe job` came to show an empty goal list on a job with a check.
 	// The check is a goal here too, so verification_evidence may name it by its
 	// id.
-	gates := append(row.EffectiveGoals(), integratorGoals(row)...)
-	gates = append(gates, owedGoals(row, declared, seen.tries, gates)...)
+	integrated, err := integratorGoals(row)
+	if err != nil {
+		v.Violations = append(v.Violations, err.Error())
+		return v
+	}
+	gates := append(row.EffectiveGoals(), integrated...)
+	owedRuns, err := owedGoals(row, declared, seen.tries, gates)
+	if err != nil {
+		v.Violations = append(v.Violations, err.Error())
+		return v
+	}
+	gates = append(gates, owedRuns...)
+	gateChecks, err := checksOf(gates)
+	if err != nil {
+		v.Violations = append(v.Violations, fmt.Sprintf("job %s: %v", row.ID, err))
+		return v
+	}
+	checkOf := make(map[string]types.LeaseCheck, len(gateChecks))
+	for _, g := range gateChecks {
+		checkOf[g.Goal.ID] = g.Check
+	}
 	declaredGates := make(map[string]job.Goal, len(gates))
 	for _, gate := range gates {
 		declaredGates[gate.ID] = gate
@@ -583,15 +629,16 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 			}
 			continue
 		}
-		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
-		if gate.Kind == job.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
-			scopedRun(gate.Check, attemptByGate[gate.ID], seen.TestSelection) {
+		check := checkOf[gate.ID]
+		statusByGate[gate.ID] = verifyCheckedGate(row, gate, check, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
+		if gate.Kind == job.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(check) &&
+			scopedRun(check, attemptByGate[gate.ID], seen.TestSelection) {
 			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run scoped with `-- %s`:"+
 				" -run and -skip select tests inside the packages `%s` runs, so it ran every package the check does",
-				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), CheckCommand(gate.Check)))
+				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), CheckCommand(check)))
 		}
-		if gate.Kind == job.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
-			narrowedFiles(gate.Check, attemptByGate[gate.ID], seen.namedFiles, seen.TestSelection) {
+		if gate.Kind == job.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(check) &&
+			narrowedFiles(check, attemptByGate[gate.ID], seen.namedFiles, seen.TestSelection) {
 			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run over the files this job changed: `-- %s`",
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " ")))
 		}
@@ -760,11 +807,23 @@ func owedGate(row job.Job, gate job.Goal, reason string) job.VerificationStatus 
 }
 
 func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun, seen Observed) job.VerificationStatus {
+	if gate.Kind != job.GoalKindCheck {
+		return verifySubjectGate(gate, seen)
+	}
+	check, err := GoalCheck(gate)
+	if err != nil {
+		return job.VerificationStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref), Violations: []string{err.Error()}}
+	}
+	return verifyCheckedGate(row, gate, check, ref, attempt, seen)
+}
+
+// verifyCheckedGate is [verifyGate] with gate's check already read.
+func verifyCheckedGate(row job.Job, gate job.Goal, check types.LeaseCheck, ref string, attempt job.CapturedRun, seen Observed) job.VerificationStatus {
 	if kind := gate.Kind; kind != job.GoalKindCheck {
 		return verifySubjectGate(gate, seen)
 	}
 	status := job.VerificationStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
-	if seen.GreenGate.covers(gate.Check) {
+	if seen.GreenGate.covers(check) {
 		status.Verified = true
 		return status
 	}
@@ -776,7 +835,7 @@ func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun,
 		status.Violations = append(status.Violations, fmt.Sprintf("no run is recorded for output ref %q", status.OutputRef))
 		return status
 	}
-	status.Scope = runScope(gate.Check, attempt, seen.namedFiles, seen.TestSelection)
+	status.Scope = runScope(check, attempt, seen.namedFiles, seen.TestSelection)
 	if row.Created > 0 {
 		// Compared in whole seconds, the resolution the declaration is stamped in: a run in
 		// the declaring second cannot be ordered against it either way, and a check run
@@ -792,7 +851,7 @@ func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun,
 	if why, ok := seen.Stale[attemptKey(attempt)]; ok {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q predates the job's last write: it proves the work only if %s", status.OutputRef, why))
 	}
-	if gate.Check.Script != "" && !seen.anyLease && attempt.Lease == "" {
+	if check.Script != "" && !seen.anyLease && attempt.Lease == "" {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under no lease, so it is not this job's evidence: record the script under lease %q",
 			status.OutputRef, row.ID))
 	}
@@ -801,12 +860,12 @@ func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun,
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
 			status.OutputRef, attempt.Lease, row.ID))
 	}
-	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles, seen.TestSelection) {
+	if !ranOver(check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles, seen.TestSelection) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run%s",
-			status.OutputRef, recordedCommand(attempt), CheckCommand(resolveCheck(gate.Check, seen.DefaultCharms)), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
+			status.OutputRef, recordedCommand(attempt), CheckCommand(resolveCheck(check, seen.DefaultCharms)), leftOut(check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
 	}
 	if attempt.Failed {
-		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check, seen.namedFiles, seen.TestSelection))
+		status.Violations = append(status.Violations, runFailed(status.OutputRef, check, seen.namedFiles, seen.TestSelection))
 	}
 	status.Verified = len(status.Violations) == 0
 	return status
@@ -831,7 +890,7 @@ func verifyGate(row job.Job, gate job.Goal, ref string, attempt job.CapturedRun,
 // of a [scopedRun], which VerifyGates notes beside the grade. Nil args are not compared:
 // the run forwarded none, or its record predates the field, and either way it narrowed
 // nothing it can show.
-func ranCheck(c job.LeaseCheck, a job.CapturedRun, defaults []string, selection testSelection) bool {
+func ranCheck(c types.LeaseCheck, a job.CapturedRun, defaults []string, selection testSelection) bool {
 	if c.Script != "" {
 		// A recorded script stores its argv, so absent means empty.
 		if len(a.ExtraArgs) != len(c.Args) || (len(c.Args) > 0 && !slices.Equal(a.ExtraArgs, c.Args)) {
@@ -862,7 +921,7 @@ func ranCheck(c job.LeaseCheck, a job.CapturedRun, defaults []string, selection 
 // ranOver is ranCheck for a job that changed the files in changed. A
 // file-scoped check judges only the files it is handed, so its list is graded
 // against changed and never compared verbatim.
-func ranOver(c job.LeaseCheck, a job.CapturedRun, defaults, changed []string, named map[string]bool, selection testSelection) bool {
+func ranOver(c types.LeaseCheck, a job.CapturedRun, defaults, changed []string, named map[string]bool, selection testSelection) bool {
 	if fileScoped(c, named, selection) && onlyFiles(a.ExtraArgs) && len(changed) > 0 {
 		if len(unreadFiles(c, a, changed)) > 0 {
 			return false
@@ -876,7 +935,7 @@ func ranOver(c job.LeaseCheck, a job.CapturedRun, defaults, changed []string, na
 // them that way with or without a list. A script's args are its argv, and
 // go-test's are packages and flags. Any other target's args must each
 // be in named, or an argument like an environment name reads as a file list.
-func fileScoped(c job.LeaseCheck, named map[string]bool, selection testSelection) bool {
+func fileScoped(c types.LeaseCheck, named map[string]bool, selection testSelection) bool {
 	if c.Script != "" || selection.goTests(c) || !selection.known(c) {
 		return false
 	}
@@ -895,7 +954,8 @@ func fileScoped(c job.LeaseCheck, named map[string]bool, selection testSelection
 
 // namedFiles holds each goal argument that names a file, as a path from tree.
 // That is a regular file there now, or one of changed, so a deletion counts.
-// It stats, so a caller reads it before the store's lock.
+// It stats, so a caller reads it before the store's lock. A check that does not read names
+// no file; VerifyGates refuses it.
 func namedFiles(tree string, goals []job.Goal, changed []string) map[string]bool {
 	touched := make(map[string]bool, len(changed))
 	for _, p := range changed {
@@ -903,11 +963,15 @@ func namedFiles(tree string, goals []job.Goal, changed []string) map[string]bool
 	}
 	named := map[string]bool{}
 	for _, g := range goals {
-		if g.Kind != job.GoalKindCheck || g.Check.Script != "" {
+		if g.Kind != job.GoalKindCheck || !job.HasCheck(g.Check) {
 			continue
 		}
-		for _, arg := range g.Check.Args {
-			p := path.Join(g.Check.Project, arg)
+		check, err := GoalCheck(g)
+		if err != nil || check.Script != "" {
+			continue
+		}
+		for _, arg := range check.Args {
+			p := path.Join(check.Project, arg)
 			if !filepath.IsLocal(filepath.FromSlash(p)) {
 				continue
 			}
@@ -928,14 +992,14 @@ func onlyFiles(args []string) bool {
 
 // unreadFiles are the files of changed under c's project that a's args leave
 // out, relative to that project. A file outside it is not this goal's.
-func unreadFiles(c job.LeaseCheck, a job.CapturedRun, changed []string) []string {
+func unreadFiles(c types.LeaseCheck, a job.CapturedRun, changed []string) []string {
 	return slices.DeleteFunc(filesIn(path.Clean(c.Project), changed), func(f string) bool {
 		return slices.ContainsFunc(a.ExtraArgs, func(arg string) bool { return job.CoversPath(arg, f) })
 	})
 }
 
 // leftOut says which changed files a's narrowed run of c did not read, or "".
-func leftOut(c job.LeaseCheck, a job.CapturedRun, changed []string, named map[string]bool, selection testSelection) string {
+func leftOut(c types.LeaseCheck, a job.CapturedRun, changed []string, named map[string]bool, selection testSelection) string {
 	if !fileScoped(c, named, selection) || !onlyFiles(a.ExtraArgs) {
 		return ""
 	}
@@ -948,7 +1012,7 @@ func leftOut(c job.LeaseCheck, a job.CapturedRun, changed []string, named map[st
 
 // runFailed is the violation of a failed run. A file-scoped check's findings in
 // other files are not this job's.
-func runFailed(ref string, c job.LeaseCheck, named map[string]bool, selection testSelection) string {
+func runFailed(ref string, c types.LeaseCheck, named map[string]bool, selection testSelection) string {
 	failed := fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", ref)
 	if fileScoped(c, named, selection) {
 		return failed + ": a finding in a file this job did not change is not this job's, so run it over the files it changed"
@@ -957,7 +1021,7 @@ func runFailed(ref string, c job.LeaseCheck, named map[string]bool, selection te
 }
 
 // narrowedFiles reports whether a ran file-scoped c over another list of files.
-func narrowedFiles(c job.LeaseCheck, a job.CapturedRun, named map[string]bool, selection testSelection) bool {
+func narrowedFiles(c types.LeaseCheck, a job.CapturedRun, named map[string]bool, selection testSelection) bool {
 	return fileScoped(c, named, selection) && onlyFiles(a.ExtraArgs) && !slices.Equal(a.ExtraArgs, c.Args)
 }
 
@@ -965,7 +1029,7 @@ func narrowedFiles(c job.LeaseCheck, a job.CapturedRun, named map[string]bool, s
 // same args otherwise. Those flags select tests inside the packages go-test runs and leave
 // the package set alone (a package argument does not scope go-test either), so the run
 // covered every package the check covers. Target and project are ranCheck's to compare.
-func scopedRun(c job.LeaseCheck, a job.CapturedRun, selection testSelection) bool {
+func scopedRun(c types.LeaseCheck, a job.CapturedRun, selection testSelection) bool {
 	return a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && selection.goTests(c) &&
 		slices.Equal(withoutTestSelection(a.ExtraArgs), withoutTestSelection(c.Args))
 }
@@ -973,7 +1037,7 @@ func scopedRun(c job.LeaseCheck, a job.CapturedRun, selection testSelection) boo
 // runScope is the `--` args a's go test of c narrowed with, as `-- <args>`: a -run, a -skip
 // or a package argument. It is "" for any other run, which ran every package and test c
 // names.
-func runScope(c job.LeaseCheck, a job.CapturedRun, named map[string]bool, selection testSelection) string {
+func runScope(c types.LeaseCheck, a job.CapturedRun, named map[string]bool, selection testSelection) string {
 	if narrowedFiles(c, a, named, selection) {
 		return fmt.Sprintf("-- %s", strings.Join(a.ExtraArgs, " "))
 	}
@@ -1012,7 +1076,7 @@ func withoutTestSelection(args []string) []string {
 // unless the check opts out of them, the check's own charms stacked on top, duplicates
 // dropped (cmd/magus withDefaultCharms), and the write-granting charms removed from ci,
 // which RunCI never runs with (magus.CharmsForCI).
-func resolveCheck(c job.LeaseCheck, defaults []string) job.LeaseCheck {
+func resolveCheck(c types.LeaseCheck, defaults []string) types.LeaseCheck {
 	if c.NoDefaultCharms {
 		defaults = nil
 	}

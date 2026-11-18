@@ -53,7 +53,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	row.Agent.Model = job.Model{ID: "sonnet"}
 	row.State = job.StateFail
 	row.Created = 100
-	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
+	row.Check = rawOf(types.LeaseCheck{Target: "test", Project: "."})
 	row.Paths.Write = []string{"pkg/a.go#func A", "pkg/a.go#func B", "pkg/b.go"}
 	row.Attempt = &job.CapturedRun{}
 	row.GateAttempts = []job.GateAttempt{{}, {}}

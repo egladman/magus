@@ -273,13 +273,13 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].Check)
-	assert.Equal(t, "go-test", rows[0].Check.Target)
+	assert.Equal(t, "go-test", checkIn(t, rows[0].Check).Target)
 
 	line := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},"validation":"magus run go-test ."}`, job.APIVersion)
 	rows, _, err = DecodeDeclarations(strings.NewReader(line))
 	require.NoError(t, err)
 	require.NotNil(t, rows[0].Check, "a line alone is the declaration's own check")
-	assert.Equal(t, job.LeaseCheck{Target: "go-test", Project: "."}, *rows[0].Check)
+	assert.Equal(t, types.LeaseCheck{Target: "go-test", Project: "."}, checkIn(t, rows[0].Check))
 
 	_, _, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "not both", "fork's decoder stays strict")

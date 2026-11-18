@@ -84,7 +84,7 @@ func decodeDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) 
 	}
 	var defaulted []string
 	row.Goals, defaulted = resolveAccept(row.Goals)
-	err = errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
+	err = errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), ValidateDeclaration(row))
 	return row, defaultedAccepts(row.ID, defaulted), err
 }
 
@@ -128,14 +128,18 @@ func foldValidation(row *job.Declaration, line string) error {
 	switch {
 	case line == "":
 		return nil
-	case row.Check != nil:
+	case job.HasCheck(row.Check):
 		return invalid("a job carries `check` or a rendered `validation` line, not both", "send `check` alone")
 	}
 	c, err := ParseCheckCommand(line)
 	if err != nil {
 		return invalid(err.Error(), "send `check` with the target and project instead")
 	}
-	row.Check = &c
+	raw, err := types.EncodeLeaseCheck(c)
+	if err != nil {
+		return err
+	}
+	row.Check = raw
 	return nil
 }
 

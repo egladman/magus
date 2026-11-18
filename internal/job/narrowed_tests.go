@@ -43,16 +43,21 @@ func narrowedTestProblems(store *Store, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return types.JobProblems{unreadableCheckProblem(err)}
+	}
 	var ps types.JobProblems
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != job.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.Paths.Write, store.testSelection()) {
+	for _, gc := range checks {
+		g := gc.Goal
+		if g.Kind != job.GoalKindCheck || scopedToWritePackages(store.root, gc.Check, row.Paths.Write, store.testSelection()) {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
 		if g.ID != job.PrimaryGoalID {
 			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
 		}
-		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.Paths.Write, store.testSelection()); ok {
+		if p, ok := narrowedCheckProblem(store.root, named, gc.Check, row.Paths.Write, store.testSelection()); ok {
 			p.Field = goalCheckField(row, g)
 			ps = append(ps, p)
 		}
@@ -62,7 +67,7 @@ func narrowedTestProblems(store *Store, row job.Job) types.JobProblems {
 
 // narrowedCheckProblem is [narrowedTestProblems] for one check, named as the problem names
 // it, and false when the check leaves no test out.
-func narrowedCheckProblem(root, named string, check job.LeaseCheck, writePaths []string, selection testSelection) (types.JobProblem, bool) {
+func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths []string, selection testSelection) (types.JobProblem, bool) {
 	if !selection.goTests(check) {
 		return types.JobProblem{}, false
 	}
@@ -411,7 +416,7 @@ func isTestFunc(fn *ast.FuncDecl) bool {
 // scopedToWritePackages reports whether check is a go test naming exactly the packages of
 // writePaths: every package argument names one of them, `./dir` or `./dir/...`, and every
 // one of them is named.
-func scopedToWritePackages(root string, check job.LeaseCheck, writePaths []string, selection testSelection) bool {
+func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string, selection testSelection) bool {
 	if root == "" || !selection.goTests(check) {
 		return false
 	}

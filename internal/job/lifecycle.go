@@ -182,9 +182,12 @@ func workspaceDefaultCharms(tree string) []string {
 // changed is what the result claims: exit reads no diff, and the wait does. It
 // loads the workspace, so only a run the check does not name verbatim asks.
 func refuseWrongRun(row job.Job, primary job.CapturedRun, gates []job.GateAttempt, defaults []string, changed func() ([]string, map[string]bool), selection testSelection) error {
-	goals := row.EffectiveGoals()
+	goals, err := effectiveChecks(row)
+	if err != nil {
+		return err
+	}
 	check := func(id string, attempt job.CapturedRun) error {
-		i := slices.IndexFunc(goals, func(g job.Goal) bool { return g.ID == id && g.Kind == job.GoalKindCheck })
+		i := slices.IndexFunc(goals, func(g goalCheck) bool { return g.Goal.ID == id && g.Goal.Kind == job.GoalKindCheck })
 		if i < 0 || ranCheck(goals[i].Check, attempt, defaults, selection) {
 			return nil
 		}

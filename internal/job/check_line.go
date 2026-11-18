@@ -7,19 +7,20 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types"
 )
 
 // CheckCommand renders c as the command a person types and a job stores: [checkArgv]
 // joined by spaces. Running it satisfies the check. The charms it executes under,
 // default_charms included, are the charms the check is resolved to (ranCheck).
-func CheckCommand(c job.LeaseCheck) string {
+func CheckCommand(c types.LeaseCheck) string {
 	return strings.Join(checkArgv(c), " ")
 }
 
 // checkArgv is c as the argv that runs it, led by the binary as this process was invoked
 // (see [hint.BinaryName]). It is the one rendering of a check: [CheckCommand] joins it, and
 // a witnessed run executes it, so an argument holding a space stays one word there.
-func checkArgv(c job.LeaseCheck) []string {
+func checkArgv(c types.LeaseCheck) []string {
 	argv := []string{hint.BinaryName()}
 	switch {
 	case c.Script != "" && c.Test:
@@ -27,7 +28,7 @@ func checkArgv(c job.LeaseCheck) []string {
 	case c.Script != "":
 		argv = append(argv, "buzz", "--record", c.Script)
 	default:
-		argv = append(argv, "run", c.Target, cmp.Or(c.Project, "."))
+		argv = append(argv, "run", c.Target, runProject(c.Project))
 		if c.NoDefaultCharms {
 			argv = append(argv, "--no-default-charms")
 		}
@@ -38,13 +39,23 @@ func checkArgv(c job.LeaseCheck) []string {
 	return argv
 }
 
+// runProject is project as `run` takes it: the workspace root, which `run` refuses as
+// `/`, is --all.
+func runProject(project string) string {
+	if project == "/" {
+		return "--all"
+	}
+	return cmp.Or(project, ".")
+}
+
 // validationLine is a row's Validation: its check as [CheckCommand] renders it, "" for a row
 // with none. A store write renders it so the two cannot disagree.
-func validationLine(c *job.LeaseCheck) string {
-	if c == nil {
+func validationLine(row job.Job) string {
+	c, ok, err := RowCheck(row)
+	if err != nil || !ok {
 		return ""
 	}
-	return CheckCommand(*c)
+	return CheckCommand(c)
 }
 
 // ParseCheckCommand reads a rendered `[magus] run <target> <project> [-- args]`, or
@@ -54,25 +65,34 @@ func validationLine(c *job.LeaseCheck) string {
 // declared it before the check record existed. Observe it by grepping the
 // ledger archives under the per-repository state dir for a record with
 // `validation` and no `check`.
-func ParseCheckCommand(s string) (job.LeaseCheck, error) {
+func ParseCheckCommand(s string) (types.LeaseCheck, error) {
 	words := strings.Fields(s)
 	if len(words) > 0 && words[0] != "run" && words[0] != "buzz" {
 		words = words[1:]
 	}
 	if len(words) >= 3 && words[0] == "buzz" && words[1] == "--record" {
-		c := job.LeaseCheck{Script: words[2]}
+		c := types.LeaseCheck{Script: words[2]}
 		if rest := words[3:]; len(rest) > 0 {
 			if rest[0] != "--" {
-				return job.LeaseCheck{}, &checkCommandError{Line: s, Script: true}
+				return types.LeaseCheck{}, &checkCommandError{Line: s, Script: true}
 			}
 			c.Args = rest[1:]
 		}
 		return c, nil
 	}
 	if len(words) == 0 || words[0] != "run" {
-		return job.LeaseCheck{}, &checkCommandError{Line: s}
+		return types.LeaseCheck{}, &checkCommandError{Line: s}
 	}
-	return job.ParseLeaseCheck(strings.Join(words[1:], " "))
+	words = words[1:]
+	for i, w := range words {
+		if w == "--" {
+			break
+		}
+		if w == "--all" {
+			words[i] = "/"
+		}
+	}
+	return ParseLeaseCheck(strings.Join(words, " "))
 }
 
 // checkCommandError is a line [ParseCheckCommand] refuses. Script says it began as a
@@ -96,5 +116,5 @@ func recordedCommand(a job.CapturedRun) string {
 	if a.Spell != "" {
 		target = fmt.Sprintf("%s::%s", a.Spell, target)
 	}
-	return CheckCommand(job.LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs})
+	return CheckCommand(types.LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs})
 }

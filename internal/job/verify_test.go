@@ -30,7 +30,7 @@ func TestScriptEvidenceSuite(t *testing.T) { suite.Run(t, new(ScriptEvidenceSuit
 
 func (s *ScriptEvidenceSuite) SetupTest() {
 	s.row = job.Job{ID: "job-a"}
-	s.gate = job.Goal{ID: "g", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Script: "p.buzz", Args: []string{"x"}}}
+	s.gate = job.Goal{ID: "g", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}})}
 }
 
 func (s *ScriptEvidenceSuite) attempt(lease string, args []string) job.CapturedRun {
@@ -65,11 +65,11 @@ func (s *ScriptEvidenceSuite) TestRunUnderNoLeaseSaysSo() {
 }
 
 func acceptRow() job.Job {
-	check := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
+	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
 	return job.Job{
 		ID:         "harness/ledger-accept",
 		Paths:      job.Paths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
-		Check:      &check,
+		Check:      rawOf(check),
 		Validation: CheckCommand(check),
 		State:      job.StateRunning,
 	}
@@ -109,8 +109,8 @@ func goalRow() job.Job {
 		Paths: job.Paths{Write: []string{"internal/job"}},
 		State: job.StateRunning,
 		Goals: []job.Goal{
-			{ID: "unit", Description: "job package tests pass", Check: job.LeaseCheck{Target: "go::go-test", Project: "."}},
-			{ID: "docs", Description: "docs checks pass", Check: job.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},
+			{ID: "unit", Description: "job package tests pass", Check: rawOf(types.LeaseCheck{Target: "go::go-test", Project: "."})},
+			{ID: "docs", Description: "docs checks pass", Check: rawOf(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"unit"}},
 		},
 	}
 }
@@ -212,7 +212,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	ciRow := func(target, project string) job.Job {
 		row := acceptRow()
 		row.Created = 100
-		row.Check = &job.LeaseCheck{Target: target, Project: project}
+		row.Check = rawOf(types.LeaseCheck{Target: target, Project: project})
 		return row
 	}
 	rep := passingResult()
@@ -278,7 +278,7 @@ func TestVerifyGoalDependenciesPropagate(t *testing.T) {
 
 	row := goalRow()
 	row.Goals = append(row.Goals, job.Goal{
-		ID: "publish", Check: job.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"docs"},
+		ID: "publish", Check: rawOf(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"docs"},
 	})
 	rep := goalResult()
 	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "publish", OutputRef: "publish-ref"})
@@ -447,7 +447,7 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.Check = &job.LeaseCheck{Target: "go::go-test", Project: "."}
+	row.Check = rawOf(types.LeaseCheck{Target: "go::go-test", Project: "."})
 	scoped := passingRun
 	scoped.ExtraArgs = []string{"-run", "Spawn|Waiter"}
 
@@ -473,7 +473,7 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 		assert.Empty(t, v.Notes, name)
 	}
 
-	lint := job.LeaseCheck{Target: "go::lint", Project: "."}
+	lint := types.LeaseCheck{Target: "go::lint", Project: "."}
 	assert.False(t, ranCheck(lint, job.CapturedRun{Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "X"}}, nil, goCheckSelection),
 		"-run scopes go test only")
 }
@@ -553,7 +553,7 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 	t.Parallel()
 
-	c := job.LeaseCheck{Script: "probes/key.buzz"}
+	c := types.LeaseCheck{Script: "probes/key.buzz"}
 	assert.True(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}, goCheckSelection))
 	assert.True(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil, goCheckSelection), "one path spelled two ways")
 	assert.False(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil, goCheckSelection), "another script")
@@ -567,8 +567,8 @@ func TestScriptTestCheckBindsOnlyToItsTestRun(t *testing.T) {
 
 	main := job.CapturedRun{Found: true, Project: ".", Target: "buzz probes/key.buzz"}
 	tests := job.CapturedRun{Found: true, Project: ".", Target: "buzz -t probes/key.buzz"}
-	script := job.LeaseCheck{Script: "probes/key.buzz"}
-	tested := job.LeaseCheck{Script: "probes/key.buzz", Test: true}
+	script := types.LeaseCheck{Script: "probes/key.buzz"}
+	tested := types.LeaseCheck{Script: "probes/key.buzz", Test: true}
 
 	assert.True(t, ranCheck(tested, tests, nil, goCheckSelection))
 	assert.False(t, ranCheck(tested, main, nil, goCheckSelection), "a main run is not evidence of passing tests")
@@ -645,11 +645,11 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	gated := job.CapturedRun{Found: true, Project: ".", Target: "generate"}
 	written := job.CapturedRun{Found: true, Project: ".", Target: "generate:rw"}
 
-	optOut := job.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
+	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
 	assert.True(t, ranCheck(optOut, gated, defaults, goCheckSelection), "the --no-default-charms run")
 	assert.False(t, ranCheck(optOut, written, defaults, goCheckSelection), "a written run is not evidence of a gated one")
 
-	plain := job.LeaseCheck{Target: "generate", Project: "."}
+	plain := types.LeaseCheck{Target: "generate", Project: "."}
 	assert.True(t, ranCheck(plain, written, defaults, goCheckSelection), "a plain check still binds the default-charm run")
 	assert.False(t, ranCheck(plain, gated, defaults, goCheckSelection))
 
@@ -662,7 +662,7 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 func TestCheckOptOutIsARecordField(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := job.ParseLeaseCheck("generate . --no-default-charms")
+	parsed, err := ParseLeaseCheck("generate . --no-default-charms")
 	require.NoError(t, err)
 	assert.True(t, parsed.NoDefaultCharms)
 
@@ -671,9 +671,9 @@ func TestCheckOptOutIsARecordField(t *testing.T) {
 	require.NoError(t, err)
 	var row job.Job
 	decl.Apply(&row)
-	require.NotNil(t, row.Check)
-	assert.True(t, row.Check.NoDefaultCharms)
-	assert.Equal(t, "magus run generate . --no-default-charms", validationLine(row.Check))
+	require.True(t, job.HasCheck(row.Check))
+	assert.True(t, checkIn(t, row.Check).NoDefaultCharms)
+	assert.Equal(t, "magus run generate . --no-default-charms", validationLine(row))
 }
 
 // A rejected run names the check as it resolved, so the reader sees which charm set the
@@ -682,7 +682,7 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "fix/job-store"}
-	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "test", Project: "."}}
+	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}
 	seen := Observed{DefaultCharms: []string{types.CharmReadWrite}}
 
 	status := verifyGate(row, gate, "out57a24bec47f2", job.CapturedRun{Found: true, Project: ".", Target: "test:rw"}, seen)
@@ -700,7 +700,7 @@ func TestCheckGateRefusesARunTheJobWroteAfter(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "fix/job-store"}
-	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "test", Project: "."}}
+	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}
 	run := job.CapturedRun{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
 
 	status := verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"out57a24bec47f2": "the ref, not the run"}})
@@ -863,7 +863,7 @@ func keys(m map[string]codec.RawMessage) []string {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go#executeStages"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go#executeStages"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"run.go"}}
 	placed := func(decl string) job.RegionChange {
 		return job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
@@ -897,7 +897,7 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"run.go"}}
 	placed := func(decl string) job.RegionChange {
 		return job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
@@ -1004,7 +1004,7 @@ func integrationRow(t *testing.T, state job.State) *Store {
 	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *job.Job) {
 		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), Goals: []job.Goal{
-			{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "docs"}},
+			{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: "docs"})},
 		}}.Apply(u)
 		u.State = state
 	})
@@ -1167,11 +1167,14 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
-	goals := integratorGoals(row)
+	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	goals, err := integratorGoals(row)
+	require.NoError(t, err)
 	require.Len(t, goals, 1)
 	assert.Equal(t, "lint", goals[0].ID)
-	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
+	none, err := integratorGoals(acceptRow())
+	require.NoError(t, err)
+	assert.Empty(t, none, "a job that integrates nothing holds only what it declares")
 }
 
 // A check the environment kept from running is filed with its cause and
@@ -1234,16 +1237,16 @@ func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
 func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	t.Parallel()
 
-	scoped := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
-	worker := job.Job{ID: "a", Check: &scoped, Goals: []job.Goal{
-		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
-		{ID: "buzz", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"}},
+	scoped := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
+	worker := job.Job{ID: "a", Check: rawOf(scoped), Goals: []job.Goal{
+		{ID: "lint", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."})},
+		{ID: "buzz", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "buzz-test", Project: "docs"})},
 	}}
 	owed := &job.Result{
 		Validation:           job.ResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: OwedNoSeat},
 		VerificationEvidence: []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat}, {GateID: "buzz", Owed: OwedNoSeat}},
 	}
-	paid := job.Job{ID: "b", Check: &job.LeaseCheck{Target: "buzz-test", Project: "console"}}
+	paid := job.Job{ID: "b", Check: rawOf(types.LeaseCheck{Target: "buzz-test", Project: "console"})}
 	elsewhere := worker
 	elsewhere.ID = "c"
 	tries := job.NewAttempts([]job.Attempt{
@@ -1252,15 +1255,19 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 		filedTry("c", owed),
 	})
 	row := job.Job{ID: "integrate", Integrates: []string{"a", "b"}}
-	held := integratorGoals(row)
+	held, err := integratorGoals(row)
+	require.NoError(t, err)
 
-	got := owedGoals(row, []job.Job{worker, paid, elsewhere}, tries, held)
+	got, err := owedGoals(row, []job.Job{worker, paid, elsewhere}, tries, held)
+	require.NoError(t, err)
 	want := []job.Goal{
-		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"},
+		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "buzz-test", Project: "docs"}),
 			Accept: []job.Basis{job.BasisWitnessed}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
-	assert.Empty(t, owedGoals(job.Job{ID: "w"}, []job.Job{worker}, tries, nil), "a job that integrates nothing owes nothing")
+	none, err := owedGoals(job.Job{ID: "w"}, []job.Job{worker}, tries, nil)
+	require.NoError(t, err)
+	assert.Empty(t, none, "a job that integrates nothing owes nothing")
 }
 
 // narrowedRunSuite pins a file-scoped goal grading what the row changed.
@@ -1272,7 +1279,7 @@ func TestNarrowedRun(t *testing.T) { suite.Run(t, new(narrowedRunSuite)) }
 
 func (s *narrowedRunSuite) row(args ...string) job.Job {
 	row := acceptRow()
-	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args}}.Resolve()}
+	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args})}.Resolve()}
 	return row
 }
 
@@ -1341,7 +1348,7 @@ func (s *narrowedRunSuite) TestStaleRunIsStillRefused() {
 }
 
 func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
-	c := job.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
+	c := types.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
 	run := job.CapturedRun{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
 
 	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}, nil, goCheckSelection), "a file outside the project is not this goal's")
@@ -1349,73 +1356,73 @@ func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
 }
 
 func (s *narrowedRunSuite) TestCheckOverFilesGetsTheSameAnswer() {
-	c := job.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
 	run := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go", "b.go")(c), goCheckSelection))
 }
 
 // named writes files into a checkout and answers [namedFiles] over a check.
-func (s *narrowedRunSuite) named(files ...string) func(job.LeaseCheck, ...string) map[string]bool {
+func (s *narrowedRunSuite) named(files ...string) func(types.LeaseCheck, ...string) map[string]bool {
 	tree := s.T().TempDir()
 	for _, f := range files {
 		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), nil, 0o644))
 	}
-	return func(c job.LeaseCheck, changed ...string) map[string]bool {
-		return namedFiles(tree, []job.Goal{{Kind: job.GoalKindCheck, Check: c}}, changed)
+	return func(c types.LeaseCheck, changed ...string) map[string]bool {
+		return namedFiles(tree, []job.Goal{{Kind: job.GoalKindCheck, Check: rawOf(c)}}, changed)
 	}
 }
 
 func (s *narrowedRunSuite) TestAnArgumentNamingNoFileIsComparedVerbatim() {
-	c := job.LeaseCheck{Target: "deploy-check", Project: ".", Args: []string{"staging"}}
+	c := types.LeaseCheck{Target: "deploy-check", Project: ".", Args: []string{"staging"}}
 	run := job.CapturedRun{Found: true, Target: "deploy-check", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "a.go"), goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestAFileTheRowDeletedStillNamesAFile() {
-	c := job.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "gone.go"}}
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "gone.go"}}
 	run := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "gone.go"), goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestADirectoryIsNotAFile() {
-	c := job.LeaseCheck{Target: "format", Project: ".", Args: []string{"pkg"}}
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"pkg"}}
 	run := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"pkg/a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, s.named()(c), goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestAnArgumentResolvesAgainstItsProject() {
-	c := job.LeaseCheck{Target: "format", Project: "libs/x", Args: []string{"a.go"}}
+	c := types.LeaseCheck{Target: "format", Project: "libs/x", Args: []string{"a.go"}}
 
 	s.Equal(map[string]bool{"libs/x/a.go": true}, s.named()(c, "libs/x/a.go"))
 }
 
 func (s *narrowedRunSuite) TestNoArgCheckThatIsNotLintStaysWhole() {
-	vet := job.LeaseCheck{Target: "go-vet", Project: "."}
+	vet := types.LeaseCheck{Target: "go-vet", Project: "."}
 	narrowed := job.CapturedRun{Found: true, Target: "go-vet", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.False(ranOver(vet, narrowed, nil, []string{"a.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestRunWithAFlagIsAnotherRun() {
-	c := job.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
+	c := types.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
 	run := job.CapturedRun{Found: true, Target: "lint", Project: ".", ExtraArgs: []string{"--fix", "a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"a.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestScriptArgsStayItsArgv() {
-	c := job.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
+	c := types.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
 	run := job.CapturedRun{Found: true, Target: "buzz probes/key.buzz", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"a.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestPackageArgumentDoesNotScopeGoTest() {
-	c := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
+	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
 	run := job.CapturedRun{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"./pkg"}}
 
 	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, nil, goCheckSelection))

@@ -34,8 +34,8 @@ type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*tier.Assi
 type ModelTierRequest struct {
 	ID, Parent, Instructions             string
 	ReadOnly                             bool
-	Check                                *job.LeaseCheck
-	Goals                                []job.Goal
+	Check                                *LeaseCheck
+	Goals                                []Goal
 	Kind                                 JobKind
 	WritePaths, WriteProjects, ReadPaths []string
 	DependsOn                            []string

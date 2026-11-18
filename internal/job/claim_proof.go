@@ -839,7 +839,11 @@ func authorizeClaim(actor job.Actor, id string, prev, next job.Job, exists bool,
 	case prev.State != job.StateRunning && prev.State != job.StateExited:
 		return claimRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job claims", id, cmp.Or(string(prev.State), "unstated")))
 	}
-	if fields := job.ChangedFields(prev, next); !slices.Equal(fields, []string{"paths.write"}) {
+	fields, err := job.ChangedFields(prev, next, equalStoredChecks)
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(fields, []string{"paths.write"}) {
 		return claimRefusal(actor, id, "a claim adds write paths and changes nothing else, and this one changes "+strings.Join(fields, ", "))
 	}
 	n, w := len(prev.Paths.Write), len(prev.Claims)

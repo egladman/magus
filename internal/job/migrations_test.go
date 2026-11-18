@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -169,7 +170,7 @@ func (s *headerlessStoreSuite) TestAFlatRowMigratesFromZero() {
 	s.Require().Len(rows, 1)
 	stored := storedLines(s.T(), path)
 	s.Require().Len(stored, 2, "the header the migration wrote, then the row")
-	s.Equal(string(job.APIVersion), stored[1]["apiVersion"])
+	s.Equal(string(job.APIVersion), stored[1]["api_version"])
 }
 
 func (s *headerlessStoreSuite) read(path string) []byte {
@@ -247,12 +248,16 @@ func (s *regroupSuite) read(path string) string {
 	return string(raw)
 }
 
-// before writes the store back as the migration before groupsMoved left it.
+// before writes the store back as the migration before groupsMoved left it: in the
+// batch.magus group, its api version under the camelCase key it had then.
 func (s *regroupSuite) before() {
 	group := job.APIVersion.Group() + "/"
+	at := slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == groupsMoved })
 	s.rewrite(s.jobs, group, batchMagusGroup+"/")
-	s.rewrite(s.jobs, fmt.Sprintf(`"migration":%d`, len(jobMigrations())), fmt.Sprintf(`"migration":%d`, len(jobMigrations())-1))
+	s.rewrite(s.jobs, `"api_version":`, `"apiVersion":`)
+	s.rewrite(s.jobs, fmt.Sprintf(`"migration":%d`, len(jobMigrations())), fmt.Sprintf(`"migration":%d`, at))
 	s.rewrite(s.attempts, group, batchMagusGroup+"/")
+	s.rewrite(s.attempts, `"api_version":`, `"apiVersion":`)
 }
 
 func (s *regroupSuite) TestARowTakesTheJobGroupAndItsAnnotations() {
@@ -324,7 +329,7 @@ func (s *regroupSuite) TestAMigratedStoreIsNotRewrittenAgain() {
 }
 
 func (s *regroupSuite) TestAForeignGroupIsRefusedAndNothingIsWritten() {
-	s.rewrite(s.jobs, `"apiVersion":"`+string(job.APIVersion)+`","kind":"Job"`, `"apiVersion":"example.jobs/v1","kind":"Job"`)
+	s.rewrite(s.jobs, `"api_version":"`+string(job.APIVersion)+`","kind":"Job"`, `"api_version":"example.jobs/v1","kind":"Job"`)
 	before := s.read(s.jobs)
 
 	_, err := s.st.Read(s.T().Context())
@@ -524,4 +529,216 @@ func (s *writerStampSuite) TestAWriteWithNoBuildOnItsContextStampsTheBinary() {
 	s.Require().NoError(err)
 	commit, _ := buildinfo.Commit()
 	s.Equal(map[string]any{"version": buildinfo.UnknownVersion, "commit": commit}, storedLines(s.T(), path)[0]["writer"])
+}
+
+// snakeRecordSuite pins the migration that respells the store's records in snake_case.
+type snakeRecordSuite struct {
+	suite.Suite
+}
+
+func TestSnakeRecordSuite(t *testing.T) { suite.Run(t, new(snakeRecordSuite)) }
+
+// The lines below are what a store at migration 9 held: camelCase keys, CamelCase enum
+// values and a check spelling noDefaultCharms.
+const (
+	camelHeader = `{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList","migration":9,"retained":0}`
+	camelRow    = `{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job",` +
+		`"metadata":{"name":"a","generation":2,"annotations":{"x.example/dependsOn":"keepMe"}},` +
+		`"spec":{"agent":{"instructions":"x","worker":{"type":"Resumed"}},"paths":{"write":["a.go"]},"dependsOn":["b"],` +
+		`"briefFormat":"Markdown","maxAttempts":2,"check":{"target":"generate","project":".","noDefaultCharms":true},` +
+		`"goals":[{"id":"g","kind":"Check","expect":"Passed","check":{"target":"test","project":"."},"accept":["Witnessed"]},` +
+		`{"id":"s","kind":"Symbol","expect":"Unreferenced","symbols":["X"]}]},` +
+		`"status":{"conditions":[{"type":"Running","status":"True","observedGeneration":2,"lastTransitionTime":"1970-01-01T00:00:02Z","reason":"Running","message":""}],` +
+		`"modelTier":{"name":"bounded","rank":1,"skills":"Short","source":"UserMatrix"},"writeProof":"Disjoint","reportedBase":"abc",` +
+		`"baseVerdict":"RevisionMatch","registeredBy":{"user":"u","entryPoint":"Cli","credential":{"class":"Operator","id":"i"}},` +
+		`"registered":1,"checkoutRoot":"/tmp/x","created":1,"updated":2}}`
+	camelAttempt = `{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Attempt","spec":{"job":"a","n":1},` +
+		`"status":{"started":1,"ended":2,"end":"Handback","jobState":"NoReturn","observedGeneration":2,"retry":{"retryable":false,"change":"Upgrade"}}}`
+)
+
+// snakeRowWant is camelRow as this build writes the row it holds, annotation included.
+func (s *snakeRecordSuite) snakeRowWant() string {
+	row := job.Job{ID: "a", Generation: 2, State: job.StateRunning, Created: 1, Updated: 2,
+		Agent: &job.Agent{Instructions: "x", Worker: job.Worker{Type: job.WorkerTypeResumed}},
+		Paths: job.Paths{Write: []string{"a.go"}}, DependsOn: []string{"b"}, BriefFormat: job.BriefFormatMarkdown, MaxAttempts: 2,
+		Check: rawOf(types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}),
+		Goals: []job.Goal{
+			{ID: "g", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}), Accept: []job.Basis{job.BasisWitnessed}},
+			{ID: "s", Kind: job.GoalKindSymbol, Expect: job.ExpectUnreferenced, Symbols: []string{"X"}},
+		},
+		ModelTier:  &tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceUserMatrix},
+		WriteProof: job.WriteProofDisjoint, ReportedBase: "abc", BaseVerdict: job.BaseRevisionMatch,
+		RegisteredBy: job.Origin{User: "u", EntryPoint: job.EntryPointCLI, Credential: job.Credential{Kind: "operator", ID: "i"}},
+		Registered:   1, CheckoutRoot: "/tmp/x",
+	}
+	line, err := job.MarshalRecord(row, nil)
+	s.Require().NoError(err)
+	var e map[string]any
+	s.Require().NoError(codec.Unmarshal(line, &e))
+	e["metadata"].(map[string]any)["annotations"] = map[string]any{"x.example/dependsOn": "keepMe"}
+	want, err := codec.Marshal(e)
+	s.Require().NoError(err)
+	return string(want)
+}
+
+// snaked is a stored line as [snakeRecord] rewrites it.
+func (s *snakeRecordSuite) snaked(text string) (string, error) {
+	e, err := decodeEntry([]byte(text))
+	s.Require().NoError(err)
+	if e, err = snakeRecord(e); err != nil {
+		return "", err
+	}
+	out, err := codec.Marshal(e)
+	s.Require().NoError(err)
+	return string(out), nil
+}
+
+func (s *snakeRecordSuite) TestARowRespellsItsKeysItsEnumsAndItsChecks() {
+	got, err := s.snaked(camelRow)
+
+	s.Require().NoError(err)
+	s.JSONEq(s.snakeRowWant(), got)
+}
+
+func (s *snakeRecordSuite) TestAnAttemptRespellsItsKeysAndItsEnums() {
+	want, err := job.MarshalAttempt(job.Attempt{Job: "a", N: 1, Status: job.AttemptStatus{Started: 1, Ended: 2, End: job.AttemptEndHandback,
+		State: job.StateNoReturn, ObservedGeneration: 2, Retry: job.RetryVerdict{Change: job.RetryAfterUpgrade}}}, false)
+	s.Require().NoError(err)
+
+	got, err := s.snaked(camelAttempt)
+
+	s.Require().NoError(err)
+	s.JSONEq(string(want), got)
+}
+
+func (s *snakeRecordSuite) TestTheHeaderRespellsItsAPIVersion() {
+	got, err := s.snaked(camelHeader)
+
+	s.Require().NoError(err)
+	s.JSONEq(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":9,"retained":0}`, got)
+}
+
+func (s *snakeRecordSuite) TestARespelledLineIsKeptAsItIs() {
+	once, err := s.snaked(camelRow)
+	s.Require().NoError(err)
+
+	twice, err := s.snaked(once)
+
+	s.Require().NoError(err)
+	s.Equal(once, twice)
+}
+
+func (s *snakeRecordSuite) TestAValueNoListSpellsIsRefused() {
+	_, err := s.snaked(strings.Replace(camelRow, `"writeProof":"Disjoint"`, `"writeProof":"Sideways"`, 1))
+
+	var unplaced *UnplacedEnumError
+	s.Require().ErrorAs(err, &unplaced)
+	s.Equal("status.write_proof", unplaced.Path)
+	s.Equal("Sideways", unplaced.Value)
+	s.Contains(unplaced.Values, "disjoint")
+}
+
+func (s *snakeRecordSuite) TestACredentialKindTheCallerDoesNotAdmitIsRefused() {
+	_, err := s.snaked(strings.Replace(camelRow, `"class":"Operator"`, `"class":"Smartcard"`, 1))
+
+	var unplaced *UnplacedEnumError
+	s.Require().ErrorAs(err, &unplaced)
+	s.Equal("status.registered_by.credential.class", unplaced.Path)
+}
+
+func (s *snakeRecordSuite) TestAKeyUnderBothSpellingsIsRefused() {
+	_, err := s.snaked(strings.Replace(camelRow, `"maxAttempts":2`, `"maxAttempts":2,"max_attempts":3`, 1))
+
+	var collision *SnakeKeyCollisionError
+	s.Require().ErrorAs(err, &collision)
+	s.Equal("max_attempts", collision.Snake)
+}
+
+func (s *snakeRecordSuite) TestAnnotationsAndUnknownMembersAreKeptVerbatim() {
+	got, err := s.snaked(strings.Replace(camelRow, `"checkoutRoot":"/tmp/x"`, `"checkoutRoot":"/tmp/x","laterMember":{"innerKey":1}`, 1))
+
+	s.Require().NoError(err)
+	s.Contains(got, `"x.example/dependsOn":"keepMe"`)
+	s.Contains(got, `"laterMember":{"innerKey":1}`)
+}
+
+// snakeStoreSuite migrates a store left at the migration before [keysSnaked], as a binary
+// built on the base does: only such a binary migrates the store every checkout shares.
+type snakeStoreSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	base string
+}
+
+func TestSnakeStoreSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(snakeStoreSuite))
+}
+
+func (s *snakeStoreSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"})
+	s.base = s.repo.Head()
+	s.repo.Git("update-ref", "refs/remotes/origin/main", s.base)
+}
+
+// planted is a store at root holding the camel lines, at the migration before keysSnaked.
+func (s *snakeStoreSuite) planted() (st *Store, jobs, attempts string) {
+	st = tempStore(s.T(), s.repo.Root())
+	st.notices = &bytes.Buffer{}
+	at := slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == keysSnaked })
+	s.Require().Positive(at)
+	header := strings.Replace(camelHeader, `"migration":9`, fmt.Sprintf(`"migration":%d`, at), 1)
+	jobs = plantRaw(s.T(), st, header+"\n"+camelRow)
+	attempts, err := st.AttemptsPath()
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(attempts, []byte(camelAttempt+"\n"), 0o600))
+	return st, jobs, attempts
+}
+
+func (s *snakeStoreSuite) TestTheStoreReadsAfterItsLinesAreRespelled() {
+	st, jobs, attempts := s.planted()
+	ctx := types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.4.3", Commit: s.base})
+
+	f, err := st.Read(ctx)
+
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	row := f.Jobs[0]
+	s.Equal(job.StateRunning, row.State)
+	s.Equal(types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}, checkIn(s.T(), row.Check))
+	s.Equal([]job.Basis{job.BasisWitnessed}, row.Goals[0].Accept)
+	s.Equal(job.WriteProofDisjoint, row.WriteProof)
+	s.Equal(job.EntryPointCLI, row.RegisteredBy.EntryPoint)
+	lines := storedLines(s.T(), jobs)
+	s.Require().Len(lines, 2)
+	s.Equal(string(job.APIVersion), lines[0]["api_version"])
+	s.NotContains(lines[0], "apiVersion")
+	s.InDelta(len(jobMigrations()), lines[0]["migration"], 0)
+	s.Equal(map[string]any{"x.example/dependsOn": "keepMe"}, lines[1]["metadata"].(map[string]any)["annotations"])
+
+	tries, err := st.Attempts(ctx)
+	s.Require().NoError(err)
+	s.Require().Len(tries, 1)
+	s.Equal(job.AttemptEndHandback, tries[0].Status.End)
+	s.Equal(job.StateNoReturn, tries[0].Status.State)
+	raw, err := os.ReadFile(attempts)
+	s.Require().NoError(err)
+	s.NotContains(string(raw), "apiVersion")
+}
+
+func (s *snakeStoreSuite) TestAValueNoListSpellsLeavesTheStoreAsItWas() {
+	st, jobs, _ := s.planted()
+	body, err := os.ReadFile(jobs)
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(jobs, []byte(strings.Replace(string(body), `"baseVerdict":"RevisionMatch"`, `"baseVerdict":"Elsewhere"`, 1)), 0o600))
+	before, err := os.ReadFile(jobs)
+	s.Require().NoError(err)
+
+	_, err = st.Read(types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.4.3", Commit: s.base}))
+
+	var unplaced *UnplacedEnumError
+	s.Require().ErrorAs(err, &unplaced)
+	after, err := os.ReadFile(jobs)
+	s.Require().NoError(err)
+	s.Equal(string(before), string(after), "nothing was written")
 }

@@ -80,21 +80,26 @@ func DecodePut(params map[string]any) (job.Put, error) {
 
 	// check and validation are two spellings of one field, so a put naming each of them is
 	// a caller that does not know which one it meant.
-	check := func(key string, parse func(string) (job.LeaseCheck, error)) {
+	check := func(key string, parse func(string) (types.LeaseCheck, error)) {
 		v, ok, e := mergeString(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case !ok:
 		case strings.TrimSpace(v) == "":
-			put.Check = &job.LeaseCheck{}
+			put.Check = codec.RawMessage("null")
 		default:
 			c, perr := parse(v)
 			if perr != nil {
 				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
 				return
 			}
-			put.Check = &c
+			raw, perr := RawCheck(c)
+			if perr != nil {
+				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
+				return
+			}
+			put.Check = raw
 		}
 	}
 	_, hasCheck := params["check"]
@@ -103,7 +108,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	case hasCheck && hasLine:
 		err = errors.Join(err, errors.New("job: a put carries `check` or a rendered `validation` line, not both"))
 	case hasCheck:
-		check("check", job.ParseLeaseCheck)
+		check("check", ParseLeaseCheck)
 	case hasLine:
 		// compat: see ParseCheckCommand.
 		check("validation", ParseCheckCommand)
@@ -217,7 +222,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 	}
 	if p.Goals != nil {
 		goals, _ := resolveAccept(*p.Goals)
-		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Goals: goals})); e != nil {
+		if e := ValidateDeclaration((job.Declaration{ID: "merge", Goals: goals})); e != nil {
 			err = errors.Join(err, e)
 		} else {
 			set = append(set, func(u *job.Job) { u.Goals = goals })
@@ -225,19 +230,26 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 	}
 	if p.Deviations != nil {
 		deviations := slices.Clone(*p.Deviations)
-		if e := types.ValidateDeclaration((job.Declaration{ID: "merge", Deviations: deviations})); e != nil {
+		if e := ValidateDeclaration((job.Declaration{ID: "merge", Deviations: deviations})); e != nil {
 			err = errors.Join(err, e)
 		} else {
 			set = append(set, func(u *job.Job) { u.Deviations = deviations })
 		}
 	}
 	if p.Check != nil {
-		if p.Check.Target == "" && p.Check.Script == "" {
+		switch c, e := types.DecodeLeaseCheck(p.Check); {
+		case !job.HasCheck(p.Check):
 			set = append(set, func(u *job.Job) { u.Check, u.Validation = nil, "" })
-		} else {
-			c := *p.Check
-			c.Args = slices.Clone(c.Args)
-			set = append(set, func(u *job.Job) { u.Check, u.Validation = &c, CheckCommand(c) })
+		case e != nil:
+			err = errors.Join(err, fmt.Errorf("job: check: %w", e))
+		default:
+			raw, e := RawCheck(c)
+			if e != nil {
+				err = errors.Join(err, fmt.Errorf("job: check: %w", e))
+				break
+			}
+			line := CheckCommand(c)
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = slices.Clone(raw), line })
 		}
 	}
 	if p.State != nil {

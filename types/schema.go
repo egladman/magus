@@ -80,7 +80,7 @@ func (l FormatLedger) Features() []string {
 // Its features are the ones a stored row requires; see [JobFeatures].
 var DeclarationSchema = FormatLedger{
 	Name:    "declaration",
-	Type:    reflect.TypeFor[job.Declaration](),
+	Type:    reflect.TypeFor[Declaration](),
 	Version: APIVersion(job.APIVersion),
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.

@@ -27,7 +27,7 @@ import (
 // reason (2026-10-14). Every no_return a write records now says which end it was.
 func TestEndedReasonSaysWhichEnd(t *testing.T) {
 	t.Parallel()
-	check := &job.LeaseCheck{Target: "test", Project: "."}
+	check := &types.LeaseCheck{Target: "test", Project: "."}
 	for _, tt := range []struct {
 		name     string
 		row      job.Job
@@ -36,10 +36,10 @@ func TestEndedReasonSaysWhichEnd(t *testing.T) {
 		want     string
 	}{
 		{"a read-only scout that filed nothing", job.Job{ID: "s", ReadOnly: true, Registered: 1}, false, true, "ended ungraded"},
-		{"a result nobody verified", job.Job{ID: "w", Check: check, Registered: 1}, true, false, "ended unverified"},
-		{"a row nobody took", job.Job{ID: "w", Check: check}, false, false, "before any holder ran"},
-		{"its holder giving it up", job.Job{ID: "w", Check: check, Registered: 1}, false, true, "abandoned by its holder"},
-		{"the root ending an isolated worker's row", job.Job{ID: "w", Check: check, Registered: 1}, false, false, "ended by someone other than its holder"},
+		{"a result nobody verified", job.Job{ID: "w", Check: rawOf(*check), Registered: 1}, true, false, "ended unverified"},
+		{"a row nobody took", job.Job{ID: "w", Check: rawOf(*check)}, false, false, "before any holder ran"},
+		{"its holder giving it up", job.Job{ID: "w", Check: rawOf(*check), Registered: 1}, false, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", job.Job{ID: "w", Check: rawOf(*check), Registered: 1}, false, false, "ended by someone other than its holder"},
 	} {
 		assert.Contains(t, endedReason(tt.row, tt.filed, tt.byHolder), tt.want, tt.name)
 	}
@@ -53,7 +53,7 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	seed(t, s, job.Job{ID: "notes", ReadOnly: true, State: job.StateRunning, Registered: 1})
-	seed(t, s, job.Job{ID: "probe", ReadOnly: true, State: job.StateRunning, Registered: 1, Check: &job.LeaseCheck{Script: "probe.buzz"}})
+	seed(t, s, job.Job{ID: "probe", ReadOnly: true, State: job.StateRunning, Registered: 1, Check: rawOf(types.LeaseCheck{Script: "probe.buzz"})})
 	none := func(context.Context, string) (job.CapturedRun, error) { return job.CapturedRun{}, nil }
 
 	notes, err := Exit(t.Context(), s, "notes", &job.Result{}, none)
@@ -187,9 +187,9 @@ func TestExitEvidence(t *testing.T) { suite.Run(t, new(exitEvidenceSuite)) }
 
 func (s *exitEvidenceSuite) row() job.Job {
 	row := acceptRow()
-	row.Check = &job.LeaseCheck{Target: "go::go-test", Project: "."}
-	row.Validation = CheckCommand(*row.Check)
-	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	row.Check = rawOf(types.LeaseCheck{Target: "go::go-test", Project: "."})
+	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
+	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."})}.Resolve()}
 	return row
 }
 
@@ -342,7 +342,9 @@ func (s *exitEvidenceSuite) TestRunSkippingTheDefaultCharmsIsRefused() {
 
 func (s *exitEvidenceSuite) TestRunUnderDefaultsOfACheckOptingOutIsRefused() {
 	row := s.row()
-	row.Check.NoDefaultCharms = true
+	check := checkIn(s.T(), row.Check)
+	check.NoDefaultCharms = true
+	row.Check = rawOf(check)
 
 	_, err := s.exitUnderDefaults(row, job.CapturedRun{Target: "go-test:rw"})
 
@@ -351,7 +353,9 @@ func (s *exitEvidenceSuite) TestRunUnderDefaultsOfACheckOptingOutIsRefused() {
 
 func (s *exitEvidenceSuite) TestRunOfACheckOptingOutOfDefaultsIsTheCheck() {
 	row := s.row()
-	row.Check.NoDefaultCharms = true
+	check := checkIn(s.T(), row.Check)
+	check.NoDefaultCharms = true
+	row.Check = rawOf(check)
 
 	_, err := s.exitUnderDefaults(row, job.CapturedRun{Target: "go-test"})
 
@@ -1062,7 +1066,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 	signature := func(name, declared string) job.Goal {
 		return job.Goal{ID: "goal", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: declared}
 	}
-	check := job.Goal{ID: "goal", Check: job.LeaseCheck{Target: "go-test", Project: "."}}
+	check := job.Goal{ID: "goal", Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
 	run := job.CapturedRun{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
 	failed := run
 	failed.Failed = true

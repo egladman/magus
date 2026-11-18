@@ -121,9 +121,9 @@ func (s *resultShapeSuite) row() job.Job {
 	return job.Job{
 		ID:    "w",
 		Paths: job.Paths{Write: []string{"a.go"}},
-		Check: &job.LeaseCheck{Target: "go-vet", Project: "."},
+		Check: rawOf(types.LeaseCheck{Target: "go-vet", Project: "."}),
 		Goals: []job.Goal{
-			{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
+			{ID: "lint", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."})},
 		},
 	}
 }
@@ -337,7 +337,7 @@ func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 	}
 	gate := func(names ...string) []job.Goal {
 		return []job.Goal{
-			{ID: "check", Check: job.LeaseCheck{Target: "test", Project: "."}},
+			{ID: "check", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})},
 			{ID: "sym", Kind: job.GoalKindSymbol, Symbols: names},
 		}
 	}
@@ -598,7 +598,7 @@ func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
 		{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Goal"}, Signature: "type Goal struct"},
 		symbol("kept", job.ExpectPresent, "Api"),
 		symbol("unused", job.ExpectUnreferenced, "Update"),
-		{ID: "check", Check: job.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "check", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})},
 	}}
 
 	resolved, claims, err := ResolveSymbolGoals(t.Context(), row, read)
@@ -702,7 +702,7 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 		ID: "rename", State: job.StateRunning, Paths: job.Paths{Write: []string{"."}},
 		Goals: []job.Goal{
 			{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OldName"}},
-			{ID: "tests", Check: job.LeaseCheck{Target: "test", Project: "."}},
+			{ID: "tests", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})},
 		},
 	}
 	child := job.Job{
@@ -889,14 +889,14 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()
 
-	check := job.LeaseCheck{Target: "test", Project: "."}
+	check := types.LeaseCheck{Target: "test", Project: "."}
 	goal := job.Goal{ID: "done", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}
 	for name, tc := range map[string]struct {
 		row     job.Job
 		refused bool
 	}{
 		"a writing job with neither":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}}, refused: true},
-		"a writing job with a check":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: &check}},
+		"a writing job with a check":    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: rawOf(check)}},
 		"a writing job with a goal":     {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Goals: []job.Goal{goal}}},
 		"a read-only job":               {row: job.Job{ID: "r", ReadOnly: true}},
 		"a job declaring no write path": {row: job.Job{ID: "r"}},
@@ -925,17 +925,17 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 	t.Parallel()
 
-	check := job.LeaseCheck{Target: "test", Project: "."}
-	script := job.LeaseCheck{Script: "probes/callers.buzz"}
+	check := types.LeaseCheck{Target: "test", Project: "."}
+	script := types.LeaseCheck{Script: "probes/callers.buzz"}
 	for name, tc := range map[string]struct {
 		row     job.Job
 		refused bool
 	}{
 		"no write paths and not read-only": {row: job.Job{ID: "s"}, refused: true},
-		"a check and no write paths":       {row: job.Job{ID: "s", Check: &check}, refused: true},
+		"a check and no write paths":       {row: job.Job{ID: "s", Check: rawOf(check)}, refused: true},
 		"a read-only job":                  {row: job.Job{ID: "s", ReadOnly: true}},
-		"a read-only job with a script":    {row: job.Job{ID: "s", ReadOnly: true, Check: &script}},
-		"a writing job":                    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: &check}},
+		"a read-only job with a script":    {row: job.Job{ID: "s", ReadOnly: true, Check: rawOf(script)}},
+		"a writing job":                    {row: job.Job{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: rawOf(check)}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -1204,7 +1204,7 @@ func TestApplyCreatesANewJob(t *testing.T) {
 		Checkpoint: "rev-1",
 		Paths:      job.Paths{Write: []string{"internal/job/store.go"}},
 		Check:      forkCheck(),
-		Validation: CheckCommand(*forkCheck()),
+		Validation: CheckCommand(checkIn(t, forkCheck())),
 		State:      job.StateDeclared,
 		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
 		Validated:  got[0].Next.Validated,
@@ -1216,15 +1216,15 @@ func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
 	t.Parallel()
 
 	s, rec := humanOnlyGrader(t)
-	lint := job.LeaseCheck{Target: "lint", Project: "."}
-	bench := job.LeaseCheck{Target: "bench", Project: "."}
-	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, &lint }, config.Jobs{}, nil)
+	lint := types.LeaseCheck{Target: "lint", Project: "."}
+	bench := types.LeaseCheck{Target: "bench", Project: "."}
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, rawOf(lint) }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	graded := len(rec.graded)
 	before := storeBytes(t, s)
 
-	paid := job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: &lint, Goals: []job.Goal{
-		{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: bench},
+	paid := job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: rawOf(lint), Goals: []job.Goal{
+		{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(bench)},
 	}}
 	for _, dryRun := range []bool{true, false} {
 		_, err = Apply(t.Context(), s, []job.Declaration{paid}, config.Jobs{}, nil, nil, dryRun)
@@ -1233,13 +1233,13 @@ func TestApplyGradesEveryGoalCheckItAdds(t *testing.T) {
 	}
 
 	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) {
-		u.Goals = append(u.Goals, job.Goal{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: bench})
+		u.Goals = append(u.Goals, job.Goal{ID: "paid", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(bench)})
 	}, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "w's goal paid's check", "a merge that adds a goal check is graded too")
 
 	rec.graded = rec.graded[:graded]
 	again := paid
-	again.Goals = []job.Goal{{ID: "again", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: lint, Accept: []job.Basis{job.BasisWitnessed}}}
+	again.Goals = []job.Goal{{ID: "again", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(lint), Accept: []job.Basis{job.BasisWitnessed}}}
 	_, err = Apply(t.Context(), s, []job.Declaration{again}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, graded, "a goal naming a check the row already holds is not graded again")
@@ -1265,15 +1265,15 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 		return CheckVerdict{}
 	}
 	s := NewStore(loc)
-	lint := &job.LeaseCheck{Target: "lint", Project: "."}
+	lint := &types.LeaseCheck{Target: "lint", Project: "."}
 
 	_, err := ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/a.go"}, forkCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
-	_, err = ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Check = lint }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "a", func(u *job.Job) { u.Check = rawOf(*lint) }, config.Jobs{}, nil)
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: lint}}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "b", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: rawOf(*lint)}}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, [][]string{{}, {"a"}, {"a", "b"}, {"a", "b"}}, pinned)
@@ -1397,7 +1397,9 @@ func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration"}
 	next := prev.Clone()
 	next.Integrates = []string{"worker"}
-	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
+	changed, err := job.SpecChanges(prev, next, equalStoredChecks)
+	s.Require().NoError(err)
+	a := Applied{Prev: prev, Next: next, Changed: changed}
 	s.Equal([]string{"integrates"}, a.Changed)
 	s.Equal([]string{"integrates +worker"}, a.ChangeLines())
 }
@@ -1406,7 +1408,9 @@ func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration", Paths: job.Paths{Soft: []string{"old.go"}}}
 	next := prev.Clone()
 	next.Paths.Soft = []string{"new.go"}
-	a := Applied{Prev: prev, Next: next, Changed: job.SpecChanges(prev, next)}
+	changed, err := job.SpecChanges(prev, next, equalStoredChecks)
+	s.Require().NoError(err)
+	a := Applied{Prev: prev, Next: next, Changed: changed}
 	s.Equal([]string{"paths.soft"}, a.Changed)
 	s.Equal([]string{"paths.soft +new.go -old.go"}, a.ChangeLines())
 }

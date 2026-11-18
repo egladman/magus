@@ -156,7 +156,7 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 			} else {
 				gate.Symbols = []string{"Nope"}
 			}
-			if err := types.ValidateGoal(gate); err != nil {
+			if err := ValidateGoal(gate); err != nil {
 				continue // the matrix refuses this pair, so there is nothing to grade
 			}
 			graded++
@@ -187,7 +187,7 @@ func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 		ID:      "unit",
 		Created: 1,
 		Paths:   job.Paths{Write: []string{"api"}},
-		Check:   &job.LeaseCheck{Target: "go-test", Project: "api"},
+		Check:   rawOf(types.LeaseCheck{Target: "go-test", Project: "api"}),
 	}
 	status := VerifyGates(row, job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}},
 		job.CapturedRun{}, nil, []job.Job{row}, Observed{})
@@ -362,7 +362,7 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "api"}}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "api"})}
 	regions := []job.RegionChange{{File: job.FileChange{Path: "api/x.go"}, Side: job.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
@@ -391,7 +391,7 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "api"},
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "api"}),
 		Goals: []job.Goal{
 			{ID: "new", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Declared"}},
 			{ID: "root/field", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Goal#Signature"}},

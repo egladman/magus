@@ -24,13 +24,18 @@ import (
 //
 // rows is the plan the row joins, which is where the parent's rank is read. WriteProjects
 // stays empty: a project is a graph fact, which [Store] fills from Location.Owners.
-func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []model.Row, history []types.ModelTierRecord) types.ModelTierRequest {
+func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []model.Row, history []types.ModelTierRecord) (types.ModelTierRequest, error) {
+	view, err := types.NewJob(row)
+	if err != nil {
+		return types.ModelTierRequest{}, err
+	}
 	req := types.ModelTierRequest{
 		ID:           row.ID,
 		Parent:       row.Parent,
 		Instructions: row.Instructions(),
 		ReadOnly:     row.ReadOnly,
-		Goals:        slices.Clone(row.Goals),
+		Check:        view.Check,
+		Goals:        view.Goals,
 		Kind:         modelTierKind(row),
 		WritePaths:   slices.Clone(row.Paths.Write),
 		ReadPaths:    slices.Clone(row.Paths.Read),
@@ -38,11 +43,6 @@ func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []mo
 		WriteFiles:   writeFileCount(row.Paths.Write),
 		Model:        row.Agent.RequestedModel(),
 		History:      slices.Clone(history),
-	}
-	if row.Check != nil {
-		check := *row.Check
-		check.Args = slices.Clone(check.Args)
-		req.Check = &check
 	}
 	if row.Parent != "" {
 		if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.Parent }); i >= 0 && rows[i].ModelTier != nil {
@@ -54,21 +54,26 @@ func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []mo
 		rank := declared.Rank()
 		req.DeclaredRank = &rank
 	}
-	return req
+	return req, nil
 }
 
 // modelTierKind is what row is judged by, the first that applies: a script check, symbol
-// goals, path goals, a target check, else a reader of its prose.
+// goals, path goals, a target check, else a reader of its prose. A check that does not read
+// as a lease check, which no store keeps, is judged as a target check.
 func modelTierKind(row job.Job) types.JobKind {
 	var symbol, paths, target bool
 	for _, g := range row.EffectiveGoals() {
 		g = g.Resolve()
 		switch g.Kind {
 		case job.GoalKindCheck:
-			if g.Check.Script != "" {
+			if !job.HasCheck(g.Check) {
+				continue
+			}
+			c, err := GoalCheck(g)
+			if err == nil && c.Script != "" {
 				return types.JobKindScript
 			}
-			target = target || g.Check.Target != ""
+			target = target || err != nil || c.Target != ""
 		case job.GoalKindSymbol:
 			symbol = true
 		case job.GoalKindPaths:
@@ -282,7 +287,10 @@ func (s *Store) assignModelTier(ctx context.Context, row job.Job, plan []job.Job
 	if s.modelRows != nil {
 		models = s.modelRows()
 	}
-	req := newModelTierRequest(row, plan, s.modelTiers, models, nil)
+	req, err := newModelTierRequest(row, plan, s.modelTiers, models, nil)
+	if err != nil {
+		return tier.Assignment{}, err
+	}
 	if s.modelTierMatrix != nil && s.owners != nil && row.Agent.RequestedModel().IsZero() && len(row.Paths.Write) > 0 {
 		projects, err := s.writeProjects(ctx, row)
 		if err != nil {

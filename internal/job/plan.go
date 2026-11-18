@@ -37,7 +37,7 @@ func Declare(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 	}
 	return func(u *job.Job) {
 		row.Apply(u)
-		u.Validation = validationLine(u.Check)
+		u.Validation = validationLine(*u)
 		u.Deadline = 0
 		if d > 0 {
 			u.Deadline = deadlineAfter(d)
@@ -102,7 +102,8 @@ func mergeBase(rows []job.Job, id string, merge func(*job.Job)) (job.Job, bool) 
 
 // addedChecks is merged cut to the checks an update adds to prev: its check when it
 // changed, and every goal check prev carried under no goal. A check the row already held
-// was graded when it entered, so an unrelated update never re-grades it.
+// was graded when it entered, so an unrelated update never re-grades it. Two checks that
+// cannot be compared count as different, so an unreadable one is graded again.
 func addedChecks(prev, merged job.Job, checkChanged bool) job.Job {
 	added := merged
 	if !checkChanged {
@@ -111,7 +112,8 @@ func addedChecks(prev, merged job.Job, checkChanged bool) job.Job {
 	held := prev.EffectiveGoals()
 	added.Goals = slices.DeleteFunc(slices.Clone(merged.Goals), func(goal job.Goal) bool {
 		return goal.Kind != job.GoalKindCheck || slices.ContainsFunc(held, func(g job.Goal) bool {
-			return g.Kind == job.GoalKindCheck && job.SameLeaseCheck(&g.Check, &goal.Check)
+			same, err := equalStoredChecks(g.Check, goal.Check)
+			return g.Kind == job.GoalKindCheck && err == nil && same
 		})
 	})
 	return added
@@ -279,7 +281,11 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 		v := validateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		problems = append(problems, prefixed(rec.ID, append(ps, v.Problems...))...)
 		next.Releases = store.Releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
-		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: job.SpecChanges(prev, next)})
+		changed, err := job.SpecChanges(prev, next, equalStoredChecks)
+		if err != nil {
+			return nil, err
+		}
+		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: changed})
 		merges, proofs = append(merges, merge), append(proofs, v.WriteProof)
 		returning = append(returning, redeclares && !ended)
 		if i >= 0 {
@@ -367,7 +373,7 @@ func specMerge(rec job.Declaration, creates bool, checkpoint func() string) func
 	}
 	return func(u *job.Job) {
 		rec.ApplySpec(u)
-		u.Validation = validationLine(u.Check)
+		u.Validation = validationLine(*u)
 		if soft := slices.DeleteFunc(slices.Clone(u.Paths.Soft), func(p string) bool { return !slices.Contains(u.Paths.Write, p) }); len(soft) != len(u.Paths.Soft) {
 			u.Paths.Soft = soft
 			if len(soft) == 0 {
@@ -554,7 +560,15 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 	if ws, why := store.loadedWorkspace(); why == "" {
 		probe.Goals, probe.Paths.Write = goals, paths
 		if added, notes := lintGoals(ctx, store.root, probe, ws, store.checkGrader()); len(added) > 0 {
-			goals = append(slices.Clone(goals), added...)
+			modules := make([]job.Goal, len(added))
+			for i, g := range added {
+				m, err := g.Module()
+				if err != nil {
+					return nil, err
+				}
+				modules[i] = m
+			}
+			goals = append(slices.Clone(goals), modules...)
 			out := store.notices
 			if out == nil {
 				out = os.Stderr
@@ -663,7 +677,7 @@ func resultShape(row job.Job) string {
 		switch {
 		case goal.Kind != job.GoalKindCheck:
 		case goal.ID == job.PrimaryGoalID:
-			shape.Validation = job.ResultValidation{Command: CheckCommand(goal.Check), OutputRef: "<ref its run printed>"}
+			shape.Validation = job.ResultValidation{Command: renderGoalCheck(goal), OutputRef: "<ref its run printed>"}
 		default:
 			shape.VerificationEvidence = append(shape.VerificationEvidence, job.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
 		}
@@ -694,7 +708,7 @@ func RenderGoalCommands(out io.Writer, row job.Job) {
 	fmt.Fprintln(out, "goal commands")
 	for _, goal := range row.EffectiveGoals() {
 		if goal.Kind == job.GoalKindCheck {
-			fmt.Fprintf(out, "  %s: %s\n", goal.ID, CheckCommand(goal.Check))
+			fmt.Fprintf(out, "  %s: %s\n", goal.ID, renderGoalCheck(goal))
 		}
 	}
 	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), resultShape(row))

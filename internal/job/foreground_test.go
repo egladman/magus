@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types"
 )
 
 func lastRunTook(d time.Duration) LastRun {
@@ -22,7 +23,7 @@ func foregroundLimit(d time.Duration) ForegroundMax {
 func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "w", Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "w", Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
 	asked := func(project, target string) (time.Duration, bool) {
 		assert.Equal(t, ".", project)
 		assert.Equal(t, "go-test", target)
@@ -31,7 +32,7 @@ func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 
 	o, ok := OverrunsForeground(row, asked, foregroundLimit(10*time.Minute))
 	require.True(t, ok)
-	assert.Equal(t, ForegroundOverrun{Check: CheckCommand(*row.Check), LastRunMs: 840000, ForegroundMaxMs: 600000}, o)
+	assert.Equal(t, ForegroundOverrun{Check: CheckCommand(checkIn(t, row.Check)), LastRunMs: 840000, ForegroundMaxMs: 600000}, o)
 	assert.Contains(t, o.Check, "run go-test .")
 
 	var out bytes.Buffer
@@ -47,7 +48,7 @@ func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 func TestOverrunsForegroundIsFalseWhenNothingOverruns(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "w", Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "w", Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
 	for name, tc := range map[string]struct {
 		row     job.Job
 		lastRun LastRun
@@ -72,8 +73,8 @@ func TestOverrunsForegroundLooksPastACheckWithNoRecordedRun(t *testing.T) {
 
 	row := job.Job{
 		ID:    "w",
-		Check: &job.LeaseCheck{Target: "go-vet", Project: "."},
-		Goals: []job.Goal{{ID: "test", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "go-test", Project: "."}}},
+		Check: rawOf(types.LeaseCheck{Target: "go-vet", Project: "."}),
+		Goals: []job.Goal{{ID: "test", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}},
 	}
 	asked := 0
 	lastRun := func(_, target string) (time.Duration, bool) {

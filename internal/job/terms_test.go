@@ -163,7 +163,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 		{ID: "api", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Open"},
 			Signature: "func Open(root string) error", Description: "opens the ledger at root"},
 		{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"OpenLegacy"}},
-		{ID: "unit", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "unit", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})},
 	}
 	row.Breaks = []string{"--old-flag", "ledger.Open"}
 	facts := TermsFacts{

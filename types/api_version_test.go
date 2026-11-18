@@ -95,7 +95,7 @@ func (s *APIVersionSuite) TestRefuseVersionAcceptsItsOwnVersion() {
 
 func (s *APIVersionSuite) TestRefuseVersionNamesAMissingVersion() {
 	err := RefuseVersion(APIVersion(job.APIVersion), "", "the row", "delete the job store")
-	s.EqualError(err, "the row: record carries no apiVersion, and this reader reads only safetyscissors.job/v1alpha1: delete the job store")
+	s.EqualError(err, "the row: record carries no api_version, and this reader reads only safetyscissors.job/v1alpha1: delete the job store")
 }
 
 func (s *APIVersionSuite) TestRefuseVersionAsksForANewerMagus() {

@@ -112,8 +112,8 @@ func (m *KeptVerdicts) Judged() int {
 // linking its binary, so a worker the guard keeps from building can still run it. The
 // grader also judges it to tell a deny of the declared check from a deny of every command
 // the worker runs.
-func CompilingCheck() job.LeaseCheck {
-	return job.LeaseCheck{Target: "go::go-vet", Project: "."}
+func CompilingCheck() types.LeaseCheck {
+	return types.LeaseCheck{Target: "go::go-vet", Project: "."}
 }
 
 // humanOnlyRule is the guard rule that refuses a run of a target the workspace declares a
@@ -135,19 +135,24 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 	}
 	grader := store.checkGrader()
 	var (
-		graded []job.LeaseCheck
+		graded []types.LeaseCheck
 		ps     types.JobProblems
 	)
-	for _, goal := range row.EffectiveGoals() {
-		if goal.Kind != job.GoalKindCheck || goal.Check.Target == "" && goal.Check.Script == "" {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return types.JobProblems{unreadableCheckProblem(err)}
+	}
+	for _, gc := range checks {
+		goal, check := gc.Goal, gc.Check
+		if goal.Kind != job.GoalKindCheck || check.Target == "" && check.Script == "" {
 			continue
 		}
-		if slices.ContainsFunc(graded, func(c job.LeaseCheck) bool { return job.SameLeaseCheck(&c, &goal.Check) }) {
+		if slices.ContainsFunc(graded, func(c types.LeaseCheck) bool { return SameLeaseCheck(&c, &check) }) {
 			continue
 		}
-		graded = append(graded, goal.Check)
+		graded = append(graded, check)
 		pending := row
-		pending.Check = &goal.Check
+		pending.Check = goal.Check
 		verdict := grader(ctx, store.root, pending)
 		which := "check"
 		if goal.ID != job.PrimaryGoalID {
@@ -157,7 +162,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 			return ps
 		}
 		if verdict.NotGraded != "" {
-			p := ungradedCheckProblem(row.ID, which, goal.Check, verdict.NotGraded)
+			p := ungradedCheckProblem(row.ID, which, check, verdict.NotGraded)
 			p.Field = goalCheckField(row, goal)
 			if verdict.NotGraded == noGraderReason {
 				p.Fix = "open the job store with a Location that names its Grader, as magus's own doors do"
@@ -167,15 +172,22 @@ func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.J
 		if !verdict.Denied {
 			continue
 		}
-		p := deniedCheckProblem(row, which, goal.Check, verdict)
+		p := deniedCheckProblem(row, which, check, verdict)
 		p.Field = goalCheckField(row, goal)
 		ps = append(ps, p)
 	}
 	return ps
 }
 
+// unreadableCheckProblem is a row whose check does not read as a lease check, which no
+// store keeps: the record is refused rather than graded as checking nothing.
+func unreadableCheckProblem(err error) types.JobProblem {
+	return types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: err.Error(),
+		Fix: "write the check as {target, project, args, no_default_charms} or {script, args, test}"}
+}
+
 // ungradedCheckProblem words a check of row id the guard reached no verdict on, quoting why.
-func ungradedCheckProblem(id, which string, check job.LeaseCheck, why string) types.JobProblem {
+func ungradedCheckProblem(id, which string, check types.LeaseCheck, why string) types.JobProblem {
 	return types.JobProblem{
 		Code: types.JobUngraded,
 		Message: fmt.Sprintf("%s's %s `%s` could not be graded against the guard: %s,"+
@@ -211,7 +223,7 @@ func replacementCheckFix(row job.Job) string {
 // deniedCheckProblem words the problem with row's check. A target a person runs
 // can never be a worker's check, so that problem asks for another.
 // Any other deny gets [replacementCheckFix].
-func deniedCheckProblem(row job.Job, which string, check job.LeaseCheck, verdict CheckVerdict) types.JobProblem {
+func deniedCheckProblem(row job.Job, which string, check types.LeaseCheck, verdict CheckVerdict) types.JobProblem {
 	id := row.ID
 	reason := strings.Join(strings.Fields(verdict.Reason), " ")
 	if verdict.Rule == humanOnlyRule {

@@ -78,7 +78,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	// write paths with every check it runs for an update.
 	judged := merged
 	if updates {
-		ps = append(ps, newProblems(types.DeclarationProblems(rowDeclaration(prev)), types.DeclarationProblems(rowDeclaration(merged)))...)
+		ps = append(ps, newProblems(DeclarationProblems(rowDeclaration(prev)), DeclarationProblems(rowDeclaration(merged)))...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, droppedProblems(prev, merged)...)
 		var goals []job.Goal
@@ -99,7 +99,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 		// Judged on what the update changes, so a check the row already held never blocks an
 		// unrelated update: a new check or goal is graded against every write path, an old
 		// one only against the paths this update adds.
-		checkChanged := !job.SameLeaseCheck(prev.Check, merged.Check)
+		checkChanged := !sameStoredCheck(prev.Check, merged.Check)
 		newChecks := job.Job{ID: id, Paths: job.Paths{Write: merged.Paths.Write}, Goals: goals}
 		if checkChanged {
 			newChecks.Check = merged.Check
@@ -116,7 +116,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 			v.WriteProof = store.WriteProof(rows, merged)
 		}
 	} else {
-		ps = append(ps, types.DeclarationProblems(rowDeclaration(merged))...)
+		ps = append(ps, DeclarationProblems(rowDeclaration(merged))...)
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
@@ -189,7 +189,7 @@ func contendedFork(ctx context.Context, store *Store, rows []job.Job, id string,
 	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
 		return types.JobValidation{}, false
 	}
-	ps := slices.Concat(types.DeclarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
+	ps := slices.Concat(DeclarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
 		claimCeilingProblems(merged, limits), directoryWritePathProblems(store, merged), contended)
 	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
@@ -229,7 +229,7 @@ func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitte
 // wrote. A file not yet tracked stays, since the args are fixed at fork time and a path the
 // worker will create is untracked then. The notes say how many files were left out, or that
 // the VCS could not be asked and every file was kept.
-func lintGoals(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (goals []job.Goal, notes []string) {
+func lintGoals(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (goals []types.Goal, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
 		return nil, nil
 	}
@@ -599,7 +599,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []job.Job, merged
 	writes := !judged.ReadOnly && len(judged.Paths.Write) > 0
 	if why != "" {
 		var unchecked []string
-		if slices.ContainsFunc(judged.EffectiveGoals(), func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && g.Check.Target != "" }) {
+		if slices.ContainsFunc(judged.EffectiveGoals(), func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && job.HasCheck(g.Check) }) {
 			unchecked = append(unchecked, "the check's project, target and test-selection semantics: "+why)
 		}
 		if writes {
@@ -644,12 +644,17 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		ps        types.JobProblems
 		unchecked []string
 	)
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != job.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
+	checks, err := effectiveChecks(row)
+	if err != nil {
+		return types.JobProblems{unreadableCheckProblem(err)}, nil
+	}
+	for _, gc := range checks {
+		g, check := gc.Goal, gc.Check
+		if g.Kind != job.GoalKindCheck || check.Script != "" || check.Target == "" {
 			continue
 		}
 		field := goalCheckField(row, g)
-		project := cmp.Or(strings.TrimSpace(g.Check.Project), ".")
+		project := cmp.Or(strings.TrimSpace(check.Project), ".")
 		i := slices.IndexFunc(ws.Projects, func(p *types.Project) bool { return p.Path == project })
 		if i < 0 {
 			paths := make([]string, len(ws.Projects))
@@ -659,15 +664,15 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			slices.Sort(paths)
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".project",
-				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(g.Check), project),
+				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(check), project),
 				Fix:     "name one of its projects: " + listNames(paths),
 			})
 			continue
 		}
 		p := ws.Projects[i]
-		spell, name, qualified := strings.Cut(g.Check.Target, "::")
+		spell, name, qualified := strings.Cut(check.Target, "::")
 		if !qualified {
-			spell, name = "", g.Check.Target
+			spell, name = "", check.Target
 		}
 		name, _, _ = strings.Cut(name, ":")
 		name = types.Normalize(name)
@@ -675,7 +680,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			continue
 		}
 		if spellsUnresolved(p) {
-			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", CheckCommand(g.Check), project))
+			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", CheckCommand(check), project))
 			continue
 		}
 		var targets []string
@@ -695,7 +700,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		if spell != "" && !bound {
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".target",
-				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(g.Check), spell, project),
+				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(check), spell, project),
 				Fix:     "name a spell it binds: " + listNames(p.Spells),
 			})
 			continue
@@ -706,7 +711,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		slices.Sort(targets)
 		ps = append(ps, types.JobProblem{
 			Code: types.JobCheckUnrunnable, Field: field + ".target",
-			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(g.Check), name, project),
+			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(check), name, project),
 			Fix:     "name one of its targets: " + listNames(slices.Compact(targets)),
 		})
 	}
@@ -780,9 +785,11 @@ func rowDeclaration(row job.Job) job.Declaration {
 	// A row stored before the check record carries only the rendered line; one it could not
 	// parse was refused at the door, so a line that fails here declares no check.
 	rec.Check = row.Check
-	if row.Check == nil && strings.TrimSpace(row.Validation) != "" {
+	if !job.HasCheck(row.Check) && strings.TrimSpace(row.Validation) != "" {
 		if c, err := ParseCheckCommand(row.Validation); err == nil {
-			rec.Check = &c
+			if raw, err := types.EncodeLeaseCheck(c); err == nil {
+				rec.Check = raw
+			}
 		}
 	}
 	return rec

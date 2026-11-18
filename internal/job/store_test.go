@@ -569,7 +569,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	t.Parallel()
 
-	check := job.LeaseCheck{Target: "go-test", Project: "."}
+	check := types.LeaseCheck{Target: "go-test", Project: "."}
 	for _, tc := range []struct {
 		name  string
 		fork  func(t *testing.T, s *Store, checkpoint string) (job.Job, error)
@@ -607,7 +607,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Agent:        job.Instructed("goal"),
 				Checkpoint:   head,
 				Paths:        job.Paths{Write: []string{"a.go"}},
-				Check:        &check,
+				Check:        rawOf(check),
 				Validation:   CheckCommand(check),
 				State:        job.StateDeclared,
 				WriteProof:   tc.proof,
@@ -680,15 +680,15 @@ func storedStatus(t *testing.T, path, id string) map[string]any {
 func recordLine(id, condition, reason, spec, status string) string {
 	conditions := ""
 	if condition != "" {
-		conditions = fmt.Sprintf(`"conditions":[{"type":%q,"status":"True","lastTransitionTime":"1970-01-01T00:00:01Z","reason":%q,"message":""}],`, condition, reason)
+		conditions = fmt.Sprintf(`"conditions":[{"type":%q,"status":"True","last_transition_time":"1970-01-01T00:00:01Z","reason":%q,"message":""}],`, condition, reason)
 	}
-	return fmt.Sprintf(`{"apiVersion":%q,"kind":"Job","metadata":{"name":%q},"spec":{%s},"status":{%s"created":1,"updated":1%s}}`,
+	return fmt.Sprintf(`{"api_version":%q,"kind":"Job","metadata":{"name":%q},"spec":{%s},"status":{%s"created":1,"updated":1%s}}`,
 		job.APIVersion, id, spec, conditions, status)
 }
 
 // headerLine is the JobList line at this build's migration.
 func headerLine(extra string) string {
-	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":%d%s}`, job.APIVersion, len(jobMigrations()), extra)
+	return fmt.Sprintf(`{"api_version":%q,"kind":"JobList","migration":%d%s}`, job.APIVersion, len(jobMigrations()), extra)
 }
 
 // A row a newer magus wrote is an ordinary row to this one: updating it or any other row
@@ -790,7 +790,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	commit, _ := buildinfo.Commit()
 
 	assert.Equal(t, []map[string]any{{
-		"apiVersion": string(job.APIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
+		"api_version": string(job.APIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
 		"plan": "p1", "retained": float64(1_700_000_000), "writer": map[string]any{"version": buildinfo.UnknownVersion, "commit": commit},
 	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention and writer stamps ride in it")
 }
@@ -813,8 +813,8 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	require.Len(t, after, len(before)+1, "one line appended, nothing rewritten")
 	assert.Equal(t, before, after[:len(before)])
 	assert.Equal(t, "a", after[len(before)]["metadata"].(map[string]any)["name"])
-	assert.Equal(t, map[string]any{"instructions": "moved", "worker": map[string]any{"type": "Resumed"}},
-		after[len(before)]["spec"].(map[string]any)["agent"], "enum values are CamelCase on the record")
+	assert.Equal(t, map[string]any{"instructions": "moved", "worker": map[string]any{"type": "resumed"}},
+		after[len(before)]["spec"].(map[string]any)["agent"], "enum values are their Go values on the record")
 
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
@@ -1483,7 +1483,7 @@ func renamed(from, to string) migrate.Migration {
 // unmigrated is a header behind every migration, and row a running
 // with spec member name.
 func unmigrated(name string) string {
-	return fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion,
+	return fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion,
 		recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), ""))
 }
 
@@ -1517,7 +1517,7 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 }
 
 func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
+	body := fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
@@ -1531,7 +1531,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
+	body := fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, _ := s.migratingStore(body, renamed("goal", "parent"))
 
 	_, err := st.Read(s.T().Context())
@@ -1582,7 +1582,7 @@ func behindStore(t *testing.T, root string) (*Store, string, *bytes.Buffer) {
 	notices := &bytes.Buffer{}
 	st = st.withMigrations([]migrate.Migration{renamed("goal", "parent")})
 	st.notices = notices
-	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion, line)), notices
+	return st, plantRaw(t, st, fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion, line)), notices
 }
 
 // agentSectionSuite pins the migration that moves a row's flat model,
@@ -1675,7 +1675,7 @@ func (s *workerResumedSuite) TestAResumeWorkerBecomesResumed() {
 	row, stored := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,` +
 		`"agent":{"instructions":"ship it","worker":{"type":"resume"}}}`)
 	s.Equal(&job.Agent{Instructions: "ship it", Worker: job.Worker{Type: job.WorkerTypeResumed}}, row.Agent)
-	s.Equal(map[string]any{"type": "Resumed"}, stored["agent"].(map[string]any)["worker"], "the file holds the new spelling, CamelCase")
+	s.Equal(map[string]any{"type": "resumed"}, stored["agent"].(map[string]any)["worker"], "the file holds the new spelling")
 }
 
 func (s *workerResumedSuite) TestANewWorkerKeepsItsReason() {
@@ -1707,7 +1707,7 @@ func (s *StaleStampSuite) SetupTest() {
 func (s *StaleStampSuite) TestRefusesAnIntegerRow() {
 	plantRaw(s.T(), s.store, `{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}`)
 	_, err := s.store.List(s.T().Context())
-	s.ErrorContains(err, "record carries no apiVersion")
+	s.ErrorContains(err, "record carries no api_version")
 	s.ErrorContains(err, fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", s.store.path))
 }
 
@@ -1822,14 +1822,14 @@ type checkArgvSuite struct{ suite.Suite }
 func TestCheckArgv(t *testing.T) { suite.Run(t, new(checkArgvSuite)) }
 
 func (s *checkArgvSuite) TestATargetCheckRunsThroughMagusRun() {
-	got := checkArgv(job.LeaseCheck{Target: "test", Args: []string{"-run", "TestA B"}, NoDefaultCharms: true})
+	got := checkArgv(types.LeaseCheck{Target: "test", Args: []string{"-run", "TestA B"}, NoDefaultCharms: true})
 
 	s.Equal([]string{hint.BinaryName(), "run", "test", ".", "--no-default-charms", "--", "-run", "TestA B"}, got)
 }
 
 func (s *checkArgvSuite) TestAScriptCheckRunsRecordedOrItsTests() {
-	s.Equal([]string{hint.BinaryName(), "buzz", "--record", "probe.buzz"}, checkArgv(job.LeaseCheck{Script: "probe.buzz"}))
-	s.Equal([]string{hint.BinaryName(), "buzz", "-t", "probe.buzz", "--", "x"}, checkArgv(job.LeaseCheck{Script: "probe.buzz", Test: true, Args: []string{"x"}}))
+	s.Equal([]string{hint.BinaryName(), "buzz", "--record", "probe.buzz"}, checkArgv(types.LeaseCheck{Script: "probe.buzz"}))
+	s.Equal([]string{hint.BinaryName(), "buzz", "-t", "probe.buzz", "--", "x"}, checkArgv(types.LeaseCheck{Script: "probe.buzz", Test: true, Args: []string{"x"}}))
 }
 
 func (s *checkArgvSuite) TestAStoreWithNoCheckoutHasNoCommand() {

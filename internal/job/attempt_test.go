@@ -169,7 +169,7 @@ func (s *attemptStoreSuite) TestADroppedRowTakesItsTriesWithIt() {
 func (s *attemptStoreSuite) TestALineAnotherVersionWroteIsRefused() {
 	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(os.WriteFile(path, []byte(`{"apiVersion":"batch.magus/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
+	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"batch.magus/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
 
 	_, err := s.store.Attempts(s.T().Context())
 
@@ -186,12 +186,12 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 	var line map[string]any
 	s.Require().NoError(codec.Unmarshal([]byte(strings.TrimSpace(string(raw))), &line))
 	s.Equal(map[string]any{
-		"apiVersion": "safetyscissors.job/v1alpha1", "kind": "Attempt",
+		"api_version": "safetyscissors.job/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": "a", "n": float64(1)},
-		"status": map[string]any{"ended": float64(30), "end": "Exit", "result": map[string]any{
-			"job": "a", "changedPaths": []any{"a.go"}, "unresolvedRisks": nil,
+		"status": map[string]any{"ended": float64(30), "end": "exit", "result": map[string]any{
+			"job": "a", "changed_paths": []any{"a.go"}, "unresolved_risks": nil,
 		}},
-	}, line, "camelCase keys, CamelCase enum values")
+	}, line, "snake_case keys, Go enum values")
 }
 
 // An attempts.jsonl an older magus wrote takes the envelope once, and a
@@ -213,7 +213,7 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	s.Equal(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, got[0])
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
-	s.Contains(string(raw), `"jobState":"NoReturn"`)
+	s.Contains(string(raw), `"job_state":"no_return"`)
 	s.Contains(string(raw), `"dropped":true`)
 }
 
