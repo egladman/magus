@@ -97,12 +97,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	flagArgs, extraArgs := commands.SplitOnDashDash(rest)
 
 	var af *flaggen.AffectedFlags
-	_, err := commandParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
+	operands, err := commandParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		af = flaggen.BindAffected(fs)
 		fs.Usage = func() {
-			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
+			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [projects...] [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "Run target %s for every project affected by VCS changes.\n", target)
+			fmt.Fprintln(os.Stderr, "Named projects keep only the affected ones among them; / names them all.")
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -135,6 +136,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	if af.Stdin && af.Base != "" {
 		return fmt.Errorf("magus affected: --stdin and --base are mutually exclusive")
+	}
+	if len(operands) > 0 && (af.Stdin || af.Graph) {
+		return exit.Usagef("magus affected: project operands are not supported with --stdin or --graph")
 	}
 
 	if af.Graph {
@@ -203,6 +207,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
+		if targets, err = narrowAffected(ctx, ws, target, targets, operands); err != nil {
+			return err
+		}
 		describe.ListTargets(ctx, "affected:ls", targets, source)
 		// The listing is one path per line whatever -o says, so the breadcrumbs print
 		// only for the text reader; a caller parsing names must not find a next: block.
@@ -241,6 +248,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
+		return err
+	}
+	if targets, err = narrowAffected(ctx, m, target, targets, operands); err != nil {
 		return err
 	}
 	// Name the projects, with the count after them. "3 projects" told a reader how many
@@ -297,7 +307,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	// Sized once the gate is going to run. A trivial change is proven to need no gate,
 	// which is a verdict on the change rather than a deferral, so it exits 0.
-	sized := gate.Size(ctx, af.Base, !af.RedundancyCheck)
+	// A sized gate carries its own project sets, so it would run past a named filter.
+	var sized *types.TierReport
+	if len(operands) == 0 {
+		sized = gate.Size(ctx, af.Base, !af.RedundancyCheck)
+	}
 	if sized != nil {
 		slog.InfoContext(ctx, internalci.RenderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == check.RiskTrivial {
@@ -417,6 +431,24 @@ func withCharms(opts []magus.RunOption, charms []string) []magus.RunOption {
 	return append(slices.Clip(opts), magus.WithCharms(charms...))
 }
 
+// narrowAffected keeps the affected targets whose project the operands name, the
+// same grammar as `magus run <target> <projects>`. No operand, or "/", is no filter.
+// An operand that names no workspace project is an error rather than an empty set.
+func narrowAffected(ctx context.Context, ws types.WorkspaceRepository, target string, affected []types.Target, operands []string) ([]types.Target, error) {
+	if len(operands) == 0 || slices.Contains(operands, "/") {
+		return affected, nil
+	}
+	named, _, err := resolveTargets(ctx, ws, types.Target{Name: target}, runSelection{projects: operands, cwd: clientCurrentWorkingDirectory(ctx)})
+	if err != nil {
+		return nil, err
+	}
+	want := make(map[string]bool, len(named))
+	for _, t := range named {
+		want[t.Path] = true
+	}
+	return slices.DeleteFunc(slices.Clone(affected), func(t types.Target) bool { return !want[t.Path] }), nil
+}
+
 func affectedMissingTargetUsage() {
 	fmt.Fprintf(os.Stderr, "magus affected: a target is required (e.g. `%s`)\n", hint.Affected.With("ci"))
 	fmt.Fprintln(os.Stderr, "")
@@ -424,7 +456,7 @@ func affectedMissingTargetUsage() {
 }
 
 func affectedUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus affected <target> [--base <ref>] [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus affected <target> [projects...] [--base <ref>] [flags]")
 	fmt.Fprintln(os.Stderr, "       magus affected --explain <project> [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected --impact [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected <target> --plan [--max-shards N]")
