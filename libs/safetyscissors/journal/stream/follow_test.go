@@ -3,6 +3,7 @@ package stream
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -151,6 +152,36 @@ func (s *FollowerSuite) TestMissingDirectoryIsNotAnError() {
 	var got []Event
 	s.Require().NoError(f.Replay(s.T().Context(), 0, collect(&got)))
 	s.Empty(got)
+}
+
+func (s *FollowerSuite) TestFollowRefusesANonPositiveInterval() {
+	f := NewFollower(s.T().TempDir(), "/repo")
+	s.ErrorContains(f.Follow(s.T().Context(), 0, collect(new([]Event))), "must be positive")
+}
+
+func (s *FollowerSuite) TestFollowReturnsALogThatDoesNotRead() {
+	dir := s.T().TempDir()
+	f := NewFollower(dir, "/repo")
+	s.Require().NoError(f.Skip())
+	s.writeLog(dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
+	s.Require().NoError(os.Chmod(filepath.Join(dir, "inv1.jsonl"), 0))
+
+	ctx, cancel := context.WithTimeout(s.T().Context(), 3*time.Second)
+	defer cancel()
+	s.ErrorIs(f.Follow(ctx, 10*time.Millisecond, collect(new([]Event))), fs.ErrPermission)
+}
+
+// TestDrainForgetsARemovedLog: rotation removes logs between a listing and
+// its read.
+func (s *FollowerSuite) TestDrainForgetsARemovedLog() {
+	dir := s.T().TempDir()
+	s.writeLog(dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
+	f := NewFollower(dir, "/repo")
+	s.Require().NoError(f.Skip())
+	s.Require().NoError(os.Remove(filepath.Join(dir, "inv1.jsonl")))
+
+	s.Require().NoError(f.drain(s.T().Context(), "inv1.jsonl", collect(new([]Event))))
+	s.NotContains(f.offsets, "inv1.jsonl")
 }
 
 // TestFollowPicksUpANewInvocation: a run started by ANOTHER process reaches

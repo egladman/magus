@@ -3,12 +3,15 @@ package stream
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
@@ -102,15 +105,15 @@ func (f *Follower) skip(names []string) {
 
 // Follow polls the run-log directory every interval and emits what appears,
 // blocking until ctx is cancelled. It returns nil on cancellation: a follower
-// stopping because it was asked to is not a failure.
+// stopping because it was asked to is not a failure. An interval of zero or
+// less is an error.
 //
 // An emit error stops the follow and is returned: that is the subscriber's pipe
-// closing, and continuing to read a directory nobody is listening to is waste. A
-// read error on one log is skipped rather than fatal, because a log being written
-// concurrently is the normal case.
+// closing. So is a directory or a log that does not read. A log removed between
+// the listing and its read is passed over, since rotation removes logs.
 func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func(Event) error) error {
 	if interval <= 0 {
-		interval = 250 * time.Millisecond
+		return fmt.Errorf("follow %s: the poll interval must be positive, got %s", f.dir, interval)
 	}
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
@@ -121,10 +124,13 @@ func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func
 		case <-tick.C:
 			logs, err := f.logs()
 			if err != nil {
-				continue
+				return err
 			}
 			for _, name := range logs {
 				if err := f.drain(ctx, name, emit); err != nil {
+					if ctx.Err() != nil {
+						return nil
+					}
 					return err
 				}
 			}
@@ -153,8 +159,11 @@ func (f *Follower) logs() ([]string, error) {
 			continue
 		}
 		info, err := e.Info()
-		if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
+		}
+		if err != nil {
+			return nil, err
 		}
 		found = append(found, stamped{e.Name(), info.ModTime()})
 	}
@@ -167,19 +176,26 @@ func (f *Follower) logs() ([]string, error) {
 }
 
 // drain reads whatever is new in one log and emits it, advancing the stored
-// offset to the last COMPLETE line. A log that does not read is left for the
-// next poll.
+// offset to the last COMPLETE line. A log that is gone is forgotten; any other
+// read failure is the error.
 func (f *Follower) drain(ctx context.Context, name string, emit func(Event) error) error {
 	records, next, err := journal.RecordsSince(ctx, f.dir, strings.TrimSuffix(name, runLogExt), f.offsets[name])
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
+		delete(f.offsets, name)
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	f.offsets[name] = next
 	for r, err := range records {
 		// A line that does not decode is skipped here and nowhere else: magus
 		// doctor reads with Records and reports it.
-		if err != nil {
+		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
+		}
+		if err != nil {
+			return err
 		}
 		se, ok := fromJournal(f.workspace, r)
 		if !ok {
