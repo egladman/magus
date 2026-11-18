@@ -322,6 +322,6 @@ spec disagreed the ceiling won, ruled by Eli on 11-18.
   `internal/recorder`, and `NewFactHandler`, `ActivityCall`, `ActivitySpawn` and
   `ReadActivity` in `internal/sessions`. A caller outside reads a session's activity
   through `sessions.ActivityHere`.
-- `internal/recorder/feedback_shape.go` folds into `feedback.go`,
-  `internal/sessions/prompt_cache.go` into `prompt.go`, and `feedback_marks.go` is
-  `marks.go`, as the file-split check asks of a file the fold created.
+- The command shapes fold into `internal/recorder/feedback.go`, the prompt-cache clock
+  into `internal/sessions/prompt.go`, and the feedback marks are
+  `internal/recorder/marks.go`, as the file-split check asks of a file the fold created.
