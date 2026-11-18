@@ -17,9 +17,10 @@
   writers are in `internal/recorder`: `Append` is `AppendCall`, `WriteBlob` is
   `WritePayload`, `Rotate`, `Stat` and `LastRun` are `RotateCalls`, `StatCalls` and
   `LastJob`, and `Emit` hands each `Sink` a `journal.Record`. `recorder.Calls` and
-  `ReadPayload` read the activity log under a cache base. The session views are in
-  `internal/sessions`: `SessionTrail` is `Activity`, `ForSession` is `ActivityHere`,
-  `SessionCost` is `Cost` and `WithInvocationJournal` is `WithInvocationFacts`.
+  `ReadPayload` read the activity log under a cache base.
+- **Breaking for SDK callers: the session views are in `internal/sessions`.**
+  `SessionTrail` is `Activity`, `ForSession` is `ActivityHere`, `SessionCost` is `Cost`
+  and `WithInvocationJournal` is `WithInvocationFacts`.
 - **Breaking for SDK callers: `(*SafetyScissors).Trail` is `Calls`.** It returns
   `iter.Seq2[journal.Call, error]` over `journal.Calls`, and `Dirs.Trail` is
   `Dirs.Activity`, the `activity/` directory itself rather than the one that holds it.
