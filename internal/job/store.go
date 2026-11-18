@@ -614,14 +614,16 @@ func (w storeWriter) named() string {
 	return fmt.Sprintf(" (%s wrote it last)", w)
 }
 
-// runningBuild is this binary's build identity: what the command stamped on ctx, its
-// commit read off the binary when ctx carries none.
+// runningBuild is this binary's build identity: what ctx carries, else [buildinfo.Self].
+// Every door that opens a store reads the binary's own stamp this way, whether or not
+// its ctx descends from the one main stamped.
 func runningBuild(ctx context.Context) types.MagusBuild {
 	b := types.MagusBuildFromContext(ctx)
-	if b.Commit == "" {
-		b.Commit, b.Date = buildinfo.Commit()
+	if b == (types.MagusBuild{}) {
+		b = buildinfo.Self()
 	}
 	b.Version = cmp.Or(b.Version, buildinfo.UnknownVersion)
+	b.Commit = cmp.Or(b.Commit, buildinfo.UnknownVersion)
 	return b
 }
 
@@ -767,10 +769,14 @@ type offBaseMigrationError struct {
 
 func (e *offBaseMigrationError) Error() string {
 	base := cmp.Or(e.Base, "the base")
+	self := storeWriter{Version: e.Build.Version, Commit: e.Build.Commit}.String()
+	if e.Build.Source == types.BuildSourceVCS {
+		self += ", read from Go's VCS stamp because it carries no magus version stamp"
+	}
 	return fmt.Sprintf("job: job store %s is at migration %d, and this magus (%s) writes migration %d, but %s:"+
 		" every checkout and branch shares the store, and once migrated every magus built on %s refuses it as newer, so nothing was read or written%s:"+
 		" rebuild magus from %s, or run this binary under its own XDG_STATE_HOME",
-		e.Path, e.Found, storeWriter{Version: e.Build.Version, Commit: e.Build.Commit}, e.Known, e.Why, base, e.Last.named(), base)
+		e.Path, e.Found, self, e.Known, e.Why, base, e.Last.named(), base)
 }
 
 // refuseOffBase refuses migrating the file at path forward from migration found unless
@@ -804,10 +810,14 @@ func (s *Store) refuseOffBase(ctx context.Context, path string, found int, last 
 	switch {
 	case res.Base == "":
 		return refused("", "%s names no base branch", res.Name)
-	case build.Commit == "" || build.Commit == buildinfo.UnknownVersion:
-		return refused(res.Base, "this binary carries no build commit, so nothing says %s contains it", res.Base)
-	case strings.HasSuffix(build.Version, "-dirty") || buildinfo.Modified():
-		return refused(res.Base, "this binary was built from a modified tree, and no commit holds what it was built from")
+	case build.Source == types.BuildSourceNone || build.Commit == buildinfo.UnknownVersion:
+		return refused(res.Base, "this binary's build identity could not be read: it carries no magus version stamp and no Go VCS stamp, so nothing says %s contains it;"+
+			" build magus with `./magus run go-build .` or `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here`", res.Base)
+	case build.Dirty && build.Source == types.BuildSourceVCS:
+		return refused(res.Base, "this binary carries no magus version stamp, and Go's VCS stamp says it was built from a modified tree;"+
+			" that stamp can name another revision and a modified tree in a linked git worktree, so build magus with `./magus run go-build .` to stamp it")
+	case build.Dirty:
+		return refused(res.Base, "this binary was built from a modified tree (its version %s says so), and no commit holds what it was built from", build.Version)
 	}
 	base, err := res.VCS.FindCommit(ctx, root, res.Base)
 	if err != nil {
@@ -819,6 +829,9 @@ func (s *Store) refuseOffBase(ctx context.Context, path string, found int, last 
 		return refused(res.Base, "%s cannot say whether %s at %s contains commit %.12s (%v)", res.Name, res.Base, shortRevision(base), build.Commit, err)
 	case !contained:
 		return refused(res.Base, "%s at %s does not contain commit %.12s, which built it", res.Base, shortRevision(base), build.Commit)
+	}
+	if build.Source == types.BuildSourceVCS {
+		fmt.Fprintf(s.noticeWriter(), "job: this magus carries no magus version stamp, so its build commit %.12s was read from Go's VCS stamp before it migrated job store %s\n", build.Commit, path)
 	}
 	return nil
 }

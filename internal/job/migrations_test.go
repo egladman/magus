@@ -212,7 +212,7 @@ func (s *rootlessMigrationSuite) TestAWorkingDirectoryOnABranchIsRefused() {
 	s.T().Chdir(repo.Root())
 	st, _, _ := behindStore(s.T(), "")
 
-	_, err := st.Read(types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v1", Commit: branch}))
+	_, err := st.Read(types.WithMagusBuild(s.T().Context(), types.StampedBuild("v1", branch, "")))
 
 	_, ok := errors.AsType[*offBaseMigrationError](err)
 	s.True(ok, "%v", err)
@@ -388,9 +388,19 @@ func (s *baseFenceSuite) SetupTest() {
 	s.branch = s.repo.Commit("branch work", map[string]string{"b.txt": "b\n"})
 }
 
-// built is a context whose binary was built at version from commit.
+// built is a context whose binary go-build stamped with version and commit.
 func (s *baseFenceSuite) built(version, commit string) context.Context {
-	return types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: version, Commit: commit})
+	return types.WithMagusBuild(s.T().Context(), types.StampedBuild(version, commit, ""))
+}
+
+// unstamped is a context whose binary carries no magus stamp, only Go's VCS stamp of
+// commit, modified or not; commit "" carries none either.
+func (s *baseFenceSuite) unstamped(commit string, modified bool) context.Context {
+	b := types.MagusBuild{Version: "unknown", Commit: "unknown"}
+	if commit != "" {
+		b.Commit, b.Source, b.Dirty = commit, types.BuildSourceVCS, modified
+	}
+	return types.WithMagusBuild(s.T().Context(), b)
 }
 
 // refused asserts a read and a write of the store at path under ctx are refused as off
@@ -432,7 +442,7 @@ func (s *baseFenceSuite) TestABranchBinaryIsRefused() {
 		fmt.Sprintf("origin/main at %s does not contain commit %.12s, which built it", s.repo.Git("rev-parse", "--short", s.base), s.branch))
 
 	s.Equal(&offBaseMigrationError{
-		Path: path, Found: 0, Known: 1, Build: types.MagusBuild{Version: "v0.4.3-1-gfeat", Commit: s.branch}, Base: "origin/main",
+		Path: path, Found: 0, Known: 1, Build: types.StampedBuild("v0.4.3-1-gfeat", s.branch, ""), Base: "origin/main",
 		Why: fmt.Sprintf("origin/main at %s does not contain commit %.12s, which built it", s.repo.Git("rev-parse", "--short", s.base), s.branch),
 	}, off)
 	s.Contains(off.Error(), "(its header names no writer")
@@ -452,13 +462,53 @@ func (s *baseFenceSuite) TestTheRefusalNamesTheLastWriter() {
 func (s *baseFenceSuite) TestABinaryWithNoBuildCommitIsRefused() {
 	st, path, _ := behindStore(s.T(), s.repo.Root())
 
-	s.refused(s.built("v0.4.3", "unknown"), st, path, "this binary carries no build commit, so nothing says origin/main contains it")
+	s.refused(s.built("v0.4.3", "unknown"), st, path, "this binary's build identity could not be read")
 }
 
-func (s *baseFenceSuite) TestABinaryBuiltFromAModifiedTreeIsRefused() {
+func (s *baseFenceSuite) TestAStampedBinaryBuiltFromAModifiedTreeIsRefused() {
 	st, path, _ := behindStore(s.T(), s.repo.Root())
 
-	s.refused(s.built("v0.4.3-dirty", s.base), st, path, "this binary was built from a modified tree")
+	s.refused(s.built("v0.4.3-dirty", s.base), st, path, "this binary was built from a modified tree (its version v0.4.3-dirty says so)")
+}
+
+// Go's VCS stamp of a build in a linked worktree can say modified for a clean tree, so it
+// never speaks for a binary go-build stamped.
+func (s *baseFenceSuite) TestAStampedCleanBinaryIgnoresTheVCSStamp() {
+	st, path, notices := behindStore(s.T(), s.repo.Root())
+
+	_, err := st.Read(s.built("v0.5.0-rc.3-205-g"+s.base[:9], s.base))
+
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.NotContains(notices.String(), "VCS stamp")
+}
+
+func (s *baseFenceSuite) TestAnUnstampedBinaryOnTheBaseMigratesAndSaysItFellBack() {
+	st, path, notices := behindStore(s.T(), s.repo.Root())
+
+	_, err := st.Read(s.unstamped(s.base, false))
+
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Contains(notices.String(), fmt.Sprintf("job: this magus carries no magus version stamp, so its build commit %.12s was read from Go's VCS stamp before it migrated job store %s\n", s.base, path))
+}
+
+func (s *baseFenceSuite) TestAnUnstampedModifiedBinaryIsRefusedAndSaysItFellBack() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	off := s.refused(s.unstamped(s.base, true), st, path, "this binary carries no magus version stamp, and Go's VCS stamp says it was built from a modified tree")
+
+	s.Contains(off.Error(), "read from Go's VCS stamp because it carries no magus version stamp")
+	s.Contains(off.Error(), "./magus run go-build .")
+}
+
+func (s *baseFenceSuite) TestABinaryWithNoStampAtAllIsRefusedNamingTheBuild() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	off := s.refused(s.unstamped("", false), st, path, "this binary's build identity could not be read: it carries no magus version stamp and no Go VCS stamp")
+
+	s.Contains(off.Error(), "build magus with `./magus run go-build .` or `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here`")
+	s.NotContains(off.Error(), "modified tree")
 }
 
 func (s *baseFenceSuite) TestACommitTheRepositoryLacksIsRefused() {
@@ -759,7 +809,7 @@ func (s *snakeStoreSuite) planted() (st *Store, jobs, attempts string) {
 
 func (s *snakeStoreSuite) TestTheStoreReadsAfterItsLinesAreRespelled() {
 	st, jobs, attempts := s.planted()
-	ctx := types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.4.3", Commit: s.base})
+	ctx := types.WithMagusBuild(s.T().Context(), types.StampedBuild("v0.4.3", s.base, ""))
 
 	f, err := st.Read(ctx)
 
@@ -796,7 +846,7 @@ func (s *snakeStoreSuite) TestAValueNoListSpellsLeavesTheStoreAsItWas() {
 	before, err := os.ReadFile(jobs)
 	s.Require().NoError(err)
 
-	_, err = st.Read(types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.4.3", Commit: s.base}))
+	_, err = st.Read(types.WithMagusBuild(s.T().Context(), types.StampedBuild("v0.4.3", s.base, "")))
 
 	var unplaced *unplacedEnumError
 	s.Require().ErrorAs(err, &unplaced)

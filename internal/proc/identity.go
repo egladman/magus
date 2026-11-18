@@ -1,9 +1,8 @@
 package proc
 
 import (
-	"runtime/debug"
-
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/types"
 )
 
 // This file computes the ADOPTION IDENTITY: the version string a magus build sends over
@@ -15,20 +14,29 @@ import (
 // (devVersionSentinel), so the server gate (a plain string equality) treats EVERY dev
 // build as identical to every other. A stale dev server left running from an old, since-
 // deleted binary would then adopt runs from an unrelated newer dev client and execute
-// them with the wrong code. Fingerprinting each dev build from its embedded VCS stamp
-// makes builds of different revisions (and every dirty build) refuse to adopt each other.
+// them with the wrong code. Fingerprinting each dev build from its build commit makes
+// builds of different revisions (and every dirty build) refuse to adopt each other.
 
-// devVersionSentinel is the placeholder main.version carries in an unstamped dev build:
-// `go build`/`go run ./cmd/magus` without `-ldflags "-X main.version=..."`. Every RELEASE
-// build is stamped with a real version (git describe) by the magusfile, so any value
-// other than this exact string is a stamped release and passes the gate on its version as
-// before. Keep in sync with the default of `version` in cmd/magus/version.go.
+// devVersionSentinel is the placeholder buildinfo's version carries in an unstamped dev
+// build: `go build`/`go run ./cmd/magus` without `-ldflags "-X .../buildinfo.version=..."`.
+// Every RELEASE build is stamped with a real version (git describe) by the magusfile, so
+// any value other than this exact string is a stamped release and passes the gate on its
+// version as before. Keep in sync with buildinfo.UnknownVersion.
 const devVersionSentinel = "unknown"
 
-// adoptionIdentity maps a build's DISPLAY version to the identity used for the server
-// adoption gate. Client and server both run it over their own build, so two builds adopt
-// each other only when their identities are equal. It is total and deterministic per
-// process:
+// adoptionIdentity is [gateIdentity] of displayVersion for this binary's build,
+// [buildinfo.Self].
+func adoptionIdentity(displayVersion string) string {
+	return gateIdentity(displayVersion, buildinfo.Self())
+}
+
+// gateIdentity maps a build's DISPLAY version to the identity used for the server
+// adoption gate, judging the build b by its linker stamp first and Go's VCS stamp only
+// when no stamp exists ([buildinfo.Self]): a build in a linked git worktree records
+// another revision and a modified tree in Go's VCS stamp, which would give a clean
+// stamped build a per-file identity. Client and server both run it over their own build,
+// so two builds adopt each other only when their identities are equal. It is total and
+// deterministic per process:
 //
 //   - "" passes through unchanged. An empty identity on either side disables the gate; it
 //     is the test-injection / pre-versioning escape hatch (see service.versionAdmits).
@@ -38,10 +46,11 @@ const devVersionSentinel = "unknown"
 //     with old code; the executable-file identity admits only the byte-identical binary.
 //   - A stamped release version (anything but devVersionSentinel) passes through unchanged,
 //     so releases keep matching on their exact version.
-//   - The dev sentinel is replaced by a build fingerprint: "dev-<revision>" for a CLEAN
-//     build carrying VCS info (two clean builds of one commit are provably the same code
-//     and DO adopt each other, preserving the run-a-server-then-adopt-into-it workflow),
-//     or the per-process [buildinfo.Unverifiable] token for a VCS-less build (never matches:
+//   - The dev sentinel is replaced by a build fingerprint: "dev-<commit>" for a CLEAN
+//     build whose commit is known, from the stamp or, failing that, from Go's VCS stamp
+//     (two clean builds of one commit are provably the same code and DO adopt each other,
+//     preserving the run-a-server-then-adopt-into-it workflow), or the per-process
+//     [buildinfo.Unverifiable] token for a build with no identity (never matches:
 //     adoption refused).
 //
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is
@@ -49,41 +58,16 @@ const devVersionSentinel = "unknown"
 // against its own stored "unknown" and correctly mismatches, refusing the call. A new wire
 // field would be silently ignored by that old server and fail OPEN: the very failure mode
 // this fix exists to close.
-func adoptionIdentity(displayVersion string) string {
-	if displayVersion == "" {
-		return "" // the check-disabled / test-injection escape hatch stays open
-	}
-	rev, modified, ok := buildVCS()
-	if ok && modified {
+func gateIdentity(displayVersion string, b types.MagusBuild) string {
+	switch {
+	case displayVersion == "":
+		return ""
+	case b.Dirty:
 		return buildinfo.File()
-	}
-	if displayVersion != devVersionSentinel {
+	case displayVersion != devVersionSentinel:
 		return displayVersion
-	}
-	if !ok || rev == "" {
+	case b.Source == types.BuildSourceNone || b.Commit == "" || b.Commit == buildinfo.UnknownVersion:
 		return buildinfo.Unverifiable()
 	}
-	return "dev-" + rev
-}
-
-// buildVCS reads the VCS stamp the Go toolchain embeds in the binary at build time (Go
-// 1.18+). ok is false only when no build info is available at all (e.g. a binary built
-// with -ldflags that strips it in an unusual way); rev and modified are the vcs.revision
-// and vcs.modified settings, which are absent ("" / false) when the build carried no VCS
-// info at all: built with -buildvcs=false, or outside a VCS work tree. A var so tests
-// can pin the build state instead of inheriting whatever tree built the test binary.
-var buildVCS = func() (rev string, modified bool, ok bool) {
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "", false, false
-	}
-	for _, s := range bi.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			rev = s.Value
-		case "vcs.modified":
-			modified = s.Value == "true"
-		}
-	}
-	return rev, modified, true
+	return "dev-" + b.Commit
 }

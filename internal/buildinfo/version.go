@@ -2,7 +2,6 @@ package buildinfo
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
@@ -15,16 +14,6 @@ const sourceRepository = "https://github.com/egladman/magus"
 // adoption gate keys on to fingerprint one (proc.devVersionSentinel); keep the two in
 // sync. Named because a server reports it too, and the two must not be compared.
 const UnknownVersion = "unknown"
-
-// builtDirty reports whether b was built from a modified tree, whose source exists only
-// on the machine that built it. go-build marks that in the version (describe's -dirty
-// suffix); a bare `go build` leaves it in the VCS stamp instead.
-func builtDirty(b types.MagusBuild) bool {
-	if strings.HasSuffix(b.Version, "-dirty") {
-		return true
-	}
-	return b.Version == UnknownVersion && Modified()
-}
 
 // VersionOutput is the structured view of the build stamp. Engine is unconditional
 // here even though the text form gates it behind -v: a verbosity flag is a reading
@@ -71,7 +60,7 @@ type VersionEmbedded struct {
 // the contract digest, which can fail to hash: the caller adds it.
 func NewVersionOutput(b types.MagusBuild, builtBy string) VersionOutput {
 	return VersionOutput{
-		Version: b.Version, Commit: b.Commit, Dirty: builtDirty(b), Repository: sourceRepository,
+		Version: b.Version, Commit: b.Commit, Dirty: b.Dirty, Repository: sourceRepository,
 		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
 		Embedded: VersionEmbedded{FigureSHA256: figure.SourceSHA256()},
 	}

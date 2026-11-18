@@ -1139,6 +1139,10 @@ github.com/egladman/magus/types.BrokerPolicy.Values method func() []string
 github.com/egladman/magus/types.BrokerRequired const BrokerPolicy = "required"
 github.com/egladman/magus/types.BrokerUnavailable const DiagnosticCode = "MGS3022"
 github.com/egladman/magus/types.BuildSlotsDeadlocked const DiagnosticCode = "MGS3013"
+github.com/egladman/magus/types.BuildSource type string
+github.com/egladman/magus/types.BuildSourceNone const BuildSource = ""
+github.com/egladman/magus/types.BuildSourceStamp const BuildSource = "stamp"
+github.com/egladman/magus/types.BuildSourceVCS const BuildSource = "vcs"
 github.com/egladman/magus/types.BuildStamp type struct
 github.com/egladman/magus/types.BuildStamp.BuildDate field string "json:\"build_date\""
 github.com/egladman/magus/types.BuildStamp.Commit field string "json:\"commit\""
@@ -3059,6 +3063,8 @@ github.com/egladman/magus/types.MagusBuild type struct
 github.com/egladman/magus/types.MagusBuild.AcceptsReplacement method func(repl BuildStamp) error
 github.com/egladman/magus/types.MagusBuild.Commit field string
 github.com/egladman/magus/types.MagusBuild.Date field string
+github.com/egladman/magus/types.MagusBuild.Dirty field bool
+github.com/egladman/magus/types.MagusBuild.Source field BuildSource
 github.com/egladman/magus/types.MagusBuild.Version field string
 github.com/egladman/magus/types.MagusBuildFromContext func(ctx context.Context) MagusBuild
 github.com/egladman/magus/types.MagusCommandOptions type struct
@@ -4018,6 +4024,7 @@ github.com/egladman/magus/types.StagedFileReporter.StagedFiles imethod func(ctx 
 github.com/egladman/magus/types.StaleGeneratedOutput const DiagnosticCode = "MGS4006"
 github.com/egladman/magus/types.StaleIndexProjects func(stale []KnowledgeStaleIndex) []string
 github.com/egladman/magus/types.StaleSourceProjects func(files []FileEntry) []string
+github.com/egladman/magus/types.StampedBuild func(version string, commit string, date string) MagusBuild
 github.com/egladman/magus/types.StampedKnowledgeVersion func(b []byte) (APIVersion, bool)
 github.com/egladman/magus/types.StateConflict const DiagnosticCode = "MGS9025"
 github.com/egladman/magus/types.Status type struct

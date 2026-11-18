@@ -3,9 +3,12 @@ package proc
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/ward"
-	"github.com/stretchr/testify/assert"
+	"github.com/egladman/magus/types"
 )
 
 // devVersionSentinel's doc says to keep it in sync with ward.DevVersion (and cmd/magus's
@@ -16,74 +19,69 @@ func TestDevVersionSentinelMatchesWard(t *testing.T) {
 	assert.Equal(t, ward.DevVersion, devVersionSentinel)
 }
 
-// pinBuildVCS forces the build state adoptionIdentity reads, restoring the real
-// reader on cleanup, so these tests do not inherit the VCS state of whatever tree
-// built the test binary.
-func pinBuildVCS(t *testing.T, rev string, modified, ok bool) {
-	t.Helper()
-	restore := buildVCS
-	buildVCS = func() (string, bool, bool) { return rev, modified, ok }
-	t.Cleanup(func() { buildVCS = restore })
+// gateIdentitySuite pins the adoption identity each kind of build gates on.
+type gateIdentitySuite struct {
+	suite.Suite
 }
 
-// adoptionIdentity is symmetric and total: "" and stamped releases pass through, only the
-// dev sentinel is rewritten to a fingerprint. These cases pin the pass-through halves for
-// a CLEAN build; a modified build never passes through (see
-// TestAdoptionIdentityStampedDirtyIsNotShared).
-func TestAdoptionIdentityPassThrough(t *testing.T) {
-	pinBuildVCS(t, "abc123", false, true)
-	cases := map[string]string{
-		"":                 "",       // the check-disabled / test-injection escape hatch
-		"v0.4.2":           "v0.4.2", // a stamped release version
-		"v0.4.2-3-gabc123": "v0.4.2-3-gabc123",
-		"test":             "test", // the literal used by existing round-trip tests
+func TestGateIdentitySuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(gateIdentitySuite))
+}
+
+// vcsBuild is an unstamped build that fell back to Go's VCS stamp.
+func vcsBuild(commit string, modified bool) types.MagusBuild {
+	return types.MagusBuild{Version: devVersionSentinel, Commit: commit, Date: "unknown", Source: types.BuildSourceVCS, Dirty: modified}
+}
+
+func (s *gateIdentitySuite) TestTheEmptyVersionDisablesTheGateForAnyBuild() {
+	s.Empty(gateIdentity("", types.StampedBuild("v0.4.2-dirty", "6bfd32710", "")))
+	s.Empty(gateIdentity("", types.MagusBuild{}))
+}
+
+func (s *gateIdentitySuite) TestAStampedCleanVersionPassesThrough() {
+	for _, v := range []string{"v0.4.2", "v0.4.2-3-gabc123", "test"} {
+		s.Equal(v, gateIdentity(v, types.StampedBuild(v, "abc123", "")))
 	}
-	for in, want := range cases {
-		assert.Equalf(t, want, adoptionIdentity(in), "adoptionIdentity(%q)", in)
-	}
 }
 
-// A stamped dirty build's display version is `git describe --dirty`, which every dirty
-// build of one commit shares: the server built at one dirty state and a client rebuilt
-// at another carry the SAME string while running different code. Passing it through let
-// the stale server adopt the newer client and execute the run with old code. The
-// identity must therefore be the executable file's, never the shared string.
-func TestAdoptionIdentityStampedDirtyIsNotShared(t *testing.T) {
-	pinBuildVCS(t, "6bfd32710", true, true)
-	const stamped = "v0.4.2-2-g6bfd32710-dirty"
-	got := adoptionIdentity(stamped)
-	assert.NotEqual(t, stamped, got, "a dirty build must not gate adoption on its shared describe string")
-	assert.Equal(t, buildinfo.File(), got, "a dirty build identifies as the executable file it runs from")
-	assert.NotEmpty(t, got)
+// A stamped clean build in a linked worktree carries a VCS stamp that says modified;
+// [buildinfo.Self] reads the stamp first, so the build keeps its shared version and a
+// copied ./magus still adopts into a server built at the same commit.
+func (s *gateIdentitySuite) TestAStampedCleanBuildIsNotJudgedByItsVCSStamp() {
+	b := types.StampedBuild("v0.5.0-rc.3-205-g33268e391", "33268e391", "")
 
-	// The escape hatch outranks the dirty rule: "" still disables the gate.
-	assert.Equal(t, "", adoptionIdentity(""))
+	s.Equal("v0.5.0-rc.3-205-g33268e391", gateIdentity(b.Version, b))
 }
 
-// A dev build's identity is never the raw sentinel: it is either "dev-<revision>" (clean)
-// or the per-process unverifiable token (dirty / no VCS). Whichever this test binary is,
-// the result must differ from "unknown" so two dev builds cannot match on the placeholder.
-func TestAdoptionIdentityDevIsFingerprinted(t *testing.T) {
+// Every dirty build of one commit shares its `git describe --dirty` string while running
+// different code, so a dirty build identifies as the executable file it runs from.
+func (s *gateIdentitySuite) TestAStampedDirtyBuildIdentifiesAsItsFile() {
+	b := types.StampedBuild("v0.4.2-2-g6bfd32710-dirty", "6bfd32710", "")
+
+	s.Equal(buildinfo.File(), gateIdentity(b.Version, b))
+}
+
+func (s *gateIdentitySuite) TestAnUnstampedCleanBuildFallsBackToItsVCSCommit() {
+	s.Equal("dev-abc123", gateIdentity(devVersionSentinel, vcsBuild("abc123", false)))
+}
+
+func (s *gateIdentitySuite) TestAnUnstampedModifiedBuildIdentifiesAsItsFile() {
+	s.Equal(buildinfo.File(), gateIdentity(devVersionSentinel, vcsBuild("abc123", true)))
+}
+
+func (s *gateIdentitySuite) TestABuildWithNoIdentityNeverAdopts() {
+	b := types.MagusBuild{Version: devVersionSentinel, Commit: "unknown", Date: "unknown"}
+
+	s.Equal(buildinfo.Unverifiable(), gateIdentity(devVersionSentinel, b))
+}
+
+// Whatever tree built the test binary, a dev build never keeps the shared placeholder.
+func (s *gateIdentitySuite) TestThisBinaryIsNeverIdentifiedByThePlaceholder() {
 	got := adoptionIdentity(devVersionSentinel)
-	assert.NotEqual(t, devVersionSentinel, got, "a dev build must not keep the shared placeholder as its identity")
-	assert.NotEmpty(t, got, "a dev build's identity is never empty (that would disable the gate)")
 
-	// Mirror adoptionIdentity's own decision (go test binaries typically carry no
-	// vcs.revision, so the unverifiable branch is the common one under `go test`).
-	rev, modified, ok := buildVCS()
-	switch {
-	case ok && modified:
-		// Dirty build: the identity is the executable file's, per-file not per-process.
-		assert.Equal(t, buildinfo.File(), got)
-	case !ok || rev == "":
-		// Unprovable build: identity is the per-process token, which never matches anything.
-		assert.Equal(t, buildinfo.Unverifiable(), got)
-	default:
-		// Clean build with an embedded revision: identity encodes it and is stable per build.
-		assert.Equal(t, "dev-"+rev, got)
-		assert.NotEqual(t, buildinfo.Unverifiable(), got, "a clean build has a revision-derived, not per-process, identity")
-		assert.Equal(t, got, adoptionIdentity(devVersionSentinel), "a clean build's identity is deterministic")
-	}
+	s.NotEqual(devVersionSentinel, got)
+	s.NotEmpty(got)
 }
 
 // versionAdmits is the shared gate. It admits when either side is empty (check disabled) or

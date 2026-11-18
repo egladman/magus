@@ -368,7 +368,7 @@ fun built_by() > str !> any { return os\env("BUILT_BY") ?? ""; }
 
 fun ld_flags() > str !> any {
     return "-w -s"
-        + " -X main.version=" + version()
+        + " -X github.com/egladman/magus/internal/buildinfo.version=" + version()
         + " -X github.com/egladman/magus/internal/buildinfo.commit=" + commit()
         + " -X github.com/egladman/magus/internal/buildinfo.commitDate=" + build_date()
         + " -X main.builtBy=" + built_by();

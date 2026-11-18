@@ -103,7 +103,7 @@ type SemverVersion struct {
 // things String() normalizes away (a leading zero like "v1.02.3", a missing
 // "v", metadata the canonical form still carries). The leading "v" matches how
 // this codebase already writes versions everywhere else: git tags ("v0.3.0"),
-// the linker-stamped build version (-X main.version=v0.1.0), and selfupdate's
+// the linker-stamped build version (-X .../internal/buildinfo.version=v0.1.0), and selfupdate's
 // target version handling.
 func (v SemverVersion) String() string {
 	s := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
