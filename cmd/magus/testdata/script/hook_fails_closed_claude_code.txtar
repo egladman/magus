@@ -22,8 +22,8 @@ exec magus describe harness claude-code -o 'template={{range .wired}}{{if eq .ke
 cp stdout $WORK/pre.sh
 exec magus describe harness claude-code -o 'template={{range .wired}}{{if eq .key "hooks.Stop"}}{{(index (index .entries 0).hooks 0).command}}{{end}}{{end}}'
 cp stdout $WORK/stop.sh
-mkdir docs/guides/integrations
-symlink docs/guides/integrations/agents -> $__MAGUS_TEMPLATES
+mkdir .magus/harness
+symlink .magus/harness/hooks -> $__MAGUS_TEMPLATES
 env CLAUDE_PROJECT_DIR=$WORK/release
 
 # A magus.yaml this magus cannot read refuses an ordinary call and names the update.
@@ -76,8 +76,8 @@ env PATH=$SAVED_PATH
 # --- a checkout of magus, which builds its own ./magus -----------------------------
 
 cd $WORK/source
-mkdir docs/guides/integrations
-symlink docs/guides/integrations/agents -> $__MAGUS_TEMPLATES
+mkdir .magus/harness
+symlink .magus/harness/hooks -> $__MAGUS_TEMPLATES
 env CLAUDE_PROJECT_DIR=$WORK/source
 
 # Unreadable config: the bootstrap and the checkout hook are its repair, not a release.

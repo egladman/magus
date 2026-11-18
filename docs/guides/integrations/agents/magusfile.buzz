@@ -35,8 +35,22 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 
 // The schema directory, not its files: drift\expand walks it, so new schemas are covered.
 fun generatedOutputs() > [str] {
-    return ["guard-templates.md", "README.md", "../../../../internal/render/testdata/hosts/cursor/gen", "../../../../spells/harness/opencode/runtime"];
+    return ["guard-templates.md", "README.md", "../../../../internal/render/testdata/hosts/cursor/gen", OPENCODE_COPY, GLUE_COPY];
 }
+
+// OpenCode's plugin runs its glue from .opencode/magus/runtime (internal/interp/bindings/opencode),
+// so its spell carries its own copy rather than the hook glue's.
+final OPENCODE_COPY = "../../../../spells/harness/opencode/runtime";
+final OPENCODE_GLUE = ["magus-observe.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz", "lib/hook.buzz"];
+
+// The copy of the glue the binary embeds (internal/agent) and installs into a workspace.
+final GLUE_COPY = "../../../../internal/agent/gen/glue";
+
+// Every script a shipped harness spell's hooks run, and the module they import. A hook
+// naming one missing here fails that harness's load.
+final GLUE = ["cursor-hook.buzz", "magus-buzz-check.buzz", "magus-checkpoint.buzz", "magus-command.buzz",
+              "magus-duration.buzz", "magus-observe.buzz", "magus-reclaim-disk.buzz", "magus-rehydrate.buzz",
+              "magus-session.buzz", "lib/hook.buzz"];
 
 // Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
 // replaced by the file it names.
@@ -47,21 +61,25 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
     ctx.needs(cursor_schemas_generate, index_generate);
     ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz",
-                    "../../../../spells/harness/*/spell.buzz", "../../../../internal/spell/harness.buzz", "magus-observe.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz", "lib/hook.buzz"]);
-    ctx.writesFiles(["guard-templates.md", "README.md"]);
-    final assets = {
-        "../../../../spells/harness/opencode/runtime/magus-observe.buzz": "magus-observe.buzz",
-        "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz": "magus-buzz-check.buzz",
-        "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz": "magus-reclaim-disk.buzz",
-        "../../../../spells/harness/opencode/runtime/lib/hook.buzz": "lib/hook.buzz",
-    };
-    ctx.writesFiles(["guard-templates.md", "README.md", "../../../../spells/harness/opencode/runtime/magus-observe.buzz", "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz", "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz", "../../../../spells/harness/opencode/runtime/lib/hook.buzz"]);
-    foreach (dest, source in assets) {
-        final content = fs\readFile(source);
+                    "../../../../spells/harness/*/spell.buzz", "../../../../internal/spell/harness.buzz"]);
+    final copies = mut {<str: str>};
+    foreach (name in GLUE) { copies["{GLUE_COPY}/{name}"] = name; }
+    foreach (name in OPENCODE_GLUE) { copies["{OPENCODE_COPY}/{name}"] = name; }
+    // Literal, as the static read requires: one path per GLUE and OPENCODE_GLUE entry.
+    ctx.writesFiles(["guard-templates.md", "README.md",
+        "../../../../spells/harness/opencode/runtime/magus-observe.buzz", "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz",
+        "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz", "../../../../spells/harness/opencode/runtime/lib/hook.buzz",
+        "../../../../internal/agent/gen/glue/cursor-hook.buzz", "../../../../internal/agent/gen/glue/magus-buzz-check.buzz",
+        "../../../../internal/agent/gen/glue/magus-checkpoint.buzz", "../../../../internal/agent/gen/glue/magus-command.buzz",
+        "../../../../internal/agent/gen/glue/magus-duration.buzz", "../../../../internal/agent/gen/glue/magus-observe.buzz",
+        "../../../../internal/agent/gen/glue/magus-reclaim-disk.buzz", "../../../../internal/agent/gen/glue/magus-rehydrate.buzz",
+        "../../../../internal/agent/gen/glue/magus-session.buzz", "../../../../internal/agent/gen/glue/lib/hook.buzz"]);
+    foreach (dest, name in copies) {
+        final content = fs\readFile(name);
         if (ctx.hasCharm("rw")) {
             fs\writeFileAtomic(dest, content: content);
         } else if ((fs\readFile(dest) catch "") != content) {
-            throw "generate: OpenCode runtime asset " + dest + " is stale; run magus run generate:rw docs/guides/integrations/agents";
+            throw "[MGS4006] generate: the embedded glue " + dest + " is stale; run magus run generate:rw docs/guides/integrations/agents";
         }
     }
     final tmpl = fs\readFile("guard-templates.md.tmpl");

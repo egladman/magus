@@ -35,6 +35,9 @@ final EVERY_TOOL = "*";
 // Where `magus agent harness install` writes this host's tool rows, beside its hooks.
 final TOOLS_DIR = ".codex/magus/tools";
 
+// Where `magus agent harness install` copies the glue every hook runs.
+final GLUE_DIR = hookGlueDir();
+
 // One glue serves every entry that judges: each event reaches `magus shell` whole, and magus
 // reads off it what the call is, a command, a patch, an MCP call or a spawn. The host name is
 // the one argument: Codex has no skill tool to match, so its limits say no skill load is seen.
@@ -139,23 +142,23 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 }
 
 fun codex_command(hook: HookCommand) > str {
-    return codex_fails_closed(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags), stops: codex_stops(hook.event));
+    return codex_fails_closed(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: hook.script, flags: hook.flags), stops: codex_stops(hook.event));
 }
 
 fun codex_guard_command() > str {
-    return codex_fails_closed(buzzCommand(HOOK_DIR, script: "magus-command", flags: codex_guard_flags()), stops: false);
+    return codex_fails_closed(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: "magus-command", flags: codex_guard_flags()), stops: false);
 }
 
 fun codex_stop_command() > str {
-    return codex_fails_closed(buzzCommand(HOOK_DIR, script: "magus-command", flags: codex_guard_flags()), stops: true);
+    return codex_fails_closed(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: "magus-command", flags: codex_guard_flags()), stops: true);
 }
 
 fun codex_rehydrate_command() > str {
-    return codex_fails_closed(buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: codex_rehydrate_flags()), stops: false);
+    return codex_fails_closed(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: "magus-rehydrate", flags: codex_rehydrate_flags()), stops: false);
 }
 
 fun codex_checkpoint_command() > str {
-    return codex_fails_closed(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]), stops: true);
+    return codex_fails_closed(namedCommand(HOOK_DIR, glue: GLUE_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]), stops: true);
 }
 
 // Codex marks a hook that exits anything but 0 or 2, or runs past its timeout, as failed
@@ -230,7 +233,7 @@ export fun mgs_listEntries() > [ManagedEntries] {
 }
 
 export fun mgs_getHarness() > Harness {
-    return Harness{config = HarnessConfig{path = ".codex/hooks.json"}, guard = "hooks"};
+    return Harness{config = HarnessConfig{path = ".codex/hooks.json"}, guard = "hooks", assets = glueAssets(GLUE_DIR, hooks: mgs_listHooks())};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -427,6 +430,14 @@ test "mgs_getHarness names the Codex hooks file and mgs_getSkills .agents/skills
     assert\equal(mgs_getSkills().paths.join(","), ".agents/skills", "Codex reads .agents/skills");
 }
 
+test "mgs_getHarness copies every script a hook runs, and the module they import" {
+    final paths = mgs_getHarness().assets.map(fun (index: int, asset: HarnessAsset) > str => asset.path);
+    foreach (hook in mgs_listHooks()) {
+        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, "{hook.script} is installed");
+    }
+    assert\isTrue(paths.indexOf("{GLUE_DIR}/lib/hook.buzz") != null, "the module every script imports");
+}
+
 test "every hook appears in the entries, so the drift check magus runs passes" {
     final commands = mut [<str>];
     foreach (block in codex_entries()) {
@@ -447,7 +458,7 @@ test "every glue command is a plain argv that names this host, and rehydrate tak
     assert\isTrue(codex_glue(codex_rehydrate_command()).endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     foreach (hook in mgs_listHooks()) {
         final cmd = codex_glue(codex_command(hook));
-        assert\isTrue(cmd.startsWith("magus buzz -C . -s "), "name the working directory without an environment prefix: {cmd}");
+        assert\isTrue(cmd.startsWith("magus buzz -C . -s .magus/harness/hooks/{hook.script}.buzz"), "the installed copy, from the named working directory: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
         assert\isTrue(cmd.indexOf("--tool-rows") == null, "magus finds the tool rows by host: {cmd}");
     }

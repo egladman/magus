@@ -31,6 +31,9 @@ export fun mgs_getName() > str { return "claude-code"; }
 // exits 127, which claude_fails_closed turns into a block.
 final HOOK_DIR = "\"$CLAUDE_PROJECT_DIR\"";
 
+// Where `magus agent harness install` copies the glue every hook runs.
+final GLUE_DIR = hookGlueDir();
+
 // Claude Code's Bash tool waits 120000 ms on a command that names no timeout and lets one
 // name up to 600000 (code.claude.com/docs/en/settings, BASH_DEFAULT_TIMEOUT_MS and
 // BASH_MAX_TIMEOUT_MS); past its timeout the command moves to the background. Returned by
@@ -132,7 +135,7 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 }
 
 fun claude_command(hook: HookCommand) > str {
-    final command = claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
+    final command = claude_checkout(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: hook.script, flags: hook.flags));
     // Async: Claude Code waits on nothing it says, so it has no failure to block.
     if (hook.script == DURATION_SCRIPT) { return command + " # magus:harness"; }
     return claude_fails_closed(command, ceilingS: hook.timeoutS - 1, stops: claude_stops(hook.event));
@@ -177,23 +180,23 @@ fun claude_fails_closed(command: str, ceilingS: int, stops: bool) > str {
 }
 
 fun claude_guard_command() > str {
-    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
+    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, glue: GLUE_DIR, agentName: mgs_getName(), script: "magus-command", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 fun claude_observe_command() > str {
-    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-observe", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
+    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, glue: GLUE_DIR, agentName: mgs_getName(), script: "magus-observe", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 fun claude_rehydrate_command() > str {
-    return claude_fails_closed(claude_checkout(buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
+    return claude_fails_closed(claude_checkout(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: "magus-rehydrate", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 fun claude_checkpoint_command() > str {
-    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: true);
+    return claude_fails_closed(claude_checkout(namedCommand(HOOK_DIR, glue: GLUE_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>])), ceilingS: HOOK_TIMEOUT_S - 1, stops: true);
 }
 
 fun claude_session_command() > str {
-    return claude_fails_closed(claude_checkout(buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
+    return claude_fails_closed(claude_checkout(buzzCommand(HOOK_DIR, glue: GLUE_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""])), ceilingS: HOOK_TIMEOUT_S - 1, stops: false);
 }
 
 // Something must answer, so PATH magus stands in for a missing ./magus. In a
@@ -381,7 +384,8 @@ export fun mgs_listModels() > [HarnessModel] {
 // the agent runs inherits it (testdata/hosts/claude-code/settings.schema.json, "env").
 // MAGUS_LOG_SILENT=true is -s for every one of them; a value the person already set stays.
 export fun mgs_getHarness() > Harness {
-    return Harness{config = HarnessConfig{path = ".claude/settings.json", defaults = {"env": {"MAGUS_LOG_SILENT": "true"}}}, guard = "hooks"};
+    return Harness{config = HarnessConfig{path = ".claude/settings.json", defaults = {"env": {"MAGUS_LOG_SILENT": "true"}}}, guard = "hooks",
+        assets = glueAssets(GLUE_DIR, hooks: claude_hooks())};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -552,6 +556,15 @@ test "mgs_getHarness names Claude Code settings and makes every Bash tool comman
     assert\equal("{env["MAGUS_LOG_SILENT"]}", "true", "the settings env object Claude Code sets on the session");
 }
 
+test "mgs_getHarness copies every script a hook runs, and the module they import, into the dir the hooks name" {
+    final paths = mgs_getHarness().assets.map(fun (index: int, asset: HarnessAsset) > str => asset.path);
+    foreach (hook in mgs_listHooks()) {
+        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, "{hook.script} is installed");
+        assert\isTrue(claude_command(hook).indexOf(" -s {GLUE_DIR}/{hook.script}.buzz") != null, "{hook.script} runs from the copy");
+    }
+    assert\isTrue(paths.indexOf("{GLUE_DIR}/lib/hook.buzz") != null, "the module every script imports");
+}
+
 test "mgs_getSkills installs both forms under .claude/skills" {
     final skills = mgs_getSkills();
     assert\equal(skills.form.value, "both", "the short skills and their full twins");
@@ -600,7 +613,7 @@ fun claude_glue(command: str) > str {
 }
 
 test "the glue commands are the plain argv every machine shares" {
-    final head = "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
+    final head = "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s .magus/harness/hooks/";
     foreach (full in claude_commands()) {
         final cmd = claude_glue(full);
         assert\isTrue(cmd.startsWith(head), "the same string on every machine, checkout binary first: {cmd}");

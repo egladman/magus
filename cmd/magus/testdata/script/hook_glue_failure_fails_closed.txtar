@@ -6,7 +6,7 @@
 
 # A missing script refuses the call, naming the cause and both remedies.
 stdin touch.json
-exec sh -c 'magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code; echo "exit $?"'
+exec sh -c 'magus buzz -s .magus/harness/hooks/magus-command.buzz -- --agent-name claude-code; echo "exit $?"'
 stdout '^exit 2$'
 stderr 'magus guard could not judge this call, so it is refused'
 stderr 'its hook glue stopped before it answered'

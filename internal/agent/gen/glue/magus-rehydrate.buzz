@@ -1,0 +1,145 @@
+// magus rehydrate hook: prints where this checkout stands, for a session that has
+// lost its history.
+//
+// Run it as `magus buzz -s magus-rehydrate.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module and
+// no spell: the workspace stays CLOSED, which is what lets a session-start hook add
+// its block in about 10ms rather than paying roughly 700ms to open one.
+//
+// Wire it to your host's session-start event, for the compaction and resume cases
+// at least. When a host replaces a long session's history with a summary, the model
+// keeps working from prose: the branch it is on, what it has already changed, and
+// which rules it agreed to all survive only as somebody's retelling, and each
+// retelling is a copy of a copy. Whatever this prints lands in that context window
+// instead, read off the disk at the moment it prints.
+//
+// Contract: runs `magus session --brief`, prints what it says, and adds one line
+// naming your host's own instruction file, for the checkout its event's cwd names. It
+// judges nothing and exits 0 whatever happens. Arguments, after `--`:
+//
+//   --rules <file>   your host's instruction file, relative to the workspace root;
+//                    CLAUDE.md when omitted
+//   --format json    for a host that reads stdout as a reply rather than as context
+//
+// and one variable:
+//
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// Two channels, because hosts disagree about what a session-start hook's stdout
+// IS. Some add plain stdout to the model's context, which is the default here.
+// Others parse stdout as a JSON reply and drop anything that is not one, so the
+// same text has to arrive as a string field:
+//
+//   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
+//
+// A subagent starts with none of its parent's history, which is the same loss, so the
+// event may also be SubagentStart: the reply then names that event, and the child reads
+// the brief before its first step. Any other event is answered as SessionStart.
+//
+// The rules line is the one host-shaped part, which is why the entry names it rather
+// than magus printing it: magus names the files it ships and can see (AGENTS.md, the
+// installed skill directories), and the file YOUR host reads is yours to name. It
+// prints only when that file is really there.
+//
+// NO magus-guard-coverage line, for the same reason magus-checkpoint.buzz has none: a
+// coverage declaration states how much of a VERDICT a host can carry, and this file
+// carries no verdict on any input. It never denies, never advises, and cannot
+// change what your host does next.
+//
+// magus-guard-template: 39
+
+// EVERY call that can fail is caught, matching the templates beside it. A hook that
+// can fail is a hook that can break the session it was meant to help.
+
+import "io";
+import "flags";
+import "fs";
+import "encoding/json";
+import "proc";
+import "lib/hook" as hook;
+
+final RULES_FLAG = "--rules";
+final FORMAT_FLAG = "--format";
+final SUBAGENT_START = "SubagentStart";
+
+// warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
+// file writes on stdout.
+fun warn(message: str) > void {
+    io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
+}
+
+// parseOptions reads the two flags and reports every other argument: an argument arriving
+// here means the wiring meant something by it, and reading none at all accepted that
+// silently. An unreadable argv falls back to the defaults rather than to no brief.
+fun parseOptions(args: [str]) > {str: str} {
+    final parsed = flags\parse(args, switches: [<str>], valued: [RULES_FLAG, FORMAT_FLAG]) catch null;
+    if (parsed == null) {
+        warn("could not read the arguments {args}; using the defaults. Fix the hook command in your host config.");
+        return {<str: str>};
+    }
+    foreach (word in parsed!.unknown + parsed!.positionals) {
+        warn("unsupported argument \"{word}\"; this hook accepts {RULES_FLAG} and {FORMAT_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    return parsed!.values;
+}
+
+fun main(args: [str]) > void {
+    final options = parseOptions(args);
+    final rules = options[RULES_FLAG] ?? "CLAUDE.md";
+    final format = options[FORMAT_FLAG] ?? "";
+    if (format != "" and format != "json") {
+        warn("unsupported {FORMAT_FLAG} \"{format}\"; the one format is json. Printing plain text.");
+    }
+    // The event's cwd names the checkout to brief, for the reason magus-command.buzz's
+    // Guard gives. The working directory stands in when the event names none.
+    final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final cwd = hook\field(event, dotPath: "cwd");
+    var eventName = "SessionStart";
+    if (hook\field(event, dotPath: "hook_event_name") == SUBAGENT_START) { eventName = SUBAGENT_START; }
+    var root = "";
+    if (cwd != "") { root = hook\workspaceRootAt(cwd); }
+    if (root == "") { root = hook\workspaceRoot(); }
+
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) {
+        // Only the json reply carries a systemMessage.
+        final host = if (format == "json") "claude-code" else "";
+        io\stdout.write(hook\unrecordedNotice(bin, session: hook\field(event, dotPath: "session_id"),
+            host: host, file: "magus-rehydrate.buzz", root: root)) catch void;
+        return;
+    }
+
+    // Captured rather than streamed, because the json arm has to wrap it. stderr is
+    // discarded by `quiet`: a magus too old for `session --brief` prints its usage
+    // there, and that would otherwise be injected as this hook's answer.
+    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+    }) catch null;
+    if (result == null) { return; }
+
+    var brief = hook\trimTrailingNewlines(result!.stdout);
+
+    // Nothing from magus is nothing to say, in either channel. The rules line trails
+    // the brief and points back at it, so on its own it is a sentence about a block
+    // that was never written, and an envelope carrying only that is worse than none.
+    if (brief == "") { return; }
+
+    if (root != "") {
+        final hasRules = fs\isFile("{root}/{rules}") catch false;
+        if (hasRules) {
+            brief = brief + "\nstanding rules: " + rules + "; re-read it, the summary above is not it";
+        }
+    }
+
+    if (format == "json") {
+        final context = json\stringify(brief + "\n") catch "";
+        if (context == "") { return; }
+        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"{eventName}","additionalContext":`
+            + context + "}}") catch void;
+        return;
+    }
+
+    io\stdout.write(brief + "\n") catch void;
+}

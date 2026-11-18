@@ -154,7 +154,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking the call"
           }
         ]
@@ -166,7 +166,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: recording the subagent"
           }
         ]
@@ -176,7 +176,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-buzz-check.buzz -- --agent-name codex",
             "statusMessage": "magus: checking the Buzz it wrote"
           }
         ]
@@ -186,7 +186,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-duration.buzz -- --agent-name codex # magus:harness",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-duration.buzz -- --agent-name codex # magus:harness",
             "statusMessage": "magus: recording tool time"
           }
         ]
@@ -197,7 +197,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: briefing the subagent"
           }
         ]
@@ -206,7 +206,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: joining the subagent to its spawn"
           }
         ]
@@ -217,7 +217,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: recording the subagent's context"
           }
         ]
@@ -229,7 +229,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -241,7 +241,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: briefing the session"
           }
         ]
@@ -251,7 +251,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: restating this checkout's rules"
           }
         ]
@@ -262,7 +262,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking the stop"
           }
         ]
@@ -271,7 +271,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-checkpoint.buzz -- --agent-name codex",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -282,7 +282,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: noting the request"
           }
         ]
@@ -291,7 +291,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-reclaim-disk.buzz -- --agent-name codex",
             "statusMessage": "magus: sampling free disk space"
           }
         ]
@@ -305,7 +305,8 @@ Every entry runs the Buzz glue as a plain argv: `magus buzz -C . -s <file>`, wit
 host and any flags after `--`. It needs neither jq nor a POSIX shell. The harness
 descriptor only merges those opaque fragments into `.codex/hooks.json`; Magus does
 not inject a codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the
-repository, or merge what `magus describe harness codex` prints.
+repository, or merge what `magus describe harness codex` prints. Either way the
+entries run the glue `magus agent harness install` copies into `.magus/harness/hooks`.
 
 `magus agent harness install` writes the spell's tool rows to `.codex/magus/tools`, beside a
 host file naming codex, where magus finds them by the entry's `--agent-name`. A tool the rows
@@ -459,7 +460,7 @@ among them, and hands a failure back as the reason to fix it:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s .magus/harness/hooks/magus-buzz-check.buzz -- --agent-name codex",
             "statusMessage": "magus: checking the Buzz it wrote"
           }
         ]

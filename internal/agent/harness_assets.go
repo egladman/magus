@@ -23,6 +23,9 @@ import (
 type HarnessRuntimeAsset struct {
 	Path    string `json:"path"`
 	Content []byte `json:"content"`
+	// Glue marks stamped hook glue (GlueAsset): install rewrites a copy whatever it
+	// holds and leaves a link the workspace made, and verify names each kind of drift.
+	Glue bool `json:"glue,omitempty"`
 }
 
 func validateHarnessRuntime(d HarnessDescriptor) error {
@@ -115,6 +118,15 @@ func planHarnessAssets(root string, d HarnessDescriptor, plan *types.HarnessInst
 	}
 	var receipts strings.Builder
 	for _, a := range d.Assets {
+		if a.Glue {
+			linked, err := glueLinked(root, a.Path)
+			if err != nil {
+				return err
+			}
+			if linked {
+				continue
+			}
+		}
 		path, err := assetPath(root, a.Path)
 		if err != nil {
 			return err
@@ -124,7 +136,7 @@ func planHarnessAssets(root string, d HarnessDescriptor, plan *types.HarnessInst
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		if exists && !bytes.Equal(body, a.Content) && known[a.Path] != assetDigest(body) {
+		if exists && !a.Glue && !bytes.Equal(body, a.Content) && known[a.Path] != assetDigest(body) {
 			return fmt.Errorf("harness asset %s has unrecognized local changes, so preserve or move it before installing", a.Path)
 		}
 		if !exists || !bytes.Equal(body, a.Content) {
@@ -138,6 +150,11 @@ func planHarnessAssets(root string, d HarnessDescriptor, plan *types.HarnessInst
 		}
 		receipts.Write(encoded)
 		receipts.WriteByte('\n')
+	}
+	// Every asset is a link the workspace owns, so there is nothing to record, and an empty
+	// body would plan as a JSON merge into the receipt file.
+	if receipts.Len() == 0 {
+		return nil
 	}
 	state, err := planWholeFile(root, receipt, receipts.String())
 	if err != nil {
@@ -567,6 +584,11 @@ func fileCurrent(link, source string) (bool, error) {
 	if bytes.Equal(linked, want) {
 		return true, nil
 	}
+	// An installed glue copy says not to edit it, so a link to the workspace's own source
+	// may take its place.
+	if carriesGlueStamp(linked) {
+		return false, nil
+	}
 	return false, errors.New("refuse conflicting file")
 }
 
@@ -628,7 +650,20 @@ func writeHarnessLink(plan harnessLink) error {
 	if err := os.MkdirAll(plan.parent, 0o755); err != nil {
 		return fmt.Errorf("create parent for %q: %w", plan.destination, err)
 	}
-	if err := os.Symlink(plan.target, plan.link); err != nil {
+	if _, err := os.Lstat(plan.link); err != nil {
+		if err := os.Symlink(plan.target, plan.link); err != nil {
+			return fmt.Errorf("link %q: %w", plan.destination, err)
+		}
+		return nil
+	}
+	// Only a stamped glue copy reaches here (fileCurrent): renamed over in one step, so
+	// the hook that runs it never finds the path empty.
+	staged := plan.link + ".magus-link"
+	if err := os.Symlink(plan.target, staged); err != nil {
+		return fmt.Errorf("link %q: %w", plan.destination, err)
+	}
+	if err := os.Rename(staged, plan.link); err != nil {
+		_ = os.Remove(staged) // the rename's error is the one to report; a stray staged link is inert
 		return fmt.Errorf("link %q: %w", plan.destination, err)
 	}
 	return nil

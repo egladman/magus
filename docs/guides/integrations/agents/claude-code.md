@@ -107,7 +107,7 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+          "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s .magus/harness/hooks/magus-command.buzz -- --agent-name claude-code"
         }]
       }
     ]
@@ -307,7 +307,7 @@ as the reason to fix it:
         "hooks": [
           {
             "type": "command",
-            "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s .magus/harness/hooks/magus-buzz-check.buzz -- --agent-name claude-code",
             "timeout": 30
           }
         ]
@@ -351,7 +351,7 @@ is refused whether the windows came from `sed -n` or from `Read`.
         "hooks": [
           {
             "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
+            "command": "./magus buzz -s .magus/harness/hooks/magus-observe.buzz",
             "timeout": 10
           }
         ]
@@ -380,14 +380,14 @@ entry receives it before it runs, and two more entries see it finish:
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s .magus/harness/hooks/magus-command.buzz", "timeout": 10 }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s .magus/harness/hooks/magus-command.buzz", "timeout": 10 }
         ]
       }
     ]
@@ -513,7 +513,7 @@ tree, plus this session's id and transcript path. `magus session` lists it.
         "hooks": [
           {
             "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz",
+            "command": "./magus buzz -s .magus/harness/hooks/magus-checkpoint.buzz",
             "timeout": 10
           }
         ]
@@ -544,7 +544,7 @@ that trims caches when free space runs low.
         "hooks": [
           {
             "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name claude-code",
+            "command": "./magus buzz -s .magus/harness/hooks/magus-reclaim-disk.buzz -- --agent-name claude-code",
             "timeout": 10
           }
         ]
@@ -629,7 +629,7 @@ never an automatic instruction or memory edit.
         "hooks": [
           {
             "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
+            "command": "./magus buzz -s .magus/harness/hooks/magus-rehydrate.buzz",
             "timeout": 10
           }
         ]

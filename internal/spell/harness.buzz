@@ -6,8 +6,16 @@
 // Quoting and the glue command line live here once, so every host renders them alike.
 import "magus/spell";
 
-// The directory every shipped glue script lives in, relative to the workspace root.
-final GLUE_DIR = "docs/guides/integrations/agents";
+// The embedded directory the binary carries every glue script in, as an asset source names it.
+final GLUE_SOURCE = "magus:glue";
+
+// The one module every glue script imports, copied beside the scripts so the import resolves.
+final GLUE_LIB = "lib/hook";
+
+// hookGlueDir is the workspace directory `magus agent harness install` copies the hook glue
+// into, the one every host's hook lines name. It sits in the workspace's own .magus state,
+// so a checkout ignores or commits it with the rest of what magus writes there.
+export fun hookGlueDir() > str { return ".magus/harness/hooks"; }
 
 // yamlQuote renders text as a YAML double-quoted scalar, so a colon, a quote or a newline
 // in a description cannot change what the frontmatter means.
@@ -38,17 +46,18 @@ fun escapeBasic(text: str) > str {
 // event cwd's checkout, PATH's only where it has none.
 // host is the directory the host's hook
 // commands start in, as the host spells it ("$CLAUDE_PROJECT_DIR", "."), or "" for a host
-// that starts them in the workspace root. `-s` keeps the interpreter's advisories off
-// stderr, which a host shows as a hook error. flags ride after `--`, which `magus buzz`
-// forwards to the script as its own argv.
-export fun buzzCommand(host: str, script: str, flags: [str]) > str {
+// that starts them in the workspace root. glue is the workspace-relative directory
+// `magus agent harness install` copies the scripts into, the dir the spell hands glueAssets.
+// `-s` keeps the interpreter's advisories off stderr, which a host shows as a hook error.
+// flags ride after `--`, which `magus buzz` forwards to the script as its own argv.
+export fun buzzCommand(host: str, glue: str, script: str, flags: [str]) > str {
     final words = mut ["magus", "buzz"];
     if (host != "") {
         words.append("-C");
         words.append(host);
     }
     words.append("-s");
-    words.append("{GLUE_DIR}/{script}.buzz");
+    words.append("{glue}/{script}.buzz");
     if (flags.len() > 0) {
         words.append("--");
         foreach (flag in flags) { words.append(flag); }
@@ -60,10 +69,28 @@ export fun buzzCommand(host: str, script: str, flags: [str]) > str {
 // identity the glue acts on; the glue refuses a call without it (MGS3024) rather than
 // guessing a host. A spell passes its own mgs_getName(), so the name cannot drift from
 // the harness it belongs to.
-export fun namedCommand(host: str, agentName: str, script: str, flags: [str]) > str {
+export fun namedCommand(host: str, glue: str, agentName: str, script: str, flags: [str]) > str {
     final named = mut ["--agent-name", agentName];
     foreach (flag in flags) { named.append(flag); }
-    return buzzCommand(host, script: script, flags: named);
+    return buzzCommand(host, glue: glue, script: script, flags: named);
+}
+
+// glueAssets copies the glue every hook names, and the module the glue imports, from the
+// binary into dir, so a workspace runs the glue of the magus that installed it. The binary
+// stamps each copy with its version and digest, which verify and doctor read to name a
+// missing, edited or outdated copy. A hook naming a script the binary ships no glue for
+// fails the harness's load.
+export fun glueAssets(dir: str, hooks: [HookCommand]) > [HarnessAsset] {
+    final names = mut [<str>];
+    foreach (hook in hooks) {
+        if (names.indexOf(hook.script) == null) { names.append(hook.script); }
+    }
+    names.append(GLUE_LIB);
+    final assets = mut [<HarnessAsset>];
+    foreach (name in names) {
+        assets.append(HarnessAsset{path = "{dir}/{name}.buzz", source = "{GLUE_SOURCE}/{name}.buzz"});
+    }
+    return assets;
 }
 
 // buzzCheckHook is the hook that runs `magus buzz --check` on a .buzz file the agent just
