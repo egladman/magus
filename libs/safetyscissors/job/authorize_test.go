@@ -118,6 +118,28 @@ func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnGoalsCheck() {
 	s.Contains(refused.Rule, "goals")
 }
 
+// A worker that could widen its own goal's accept list could grade itself on a weaker
+// basis, and one that could rewrite a signature could hold its symbol to any shape.
+func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnGoalsAcceptOrSignature() {
+	prev := s.worker()
+	prev.Goals = []Goal{
+		{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}},
+		{ID: "sig", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"pkg.F"}, Signature: "func F()"},
+	}
+	widened, reshaped := prev.Clone(), prev.Clone()
+	widened.Goals[0].Accept = []Basis{BasisWitnessed, BasisReported}
+	reshaped.Goals[1].Signature = "func F(int)"
+
+	for name, next := range map[string]Job{"accept": widened, "signature": reshaped} {
+		var refused *RefusedError
+		s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, next, true, []Job{prev}, equalSpecCheck), &refused, name)
+		s.Contains(refused.Rule, "goals", name)
+	}
+	changed, err := ChangedFields(prev, widened, equalSpecCheck)
+	s.Require().NoError(err)
+	s.Equal([]string{"goals"}, changed)
+}
+
 func (s *AuthorizeSuite) TestSubsetNarrowsAGlobButNeverWidensIt() {
 	s.True(Subset([]string{"internal/job/store.go"}, []string{"internal/**"}))
 	s.False(Subset([]string{"internal/**"}, []string{"internal/job/*.go"}))

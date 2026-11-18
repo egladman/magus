@@ -382,7 +382,8 @@ func goalsEqual(id string, a, b []Goal, equal CheckEqual) (bool, error) {
 		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
 			a[i].Kind != b[i].Kind || a[i].Expect != b[i].Expect ||
 			!slices.Equal(a[i].Paths, b[i].Paths) || !slices.Equal(a[i].Symbols, b[i].Symbols) ||
-			!slices.Equal(a[i].DependsOn, b[i].DependsOn) {
+			!slices.Equal(a[i].DependsOn, b[i].DependsOn) ||
+			!slices.Equal(a[i].Accept, b[i].Accept) || a[i].Signature != b[i].Signature {
 			return false, nil
 		}
 		same, err := checksEqual(id, a[i], b[i], equal)
