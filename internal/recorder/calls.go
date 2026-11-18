@@ -144,56 +144,60 @@ type AgentCommandResponse struct {
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
 }
 
-// retiredDecisionError is an agent-command blob holding "pass" or "allow", the names the
-// guard's defer had before its decisions became defer, advise, ask and deny. A reader
-// refuses the store rather than drop the observation from what it counts.
-type retiredDecisionError struct {
-	// Store is the activity directory the blob was read from, and Ref the blob.
+// RetiredDecisionError is an agent-command blob holding "pass" or "allow",
+// the names the guard's defer had before its decisions became defer, advise,
+// ask and deny. A reader refuses the store rather than drop the observation
+// from what it counts.
+type RetiredDecisionError struct {
+	// Store is the activity directory the blob was read from; Ref the blob.
 	Store    string
 	Ref      string
 	Decision string
 }
 
-func (e *retiredDecisionError) Error() string {
+func (e *RetiredDecisionError) Error() string {
 	return fmt.Sprintf("recorder: %s holds the retired guard decision %q in payload %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
 }
 
-// blobUndecodableError is an agent-command blob that is there and does not decode. A
-// reader returns it beside what the other blobs held, rather than count around it.
-type blobUndecodableError struct {
-	// Store is the activity directory the blob was read from, and Ref the blob.
+// BlobUndecodableError is an agent-command blob that is there and does not
+// decode. A reader returns it beside what the other blobs held, rather than
+// count around it.
+type BlobUndecodableError struct {
+	// Store is the activity directory the blob was read from; Ref the blob.
 	Store string
 	Ref   string
 	Err   error
 }
 
-func (e *blobUndecodableError) Error() string {
+func (e *BlobUndecodableError) Error() string {
 	return fmt.Sprintf("recorder: payload %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
 }
 
-func (e *blobUndecodableError) Unwrap() error { return e.Err }
+func (e *BlobUndecodableError) Unwrap() error { return e.Err }
 
-// decodeRequestBlob decodes the request blob ref under base into req. A retired decision
-// is a [*retiredDecisionError] and any other failure a [*blobUndecodableError].
-func decodeRequestBlob(base, ref string, raw []byte, req *AgentCommandRequest) error {
-	err := decodeAgentBlob(base, ref, raw, req)
-	var retired *retiredDecisionError
+// DecodeRequestBlob decodes the request blob ref, read from the activity log
+// under base, into req. A retired decision is a [*RetiredDecisionError] and
+// any other failure a [*BlobUndecodableError].
+func DecodeRequestBlob(base, ref string, raw []byte, req *AgentCommandRequest) error {
+	err := DecodeAgentBlob(base, ref, raw, req)
+	var retired *RetiredDecisionError
 	if err == nil || errors.As(err, &retired) {
 		return err
 	}
-	return &blobUndecodableError{Store: filepath.Join(base, dir), Ref: ref, Err: err}
+	return &BlobUndecodableError{Store: callsDir(base), Ref: ref, Err: err}
 }
 
 // retiredDecisions are the decision names no build after the defer rename writes.
 func retiredDecisions() []string { return []string{"pass", "allow"} }
 
-// decodeAgentBlob decodes the agent-command blob ref under base into v. A retired decision
-// is a [*retiredDecisionError]; any other failure is returned as is.
-func decodeAgentBlob(base, ref string, raw []byte, v any) error {
+// DecodeAgentBlob decodes the agent-command blob ref, read from the activity
+// log under base, into v. A retired decision is a [*RetiredDecisionError];
+// any other failure is returned as is.
+func DecodeAgentBlob(base, ref string, raw []byte, v any) error {
 	err := codec.Unmarshal(raw, v)
 	var unknown *verdict.UnknownDecisionError
 	if errors.As(err, &unknown) && slices.Contains(retiredDecisions(), unknown.Decision) {
-		return &retiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: unknown.Decision}
+		return &RetiredDecisionError{Store: callsDir(base), Ref: ref, Decision: unknown.Decision}
 	}
 	return err
 }
@@ -621,13 +625,17 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 // agentKindTag is the encoded prefix both agent kinds share.
 const agentKindTag = `"kind":"agent_`
 
-// relativize makes a recorded path workspace-relative. A path already
-// relative, or outside the workspace, comes back unchanged.
-func relativize(root, p string) string {
-	if p == "" || root == "" || !strings.HasPrefix(p, root) {
+// Relativize makes a recorded path relative to the workspace root, the form a
+// review speaks. A path already relative, or outside root, comes back
+// unchanged, so /repo2/x stays as it is under the root /repo.
+func Relativize(root, p string) string {
+	if p == "" || root == "" {
 		return p
 	}
-	return strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+	if rel, ok := strings.CutPrefix(p, strings.TrimSuffix(root, "/")+"/"); ok {
+		return rel
+	}
+	return p
 }
 
 // ObservedCounts reports how many reads, writes and shell commands the
@@ -635,7 +643,7 @@ func relativize(root, p string) string {
 // records at all. A log that cannot be read is the error. A request payload
 // that does not decode is left out and returned in the joined error.
 func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
-	events, err := recentCalls(ctx, base, limit)
+	events, err := RecentCalls(ctx, base, limit)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -644,12 +652,12 @@ func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes,
 		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := e.Request.Read(callsDir(base))
+		raw, rerr := ReadCallPayload(base, e.Request)
 		if rerr != nil {
 			continue
 		}
 		var req AgentCommandRequest
-		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
+		if err := DecodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -710,9 +718,10 @@ func isEnvAssignment(tok string) bool {
 	return true
 }
 
-// recentCalls is up to limit calls from the end of the log under base, newest
-// first. A line that does not decode is passed over.
-func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
+// RecentCalls is up to limit calls from the end of the log under base, newest
+// first. A line that does not decode is passed over; any other read failure
+// is the error, and so is an empty base.
+func RecentCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	if base == "" {
 		return nil, errors.New("recorder: read names no directory")
 	}
@@ -793,7 +802,7 @@ func WritePayload(ctx context.Context, base, prefix string, data []byte) journal
 // argv of a background job such as "graph build", and whether there is one.
 // A job that has not run within the retained log is (zero, false).
 func LastJob(ctx context.Context, base, name string) (journal.Call, bool) {
-	calls, _ := recentCalls(ctx, base, maxEvents)
+	calls, _ := RecentCalls(ctx, base, maxEvents)
 	for _, c := range calls { // newest-first
 		if c.Kind == journal.CallKindJob && c.Name == name {
 			return c, true

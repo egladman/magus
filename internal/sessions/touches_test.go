@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
 
 	got, err := replayTrail(t.Context(), "", base, []string{"magus.go"}, 100)
 
-	var undecodable *blobUndecodableError
+	var undecodable *recorder.BlobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
 	assert.Equal(t, ref, undecodable.Ref)
 	assert.Len(t, got["magus.go"], 1)
@@ -305,9 +306,9 @@ func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	recorder.AppendCall(t.Context(), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: recorder.ToolShellCommand, Response: response})
 
 	_, err := readActivity(t.Context(), base, "s1", 100)
-	var retired *retiredDecisionError
+	var retired *recorder.RetiredDecisionError
 	require.ErrorAs(t, err, &retired)
-	assert.Equal(t, retiredDecisionError{Store: base, Ref: ref, Decision: "pass"}, *retired)
+	assert.Equal(t, recorder.RetiredDecisionError{Store: filepath.Join(base, "activity"), Ref: ref, Decision: "pass"}, *retired, "the store to clear is the activity directory")
 }
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {

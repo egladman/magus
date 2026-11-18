@@ -42,11 +42,11 @@ func (f GuardFeedback) NeedsReview() bool {
 // and a derived view avoids divergence between what the guard saw and what a
 // later report reads.
 func RecentGuardFeedback(ctx context.Context, base, session string, limit int) ([]GuardFeedback, error) {
-	events, err := recentCalls(ctx, base, limit)
+	events, err := RecentCalls(ctx, base, limit)
 	if err != nil || len(events) == 0 {
 		return nil, err
 	}
-	// ReadRecent is newest first; follow-up can only be recognized in causal
+	// RecentCalls is newest first; follow-up can only be recognized in causal
 	// order, so inspect the retained window oldest first.
 	slices.Reverse(events)
 
@@ -135,7 +135,7 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 	if base == "" || lease == "" || limit <= 0 {
 		return nil, false, nil
 	}
-	events, err := recentCalls(ctx, base, maxEvents)
+	events, err := RecentCalls(ctx, base, maxEvents)
 	if err != nil {
 		return nil, false, err
 	}
@@ -179,10 +179,10 @@ type agentCommand struct {
 // agentCommands yields the agent-command events among events, in their order, whose
 // request and response blobs both read and decode. An event whose blobs rotated away is
 // skipped; a blob holding a retired guard decision is yielded as a
-// [*retiredDecisionError], and nothing after it.
+// [*RetiredDecisionError], and nothing after it.
 func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, error] {
 	return func(yield func(agentCommand, error) bool) {
-		var retired *retiredDecisionError
+		var retired *RetiredDecisionError
 		for _, event := range events {
 			if event.Kind != journal.CallKindAgentCommand || event.Request.Ref == "" || event.Response.Ref == "" {
 				continue
@@ -192,7 +192,7 @@ func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, e
 			if err != nil {
 				continue
 			}
-			if err := decodeAgentBlob(base, event.Request.Ref, raw, &command.request); errors.As(err, &retired) {
+			if err := DecodeAgentBlob(base, event.Request.Ref, raw, &command.request); errors.As(err, &retired) {
 				yield(agentCommand{}, err)
 				return
 			} else if err != nil {
@@ -202,7 +202,7 @@ func agentCommands(base string, events []journal.Call) iter.Seq2[agentCommand, e
 			if err != nil {
 				continue
 			}
-			if err := decodeAgentBlob(base, event.Response.Ref, raw, &command.response); errors.As(err, &retired) {
+			if err := DecodeAgentBlob(base, event.Response.Ref, raw, &command.response); errors.As(err, &retired) {
 				yield(agentCommand{}, err)
 				return
 			} else if err != nil {

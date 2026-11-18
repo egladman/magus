@@ -133,13 +133,13 @@ func ReadFeedback(bases []string, w FeedbackWindow) (feedback.Report, error) {
 }
 
 // feedbackObservation reads one agent-command event's blobs. It reports false for an event
-// that recorded no request blob or whose blob is gone. A request blob that cannot be read or decoded is its error: a
-// [*blobUndecodableError], or a [*retiredDecisionError] for one holding a retired guard
-// decision.
+// that recorded no request blob or whose blob is gone. A request blob that
+// cannot be read or decoded is its error, a [*RetiredDecisionError] for one
+// holding a retired guard decision.
 func feedbackObservation(base string, e journal.Call) (feedback.Observation, bool, error) {
 	var req AgentCommandRequest
 	var resp AgentCommandResponse
-	var retired *retiredDecisionError
+	var retired *RetiredDecisionError
 	if e.Request.Ref == "" {
 		return feedback.Observation{}, false, nil
 	}
@@ -150,13 +150,13 @@ func feedbackObservation(base string, e journal.Call) (feedback.Observation, boo
 	if err != nil {
 		return feedback.Observation{}, false, err
 	}
-	if err := decodeAgentBlob(base, e.Request.Ref, raw, &req); err != nil {
+	if err := DecodeAgentBlob(base, e.Request.Ref, raw, &req); err != nil {
 		return feedback.Observation{}, false, err
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.Response.Ref != "" {
 		if raw, err := e.Response.Read(callsDir(base)); err == nil {
-			if err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); errors.As(err, &retired) {
+			if err := DecodeAgentBlob(base, e.Response.Ref, raw, &resp); errors.As(err, &retired) {
 				return feedback.Observation{}, false, err
 			}
 		}

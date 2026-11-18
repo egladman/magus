@@ -110,14 +110,15 @@ const (
 //
 // A missing store, a missing blob, or an agent whose host wires no hook all contribute less;
 // a store that cannot be read is [ConsultGapUnobserved] and its error.
-// A request blob that does not decode is skipped and returned in the joined error, a
-// [*blobUndecodableError] or a [*retiredDecisionError] per blob, beside what the rest gave.
+// A request blob that does not decode is skipped and returned in the joined
+// error, a [*BlobUndecodableError] or a [*RetiredDecisionError] per blob,
+// beside what the rest gave.
 func Consulted(ctx context.Context, root, base string, paths []string, limit int) ([]Consultation, ConsultGap, error) {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		want[p] = true
 	}
-	events, err := recentCalls(ctx, base, limit)
+	events, err := RecentCalls(ctx, base, limit)
 	if err != nil {
 		return nil, ConsultGapUnobserved, err
 	}
@@ -139,18 +140,18 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 			continue
 		}
 		leased++
-		raw, rerr := e.Request.Read(callsDir(base))
+		raw, rerr := ReadCallPayload(base, e.Request)
 		if rerr != nil {
 			continue
 		}
 		var req AgentCommandRequest
-		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
+		if err := DecodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		switch req.Tool {
 		case ToolFileWrite:
-			if want[relativize(root, req.Path)] {
+			if want[Relativize(root, req.Path)] {
 				leases[e.Lease] = true
 			}
 		case ToolShellCommand:

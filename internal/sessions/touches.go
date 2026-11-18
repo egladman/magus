@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -94,10 +93,10 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 // replayTrail reconstructs, for each of paths, which agent sessions the store at base saw
 // write it and what they had read first, reading at most limit recent events. A store that
 // cannot be read is its error. A request blob that does not decode is skipped and returned
-// in the joined error, which is a [*blobUndecodableError] or a [*retiredDecisionError] per
-// blob.
+// in the joined error, which is a [*recorder.BlobUndecodableError] or a
+// [*recorder.RetiredDecisionError] per blob.
 func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
-	events, err := readCalls(ctx, base, limit)
+	events, err := recorder.RecentCalls(ctx, base, limit)
 	if err != nil {
 		return map[string][]diff.Touch{}, err
 	}
@@ -124,7 +123,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 			continue
 		}
 		var req recorder.AgentCommandRequest
-		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
+		if err := recorder.DecodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -139,7 +138,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		// else reads the touch, and every consumer then has to remember to redact.
 		obs = append(obs, observation{
 			Host: req.Host, Session: req.Session, Transcript: req.Transcript,
-			Tool: req.Tool, Path: relativize(root, req.Path), Program: recorder.CommandProgram(req.Command),
+			Tool: req.Tool, Path: recorder.Relativize(root, req.Path), Program: recorder.CommandProgram(req.Command),
 			At: e.Time,
 		})
 	}
@@ -374,11 +373,11 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 	if session == "" {
 		return out, nil
 	}
-	events, err := readCalls(ctx, base, limit)
+	events, err := recorder.RecentCalls(ctx, base, limit)
 	if err != nil {
 		return out, err
 	}
-	var retired *retiredDecisionError
+	var retired *recorder.RetiredDecisionError
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
 		if e.Session != session {
@@ -390,7 +389,7 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 			call := activityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := recorder.ReadCallPayload(base, e.Response); err == nil {
 				var resp recorder.AgentCommandResponse
-				switch err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); {
+				switch err := recorder.DecodeAgentBlob(base, e.Response.Ref, raw, &resp); {
 				case errors.As(err, &retired):
 					return Activity{}, err
 				case err == nil:
@@ -402,7 +401,7 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 			}
 			if raw, err := recorder.ReadCallPayload(base, e.Request); err == nil {
 				var req recorder.AgentCommandRequest
-				switch err := decodeAgentBlob(base, e.Request.Ref, raw, &req); {
+				switch err := recorder.DecodeAgentBlob(base, e.Request.Ref, raw, &req); {
 				case errors.As(err, &retired):
 					return Activity{}, err
 				case err == nil:
@@ -432,86 +431,6 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 	}
 	out.Repeats = repeats(out.Calls)
 	return out, nil
-}
-
-// relativize turns a recorded path into the workspace-relative form a review speaks. A path
-// already relative, or one outside the workspace entirely, is returned unchanged; the latter
-// then matches nothing, which is the honest outcome for a file this review is not about.
-func relativize(root, p string) string {
-	if p == "" || root == "" || !strings.HasPrefix(p, root) {
-		return p
-	}
-	return strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
-}
-
-// readCalls is up to limit calls from the end of the log under base, newest
-// first. A line that does not decode is passed over.
-func readCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
-	if base == "" {
-		return nil, errors.New("sessions: read names no directory")
-	}
-	var out []journal.Call
-	for c, err := range recorder.ReadCalls(ctx, base, limit) {
-		if errors.Is(err, codec.ErrLineUndecodable) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, nil
-}
-
-// The payload decoders below copy internal/recorder's: the spec exports the
-// payload types and not their readers, and each side names its own errors.
-
-// retiredDecisionError is a payload holding "pass" or "allow", the names
-// the guard's defer had before. A reader refuses the store rather than drop
-// the observation from what it counts.
-type retiredDecisionError struct {
-	Store    string
-	Ref      string
-	Decision string
-}
-
-func (e *retiredDecisionError) Error() string {
-	return fmt.Sprintf("sessions: %s holds the retired guard decision %q in payload %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
-}
-
-// blobUndecodableError is a payload that is there and does not decode.
-type blobUndecodableError struct {
-	Store string
-	Ref   string
-	Err   error
-}
-
-func (e *blobUndecodableError) Error() string {
-	return fmt.Sprintf("sessions: payload %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
-}
-
-func (e *blobUndecodableError) Unwrap() error { return e.Err }
-
-// decodeRequestBlob decodes a request payload into req: a retired decision
-// is a [*retiredDecisionError] and any other failure a [*blobUndecodableError].
-func decodeRequestBlob(base, ref string, raw []byte, req *recorder.AgentCommandRequest) error {
-	err := decodeAgentBlob(base, ref, raw, req)
-	var retired *retiredDecisionError
-	if err == nil || errors.As(err, &retired) {
-		return err
-	}
-	return &blobUndecodableError{Store: base, Ref: ref, Err: err}
-}
-
-// decodeAgentBlob decodes an agent payload into v. A retired decision is a
-// [*retiredDecisionError]; any other failure is returned as is.
-func decodeAgentBlob(base, ref string, raw []byte, v any) error {
-	err := codec.Unmarshal(raw, v)
-	var unknown *verdict.UnknownDecisionError
-	if errors.As(err, &unknown) && slices.Contains([]string{"pass", "allow"}, unknown.Decision) {
-		return &retiredDecisionError{Store: base, Ref: ref, Decision: unknown.Decision}
-	}
-	return err
 }
 
 // prependCapped puts v at the front and bounds the list, dropping a duplicate so a file read

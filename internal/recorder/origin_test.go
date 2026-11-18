@@ -26,7 +26,7 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	AppendCall(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
 	AppendCall(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
-	events, err := recentCalls(t.Context(), dir, 2)
+	events, err := RecentCalls(t.Context(), dir, 2)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	local := LocalOrigin(ctx)

@@ -85,9 +85,9 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
 
-	events, err := recentCalls(t.Context(), dir, 10)
+	events, err := RecentCalls(t.Context(), dir, 10)
 	if err != nil {
-		t.Fatalf("recentCalls: %v", err)
+		t.Fatalf("RecentCalls: %v", err)
 	}
 	if len(events) != 3 {
 		t.Fatalf("got %d events, want 3", len(events))
@@ -136,7 +136,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 		Decision:  verdict.Defer,
 	})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -175,7 +175,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: verdict.Defer})
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events)
 }
@@ -184,7 +184,7 @@ func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: verdict.Defer, GuardMs: 278})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	require.NotNil(t, events[0].Guard)
@@ -196,7 +196,7 @@ func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -220,7 +220,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0", Cwd: "/work/tree",
 	})
 
-	events, err := recentCalls(t.Context(), dir, 10)
+	events, err := RecentCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	var commands, spawns []journal.Call
@@ -269,7 +269,7 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: verdict.Advise, Context: "record the decision"})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -314,7 +314,7 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	}
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: verdict.Defer, AgentFacts: want})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	raw, err := readBlob(dir, events[0].Request.Ref)
@@ -331,7 +331,7 @@ func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls"})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
@@ -346,7 +346,7 @@ func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
 	empty := 0
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
@@ -366,7 +366,7 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5", AgentFacts: want,
 	})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
@@ -393,7 +393,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 		Context:   handed,
 	})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -430,12 +430,12 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events, "a spawn with no handed context has nothing to audit")
 
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Context: "go and do the thing"})
-	events, err = recentCalls(t.Context(), dir, 1)
+	events, err = RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// An unlabelled callee still says a spawn happened, and names no lease.
@@ -462,7 +462,7 @@ func TestAppendAgentSpawn_ContinueIsExplicit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			AppendAgentSpawn(t.Context(), dir, tc.spawn)
-			events, err := recentCalls(t.Context(), dir, 1)
+			events, err := RecentCalls(t.Context(), dir, 1)
 			require.NoError(t, err)
 			require.Len(t, events, 1)
 			assert.Equal(t, tc.want, events[0].Name)
@@ -537,7 +537,7 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: verdict.Defer})
 
-	events, err := recentCalls(t.Context(), dir, 3)
+	events, err := RecentCalls(t.Context(), dir, 3)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	assert.Empty(t, events[0].Lease, "newest first: an unresolved call is uncorrelated, never the environment's")
@@ -559,7 +559,7 @@ func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
 
-	events, err := recentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(t.Context(), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Empty(t, events[0].Lease, "a missing join is the designed outcome, never an invented one")
@@ -619,7 +619,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 
 	rotate(dir, 2) // keep the last 2 events
 
-	events, _ := recentCalls(t.Context(), dir, 10)
+	events, _ := RecentCalls(t.Context(), dir, 10)
 	if len(events) != 2 {
 		t.Fatalf("after rotate got %d events, want 2", len(events))
 	}
@@ -710,7 +710,7 @@ func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
 	rotate(dir, 10) // under cap: no rewrite
-	if evs, _ := recentCalls(t.Context(), dir, 10); len(evs) != 1 {
+	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
 	}
 	rotate("", 2) // must not panic
@@ -722,7 +722,7 @@ func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindJob, Name: "x"})
 	}
 	RotateCalls(dir) // maxEvents is 10000, so this is a no-op that must not lose events
-	if evs, _ := recentCalls(t.Context(), dir, 10); len(evs) != 3 {
+	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 3 {
 		t.Errorf("Rotate under cap changed the trail: got %d events, want 3", len(evs))
 	}
 }
@@ -736,7 +736,7 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
 	RotateCalls(dir)
-	got, err := recentCalls(t.Context(), dir, maxEvents+100)
+	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
 	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
@@ -769,7 +769,7 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 	require.NoError(t, os.Chmod(eventsPath(dir), 0o644))
 
 	RotateCalls(dir)
-	got, err := recentCalls(t.Context(), dir, maxEvents+100)
+	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents, "the rotate ran")
 	fi, err := os.Stat(eventsPath(dir))
@@ -793,7 +793,7 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	require.Less(t, info.Size(), int64(maxEvents)*minEventBytes, "a one-event trail is below the skip threshold")
 
 	RotateCalls(dir)
-	got, err := recentCalls(t.Context(), dir, 10)
+	got, err := RecentCalls(t.Context(), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
 
@@ -950,7 +950,7 @@ func TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts(t *testing.T) {
 
 	reads, writes, shell, err := ObservedCounts(t.Context(), base, 100)
 
-	var undecodable *blobUndecodableError
+	var undecodable *BlobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
 	assert.Equal(t, request.Ref, undecodable.Ref)
 	assert.Equal(t, [3]int{1, 0, 0}, [3]int{reads, writes, shell})
@@ -979,6 +979,13 @@ func TestCommandProgramReducesToTheProgram(t *testing.T) {
 	} {
 		assert.Equal(t, tc.want, CommandProgram(tc.in), "input %q", tc.in)
 	}
+}
+
+func TestRelativizeCutsTheRootAtASeparator(t *testing.T) {
+	assert.Equal(t, "x/y.go", Relativize("/repo", "/repo/x/y.go"))
+	assert.Equal(t, "x/y.go", Relativize("/repo/", "/repo/x/y.go"))
+	assert.Equal(t, "/repo2/x", Relativize("/repo", "/repo2/x"), "a sibling sharing the prefix is outside the root")
+	assert.Equal(t, "x.go", Relativize("/repo", "x.go"))
 }
 
 func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
