@@ -50,12 +50,12 @@ func (s *StoreVersionSuite) spec(line map[string]codec.RawMessage) string {
 }
 
 func (s *StoreVersionSuite) TestAStoredCheckPostconditionComesToAcceptWitnessed() {
-	line := s.line(`{"kind":"Job","spec":{"postconditions":[{"id":"tests","kind":"Check"},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}}`)
+	line := s.line(`{"kind":"Job","spec":{"goals":[{"id":"tests","kind":"Check"},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}}`)
 
 	got, err := AcceptWitnessed(line)
 
 	s.Require().NoError(err)
-	s.JSONEq(`{"postconditions":[{"id":"tests","kind":"Check","accept":["Witnessed"]},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}`, s.spec(got))
+	s.JSONEq(`{"goals":[{"id":"tests","kind":"Check","accept":["Witnessed"]},{"id":"docs","kind":"Paths"},{"id":"lint","kind":"Check","accept":["Reported"]}]}`, s.spec(got))
 	again, err := AcceptWitnessed(got)
 	s.Require().NoError(err)
 	s.JSONEq(s.spec(got), s.spec(again), "the rewrite is the same applied twice")
@@ -75,7 +75,7 @@ func (s *StoreVersionSuite) TestALineWithNoPostconditionsComesBackAsItWas() {
 // only the caller's later migration brings it forward.
 func (s *StoreVersionSuite) TestAMigratedRowKeepsTheOlderLayout() {
 	line := s.line(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
-		`"spec":{"postconditions":[{"id":"tests","kind":"Check","expect":"Passed","check":{"target":"test","project":"."}}]},"status":{}}`)
+		`"spec":{"goals":[{"id":"tests","kind":"Check","expect":"Passed","check":{"target":"test","project":"."}}]},"status":{}}`)
 
 	got, err := AcceptWitnessed(line)
 	s.Require().NoError(err)

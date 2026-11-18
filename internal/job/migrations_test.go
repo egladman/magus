@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -551,12 +552,13 @@ const (
 		`"metadata":{"name":"a","generation":2,"annotations":{"x.example/dependsOn":"keepMe"}},` +
 		`"spec":{"agent":{"instructions":"x","worker":{"type":"Resumed"}},"paths":{"write":["a.go"]},"dependsOn":["b"],` +
 		`"briefFormat":"Markdown","maxAttempts":2,"check":{"target":"generate","project":".","noDefaultCharms":true},` +
-		`"postconditions":[{"id":"g","kind":"Check","expect":"Passed","check":{"target":"test","project":"."},"accept":["Witnessed"]},` +
+		`"goals":[{"id":"g","kind":"Check","expect":"Passed","check":{"target":"test","project":"."},"accept":["Witnessed"]},` +
 		`{"id":"s","kind":"Symbol","expect":"Unreferenced","symbols":["X"]}]},` +
 		`"status":{"conditions":[{"type":"Running","status":"True","observedGeneration":2,"lastTransitionTime":"1970-01-01T00:00:02Z","reason":"Running","message":""}],` +
 		`"modelTier":{"name":"bounded","rank":1,"skills":"Short","source":"UserMatrix"},"writeProof":"Disjoint","reportedBase":"abc",` +
 		`"baseVerdict":"RevisionMatch","registeredBy":{"user":"u","entryPoint":"Cli","credential":{"class":"Operator","id":"i"}},` +
-		`"registered":1,"checkoutRoot":"/tmp/x","created":1,"updated":2}}`
+		`"registered":1,"checkoutRoot":"/tmp/x","created":1,"updated":2,` +
+		`"gateAttempts":[{"gateId":"g","attempt":{"found":true,"ref":"out1","timestampMs":5}}]}}`
 	camelAttempt = `{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Attempt","spec":{"job":"a","n":1},` +
 		`"status":{"started":1,"ended":2,"end":"Handback","jobState":"NoReturn","observedGeneration":2,"retry":{"retryable":false,"change":"Upgrade"}}}`
 )
@@ -575,6 +577,7 @@ func (s *snakeRecordSuite) snakeRowWant() string {
 		WriteProof: job.WriteProofDisjoint, ReportedBase: "abc", BaseVerdict: job.BaseRevisionMatch,
 		RegisteredBy: job.Origin{User: "u", EntryPoint: job.EntryPointCLI, Credential: job.Credential{Kind: "operator", ID: "i"}},
 		Registered:   1, CheckoutRoot: "/tmp/x",
+		PostconditionAttempts: []job.PostconditionAttempt{{PostconditionID: "g", Attempt: job.CapturedRun{Found: true, Ref: "out1", TimestampMs: 5}}},
 	}
 	line, err := job.MarshalRecord(row, nil)
 	s.Require().NoError(err)
@@ -664,6 +667,61 @@ func (s *snakeRecordSuite) TestAnnotationsAndUnknownMembersAreKeptVerbatim() {
 	s.Require().NoError(err)
 	s.Contains(got, `"x.example/dependsOn":"keepMe"`)
 	s.Contains(got, `"laterMember":{"innerKey":1}`)
+}
+
+func (s *snakeRecordSuite) TestAVerificationEvidenceKeepsItsGateID() {
+	got, err := s.snaked(strings.Replace(camelRow, `"checkoutRoot":"/tmp/x"`,
+		`"checkoutRoot":"/tmp/x","result":{"verificationEvidence":[{"gateId":"g","outputRef":"out1"}]}`, 1))
+
+	s.Require().NoError(err)
+	s.Contains(got, `"verification_evidence":[{"gate_id":"g","output_ref":"out1"}]`)
+	s.NotContains(got, `"goals"`)
+	s.NotContains(got, `"gate_attempts"`)
+}
+
+func TestRespellFeaturesSuite(t *testing.T) { suite.Run(t, new(respellFeaturesSuite)) }
+
+// respellFeaturesSuite pins [featuresRespelled] on a row and on the header.
+type respellFeaturesSuite struct {
+	suite.Suite
+}
+
+func (s *respellFeaturesSuite) respelled(text string) string {
+	e, err := decodeEntry([]byte(text))
+	s.Require().NoError(err)
+	e, err = respellFeatures(e)
+	s.Require().NoError(err)
+	out, err := codec.Marshal(e)
+	s.Require().NoError(err)
+	return string(out)
+}
+
+func (s *respellFeaturesSuite) TestARowsSignatureGoalsBecomesSignaturePostconditions() {
+	got := s.respelled(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a",` +
+		`"annotations":{"safetyscissors.job/requires":"claim-declarations,signature-goals","x.example/note":"signature-goals"}}}`)
+
+	s.JSONEq(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a",`+
+		`"annotations":{"safetyscissors.job/requires":"claim-declarations,signature-postconditions","x.example/note":"signature-goals"}}}`, got)
+	row, ok, err := job.ReadRecord([]byte(got))
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Empty(row.Unmet(), "this build implements every feature the row requires")
+}
+
+func (s *respellFeaturesSuite) TestTheHeaderIsRespelledToo() {
+	header, err := job.MarshalHeader([]apiversion.Feature{"signature-goals"})
+	s.Require().NoError(err)
+
+	want, err := job.MarshalHeader([]apiversion.Feature{"signature-postconditions"})
+	s.Require().NoError(err)
+	s.JSONEq(string(want), s.respelled(string(header)))
+}
+
+func (s *respellFeaturesSuite) TestALineNamingNoRenamedFeatureIsKeptAsItIs() {
+	line := `{"kind":"Job","metadata":{"name":"a","annotations":{"safetyscissors.job/requires":"job-generations"}}}`
+
+	s.JSONEq(line, s.respelled(line))
+	s.JSONEq(`{"kind":"JobList"}`, s.respelled(`{"kind":"JobList"}`))
 }
 
 // snakeStoreSuite migrates a store left at the migration before [keysSnaked], as a binary

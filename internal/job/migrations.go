@@ -54,6 +54,7 @@ func jobMigrations() []migrate.Migration {
 		{Name: job.AcceptWitnessedMigration, Up: acceptWitnessed},
 		{Name: groupsMoved, Up: regroup, Header: regroup},
 		{Name: keysSnaked, Up: snakeRecord, Header: snakeRecord},
+		{Name: featuresRespelled, Up: respellFeatures, Header: respellFeatures},
 	}
 }
 
@@ -234,12 +235,13 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	}
 	var row job.Job
 	var flat struct {
-		Holder     string           `json:"holder"`
-		APIVersion types.APIVersion `json:"api_version"`
-		WritePaths []string         `json:"write_paths"`
-		ReadPaths  []string         `json:"read_paths"`
-		DenyPaths  []string         `json:"deny_paths"`
-		SoftPaths  []string         `json:"soft_paths"`
+		Holder     string              `json:"holder"`
+		APIVersion types.APIVersion    `json:"api_version"`
+		WritePaths []string            `json:"write_paths"`
+		ReadPaths  []string            `json:"read_paths"`
+		DenyPaths  []string            `json:"deny_paths"`
+		SoftPaths  []string            `json:"soft_paths"`
+		Goals      []job.Postcondition `json:"goals"`
 	}
 	if err := codec.Unmarshal(text, &row); err != nil {
 		return nil, fmt.Errorf("reading the row: %w", err)
@@ -255,6 +257,7 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 		row.RegisteredBy.EntryPoint = job.EntryPointServer
 	}
 	row.Paths = job.Paths{Write: flat.WritePaths, Read: flat.ReadPaths, Deny: flat.DenyPaths, Soft: flat.SoftPaths}
+	row.Postconditions = flat.Goals
 	// The record is written in today's spelling, which the later migrations that respell a
 	// CamelCase value never see: what they would make of it is made here.
 	for i, g := range row.Postconditions {
@@ -443,7 +446,8 @@ const keysSnaked = "records and attempts spell their keys and enum values in sna
 // snakeKeys pairs each camelCase key a job store record spelled before [keysSnaked] with
 // its snake_case spelling. An explicit table rather than a case conversion, because a
 // conversion would respell every camelCase key, those of a member this build keeps without
-// declaring among them; the table names only keys a record declared.
+// declaring among them; the table names only keys a record declared. goals and
+// gateAttempts take the names the postcondition rename gave them.
 func snakeKeys() map[string]string {
 	return map[string]string{
 		"apiVersion": "api_version", "attemptId": "attempt_id", "baseVerdict": "base_verdict",
@@ -451,8 +455,8 @@ func snakeKeys() map[string]string {
 		"changedPaths": "changed_paths", "checkoutRoot": "checkout_root", "deadBecause": "dead_because",
 		"denialsKnown": "denials_known", "dependsOn": "depends_on", "durationMs": "duration_ms",
 		"endReason": "end_reason", "entryPoint": "entry_point", "extraArgs": "extra_args",
-		"failingRefs": "failing_refs", "followUps": "follow_ups", "gateAttempts": "gate_attempts",
-		"gateId": "gate_id", "holderStopped": "holder_stopped", "itemsRemoved": "items_removed",
+		"failingRefs": "failing_refs", "followUps": "follow_ups", "gateAttempts": "postcondition_attempts",
+		"gateId": "gate_id", "goals": "postconditions", "holderStopped": "holder_stopped", "itemsRemoved": "items_removed",
 		"jobState": "job_state", "lastRun": "last_run", "lastTransitionTime": "last_transition_time",
 		"leftUnmerged": "left_unmerged", "maxAttempts": "max_attempts", "maxClaims": "max_claims",
 		"modelTier": "model_tier", "observedGeneration": "observed_generation", "outputRef": "output_ref",
@@ -517,6 +521,9 @@ func snakeRecord(e migrate.Entry) (migrate.Entry, error) {
 		return nil, err
 	}
 	if err := snakeChecks(out); err != nil {
+		return nil, err
+	}
+	if err := attemptPostconditionIDs(out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -808,4 +815,99 @@ func snakeCheck(raw codec.RawMessage, at string) (codec.RawMessage, error) {
 	delete(check, "noDefaultCharms")
 	check["no_default_charms"] = v
 	return codec.Marshal(check)
+}
+
+// attemptPostconditionIDs respells gate_id as postcondition_id in each of a row's
+// postcondition_attempts. Not through [snakeKeys]: a verification evidence entry keeps
+// gate_id.
+func attemptPostconditionIDs(e migrate.Entry) error {
+	raw, ok := e["status"]
+	if !ok {
+		return nil
+	}
+	var status map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &status); err != nil {
+		return fmt.Errorf("reading status: %w", err)
+	}
+	attemptsRaw, ok := status["postcondition_attempts"]
+	if !ok {
+		return nil
+	}
+	var attempts []map[string]codec.RawMessage
+	if err := codec.Unmarshal(attemptsRaw, &attempts); err != nil {
+		return fmt.Errorf("reading status.postcondition_attempts: %w", err)
+	}
+	for i, a := range attempts {
+		id, ok := a["gate_id"]
+		if !ok {
+			continue
+		}
+		if _, dup := a["postcondition_id"]; dup {
+			return &snakeKeyCollisionError{Path: fmt.Sprintf("status.postcondition_attempts[%d]", i), Camel: "gate_id", Snake: "postcondition_id"}
+		}
+		delete(a, "gate_id")
+		a["postcondition_id"] = id
+	}
+	var err error
+	if status["postcondition_attempts"], err = codec.Marshal(attempts); err != nil {
+		return err
+	}
+	if e["status"], err = codec.Marshal(status); err != nil {
+		return err
+	}
+	return nil
+}
+
+// featuresRespelled names the migration that respells the signature-goals feature.
+const featuresRespelled = "the signature-goals feature becomes signature-postconditions"
+
+// renamedFeatures pairs each feature a requires annotation named before
+// [featuresRespelled] with its name after it.
+func renamedFeatures() map[string]string {
+	return map[string]string{"signature-goals": "signature-postconditions"}
+}
+
+// respellFeatures renames, in every requires annotation of a row or the header, each
+// feature [renamedFeatures] lists. A line naming none comes back unchanged.
+func respellFeatures(e migrate.Entry) (migrate.Entry, error) {
+	raw, ok := e["metadata"]
+	if !ok {
+		return e, nil
+	}
+	var meta map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &meta); err != nil {
+		return nil, fmt.Errorf("reading metadata: %w", err)
+	}
+	annotationsRaw, ok := meta["annotations"]
+	if !ok {
+		return e, nil
+	}
+	var annotations map[string]string
+	if err := codec.Unmarshal(annotationsRaw, &annotations); err != nil {
+		return nil, fmt.Errorf("reading metadata.annotations: %w", err)
+	}
+	renamed, changed := renamedFeatures(), false
+	for key, value := range annotations {
+		if !strings.HasSuffix(key, "/requires") {
+			continue
+		}
+		names := strings.Split(value, ",")
+		for i, name := range names {
+			if to, ok := renamed[strings.TrimSpace(name)]; ok {
+				names[i], changed = to, true
+			}
+		}
+		annotations[key] = strings.Join(names, ",")
+	}
+	if !changed {
+		return e, nil
+	}
+	var err error
+	if meta["annotations"], err = codec.Marshal(annotations); err != nil {
+		return nil, err
+	}
+	if e["metadata"], err = codec.Marshal(meta); err != nil {
+		return nil, err
+	}
+	return e, nil
 }

@@ -354,11 +354,20 @@ func (e gradesEntry) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON reads a run or a grade by the type the line is stamped with, and refuses
-// a line of another version or kind with an [*apiversion.RefusedError].
+// a line of another version or kind with an [*apiversion.RefusedError]. A line spelling
+// goal or goals, the names postcondition and postconditions had before, is refused: no
+// migration reads grades.jsonl, and read as it stands it would grade nothing.
 func (e *gradesEntry) UnmarshalJSON(data []byte) error {
-	var probe struct{ apiversion.TypeMeta }
+	var probe struct {
+		apiversion.TypeMeta
+		Goal  codec.RawMessage `json:"goal"`
+		Goals codec.RawMessage `json:"goals"`
+	}
 	if err := codec.Unmarshal(data, &probe); err != nil {
 		return err
+	}
+	if probe.Goal != nil || probe.Goals != nil {
+		return fmt.Errorf("job: a grades.jsonl %s line spells goal, which this build reads only as postcondition", probe.Kind)
 	}
 	switch probe.TypeMeta {
 	case runType():

@@ -212,11 +212,32 @@ func (s *GradeSuite) TestALineOfAnotherKindIsRefused() {
 func (s *GradeSuite) TestAnOlderBuildsRunLineIsRefused() {
 	s.declare(checkPostconditionAccepting("tests", BasisReported))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, gradesFileName),
-		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","postcondition":"tests","basis":"Reported"}`+"\n"), 0o600))
+		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","goal":"tests","basis":"Reported"}`+"\n"), 0o600))
 
 	_, err := s.store.Grade(s.T().Context(), "j1", map[string]RunRef{"tests": "run-1"})
 
 	s.ErrorIs(err, codec.ErrLineUndecodable)
+}
+
+// grades.jsonl has no migration, so a line written before goal became postcondition is
+// refused rather than read as a run of no postcondition.
+func (s *GradeSuite) TestARunLineSpellingGoalIsRefused() {
+	s.declare(checkPostconditionAccepting("tests", BasisReported))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, gradesFileName),
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","goal":"tests","basis":"reported",`+
+			`"check":{"target":"test","project":"."},"tree":"t","exit":0,"started":1,"ended":2}`+"\n"), 0o600))
+
+	_, err := s.store.Grade(s.T().Context(), "j1", map[string]RunRef{"tests": "run-1"})
+
+	s.ErrorIs(err, codec.ErrLineUndecodable)
+	s.ErrorContains(err, "spells goal")
+}
+
+func (s *GradeSuite) TestAGradeLineSpellingGoalsIsRefused() {
+	var e gradesEntry
+	err := codec.Unmarshal([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":1,"verified":false,"goals":[]}`), &e)
+
+	s.ErrorContains(err, "spells goal")
 }
 
 func (s *GradeSuite) TestARunsAndAGradesLinesArePinned() {
