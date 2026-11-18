@@ -1,7 +1,7 @@
 package stream
 
 import (
-	"bufio"
+	"errors"
 	"io"
 	"sync"
 
@@ -72,22 +72,24 @@ func targetStatus(journalStatus journal.Status) (status string, cacheHit bool) {
 // two JSON objects on one line.
 type Writer struct {
 	mu     sync.Mutex
-	bw     *bufio.Writer
+	dst    io.Writer
 	filter Filter
 }
 
-// NewWriter returns a Writer emitting to dst under filter. The caller owns dst
-// and must call [Writer.Close] to flush; a Writer that is never closed loses
-// whatever is still buffered.
+// NewWriter returns a Writer emitting to dst under filter. The caller owns
+// dst; a Writer buffers nothing, so there is nothing to flush or close.
 func NewWriter(dst io.Writer, filter Filter) *Writer {
-	return &Writer{bw: bufio.NewWriter(dst), filter: filter}
+	return &Writer{dst: dst, filter: filter}
 }
 
-// Write writes one event, or does nothing when the filter excludes its type.
-// It flushes per event: a subscriber is usually a pipe read live, and a status
-// bar that learns of a failed build 4KB late is worse than none.
+// Write writes one event as one line in one write to dst, or nothing when the
+// filter excludes its type. An event with no Body is an error: it has no type
+// to filter on and no line a subscriber could parse.
 func (w *Writer) Write(e Event) error {
-	if e.Body == nil || !w.filter.Allows(e.Body.EventType()) {
+	if e.Body == nil {
+		return errors.New("write stream event: no body")
+	}
+	if !w.filter.Allows(e.Body.EventType()) {
 		return nil
 	}
 	line, err := codec.Marshal(e)
@@ -96,19 +98,6 @@ func (w *Writer) Write(e Event) error {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if _, err := w.bw.Write(line); err != nil {
-		return err
-	}
-	if err := w.bw.WriteByte('\n'); err != nil {
-		return err
-	}
-	return w.bw.Flush()
-}
-
-// Close flushes any buffered line. It does not close the underlying writer,
-// which the caller owns.
-func (w *Writer) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.bw.Flush()
+	_, err = w.dst.Write(append(line, '\n'))
+	return err
 }

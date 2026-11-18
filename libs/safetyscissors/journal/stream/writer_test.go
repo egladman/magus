@@ -113,7 +113,6 @@ func (s *WriterSuite) TestEmitsOneLinePerEvent() {
 	w := NewWriter(&buf, Filter{})
 	s.Require().NoError(w.Write(Event{Ts: 1, Body: Run{Phase: "started"}}))
 	s.Require().NoError(w.Write(Event{Ts: 2, Body: Run{Phase: "finished", Status: "pass"}}))
-	s.Require().NoError(w.Close())
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	s.Require().Len(lines, 2)
@@ -129,7 +128,12 @@ func (s *WriterSuite) TestDropsFilteredTypes() {
 	var buf bytes.Buffer
 	w := NewWriter(&buf, Filter{})
 	s.Require().NoError(w.Write(Event{Ts: 1, Body: Output{Stream: "stdout", Text: "noisy"}}))
-	s.Require().NoError(w.Close())
+	s.Empty(buf.String())
+}
+
+func (s *WriterSuite) TestAnEventWithNoBodyIsAnError() {
+	var buf bytes.Buffer
+	s.ErrorContains(NewWriter(&buf, Filter{}).Write(Event{Ts: 1}), "no body")
 	s.Empty(buf.String())
 }
 
@@ -150,7 +154,6 @@ func (s *WriterSuite) TestIsConcurrencySafe() {
 		})
 	}
 	wg.Wait()
-	s.Require().NoError(w.Close())
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	s.Require().Len(lines, writers*each)

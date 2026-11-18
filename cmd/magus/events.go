@@ -95,9 +95,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	w := stream.NewWriter(destination, filter)
-	defer func() { _ = w.Close() }()
-	emit := w.Write
+	emit := stream.NewWriter(destination, filter).Write
 	if opts.Format != outputText && opts.Format != outputJSONL {
 		emit = recordEmitter(filter, func(v any, names []string) error {
 			return emitRecord(opts, v, names)
