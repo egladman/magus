@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -67,7 +69,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	filter, err := ParseFilter(ef.Type)
+	filter, err := parseEventFilter(ef.Type)
 	if err != nil {
 		return err
 	}
@@ -97,7 +99,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	defer func() { _ = w.Close() }()
 	emit := w.Write
 	if opts.Format != outputText && opts.Format != outputJSONL {
-		emit = RecordEmitter(filter, func(v any, names []string) error {
+		emit = recordEmitter(filter, func(v any, names []string) error {
 			return emitRecord(opts, v, names)
 		})
 	}
@@ -129,4 +131,50 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	// the signal into magus's conventional 128+N exit. Registering a second
 	// handler for the same signals would fight it for no gain.
 	return f.Follow(ctx, ef.Interval, emit)
+}
+
+// recordEmitter renders each event alone as it arrives: the stream never
+// closes, so no document wraps it. A -o name line is the event's type.
+func recordEmitter(filter stream.Filter, emit func(v any, names []string) error) func(stream.Event) error {
+	var mu sync.Mutex
+	return func(e stream.Event) error {
+		if e.Body == nil || !filter.Allows(e.Body.EventType()) {
+			return nil
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		return emit(e, []string{string(e.Body.EventType())})
+	}
+}
+
+// parseEventFilter turns the --type list into a filter. An unknown name is
+// an error: an empty match would read as a workspace where nothing happens.
+func parseEventFilter(csv string) (stream.Filter, error) {
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		return stream.Filter{}, nil
+	}
+	var out stream.Filter
+	for _, name := range strings.Split(csv, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		t, err := stream.ParseEventType(name)
+		if err != nil {
+			return stream.Filter{}, fmt.Errorf("magus events (known types: %s): %w", strings.Join(eventTypeNames(), ", "), err)
+		}
+		out.Types = append(out.Types, t)
+	}
+	return out, nil
+}
+
+// eventTypeNames renders the taxonomy for an error message.
+func eventTypeNames() []string {
+	all := stream.EventTypes()
+	names := make([]string, len(all))
+	for i, t := range all {
+		names[i] = string(t)
+	}
+	return names
 }

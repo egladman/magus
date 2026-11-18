@@ -10,29 +10,29 @@ import (
 )
 
 func TestParseFilterEmptyAllowsEverything(t *testing.T) {
-	f, err := ParseFilter("  ")
+	f, err := parseEventFilter("  ")
 	require.NoError(t, err)
 	assert.Empty(t, f.Types)
 }
 
 func TestParseFilterTrimsAndSkipsEmptyNames(t *testing.T) {
-	f, err := ParseFilter(" target.result , ,run.started,")
+	f, err := parseEventFilter(" target.result , ,run.started,")
 	require.NoError(t, err)
 	assert.Equal(t, []stream.EventType{stream.TargetResult, stream.RunStarted}, f.Types)
 }
 
 func TestParseFilterRefusesATypoAndListsTheTaxonomy(t *testing.T) {
-	_, err := ParseFilter("target.reslut")
+	_, err := parseEventFilter("target.reslut")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus events (known types: ")
-	for _, name := range typeNames() {
+	for _, name := range eventTypeNames() {
 		assert.Contains(t, err.Error(), name)
 	}
 }
 
 func TestRecordEmitterNamesEachEventByItsType(t *testing.T) {
 	var gotNames [][]string
-	emit := RecordEmitter(stream.Filter{}, func(_ any, names []string) error {
+	emit := recordEmitter(stream.Filter{}, func(_ any, names []string) error {
 		gotNames = append(gotNames, names)
 		return nil
 	})
@@ -42,7 +42,7 @@ func TestRecordEmitterNamesEachEventByItsType(t *testing.T) {
 
 func TestRecordEmitterDropsFilteredAndBodylessEvents(t *testing.T) {
 	calls := 0
-	emit := RecordEmitter(stream.Filter{Types: []stream.EventType{stream.TargetOutput}}, func(any, []string) error {
+	emit := recordEmitter(stream.Filter{Types: []stream.EventType{stream.TargetOutput}}, func(any, []string) error {
 		calls++
 		return nil
 	})
@@ -53,6 +53,6 @@ func TestRecordEmitterDropsFilteredAndBodylessEvents(t *testing.T) {
 
 func TestRecordEmitterReturnsTheRendererError(t *testing.T) {
 	want := errors.New("closed pipe")
-	emit := RecordEmitter(stream.Filter{}, func(any, []string) error { return want })
+	emit := recordEmitter(stream.Filter{}, func(any, []string) error { return want })
 	assert.ErrorIs(t, emit(stream.Event{Body: stream.Target{}}), want)
 }
