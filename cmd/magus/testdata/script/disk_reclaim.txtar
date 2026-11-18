@@ -26,20 +26,20 @@ stdout '^Did: trimmed 30\.0 GiB of the acme spell''s ACMECACHE; 25\.0 GiB left, 
 exists acmecache/ab/young
 
 # The store holds the same line, so the next prompt hook can say it once.
-exists state/magus/disk/samples.jsonl
-grep '"action":"reclaimed"' state/magus/disk/samples.jsonl
-grep 'trimmed 30.0 GiB' state/magus/disk/samples.jsonl
+exists state/magus/disk/space.jsonl
+grep '"action":"reclaimed"' state/magus/disk/space.jsonl
+grep 'trimmed 30.0 GiB' state/magus/disk/space.jsonl
 
 # The prompt hook says that line once, from the store. A stand-in takes the tick
 # it starts, so nothing outlives this script.
 env __MAGUS_BIN=$WORK/stand-in
 chmod 0755 stand-in
-exec touch -t 202001010000 state/magus/disk/samples.jsonl
+exec touch -t 202001010000 state/magus/disk/space.jsonl
 stdin event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-reclaim-disk.buzz -- --agent-name claude-code
 stdout '^Did: trimmed 30\.0 GiB'
 
-exec touch -t 202001010000 state/magus/disk/samples.jsonl
+exec touch -t 202001010000 state/magus/disk/space.jsonl
 stdin event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-reclaim-disk.buzz -- --agent-name claude-code
 ! stdout .

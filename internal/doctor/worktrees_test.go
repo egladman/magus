@@ -106,16 +106,27 @@ func TestDiskTrendNamesTheLastReclaimChunks(t *testing.T) {
 }
 
 func TestReadDiskSamplesNamesAMalformedLine(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "samples.jsonl")
+	path := filepath.Join(t.TempDir(), "space.jsonl")
 	require.NoError(t, os.WriteFile(path, []byte(`{"at":1,"path":"/w","total_bytes":2,"free_bytes":1,"action":"sample","detail":""}`+"\nnot json\n"), 0o644))
 	_, err := readDiskSamples(path)
 	assert.ErrorContains(t, err, "line 2")
 }
 
-func TestReadDiskSamplesRefusesTheCamelCaseSpelling(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "samples.jsonl")
+func TestReadDiskSamplesRefusesAnUnknownKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "space.jsonl")
 	require.NoError(t, os.WriteFile(path, []byte(`{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""}`+"\n"), 0o644))
 	_, err := readDiskSamples(path)
 	assert.ErrorContains(t, err, "line 1")
-	assert.ErrorContains(t, err, "camelCase")
+}
+
+func TestDiskTrendNamesTheRetiredSamplesStore(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	dir := filepath.Join(state, "magus", "disk")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "samples.jsonl"), []byte(`{"totalBytes":2}`+"\n"), 0o644))
+	got := (&runner{}).checkDiskTrend()
+	require.NotEmpty(t, got.Details)
+	assert.Contains(t, got.Details[len(got.Details)-1], filepath.Join(dir, "samples.jsonl"))
+	assert.Contains(t, got.Details[len(got.Details)-1], "can be deleted")
 }
