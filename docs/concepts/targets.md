@@ -39,13 +39,13 @@ The project is a **positional** argument, not embedded in the target token. `:` 
 
 Examples:
 
-| Command                     | Project(s) | Name           | Charms        | Spell |
-| --------------------------- | ---------- | -------------- | ------------- | ----- |
-| `magus run build`           | cwd / all  | `build`        | -             | -     |
-| `magus run test api`        | `api`      | `test`         | -             | -     |
-| `magus run format:rw api`   | `api`      | `format`       | `rw`          | -     |
-| `magus run lint:rw,debug /` | all        | `lint`         | `rw`, `debug` | -     |
-| `magus run go::go-test`     | all        | `go-test` (op) | -             | `go`  |
+| Command                         | Project(s) | Name           | Charms        | Spell |
+| ------------------------------- | ---------- | -------------- | ------------- | ----- |
+| `magus run build`               | cwd / all  | `build`        | -             | -     |
+| `magus run test api`            | `api`      | `test`         | -             | -     |
+| `magus run format:rw api`       | `api`      | `format`       | `rw`          | -     |
+| `magus run lint:rw,debug --all` | all        | `lint`         | `rw`, `debug` | -     |
+| `magus run go::go-test`         | all        | `go-test` (op) | -             | `go`  |
 
 Invalid forms:
 
