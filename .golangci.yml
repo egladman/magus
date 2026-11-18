@@ -32,6 +32,9 @@ linters:
     # --- Type safety ---
     - forcetypeassert # forbid unchecked type assertions (x.(T) without ok guard)
     - musttag         # every field of a marshaled struct must carry a json tag
+    # Every JSON key magus owns is snake_case. The exclusions below name the formats
+    # magus mirrors from outside, whose spelling is theirs to set.
+    - tagliatelle
     # json.Marshal panics on nothing but silently drops or errors on an unsupported
     # field (chan, func, complex, a cyclic map) - so a call site that proved the
     # error unreachable and started ignoring it (body, _ := json.Marshal(v)) has
@@ -158,6 +161,13 @@ linters:
     - gochecknoinits
 
   settings:
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          # magus's own YAML (magus.yaml, spell descriptors) is snake_case too; the default
+          # is camel, which would flag every one of them.
+          yaml: snake
     forbidigo:
       analyze-types: true
       forbid:
@@ -891,6 +901,29 @@ linters:
       # test fixtures (synthetic responses, deliberate typo fixtures).
       - path: _test\.go
         linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc, bodyclose, misspell, gochecknoinits]
+
+      # tagliatelle holds every JSON key magus owns to snake_case. Each path here mirrors a
+      # format whose spelling another party sets, so its tags follow that party:
+      #
+      #   SARIF           - libs/proofread/cmd/proofread/format
+      #   LSP             - internal/langservice/server.go
+      #   OCI, Docker     - libs/oci, libs/image, benchmarks/agent/internal/container
+      #   package.json    - internal/deps/node.go
+      #   plugin and marketplace manifests - internal/agent/harness_plugin.go
+      #   opencode        - internal/interp/bindings/opencode/runtime.go
+      #   MCP envelope    - internal/handler/mcp
+      #   hook payloads and the Claude transcript - internal/guard/spawn_rule.go
+      #   Connect error details - internal/rpcerr
+      #   go list and go test -json - internal/risk/golang, benchmarks/agent
+      #   golangci-lint plugin settings - libs/conventions, libs/testpairing
+      #   tokenizer.json  - libs/train/embed/teacher
+      #
+      # libs/gopherbuzz/buzzgen/config.go is not external: .buzzgen.yaml spells zeroCase
+      # and casesFrom in camelCase, and renaming them is a separate break.
+      - path: ^(libs/proofread/cmd/proofread/format|internal/langservice/server|internal/deps/node|internal/agent/harness_plugin|internal/interp/bindings/opencode/runtime|internal/guard/spawn_rule|internal/risk/golang/golang|libs/testpairing/testpairing|libs/gopherbuzz/buzzgen/config)(_test)?\.go$
+        linters: [tagliatelle]
+      - path: ^(libs/oci|libs/image|libs/conventions|libs/train/embed/teacher|internal/handler/mcp|internal/rpcerr|benchmarks/agent)/
+        linters: [tagliatelle]
 
       # protoc-gen-go emits an init() into every .pb.go and the file is never hand-edited.
       - path: ^proto/gen/
