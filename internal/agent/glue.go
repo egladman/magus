@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"fmt"
@@ -9,8 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/internal/file"
 )
 
 // GlueSource prefixes the asset source of every hook glue file the binary embeds, the
@@ -35,6 +39,61 @@ func GlueAsset(source string) ([]byte, error) {
 		return nil, err
 	}
 	return stampGlue(body), nil
+}
+
+// IsGlueScript reports whether name, a file name such as magus-command.buzz, is a hook
+// script the binary embeds. lib/ is the module the scripts import, never a script.
+//
+// compat: see legacyGlueScript in cmd/magus/hook_glue.go.
+func IsGlueScript(name string) bool {
+	if name == "" || strings.Contains(name, "/") || !strings.HasSuffix(name, ".buzz") {
+		return false
+	}
+	info, err := fs.Stat(glueFS, "gen/glue/"+name)
+	return err == nil && !info.IsDir()
+}
+
+// WriteGlue writes every embedded glue file, unstamped, under dir, the scripts and
+// lib/ beside them so their imports resolve. A file already holding its bytes is left.
+//
+// compat: see legacyGlueScript in cmd/magus/hook_glue.go.
+func WriteGlue(dir string) error {
+	return fs.WalkDir(glueFS, "gen/glue", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		body, err := fs.ReadFile(glueFS, name)
+		if err != nil {
+			return err
+		}
+		dest := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(name, "gen/glue/")))
+		if have, err := os.ReadFile(dest); err == nil && bytes.Equal(have, body) {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		return file.WriteFileAtomic(dest, body, 0o644)
+	})
+}
+
+// GlueDigest identifies the embedded glue as a whole, so two binaries shipping different
+// glue never share a directory WriteGlue filled.
+func GlueDigest() (string, error) {
+	sum := sha256.New()
+	err := fs.WalkDir(glueFS, "gen/glue", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		body, err := fs.ReadFile(glueFS, name)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(sum, "%s\x00%d\x00", name, len(body))
+		_, err = sum.Write(body)
+		return err
+	})
+	return fmt.Sprintf("%x", sum.Sum(nil))[:12], err
 }
 
 // glueRemedy is the command every glue finding names: install rewrites a stamped copy
@@ -138,6 +197,26 @@ func glueProblem(root string, a HarnessRuntimeAsset) string {
 
 func glueFinding(format string, args ...any) string {
 	return fmt.Sprintf("%s; run `%s`", fmt.Sprintf(format, args...), glueRemedy)
+}
+
+// legacyGlueLines is each path under docs/guides/integrations/agents to a script the
+// binary embeds that a hook command in config runs: where every line named its glue
+// before install copied it. An opt-in script magus does not install, such as
+// proofread-reply.buzz, stays wired there and is not listed.
+//
+// compat: see legacyGlueScript in cmd/magus/hook_glue.go.
+func legacyGlueLines(config map[string]any) []string {
+	var commands, found []string
+	collectCommands(config, &commands)
+	for _, command := range commands {
+		for _, word := range strings.Fields(command) {
+			name, legacy := strings.CutPrefix(word, "docs/guides/integrations/agents/")
+			if legacy && IsGlueScript(name) && !slices.Contains(found, word) {
+				found = append(found, word)
+			}
+		}
+	}
+	return found
 }
 
 // glueProblems is every finding over d's glue assets, in the order d declares them.

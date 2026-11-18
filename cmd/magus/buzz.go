@@ -154,6 +154,20 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		return buzzRepl(ctx, !bf.Autoload)
 	}
 
+	// compat: see legacyGlueScript.
+	if bf.E == "" && !bf.Test && len(rest) == 1 && !termkit.StdinIsTerminal() {
+		embedded, legacy, err := legacyGlueScript(rest[0])
+		if err != nil {
+			return err
+		}
+		if legacy {
+			if err := noteLegacyGlue(ctx, rest[0]); err != nil {
+				return err
+			}
+			rest = []string{embedded}
+		}
+	}
+
 	opts := interp.ScriptOptions{Embedded: bf.Embedded, Inline: bf.E != "", Test: bf.Test, Record: bf.Record}
 	if bf.Test {
 		return runner.Test(ctx, root, opts, bf.Coverprofile, bf.E, rest, forwarded)

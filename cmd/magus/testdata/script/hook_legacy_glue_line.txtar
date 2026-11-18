@@ -1,0 +1,58 @@
+# A session keeps the hook lines it started with. One started before its hooks were
+# reinstalled still runs docs/guides/integrations/agents/<script>.buzz, which a workspace
+# outside magus does not hold, so magus runs its embedded copy of that script: the session
+# stays judged rather than refused, the reinstall included. It says so once per session,
+# and verify still fails the line, naming the reinstall.
+
+[windows] skip 'the hook lines are POSIX sh'
+
+mkdir spells/harness/claude-code
+cp $__MAGUS_TEMPLATES/../../../../spells/harness/claude-code/spell.buzz spells/harness/claude-code/spell.buzz
+! exists docs
+
+# A harmless call is judged and runs, and the first call of the session says why.
+stdin echo.json
+exec sh -c 'magus buzz -C "$WORK" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code; s=$?; echo; echo "exit $s"'
+stdout '^exit 0$'
+stderr 'names docs/guides/integrations/agents/magus-command\.buzz, which this workspace does not hold, so it ran the glue this magus embeds'
+stderr 'magus agent harness install'
+
+# The note fires once per session.
+stdin echo.json
+exec sh -c 'magus buzz -C "$WORK" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code; s=$?; echo; echo "exit $s"'
+stdout '^exit 0$'
+! stderr 'ran the glue this magus embeds'
+
+# The embedded glue judges: a whole-tree reset is refused. Claude Code reads the deny off
+# the reply, so the glue exits 0; 2 is the refusal of a call nothing could judge.
+stdin reset.json
+exec sh -c 'magus buzz -C "$WORK" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code; s=$?; echo; echo "exit $s"'
+stdout '"permissionDecision":"deny","permissionDecisionReason":"whole-tree git reset --hard'
+stdout '^exit 0$'
+
+# A name the binary embeds no script for is not legacy glue, and fails closed.
+stdin echo.json
+exec sh -c 'magus buzz -C "$WORK" -s docs/guides/integrations/agents/magus-unknown.buzz -- --agent-name claude-code; s=$?; echo; echo "exit $s"'
+stdout '^exit 2$'
+stderr 'its hook glue stopped before it answered'
+! stderr 'ran the glue this magus embeds'
+
+# Verify fails the old line and names the reinstall, which moves it.
+! exec magus agent harness verify --id claude-code
+stdout 'a hook line runs docs/guides/integrations/agents/magus-command\.buzz.*run `magus agent harness install`'
+exec magus agent harness install --id claude-code
+exec magus agent harness verify --id claude-code
+stdout '^verified claude-code harness'
+
+-- magus.yaml --
+{}
+-- magusfile.buzz --
+import "magus";
+import "spells/harness/claude-code" as claude;
+magus\harness.provider(claude);
+-- .claude/settings.json --
+{"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code", "timeout": 10}]}]}}
+-- echo.json --
+{"session_id":"legacy-1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}
+-- reset.json --
+{"session_id":"legacy-1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git reset --hard"}}

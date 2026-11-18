@@ -904,11 +904,6 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 		return HarnessVerification{}, pathErr
 	}
 	result.Path = path
-	if problems := glueProblems(root, d); len(problems) > 0 {
-		result.Status, result.Reason = HarnessUncovered, strings.Join(problems, "; ")
-		verifyHarnessMCP(d, &result)
-		return result, nil
-	}
 	body, readError := os.ReadFile(path)
 	if os.IsNotExist(readError) {
 		result.Status, result.Reason = HarnessUncovered, "harness config does not exist"
@@ -923,6 +918,20 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 		result.Status, result.Reason = HarnessInvalid, "parse existing JSON: "+decodeErr.Error()
 		verifyHarnessMCP(d, &result)
 		//nolint:nilerr // an unparseable host config is an invalid verdict, carried in Reason, not a command failure
+		return result, nil
+	}
+	if legacy := legacyGlueLines(config); len(legacy) > 0 {
+		result.Status = HarnessUncovered
+		result.Reason = glueFinding("a hook line runs %s, where the glue lived before install copied it into the workspace", strings.Join(legacy, ", "))
+		verifyHarnessMCP(d, &result)
+		return result, nil
+	}
+	if problems := glueProblems(root, d); len(problems) > 0 {
+		result.Status, result.Reason = HarnessUncovered, problems[0]
+		if len(problems) > 1 {
+			result.Reason = fmt.Sprintf("%s (and %d more glue findings)", problems[0], len(problems)-1)
+		}
+		verifyHarnessMCP(d, &result)
 		return result, nil
 	}
 	if open := failOpenHooks(ctx, root, config, d); len(open) > 0 {

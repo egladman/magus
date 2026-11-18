@@ -7,4 +7,5 @@
   version and digest, and the hook lines run it from there. `magus agent harness verify`
   and `magus doctor` name a missing copy, an edited one and one from another magus, each
   with the remedy `magus agent harness install`. Re-run it after upgrading: a line installed
-  before this names the old path. The guard templates move to version 39.
+  before this names the old path. Until then, a session still running an old line runs the
+  glue magus embeds, and says so once per session. The guard templates move to version 39.
