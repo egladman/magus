@@ -431,7 +431,7 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 	})})
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 
-	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
 	assert.Equal(t, journal.Call{
 		Kind:    journal.CallKindAgentCommand,
@@ -445,7 +445,7 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 		},
 	}, clearVolatile(commands[0]))
 
-	spawns := trailEvents(t, cacheDir, journal.CallKindAgentSpawn)
+	spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, journal.Call{
 		Kind:    journal.CallKindAgentSpawn,
@@ -471,7 +471,7 @@ func TestBareHookRowsRecordTheDirectoryTheJudgeRanIn(t *testing.T) {
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "notes.txt", IsPath: true})
 
-	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 2)
 	byTool := map[string]string{}
 	for _, e := range commands {
@@ -496,7 +496,7 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
 
-	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
 	require.NotNil(t, commands[0].Guard)
 	phases := commands[0].Guard.Phases

@@ -256,7 +256,7 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v))
 		assert.Contains(t, v.Reason, "Ask for the board once.")
 
-		commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+		commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 		require.Len(t, commands, 1)
 		assert.Equal(t, decidedByWorktree, callDecidedBy(commands[0]))
 	})
@@ -292,7 +292,7 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 	again := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, first, again)
 
-	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.NotEmpty(t, commands)
 	assert.Equal(t, []recorder.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
 		readCommandBlob(t, cacheDir, commands[0]).RuleFailures)
@@ -342,7 +342,7 @@ func TestCommandRulesKeepTheStricterSide(t *testing.T) {
 			v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
 
-			commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+			commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 			require.Len(t, commands, 1)
 			assert.Equal(t, tc.decidedBy, callDecidedBy(commands[0]))
 		})
@@ -375,7 +375,7 @@ func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 		defer cancel()
 		v := Judge(ctx, slow, Request{Input: command, Host: "claude-code", Session: "s1"})
-		commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+		commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 		require.Len(t, commands, 1)
 		return v, readCommandBlob(t, cacheDir, commands[0]).RuleFailures
 	}

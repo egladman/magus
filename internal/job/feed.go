@@ -269,24 +269,23 @@ func Ascending(events []journal.Call) []journal.Call {
 	return out
 }
 
-// TrailCursor is how far forward a follower has read the trail.
+// CallCursor is how far forward a follower has read the activity log.
 //
-// It carries a COUNT alongside the timestamp because the trail's resolution is a
-// millisecond and two observations routinely share one: a cursor holding only a timestamp
-// either replays that millisecond's events on every tick or drops the second of them, and
-// both read to a person as a bug in the guard.
+// It counts the calls seen at its timestamp. The log stamps
+// milliseconds, and two calls often share one, so a bare
+// timestamp replays or drops the second.
 //
-// Shared by the streaming RPC and `magus job watch` so the two cannot disagree about what
-// "since I last looked" means.
-type TrailCursor struct {
+// The streaming RPC and `magus job watch` share it, so both
+// mean one thing by "since I last looked".
+type CallCursor struct {
 	ts   int64
 	seen int
 }
 
 // CursorAt places a cursor at the end of asc, so a follower that skipped the backfill does
 // not receive the whole retained window on its first tick.
-func CursorAt(asc []journal.Call) *TrailCursor {
-	c := &TrailCursor{}
+func CursorAt(asc []journal.Call) *CallCursor {
+	c := &CallCursor{}
 	if len(asc) == 0 {
 		return c
 	}
@@ -296,7 +295,7 @@ func CursorAt(asc []journal.Call) *TrailCursor {
 }
 
 // Next returns the events in asc this cursor has not yielded, and advances past them.
-func (c *TrailCursor) Next(asc []journal.Call) []journal.Call {
+func (c *CallCursor) Next(asc []journal.Call) []journal.Call {
 	var out []journal.Call
 	at := 0
 	for _, e := range asc {

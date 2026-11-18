@@ -429,7 +429,7 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 				assert.Equal(t, unjudgedNote(), v.Context)
 			}
 
-			rows := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+			rows := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 			require.Len(t, rows, 1)
 			assert.Equal(t, c.tool, rows[0].Name)
 			require.NotNil(t, rows[0].Guard)
@@ -572,7 +572,7 @@ func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	assert.Equal(t, verdict.Defer, onTime.Decision)
 	assert.Equal(t, verdict.Deny, lapse().Decision, "an answer in time starts the count over")
 
-	rows := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	rows := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.NotEmpty(t, rows)
 	names := make([]string, len(rows[0].Guard.Phases))
 	for i, p := range rows[0].Guard.Phases {
@@ -897,7 +897,7 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedReportsNoLapseOnAPass() {
 func (s *JudgeBudgetSuite) TestTrailNamesBuiltinRulesAndNotices() {
 	ctx, cacheDir := spawnFixture(s.T())
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-	rows := trailEvents(s.T(), cacheDir, journal.CallKindAgentCommand)
+	rows := callsOfKind(s.T(), cacheDir, journal.CallKindAgentCommand)
 	s.Require().NotEmpty(rows)
 	names := make([]string, len(rows[0].Guard.Phases))
 	for i, p := range rows[0].Guard.Phases {
@@ -927,7 +927,7 @@ func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
 	v := lapseNow(ctx, s.T(), Dependencies{}, req, func(context.Context) {})
 
 	s.Equal(row.ID, v.Lease)
-	rows := trailEvents(s.T(), hookLocation(ctx, Dependencies{}).cacheDir, journal.CallKindAgentCommand)
+	rows := callsOfKind(s.T(), hookLocation(ctx, Dependencies{}).cacheDir, journal.CallKindAgentCommand)
 	s.Require().NotEmpty(rows)
 	s.Equal(row.ID, rows[len(rows)-1].Lease)
 }

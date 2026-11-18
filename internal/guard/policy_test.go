@@ -92,7 +92,7 @@ func sourcesAt(calls *int, pairs ...PolicySource) func(context.Context) []Policy
 func policyActions(t *testing.T, base string) []string {
 	t.Helper()
 	var out []string
-	for _, e := range trailEvents(t, base, journal.CallKindGuardPolicy) {
+	for _, e := range callsOfKind(t, base, journal.CallKindGuardPolicy) {
 		out = append(out, e.Name)
 	}
 	return out
@@ -160,7 +160,7 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", SpawnRule: true, Sources: sourcesAt(&calls)}, false)
 	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d2", SpawnRule: true, Sources: sourcesAt(&calls, src)}, false)
 
-	events := trailEvents(t, base, journal.CallKindGuardPolicy)
+	events := callsOfKind(t, base, journal.CallKindGuardPolicy)
 	require.Len(t, events, 2)
 	var tightened journal.Call
 	for _, e := range events {
@@ -185,7 +185,7 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 	v := Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
 	assert.Equal(t, verdict.Defer, v.Decision)
-	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
 	got := commands[0]
 	got.Time, got.Workspace, got.User, got.UID = time.Time{}, "", "", ""
@@ -240,7 +240,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Digest: "d9", ShellRules: 1} }}
 
 	Judge(ctx, deps, Request{Input: "git stash", Host: "claude-code", Session: "s1"})
-	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
 	// The clock, the stamped account, the workspace and the content-addressed fields are
 	// cleared first, so a field added to the event cannot be dropped here unseen.
@@ -262,7 +262,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 
 	deps.ShellRules = []WorkspaceShellRule{{Name: "no-curl", Decision: verdict.Deny, Program: "curl", Reason: "not here"}}
 	Judge(ctx, deps, Request{Input: "curl https://example.com", Host: "claude-code", Session: "s1"})
-	commands = trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+	commands = callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 2)
 	var byWorkspace int
 	for _, e := range commands {

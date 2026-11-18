@@ -92,7 +92,7 @@ func TestLoadFailureDeniesGatedVerbs(t *testing.T) {
 			stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
 			assert.Contains(t, stored, fmt.Sprintf("\n%s changes state, and the guard policy that would judge it is not running:", tc.verb))
 
-			commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
+			commands := callsOfKind(t, cacheDir, journal.CallKindAgentCommand)
 			require.Len(t, commands, 1)
 			assert.Equal(t, decidedByBuiltin, callDecidedBy(commands[0]))
 		})
@@ -468,7 +468,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	d := staleBinaryDenial(judgedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
 		unloadStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %sstale-binary/", d.full(), ruleDocsBase), stored)
-	spawns := trailEvents(t, cacheDir, journal.CallKindAgentSpawn)
+	spawns := callsOfKind(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByBuiltin, callDecidedBy(spawns[0]))
 	assert.Equal(t, staleFailures, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)

@@ -266,7 +266,7 @@ func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
 
-	events := trailEvents(t, dir, journal.CallKindAgentCommand)
+	events := callsOfKind(t, dir, journal.CallKindAgentCommand)
 	require.Len(t, events, 1)
 	assert.Equal(t, jobtypes.EntryPointCLI, events[0].EntryPoint)
 	assert.Empty(t, events[0].Session, "a terminal window is not a host session")
