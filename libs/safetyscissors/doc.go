@@ -11,7 +11,6 @@
 //   - session: the append-only record of what invocations did, its fold and its pruning.
 //   - step: one thing a program is about to do, as data, and the spec of each kind.
 //   - tier: the model tier set, a job's assignment, the spawn ceiling and a price table.
-//   - trail: the append-only activity events and the guard's records. It exports reading only.
 //   - verdict: what a rule answers about a call, and the stricter-of merge.
 //
 // Nothing in the module reads the environment, writes to stdout or stderr, or keeps
